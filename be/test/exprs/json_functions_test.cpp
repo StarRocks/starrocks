@@ -22,17 +22,21 @@
 #include <string>
 
 #include "butil/time.h"
+#include "column/const_column.h"
 #include "column/map_column.h"
+#include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "gtest/gtest-param-test.h"
+#include "gutil/casts.h"
 #include "gutil/strings/strip.h"
 #include "testutil/assert.h"
 #include "util/defer_op.h"
 #include "util/json.h"
+#include "util/json_util.h"
 
 namespace starrocks {
 
@@ -459,6 +463,137 @@ INSTANTIATE_TEST_SUITE_P(
                 // clang-format on
                 ));
 
+class FlatJsonQueryTestFixture
+        : public ::testing::TestWithParam<std::tuple<std::string, std::vector<std::string>, std::string, std::string>> {
+};
+
+TEST_P(FlatJsonQueryTestFixture, json_query) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto json_col = JsonColumn::create();
+    ColumnBuilder<TYPE_VARCHAR> builder(1);
+
+    std::string param_json = std::get<0>(GetParam());
+    std::vector<std::string> param_flat_path = std::get<1>(GetParam());
+
+    std::string param_path = std::get<2>(GetParam());
+    std::string param_result = std::get<3>(GetParam());
+
+    JsonValue json;
+    ASSERT_TRUE(JsonValue::parse(param_json, &json).ok());
+    json_col->append(&json);
+    if (param_path == "NULL") {
+        builder.append_null();
+    } else {
+        builder.append(param_path);
+    }
+
+    auto flat_json = JsonColumn::create();
+    auto flat_json_ptr = flat_json.get();
+    std::vector<std::string> full_paths;
+    for (const auto& p : param_flat_path) {
+        if (param_path.starts_with("$")) {
+            full_paths.emplace_back("$." + p);
+        } else {
+            full_paths.emplace_back(p);
+        }
+    }
+    flat_json_ptr->init_flat_columns(full_paths);
+
+    JsonFlater jf(param_flat_path);
+    jf.flatten(json_col.get(), &flat_json_ptr->get_flat_fields());
+
+    Columns columns{flat_json, builder.build(true)};
+
+    ctx.get()->set_constant_columns(columns);
+    std::ignore =
+            JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+
+    ColumnPtr result = JsonFunctions::json_query(ctx.get(), columns).value();
+    ASSERT_TRUE(!!result);
+
+    StripWhiteSpace(&param_result);
+    Datum datum = result->get(0);
+    if (param_result == "NULL") {
+        ASSERT_TRUE(datum.is_null());
+    } else {
+        ASSERT_TRUE(!datum.is_null());
+        auto st = datum.get_json()->to_string();
+        ASSERT_TRUE(st.ok()) << st->c_str();
+        std::string json_result = datum.get_json()->to_string().value();
+        StripWhiteSpace(&json_result);
+        ASSERT_EQ(param_result, json_result);
+    }
+
+    ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+}
+
+INSTANTIATE_TEST_SUITE_P(
+        FlatJsonQueryTest, FlatJsonQueryTestFixture,
+        ::testing::Values(
+                // clang-format off
+                // empty
+                std::make_tuple(R"( {"k1":1} )", std::vector<std::string>{"k1"},  "NULL", R"(NULL)"),
+                std::make_tuple(R"( {"k1":1} )", std::vector<std::string>{"k1"}, "", R"(NULL)"),
+
+                // various types
+                std::make_tuple(R"( {"k1":1, "k2":"hehe", "k3":[1]} )", std::vector<std::string>{"k1", "k2", "k3"}, "$.k2", R"( "hehe" )"),
+                std::make_tuple(R"( {"k1":1, "k2":"hehe", "k3":[1]} )", std::vector<std::string>{"k1", "k2", "k3"}, "$.k3", R"( [1] )"),
+                std::make_tuple(R"( {"k1":1, "k2":"hehe", "k3":[1]} )", std::vector<std::string>{"k1", "k2", "k3"}, "$.k3", R"( [1] )"),
+                std::make_tuple(R"( {"k1":1, "k2":"hehe", "k3":[1], "k4": {}} )", std::vector<std::string>{"k1", "k2", "k4"}, "$.k4", R"( {} )"),
+                std::make_tuple(R"( {"k1":1, "k2":"hehe", "k3":[1], "k4": {}} )", std::vector<std::string>{"k1", "k2", "k5"}, "$.k5", R"( NULL )"),
+
+                // simple syntax
+                std::make_tuple(R"( {"k1":1, "k2":"hehe", "k3":[1]} )", std::vector<std::string>{"k1", "k2", "k3"}, "k2", R"( "hehe" )"),
+                std::make_tuple(R"( {"k1":1, "k2":"hehe", "k3":[1]} )", std::vector<std::string>{"k1", "k2", "k3"}, "k3", R"( [1] )"),
+                std::make_tuple(R"( {"k1":1, "k2":"hehe", "k3":[1]} )", std::vector<std::string>{"k1", "k2", "k3"}, "k3", R"( [1] )"),
+                std::make_tuple(R"( {"k1":1, "k2":"hehe", "k3":[1], "k4": {}} )", std::vector<std::string>{"k1", "k4", "k3"}, "k4", R"( {} )"),
+                std::make_tuple(R"( {"k1":1, "k2":"hehe", "k3":[1], "k4": {}} )", std::vector<std::string>{"k1", "k5", "k3"}, "k5", R"( NULL )"),
+
+                // nested array
+                std::make_tuple(R"( {"k1": [1,2,3]} )", std::vector<std::string>{"k1"}, "$.k1[0]", R"( 1 )"),
+                std::make_tuple(R"( {"k1": [1,2,3]} )", std::vector<std::string>{"k1"}, "$.k1[3]", R"( NULL )"),
+                std::make_tuple(R"( {"k1": [1,2,3]} )", std::vector<std::string>{"k1"}, "$.k1[-1]", R"( NULL )"),
+                std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", std::vector<std::string>{"k1"}, "$.k1[0][0]", R"( 1 )"),
+                std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", std::vector<std::string>{"k1"}, "$.k1[0][1]", R"( 2 )"),
+                std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", std::vector<std::string>{"k1"}, "$.k1[0][2]", R"( 3 )"),
+                std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", std::vector<std::string>{"k1"}, "$.k1[0][3]", R"( NULL )"),
+                std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", std::vector<std::string>{"k1"}, "$.k1[1][0]", R"( 4 )"),
+                std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", std::vector<std::string>{"k1"}, "$.k1[1][2]", R"( 6 )"),
+                std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", std::vector<std::string>{"k1"}, "$.k1[2][0]", R"( NULL )"),
+                std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", std::vector<std::string>{"k1"}, "$.k1[2]]]]]", R"( NULL )"),
+                std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", std::vector<std::string>{"k1"}, "$.k1[[[[[2]", R"( NULL )"),
+                std::make_tuple(R"( {"k1": [[[1,2,3]]]} )", std::vector<std::string>{"k1"}, "$.k1[0][0][0]", R"( 1 )"),
+                std::make_tuple(R"( {"k1": [{"k2": [[1, 2], [3, 4]] }] } )", std::vector<std::string>{"k1"}, "$.k1[0].k2[0][0]", R"( 1 )"),
+                std::make_tuple(R"( {"k1": [{"k2": [[1, 2], [3, 4]] }] } )", std::vector<std::string>{"k1"}, "$.k1[0].k2[1][0]", R"( 3 )"),
+
+                // nested object
+                std::make_tuple(R"( {"k1": {"k2": {"k3": 1}}} )", std::vector<std::string>{"k1"}, "$.k1", R"( {"k2": {"k3": 1}} )"),
+                std::make_tuple(R"( {"k1": {"k2": {"k3": 1}}} )", std::vector<std::string>{"k1"}, "$.k1.k2", R"( {"k3": 1} )"),
+                std::make_tuple(R"( {"k1": {"k2": {"k3": 1}}} )", std::vector<std::string>{"k1"}, "$.k1.k2.k3", R"( 1 )"),
+                std::make_tuple(R"( {"k1": {"k2": {"k3": 1}}} )", std::vector<std::string>{"k1"}, "$.k1.k2.k3.k4", R"( NULL )"),
+
+                std::make_tuple(R"( {"k1": {"k2": {"k3": 1}}} )", std::vector<std::string>{"k1"}, "k1", R"( {"k2": {"k3": 1}} )"),
+                std::make_tuple(R"( {"k1": {"k2": {"k3": 1}}} )", std::vector<std::string>{"k1"}, "k1.k2", R"( {"k3": 1} )"),
+                std::make_tuple(R"( {"k1": {"k2": {"k3": 1}}} )", std::vector<std::string>{"k1"}, "k1.k2.k3", R"( 1 )"),
+                std::make_tuple(R"( {"k1": {"k2": {"k3": 1}}} )", std::vector<std::string>{"k1"}, "k1.k2.k3.k4", R"( NULL )"),
+
+                // nested object in array
+                std::make_tuple(R"( {"k1": [{"k2": 1}]} )", std::vector<std::string>{"k1"}, "$.k1[0]", R"( {"k2": 1} )"),
+                std::make_tuple(R"( {"k1": [{"k2": 1}]} )", std::vector<std::string>{"k1"}, "$.k1[0].k2", R"( 1 )"),
+                std::make_tuple(R"( {"k1": [{"k2": 1}]} )", std::vector<std::string>{"k1"}, "$.k1[0].k3", R"( NULL )"),
+
+                // array result
+                std::make_tuple(R"( {"k1": [{"k2": 1}, {"k2": 2}]} )", std::vector<std::string>{"k1"}, "$.k1[*].k2", R"( [1, 2] )"),
+                std::make_tuple(R"( {"k1": [{"k2": 1}, {"k2": 2}]} )", std::vector<std::string>{"k1"}, "$.k1[*]", R"( [{"k2": 1}, {"k2": 2}] )"),
+                std::make_tuple(R"( {"k1": [{"k2": 1}, {"k2": 2}, {"k2": 3}]} )", std::vector<std::string>{"k1"}, "$.k1[0:2]",
+                                R"( [{"k2": 1}, {"k2": 2}] )"),
+                std::make_tuple(R"( {"k1": [1,2,3,4]} )", std::vector<std::string>{"k1"}, "$.k1[*]", R"( [1, 2, 3, 4] )"),
+                std::make_tuple(R"( {"k1": [1,2,3,4]} )", std::vector<std::string>{"k1"}, "$.k1[1:3]", R"( [2, 3] )")
+                // clang-format on
+                ));
+
 class JsonExistTestFixture : public ::testing::TestWithParam<std::tuple<std::string, std::string, bool>> {};
 
 TEST_P(JsonExistTestFixture, json_exists) {
@@ -532,6 +667,370 @@ INSTANTIATE_TEST_SUITE_P(JsonExistTest, JsonExistTestFixture,
 
                                            // error case
                                            std::make_tuple(R"( {"k1": null} )", std::string(10, 0x1), false)));
+
+class FlatJsonExistsTestFixture
+        : public ::testing::TestWithParam<std::tuple<std::string, std::vector<std::string>, std::string, bool>> {};
+
+TEST_P(FlatJsonExistsTestFixture, flat_json_exists_test) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto json_col = JsonColumn::create();
+
+    std::string param_json = std::get<0>(GetParam());
+    std::vector<std::string> param_flat_path = std::get<1>(GetParam());
+    std::string param_path = std::get<2>(GetParam());
+    bool param_exist = std::get<3>(GetParam());
+
+    auto json = JsonValue::parse(param_json);
+    ASSERT_TRUE(json.ok());
+    json_col->append(&*json);
+
+    Columns flat_columns;
+
+    auto flat_json = JsonColumn::create();
+    auto* flat_json_ptr = down_cast<JsonColumn*>(flat_json.get());
+
+    std::vector<std::string> full_paths;
+    for (const auto& p : param_flat_path) {
+        full_paths.emplace_back("$." + p);
+    }
+    flat_json_ptr->init_flat_columns(full_paths);
+
+    JsonFlater jf(param_flat_path);
+    jf.flatten(json_col.get(), &flat_json_ptr->get_flat_fields());
+
+    Columns columns;
+    columns.push_back(flat_json);
+    if (!param_path.empty()) {
+        auto path_column = BinaryColumn::create();
+        path_column->append(param_path);
+        columns.push_back(path_column);
+    }
+
+    ctx.get()->set_constant_columns(columns);
+    Status st = JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    if (!st.ok()) {
+        ASSERT_FALSE(param_exist);
+        return;
+    }
+
+    ASSIGN_OR_ABORT(ColumnPtr result, JsonFunctions::json_exists(ctx.get(), columns))
+    ASSERT_TRUE(!!result);
+
+    if (param_exist) {
+        ASSERT_TRUE((bool)result->get(0).get_uint8());
+    } else {
+        ASSERT_TRUE(result->get(0).is_null() || !(bool)result->get(0).get_uint8());
+    }
+
+    ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+}
+
+// clang-format off
+INSTANTIATE_TEST_SUITE_P(FlatJsonExistsTest, FlatJsonExistsTestFixture,
+                          ::testing::Values(std::make_tuple(R"({ "k1":1, "k2":"2"})", std::vector<std::string>{"k1", "k2"}, "$.k1", true),
+                                            std::make_tuple(R"({ "k1": [1,2,3]})", std::vector<std::string>({"k1", "k2"}),"$.k1", true),
+                                            std::make_tuple(R"({"k1": {"k2": {"k3": 1}}})", std::vector<std::string>({"k1"}), "$.k1.k2.k3", true),
+                                            std::make_tuple(R"({"k1": [{"k2": 1}]})", std::vector<std::string>({"k1"}), "$.k1[0].k2", true),
+                                            std::make_tuple(R"({"k1": [{"k2": 1}]})", std::vector<std::string>({"k1"}), "$.k1[*].k2", true),
+                                            std::make_tuple(R"({"k1": [{"k2": 1}]})", std::vector<std::string>({"k1"}), "$.k1[0:2].k2", true),
+                                            std::make_tuple(R"({ })", std::vector<std::string>({"k1"}), "$.k1", false),
+                                            std::make_tuple(R"({"k1": 1})", std::vector<std::string>({"k2"}), "$.k2", false),
+                                            std::make_tuple(R"({"k1": {"k2": {"k3": 1}}})", std::vector<std::string>({"k1"}), "$.k1.k2.k3.k4", false),
+                                            std::make_tuple(R"({"k1": [{"k2": 1}]})", std::vector<std::string>({"k1"}), "$.k1[0].k3", false),
+                                            //  nested array
+                                            std::make_tuple(R"({"k1": [[1]]})",std::vector<std::string>({"k1"}), "$.k1[0][1]", false),
+                                            std::make_tuple(R"({"k1": [[1]]})",std::vector<std::string>({"k1"}), "$.k1[0][0]", true),
+                                            // special case
+                                            std::make_tuple(R"([{"k1": 1}, {"k2": 2}])",std::vector<std::string>({"k1"}), "$.k1[1]", false),
+                                            std::make_tuple(R"("k1")",std::vector<std::string>({"k1"}), "$.k1", false)
+                        ));
+// clang-format on
+
+TEST_F(JsonFunctionsTest, flat_json_invalid_path_test) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto json_col = JsonColumn::create();
+
+    std::string param_json = R"({"k1":1, "k2":"2"})";
+    std::vector<std::string> param_flat_path = std::vector<std::string>{"k1", "k2"};
+    std::string param_path = "$.k3";
+
+    auto json = JsonValue::parse(param_json);
+    ASSERT_TRUE(json.ok());
+    json_col->append(&*json);
+
+    Columns flat_columns;
+
+    auto flat_json = JsonColumn::create();
+    auto* flat_json_ptr = down_cast<JsonColumn*>(flat_json.get());
+
+    std::vector<std::string> full_paths;
+    for (const auto& p : param_flat_path) {
+        full_paths.emplace_back("$." + p);
+    }
+    flat_json_ptr->init_flat_columns(full_paths);
+
+    JsonFlater jf(param_flat_path);
+    jf.flatten(json_col.get(), &flat_json_ptr->get_flat_fields());
+
+    Columns columns;
+    columns.push_back(flat_json);
+    if (!param_path.empty()) {
+        auto path_column = BinaryColumn::create();
+        path_column->append(param_path);
+        columns.push_back(path_column);
+    }
+
+    ctx.get()->set_constant_columns(columns);
+    Status st = JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    if (!st.ok()) {
+        return;
+    }
+
+    auto ret = JsonFunctions::json_exists(ctx.get(), columns);
+    ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+
+    ASSERT_FALSE(ret.ok());
+}
+
+TEST_F(JsonFunctionsTest, flat_json_invalid_constant_json_test) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto json_col = JsonColumn::create();
+
+    std::string param_json = R"({"k1":1, "k2":"2"})";
+    std::vector<std::string> param_flat_path = std::vector<std::string>{"k1", "k2"};
+    std::string param_path = "$.k3";
+
+    auto json = JsonValue::parse(param_json);
+    ASSERT_TRUE(json.ok());
+    json_col->append(&*json);
+
+    Columns flat_columns;
+
+    auto flat_json = JsonColumn::create();
+    auto* flat_json_ptr = down_cast<JsonColumn*>(flat_json.get());
+
+    std::vector<std::string> full_paths;
+    for (const auto& p : param_flat_path) {
+        full_paths.emplace_back("$." + p);
+    }
+    flat_json_ptr->init_flat_columns(full_paths);
+
+    JsonFlater jf(param_flat_path);
+    jf.flatten(json_col.get(), &flat_json_ptr->get_flat_fields());
+
+    Columns columns;
+    columns.push_back(ConstColumn::create(flat_json, 2));
+    if (!param_path.empty()) {
+        auto path_column = BinaryColumn::create();
+        path_column->append(param_path);
+        columns.push_back(path_column);
+    }
+
+    ctx.get()->set_constant_columns(columns);
+    ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+
+    auto ret = JsonFunctions::json_exists(ctx.get(), columns);
+    ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+
+    ASSERT_FALSE(ret.ok());
+}
+
+TEST_F(JsonFunctionsTest, flat_json_variable_path_test) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto json_col = JsonColumn::create();
+
+    std::string param_json = R"({"k1":1, "k2":"2"})";
+    std::vector<std::string> param_flat_path = std::vector<std::string>{"k1", "k2"};
+    std::string param_path = "$.k2";
+
+    auto json = JsonValue::parse(param_json);
+    ASSERT_TRUE(json.ok());
+    json_col->append(&*json);
+
+    Columns flat_columns;
+
+    auto flat_json = JsonColumn::create();
+    auto* flat_json_ptr = down_cast<JsonColumn*>(flat_json.get());
+
+    std::vector<std::string> full_paths;
+    for (const auto& p : param_flat_path) {
+        full_paths.emplace_back("$." + p);
+    }
+    flat_json_ptr->init_flat_columns(full_paths);
+
+    JsonFlater jf(param_flat_path);
+    jf.flatten(json_col.get(), &flat_json_ptr->get_flat_fields());
+
+    Columns columns;
+    columns.push_back(flat_json);
+    flat_json->assign(10, 0);
+
+    if (!param_path.empty()) {
+        auto path_column = BinaryColumn::create();
+        path_column->append(param_path);
+        path_column->assign(10, 0);
+        columns.push_back(path_column);
+    }
+
+    ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+    ASSIGN_OR_ABORT(ColumnPtr result, JsonFunctions::json_exists(ctx.get(), columns))
+    ASSERT_TRUE((bool)result->get(0).get_uint8());
+
+    ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+}
+
+TEST_F(JsonFunctionsTest, flat_json_invalid_variable_path_test) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto json_col = JsonColumn::create();
+
+    std::string param_json = R"({"k1":1, "k2":"2"})";
+    std::vector<std::string> param_flat_path = std::vector<std::string>{"k1", "k2"};
+    std::string param_path = "$.k2";
+
+    auto json = JsonValue::parse(param_json);
+    ASSERT_TRUE(json.ok());
+    json_col->append(&*json);
+
+    Columns flat_columns;
+
+    auto flat_json = JsonColumn::create();
+    auto* flat_json_ptr = down_cast<JsonColumn*>(flat_json.get());
+
+    std::vector<std::string> full_paths;
+    for (const auto& p : param_flat_path) {
+        full_paths.emplace_back("$." + p);
+    }
+    flat_json_ptr->init_flat_columns(full_paths);
+
+    JsonFlater jf(param_flat_path);
+    jf.flatten(json_col.get(), &flat_json_ptr->get_flat_fields());
+
+    Columns columns;
+    columns.push_back(flat_json);
+    flat_json->assign(2, 0);
+
+    if (!param_path.empty()) {
+        auto path_column = BinaryColumn::create();
+        path_column->append(param_path);
+        path_column->append("$.k3");
+        columns.push_back(path_column);
+    }
+
+    ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+
+    auto ret = JsonFunctions::json_exists(ctx.get(), columns);
+
+    ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+
+    ASSERT_FALSE(ret.ok());
+}
+
+TEST_F(JsonFunctionsTest, flat_json_invalid_null_path_test) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto json_col = JsonColumn::create();
+
+    std::string param_json = R"({"k1":1, "k2":"2"})";
+    std::vector<std::string> param_flat_path = std::vector<std::string>{"k1", "k2"};
+    std::string param_path = "$.k2";
+
+    auto json = JsonValue::parse(param_json);
+    ASSERT_TRUE(json.ok());
+    json_col->append(&*json);
+
+    Columns flat_columns;
+
+    auto flat_json = JsonColumn::create();
+    auto* flat_json_ptr = down_cast<JsonColumn*>(flat_json.get());
+
+    std::vector<std::string> full_paths;
+    for (const auto& p : param_flat_path) {
+        full_paths.emplace_back("$." + p);
+    }
+    flat_json_ptr->init_flat_columns(full_paths);
+
+    JsonFlater jf(param_flat_path);
+    jf.flatten(json_col.get(), &flat_json_ptr->get_flat_fields());
+
+    Columns columns;
+    columns.push_back(flat_json);
+    flat_json->assign(2, 0);
+
+    if (!param_path.empty()) {
+        auto path_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+        path_column->append_nulls(2);
+        columns.push_back(path_column);
+    }
+
+    ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+
+    auto ret = JsonFunctions::json_exists(ctx.get(), columns);
+
+    ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+
+    ASSERT_FALSE(ret.ok());
+}
+
+TEST_F(JsonFunctionsTest, flat_json_constant_path_test) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto json_col = JsonColumn::create();
+
+    std::string param_json = R"({"k1":1, "k2":"2"})";
+    std::vector<std::string> param_flat_path = std::vector<std::string>{"k1", "k2"};
+    std::string param_path = "$.k2";
+
+    auto json = JsonValue::parse(param_json);
+    ASSERT_TRUE(json.ok());
+    json_col->append(&*json);
+
+    Columns flat_columns;
+
+    auto flat_json = JsonColumn::create();
+    auto* flat_json_ptr = down_cast<JsonColumn*>(flat_json.get());
+
+    std::vector<std::string> full_paths;
+    for (const auto& p : param_flat_path) {
+        full_paths.emplace_back("$." + p);
+    }
+    flat_json_ptr->init_flat_columns(full_paths);
+
+    JsonFlater jf(param_flat_path);
+    jf.flatten(json_col.get(), &flat_json_ptr->get_flat_fields());
+
+    Columns columns;
+    columns.push_back(flat_json);
+
+    if (!param_path.empty()) {
+        auto path_column = BinaryColumn::create();
+        path_column->append(param_path);
+        columns.push_back(ConstColumn::create(path_column, 1));
+    }
+
+    ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+
+    ASSIGN_OR_ABORT(ColumnPtr result, JsonFunctions::json_exists(ctx.get(), columns))
+    ASSERT_TRUE((bool)result->get(0).get_uint8());
+
+    ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+}
 
 class JsonParseTestFixture : public ::testing::TestWithParam<std::tuple<std::string, bool, std::string>> {};
 
@@ -790,6 +1289,67 @@ INSTANTIATE_TEST_SUITE_P(JsonLengthTest, JsonLengthTestFixture,
                             std::make_tuple(R"( [1] )", "", 1),
                             std::make_tuple(R"( null )", "", 1), 
                             std::make_tuple(R"( 1 )", "", 1)
+                        ));
+// clang-format on
+
+class FlatJsonLengthTestFixture
+        : public ::testing::TestWithParam<std::tuple<std::string, std::vector<std::string>, std::string, int>> {};
+
+TEST_P(FlatJsonLengthTestFixture, flat_json_length_test) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto json_col = JsonColumn::create();
+
+    std::string param_json = std::get<0>(GetParam());
+    std::vector<std::string> param_flat_path = std::get<1>(GetParam());
+    std::string param_path = std::get<2>(GetParam());
+    int expect_length = std::get<3>(GetParam());
+
+    auto json = JsonValue::parse(param_json);
+    ASSERT_TRUE(json.ok());
+    json_col->append(&*json);
+
+    Columns flat_columns;
+
+    auto flat_json = JsonColumn::create();
+    auto* flat_json_ptr = down_cast<JsonColumn*>(flat_json.get());
+
+    std::vector<std::string> full_paths;
+    for (const auto& p : param_flat_path) {
+        full_paths.emplace_back("$." + p);
+    }
+    flat_json_ptr->init_flat_columns(full_paths);
+
+    JsonFlater jf(param_flat_path);
+    jf.flatten(json_col.get(), &flat_json_ptr->get_flat_fields());
+
+    Columns columns;
+    columns.push_back(flat_json);
+    if (!param_path.empty()) {
+        auto path_column = BinaryColumn::create();
+        path_column->append(param_path);
+        columns.push_back(path_column);
+    }
+
+    // ctx.get()->set_constant_columns(columns);
+    Status st = JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    ASSERT_OK(st);
+
+    ASSIGN_OR_ABORT(ColumnPtr result, JsonFunctions::json_length(ctx.get(), columns));
+    ASSERT_TRUE(!!result);
+    EXPECT_EQ(expect_length, result->get(0).get_int32());
+
+    ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+}
+
+// clang-format off
+INSTANTIATE_TEST_SUITE_P(FlatJsonLengthTest, FlatJsonLengthTestFixture,
+                         ::testing::Values(
+                            std::make_tuple(R"({ "k1":1, "k2": {} })", std::vector<std::string>({"k1", "k2"}), "$.k2", 0), 
+                            std::make_tuple(R"({ "k1":1, "k2": [1,2] })", std::vector<std::string>({"k1", "k2"}), "$.k2", 2), 
+                            std::make_tuple(R"({ "k1":1, "k2": [1,2] })", std::vector<std::string>({"k1", "k2", "k3"}), "$.k3", 0),
+                            std::make_tuple(R"({ "k1":1, "k2": {"xx": 1} })", std::vector<std::string>{"k1", "k2"}, "$.k1", 1)
                         ));
 // clang-format on
 

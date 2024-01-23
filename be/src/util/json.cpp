@@ -75,6 +75,10 @@ JsonValue JsonValue::from_null() {
     return JsonValue(nullJsonSlice());
 }
 
+JsonValue JsonValue::from_none() {
+    return JsonValue(noneJsonSlice());
+}
+
 JsonValue JsonValue::from_int(int64_t value) {
     vpack::Builder builder;
     builder.add(vpack::Value(value));
@@ -288,8 +292,19 @@ StatusOr<Slice> JsonValue::get_string() const {
     });
 }
 
+StatusOr<JsonValue> JsonValue::get_obj(const std::string& key) const {
+    return callVPack<JsonValue>([this, &key]() {
+        auto ss = to_vslice().get(key);
+        return JsonValue(ss);
+    });
+}
+
 bool JsonValue::is_null() const {
     return to_vslice().isNull();
+}
+
+bool JsonValue::is_none() const {
+    return to_vslice().isNone();
 }
 
 std::ostream& operator<<(std::ostream& os, const JsonValue& json) {

@@ -19,8 +19,10 @@
 #include <functional>
 #include <thread>
 
+#include "column/column_access_path.h"
 #include "column/column_pool.h"
 #include "column/type_traits.h"
+#include "common/compiler_util.h"
 #include "common/status.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/limit_operator.h"
@@ -31,6 +33,7 @@
 #include "exec/pipeline/scan/olap_scan_prepare_operator.h"
 #include "exprs/expr_context.h"
 #include "exprs/runtime_filter_bank.h"
+#include "gen_cpp/RuntimeProfile_types.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
@@ -97,9 +100,12 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
     if (_olap_scan_node.__isset.column_access_paths) {
         for (int i = 0; i < _olap_scan_node.column_access_paths.size(); ++i) {
-            auto path = std::make_unique<ColumnAccessPath>();
-            if (path->init(_olap_scan_node.column_access_paths[i], state, _pool).ok()) {
-                _column_access_paths.emplace_back(std::move(path));
+            auto st = ColumnAccessPath::create(_olap_scan_node.column_access_paths[i], state, _pool);
+            if (LIKELY(st.ok())) {
+                _column_access_paths.emplace_back(std::move(st.value()));
+            } else {
+                LOG(WARNING) << "Failed to create column access path: " << _olap_scan_node.column_access_paths[i].type
+                             << "index: " << i << ", error: " << st.status();
             }
         }
     }
@@ -556,6 +562,8 @@ void OlapScanNode::_init_counter(RuntimeState* state) {
     _cached_pages_num_counter = ADD_COUNTER(_scan_profile, "CachedPagesNum", TUnit::UNIT);
     _pushdown_predicates_counter =
             ADD_COUNTER_SKIP_MERGE(_scan_profile, "PushdownPredicates", TUnit::UNIT, TCounterMergeType::SKIP_ALL);
+    _pushdown_access_paths_counter =
+            ADD_COUNTER_SKIP_MERGE(_scan_profile, "PushdownAccessPaths", TUnit::UNIT, TCounterMergeType::SKIP_ALL);
 
     _get_rowsets_timer = ADD_TIMER(_scan_profile, "GetRowsets");
     _get_delvec_timer = ADD_TIMER(_scan_profile, "GetDelVec");
