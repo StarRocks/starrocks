@@ -227,12 +227,14 @@ BE dynamic parameters are as follows.
 
 #### update_compaction_size_threshold
 
-- **Default:** 268435456 bytes
+- **Default:** 268435456
+- **Unit:** Bytes
 - **Description:** The Compaction Score of Primary Key tables is calculated based on the file size, which is different from other table types. This parameter can be used to make the Compaction Score of Primary Key tables similar to that of other table types, making it easier for users to understand.
 
 #### update_compaction_result_bytes
 
 - **Default:** 1073741824
+- **Unit:** Bytes
 - **Description:** The maximum result size of a single Update Compaction.
 
 #### update_compaction_delvec_file_io_amp_ratio
@@ -243,6 +245,7 @@ BE dynamic parameters are as follows.
 #### repair_compaction_interval_seconds
 
 - **Default:** 600
+- **Unit:** Seconds
 - **Description:** The time interval to poll Repair Compaction threads.
 
 #### manual_compaction_threads
@@ -262,7 +265,8 @@ BE dynamic parameters are as follows.
 
 #### min_compaction_failure_interval_sec
 
-- **Default:** 120 seconds
+- **Default:** 120
+- **Unit:** Second
 - **Description:** The minimum time interval at which a tablet compaction can be scheduled since the previous compaction failure.
 
 #### max_compaction_concurrency
@@ -272,7 +276,8 @@ BE dynamic parameters are as follows.
 
 #### periodic_counter_update_period_ms
 
-- **Default:** 500 ms
+- **Default:** 500
+- **Unit:** ms
 - **Description:** The time interval at which to collect the Counter statistics.
 
 #### pindex_major_compaction_limit_per_disk
@@ -283,27 +288,32 @@ BE dynamic parameters are as follows.
 
 #### load_error_log_reserve_hours
 
-- **Default:** 48 hours
+- **Default:** 48
+- **Unit:** hour
 - **Description:** The time for which data loading logs are reserved.
 
 #### streaming_load_max_mb
 
-- **Default:** 10,240 MB
+- **Default:** 102400
+- **Unit:** MB
 - **Description:** The maximum size of a file that can be streamed into StarRocks.
 
 #### streaming_load_max_batch_size_mb
 
-- **Default:** 100 MB
+- **Default:** 100
+- **Unit:** MB
 - **Description:** The maximum size of a JSON file that can be streamed into StarRocks.
 
 #### memory_maintenance_sleep_time_s
 
-- **Default:** 10 seconds
+- **Default:** 10
+- **Unit:** Seconds
 - **Description:** The time interval at which ColumnPool GC is triggered. StarRocks executes GC periodically and returns the released memory to the operating system.
 
 #### write_buffer_size
 
-- **Default:** 104,857,600 Bytes
+- **Default:** 104857600
+- **Unit:** Bytes
 - **Description:** The buffer size of MemTable in the memory. This configuration item is the threshold to trigger a flush.
 
 #### tablet_stat_cache_update_interval_second
@@ -481,7 +491,7 @@ BE static parameters are as follows.
 #### compaction_memory_limit_per_worker
 
 - **Default**: 2147483648 (2 GB)
-- **Unit**: byte
+- **Unit**: Bytes
 - **Description**: The maximum memory usage per compaction thread.
 
 #### priority_networks
@@ -666,7 +676,7 @@ BE static parameters are as follows.
 #### max_length_for_bitmap_function
 
 - **Default**: 1000000
-- **Unit**: Byte
+- **Unit**: Bytes
 - **Description**: The maximum length of input values for bitmap functions.
 
 #### max_length_for_to_base64
@@ -684,7 +694,7 @@ BE static parameters are as follows.
 #### max_garbage_sweep_interval
 
 - **Default**: 3600
-- **Unit**: Second
+- **Unit**: Seconds
 - **Description**: The maximum time interval for garbage collection on storage volumes.
 
 #### min_garbage_sweep_interval
@@ -708,7 +718,7 @@ BE static parameters are as follows.
 #### index_stream_cache_capacity
 
 - **Default**: 10737418240
-- **Unit**: Byte
+- **Unit**: Bytes
 - **Description**: The cache capacity for the statistical information of BloomFilter, Min, and Max.
 
 #### disable_storage_page_cache
@@ -736,7 +746,7 @@ BE static parameters are as follows.
 #### compaction_trace_threshold
 
 - **Default**: 60
-- **Unit**: Second
+- **Unit**: Seconds
 - **Description**: The time threshold for each compaction. If a compaction takes more time than the time threshold, StarRocks prints the corresponding trace.
 
 #### cumulative_compaction_num_threads_per_disk
@@ -787,7 +797,7 @@ BE static parameters are as follows.
 #### streaming_load_rpc_max_alive_time_sec
 
 - **Default**: 1200
-- **Unit**: Second
+- **Unit**: Seconds
 - **Description**: The RPC timeout for Stream Load.
 
 #### fragment_pool_thread_num_min
@@ -823,7 +833,7 @@ BE static parameters are as follows.
 #### load_process_max_memory_limit_bytes
 
 - **Default**: 107374182400
-- **Unit**: Byte
+- **Unit**: Bytes
 - **Description**: The maximum size limit of memory resources that can be taken up by all load processes on a BE node.
 
 #### load_process_max_memory_limit_percent
@@ -847,7 +857,7 @@ BE static parameters are as follows.
 #### brpc_max_body_size
 
 - **Default**: 2147483648
-- **Unit**: Byte
+- **Unit**: Bytes
 - **Description**: The maximum body size of a bRPC.
 
 #### tablet_map_shard_size

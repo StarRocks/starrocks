@@ -200,23 +200,23 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### min_base_compaction_num_singleton_deltas
 
-- 含义：触发 BaseCompaction 的最小 segment 数。
+- 含义：触发 Base Compaction 的最小 segment 数。
 - 默认值：5
 
 #### max_base_compaction_num_singleton_deltas
 
-- 含义：单次 BaseCompaction 合并的最大 segment 数。
+- 含义：单次 Base Compaction 合并的最大 segment 数。
 - 默认值：100
 
 #### base_compaction_interval_seconds_since_last_operation
 
-- 含义：上一轮 BaseCompaction 距今的间隔，是触发 BaseCompaction 条件之一。
+- 含义：上一轮 Base Compaction 距今的间隔，是触发 Base Compaction 条件之一。
 - 单位：秒
 - 默认值：86400
 
 #### cumulative_compaction_check_interval_seconds
 
-- 含义：CumulativeCompaction 线程轮询的间隔。
+- 含义：Cumulative Compaction 线程轮询的间隔。
 - 单位：秒
 - 默认值：1
 
@@ -250,6 +250,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 - 含义：Primary Key 表每个 tablet 做 Update Compaction 的最小时间间隔。
 - 默认值：120
+- 单位：秒
 
 #### max_update_compaction_num_singleton_deltas
 
@@ -277,6 +278,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 - 含义：Repair Compaction 线程轮询的间隔。
 - 默认值：600
+- 单位：秒
 
 #### manual_compaction_threads
 
@@ -551,7 +553,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 #### compaction_memory_limit_per_worker
 
 - 含义：单个 Compaction 线程的最大内存使用量。
-- 单位：byte
+- 单位：字节
 - 默认值：2147483648 (2 GB)
 
 #### priority_networks
@@ -730,12 +732,12 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### base_compaction_num_threads_per_disk
 
-- 含义：每个磁盘 BaseCompaction 线程的数目。
+- 含义：每个磁盘 Base Compaction 线程的数目。
 - 默认值：1
 
 #### base_cumulative_delta_ratio
 
-- 含义：BaseCompaction 触发条件之一：Cumulative 文件大小达到 Base 文件的比例。
+- 含义：Base Compaction 触发条件之一：Cumulative 文件大小达到 Base 文件的比例。
 - 默认值：0.3
 
 #### compaction_trace_threshold
