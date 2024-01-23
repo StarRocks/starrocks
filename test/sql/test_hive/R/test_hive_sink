@@ -1,0 +1,61 @@
+-- name: test_hive_sink
+create external catalog hive_sink_test_${uuid0} PROPERTIES ("type"="hive", "hive.metastore.uris"="${hive_metastore_uris}");
+-- result:
+-- !result
+set catalog hive_sink_test_${uuid0};
+-- result:
+-- !result
+create database hive_db_${uuid0};
+-- result:
+-- !result
+use hive_db_${uuid0};
+-- result:
+-- !result
+create table t1 (k1 int, k2 int, k3 date, k4 smallint) partition by (k3, k4);
+-- result:
+-- !result
+insert into t1 select 999,888,'9999-12-03', 3;
+-- result:
+-- !result
+select * from t1;
+-- result:
+999	888	9999-12-03	3
+-- !result
+insert into t1 values( 999,888,'9999-12-03', 3),( 999,888,'9999-12-33', 3);
+-- result:
+E: (1064, "Partition value can't be null.")
+-- !result
+select * from t1;
+-- result:
+999	888	9999-12-03	3
+-- !result
+drop table t1 force;
+-- result:
+-- !result
+CREATE TABLE struct_index (
+date varchar(1048576) NULL COMMENT "",
+hash varchar(1048576) NULL COMMENT "",
+input struct<`index` bigint(20), value double> NULL COMMENT "",
+outputs array<struct<`index` bigint(20), value double>> NULL COMMENT ""
+);
+-- result:
+-- !result
+insert into struct_index values ('20210101', '123', row(1,1.1), [row(1,1.1)]);
+-- result:
+-- !result
+select /*+ set_var(enable_prune_complex_types = false) */ outputs[1].`index`, input.`index` from struct_index;
+-- result:
+1	1
+-- !result
+drop table struct_index force;
+-- result:
+-- !result
+drop database hive_db_${uuid0};
+-- result:
+-- !result
+drop catalog hive_sink_test_${uuid0};
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
