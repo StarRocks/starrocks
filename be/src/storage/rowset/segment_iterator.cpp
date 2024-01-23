@@ -247,8 +247,6 @@ private:
 
     Status _read(Chunk* chunk, vector<rowid_t>* rowid, size_t n);
 
-    bool _skip_fill_data_cache() const { return !_opts.fill_data_cache; }
-
     void _init_column_access_paths();
 
     // search delta column group by column uniqueid, if this column exist in delta column group,
@@ -507,9 +505,10 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     iter_opts.use_page_cache = _opts.use_page_cache;
     iter_opts.check_dict_encoding = check_dict_enc;
     iter_opts.reader_type = _opts.reader_type;
-    iter_opts.fill_data_cache = _opts.fill_data_cache;
+    iter_opts.lake_io_opts = _opts.lake_io_opts;
 
-    RandomAccessFileOptions opts{.skip_fill_local_cache = _skip_fill_data_cache()};
+    RandomAccessFileOptions opts{.skip_fill_local_cache = !_opts.lake_io_opts.fill_data_cache,
+                                 .buffer_size = _opts.lake_io_opts.buffer_size};
 
     ColumnAccessPath* access_path = nullptr;
     if (_column_access_paths.find(cid) != _column_access_paths.end()) {
@@ -676,7 +675,7 @@ StatusOr<SparseRange<>> SegmentIterator::_get_row_ranges_by_key_ranges() {
         return res;
     }
 
-    RETURN_IF_ERROR(_segment->load_index(_skip_fill_data_cache()));
+    RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts));
     for (const SeekRange& range : _opts.ranges) {
         rowid_t lower_rowid = 0;
         rowid_t upper_rowid = num_rows();
@@ -708,7 +707,7 @@ StatusOr<SparseRange<>> SegmentIterator::_get_row_ranges_by_short_key_ranges() {
         return res;
     }
 
-    RETURN_IF_ERROR(_segment->load_index(_skip_fill_data_cache()));
+    RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts));
     for (const auto& short_key_range : _opts.short_key_ranges) {
         rowid_t lower_rowid = 0;
         rowid_t upper_rowid = num_rows();
@@ -1683,7 +1682,7 @@ Status SegmentIterator::_init_bitmap_index_iterators() {
             IndexReadOptions opts;
             opts.use_page_cache = config::enable_bitmap_index_memory_page_cache || !config::disable_storage_page_cache;
             opts.kept_in_memory = config::enable_bitmap_index_memory_page_cache;
-            opts.skip_fill_data_cache = _skip_fill_data_cache();
+            opts.lake_io_opts = _opts.lake_io_opts;
             opts.read_file = _column_files[cid].get();
             opts.stats = _opts.stats;
 

@@ -101,7 +101,7 @@ DISTRIBUTED BY HASH(`id`);
 
 :::note
 
-Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [Determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
+Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/Data_distribution.md#set-the-number-of-buckets).
 
 :::
 
@@ -176,7 +176,7 @@ DISTRIBUTED BY HASH(`id`);
 
 :::note
 
-Since v2.5.7, StarRocks can set the number of(BUCKETS) automatically when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [Determine the number of buckets](../table_design/Data_distribution.md#determine-the-number-of-buckets).
+Since v2.5.7, StarRocks can set the number of(BUCKETS) automatically when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../table_design/Data_distribution.md#set-the-number-of-buckets).
 
 :::
 

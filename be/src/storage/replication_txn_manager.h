@@ -23,13 +23,17 @@ class ReplicationTxnManager {
 public:
     explicit ReplicationTxnManager() {}
 
+    Status init(const std::vector<starrocks::DataDir*>& data_dirs);
+
     Status remote_snapshot(const TRemoteSnapshotRequest& request, std::string* src_snapshot_path,
                            bool* incremental_snapshot);
 
     Status replicate_snapshot(const TReplicateSnapshotRequest& request);
 
-    Status get_txn_related_tablets(const TTransactionId transaction_id, TPartitionId partition_id,
-                                   std::vector<TTabletId>* tablet_ids);
+    void get_txn_related_tablets(TTransactionId transaction_id, TPartitionId partition_id,
+                                 std::vector<TTabletId>* tablet_ids);
+
+    void get_tablet_related_txns(TTabletId tablet_id, std::set<TTransactionId>* transaction_ids);
 
     Status publish_txn(TTransactionId transaction_id, TPartitionId partition_id, const TabletSharedPtr& tablet,
                        int64_t version);
@@ -41,6 +45,9 @@ public:
     DISALLOW_COPY_AND_MOVE(ReplicationTxnManager);
 
 private:
+    StatusOr<TabletSharedPtr> prepare_txn(TTransactionId transaction_id, TPartitionId partition_id,
+                                          TTabletId tablet_id);
+
     Status make_remote_snapshot(const TRemoteSnapshotRequest& request, const std::vector<Version>* missed_versions,
                                 const std::vector<int64_t>* missing_version_ranges, TBackend* src_backend,
                                 std::string* src_snapshot_path);
@@ -74,12 +81,18 @@ private:
 
     Status save_tablet_txn_meta(const std::string& tablet_txn_dir_path, const ReplicationTxnMetaPB& txn_meta);
 
-    Status load_tablet_txn_meta(DataDir* data_dir, TTransactionId transaction_id, TPartitionId partition_id,
-                                TTabletId tablet_id, ReplicationTxnMetaPB& txn_meta);
+    Status load_tablet_txn_meta(TTransactionId transaction_id, TTabletId tablet_id,
+                                ReplicationTxnMetaPB& txn_meta) const;
 
-    Status load_tablet_txn_meta(const std::string& tablet_txn_dir_path, ReplicationTxnMetaPB& txn_meta);
+    Status load_tablet_txn_meta(const std::string& tablet_txn_dir_path, ReplicationTxnMetaPB& txn_meta) const;
 
-    StatusOr<TabletSharedPtr> get_tablet(TTabletId tablet_id);
+    StatusOr<TabletSharedPtr> get_tablet(TTabletId tablet_id) const;
+
+private:
+    mutable std::shared_mutex _mutex;
+    std::unordered_map<TTransactionId, std::unordered_map<TPartitionId, std::unordered_set<TTabletId>>>
+            _transaction_map;
+    std::unordered_map<TTabletId, std::unordered_map<TTransactionId, ReplicationTxnMetaPB>> _tablet_map;
 };
 
 } // namespace starrocks

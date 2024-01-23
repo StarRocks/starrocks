@@ -57,13 +57,13 @@ SHOW [ALL] ROUTINE LOAD FOR [<db_name>.]<job_name>
 | DataSourceProperties | 数据源属性。比如 Topic、Kafka 集群中 Broker 的地址和端口列表。 |
 | CustomProperties     | 导入作业中自定义的更多数据源相关属性。                       |
 | Statistic            | 导入数据的指标，比如成功导入数据行、总数据行、已接受的数据量。 |
-| Progress             | Topic 中各个分区消息的消费进度（以位点进行衡量）。           |
-| TimestampProgress    | Topic 中各个分区消息的消费进度（以时间戳进行衡量）。         |
+| Progress             | 导入作业消费 Topic 中各个分区消息的进度（以位点进行衡量）。           |
+| TimestampProgress    | 导入作业消费 Topic 中各个分区消息的进度（以时间戳进行衡量）。         |
 | ReasonOfStateChanged | 导致导入作业处于 `CANCELLED` 或者 `PAUSED` 状态的原因。      |
 | ErrorLogUrls         | 错误日志 URL。您可以使用 `curl` 或 `wget` 命令打开该地址。   |
 | TrackingSQL          | 直接通过 SQL 查询 Information Schema 中记录的错误日志信息。  |
 | OtherMsg             | 所有失败的导入任务的信息。                                   |
-| LatestSourcePosition | Topic 中各个分区中消息的最新消费位点。                       |
+| LatestSourcePosition | 数据源 Kafka 中 Topic 中各个分区的最新消息位点，便于检查导入延迟情况。  | 
 
 ## 示例
 

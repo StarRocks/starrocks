@@ -35,11 +35,11 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
@@ -103,7 +103,7 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
         }
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
-        
+
         try {
             olapTable = (OlapTable) db.getTable(tableName);
             if (olapTable == null) {

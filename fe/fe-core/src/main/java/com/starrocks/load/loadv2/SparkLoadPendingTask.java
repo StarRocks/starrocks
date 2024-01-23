@@ -67,6 +67,8 @@ import com.starrocks.common.LoadException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.LoadPriority;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.BrokerFileGroupAggInfo.FileGroupAggKey;
 import com.starrocks.load.FailMsg;
@@ -82,8 +84,6 @@ import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlPartitionInfo;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.EtlTable;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.FilePatternVersion;
 import com.starrocks.load.loadv2.etl.EtlJobConfig.SourceType;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ImportColumnDesc;
@@ -117,7 +117,6 @@ public class SparkLoadPendingTask extends LoadTask {
                                 Map<FileGroupAggKey, List<BrokerFileGroup>> aggKeyToBrokerFileGroups,
                                 SparkResource resource, BrokerDesc brokerDesc) {
         super(loadTaskCallback, TaskType.PENDING, LoadPriority.NORMAL_VALUE);
-        this.retryTime = 3;
         this.attachment = new SparkPendingTaskAttachment(signature);
         this.aggKeyToBrokerFileGroups = aggKeyToBrokerFileGroups;
         this.resource = resource;
@@ -386,7 +385,7 @@ public class SparkLoadPendingTask extends LoadTask {
         }
         List<EtlPartition> etlPartitions = Lists.newArrayList();
         Map<Long, List<List<LiteralExpr>>> multiLiteralExprValues = listPartitionInfo.getMultiLiteralExprValues();
-        Map<Long, List<LiteralExpr>>  literalExprValues = listPartitionInfo.getLiteralExprValues();
+        Map<Long, List<LiteralExpr>> literalExprValues = listPartitionInfo.getLiteralExprValues();
         for (Long partitionId : partitionIds) {
             Partition partition = table.getPartition(partitionId);
             if (partition == null) {
@@ -544,7 +543,7 @@ public class SparkLoadPendingTask extends LoadTask {
                 for (ImportColumnDesc columnDesc : copiedColumnExprList) {
                     if (!columnDesc.isColumn() && slot.getColumnName().equals(columnDesc.getColumnName())) {
                         throw new LoadException("generated column can not refenece the column which is the " +
-                                                "result of the expression in spark load");
+                                "result of the expression in spark load");
                     }
                 }
             }

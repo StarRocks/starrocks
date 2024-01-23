@@ -26,8 +26,8 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -70,7 +70,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
 
     @Override
     public void preCommit(TransactionState txnState, List<TabletCommitInfo> tabletCommitInfos,
-                          List<TabletFailInfo> failedTablets) throws TransactionException {
+                            List<TabletFailInfo> failedTablets) throws TransactionException {
         Preconditions.checkState(txnState.getTransactionStatus() != TransactionStatus.COMMITTED);
         txnState.clearAutomaticPartitionSnapshot();
         if (table.getState() == OlapTable.OlapTableState.RESTORE) {
@@ -245,18 +245,13 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
 
     @Override
     public void preWriteCommitLog(TransactionState txnState) {
-        Preconditions.checkState(txnState.getTransactionStatus() == TransactionStatus.COMMITTED
-                || txnState.getTransactionStatus() == TransactionStatus.PREPARED);
+        Preconditions.checkState(txnState.getTransactionStatus() == TransactionStatus.PREPARED);
         TableCommitInfo tableCommitInfo = new TableCommitInfo(table.getId());
         boolean isFirstPartition = true;
         txnState.getErrorReplicas().addAll(errorReplicaIds);
         for (long partitionId : dirtyPartitionSet) {
-            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             PartitionCommitInfo partitionCommitInfo;
             long version = -1;
-            if (txnState.getTransactionStatus() == TransactionStatus.COMMITTED) {
-                version = partition.getNextVersion();
-            }
             if (isFirstPartition) {
 
                 List<String> validDictCacheColumnNames = Lists.newArrayList();
@@ -291,10 +286,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
         }
 
         txnState.putIdToTableCommitInfo(table.getId(), tableCommitInfo);
-    }
 
-    @Override
-    public void postWriteCommitLog(TransactionState txnState) {
         // add publish version tasks. set task to null as a placeholder.
         // tasks will be created when publishing version.
         for (long backendId : totalInvolvedBackends) {

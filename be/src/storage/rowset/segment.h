@@ -86,7 +86,7 @@ public:
                                                    uint32_t segment_id, TabletSchemaCSPtr tablet_schema,
                                                    size_t* footer_length_hint = nullptr,
                                                    const FooterPointerPB* partial_rowset_footer = nullptr,
-                                                   bool skip_fill_local_cache = true,
+                                                   const LakeIOOptions& lake_io_opts = {},
                                                    lake::TabletManager* tablet_manager = nullptr);
 
     [[nodiscard]] static StatusOr<size_t> parse_segment_footer(RandomAccessFile* read_file, SegmentFooterPB* footer,
@@ -100,7 +100,8 @@ public:
 
     ~Segment();
 
-    Status open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer, bool skip_fill_local_cache);
+    Status open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
+                const LakeIOOptions& lake_io_opts);
 
     // may return EndOfFile
     StatusOr<ChunkIteratorPtr> new_iterator(const Schema& schema, const SegmentReadOptions& read_options);
@@ -190,7 +191,7 @@ public:
 
     // Load and decode short key index.
     // May be called multiple times, subsequent calls will no op.
-    [[nodiscard]] Status load_index(bool skip_fill_local_cache = true);
+    [[nodiscard]] Status load_index(const LakeIOOptions& lake_io_opts = {});
     bool has_loaded_index() const;
 
     const ShortKeyIndexDecoder* decoder() const { return _sk_index_decoder.get(); }
@@ -242,7 +243,7 @@ private:
         TabletSchemaCSPtr _schema;
     };
 
-    Status _load_index(bool skip_fill_local_cache);
+    Status _load_index(const LakeIOOptions& lake_io_opts);
 
     void _reset();
 
@@ -259,7 +260,8 @@ private:
     size_t _column_index_mem_usage() const;
 
     // open segment file and read the minimum amount of necessary information (footer)
-    Status _open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer, bool skip_fill_local_cache);
+    Status _open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
+                 const LakeIOOptions& lake_io_opts);
     Status _create_column_readers(SegmentFooterPB* footer);
 
     StatusOr<ChunkIteratorPtr> _new_iterator(const Schema& schema, const SegmentReadOptions& read_options);

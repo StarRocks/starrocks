@@ -23,8 +23,8 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.metric.Metric.MetricUnit;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
@@ -82,7 +82,7 @@ public final class MaterializedViewMetricsEntity {
     // the current materialized view's partition count, 0 if the materialized view is not partitioned
     public GaugeMetric<Integer> counterPartitionCount;
 
-    // histogram
+    // histogram(ms)
     // record the materialized view's refresh job duration only if it's refreshed successfully.
     public Histogram histRefreshJobDuration;
 

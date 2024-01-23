@@ -23,8 +23,7 @@ public class TableAddOrDropColumnsInfoTest {
     @Test
     public void test() {
         TableAddOrDropColumnsInfo info = new TableAddOrDropColumnsInfo(1, 1,
-                Collections.emptyMap(), Collections.emptyList(), 0, 1, 0,
-                Collections.emptySet(), Collections.emptyMap());
+                Collections.emptyMap(), Collections.emptyList(), 0, 1, Collections.emptyMap());
 
         Assert.assertEquals(1, info.getDbId());
         Assert.assertEquals(1, info.getTableId());
@@ -32,13 +31,10 @@ public class TableAddOrDropColumnsInfoTest {
         Assert.assertEquals(0, info.getIndexSchemaMap().size());
         Assert.assertEquals(0, info.getJobId());
         Assert.assertEquals(1, info.getTxnId());
-        Assert.assertEquals(0, info.getStartTime());
-        Assert.assertEquals(0, info.getAddColumnsName().size());
         Assert.assertEquals(0, info.getIndexToNewSchemaId().size());
 
         TableAddOrDropColumnsInfo info2 = new TableAddOrDropColumnsInfo(1, 1,
-                Collections.emptyMap(), Collections.emptyList(), 0, 1, 0,
-                Collections.emptySet(), Collections.emptyMap());
+                Collections.emptyMap(), Collections.emptyList(), 0, 1, Collections.emptyMap());
 
         Assert.assertEquals(info.hashCode(), info2.hashCode());
         Assert.assertEquals(info, info2);
