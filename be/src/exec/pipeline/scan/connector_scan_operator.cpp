@@ -27,51 +27,42 @@ namespace starrocks::pipeline {
 // ==================== ConnectorScanOperatorFactory ====================
 
 struct ConnectorScanOperatorIOTasksMemLimiter {
-    mutable std::mutex lock;
+    mutable std::shared_mutex lock;
 
-    const int64_t dop = 0;
-    std::atomic<int64_t> scan_mem_limit = 0;
-    std::atomic<int64_t> running_chunk_source_count = 0;
-    std::atomic<int64_t> chunk_source_mem_bytes = 0;
-    int64_t chunk_source_mem_bytes_update_count = 0;
+    size_t dop = 0;
+    int64_t mem_limit = 0;
+    int64_t running_chunk_source_count = 0;
+    int64_t estimated_mem_usage_update_count = 0;
+    double estimated_mem_usage_per_chunk_source = 0;
 
-    ConnectorScanOperatorIOTasksMemLimiter(int64_t dop) : dop(dop) {}
+    int available_chunk_source_count() const {
+        std::shared_lock<std::shared_mutex> L(lock);
 
-    int available_chunk_source_count(int driver_sequence) const {
-        int64_t scan_mem_limit_value = scan_mem_limit.load(std::memory_order_relaxed);
-        int64_t chunk_source_mem_bytes_value = chunk_source_mem_bytes.load(std::memory_order_relaxed);
-        int64_t running_count = running_chunk_source_count.load(std::memory_order_relaxed);
-
-        int64_t max_count = std::max(1L, scan_mem_limit_value / chunk_source_mem_bytes_value);
-        int64_t avail_count = std::max(0L, max_count - running_count);
-        int64_t per_count = avail_count / dop;
-
-        if (per_count == 0 && driver_sequence < avail_count) {
-            per_count += 1;
+        int64_t max_count = mem_limit / estimated_mem_usage_per_chunk_source;
+        int64_t avail_count = (max_count - running_chunk_source_count) / static_cast<int64_t>(dop);
+        avail_count = std::max<int64_t>(avail_count, 0);
+        if (avail_count == 0 && running_chunk_source_count == 0) {
+            avail_count = 1;
         }
-        if (per_count < 0) {
-            per_count = 0;
-        }
-
-        // VLOG_FILE << "available_chunk_source_count. max_count=" << max_count << "(" << scan_mem_limit_value << "/"
-        //           << chunk_source_mem_bytes_value << ")"
-        //           << ", running_count = " << running_count << ", dop = " << dop << ", avail_count = " << avail_count
-        //           << ", seq = " << driver_sequence << ", per_count = " << per_count;
-        return per_count;
+        // VLOG_FILE << "available_chunk_source_count. max_count=" << max_count << "(" << mem_limit << "/"
+        //           << int64_t(estimated_mem_usage_per_chunk_source) << ")"
+        //           << ", running_chunk_source_count = " << running_chunk_source_count << ", dop=" << dop
+        //           << ", avail_count = " << avail_count;
+        return avail_count;
     }
 
     void update_running_chunk_source_count(int delta) {
-        running_chunk_source_count.fetch_add(delta, std::memory_order_relaxed);
+        std::unique_lock<std::shared_mutex> L(lock);
+        running_chunk_source_count += delta;
     }
 
-    void update_chunk_source_mem_bytes(int64_t value) {
+    void update_estimated_mem_usage_per_chunk_source(int64_t value) {
         if (value == 0) return;
 
-        std::lock_guard<std::mutex> L(lock);
-        int64_t total =
-                chunk_source_mem_bytes.load(std::memory_order_relaxed) * chunk_source_mem_bytes_update_count + value;
-        chunk_source_mem_bytes_update_count += 1;
-        chunk_source_mem_bytes.store(total / chunk_source_mem_bytes_update_count, std::memory_order_relaxed);
+        std::unique_lock<std::shared_mutex> L(lock);
+        double total = estimated_mem_usage_per_chunk_source * estimated_mem_usage_update_count + value;
+        estimated_mem_usage_update_count += 1;
+        estimated_mem_usage_per_chunk_source = total / estimated_mem_usage_update_count;
     }
 };
 
@@ -80,7 +71,8 @@ ConnectorScanOperatorFactory::ConnectorScanOperatorFactory(int32_t id, ScanNode*
         : ScanOperatorFactory(id, scan_node),
           _chunk_buffer(scan_node->is_shared_scan_enabled() ? BalanceStrategy::kRoundRobin : BalanceStrategy::kDirect,
                         dop, std::move(buffer_limiter)) {
-    _io_tasks_mem_limiter = state->obj_pool()->add(new ConnectorScanOperatorIOTasksMemLimiter(dop));
+    _io_tasks_mem_limiter = state->obj_pool()->add(new ConnectorScanOperatorIOTasksMemLimiter());
+    _io_tasks_mem_limiter->dop = dop;
 }
 
 Status ConnectorScanOperatorFactory::do_prepare(RuntimeState* state) {
@@ -106,11 +98,11 @@ const std::vector<ExprContext*>& ConnectorScanOperatorFactory::partition_exprs()
 }
 
 void ConnectorScanOperatorFactory::set_estimated_mem_usage_per_chunk_source(int64_t value) {
-    _io_tasks_mem_limiter->update_chunk_source_mem_bytes(value);
+    _io_tasks_mem_limiter->estimated_mem_usage_per_chunk_source = value;
 }
 
 void ConnectorScanOperatorFactory::set_scan_mem_limit(int64_t value) {
-    _io_tasks_mem_limiter->scan_mem_limit = value;
+    _io_tasks_mem_limiter->mem_limit = value;
 }
 
 // ===============================================================
@@ -320,7 +312,7 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
     int min_io_tasks = config::connector_io_tasks_min_size;
     auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
     ConnectorScanOperatorIOTasksMemLimiter* L = factory->_io_tasks_mem_limiter;
-    int max_io_tasks = L->available_chunk_source_count(_driver_sequence);
+    int max_io_tasks = L->available_chunk_source_count();
     max_io_tasks = std::min(max_io_tasks, _io_tasks_per_scan_operator);
     min_io_tasks = std::min(min_io_tasks, max_io_tasks);
 
@@ -498,7 +490,7 @@ void ConnectorChunkSource::close(RuntimeState* state) {
 
     ConnectorScanOperatorIOTasksMemLimiter* limiter = _get_io_tasks_mem_limiter();
     limiter->update_running_chunk_source_count(-1);
-    limiter->update_chunk_source_mem_bytes(_data_source->estimated_mem_usage());
+    limiter->update_estimated_mem_usage_per_chunk_source(_data_source->estimated_mem_usage());
 
     _closed = true;
     _data_source->close(state);
