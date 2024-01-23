@@ -713,12 +713,18 @@ You can only set the static parameters of a FE by changing them in the correspon
 
 ##### edit_log_type
 
+<<<<<<< HEAD
 - Default: BDB
 - Type: String
 - Unit: -
 - Is mutable: No
 - Description: The type of edit log that can be generated. Set the value to `BDB`.
 - Introduced in: -
+=======
+- **Unit**: -
+- **Default**: FALSE
+- **Description**: Whether to ignore an unknown log ID. When an FE is rolled back, the FEs of the earlier version may be unable to recognize some log IDs. If the value is `TRUE`, the FE ignores unknown log IDs. If the value is `FALSE`, the FE exits.
+>>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091))
 
 ##### edit_log_port
 
@@ -4614,6 +4620,7 @@ You can only set the static parameters of a FE by changing them in the correspon
 
 ##### jdbc_meta_default_cache_expire_sec
 
+<<<<<<< HEAD
 - Default: 600
 - Type: Long
 - Unit: Seconds
@@ -4658,3 +4665,574 @@ You can only set the static parameters of a FE by changing them in the correspon
 - Description:
 - Introduced in: -
 -->
+=======
+- **Unit**: Second
+- **Default**: 600
+- **Description**: The default expiration time for the JDBC Catalog metadata cache. When jdbc_meta_default_cache_enable is set to true, newly created JDBC Catalogs will default to setting the expiration time of the metadata cache.
+
+##### default_mv_refresh_immediate
+
+- **Unit**: -
+- **Default**: TRUE
+- **Description**: Whether to refresh an asynchronous materialized view immediately after creation. When this item is set to `true`, newly created materialized view will be refreshed immediately.
+- **Introduced in**: v3.2.3
+
+## Configure FE static parameters
+
+This section provides an overview of the static parameters that you can configure in the FE configuration file **fe.conf**. After you reconfigure these parameters for an FE, you must restart the FE for the changes to take effect.
+
+### Logging
+
+#### log_roll_size_mb
+
+- **Default:** 1024 MB
+- **Description:** The size per log file. Unit: MB. The default value `1024` specifies the size per log file as 1 GB.
+
+#### sys_log_dir
+
+- **Default:** StarRocksFE.STARROCKS_HOME_DIR + "/log"
+- **Description:** The directory that stores system log files.
+
+#### sys_log_level
+
+- **Default:** INFO
+- **Description:** The severity levels into which system log entries are classified. Valid values: `INFO`, `WARN`, `ERROR`, and `FATAL`.
+
+#### sys_log_verbose_modules
+
+- **Default:** Empty string
+- **Description:** The modules for which StarRocks generates system logs. If this parameter is set to `org.apache.starrocks.catalog`, StarRocks generates system logs only for the catalog module.
+
+#### sys_log_roll_interval
+
+- **Default:** DAY
+- **Description:** The time interval at which StarRocks rotates system log entries. Valid values: `DAY` and `HOUR`.
+  - If this parameter is set to `DAY`, a suffix in the `yyyyMMdd` format is added to the names of system log files.
+  - If this parameter is set to `HOUR`, a suffix in the `yyyyMMddHH` format is added to the names of system log files.
+
+#### sys_log_delete_age
+
+- **Default:** 7d
+- **Description:** The retention period of system log files. The default value `7d` specifies that each system log file can be retained for 7 days. StarRocks checks each system log file and deletes those that were generated 7 days ago.
+
+#### sys_log_roll_num
+
+- **Default:** 10
+- **Description:** The maximum number of system log files that can be retained within each retention period specified by the `sys_log_roll_interval` parameter.
+
+#### audit_log_dir
+
+- **Default:** StarRocksFE.STARROCKS_HOME_DIR + "/log"
+- **Description:** The directory that stores audit log files.
+
+#### audit_log_roll_num
+
+- **Default:** 90
+- **Description:** The maximum number of audit log files that can be retained within each retention period specified by the `audit_log_roll_interval` parameter.
+
+#### audit_log_modules
+
+- **Default:** slow_query, query
+- **Description:** The modules for which StarRocks generates audit log entries. By default, StarRocks generates audit logs for the slow_query module and the query module. Separate the module names with a comma (,) and a space.
+
+#### audit_log_roll_interval
+
+- **Default:** DAY
+- **Description:** The time interval at which StarRocks rotates audit log entries. Valid values: `DAY` and `HOUR`.
+- If this parameter is set to `DAY`, a suffix in the `yyyyMMdd` format is added to the names of audit log files.
+- If this parameter is set to `HOUR`, a suffix in the `yyyyMMddHH` format is added to the names of audit log files.
+
+#### audit_log_delete_age
+
+- **Default:** 30d
+- **Description:** The retention period of audit log files. The default value `30d` specifies that each audit log file can be retained for 30 days. StarRocks checks each audit log file and deletes those that were generated 30 days ago.
+
+#### dump_log_dir
+
+- **Default:** StarRocksFE.STARROCKS_HOME_DIR + "/log"
+- **Description:** The directory that stores dump log files.
+
+#### dump_log_modules
+
+- **Default:** query
+- **Description:** The modules for which StarRocks generates dump log entries. By default, StarRocks generates dump logs for the query module. Separate the module names with a comma (,) and a space.
+
+#### dump_log_roll_interval
+
+- **Default:** DAY
+- **Description:** The time interval at which StarRocks rotates dump log entries. Valid values: `DAY` and `HOUR`.
+  - If this parameter is set to `DAY`, a suffix in the `yyyyMMdd` format is added to the names of dump log files.
+  - If this parameter is set to `HOUR`, a suffix in the `yyyyMMddHH` format is added to the names of dump log files.
+
+#### dump_log_roll_num
+
+- **Default:** 10
+- **Description:** The maximum number of dump log files that can be retained within each retention period specified by the `dump_log_roll_interval` parameter.
+
+#### dump_log_delete_age
+
+- **Default:** 7d
+- **Description:** The retention period of dump log files. The default value `7d` specifies that each dump log file can be retained for 7 days. StarRocks checks each dump log file and deletes those that were generated 7 days ago.
+
+### Server
+
+#### frontend_address
+
+- **Default:** 0.0.0.0
+- **Description:** The IP address of the FE node.
+
+#### priority_networks
+
+- **Default:** Empty string
+- **Description:** Declares a selection strategy for servers that have multiple IP addresses. Note that at most one IP address must match the list specified by this parameter. The value of this parameter is a list that consists of entries, which are separated with semicolons (;) in CIDR notation, such as 10.10.10.0/24. If no IP address matches the entries in this list, an IP address will be randomly selected.
+
+#### http_port
+
+- **Default:** 8030
+- **Description:** The port on which the HTTP server in the FE node listens.
+
+#### http_worker_threads_num
+
+- **Default:** 0
+- **Description:** Number of worker threads for http server to deal with http requests. For a negative or 0 value, the number of threads will be twice the number of cpu cores.
+- Introduced in: 2.5.18，3.0.10，3.1.7，3.2.2
+
+#### http_backlog_num
+
+- **Default:** 1024
+- **Description:** The length of the backlog queue held by the HTTP server in the FE node.
+
+#### cluster_name
+
+- **Default:** StarRocks Cluster
+- **Description:** The name of the StarRocks cluster to which the FE belongs. The cluster name is displayed for `Title` on the web page.
+
+#### rpc_port
+
+- **Default:** 9020
+- **Description:** The port on which the Thrift server in the FE node listens.
+
+#### thrift_backlog_num
+
+- **Default:** 1024
+- **Description:** The length of the backlog queue held by the Thrift server in the FE node.
+
+#### thrift_server_max_worker_threads
+
+- **Default:** 4096
+- **Description:** The maximum number of worker threads that are supported by the Thrift server in the FE node.
+
+#### thrift_client_timeout_ms
+
+- **Default:** 5000
+- **Description:** The length of time after which idle client connections time out. Unit: ms.
+
+#### thrift_server_queue_size
+
+- **Default:** 4096
+- **Description:** The length of queue where requests are pending. If the number of threads that are being processed in the thrift server exceeds the value specified in `thrift_server_max_worker_threads`, new requests are added to the pending queue.
+
+#### brpc_idle_wait_max_time
+
+- **Default:** 10000
+- **Description:** The maximum length of time for which bRPC clients wait as in the idle state. Unit: ms.
+
+#### query_port
+
+- **Default:** 9030
+- **Description:** The port on which the MySQL server in the FE node listens.
+
+#### mysql_service_nio_enabled
+
+- **Default:** TRUE
+- **Description:** Specifies whether asynchronous I/O is enabled for the FE node.
+
+#### mysql_service_io_threads_num
+
+- **Default:** 4
+- **Description:** The maximum number of threads that can be run by the MySQL server in the FE node to process I/O events.
+
+#### mysql_nio_backlog_num
+
+- **Default:** 1024
+- **Description:** The length of the backlog queue held by the MySQL server in the FE node.
+
+#### max_mysql_service_task_threads_num
+
+- **Default:** 4096
+- **Description:** The maximum number of threads that can be run by the MySQL server in the FE node to process tasks.
+
+#### mysql_server_version
+
+- **Default:** 5.1.0
+- **Description:** The MySQL server version returned to the client. Modifying this parameter will affect the version information in the following situations:
+  1. `select version();`
+  2. Handshake packet version
+  3. Value of the global variable `version` (`show variables like 'version';`)
+
+#### max_connection_scheduler_threads_num
+
+- **Default:** 4096
+- **Description:** The maximum number of threads that are supported by the connection scheduler.
+
+#### qe_max_connection
+
+- **Default:** 1024
+- **Description:** The maximum number of connections that can be established by all users to the FE node.
+
+#### check_java_version
+
+- **Default:** TRUE
+- **Description:** Specifies whether to check version compatibility between the executed and compiled Java programs. If the versions are incompatible, StarRocks reports errors and aborts the startup of Java programs.
+
+### Metadata and cluster management
+
+#### meta_dir
+
+- **Default:** StarRocksFE.STARROCKS_HOME_DIR + "/meta"
+- **Description:** The directory that stores metadata.
+
+#### heartbeat_mgr_threads_num
+
+- **Default:** 8
+- **Description:** The number of threads that can be run by the Heartbeat Manager to run heartbeat tasks.
+
+#### heartbeat_mgr_blocking_queue_size
+
+- **Default:** 1024
+- **Description:** The size of the blocking queue that stores heartbeat tasks run by the Heartbeat Manager.
+
+#### bdbje_reset_election_group
+
+- **Default:** FALSE
+- **Description:** Whether to reset the BDBJE replication group. If this parameter is set to `TRUE`, the FE will reset the BDBJE replication group (that is, remove the information of all electable FE nodes) and start as the leader FE. After the reset, this FE will be the only member in the cluster, and other FEs can rejoin this cluster by using `ALTER SYSTEM ADD/DROP FOLLOWER/OBSERVER 'xxx'`. Use this setting only when no leader FE can be elected because the data of most follower FEs have been damaged. `reset_election_group` is used to replace `metadata_failure_recovery`.
+
+#### metadata_journal_ignore_replay_failure
+
+- **Default:** FALSE
+- **Description:** Whether to ignore journal replay failures. `TRUE` indicates journal replay failures will be ignored. However, this configuration does not take effect for failures that will damage cluster data.
+
+#### edit_log_port
+
+- **Default:** 9010
+- **Description:** The port that is used for communication among the leader, follower, and observer FEs in the StarRocks cluster.
+
+#### edit_log_type
+
+- **Default:** BDB
+- **Description:** The type of edit log that can be generated. Set the value to `BDB`.
+
+#### bdbje_heartbeat_timeout_second
+
+- **Default:** 30
+- **Description:** The amount of time after which the heartbeats among the leader, follower, and observer FEs in the StarRocks cluster time out. Unit: second.
+
+#### bdbje_lock_timeout_second
+
+- **Default:** 1
+- **Description:** The amount of time after which a lock in the BDB JE-based FE times out. Unit: second.
+
+#### max_bdbje_clock_delta_ms
+
+- **Default:** 5000
+- **Description:** The maximum clock offset that is allowed between the leader FE and the follower or observer FEs in the StarRocks cluster. Unit: ms.
+
+#### txn_rollback_limit
+
+- **Default:** 100
+- **Description:** The maximum number of transactions that can be rolled back.
+
+#### bdbje_replica_ack_timeout_second
+
+- **Default:** 10
+- **Description:** The maximum amount of time for which the leader FE can wait for ACK messages from a specified number of follower FEs when metadata is written from the leader FE to the follower FEs. Unit: second. If a large amount of metadata is being written, the follower FEs require a long time before they can return ACK messages to the leader FE, causing ACK timeout. In this situation, metadata writes fail, and the FE process exits. We recommend that you increase the value of this parameter to prevent this situation.
+
+#### master_sync_policy
+
+- **Default:** SYNC
+- **Description:** The policy based on which the leader FE flushes logs to disk. This parameter is valid only when the current FE is a leader FE. Valid values:
+  - `SYNC`: When a transaction is committed, a log entry is generated and flushed to disk simultaneously.
+  - `NO_SYNC`: The generation and flushing of a log entry do not occur at the same time when a transaction is committed.
+  - `WRITE_NO_SYNC`: When a transaction is commited, a log entry is generated simultaneously but is not flushed to disk. If you have deployed only one follower FE, we recommend that you set this parameter to `SYNC`. If you have deployed three or more follower FEs, we recommend that you set this parameter and the `replica_sync_policy` both to `WRITE_NO_SYNC`.
+
+#### replica_sync_policy
+
+- **Default:** SYNC
+- **Description:** The policy based on which the follower FE flushes logs to disk. This parameter is valid only when the current FE is a follower FE. Valid values:
+  - `SYNC`: When a transaction is committed, a log entry is generated and flushed to disk simultaneously.
+  - `NO_SYNC`: The generation and flushing of a log entry do not occur at the same time when a transaction is committed.
+  - `WRITE_NO_SYNC`: When a transaction is committed, a log entry is generated simultaneously but is not flushed to disk.
+
+#### replica_ack_policy
+
+- **Default:** SIMPLE_MAJORITY
+- **Description:** The policy based on which a log entry is considered valid. The default value `SIMPLE_MAJORITY` specifies that a log entry is considered valid if a majority of follower FEs return ACK messages.
+
+#### cluster_id
+
+- **Default:** -1
+- **Description:** The ID of the StarRocks cluster to which the FE belongs. FEs or BEs that have the same cluster ID belong to the same StarRocks cluster. Valid values: any positive integer. The default value `-1` specifies that StarRocks will generate a random cluster ID for the StarRocks cluster at the time when the leader FE of the cluster is started for the first time.
+
+### Query engine
+
+#### publish_version_interval_ms
+
+- **Default:** 10
+- **Description:** The time interval at which release validation tasks are issued. Unit: ms.
+
+#### statistic_cache_columns
+
+- **Default:** 100000
+- **Description:** The number of rows that can be cached for the statistics table.
+
+#### statistic_cache_thread_pool_size
+
+- **Default:** 10
+- **Description:** The size of the thread-pool which will be used to refresh statistic caches.
+
+### Loading and unloading
+
+#### load_checker_interval_second
+
+- **Default:** 5
+- **Description:** The time interval at which load jobs are processed on a rolling basis. Unit: second.
+
+#### transaction_clean_interval_second
+
+- **Default:** 30
+- **Description:** The time interval at which finished transactions are cleaned up. Unit: second. We recommend that you specify a short time interval to ensure that finished transactions can be cleaned up in a timely manner.
+
+#### label_clean_interval_second
+
+- **Default:** 14400
+- **Description:** The time interval at which labels are cleaned up. Unit: second. We recommend that you specify a short time interval to ensure that historical labels can be cleaned up in a timely manner.
+
+#### spark_dpp_version
+
+- **Default:** 1.0.0
+- **Description:** The version of Spark Dynamic Partition Pruning (DPP) used.
+
+#### spark_resource_path
+
+- **Default:** Empty string
+- **Description:** The root directory of the Spark dependency package.
+
+#### spark_launcher_log_dir
+
+- **Default:** sys_log_dir + "/spark_launcher_log"
+- **Description:** The directory that stores Spark log files.
+
+#### yarn_client_path
+
+- **Default:** StarRocksFE.STARROCKS_HOME_DIR + "/lib/yarn-client/hadoop/bin/yarn"
+- **Description:** The root directory of the Yarn client package.
+
+#### yarn_config_dir
+
+- **Default:** StarRocksFE.STARROCKS_HOME_DIR + "/lib/yarn-config"
+- **Description:** The directory that stores the Yarn configuration file.
+
+#### export_checker_interval_second
+
+- **Default:** 5
+- **Description:** The time interval at which load jobs are scheduled.
+
+#### export_task_pool_size
+
+- **Default:** 5
+- **Description:** The size of the unload task thread pool.
+
+### Storage
+
+#### default_storage_medium
+
+- **Default:** HDD
+- **Description:** The default storage media that is used for a table or partition at the time of table or partition creation if no storage media is specified. Valid values: `HDD` and `SSD`. When you create a table or partition, the default storage media specified by this parameter is used if you do not specify a storage media type for the table or partition.
+
+#### tablet_sched_storage_cooldown_second
+
+- **Default:** -1
+- **Description:** The latency of automatic cooling starting from the time of table creation. The alias of this parameter is `storage_cooldown_second`. Unit: second. The default value `-1` specifies that automatic cooling is disabled. If you want to enable automatic cooling, set this parameter to a value greater than `-1`.
+
+#### tablet_stat_update_interval_second
+
+- **Default:** 300
+- **Description:** The time interval at which the FE retrieves tablet statistics from each BE. Unit: second.
+
+### StarRocks shared-data cluster
+
+#### run_mode
+
+- **Default**: shared_nothing
+- **Description**: The running mode of the StarRocks cluster. Valid values: shared_data and shared_nothing (Default).
+
+  - shared_data indicates running StarRocks in shared-data mode.
+  - shared_nothing indicates running StarRocks in shared-nothing mode.
+CAUTION
+You cannot adopt the shared_data and shared_nothing modes simultaneously for a StarRocks cluster. Mixed deployment is not supported.
+DO NOT change run_mode after the cluster is deployed. Otherwise, the cluster fails to restart. The transformation from a shared-nothing cluster to a shared-data cluster or vice versa is not supported.
+
+#### cloud_native_meta_port
+
+- **Default**: 6090
+- **Description**: The cloud-native meta service RPC port.
+
+#### cloud_native_storage_type
+
+- **Default**: S3
+- **Description**: The type of object storage you use. In shared-data mode, StarRocks supports storing data in Azure Blob (supported from v3.1.1 onwards), and object storages that are compatible with the S3 protocol (such as AWS S3, Google GCP, and MinIO). Valid value: S3 (Default) and AZBLOB. If you specify this parameter as S3, you must add the parameters prefixed by aws_s3. If you specify this parameter as AZBLOB, you must add the parameters prefixed by azure_blob.
+
+#### aws_s3_path
+
+- **Default**: N/A
+- **Description**: The S3 path used to store data. It consists of the name of your S3 bucket and the sub-path (if any) under it, for example, `testbucket/subpath`.
+
+#### aws_s3_endpoint
+
+- **Default**: N/A
+- **Description**: The endpoint used to access your S3 bucket, for example, `https://s3.us-west-2.amazonaws.com`.
+
+#### aws_s3_region
+
+- **Default**: N/A
+- **Description**: The region in which your S3 bucket resides, for example, `us-west-2`.
+
+#### aws_s3_use_aws_sdk_default_behavior
+
+- **Default**: false
+- **Description**: Whether to use the default authentication credential of AWS SDK. Valid values: true and false (Default).
+
+#### aws_s3_use_instance_profile
+
+- **Default**: false
+- **Description**: Whether to use Instance Profile and Assumed Role as credential methods for accessing S3. Valid values: true and false (Default).
+  - If you use IAM user-based credential (Access Key and Secret Key) to access S3, you must specify this item as false, and specify aws_s3_access_key and aws_s3_secret_key.
+  - If you use Instance Profile to access S3, you must specify this item as true.
+  - If you use Assumed Role to access S3, you must specify this item as true, and specify aws_s3_iam_role_arn.
+  - And if you use an external AWS account, you must also specify aws_s3_external_id.
+
+#### aws_s3_access_key
+
+- **Default**: N/A
+- **Description**: The Access Key ID used to access your S3 bucket.
+
+#### aws_s3_secret_key
+
+- **Default**: N/A
+- **Description**: The Secret Access Key used to access your S3 bucket.
+
+#### aws_s3_iam_role_arn
+
+- **Default**: N/A
+- **Description**: The ARN of the IAM role that has privileges on your S3 bucket in which your data files are stored.
+
+#### aws_s3_external_id
+
+- **Default**: N/A
+- **Description**: The external ID of the AWS account that is used for cross-account access to your S3 bucket.
+
+#### azure_blob_path
+
+- **Default**: N/A
+- **Description**: The Azure Blob Storage path used to store data. It consists of the name of the container within your storage account and the sub-path (if any) under the container, for example, testcontainer/subpath.
+
+#### azure_blob_endpoint
+
+- **Default**: N/A
+- **Description**: The endpoint of your Azure Blob Storage Account, for example, `https://test.blob.core.windows.net`.
+
+#### azure_blob_shared_key
+
+- **Default**: N/A
+- **Description**: The Shared Key used to authorize requests for your Azure Blob Storage.
+
+#### azure_blob_sas_token
+
+- **Default**: N/A
+- **Description**: The shared access signatures (SAS) used to authorize requests for your Azure Blob Storage.
+
+### Other FE static parameters
+
+#### plugin_dir
+
+- **Default:** STARROCKS_HOME_DIR/plugins
+- **Description:** The directory that stores plugin installation packages.
+
+#### small_file_dir
+
+- **Default:** StarRocksFE.STARROCKS_HOME_DIR + "/small_files"
+- **Description:** The root directory of small files.
+
+#### max_agent_task_threads_num
+
+- **Default:** 4096
+- **Description:** The maximum number of threads that are allowed in the agent task thread pool.
+
+#### auth_token
+
+- **Default:** Empty string
+- **Description:** The token that is used for identity authentication within the StarRocks cluster to which the FE belongs. If this parameter is left unspecified, StarRocks generates a random token for the cluster at the time when the leader FE of the cluster is started for the first time.
+
+#### tmp_dir
+
+- **Default:** StarRocksFE.STARROCKS_HOME_DIR + "/temp_dir"
+- **Description:** The directory that stores temporary files such as files generated during backup and restore procedures. After these procedures finish, the generated temporary files are deleted.
+
+#### locale
+
+- **Default:** zh_CN.UTF-8
+- **Description:** The character set that is used by the FE.
+
+#### hive_meta_load_concurrency
+
+- **Default:** 4
+- **Description:** The maximum number of concurrent threads that are supported for Hive metadata.
+
+#### hive_meta_cache_refresh_interval_s
+
+- **Default:** 7200
+- **Description:** The time interval at which the cached metadata of Hive external tables is updated. Unit: second.
+
+#### hive_meta_cache_ttl_s
+
+- **Default:** 86400
+- **Description:** The amount of time after which the cached metadata of Hive external tables expires. Unit: second.
+
+#### hive_meta_store_timeout_s
+
+- **Default:** 10
+- **Description:** The amount of time after which a connection to a Hive metastore times out. Unit: second.
+
+#### es_state_sync_interval_second
+
+- **Default:** 10
+- **Description:** The time interval at which the FE obtains Elasticsearch indexes and synchronizes the metadata of StarRocks external tables. Unit: second.
+
+#### enable_auth_check
+
+- **Default:** TRUE
+- **Description:** Specifies whether to enable the authentication check feature. Valid values: `TRUE` and `FALSE`. `TRUE` specifies to enable this feature, and `FALSE` specifies to disable this feature.
+
+#### enable_metric_calculator
+
+- **Default:** TRUE
+- **Description:** Specifies whether to enable the feature that is used to periodically collect metrics. Valid values: `TRUE` and `FALSE`. `TRUE` specifies to enable this feature, and `FALSE` specifies to disable this feature.
+
+#### jdbc_connection_pool_size
+
+- **Default:** 8
+- **Description:** The maximum capacity of the JDBC Connection Pool when accessing the JDBC Catalog.
+
+
+#### jdbc_minimum_idle_connections
+
+- **Default:** 1
+- **Description:** The minimum number of idle connections in the JDBC Connection Pool when accessing the JDBC Catalog.
+
+
+#### jdbc_connection_idle_timeout_ms
+
+- **Default:** 600000
+- **Description:** When accessing the JDBC Catalog, connections exceeding this time are considered idle. Unit: Millisecond.
+
+>>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091))
