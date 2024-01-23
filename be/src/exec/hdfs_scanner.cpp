@@ -166,7 +166,7 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     RETURN_IF_ERROR(_runtime_state->check_mem_limit("get chunk from scanner"));
     Status status = do_get_next(runtime_state, chunk);
     if (status.ok()) {
-        if (!_scanner_params.conjunct_ctxs.empty() && _scanner_params.eval_conjunct_ctxs) {
+        if (!_scanner_params.conjunct_ctxs.empty()) {
             SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
             RETURN_IF_ERROR(ExecNode::eval_conjuncts(_scanner_params.conjunct_ctxs, (*chunk).get()));
         }
