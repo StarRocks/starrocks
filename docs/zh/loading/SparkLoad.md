@@ -355,6 +355,10 @@ WITH RESOURCE 'spark0'
   
 适用于 StarRocks 表聚合列的数据类型为 bitmap 类型。 在 load 命令中指定需要构建全局字典的字段即可，格式为：`StarRocks字段名称=bitmap_dict(hive表字段名称)` 需要注意的是目前 **只有在上游数据源为 hive 表** 时才支持全局字典的构建。
 
+* **导入 binary 类型的数据**
+
+从 2.5.17 版本开始，Spark Load 支持在导入时使用 bitmap_from_binary 函数，可以将 binary 类型转为 bitmap 类型。当 Hive 表或 HDFS 文件中列的数据类型为 binary 类型， 而 StarRocks 表中相应的列是 bitmap 类型的聚合列时，您无需构建全局字典，只需在导入命令中指定相应的字段即可。格式为：`StarRocks字段名=bitmap_from_binary(Hive表字段名)`。
+
 ### 查看导入任务
 
 Spark Load 导入方式同 Broker Load 一样都是异步的，用户必须将创建导入的 Label 记录下来，并且在 `SHOW LOAD` 命令中使用 Label 来查看导入结果。查看导入的命令在所有导入方式中是通用的，具体语法可参考 [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md)。示例如下：
