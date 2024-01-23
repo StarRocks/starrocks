@@ -64,7 +64,7 @@ public:
     Status convert(const ColumnPtr& src, Column* dst) override;
 };
 
-class Int96ToDateTimeConverter : public ColumnConverter {
+class Int96ToDateTimeConverter final : public ColumnConverter {
 public:
     Int96ToDateTimeConverter() = default;
     ~Int96ToDateTimeConverter() override = default;
@@ -85,7 +85,7 @@ private:
     int _offset = 0;
 };
 
-class Int64ToDateTimeConverter : public ColumnConverter {
+class Int64ToDateTimeConverter final : public ColumnConverter {
 public:
     Int64ToDateTimeConverter() = default;
     ~Int64ToDateTimeConverter() override = default;
@@ -109,7 +109,7 @@ void convert_int_to_int(SourceType* __restrict__ src, DestType* __restrict__ dst
 
 // Support int => int and float => double
 template <typename SourceType, typename DestType>
-class NumericToNumericConverter : public ColumnConverter {
+class NumericToNumericConverter final : public ColumnConverter {
 public:
     NumericToNumericConverter() = default;
     ~NumericToNumericConverter() override = default;
@@ -139,7 +139,7 @@ public:
 };
 
 template <typename SourceType, LogicalType DestType>
-class PrimitiveToDecimalConverter : public ColumnConverter {
+class PrimitiveToDecimalConverter final : public ColumnConverter {
 public:
     using DestDecimalType = typename RunTimeTypeTraits<DestType>::CppType;
     using DestColumnType = typename RunTimeTypeTraits<DestType>::ColumnType;
@@ -200,7 +200,7 @@ private:
 // and for fixed length binary in parquet, string data is contiguous,
 // and that's why we can do memcpy 8 bytes without accessing invalid address.
 template <LogicalType DestType>
-class BinaryToDecimalConverter : public ColumnConverter {
+class BinaryToDecimalConverter final : public ColumnConverter {
 public:
     using DecimalType = typename RunTimeTypeTraits<DestType>::CppType;
     using ColumnType = typename RunTimeTypeTraits<DestType>::ColumnType;
