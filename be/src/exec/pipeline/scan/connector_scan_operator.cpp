@@ -40,18 +40,11 @@ struct ConnectorScanOperatorIOTasksMemLimiter {
     int available_chunk_source_count(int driver_sequence) const {
         int64_t scan_mem_limit_value = scan_mem_limit.load(std::memory_order_relaxed);
         int64_t chunk_source_mem_bytes_value = chunk_source_mem_bytes.load(std::memory_order_relaxed);
-        int64_t running_count = running_chunk_source_count.load(std::memory_order_relaxed);
+        [[maybe_unused]] int64_t running_count = running_chunk_source_count.load(std::memory_order_relaxed);
 
         int64_t max_count = std::max(1L, scan_mem_limit_value / chunk_source_mem_bytes_value);
-        int64_t avail_count = std::max(0L, max_count - running_count);
-        int64_t per_count = avail_count / dop;
-
-        if (per_count == 0 && driver_sequence < avail_count) {
-            per_count += 1;
-        }
-        if (per_count < 0) {
-            per_count = 0;
-        }
+        int64_t avail_count = max_count;
+        int64_t per_count = avail_count / dop + 1;
 
         // VLOG_FILE << "available_chunk_source_count. max_count=" << max_count << "(" << scan_mem_limit_value << "/"
         //           << chunk_source_mem_bytes_value << ")"
