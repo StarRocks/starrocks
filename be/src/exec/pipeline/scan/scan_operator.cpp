@@ -533,10 +533,6 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
 
         need_detach = false;
         RETURN_IF_ERROR(_trigger_next_scan(state, chunk_source_index));
-    } else {
-        if (_morsel_queue->empty()) {
-            on_morsel_queue_empty();
-        }
     }
 
     return Status::OK();

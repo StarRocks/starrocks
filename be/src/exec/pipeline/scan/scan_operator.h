@@ -89,7 +89,6 @@ public:
     virtual void begin_driver_process() {}
     virtual void end_driver_process(PipelineDriver* driver) {}
     virtual bool is_running_all_io_tasks() const;
-    virtual void on_morsel_queue_empty() {}
 
     virtual int64_t get_scan_table_id() const { return -1; }
 
