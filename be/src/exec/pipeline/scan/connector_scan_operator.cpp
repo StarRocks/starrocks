@@ -65,7 +65,7 @@ public:
         // int64_t avail_count = std::max(0L, max_count - running_count);
         int64_t per_count = avail_count / dop;
         int64_t idle_scan_operator_count_value = idle_scan_operator_count.load(std::memory_order_relaxed);
-        DCHECK(idle_scan_operator_count <= dop);
+        DCHECK(idle_scan_operator_count_value <= dop);
 
         if (driver_sequence < (avail_count - per_count * dop + idle_scan_operator_count_value)) {
             per_count += 1;
