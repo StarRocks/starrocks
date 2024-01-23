@@ -742,23 +742,23 @@ BE static parameters are as follows.
 #### cumulative_compaction_num_threads_per_disk
 
 - **Default**: 1
-- **Description**: Number of Cumulative Compaction threads per disk.
+- **Description**: The number of Cumulative Compaction threads per disk.
 
 #### vertical_compaction_max_columns_per_group
 
 - **Default**: 5
-- **Description**: Maximum number of columns per group of Vertical Compactions.
+- **Description**: The maximum number of columns per group of Vertical Compactions.
 
 #### enable_check_string_lengths
 
 - **Default**: true
-- **Description**: Whether to check the data length during loading to solve the problem of Compaction failure caused by out-of-bounds VARCHAR type data.
+- **Description**: Whether to check the data length during loading to solve compaction failures caused by out-of-bound VARCHAR data.
 
 #### max_row_source_mask_memory_bytes
 
 - **Default**: 209715200
 - **Unit**: Bytes
-- **Description**: The maximum row source mask buffer memory size. When the buffer is larger than this value, it will be persisted to a temporary file on disk. This value should be less than the compaction_mem_limit parameter.
+- **Description**: The maximum memory size of the row source mask buffer. When the buffer is larger than this value, data will be persisted to a temporary file on the disk. This value should be less than the `compaction_mem_limit` parameter.
 
 #### be_http_port
 

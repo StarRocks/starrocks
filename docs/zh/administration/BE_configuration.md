@@ -746,7 +746,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### cumulative_compaction_num_threads_per_disk
 
-- 含义：每个磁盘 CumulativeCompaction 线程的数目。
+- 含义：每个磁盘 Cumulative Compaction 线程的数目。
 - 默认值：1
 
 #### vertical_compaction_max_columns_per_group
@@ -756,12 +756,12 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### enable_check_string_lengths
 
-- 含义：是否进行导入时数据长度检查，以解决 VARCHAR 类型数据越界导致的 Compaction 失败问题。
+- 含义：是否在导入时进行数据长度检查，以解决 VARCHAR 类型数据越界导致的 Compaction 失败问题。
 - 默认值：true
 
 #### max_row_source_mask_memory_bytes
 
-- 含义：最大 row source mask buffer内存占用大小，当 buffer 大于该值时将会持久化到磁盘临时文件中。该值应该小于 compaction_mem_limit 参数。
+- 含义：Row source mask buffer 的最大内存占用大小。当 buffer 大于该值时将会持久化到磁盘临时文件中。该值应该小于 `compaction_mem_limit` 参数。
 - 单位：字节
 - 默认值：209715200
 
