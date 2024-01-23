@@ -6,6 +6,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalEntity;
+import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.lake.ShardDeleter;
 import com.starrocks.lake.ShardManager;
@@ -169,6 +170,7 @@ public class EditLogTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testUpdateUnusedShardId() throws Exception {
         GlobalStateMgr mgr = mockGlobalStateMgr();
         JournalEntity journal = new JournalEntity();
@@ -189,4 +191,18 @@ public class EditLogTest {
         Assert.assertEquals(Deencapsulation.getField(shardDeleter, "shardIds"), new HashSet<>());
     }
 
+=======
+    public void testLoadJournalException() {
+        JournalEntity journal = new JournalEntity();
+        journal.setOpCode(OperationType.OP_SAVE_NEXTID);
+        // set data to null, and it will throw NPE in loadJournal()
+        journal.setData(null);
+
+        try {
+            EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journal);
+        } catch (JournalInconsistentException e) {
+            Assert.assertEquals(OperationType.OP_SAVE_NEXTID, e.getOpCode());
+        }
+    }
+>>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091))
 }

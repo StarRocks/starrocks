@@ -19,7 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.catalog;
+package com.starrocks.server;
 
 import com.sleepycat.je.EnvironmentFailureException;
 import com.sleepycat.je.rep.MasterStateException;
@@ -35,10 +35,15 @@ import com.starrocks.common.util.NetUtils;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalException;
+<<<<<<< HEAD:fe/fe-core/src/test/java/com/starrocks/catalog/GlobalStateMgrTest.java
+=======
+import com.starrocks.journal.JournalInconsistentException;
+>>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091)):fe/fe-core/src/test/java/com/starrocks/server/GlobalStateMgrTest.java
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.load.Load;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.OperationType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
@@ -316,6 +321,7 @@ public class GlobalStateMgrTest {
         globalStateMgr.addFrontend(FrontendNodeType.FOLLOWER, "127.0.0.1", 1000);
     }
 
+<<<<<<< HEAD:fe/fe-core/src/test/java/com/starrocks/catalog/GlobalStateMgrTest.java
     private static class MyGlobalStateMgr extends GlobalStateMgr {
         public static final String ERROR_MESSAGE = "Create Exception here.";
         private final boolean throwException;
@@ -400,5 +406,34 @@ public class GlobalStateMgrTest {
             Assert.assertTrue(suppressedExceptions[0] instanceof RuntimeException);
             Assert.assertEquals(removeFileErrorMessage, suppressedExceptions[0].getMessage());
         }
+=======
+    @Test
+    public void testCanSkipBadReplayedJournal() {
+        boolean originVal = Config.metadata_journal_ignore_replay_failure;
+        Config.metadata_journal_ignore_replay_failure = false;
+
+        // when recover_on_load_journal_failed is false, the failure of every operation type can not be skipped.
+        Assert.assertFalse(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
+                new JournalException(OperationType.OP_ADD_ANALYZE_STATUS, "failed")));
+        Assert.assertFalse(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
+                new JournalException(OperationType.OP_CREATE_DB_V2, "failed")));
+        Assert.assertFalse(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
+                new JournalInconsistentException(OperationType.OP_ADD_ANALYZE_STATUS, "failed")));
+        Assert.assertFalse(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
+                new JournalInconsistentException(OperationType.OP_CREATE_DB_V2, "failed")));
+
+        Config.metadata_journal_ignore_replay_failure = true;
+        // when recover_on_load_journal_failed is false, the failure of recoverable operation type can be skipped.
+        Assert.assertTrue(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
+                new JournalException(OperationType.OP_ADD_ANALYZE_STATUS, "failed")));
+        Assert.assertFalse(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
+                new JournalException(OperationType.OP_CREATE_DB_V2, "failed")));
+        Assert.assertTrue(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
+                new JournalInconsistentException(OperationType.OP_ADD_ANALYZE_STATUS, "failed")));
+        Assert.assertFalse(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
+                new JournalInconsistentException(OperationType.OP_CREATE_DB_V2, "failed")));
+
+        Config.metadata_journal_ignore_replay_failure = originVal;
+>>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091)):fe/fe-core/src/test/java/com/starrocks/server/GlobalStateMgrTest.java
     }
 }

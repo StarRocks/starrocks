@@ -278,6 +278,10 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+<<<<<<< HEAD
+=======
+import java.nio.file.Files;
+>>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091))
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -1447,6 +1451,7 @@ public class GlobalStateMgr {
         LOG.info("finish processing all tables' related materialized views in {}ms", duration);
     }
 
+<<<<<<< HEAD
     public long loadHeader(DataInputStream dis, long checksum) throws IOException {
         // for community, version schema is [int], and the int value must be positive
         // for starrocks, version schema is [-1, int, int]
@@ -1530,6 +1535,20 @@ public class GlobalStateMgr {
             // It may be upgraded from an earlier version, which is dangerous
             throw new RuntimeException("Old metadata was found, please upgrade to version 2.4 first " +
                     "and then from version 2.4 to the current version.");
+=======
+    public void loadHeader(DataInputStream dis) throws IOException {
+        // for new format, version schema is [starrocksMetaVersion], and the int value must be positive
+        // for old format, version schema is [-1, metaVersion, starrocksMetaVersion]
+        // so we can check the first int to determine the version schema
+        int flag = dis.readInt();
+        int starrocksMetaVersion;
+        if (flag < 0) {
+            dis.readInt();
+            starrocksMetaVersion = dis.readInt();
+        } else {
+            // when flag is positive, this is new version format
+            starrocksMetaVersion = flag;
+>>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091))
         }
 
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= 2) {
@@ -1542,6 +1561,7 @@ public class GlobalStateMgr {
             }
         }
 
+<<<<<<< HEAD
         long newChecksum = checksum;
         // alter job v2
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_61) {
@@ -1621,6 +1641,13 @@ public class GlobalStateMgr {
         streamLoadManager = StreamLoadManager.loadStreamLoadManager(in);
         checksum ^= streamLoadManager.getChecksum();
         return checksum;
+=======
+        MetaContext.get().setStarRocksMetaVersion(starrocksMetaVersion);
+        ImageHeader header = GsonUtils.GSON.fromJson(Text.readString(dis), ImageHeader.class);
+        idGenerator.setId(header.getBatchEndId());
+        isDefaultClusterCreated = header.isDefaultClusterCreated();
+        LOG.info("finished to replay header from image");
+>>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091))
     }
 
     // Only called by checkpoint thread
@@ -1976,10 +2003,10 @@ public class GlobalStateMgr {
                 // apply
                 EditLog.loadJournal(this, entity);
             } catch (Throwable e) {
-                if (canSkipBadReplayedJournal()) {
+                if (canSkipBadReplayedJournal(e)) {
                     LOG.error("!!! DANGER: SKIP JOURNAL {}: {} !!!",
                             replayedJournalId.incrementAndGet(),
-                            entity == null ? null : entity.getData(),
+                            entity == null ? null : GsonUtils.GSON.toJson(entity.getData()),
                             e);
                     if (!readSucc) {
                         cursor.skipNext();
@@ -2025,11 +2052,11 @@ public class GlobalStateMgr {
         return false;
     }
 
-    private boolean canSkipBadReplayedJournal() {
+    protected boolean canSkipBadReplayedJournal(Throwable t) {
         try {
             for (String idStr : Config.metadata_journal_skip_bad_journal_ids.split(",")) {
-                if (!StringUtils.isEmpty(idStr) && Long.valueOf(idStr) == replayedJournalId.get() + 1) {
-                    LOG.info("skip bad replayed journal id {} because configured {}",
+                if (!StringUtils.isEmpty(idStr) && Long.parseLong(idStr) == replayedJournalId.get() + 1) {
+                    LOG.error("skip bad replayed journal id {} because configured {}",
                             idStr, Config.metadata_journal_skip_bad_journal_ids);
                     return true;
                 }
@@ -2037,6 +2064,26 @@ public class GlobalStateMgr {
         } catch (Exception e) {
             LOG.warn("failed to parse metadata_journal_skip_bad_journal_ids: {}",
                     Config.metadata_journal_skip_bad_journal_ids, e);
+        }
+
+        short opCode = OperationType.OP_INVALID;
+        if (t instanceof JournalException) {
+            opCode = ((JournalException) t).getOpCode();
+        }
+        if (t instanceof JournalInconsistentException) {
+            opCode = ((JournalInconsistentException) t).getOpCode();
+        }
+
+        if (opCode != OperationType.OP_INVALID
+                && OperationType.IGNORABLE_OPERATIONS.contains(opCode)) {
+            if (Config.metadata_journal_ignore_replay_failure) {
+                LOG.error("skip ignorable journal load failure, opCode: {}", opCode);
+                return true;
+            } else {
+                LOG.error("the failure of opCode: {} is ignorable, " +
+                        "you can set metadata_journal_ignore_replay_failure to true to ignore this failure", opCode);
+                return false;
+            }
         }
         return false;
     }
