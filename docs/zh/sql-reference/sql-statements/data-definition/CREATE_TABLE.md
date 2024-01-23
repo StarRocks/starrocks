@@ -1018,7 +1018,7 @@ PROPERTIES(
     "dynamic_partition.time_unit" = "DAY",
     "dynamic_partition.start" = "-3",
     "dynamic_partition.end" = "3",
-    "dynamic_partition.prefix" = "p",
+    "dynamic_partition.prefix" = "p"
 );
 ```
 
