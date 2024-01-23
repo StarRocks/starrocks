@@ -8,6 +8,8 @@ displayed_sidebar: "English"
 From v3.0 onwards, we recommend that you use catalogs to query data from Hive, Iceberg, and Hudi. See [Hive catalog](../data_source/catalog/hive_catalog.md), [Iceberg catalog](../data_source/catalog/iceberg_catalog.md), and [Hudi catalog](../data_source/catalog/hudi_catalog.md).
 
 From v3.1 onwards, we recommend that you use [JDBC catalog](../data_source/catalog/jdbc_catalog.md) to query data from MySQL and PostgreSQL and use [Elasticsearch catalog](../data_source/catalog/elasticsearch_catalog.md) to query data from Elasticsearch.
+
+The external table feature was designed to help with importing data into StarRocks NOT to perform queries against external systems as a normal operation.   Although you can query and use functions like JOIN, it is not performant.   A more performant solution would be to import the data into StarRocks. 
 :::
 
 StarRocks supports access to other data sources by using external tables. External tables are created based on data tables that are stored in other data sources. StarRocks only stores the metadata of the data tables. You can use external tables to directly query data in other data sources. StarRocks supports the following data sources: MySQL, StarRocks, Elasticsearch, Apache Hive™, Apache Iceberg, and Apache Hudi. **Currently, you can only write data from another StarRocks cluster into the current StarRocks cluster. You cannot read data from it. For data sources other than StarRocks, you can only read data from these data sources.**
