@@ -168,3 +168,17 @@ START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
 -- result:
 E: (1064, 'Getting analyzing error from line 7, column 19 to line 7, column 47. Detail message: Unsupported partition expression from_unixtime_ms for column create_time type VARCHAR(100).')
 -- !result
+create table site_access_par_3 (
+`rowkey` string not null,
+`evernt_ts_col` BIGINT NOT NULL)
+ENGINE = OLAP
+PRIMARY KEY (`rowkey`, `evernt_ts_col`)
+PARTITION BY RANGE (FROM_UNIXTIME_MS(evernt_ts_col)) (
+START ("2023-12-30") END ("2024-01-05") EVERY (INTERVAL 1 DAY)
+)
+DISTRIBUTED BY HASH (`rowkey`) BUCKETS 1;
+-- result:
+-- !result
+insert INTO site_access_par_3 values ("2023-01-04", 1704077791000);
+-- result:
+-- !result
