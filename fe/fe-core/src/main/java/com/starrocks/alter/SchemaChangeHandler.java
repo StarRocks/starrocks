@@ -1209,7 +1209,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     throw new DdlException("Can not modify partition column[" + colName + "]. index["
                             + olapTable.getIndexNameById(alterIndexId) + "]");
                 }
-                if (col.isEmpty() && alterIndexId == olapTable.getBaseIndexId()) {
+                if (!col.isPresent() && alterIndexId == olapTable.getBaseIndexId()) {
                     // 2.1 partition column cannot be deleted.
                     throw new DdlException("Partition column[" + partitionCol.getName()
                             + "] cannot be dropped. index[" + olapTable.getIndexNameById(alterIndexId) + "]");
@@ -1227,7 +1227,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     throw new DdlException("Can not modify distribution column[" + colName + "]. index["
                             + olapTable.getIndexNameById(alterIndexId) + "]");
                 }
-                if (col.isEmpty() && alterIndexId == olapTable.getBaseIndexId()) {
+                if (!col.isPresent() && alterIndexId == olapTable.getBaseIndexId()) {
                     // 2.2 distribution column cannot be deleted.
                     throw new DdlException("Distribution column[" + distributionCol.getName()
                             + "] cannot be dropped. index[" + olapTable.getIndexNameById(alterIndexId) + "]");
@@ -1237,7 +1237,6 @@ public class SchemaChangeHandler extends AlterHandler {
             // 5. calc short key
             List<Integer> sortKeyIdxes = new ArrayList<>();
             List<Integer> sortKeyUniqueIds = new ArrayList<>();
-<<<<<<< HEAD
             if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
                 MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(alterIndexId);
                 // if sortKeyUniqueIds is empty, the table maybe create in old version and we should use sortKeyIdxes
@@ -1259,27 +1258,6 @@ public class SchemaChangeHandler extends AlterHandler {
                         if (useSortKeyUniqueId) {
                             sortKeyUniqueIds.add(alterSchema.get(sortKeyIdx).getUniqueId());
                         }
-=======
-            MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(alterIndexId);
-            // if sortKeyUniqueIds is empty, the table maybe create in old version and we should use sortKeyIdxes
-            // to determine which columns are sort key columns
-            boolean useSortKeyUniqueId = (index.getSortKeyUniqueIds() != null) && 
-                                         (!index.getSortKeyUniqueIds().isEmpty());
-            if (index.getSortKeyIdxes() != null) {
-                List<Integer> originSortKeyIdxes = index.getSortKeyIdxes();
-                for (Integer colIdx : originSortKeyIdxes) {
-                    String columnName = index.getSchema().get(colIdx).getName();
-                    Optional<Column> oneCol =
-                            alterSchema.stream().filter(c -> c.getName().equalsIgnoreCase(columnName)).findFirst();
-                    if (oneCol.isEmpty()) {
-                        LOG.warn("Sort Key Column[" + columnName + "] not exists in new schema");
-                        throw new DdlException("Sort Key Column[" + columnName + "] not exists in new schema");
-                    }
-                    int sortKeyIdx = alterSchema.indexOf(oneCol.get());
-                    sortKeyIdxes.add(sortKeyIdx);
-                    if (useSortKeyUniqueId) {
-                        sortKeyUniqueIds.add(alterSchema.get(sortKeyIdx).getUniqueId());
->>>>>>> 475122dd7a ([Enhancement] Refactor analyze logic for unified fast/non-fast schema evolution paths (#38347))
                     }
                 }
             }
@@ -2361,7 +2339,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 if (sortKeyUniqueIds != null) {
                     for (Integer uniqueId : sortKeyUniqueIds) {
                         Optional<Column> col = indexSchema.stream().filter(c -> c.getUniqueId() == uniqueId).findFirst();
-                        if (col.isEmpty()) {
+                        if (!col.isPresent()) {
                             throw new DdlException("Sork key col with unique id: " + uniqueId + " not exists");
                         }
                         int sortKeyIdx = indexSchema.indexOf(col.get());
@@ -2369,26 +2347,6 @@ public class SchemaChangeHandler extends AlterHandler {
                     }
                 }
 
-<<<<<<< HEAD
-                // upgrade from old version and replay task, addColumnsName maybe null
-                if (addColumnsName != null) {
-                    for (String columnName : addColumnsName) {
-                        Optional<Column> col = indexSchema.stream().filter(c -> c.getName() == columnName).findFirst();
-                        if (!col.isPresent()) {
-                            continue;
-                        }
-                        Column column = col.get();
-                        if (column.getDefaultExpr() != null) {
-                            Column.DefaultValueType defaultValueType = column.getDefaultValueType();
-                            if (defaultValueType == Column.DefaultValueType.CONST) {
-                                column.setDefaultValue(column.calculatedDefaultValueWithTime(startTime));
-                            }
-                        }
-                    }
-                }
-
-=======
->>>>>>> 475122dd7a ([Enhancement] Refactor analyze logic for unified fast/non-fast schema evolution paths (#38347))
                 currentIndexMeta.setSchema(indexSchema);
                 if (!newSortKeyIdxes.isEmpty()) {
                     currentIndexMeta.setSortKeyIdxes(newSortKeyIdxes);
@@ -2459,16 +2417,9 @@ public class SchemaChangeHandler extends AlterHandler {
                 "Target of light schema change must be olap table");
         OlapTable olapTable = (OlapTable) table;
         try {
-<<<<<<< HEAD
             db.writeLock();
-            modifyTableAddOrDropColumns(db, olapTable, indexSchemaMap, indexes, jobId, info.getTxnId(), 
-                                        info.getStartTime(), info.getAddColumnsName(), indexToNewSchemaId,
-                                        true);
-=======
-            locker.lockDatabase(db, LockType.WRITE);
             modifyTableAddOrDropColumns(db, olapTable, indexSchemaMap, indexes, jobId, info.getTxnId(),
                                         indexToNewSchemaId, true);
->>>>>>> 475122dd7a ([Enhancement] Refactor analyze logic for unified fast/non-fast schema evolution paths (#38347))
         } catch (DdlException e) {
             // should not happen
             LOG.warn("failed to replay modify table add or drop columns", e);

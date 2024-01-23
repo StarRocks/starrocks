@@ -373,13 +373,10 @@ public abstract class ConnectorPartitionTraits {
             }
             return result;
         }
-<<<<<<< HEAD
-=======
 
         public List<Column> getPartitionColumns() {
             return ((OlapTable) table).getPartitionInfo().getPartitionColumns();
         }
->>>>>>> 475122dd7a ([Enhancement] Refactor analyze logic for unified fast/non-fast schema evolution paths (#38347))
     }
 
     static class HivePartitionTraits extends DefaultTraits {
