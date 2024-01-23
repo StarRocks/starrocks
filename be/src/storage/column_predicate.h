@@ -157,8 +157,13 @@ public:
 
     virtual bool support_bloom_filter() const { return false; }
 
+    virtual bool support_ngram_bloom_filter() const { return false; }
+
     // Return false to filter out a data page.
     virtual bool bloom_filter(const BloomFilter* bf) const { return true; }
+
+    // Return false to filter out a data page.
+    virtual bool ngram_bloom_filter(const BloomFilter* bf, size_t gram_num) const { return true; }
 
     [[nodiscard]] virtual Status seek_bitmap_dictionary(BitmapIndexIterator* iter, SparseRange<>* range) const {
         return Status::Cancelled("not implemented");

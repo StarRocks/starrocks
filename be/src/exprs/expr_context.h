@@ -54,6 +54,7 @@ class MemTracker;
 class RuntimeState;
 class ObjectPool;
 class TColumnValue;
+class BloomFilter;
 
 /// An ExprContext contains the state for the execution of a tree of Exprs, in particular
 /// the FunctionContexts necessary for the expr tree. This allows for multi-threaded
@@ -114,6 +115,7 @@ public:
 
     [[nodiscard]] StatusOr<ColumnPtr> evaluate(Chunk* chunk, uint8_t* filter = nullptr);
     [[nodiscard]] StatusOr<ColumnPtr> evaluate(Expr* expr, Chunk* chunk, uint8_t* filter = nullptr);
+    bool evaluate_ngram_bloom_filter(const BloomFilter* bf, size_t gram_num);
 
     bool error_if_overflow() const;
 

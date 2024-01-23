@@ -787,6 +787,26 @@ bool Expr::should_compile() const {
     return true;
 }
 
+bool Expr::support_ngram_bloom_filter() const {
+    bool support = false;
+    for (auto& child : _children) {
+        if (child->support_ngram_bloom_filter()) {
+            return true;
+        }
+    }
+    return support;
+}
+
+bool Expr::ngram_bloom_filter(starrocks::ExprContext* context, const BloomFilter* bf, size_t gram_num) {
+    bool no_need_to_filt = true;
+    for (auto& child : _children) {
+        if (!child->ngram_bloom_filter(context, bf, gram_num)) {
+            return false;
+        }
+    }
+    return no_need_to_filt;
+}
+
 } // namespace starrocks
 
 #pragma clang diagnostic pop

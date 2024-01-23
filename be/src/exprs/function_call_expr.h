@@ -20,6 +20,8 @@
 
 namespace starrocks {
 
+class BloomFilter;
+
 class VectorizedFunctionCallExpr final : public Expr {
 public:
     explicit VectorizedFunctionCallExpr(const TExprNode& node);
@@ -29,6 +31,12 @@ public:
     Expr* clone(ObjectPool* pool) const override { return pool->add(new VectorizedFunctionCallExpr(*this)); }
 
     const FunctionDescriptor* get_function_desc() { return _fn_desc; }
+
+    bool support_ngram_bloom_filter() const override {
+        return _fn_desc->name == "regex" || _fn_desc->name == "like" || _fn_desc->name == "ngram_search";
+    }
+    
+    bool ngram_bloom_filter(starrocks::ExprContext* context, const BloomFilter* bf, size_t gram_num) override;
 
 protected:
     [[nodiscard]] Status prepare(RuntimeState* state, ExprContext* context) override;

@@ -24,7 +24,9 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/user_function_cache.h"
+#include "storage/rowset/bloom_filter.h"
 #include "util/failpoint/fail_point.h"
+#include "util/utf8.h"
 
 namespace starrocks {
 
@@ -171,6 +173,38 @@ StatusOr<ColumnPtr> VectorizedFunctionCallExpr::evaluate_checked(starrocks::Expr
     }
     RETURN_IF_ERROR(result.value()->unfold_const_children(_type));
     return result;
+}
+
+bool VectorizedFunctionCallExpr::ngram_bloom_filter(starrocks::ExprContext* context, const BloomFilter* bf,
+                                                    size_t gram_num) {
+    FunctionContext* fn_ctx = context->fn_context(_fn_context_index);
+    std::vector<Slice>& ngram_set = fn_ctx->get_ngram_set();
+    const auto& target_col = fn_ctx->get_constant_column(1);
+    Slice target = ColumnHelper::get_const_value<TYPE_VARCHAR>(target_col);
+
+    if (UNLIKELY(ngram_set.size() == 0)) {
+        std::vector<size_t> index;
+        size_t slice_gram_num = get_utf8_index(target, &index);
+        ngram_set.reserve(slice_gram_num - gram_num + 1);
+
+        size_t j;
+        for (j = 0; j + gram_num <= slice_gram_num; j++) {
+            // find next ngram
+            size_t cur_ngram_length =
+                    j + gram_num < slice_gram_num ? index[j + gram_num] - index[j] : target.get_size() - index[j];
+            Slice cur_ngram = Slice(target.data + index[j], cur_ngram_length);
+
+            ngram_set.push_back(cur_ngram);
+        }
+    }
+
+    for (auto& ngram : ngram_set) {
+        if (bf->test_bytes(ngram.get_data(), ngram.get_size())) {
+            return true;
+        }
+    }
+    // if neither ngram in target hit bf, this page has nothing to do with target,so filter it!
+    return false;
 }
 
 } // namespace starrocks

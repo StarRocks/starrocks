@@ -114,6 +114,7 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
     _dict_page_pointer = PagePointer(meta->dict_page());
     _total_mem_footprint = meta->total_mem_footprint();
     _name = meta->has_name() ? meta->name() : "None";
+    _column_unique_id = meta->unique_id();
 
     if (meta->is_nullable()) _flags |= kIsNullableMask;
     if (meta->has_all_dict_encoded()) _flags |= kHasAllDictEncodedMask;
@@ -360,11 +361,25 @@ Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& pre
             iter.next();
         }
     }
+    size_t gram_num = 0;
+    std::shared_ptr<TabletIndex> ngram_bf_index;
+
+    (void)_segment->tablet_schema().get_indexes_for_column(_column_unique_id, NGRAMBF, ngram_bf_index);
+
+    const std::map<std::string, std::string>& index_properties = ngram_bf_index->index_properties();
+    auto it = index_properties.find("GRAM_NUM");
+    if (it != index_properties.end()) {
+        // Found the key "ngram_size"
+        const std::string& gram_num_str = it->second; // The value corresponding to the key "ngram_size"
+        gram_num = std::stoi(gram_num_str);
+    }
+
     for (const auto& pid : page_ids) {
         std::unique_ptr<BloomFilter> bf;
         RETURN_IF_ERROR(bf_iter->read_bloom_filter(pid, &bf));
         for (const auto* pred : predicates) {
-            if (pred->support_bloom_filter() && pred->bloom_filter(bf.get())) {
+            if ((pred->support_bloom_filter() && pred->bloom_filter(bf.get())) ||
+                (pred->support_ngram_bloom_filter() && pred->ngram_bloom_filter(bf.get(), gram_num))) {
                 bf_row_ranges.add(
                         Range<>(_ordinal_index->get_first_ordinal(pid), _ordinal_index->get_last_ordinal(pid) + 1));
             }

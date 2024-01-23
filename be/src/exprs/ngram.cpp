@@ -77,7 +77,7 @@ public:
 
         // needle is too small so we can not get even single Ngram, so they are not similar at all
         if (needle.get_size() < N) {
-            return ColumnHelper::create_const_column<TYPE_FLOAT>(0, haystack_column->size());
+            return ColumnHelper::create_const_column<TYPE_DOUBLE>(0, haystack_column->size());
         }
 
         auto state = reinterpret_cast<Ngramstate*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
@@ -165,7 +165,7 @@ private:
         }
 
         size_t chunk_size = haystack->size();
-        auto res = RunTimeColumnType<TYPE_FLOAT>::create(chunk_size);
+        auto res = RunTimeColumnType<TYPE_DOUBLE>::create(chunk_size);
 
         auto state = reinterpret_cast<Ngramstate*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 
@@ -184,7 +184,7 @@ private:
             DCHECK(needle_not_overlap_with_haystack <= needle_gram_count);
 
             // now get the result
-            float row_result = 1.0f - (needle_not_overlap_with_haystack)*1.0f / std::max(needle_gram_count, (size_t)1);
+            double row_result = 1.0f - (needle_not_overlap_with_haystack)*1.0f / std::max(needle_gram_count, (size_t)1);
 
             res->get_data()[i] = row_result;
         }
@@ -202,7 +202,7 @@ private:
         std::vector<NgramHash> map_restore_helper{};
         // if haystack is too large, we can say they are not similar at all
         if (haystack.get_size() >= MAX_STRING_SIZE) {
-            return ColumnHelper::create_const_column<TYPE_FLOAT>(0, haystack_column->size());
+            return ColumnHelper::create_const_column<TYPE_DOUBLE>(0, haystack_column->size());
         }
 
         Slice cur_haystack(haystack.get_data(), haystack.get_size());
@@ -221,7 +221,7 @@ private:
                 calculateDistanceWithHaystack<false>(map, cur_haystack, map_restore_helper, needle_gram_count);
         float result = 1.0f - (needle_not_overlap_with_haystack)*1.0f / std::max(needle_gram_count, (size_t)1);
         DCHECK(needle_not_overlap_with_haystack <= needle_gram_count);
-        return ColumnHelper::create_const_column<TYPE_FLOAT>(result, haystack_column->size());
+        return ColumnHelper::create_const_column<TYPE_DOUBLE>(result, haystack_column->size());
     }
 
     // traverse haystack‘s every gram, find whether this gram is in needle or not using gram's hash

@@ -180,6 +180,10 @@ bool ColumnExprPredicate::zone_map_filter(const ZoneMapDetail& detail) const {
     return false;
 }
 
+bool ColumnExprPredicate::ngram_bloom_filter(const BloomFilter* bf, size_t gram_num) const {
+    return _expr_ctxs[0]->evaluate_ngram_bloom_filter(bf, gram_num);
+}
+
 Status ColumnExprPredicate::convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
                                        ObjectPool* obj_pool) const {
     TypeDescriptor input_type = TypeDescriptor::from_storage_type_info(target_type_info.get());

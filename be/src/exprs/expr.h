@@ -49,6 +49,7 @@
 
 namespace starrocks {
 
+class BloomFilter;
 class Expr;
 class ObjectPool;
 class RuntimeState;
@@ -246,6 +247,10 @@ public:
     // Establishes whether the current expression should undergo compilation.
     bool should_compile() const;
 
+    virtual bool support_ngram_bloom_filter() const;
+
+    // Return false to filter out a data page.
+    virtual bool ngram_bloom_filter(starrocks::ExprContext* context, const BloomFilter* bf, size_t gram_num);
 #if BE_TEST
     void set_type(TypeDescriptor t) { _type = t; }
 #endif
