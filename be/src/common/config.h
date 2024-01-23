@@ -892,7 +892,7 @@ CONF_String(query_debug_trace_dir, "${STARROCKS_HOME}/query_debug_trace");
 
 #ifdef USE_STAROS
 CONF_Int32(starlet_port, "9070");
-CONF_mInt32(starlet_cache_thread_num, "64");
+CONF_mInt32(starlet_cache_thread_num, "16");
 // Root dir used for cache if cache enabled.
 CONF_String(starlet_cache_dir, "");
 // Cache backend check interval (in seconds), for async write sync check and ttl clean, e.t.c.
@@ -907,8 +907,13 @@ CONF_mDouble(starlet_cache_evict_high_water, "0.2");
 CONF_Int32(starlet_cache_dir_allocate_policy, "0");
 // Buffer size in starlet fs buffer stream, size <= 0 means not use buffer stream.
 // Only support in S3/HDFS currently.
+<<<<<<< HEAD
 CONF_mInt32(starlet_fs_stream_buffer_size_bytes, "131072");
 CONF_mBool(starlet_use_star_cache, "false");
+=======
+CONF_mInt32(starlet_fs_stream_buffer_size_bytes, "1048576");
+CONF_mBool(starlet_use_star_cache, "true");
+>>>>>>> 90e181c1f8 ([Refactor] Modify the default values of several parameters (#37402))
 // TODO: support runtime change
 CONF_Int32(starlet_star_cache_mem_size_percent, "0");
 CONF_Int32(starlet_star_cache_disk_size_percent, "80");
