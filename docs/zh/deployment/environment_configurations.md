@@ -58,6 +58,7 @@ netstat -tunlp | grep 8060
 - `8040`：CN HTTP Server 端口（`be_http_port`）
 - `9050`：CN 心跳服务端口（`heartbeat_service_port`）
 - `8060`：CN bRPC 端口（`brpc_port`）
+- `9070`：存算分离集群中 CN（v3.0 中的 BE）的额外 Agent 服务端口。（`starlet_port`）
 
 在 CN 实例上执行如下命令查看这些端口是否被占用：
 
@@ -96,7 +97,7 @@ echo $JAVA_HOME
 
    ```Bash
    sudo  vi /etc/profile
-   # Replace <path_to_JDK> with the path where JDK is installed.
+   # 将 <path_to_JDK> 替换为 JDK 的安装路径。
    export JAVA_HOME=<path_to_JDK>
    export PATH=$PATH:$JAVA_HOME/bin
    ```
@@ -130,7 +131,12 @@ echo 'performance' | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_gover
 Memory Overcommit 允许操作系统将额外的内存资源分配给进程。建议您启用 Memory Overcommit。
 
 ```Bash
-echo 1 | sudo tee /proc/sys/vm/overcommit_memory
+# 修改配置文件。
+cat >> /etc/sysctl.conf << EOF
+vm.overcommit_memory=1
+EOF
+# 使修改生效。
+sysctl -p
 ```
 
 ### Transparent Huge Pages
@@ -138,7 +144,19 @@ echo 1 | sudo tee /proc/sys/vm/overcommit_memory
 Transparent Huge Pages 默认启用。因其会干扰内存分配，进而导致性能下降，建议您禁用此功能。
 
 ```Bash
-echo 'madvise' | sudo tee /sys/kernel/mm/transparent_hugepage/enabled
+# 临时变更。
+echo madvise | sudo tee /sys/kernel/mm/transparent_hugepage/enabled
+echo madvise | sudo tee /sys/kernel/mm/transparent_hugepage/defrag
+# 永久变更。
+cat >> /etc/rc.d/rc.local << EOF
+if test -f /sys/kernel/mm/transparent_hugepage/enabled; then
+   echo madvise > /sys/kernel/mm/transparent_hugepage/enabled
+fi
+if test -f /sys/kernel/mm/transparent_hugepage/defrag; then
+   echo madvise > /sys/kernel/mm/transparent_hugepage/defrag
+fi
+EOF
+chmod +x /etc/rc.d/rc.local
 ```
 
 ### Swap Space
@@ -151,6 +169,7 @@ echo 'madvise' | sudo tee /sys/kernel/mm/transparent_hugepage/enabled
 
    ```SQL
    swapoff /<path_to_swap_space>
+   swapoff -a
    ```
 
 2. 从 **/etc/fstab** 文件中删除 Swap Space 信息。
@@ -170,7 +189,12 @@ echo 'madvise' | sudo tee /sys/kernel/mm/transparent_hugepage/enabled
 Swappiness 会对性能造成影响，因此建议您禁用 Swappiness。
 
 ```Bash
-echo 0 | sudo tee /proc/sys/vm/swappiness
+# 修改配置文件。
+cat >> /etc/sysctl.conf << EOF
+vm.swappiness=0
+EOF
+# 使修改生效。
+sysctl -p
 ```
 
 ## 存储设置
@@ -190,48 +214,52 @@ cat /sys/block/${disk}/queue/scheduler
 
 mq-deadline 调度算法适合 SATA 磁盘。
 
-临时修改此项：
-
 ```Bash
+# 临时变更。
 echo mq-deadline | sudo tee /sys/block/${disk}/queue/scheduler
-```
-
-要使变更永久生效，请在修改该项后运行以下命令：
-
-```Bash
+# 永久变更。
+cat >> /etc/rc.d/rc.local << EOF
+echo mq-deadline | sudo tee /sys/block/${disk}/queue/scheduler
+EOF
 chmod +x /etc/rc.d/rc.local
 ```
 
 ### SSD 和 NVMe
 
-kyber 调度算法适合 NVMe 或 SSD 磁盘。
+- 如果您的 NVMe 或 SSD 磁盘支持 kyber 调度算法。
 
-临时修改此项：
+   ```Bash
+   # 临时变更。
+   echo kyber | sudo tee /sys/block/${disk}/queue/scheduler
+   # 永久变更。
+   cat >> /etc/rc.d/rc.local << EOF
+   echo kyber | sudo tee /sys/block/${disk}/queue/scheduler
+   EOF
+   chmod +x /etc/rc.d/rc.local
+   ```
 
-```Bash
-echo kyber | sudo tee /sys/block/${disk}/queue/scheduler
-```
+- 如果您的系统不支持 SSD 和 NVMe 的 kyber 调度算法，建议您使用 none（或 noop）调度算法。
 
-如果您的系统不支持 SSD 和 NVMe 的 kyber 调度算法，建议您使用 none（或 noop）调度算法。
-
-```Bash
-echo none | sudo tee /sys/block/${disk}/queue/scheduler
-```
-
-要使变更永久生效，请在修改该项后运行以下命令：
-
-```Bash
-chmod +x /etc/rc.d/rc.local
-```
+   ```Bash
+   # 临时变更。
+   echo none | sudo tee /sys/block/vdb/queue/scheduler
+   # 永久变更。
+   cat >> /etc/rc.d/rc.local << EOF
+   echo none | sudo tee /sys/block/${disk}/queue/scheduler
+   EOF
+   chmod +x /etc/rc.d/rc.local
+   ```
 
 ## SELinux
 
 建议您禁用 SELinux。
 
 ```Bash
+# 临时变更。
+setenforce 0
+# 永久变更。
 sed -i 's/SELINUX=.*/SELINUX=disabled/' /etc/selinux/config
 sed -i 's/SELINUXTYPE/#SELINUXTYPE/' /etc/selinux/config
-setenforce 0 
 ```
 
 ## 防火墙
@@ -248,7 +276,9 @@ systemctl disable firewalld.service
 您需要使用以下命令手动检查和配置 LANG 变量：
 
 ```Bash
+# 修改配置文件。
 echo "export LANG=en_US.UTF8" >> /etc/profile
+# 使修改生效。
 source /etc/profile
 ```
 
@@ -265,22 +295,24 @@ hwclock
 
 ## ulimit 设置
 
-如果**最大文件描述符**和**最大用户进程**的值设置得过小，StarRocks 运行可能会出现问题。
-
-### 最大文件描述符
-
-您可以通过运行以下命令设置最大文件描述符数：
+如果**最大文件描述符**和**最大用户进程**的值设置得过小，StarRocks 运行可能会出现问题。建议您将系统资源上限调大。
 
 ```Bash
-ulimit -n 655350
-```
+cat >> /etc/security/limits.conf << EOF
+* soft nproc 65535
+* hard nproc 65535
+* soft nofile 655350
+* hard nofile 655350
+* soft stack unlimited
+* hard stack unlimited
+* hard memlock unlimited
+* soft memlock unlimited
+EOF
 
-### 最大用户进程
-
-您可以通过运行以下命令设置最大用户进程数：
-
-```Bash
-ulimit -u 40960
+cat >> /etc/security/limits.d/20-nproc.conf << EOF 
+*          soft    nproc     65535
+root       soft    nproc     65535
+EOF
 ```
 
 ## 文件系统配置
@@ -298,7 +330,12 @@ df -Th
 如果系统当前因后台进程无法处理的新连接而溢出，则允许系统重置新连接：
 
 ```Bash
-echo 1 | sudo tee /proc/sys/net/ipv4/tcp_abort_on_overflow
+# 修改配置文件。
+cat >> /etc/sysctl.conf << EOF
+net.ipv4.tcp_abort_on_overflow=1
+EOF
+# 使修改生效。
+sysctl -p
 ```
 
 ### somaxconn
@@ -306,17 +343,23 @@ echo 1 | sudo tee /proc/sys/net/ipv4/tcp_abort_on_overflow
 设置监听 Socket 队列的最大连接请求数为 `1024`：
 
 ```Bash
-echo 1024 | sudo tee /proc/sys/net/core/somaxconn
+# 修改配置文件。
+cat >> /etc/sysctl.conf << EOF
+net.core.somaxconn=1024
+EOF
+# 使修改生效。
+sysctl -p
 ```
 
 ## NTP 设置
 
 需要在 StarRocks 集群各节点之间配置时间同步，从而保证事务的线性一致性。您可以使用 pool.ntp.org 提供的互联网时间服务，也可以使用离线环境内置的 NTP 服务。例如，您可以使用云服务提供商提供的 NTP 服务。
 
-1. 查看 NTP 时间服务器是否存在。
+1. 查看 NTP 时间服务器或 Chrony 服务是否存在。
 
    ```Bash
    rpm -qa | grep ntp
+   systemctl status chrony
    ```
 
 2. 如不存在，运行以下命令安装 NTP 时间服务器。
@@ -353,10 +396,24 @@ echo 1024 | sudo tee /proc/sys/net/core/somaxconn
 
 ## 高并发配置
 
-如果您的 StarRocks 集群负载并发较高，建议您进行如下配置：
+如果您的 StarRocks 集群负载并发较高，建议您进行如下配置.
+
+### max_map_count
+
+进程可以拥有的 VMA（虚拟内存区域）的数量。将该值调整为 `262144`：
+
+```bash
+# 修改配置文件。
+cat >> /etc/sysctl.conf << EOF
+vm.max_map_count = 262144
+EOF
+# 使修改生效。
+sysctl -p
+```
+
+### 其他
 
 ```Bash
 echo 120000 > /proc/sys/kernel/threads-max
-echo 262144 > /proc/sys/vm/max_map_count
 echo 200000 > /proc/sys/kernel/pid_max
 ```

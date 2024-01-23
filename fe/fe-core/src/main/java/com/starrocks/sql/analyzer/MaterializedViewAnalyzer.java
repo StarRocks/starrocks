@@ -23,6 +23,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
+import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IndexDef;
@@ -237,7 +238,7 @@ public class MaterializedViewAnalyzer {
         public Void visitCreateMaterializedViewStatement(CreateMaterializedViewStatement statement,
                                                          ConnectContext context) {
             final TableName tableNameObject = statement.getTableName();
-            MetaUtils.normalizationTableName(context, tableNameObject);
+            MetaUtils.normalizeMVName(context, tableNameObject);
             final String tableName = tableNameObject.getTbl();
             FeNameFormat.checkTableName(tableName);
             QueryStatement queryStatement = statement.getQueryStatement();
@@ -257,6 +258,12 @@ public class MaterializedViewAnalyzer {
             statement.setSimpleViewDef(AstToSQLBuilder.buildSimple(queryStatement));
             // collect table from query statement
 
+            if (!InternalCatalog.isFromDefault(statement.getTableName())) {
+                throw new SemanticException("Materialized view can only be created in default_catalog. " +
+                        "You could either create it with default_catalog.<database>.<mv>, or switch to " +
+                        "default_catalog through `set catalog <default_catalog>` statement",
+                        statement.getTableName().getPos());
+            }
             Database db = context.getGlobalStateMgr().getDb(statement.getTableName().getDb());
             if (db == null) {
                 throw new SemanticException("Can not find database:" + statement.getTableName().getDb(),
@@ -494,7 +501,7 @@ public class MaterializedViewAnalyzer {
                 for (String col : keyCols) {
                     Column column = columnMap.get(col).first;
                     column.setIsKey(true);
-                    //                    column.setAggregationType(null, false);
+                    column.setAggregationType(null, false);
                 }
                 return Streams.mapWithIndex(mvColumns.stream(), (column, idx) -> Pair.create(column, (int) idx))
                         .collect(Collectors.toList());
@@ -1016,7 +1023,7 @@ public class MaterializedViewAnalyzer {
                         mvName.getPos());
             }
             MaterializedView mv = (MaterializedView) table;
-            if (!mv.isActive()) {
+            if (!mv.isActive() && AlterJobMgr.MANUAL_INACTIVE_MV_REASON.equalsIgnoreCase(mv.getInactiveReason())) {
                 throw new SemanticException("Refresh materialized view failed because [" + mv.getName() +
                         "] is not active. You can try to active it with ALTER MATERIALIZED VIEW " + mv.getName()
                         + " ACTIVE; ", mvName.getPos());

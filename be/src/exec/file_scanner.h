@@ -68,6 +68,9 @@ public:
     Status create_sequential_file(const TBrokerRangeDesc& range_desc, const TNetworkAddress& address,
                                   const TBrokerScanRangeParams& params, std::shared_ptr<SequentialFile>* file);
 
+    // only for test
+    RuntimeState* TEST_runtime_state() { return _state; }
+
 protected:
     void fill_columns_from_path(ChunkPtr& chunk, int slot_start, const std::vector<std::string>& columns_from_path,
                                 int size);

@@ -69,15 +69,36 @@ From 2.5 onwards, StarRocks allows you to specify a collection period for automa
 
 Conditions that trigger automatic collection:
 
-- Table data has changed since previous statistics collection.
+- `enable_statistic_collect` is `true`
+
+- The collection time is within the range of the configured collection period. (The default collection period is all day.)
+
+- The update time of the previous collecting job is earlier than the latest update time of partitions.
 
 - The health of table statistics is below the specified threshold (`statistic_auto_collect_ratio`).
 
 > Formula for calculating statistics health: 1 - Number of added rows since the previous statistics collection/Total number of rows in the smallest partition
 
-- Partition data has been modified. Partitions whose data is not modified will not be collected again.
+In addition, StarRocks allows you to configure collection policies based on table size and table update frequency:
 
-- The collection time falls within the range of the configured collection period. (The default collection period is all day.)
+- For tables with small data volume, **statistics are collected in real time with no restrictions, even though the table data is frequently updated. The `statistic_auto_collect_small_table_size` parameter can be used to determine whether a table is a small table or a large table. You can also use `statistic_auto_collect_small_table_interval` to configure collection intervals for small tables.
+
+- For tables with large data volume, the following restrictions apply:
+
+  - The default collection interval is not less than 12 hours, which can be configured using `statistic_auto_collect_large_table_interval`.
+
+  - When the collection interval is met and the statistics health is lower than the threshold for automatic sampled collection (`statistic_auto_collect_sample_threshold`), sampled collection is triggered.
+
+  - When the collection interval is met and the statistics health is higher than the threshold for automatic sampled collection (`statistic_auto_collect_sample_threshold`) and lower than the automatic collection threshold (`statistic_auto_collect_ratio`), full collection is triggered.
+
+  - When the size of the largest partition to collect data (`statistic_max_full_collect_data_size`) is greater than 100 GB, sampled collection is triggered.
+
+  - Only statistics of partitions whose update time is later than the time of the previous collection task are collected. Statistics of partitions with no data change are not collected.
+
+:::tip
+
+After the data of a table is changed, manually triggering a sampled collection task for this table will make the update time of the sampled collection task later than the data update time, which will not trigger automatic full collection for this table in this scheduling period.
+:::
 
 Automatic full collection is enabled by default and run by the system using the default settings.
 
@@ -89,12 +110,18 @@ The following table describes the default settings. If you need to modify them, 
 | enable_collect_full_statistic         | BOOLEAN  | TRUE              | Whether to enable automatic full collection. This switch is turned on by default. |
 | statistic_collect_interval_sec        | LONG     | 300               | The interval for checking data updates during automatic collection. Unit: seconds. |
 | statistic_auto_collect_ratio          | FLOAT    | 0.8               | The threshold for determining  whether the statistics for automatic collection are healthy. If statistics health is below this threshold, automatic collection is triggered. |
-| statistic_max_full_collect_data_size | LONG      | 107374182400      | The size of the largest partition for automatic collection to collect data. Unit: Byte. If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
-| statistic_collect_max_row_count_per_query | INT  | 5000000000        | The maximum number of rows to query for a single analyze task. An analyze task will be split into multiple queries if this value is exceeded. |
 | statistic_auto_analyze_start_time | STRING      | 00:00:00   | The start time of automatic collection. Value range: `00:00:00` - `23:59:59`. |
 | statistic_auto_analyze_end_time | STRING      | 23:59:59  | The end time of automatic collection. Value range: `00:00:00` - `23:59:59`. |
+| statistic_auto_collect_small_table_size     | LONG    | 5368709120   | The threshold for determining whether a table is a small table for automatic full collection. A table whose size is greater than this value is considered a large table, whereas a table whose size is less than or equal to this value is considered a small table. Unit: Byte. Default value: 5368709120 (5 GB).                         |
+| statistic_auto_collect_small_table_interval | LONG    | 0         | The interval for automatically collecting full statistics of small tables. Unit: seconds.                              |
+| statistic_auto_collect_large_table_interval | LONG    | 43200        | The interval for automatically collecting full statistics of large tables. Unit: seconds. Default value: 43200 (12 hours).                               |
+| statistic_auto_collect_sample_threshold  | DOUBLE	| 0.3   | The statistics health threshold for triggering automatic sampled collection. If the health value of statistics is lower than this threshold, automatic sampled collection is triggered. |
+| statistic_max_full_collect_data_size | LONG      | 107374182400      | The size of the largest partition for automatic collection to collect data. Unit: Byte. Default value: 107374182400 (100 GB). If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
+| statistic_full_collect_buffer | LONG | 20971520 | The maximum buffer size taken by automatic collection tasks. Unit: Byte. Default value: 20971520 (20 MB). |
+| statistic_collect_max_row_count_per_query | INT  | 5000000000        | The maximum number of rows to query for a single analyze task. An analyze task will be split into multiple queries if this value is exceeded. |
+| statistic_collect_too_many_version_sleep | LONG | 600000 | The sleep time of automatic collection tasks if the table on which the collection task runs has too many data versions. Unit: ms. Default value: 600000 (10 minutes).  |
 
-You can rely on automatic jobs for a majority of statistics collection, but if you have specific statistics requirements, you can manually create a task by executing the ANALYZE TABLE statement or customize an automatic task by executing the CREATE ANALYZE  statement.
+You can rely on automatic jobs for a majority of statistics collection, but if you have specific requirements, you can manually create a task by executing the ANALYZE TABLE statement or customize an automatic task by executing the CREATE ANALYZE  statement.
 
 ### Manual collection
 
@@ -267,7 +294,7 @@ CREATE ANALYZE SAMPLE DATABASE db_name;
 
 -- Automatically collect stats of all tables in a database, excluding specified table 'db_name.tbl_name'.
 CREATE ANALYZE SAMPLE DATABASE db_name PROPERTIES (
-   "statistic_exclude_pattern" = "db_name\.tbl_name"
+   "statistic_exclude_pattern" = "db_name.tbl_name"
 );
 
 -- Automatically collect stats of specified columns in a table, with statistics health and the number of rows to collect specified.

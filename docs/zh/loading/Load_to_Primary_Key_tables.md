@@ -604,7 +604,6 @@ SELECT * FROM table4;
 >
 > - 在 3.1.3 版本及以前，StarRocks 不支持条件更新同部分更新一并使用。自 3.1.3 版本起，StarRocks 才支持条件更新同部分更新一并使用。
 >
-> - 当前仅 Stream Load 和 Routine Load 支持条件更新。
 
 ### 数据样例
 
@@ -677,6 +676,20 @@ SELECT * FROM table4;
       "kafka_broker_list" ="<kafka_broker_host>:<kafka_broker_port>",
       "kafka_topic" = "topic5",
       "property.kafka_default_offsets" ="OFFSET_BEGINNING"
+  );
+  ```
+
+- 通过 Broker Load 导入：
+
+  ```SQL
+  LOAD LABEL test_db.table5
+  ( DATA INFILE ("s3://xxx.csv")
+    INTO TABLE table5 COLUMNS TERMINATED BY "," FORMAT AS "CSV"
+  )
+  WITH BROKER
+  PROPERTIES
+  (
+      "merge_condition" = "version"
   );
   ```
 

@@ -184,7 +184,7 @@ AS
 
   > **说明**
   >
-  > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../../../table_design/Data_distribution.md#确定分桶数量)。
+  > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../../../table_design/Data_distribution.md#设置分桶数量)。
 
 - **随机分桶**：
 
@@ -265,7 +265,7 @@ AS
 
 **query_statement**（必填）
 
-创建异步物化视图的查询语句，其结果即为异步物化视图中的数据。
+创建异步物化视图的查询语句，其结果即为异步物化视图中的数据。从 v3.1.6 版本开始，StarRocks 支持使用 Common Table Expression (CTE) 创建异步物化视图。
 
 > **注意**
 >

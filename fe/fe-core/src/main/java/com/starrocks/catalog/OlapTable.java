@@ -58,9 +58,6 @@ import com.starrocks.catalog.LocalTablet.TabletStatus;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.Partition.PartitionState;
-import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.clone.TabletScheduler;
@@ -69,6 +66,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MarkedCountDownLatch;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.io.Text;
@@ -83,6 +81,7 @@ import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -104,6 +103,7 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TWriteQuorumType;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -113,7 +113,6 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -301,7 +300,6 @@ public class OlapTable extends Table {
         olapTable.name = this.name;
         olapTable.fullSchema = Lists.newArrayList(this.fullSchema);
         olapTable.nameToColumn = Maps.newHashMap(this.nameToColumn);
-        olapTable.relatedMaterializedViews = Sets.newHashSet(this.relatedMaterializedViews);
         olapTable.state = this.state;
         olapTable.indexNameToId = Maps.newHashMap(this.indexNameToId);
         olapTable.indexIdToMeta = Maps.newHashMap(this.indexIdToMeta);
@@ -336,6 +334,11 @@ public class OlapTable extends Table {
         if (this.tableProperty != null) {
             olapTable.tableProperty = this.tableProperty.copy();
         }
+
+        // Shallow copy shared data to check whether the copied table has changed or not.
+        olapTable.lastSchemaUpdateTime = this.lastSchemaUpdateTime;
+        olapTable.lastVersionUpdateStartTime = this.lastVersionUpdateStartTime;
+        olapTable.lastVersionUpdateEndTime = this.lastVersionUpdateEndTime;
     }
 
     public BinlogConfig getCurBinlogConfig() {
@@ -1317,6 +1320,10 @@ public class OlapTable extends Table {
     // the caller should get db lock when call this method
     public boolean shouldLoadToNewRollup() {
         return false;
+    }
+
+    public boolean isTempPartition(long partitionId) {
+        return tempPartitions.getPartition(partitionId) != null;
     }
 
     @Override
@@ -2498,15 +2505,8 @@ public class OlapTable extends Table {
         // drop all temp partitions of this table, so that there is no temp partitions in recycle bin,
         // which make things easier.
         dropAllTempPartitions();
-        for (MvId mvId : getRelatedMaterializedViews()) {
-            Table tmpTable = db.getTable(mvId.getId());
-            if (tmpTable != null) {
-                MaterializedView mv = (MaterializedView) tmpTable;
-                mv.setInactiveAndReason("base-table dropped: " + getName());
-            } else {
-                LOG.warn("Ignore materialized view {} does not exists", mvId);
-            }
-        }
+        LocalMetastore.inactiveRelatedMaterializedView(db, this,
+                MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(getName()));
     }
 
     public void onErase(boolean isReplay) {
@@ -2569,6 +2569,8 @@ public class OlapTable extends Table {
                                 batchTaskMap.put(backendId, batchTask);
                             }
                             batchTask.addTask(dropTask);
+                            LOG.info("delete tablet[{}] from backend[{}] because table {}-{} is dropped",
+                                    tabletId, backendId, table.getId(), table.getName());
                         } // end for replicas
                     } // end for tablets
                 } // end for indices
@@ -2677,26 +2679,68 @@ public class OlapTable extends Table {
         }
 
         PeriodDuration cacheDuration = tableProperty.getDataCachePartitionDuration();
-        if (cacheDuration != null && getPartitionInfo().isRangePartition()) {
+        if (cacheDuration == null) {
+            return true;
+        }
+
+        if (getPartitionInfo().isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) getPartitionInfo();
             Range<PartitionKey> partitionRange = rangePartitionInfo.getRange(partition.getId());
             Range<PartitionKey> dataCacheRange;
-            if (rangePartitionInfo.isPartitionedBy(PrimitiveType.DATETIME)) {
-                LocalDateTime upper = LocalDateTime.now();
-                LocalDateTime lower = upper.minus(cacheDuration);
-                dataCacheRange = Range.openClosed(PartitionKey.ofDateTime(lower), PartitionKey.ofDateTime(upper));
-                return partitionRange.isConnected(dataCacheRange);
-            } else if (rangePartitionInfo.isPartitionedBy(PrimitiveType.DATE)) {
-                LocalDate upper = LocalDate.now();
-                LocalDate lower = upper.minus(cacheDuration);
-                dataCacheRange = Range.openClosed(PartitionKey.ofDate(lower), PartitionKey.ofDate(upper));
-                return partitionRange.isConnected(dataCacheRange);
-            } else {
-                // If the table was not partitioned by DATE/DATETIME, ignore the property "datacache.partition_duration" and
-                // enable data cache by default.
+            if (rangePartitionInfo.isPartitionedBy(PrimitiveType.DATETIME) ||
+                    rangePartitionInfo.isPartitionedBy(PrimitiveType.DATE)) {
+                try {
+                    LocalDateTime upper = LocalDateTime.now();
+                    LocalDateTime lower = upper.minus(cacheDuration);
+                    dataCacheRange = Range.openClosed(PartitionKey.ofDateTime(lower), PartitionKey.ofDateTime(upper));
+                    return partitionRange.isConnected(dataCacheRange);
+                } catch (Exception e) {
+                    LOG.warn("Table name: {}, Partition name: {}, Datacache.partiton_duration: {}, Failed to check the " +
+                            " validaity of range partition. Error: {}.", super.name, partition.getName(),
+                            cacheDuration.toString(), e.getMessage());
+                    return false;
+                }
+            }
+        } else if (getPartitionInfo().isListPartition()) {
+            ListPartitionInfo listPartitionInfo = (ListPartitionInfo) getPartitionInfo();
+            List<Column> columns = listPartitionInfo.getPartitionColumns();
+            int dateTypeColumnIdx = ListUtils.indexOf(columns, column -> column.getPrimitiveType().isDateType());
+
+            if (dateTypeColumnIdx == -1) {
+                // List partition has no date type column.
                 return true;
             }
+
+            LocalDateTime upper = LocalDateTime.now();
+            LocalDateTime lower = upper.minus(cacheDuration);
+            List<List<String>> multiValues = listPartitionInfo.getIdToMultiValues().get(partition.getId());
+            List<String> values = listPartitionInfo.getIdToValues().get(partition.getId());
+            try {
+                if (multiValues != null) {
+                    for (List<String> multivalue : multiValues) {
+                        LocalDateTime partitionTime = DateUtils.parseDatTimeString(multivalue.get(dateTypeColumnIdx));
+                        if (lower.isBefore(partitionTime) && (partitionTime.isBefore(upper) || partitionTime.isEqual(upper))) {
+                            return true;
+                        }
+                    }
+                }
+                if (values != null) {
+                    for (String value : values) {
+                        LocalDateTime partitionTime = DateUtils.parseDatTimeString(value);
+                        if (lower.isBefore(partitionTime) && (partitionTime.isBefore(upper) || partitionTime.isEqual(upper))) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            } catch (Exception e) {
+                LOG.warn("Table name: {}, Partition name: {}, Datacache.partiton_duration: {}, Failed to check the " +
+                        "validaity of list partition. Error: {}.", super.name, partition.getName(),
+                        cacheDuration.toString(), e.getMessage());
+                return false;
+            }
         }
+
         return true;
     }
     // ------ for lake table and lake materialized view end ------

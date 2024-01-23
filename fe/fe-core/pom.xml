@@ -38,10 +38,10 @@ under the License.
         <starrocks.home>${basedir}/../../</starrocks.home>
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
         <jacoco.version>0.8.7</jacoco.version>
-        <iceberg.version>1.2.1</iceberg.version>
+        <iceberg.version>1.4.2</iceberg.version>
         <awsv2.version>2.17.257</awsv2.version>
         <paimon.version>0.5.0-incubating</paimon.version>
-        <staros.version>3.1.3</staros.version>
+        <staros.version>3.1.6</staros.version>
         <python>python</python>
     </properties>
 
@@ -819,6 +819,19 @@ under the License.
             <artifactId>ranger-plugins-common</artifactId>
             <version>2.4.0</version>
         </dependency>
+
+        <dependency>
+            <groupId>com.carrotsearch</groupId>
+            <artifactId>junit-benchmarks</artifactId>
+            <version>0.7.2</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.zaxxer</groupId>
+            <artifactId>HikariCP</artifactId>
+            <version>${hikaricp.version}</version>
+        </dependency>
     </dependencies>
 
     <build>
@@ -943,6 +956,7 @@ under the License.
             <!-- also parse the proto for FE -->
             <plugin>
                 <artifactId>maven-antrun-plugin</artifactId>
+                <version>1.8</version>
                 <executions>
                     <execution>
                         <id>generate-sources</id>

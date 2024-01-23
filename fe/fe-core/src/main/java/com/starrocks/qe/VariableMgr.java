@@ -255,12 +255,7 @@ public class VariableMgr {
     }
 
     public static SessionVariable newSessionVariable() {
-        try {
-            return (SessionVariable) DEFAULT_SESSION_VARIABLE.clone();
-        } catch (CloneNotSupportedException e) {
-            LOG.warn(e);
-        }
-        return null;
+        return (SessionVariable) DEFAULT_SESSION_VARIABLE.clone();
     }
 
     // Check if this setVar can be set correctly

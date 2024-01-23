@@ -44,8 +44,10 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRangeLocation;
+import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -68,6 +70,8 @@ public class SimpleSchedulerTest {
 
     @Before
     public void setUp() {
+        // disable updateBlackListThread
+        SimpleScheduler.disableUpdateBlacklistThread();
     }
 
     // Comment out these code temporatily.
@@ -270,6 +274,7 @@ public class SimpleSchedulerTest {
         String host = backendA.getHost();
         List<Integer> ports = new ArrayList<Integer>();
         Collections.addAll(ports, backendA.getBePort(), backendA.getBrpcPort(), backendA.getHttpPort());
+
         boolean accessible = NetUtils.checkAccessibleForAllPorts(host, ports);
         Assert.assertFalse(accessible);
 
@@ -298,6 +303,70 @@ public class SimpleSchedulerTest {
         ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
         address = SimpleScheduler.getComputeNodeHost(builder.build(), idRef);
         Assert.assertNull(address);
+    }
+
+    @Test
+    public void testUpdateBlacklist(@Mocked GlobalStateMgr globalStateMgr,
+                                    @Mocked SystemInfoService systemInfoService,
+                                    @Mocked NetUtils utils) {
+        Config.heartbeat_timeout_second = 1;
+
+        SimpleScheduler.addToBlacklist(10001L);
+        SimpleScheduler.addToBlacklist(10002L);
+        SimpleScheduler.addToBlacklist(10003L);
+        new Expectations() {
+            {
+                globalStateMgr.getCurrentSystemInfo();
+                result = systemInfoService;
+                times = 2;
+
+                // backend 10001 will be removed
+                systemInfoService.getBackendOrComputeNode(10001L);
+                result = null;
+                times = 1;
+
+                // backend 10002 will be removed
+                Backend backend1 = new Backend();
+                backend1.setAlive(true);
+                backend1.setHost("host10002");
+                backend1.setBrpcPort(10002);
+                backend1.setHttpPort(10012);
+                systemInfoService.getBackendOrComputeNode(10002L);
+                result = backend1;
+                times = 1;
+
+                systemInfoService.checkNodeAvailable(backend1);
+                result = true;
+                times = 1;
+
+                NetUtils.checkAccessibleForAllPorts("host10002", (List<Integer>) any);
+                result = true;
+                times = 1;
+
+                // backend 10003, which is not available, will not be be removed
+                ComputeNode computeNode1 = new Backend();
+                computeNode1.setAlive(false);
+                computeNode1.setHost("host10003");
+                computeNode1.setBrpcPort(10003);
+                computeNode1.setHttpPort(10013);
+                systemInfoService.getBackendOrComputeNode(10003L);
+                result = computeNode1;
+                times = 2;
+
+                systemInfoService.checkNodeAvailable(computeNode1);
+                result = false;
+                times = 2;
+            }
+        };
+        SimpleScheduler.updateBlacklist();
+
+        Assert.assertFalse(SimpleScheduler.isInBlacklist(10001L));
+        Assert.assertFalse(SimpleScheduler.isInBlacklist(10002L));
+        Assert.assertTrue(SimpleScheduler.isInBlacklist(10003L));
+
+        //Having retried for Config.heartbeat_timeout_second + 1 times, backend 10003 will be removed.
+        SimpleScheduler.updateBlacklist();
+        Assert.assertFalse(SimpleScheduler.isInBlacklist(10003L));
     }
 
     @Test

@@ -139,7 +139,7 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         }
         active_chunk->merge(std::move(*lazy_chunk));
     } else if (active_rows == 0) {
-        _param.stats->skip_read_rows += count;
+        _param.stats->late_materialize_skip_rows += count;
         _column_reader_opts.context->rows_to_skip += count;
         *row_count = 0;
         return status;
@@ -325,8 +325,7 @@ void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeD
             offset = column.data_page_offset;
         }
         int64_t size = column.total_compressed_size;
-        auto r = io::SharedBufferedInputStream::IORange{.offset = offset, .size = size};
-        ranges->emplace_back(r);
+        ranges->emplace_back(offset, size);
         *end_offset = std::max(*end_offset, offset + size);
     }
 }
@@ -372,8 +371,7 @@ void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeD
             offset = column.data_page_offset;
         }
         int64_t size = column.total_compressed_size;
-        auto r = io::SharedBufferedInputStream::IORange{.offset = offset, .size = size};
-        ranges->emplace_back(r);
+        ranges->emplace_back(offset, size);
         *end_offset = std::max(*end_offset, offset + size);
     }
 }

@@ -26,6 +26,7 @@ displayed_sidebar: "Chinese"
 
 如果在安装 BE 后启动报错 `StarRocks Be http service did not start correctly,exiting`，该问题是 BE 节点 `be_http_port` 端口被占用导致。您需要修改 BE 配置文件 **be.conf** 中的 `be_http_port` 配置项并重启 BE 服务使配置生效。如果多次修改为未被占用的端口，系统仍然重复报错，您需要检查节点是否装有 Yarn 等程序，确认监听端口选择修改监听规则，或者 BE 的端口选取范围绕过。
 
+<!--
 ## 在部署企业版 StarRocks 的过程当中，配置节点时报错：“Failed to Distribute files to node”。我该如何解决？
 
 以上错误是由于 FE 节点间 setuptools 版本不匹配导致。您需要使用 root 权限在集群的所有机器上执行以下命令：
@@ -35,10 +36,11 @@ yum remove python-setuptools
 rm /usr/lib/python2.7/site-packages/setuptool* -rf
 wget https://bootstrap.pypa.io/ez_setup.py -O - | python
 ```
+-->
 
 ## StarRocks 是否支持动态修改 FE、BE 配置项？
 
-部分 FE 节点和 BE 节点配置项支持动态修改。具体操作参考 [配置参数](../administration/Configuration.md)。
+部分 FE 和 BE 节点的配置项支持动态修改。具体操作参考 [配置参数](../administration/Configuration.md)。
 
 * 动态修改 FE 节点配置项：
   * 使用 SQL 方式动态修改：

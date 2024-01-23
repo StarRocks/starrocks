@@ -17,17 +17,10 @@ package com.starrocks.sql.optimizer;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
-import com.starrocks.pseudocluster.PseudoCluster;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.scheduler.Task;
-import com.starrocks.scheduler.TaskBuilder;
-import com.starrocks.scheduler.TaskManager;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -46,59 +39,24 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteTestBase;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.task.RewriteTreeTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
-import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.List;
 
-public class OptimizerTest {
-    private static ConnectContext connectContext;
-    private static PseudoCluster cluster;
-    private static StarRocksAssert starRocksAssert;
-
+public class OptimizerTest extends MvRewriteTestBase {
     @BeforeClass
-    public static void setUp() throws Exception {
-        // set timeout to a really long time so that ut can pass even when load of ut machine is very high
-        Config.bdbje_heartbeat_timeout_second = 60;
-        Config.bdbje_replica_ack_timeout_second = 60;
-        Config.bdbje_lock_timeout_second = 60;
-        // set some parameters to speedup test
-        Config.tablet_sched_checker_interval_seconds = 1;
-        Config.tablet_sched_repair_delay_factor_second = 1;
-        Config.enable_new_publish_mechanism = true;
-        PseudoCluster.getOrCreateWithRandomPort(true, 3);
-        GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(1000);
-        cluster = PseudoCluster.getInstance();
-        connectContext = UtFrameUtils.createDefaultCtx();
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
-        starRocksAssert = new StarRocksAssert(connectContext);
-        starRocksAssert.withDatabase("test").useDatabase("test");
-        starRocksAssert.withTable("CREATE TABLE `t0` (\n" +
-                "  `v1` bigint NULL COMMENT \"\",\n" +
-                "  `v2` bigint NULL COMMENT \"\",\n" +
-                "  `v3` bigint NULL\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`v1`, `v2`, v3)\n" +
-                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\"\n" +
-                ");");
-    }
-
-    @AfterClass
-    public static void tearDown() throws Exception {
-        PseudoCluster.getInstance().shutdown(true);
+    public static void before() throws Exception {
+        starRocksAssert.useTable("t0");
     }
 
     private static class TimeoutRule extends Rule {
@@ -173,32 +131,10 @@ public class OptimizerTest {
         }
     }
 
-    private MaterializedView getMv(String dbName, String mvName) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
-        Table table = db.getTable(mvName);
-        Assert.assertNotNull(table);
-        Assert.assertTrue(table instanceof MaterializedView);
-        MaterializedView mv = (MaterializedView) table;
-        return mv;
-    }
-
-    private void refreshMaterializedView(String dbName, String mvName) throws Exception {
-        MaterializedView mv = getMv(dbName, mvName);
-        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        final String mvTaskName = TaskBuilder.getMvTaskName(mv.getId());
-        Task task = taskManager.getTask(mvTaskName);
-        if (!taskManager.containTask(mvTaskName)) {
-            task = TaskBuilder.buildMvTask(mv, dbName);
-            TaskBuilder.updateTaskInfo(task, mv);
-            taskManager.createTask(task, false);
-        }
-        taskManager.executeTaskSync(task);
-    }
-
     @Test
     public void testPreprocessMvNonPartitionMv() throws Exception {
         Config.enable_experimental_mv = true;
-        cluster.runSql("test", "insert into t0 values(10, 20, 30)");
+        executeInsertSql(connectContext, "insert into t0 values(10, 20, 30)");
         starRocksAssert.withMaterializedView("create materialized view mv_1 distributed by hash(`v1`) " +
                 "as select v1, v2, sum(v3) as total from t0 group by v1, v2");
         starRocksAssert.withMaterializedView("create materialized view mv_2 distributed by hash(`v1`) " +
@@ -240,7 +176,7 @@ public class OptimizerTest {
                 ")\n" +
                 "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                 "PROPERTIES('replication_num' = '1');");
-        cluster.runSql("test", "insert into tbl_with_mv values(\"2020-02-20\", 20, 30)");
+        executeInsertSql(connectContext, "insert into tbl_with_mv values(\"2020-02-20\", 20, 30)");
 
         {
             starRocksAssert.withMaterializedView("create materialized view mv_4\n" +
@@ -249,7 +185,7 @@ public class OptimizerTest {
                     "refresh manual\n" +
                     "as select k1, k2, v1  from tbl_with_mv;");
             refreshMaterializedView("test", "mv_4");
-            cluster.runSql("test", "insert into tbl_with_mv partition(p3) values(\"2020-03-05\", 20, 30)");
+            executeInsertSql(connectContext, "insert into tbl_with_mv partition(p3) values(\"2020-03-05\", 20, 30)");
 
             String sql = "select k1, sum(v1) from tbl_with_mv group by k1";
             StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
@@ -278,7 +214,7 @@ public class OptimizerTest {
             }
 
             refreshMaterializedView("test", "mv_4");
-            cluster.runSql("test", "insert into tbl_with_mv partition(p2) values(\"2020-02-20\", 20, 30)");
+            executeInsertSql(connectContext, "insert into tbl_with_mv partition(p2) values(\"2020-02-20\", 20, 30)");
             Optimizer optimizer2 = new Optimizer();
             OptExpression expr2 = optimizer2.optimize(connectContext, logicalPlan.getRoot(), new PhysicalPropertySet(),
                     new ColumnRefSet(logicalPlan.getOutputColumn()), columnRefFactory);
@@ -299,7 +235,7 @@ public class OptimizerTest {
                     "refresh manual\n" +
                     "as select k1, k2, v1  from tbl_with_mv;");
             refreshMaterializedView("test", "mv_5");
-            cluster.runSql("test", "insert into tbl_with_mv partition(p3) values(\"2020-03-05\", 20, 30)");
+            executeInsertSql(connectContext, "insert into tbl_with_mv partition(p3) values(\"2020-03-05\", 20, 30)");
 
             String sql = "select k1, sum(v1) from tbl_with_mv group by k1";
             StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);

@@ -113,6 +113,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -279,7 +280,7 @@ public class Coordinator {
         this.queryOptions.setQuery_type(queryType);
         long startTime = context.getStartTime();
         String timezone = context.getSessionVariable().getTimeZone();
-        this.queryGlobals = CoordinatorPreprocessor.genQueryGlobals(startTime, timezone);
+        this.queryGlobals = CoordinatorPreprocessor.genQueryGlobals(Instant.ofEpochMilli(startTime), timezone);
         if (context.getLastQueryId() != null) {
             this.queryGlobals.setLast_query_id(context.getLastQueryId().toString());
         }
@@ -323,7 +324,7 @@ public class Coordinator {
             this.queryOptions.setLog_rejected_record_num(
                     Long.parseLong(sessionVariables.get(BulkLoadJob.LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY)));
         }
-        this.queryGlobals = CoordinatorPreprocessor.genQueryGlobals(startTime, timezone);
+        this.queryGlobals = CoordinatorPreprocessor.genQueryGlobals(Instant.ofEpochMilli(startTime), timezone);
         this.needReport = true;
 
         this.coordinatorPreprocessor =
@@ -358,7 +359,7 @@ public class Coordinator {
             this.queryOptions.setLog_rejected_record_num(
                     Long.parseLong(sessionVariables.get(BulkLoadJob.LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY)));
         }
-        this.queryGlobals = CoordinatorPreprocessor.genQueryGlobals(startTime, timezone);
+        this.queryGlobals = CoordinatorPreprocessor.genQueryGlobals(Instant.ofEpochMilli(startTime), timezone);
         this.needReport = true;
 
         this.coordinatorPreprocessor =
@@ -405,7 +406,7 @@ public class Coordinator {
             }
         }
 
-        this.queryGlobals = CoordinatorPreprocessor.genQueryGlobals(loadPlanner.getStartTime(),
+        this.queryGlobals = CoordinatorPreprocessor.genQueryGlobals(Instant.ofEpochMilli(loadPlanner.getStartTime()),
                 loadPlanner.getTimeZone());
         if (context.getLastQueryId() != null) {
             this.queryGlobals.setLast_query_id(context.getLastQueryId().toString());
@@ -546,7 +547,7 @@ public class Coordinator {
         return sinkCommitInfos;
     }
 
-    public void setTopProfileSupplier(Supplier<RuntimeProfile> topProfileSupplier) {
+    public synchronized void setTopProfileSupplier(Supplier<RuntimeProfile> topProfileSupplier) {
         this.topProfileSupplier = topProfileSupplier;
     }
 
@@ -1222,7 +1223,7 @@ public class Coordinator {
                             LOG.warn("exec plan fragment failed, errmsg={}, code: {}, fragmentId={}, backend={}:{}",
                                     errMsg, code, pair.first.fragmentId,
                                     pair.first.address.hostname, pair.first.address.port);
-                            profileDoneSignal.markedCountDown(pair.first.fragmentInstanceId(), -1L);
+                            profileDoneSignal.countDownToZero(new Status());
                             if (errorBackendExecState == null) {
                                 errorBackendExecState = pair.first;
                                 errorCode = code;
@@ -1624,7 +1625,9 @@ public class Coordinator {
         // current batch, the previous reported state will be synchronized to the profile manager.
         long now = System.currentTimeMillis();
         long lastTime = lastRuntimeProfileUpdateTime.get();
-        if (topProfileSupplier != null && execPlan != null && connectContext != null &&
+        Supplier<RuntimeProfile> topProfileSupplier = this.topProfileSupplier;
+        ExecPlan plan = execPlan;
+        if (topProfileSupplier != null && plan != null && connectContext != null &&
                 connectContext.isProfileEnabled() &&
                 // If it's the last done report, avoiding duplicate trigger
                 (!execState.done || profileDoneSignal.getLeftMarks().size() > 1) &&
@@ -1632,10 +1635,9 @@ public class Coordinator {
                 now - lastTime > (connectContext.getSessionVariable().getRuntimeProfileReportInterval() * 950L) &&
                 lastRuntimeProfileUpdateTime.compareAndSet(lastTime, now)) {
             RuntimeProfile profile = topProfileSupplier.get();
-            ExecPlan plan = execPlan;
             profile.addChild(buildQueryProfile(connectContext.needMergeProfile()));
-            ProfilingExecPlan profilingPlan = plan == null ? null : plan.getProfilingPlan();
-            ProfileManager.getInstance().pushProfile(profilingPlan, profile);
+            ProfilingExecPlan profilingPlan = plan.getProfilingPlan();
+            saveRunningProfile(profilingPlan, profile);
         }
 
         lock();
@@ -1716,6 +1718,15 @@ public class Coordinator {
                         jobId, params);
             }
         }
+    }
+
+    public synchronized void saveRunningProfile(ProfilingExecPlan profilingPlan, RuntimeProfile profile) {
+        // topProfileSupplier may be null when the query is finished.
+        // And here to make sure that runtime profile won't overwrite the final profile
+        if (topProfileSupplier == null) {
+            return;
+        }
+        ProfileManager.getInstance().pushProfile(profilingPlan, profile);
     }
 
     public synchronized void updateAuditStatistics(TReportAuditStatisticsParams params) {
@@ -2125,6 +2136,9 @@ public class Coordinator {
         return this.thriftServerHighLoad;
     }
 
+    public ConnectContext getConnectContext() {
+        return connectContext;
+    }
     // record backend execute state
     // TODO(zhaochun): add profile information and others
     public class BackendExecState {

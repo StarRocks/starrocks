@@ -24,7 +24,6 @@ PROPERTIES (
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
-"light_schema_change" = "true",
 "compression" = "LZ4"
 );
 insert into t0 values('2023-01-01', 'foo_0001', 'bar_0010', 1);

@@ -153,13 +153,21 @@ bool MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from
         for (int i = 0; i < _slot_descs->size(); ++i) {
             const ColumnPtr& src = chunk.get_column_by_slot_id((*_slot_descs)[i]->id());
             ColumnPtr& dest = _chunk->get_column_by_index(i);
-            dest->append_selective(*src, indexes, from, size);
+            if (src->only_null()) {
+                dest->append_nulls(size);
+            } else {
+                dest->append_selective(*src, indexes, from, size);
+            }
         }
     } else {
         for (int i = 0; i < _vectorized_schema->num_fields(); i++) {
             const ColumnPtr& src = chunk.get_column_by_index(i);
             ColumnPtr& dest = _chunk->get_column_by_index(i);
-            dest->append_selective(*src, indexes, from, size);
+            if (src->only_null()) {
+                dest->append_nulls(size);
+            } else {
+                dest->append_selective(*src, indexes, from, size);
+            }
         }
     }
 

@@ -56,10 +56,8 @@ static Status create_hdfs_fs_handle(const std::string& namenode, std::shared_ptr
         if (properties->__isset.hdfs_username) {
             hdfsBuilderSetUserName(hdfs_builder, properties->hdfs_username.data());
         }
-        if (properties->__isset.disable_cache && properties->disable_cache) {
-            hdfsBuilderSetForceNewInstance(hdfs_builder);
-        }
     }
+    hdfsBuilderSetForceNewInstance(hdfs_builder);
 
     // Insert cloud properties(key-value paired) into Hadoop configuration
     // TODO(SmithCruise): Should remove when using cpp sdk
@@ -92,7 +90,6 @@ static Status create_hdfs_fs_handle(const std::string& namenode, std::shared_ptr
 
 Status HdfsFsCache::get_connection(const std::string& namenode, std::shared_ptr<HdfsFsClient>& hdfs_client,
                                    const FSOptions& options) {
-    std::lock_guard<std::mutex> l(_lock);
     std::string cache_key = namenode;
     const THdfsProperties* properties = options.hdfs_properties();
     if (properties != nullptr && properties->__isset.hdfs_username) {
@@ -108,26 +105,28 @@ Status HdfsFsCache::get_connection(const std::string& namenode, std::shared_ptr<
         }
     }
 
-    for (size_t idx = 0; idx < _cache_keys.size(); idx++) {
-        if (_cache_keys[idx] == cache_key) {
-            hdfs_client = _cache_clients[idx];
-            // Found a cache client, return directly
-            return Status::OK();
-        }
-    }
-    const uint32_t max_cache_clients = config::hdfs_client_max_cache_size;
+    std::lock_guard<std::mutex> l(_lock);
 
+    auto it = _cache_clients.find(cache_key);
+    if (it != _cache_clients.end()) {
+        hdfs_client = it->second;
+        // Found a cache client, return directly
+        return Status::OK();
+    }
+
+    const uint32_t max_cache_clients = config::hdfs_client_max_cache_size;
     // Not found a cached client, create a new one
     hdfs_client = std::make_shared<HdfsFsClient>();
     hdfs_client->namenode = namenode;
     RETURN_IF_ERROR(create_hdfs_fs_handle(namenode, hdfs_client, options));
     if (UNLIKELY(_cache_keys.size() >= max_cache_clients)) {
         uint32_t idx = _rand.Uniform(max_cache_clients);
-        _cache_keys[idx] = cache_key;
-        _cache_clients[idx] = hdfs_client;
+        _cache_clients.erase(_cache_keys[idx]);
+        _cache_clients[cache_key] = hdfs_client;
+        _cache_keys[idx].swap(cache_key);
     } else {
-        _cache_keys.emplace_back(cache_key);
-        _cache_clients.emplace_back(hdfs_client);
+        _cache_clients[cache_key] = hdfs_client;
+        _cache_keys.push_back(std::move(cache_key));
     }
     return Status::OK();
 }

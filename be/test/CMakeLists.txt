@@ -1,4 +1,5 @@
 set(EXEC_FILES
+        ./agent/agent_task_test.cpp
         ./agent/master_info_test.cpp
         ./column/array_column_test.cpp
         ./column/binary_column_test.cpp
@@ -22,6 +23,7 @@ set(EXEC_FILES
         ./common/tracer_test.cpp
         ./common/uri_test.cpp
         ./fs/fs_broker_test.cpp
+        ./fs/fs_hdfs_test.cpp
         ./fs/fs_posix_test.cpp
         ./fs/fs_memory_test.cpp
         ./fs/fs_s3_test.cpp
@@ -149,8 +151,9 @@ set(EXEC_FILES
         ./formats/avro/numeric_column_test.cpp
         ./formats/avro/nullable_column_test.cpp
         ./formats/orc/orc_chunk_reader_test.cpp
-        ./formats/orc/orc_lazy_load_test.cpp
         ./formats/orc/orc_column_reader_test.cpp
+        ./formats/orc/orc_lazy_load_test.cpp
+        ./formats/parquet/arrow_parquet_writer_test.cpp
         ./formats/parquet/parquet_schema_test.cpp
         ./formats/parquet/encoding_test.cpp
         ./formats/parquet/page_reader_test.cpp
@@ -176,6 +179,7 @@ set(EXEC_FILES
         ./io/s3_input_stream_test.cpp
         ./io/fd_input_stream_test.cpp
         ./io/seekable_input_stream_test.cpp
+        ./io/shared_buffered_input_stream_test.cpp
         ./io/spill_test.cpp
         ./storage/decimal12_test.cpp
         ./storage/disjunctive_predicates_test.cpp
@@ -215,6 +219,7 @@ set(EXEC_FILES
         ./storage/lake/primary_key_publish_test.cpp
         ./storage/lake/meta_file_test.cpp
         ./storage/lake/metacache_test.cpp
+        ./storage/lake/replication_txn_manager_test.cpp
         ./storage/rowset_update_state_test.cpp
         ./storage/rowset_column_update_state_test.cpp
         ./storage/rowset_column_partial_update_test.cpp
@@ -268,6 +273,8 @@ set(EXEC_FILES
         ./storage/projection_iterator_test.cpp
         ./storage/push_handler_test.cpp
         ./storage/range_test.cpp
+        ./storage/replication_txn_manager_test.cpp
+        ./storage/segment_stream_converter_test.cpp
         ./storage/row_source_mask_test.cpp
         ./storage/union_iterator_test.cpp
         ./storage/unique_iterator_test.cpp
@@ -382,6 +389,7 @@ set(EXEC_FILES
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
+        ./storage/lake/local_pk_index_manager_test.cpp
         )
 
 if ("${WITH_STARCACHE}" STREQUAL "ON" OR "${WITH_CACHELIB}" STREQUAL "ON")

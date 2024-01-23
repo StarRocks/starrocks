@@ -233,6 +233,12 @@ std::future<Status> delete_files_callable(std::vector<std::string> files_to_dele
     return task->get_future();
 }
 
+void run_clear_task_async(std::function<void()> task) {
+    auto tp = ExecEnv::GetInstance()->delete_file_thread_pool();
+    auto st = tp->submit_func(std::move(task));
+    LOG_IF(ERROR, !st.ok()) << st;
+}
+
 static Status collect_garbage_files(const TabletMetadataPB& metadata, const std::string& base_dir,
                                     AsyncFileDeleter* deleter, int64_t* garbage_data_size) {
     for (const auto& rowset : metadata.compaction_inputs()) {
@@ -373,11 +379,17 @@ static Status vacuum_txn_log(std::string_view root_location, int64_t min_active_
     auto ret = Status::OK();
     auto log_dir = join_path(root_location, kTxnLogDirectoryName);
     auto iter_st = ignore_not_found(fs->iterate_dir2(log_dir, [&](DirEntry entry) {
-        if (!is_txn_log(entry.name)) {
-            return true;
-        }
-        auto [tablet_id, txn_id] = parse_txn_log_filename(entry.name);
-        if (txn_id >= min_active_txn_id) {
+        if (is_txn_log(entry.name)) {
+            auto [tablet_id, txn_id] = parse_txn_log_filename(entry.name);
+            if (txn_id >= min_active_txn_id) {
+                return true;
+            }
+        } else if (is_txn_slog(entry.name)) {
+            auto [tablet_id, txn_id] = parse_txn_slog_filename(entry.name);
+            if (txn_id >= min_active_txn_id) {
+                return true;
+            }
+        } else {
             return true;
         }
 
@@ -433,6 +445,7 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
 
 void vacuum(TabletManager* tablet_mgr, const VacuumRequest& request, VacuumResponse* response) {
     auto st = vacuum_impl(tablet_mgr, request, response);
+    LOG_IF(ERROR, !st.ok()) << st;
     st.to_protobuf(response->mutable_status());
 }
 
@@ -465,6 +478,11 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
     RETURN_IF_ERROR(ignore_not_found(fs->iterate_dir(log_dir, [&](std::string_view name) {
         if (is_txn_log(name)) {
             auto [tablet_id, txn_id] = parse_txn_log_filename(name);
+            if (!std::binary_search(tablet_ids.begin(), tablet_ids.end(), tablet_id)) {
+                return true;
+            }
+        } else if (is_txn_slog(name)) {
+            auto [tablet_id, txn_id] = parse_txn_slog_filename(name);
             if (!std::binary_search(tablet_ids.begin(), tablet_ids.end(), tablet_id)) {
                 return true;
             }

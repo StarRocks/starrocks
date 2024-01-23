@@ -12,7 +12,7 @@ This topic describes the syntax, parameters, and examples of the CREATE ROUTINE 
 
 > **NOTE**
 >
-> - For information about the application scenarios, principles, and basic operations of Routine Load, see [Continuously load data from Apache Kafka®](../../../loading/RoutineLoad.md).
+> - For information about the application scenarios, principles, and basic operations of Routine Load, see [Load data using Routine Load](../../../loading/RoutineLoad.md).
 > - You can load data into StarRocks tables only as a user who has the INSERT privilege on those StarRocks tables. If you do not have the INSERT privilege, follow the instructions provided in [GRANT](../account-management/GRANT.md) to grant the INSERT privilege to the user that you use to connect to your StarRocks cluster.
 
 ## Syntax
@@ -181,34 +181,53 @@ If `property.group.id` is not specified, StarRocks generates a random value base
   - PLAIN
   - SCRAM-SHA-256 and SCRAM-SHA-512
   - OAUTHBEARER
+  - GSSAPI (Kerberos)
+
+  **Examples:**
 
   - Access Kafka using the SSL security protocol:
 
     ```SQL
-    -- Specify the security protocol as SSL.
-    "property.security.protocol" = "ssl"
-    -- File or directory path to CA certificate(s) for verifying the kafka broker's key.
+    "property.security.protocol" = "ssl", -- Specify the security protocol as SSL.
+    "property.ssl.ca.location" = "FILE:ca-cert", -- File or directory path to CA certificate(s) for verifying the kafka broker's key.
     -- If the Kafka server enables client authentication, the following three parameters are also required:
-    -- Path to the client's public key used for authentication.
-    "property.ssl.certificate.location" = "FILE:client.pem"
-    -- Path to the client's private key used for authentication.
-    "property.ssl.key.location" = "FILE:client.key"
-    -- Password for the client's private key.
-    "property.ssl.key.password" = "xxxxxx"
+    "property.ssl.certificate.location" = "FILE:client.pem", -- Path to the client's public key used for authentication.
+    "property.ssl.key.location" = "FILE:client.key", -- Path to the client's private key used for authentication.
+    "property.ssl.key.password" = "xxxxxx" -- Password for the client's private key.
     ```
 
   - Access Kafka using the SASL_PLAINTEXT security protocol and SASL/PLAIN authentication mechanism:
 
     ```SQL
-    -- Specify the security protocol as SASL_PLAINTEXT
-    "property.security.protocol" = "SASL_PLAINTEXT"
-    -- specify the SASL mechanism as PLAIN which is a simple username/password authentication mechanism
-    "property.sasl.mechanism" = "PLAIN" 
-    -- SASL username
-    "property.sasl.username" = "admin"
-    -- SASL password
-    "property.sasl.password" = "xxxxxx"
+    "property.security.protocol" = "SASL_PLAINTEXT", -- Specify the security protocol as SASL_PLAINTEXT.
+    "property.sasl.mechanism" = "PLAIN", -- Specify the SASL mechanism as PLAIN which is a simple username/password authentication mechanism.
+    "property.sasl.username" = "admin",  -- SASL username.
+    "property.sasl.password" = "xxxxxx"  -- SASL password.
     ```
+
+  - Access Kafka using the SASL_PLAINTEXT security protocol and SASL/GSSAPI (Kerberos) authentication mechanism:
+
+    ```sql
+    "property.security.protocol" = "SASL_PLAINTEXT", -- Specify the security protocol as SASL_PLAINTEXT.
+    "property.sasl.mechanism" = "GSSAPI", -- Specify the SASL authentication mechanism as GSSAPI. Default value is GSSAPI.
+    "property.sasl.kerberos.service.name" = "kafka", -- The broker service name. Default value is kafka.
+    "property.sasl.kerberos.keytab" = "/home/starrocks/starrocks.keytab", -- The client keytab location.
+    "property.sasl.kerberos.principal" = "starrocks@YOUR.COM" -- The Kerberos principal.
+    ```
+
+    :::note
+
+    - Since StarRocks v3.1.4, SASL/GSSAPI (Kerberos) authentication is supported.
+    - SASL related modules need to be installed on the BE machine.
+
+        ```bash
+        # Debian/Ubuntu:
+        sudo apt-get install libsasl2-modules-gssapi-mit libsasl2-dev
+        # CentOS/Redhat:
+        sudo yum install cyrus-sasl-gssapi cyrus-sasl-devel
+        ```
+
+    :::
 
 ### FE and BE configuration items
 
@@ -425,6 +444,7 @@ PROPERTIES
 (
 "max_batch_rows" = "100000",-- The value of max_batch_rows multiplied by 10 equals the error detection window.
 "max_error_number" = "100" -- The maximum number of error data rows allowed within an error detection window.
+)
 FROM KAFKA
 (
     "kafka_broker_list" ="<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>",

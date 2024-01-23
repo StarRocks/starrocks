@@ -449,11 +449,12 @@ createTemporaryTableStatement
 
 createTableAsSelectStatement
     : CREATE TABLE (IF NOT EXISTS)? qualifiedName
-        ('(' identifier (',' identifier)* ')')?
+        ('(' (identifier (',' identifier)*  (',' indexDesc)* | indexDesc (',' indexDesc)*) ')')?
         keyDesc?
         comment?
         partitionDesc?
         distributionDesc?
+        orderByDesc?
         properties?
         AS queryStatement
     ;
@@ -571,7 +572,7 @@ columnNameWithComment
 // ------------------------------------------- Task Statement ----------------------------------------------------------
 
 submitTaskStatement
-    : SUBMIT setVarHint* TASK qualifiedName?
+    : SUBMIT TASK qualifiedName?
     AS (createTableAsSelectStatement | insertStatement )
     ;
 
@@ -1867,7 +1868,7 @@ limitElement
     ;
 
 querySpecification
-    : SELECT setVarHint* setQuantifier? selectItem (',' selectItem)*
+    : SELECT setQuantifier? selectItem (',' selectItem)*
       fromClause
       ((WHERE where=expression)? (GROUP BY groupingElement)? (HAVING having=expression)?
        (QUALIFY qualifyFunction=selectItem comparisonOperator limit=INTEGER_VALUE)?)
@@ -1950,10 +1951,6 @@ outerAndSemiJoinType
 
 bracketHint
     : '[' identifier (',' identifier)* ']'
-    ;
-
-setVarHint
-    : '/*+' SET_VAR '(' hintMap (',' hintMap)* ')' '*/'
     ;
 
 hintMap
@@ -2402,7 +2399,7 @@ interval
     ;
 
 unitIdentifier
-    : YEAR | MONTH | WEEK | DAY | HOUR | MINUTE | SECOND | QUARTER
+    : YEAR | MONTH | WEEK | DAY | HOUR | MINUTE | SECOND | QUARTER | MILLISECOND | MICROSECOND
     ;
 
 unitBoundary

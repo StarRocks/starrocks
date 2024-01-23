@@ -86,7 +86,7 @@ private:
     TabletSharedPtr _tablet;
     Version _version;
     // version of delete predicates, equal as _version by default
-    // _delete_predicates_version will be set as max_version of tablet in schema change vectorized
+    // _delete_predicates_version will be set as max_version of tablet in schema change
     Version _delete_predicates_version;
 
     MemPool _mempool;

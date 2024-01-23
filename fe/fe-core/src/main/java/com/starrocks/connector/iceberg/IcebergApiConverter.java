@@ -286,6 +286,7 @@ public class IcebergApiConverter {
         if (!PARQUET_COMPRESSION_TYPE_MAP.containsKey(compressionCodec.toLowerCase(Locale.ROOT))) {
             throw new IllegalArgumentException("Unsupported compression codec in USING: " + compressionCodec);
         }
+        tableProperties.put(TableProperties.FORMAT_VERSION, "1");
 
         return tableProperties.build();
     }

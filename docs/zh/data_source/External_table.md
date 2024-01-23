@@ -584,7 +584,7 @@ StarRocks 使用 Hive 资源来管理使用到的 Hive 集群相关配置，如 
 CREATE EXTERNAL RESOURCE "hive0"
 PROPERTIES (
   "type" = "hive",
-  "hive.metastore.uris" = "thrift://10.10.44.98:9083"
+  "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
 );
 
 -- 查看 StarRocks 中创建的资源。
@@ -898,7 +898,7 @@ CREATE EXTERNAL RESOURCE "iceberg0"
 PROPERTIES (
    "type" = "iceberg",
    "iceberg.catalog.type" = "HIVE",
-   "iceberg.catalog.hive.metastore.uris" = "thrift://192.168.0.81:9083" 
+   "iceberg.catalog.hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083" 
 );
 ~~~
 
@@ -1067,7 +1067,7 @@ select count(*) from iceberg_tbl;
 CREATE EXTERNAL RESOURCE "hudi0" 
 PROPERTIES ( 
     "type" = "hudi", 
-    "hive.metastore.uris" = "thrift://192.168.7.251:9083"
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
 );
 ~~~
 

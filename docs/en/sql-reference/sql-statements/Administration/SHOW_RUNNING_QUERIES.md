@@ -8,6 +8,12 @@ displayed_sidebar: "English"
 
 Shows the information of all queries that are running or pending in the query queue. This feature is supported from v3.1.4 onwards.
 
+:::tip
+
+This operation does not require privileges.
+
+:::
+
 ## Syntax
 
 ```SQL

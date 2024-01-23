@@ -43,21 +43,16 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.connector.iceberg.IcebergPartitionUtils;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.lang.NotImplementedException;
-import org.apache.iceberg.Snapshot;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
-
-import static com.starrocks.scheduler.PartitionBasedMvRefreshProcessor.ICEBERG_ALL_PARTITION;
 
 /**
  * Abstract the partition-related interfaces for different connectors, including Iceberg/Hive/....
@@ -106,6 +101,11 @@ public abstract class ConnectorPartitionTraits {
     abstract String getDbName();
 
     abstract PartitionKey createPartitionKey(List<String> values, List<Column> columns) throws AnalysisException;
+
+    /**
+     * Whether this table support partition-granular refresh as ref-table
+     */
+    public abstract boolean supportPartitionRefresh();
 
     /**
      * Get all partitions' name
@@ -167,6 +167,11 @@ public abstract class ConnectorPartitionTraits {
                 partitionKey.pushColumn(exprValue, type.getPrimitiveType());
             }
             return partitionKey;
+        }
+
+        @Override
+        public boolean supportPartitionRefresh() {
+            return false;
         }
 
         protected String getTableName() {
@@ -270,6 +275,12 @@ public abstract class ConnectorPartitionTraits {
         }
 
         @Override
+        public boolean supportPartitionRefresh() {
+            // TODO: check partition types
+            return true;
+        }
+
+        @Override
         public Map<String, Range<PartitionKey>> getPartitionKeyRange(Column partitionColumn, Expr partitionExpr) {
             // TODO: check partition type
             return ((OlapTable) table).getRangePartitionMap();
@@ -330,6 +341,11 @@ public abstract class ConnectorPartitionTraits {
     static class HivePartitionTraits extends DefaultTraits {
 
         @Override
+        public boolean supportPartitionRefresh() {
+            return true;
+        }
+
+        @Override
         public String getDbName() {
             return ((HiveMetaStoreTable) table).getDbName();
         }
@@ -380,6 +396,12 @@ public abstract class ConnectorPartitionTraits {
     static class IcebergPartitionTraits extends DefaultTraits {
 
         @Override
+        public boolean supportPartitionRefresh() {
+            // TODO: refine the check
+            return true;
+        }
+
+        @Override
         public String getDbName() {
             return ((IcebergTable) table).getRemoteDbName();
         }
@@ -401,50 +423,21 @@ public abstract class ConnectorPartitionTraits {
         }
 
         @Override
-        public Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
-                                                    MaterializedView.AsyncRefreshContext context) {
-            IcebergTable baseTable = (IcebergTable) table;
-
-            Set<String> result = Sets.newHashSet();
-            for (BaseTableInfo baseTableInfo : baseTables) {
-                if (!baseTableInfo.getTableIdentifier().equalsIgnoreCase(baseTable.getTableIdentifier())) {
-                    continue;
-                }
-                List<String> partitionNames = PartitionUtil.getPartitionNames(baseTable);
-                Snapshot snapshot = baseTable.getNativeTable().currentSnapshot();
-                long currentVersion = snapshot != null ? snapshot.timestampMillis() : -1;
-
-                Map<String, MaterializedView.BasePartitionInfo> baseTableInfoVisibleVersionMap =
-                        context.getBaseTableRefreshInfo(baseTableInfo);
-                MaterializedView.BasePartitionInfo basePartitionInfo =
-                        baseTableInfoVisibleVersionMap.get(ICEBERG_ALL_PARTITION);
-                if (basePartitionInfo == null) {
-                    baseTable.setRefreshSnapshotTime(currentVersion);
-                    return new HashSet<>(partitionNames);
-                }
-                // check if there are new partitions which are not in baseTableInfoVisibleVersionMap
-                for (String partitionName : partitionNames) {
-                    if (!baseTableInfoVisibleVersionMap.containsKey(partitionName)) {
-                        result.add(partitionName);
-                    }
-                }
-
-                if (!result.isEmpty()) {
-                    baseTable.setRefreshSnapshotTime(currentVersion);
-                }
-
-                long basePartitionVersion = basePartitionInfo.getVersion();
-                if (basePartitionVersion < currentVersion) {
-                    baseTable.setRefreshSnapshotTime(currentVersion);
-                    result.addAll(IcebergPartitionUtils.getChangedPartitionNames(baseTable.getNativeTable(),
-                            basePartitionVersion));
-                }
-            }
-            return result;
+        public List<PartitionInfo> getPartitions(List<String> partitionNames) {
+            IcebergTable icebergTable = (IcebergTable) table;
+            return GlobalStateMgr.getCurrentState().getMetadataMgr().
+                    getPartitions(icebergTable.getCatalogName(), table, partitionNames);
         }
     }
 
     static class JDBCPartitionTraits extends DefaultTraits {
+
+        @Override
+        public boolean supportPartitionRefresh() {
+            // TODO: refine check
+            return true;
+        }
+
         @Override
         public String getDbName() {
             return ((JDBCTable) table).getDbName();

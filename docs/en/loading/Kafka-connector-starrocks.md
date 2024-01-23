@@ -8,7 +8,7 @@ StarRocks provides a self-developed connector named Apache Kafka® connector (St
 
 The Kafka connector can seamlessly integrate with Kafka Connect, which allows StarRocks better integrated with the Kafka ecosystem. It is a wise choice if you want to load real-time data into StarRocks. Compared with Routine Load, it is recommended to use the Kafka connector in the following scenarios:
 
-- The format of source data is, for example, Protobuf, not JSON, CSV, or Avro.
+- Compared with Routine Load which only supports loading data in CSV, JSON, and Avro formats, Kafka connector can load data in more formats, such as Protobuf. As long as data can be converted into JSON and CSV formats using Kafka Connect's converters, data can be loaded into StarRocks via the Kafka connector.
 - Customize data transformation, such as Debezium-formatted CDC data.
 - Load data from multiple Kafka topics.
 - Load data from Confluent cloud.
@@ -29,7 +29,7 @@ Submit the Kafka connector into Kafka Connect:
 
 - Self-managed Kafka cluster:
 
-  - Download and unzip [starrocks-kafka-connector-1.0.0.tar.gz](https://releases.starrocks.io/starrocks/starrocks-kafka-connector-1.0.0.tar.gz).
+  - Download and unzip [starrocks-kafka-connector](https://github.com/StarRocks/starrocks-connector-for-kafka/releases).
   - Copy the extracted directory to the path specified in the `plugin.path` property. You can find the `plugin.path` property in the configuration files of worker nodes within the Kafka Connect cluster.
 
 - Confluent cloud:

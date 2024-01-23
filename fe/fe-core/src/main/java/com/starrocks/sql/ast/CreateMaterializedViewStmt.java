@@ -50,6 +50,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
@@ -66,6 +67,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.mvpattern.MVColumnBitmapAggPattern;
 import com.starrocks.sql.analyzer.mvpattern.MVColumnBitmapUnionPattern;
 import com.starrocks.sql.analyzer.mvpattern.MVColumnHLLUnionPattern;
 import com.starrocks.sql.analyzer.mvpattern.MVColumnOneChildPattern;
@@ -113,6 +115,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 new MVColumnOneChildPattern(AggregateType.MAX.name().toLowerCase()));
         FN_NAME_TO_PATTERN.put(FunctionSet.COUNT, new MVColumnOneChildPattern(FunctionSet.COUNT));
         FN_NAME_TO_PATTERN.put(FunctionSet.BITMAP_UNION, new MVColumnBitmapUnionPattern());
+        FN_NAME_TO_PATTERN.put(FunctionSet.BITMAP_AGG, new MVColumnBitmapAggPattern());
         FN_NAME_TO_PATTERN.put(FunctionSet.HLL_UNION, new MVColumnHLLUnionPattern());
         FN_NAME_TO_PATTERN.put(FunctionSet.PERCENTILE_UNION, new MVColumnPercentileUnionPattern());
     }
@@ -130,6 +133,8 @@ public class CreateMaterializedViewStmt extends DdlStmt {
      * This order of mvColumnItemList is meaningful.
      */
     private List<MVColumnItem> mvColumnItemList = Lists.newArrayList();
+
+    private Expr whereClause;
     private String baseIndexName;
     private String dbName;
     private KeysType mvKeysType = KeysType.DUP_KEYS;
@@ -137,6 +142,8 @@ public class CreateMaterializedViewStmt extends DdlStmt {
     // If the process is replaying log, isReplay is true, otherwise is false,
     // avoid throwing error during replay process, only in Rollup or MaterializedIndexMeta is true.
     private boolean isReplay = false;
+
+    public static String WHERE_PREDICATE_COLUMN_NAME = "__WHERE_PREDICATION";
 
     public CreateMaterializedViewStmt(String mvName, QueryStatement queryStatement, Map<String, String> properties) {
         super(NodePosition.ZERO);
@@ -197,6 +204,10 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         this.mvKeysType = mvKeysType;
     }
 
+    public Expr getWhereClause() {
+        return whereClause;
+    }
+
     // NOTE: This method is used to replay persistent MaterializedViewMeta,
     // so need keep the same with `genColumnAndSetIntoStmt` and keep compatible with old version policy.
     public Map<String, Expr> parseDefineExprWithoutAnalyze(String originalSql) throws AnalysisException {
@@ -204,7 +215,11 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         SelectList selectList = null;
         QueryRelation queryRelation = queryStatement.getQueryRelation();
         if (queryRelation instanceof SelectRelation) {
-            selectList = ((SelectRelation) queryRelation).getSelectList();
+            SelectRelation selectRelation = (SelectRelation) queryRelation;
+            selectList = selectRelation.getSelectList();
+            if (selectRelation.hasWhereClause()) {
+                result.put(WHERE_PREDICATE_COLUMN_NAME, selectRelation.getWhereClause());
+            }
         }
         if (selectList == null) {
             LOG.warn("parse defineExpr may not correctly for sql [{}] ", originalSql);
@@ -264,13 +279,15 @@ public class CreateMaterializedViewStmt extends DdlStmt {
 
     public void analyze(ConnectContext context) {
         QueryStatement queryStatement = getQueryStatement();
+
         long originSelectLimit = context.getSessionVariable().getSqlSelectLimit();
-        // ignore limit in creating mv
-        context.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
-
-        Analyzer.analyze(queryStatement, context);
-
-        context.getSessionVariable().setSqlSelectLimit(originSelectLimit);
+        try {
+            // ignore limit in creating mv
+            context.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
+            Analyzer.analyze(queryStatement, context);
+        } finally {
+            context.getSessionVariable().setSqlSelectLimit(originSelectLimit);
+        }
 
         // forbid explain query
         if (queryStatement.isExplain()) {
@@ -305,8 +322,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             setMvKeysType(KeysType.AGG_KEYS);
         }
         if (selectRelation.hasWhereClause()) {
-            throw new SemanticException("The where clause is not supported in add materialized view clause, expr:"
-                    + selectRelation.getWhereClause().toSql());
+            whereClause = selectRelation.getWhereClause();
         }
         if (selectRelation.hasHavingClause()) {
             throw new SemanticException("The having clause is not supported in add materialized view clause, expr:"
@@ -317,8 +333,7 @@ public class CreateMaterializedViewStmt extends DdlStmt {
             throw new SemanticException("The limit clause is not supported in add materialized view clause, expr:"
                     + " limit " + selectRelation.getLimit());
         }
-        final String countPrefix = new StringBuilder().append(MATERIALIZED_VIEW_NAME_PREFIX)
-                .append(FunctionSet.COUNT).append("_").toString();
+        final String countPrefix = MATERIALIZED_VIEW_NAME_PREFIX + FunctionSet.COUNT + "_";
         for (MVColumnItem mvColumnItem : getMVColumnItemList()) {
             if (!isReplay && mvColumnItem.isKey() && !mvColumnItem.getType().canBeMVKey()) {
                 throw new SemanticException(
@@ -357,12 +372,6 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 if (slots.size() == 0) {
                     throw new SemanticException(String.format("The materialized view currently does not support " +
                             "const expr in select " + "statement: {}", selectListItemExpr.toMySql()));
-                }
-                // TODO: support multi slot-refs later.
-                if (slots.size() > 1) {
-                    throw new SemanticException(
-                            String.format("The materialized view currently does not support multi-slot-refs expr: {}",
-                                    selectListItemExpr.toSql()));
                 }
             }
             MVColumnItem mvColumnItem;
@@ -471,7 +480,11 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         String mvColumnName = null;
         if (defineExpr instanceof SlotRef) {
             String baseColumName = baseSlotRefs.get(0).getColumnName();
-            mvColumnName = MVUtils.getMVAggColumnName(functionName, baseColumName);
+            if (functionName.equals(FunctionSet.BITMAP_AGG)) {
+                mvColumnName = MVUtils.getMVAggColumnName(FunctionSet.BITMAP_UNION, baseColumName);
+            } else {
+                mvColumnName = MVUtils.getMVAggColumnName(functionName, baseColumName);
+            }
         } else {
             if (defineExpr instanceof FunctionCallExpr) {
                 FunctionCallExpr argFunc = (FunctionCallExpr) defineExpr;
@@ -486,6 +499,12 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                         }
                         break;
                     }
+                    case FunctionSet.BITMAP_AGG:
+                        if (argFunc.getChild(0) instanceof SlotRef) {
+                            String baseColumName = baseSlotRefs.get(0).getColumnName();
+                            mvColumnName = MVUtils.getMVAggColumnName(FunctionSet.BITMAP_UNION, baseColumName);
+                        }
+                        break;
                     default:
                 }
             }
@@ -514,6 +533,20 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 type = baseType;
                 break;
             case FunctionSet.BITMAP_UNION:
+                type = Type.BITMAP;
+                break;
+            case FunctionSet.BITMAP_AGG:
+                // Compatible aggregation models
+                if (FunctionSet.BITMAP_AGG_TYPE.contains(baseType)) {
+                    Function fn = Expr.getBuiltinFunction(FunctionSet.TO_BITMAP, new Type[] {baseType},
+                            Function.CompareMode.IS_IDENTICAL);
+                    defineExpr = new FunctionCallExpr(FunctionSet.TO_BITMAP, Lists.newArrayList(defineExpr));
+                    defineExpr.setFn(fn);
+                    defineExpr.setType(Type.BITMAP);
+                } else {
+                    throw new SemanticException("Unsupported bitmap_agg type:" + baseType);
+                }
+                functionName = FunctionSet.BITMAP_UNION;
                 type = Type.BITMAP;
                 break;
             case FunctionSet.HLL_UNION:

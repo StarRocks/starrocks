@@ -110,6 +110,7 @@ public:
     // Function create_from_file is used to be compatible with previous tablet_meta.
     // Previous tablet_meta is a physical file in tablet dir, which is not stored in rocksdb.
     [[nodiscard]] Status create_from_file(const std::string& file_path);
+    [[nodiscard]] Status create_from_memory(std::string_view data);
     [[nodiscard]] Status save(const std::string& file_path);
     [[nodiscard]] static Status save(const std::string& file_path, const TabletMetaPB& tablet_meta_pb);
     [[nodiscard]] static Status reset_tablet_uid(const std::string& file_path);
@@ -156,6 +157,7 @@ public:
     void set_tablet_schema(const std::shared_ptr<const TabletSchema>& tablet_schema) { _schema = tablet_schema; }
 
     std::shared_ptr<const TabletSchema>& tablet_schema_ptr() { return _schema; }
+    const std::shared_ptr<const TabletSchema>& tablet_schema_ptr() const { return _schema; }
 
     const std::vector<RowsetMetaSharedPtr>& all_rs_metas() const;
     void add_rs_meta(const RowsetMetaSharedPtr& rs_meta);
@@ -212,6 +214,10 @@ public:
     void set_enable_shortcut_compaction(bool enable_shortcut_compaction) {
         _enable_shortcut_compaction = enable_shortcut_compaction;
     }
+
+    void set_source_schema(const TabletSchemaCSPtr& source_schema) { _source_schema = source_schema; }
+
+    const TabletSchemaCSPtr& source_schema() const { return _source_schema; }
 
 private:
     int64_t _mem_usage() const { return sizeof(TabletMeta); }
@@ -270,6 +276,9 @@ private:
     BinlogLsn _binlog_min_lsn;
 
     bool _enable_shortcut_compaction = true;
+
+    // If the tablet is replicated from another cluster, the source_schema saved the schema in the cluster
+    TabletSchemaCSPtr _source_schema = nullptr;
 
     std::shared_mutex _meta_lock;
 };

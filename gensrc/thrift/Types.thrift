@@ -203,6 +203,8 @@ enum TTaskType {
     // this use for calculate enum count
     DROP_AUTO_INCREMENT_MAP,
     COMPACTION,
+    REMOTE_SNAPSHOT,
+    REPLICATE_SNAPSHOT,
     NUM_TASK_TYPE
 }
 

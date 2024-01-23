@@ -44,11 +44,9 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 public class MaterializedViewTestBase extends PlanTestBase {
-    private static final Logger LOG = LogManager.getLogger(MaterializedViewTestBase.class);
+    protected static final Logger LOG = LogManager.getLogger(MaterializedViewTestBase.class);
 
     protected static final String MATERIALIZED_DB_NAME = "test_mv";
 
@@ -74,9 +72,11 @@ public class MaterializedViewTestBase extends PlanTestBase {
         connectContext.getSessionVariable().setEnableQueryCache(false);
         // connectContext.getSessionVariable().setEnableOptimizerTraceLog(true);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
+        connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(3000000L);
         // connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
         connectContext.getSessionVariable().setEnableMVOptimizerTraceLog(true);
+        connectContext.getSessionVariable().setEnableRewriteBitmapUnionToBitmapAgg(true);
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
 
         FeConstants.runningUnitTest = true;
@@ -111,112 +111,6 @@ public class MaterializedViewTestBase extends PlanTestBase {
 
         starRocksAssert.withDatabase(MATERIALIZED_DB_NAME)
                 .useDatabase(MATERIALIZED_DB_NAME);
-
-
-        String deptsTable = "" +
-                "CREATE TABLE depts(    \n" +
-                "   deptno INT NOT NULL,\n" +
-                "   name VARCHAR(20)    \n" +
-                ") ENGINE=OLAP \n" +
-                "DUPLICATE KEY(`deptno`)\n" +
-                "DISTRIBUTED BY HASH(`deptno`) BUCKETS 12\n" +
-                "PROPERTIES (\n" +
-                "    \"unique_constraints\" = \"deptno\"\n," +
-                "    \"replication_num\" = \"1\"\n" +
-                ");";
-        String locationsTable = "" +
-                "CREATE TABLE locations(\n" +
-                "    locationid INT NOT NULL,\n" +
-                "    state CHAR(2), \n" +
-                "   name VARCHAR(20)\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`locationid`)\n" +
-                "DISTRIBUTED BY HASH(`locationid`) BUCKETS 12\n" +
-                "PROPERTIES (\n" +
-                "    \"replication_num\" = \"1\"\n" +
-                ");";
-        String ependentsTable = "" +
-                "CREATE TABLE dependents(\n" +
-                "   empid INT NOT NULL,\n" +
-                "   name VARCHAR(20)   \n" +
-                ") ENGINE=OLAP \n" +
-                "DUPLICATE KEY(`empid`)\n" +
-                "DISTRIBUTED BY HASH(`empid`) BUCKETS 12\n" +
-                "PROPERTIES (\n" +
-                "    \"replication_num\" = \"1\"\n" +
-                ");";
-        String empsTable = "" +
-                "CREATE TABLE emps\n" +
-                "(\n" +
-                "    empid      INT         NOT NULL,\n" +
-                "    deptno     INT         NOT NULL,\n" +
-                "    locationid INT         NOT NULL,\n" +
-                "    commission INT         NOT NULL,\n" +
-                "    name       VARCHAR(20) NOT NULL,\n" +
-                "    salary     DECIMAL(18, 2)\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`empid`)\n" +
-                "DISTRIBUTED BY HASH(`empid`) BUCKETS 12\n" +
-                "PROPERTIES (\n" +
-                "    \"foreign_key_constraints\" = \"(deptno) REFERENCES depts(deptno)\"," +
-                "    \"replication_num\" = \"1\"\n" +
-                ");";
-
-        String empsTableWithoutConstraints = "" +
-                "CREATE TABLE emps_no_constraint\n" +
-                "(\n" +
-                "    empid      INT         NOT NULL,\n" +
-                "    deptno     INT         NOT NULL,\n" +
-                "    locationid INT         NOT NULL,\n" +
-                "    commission INT         NOT NULL,\n" +
-                "    name       VARCHAR(20) NOT NULL,\n" +
-                "    salary     DECIMAL(18, 2)\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`empid`)\n" +
-                "DISTRIBUTED BY HASH(`empid`) BUCKETS 12\n" +
-                "PROPERTIES (\n" +
-                "    \"replication_num\" = \"1\"\n" +
-                ");";
-
-        String empsWithBigintTable = "" +
-                "CREATE TABLE emps_bigint\n" +
-                "(\n" +
-                "    empid      BIGINT        NOT NULL,\n" +
-                "    deptno     BIGINT         NOT NULL,\n" +
-                "    locationid BIGINT         NOT NULL,\n" +
-                "    commission BIGINT         NOT NULL,\n" +
-                "    name       VARCHAR(20) NOT NULL,\n" +
-                "    salary     DECIMAL(18, 2)\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`empid`)\n" +
-                "DISTRIBUTED BY HASH(`empid`) BUCKETS 12\n" +
-                "PROPERTIES (\n" +
-                "    \"replication_num\" = \"1\"\n" +
-                ");";
-        String nullableEmps = "create table emps_null (\n" +
-                "empid int null,\n" +
-                "deptno int null,\n" +
-                "name varchar(25) null,\n" +
-                "salary double\n" +
-                ")\n" +
-                "distributed by hash(`empid`) buckets 10\n" +
-                "properties (\"replication_num\" = \"1\");";
-        String nullableDepts = "create table depts_null (\n" +
-                "deptno int null,\n" +
-                "name varchar(25) null\n" +
-                ")\n" +
-                "distributed by hash(`deptno`) buckets 10\n" +
-                "properties (\"replication_num\" = \"1\");";
-
-        starRocksAssert
-                .withTable(deptsTable)
-                .withTable(empsTable)
-                .withTable(locationsTable)
-                .withTable(ependentsTable)
-                .withTable(empsWithBigintTable)
-                .withTable(nullableEmps)
-                .withTable(nullableDepts)
-                .withTable(empsTableWithoutConstraints);
     }
 
     @AfterClass
@@ -235,9 +129,15 @@ public class MaterializedViewTestBase extends PlanTestBase {
         private Exception exception;
         private String properties;
         private String traceLog;
+        private boolean isLogical;
 
         public MVRewriteChecker(String query) {
+            this(query, false);
+        }
+
+        public MVRewriteChecker(String query, boolean isLogical) {
             this.query = query;
+            this.isLogical = isLogical;
         }
 
         public MVRewriteChecker(String mv, String query) {
@@ -270,7 +170,14 @@ public class MaterializedViewTestBase extends PlanTestBase {
                     starRocksAssert.withMaterializedView(mvSQL);
                 }
 
-                this.rewritePlan = getFragmentPlan(query);
+                if (isLogical) {
+                    this.rewritePlan = getLogicalPlan(query);
+                } else {
+                    this.rewritePlan = getFragmentPlan(query);
+                }
+                if (!Strings.isNullOrEmpty(traceLogModule)) {
+                    System.out.println(this.rewritePlan);
+                }
             } catch (Exception e) {
                 LOG.warn("test rewrite failed:", e);
                 this.exception = e;
@@ -324,49 +231,20 @@ public class MaterializedViewTestBase extends PlanTestBase {
             return this;
         }
 
-        private MVRewriteChecker contains(String expect, boolean isIgnoreColRef) {
+        public MVRewriteChecker contains(String expect) {
             Assert.assertTrue(this.rewritePlan != null);
-            boolean contained = false;
-            if (isIgnoreColRef) {
-                expect = Stream.of(expect.split("\n")).filter(s -> !s.contains("tabletList"))
-                        .map(str -> str.replaceAll("\\d+", "").trim())
-                        .collect(Collectors.joining("\n"));
-                String actual = Stream.of(this.rewritePlan.split("\n")).filter(s -> !s.contains("tabletList"))
-                        .map(str -> str.replaceAll("\\d+", "").trim())
-                        .collect(Collectors.joining("\n"));
-                contained = actual.contains(expect);
-            } else {
-                contained = this.rewritePlan.contains(expect);
-            }
+            String normalizedExpect = normalizeNormalPlan(expect);
+            String actual = normalizeNormalPlan(this.rewritePlan);
+            boolean contained = actual.contains(normalizedExpect);
 
             if (!contained) {
                 LOG.warn("rewritePlan: \n{}", rewritePlan);
                 LOG.warn("expect: \n{}", expect);
+                LOG.warn("normalized rewritePlan: \n{}", actual);
+                LOG.warn("normalized expect: \n{}", normalizedExpect);
             }
             Assert.assertTrue(contained);
             return this;
-        }
-
-        public MVRewriteChecker contains(String... expects) {
-            for (String expect: expects) {
-                Assert.assertTrue(this.rewritePlan.contains(expect));
-            }
-            return this;
-        }
-
-        public MVRewriteChecker contains(List<String> expects) {
-            for (String expect : expects) {
-                Assert.assertTrue(this.rewritePlan.contains(expect));
-            }
-            return this;
-        }
-
-        public MVRewriteChecker containsIgnoreColRefs(String expect) {
-            return contains(expect, true);
-        }
-
-        public MVRewriteChecker contains(String expect) {
-            return contains(expect, false);
         }
 
         public MVRewriteChecker notContain(String expect) {
@@ -386,13 +264,22 @@ public class MaterializedViewTestBase extends PlanTestBase {
         return fixture.rewrite();
     }
 
+    protected MVRewriteChecker sql(String query, boolean isLogical) {
+        MVRewriteChecker fixture = new MVRewriteChecker(query, isLogical);
+        return fixture.rewrite();
+    }
+
     protected MVRewriteChecker testRewriteOK(String mv, String query) {
         return testRewriteOK(mv, query, null);
     }
 
-    protected MVRewriteChecker testRewriteOK(String mv, String query, String properties) {
+    protected MVRewriteChecker testRewriteOK(String mv, String query, String properties) throws RuntimeException {
         MVRewriteChecker fixture = new MVRewriteChecker(mv, query, properties);
-        return fixture.rewrite().ok();
+        MVRewriteChecker checker = fixture.rewrite();
+        if (checker.getException() != null) {
+            throw new RuntimeException(checker.getException());
+        }
+        return checker.ok();
     }
 
     protected MVRewriteChecker testRewriteFail(String mv, String query, String properties) {

@@ -124,7 +124,7 @@ public:
     ~PrimaryCompactionPolicy() override = default;
 
     StatusOr<std::vector<RowsetPtr>> pick_rowsets(int64_t version) override;
-    StatusOr<std::vector<RowsetPtr>> pick_rowsets(const TabletMetadataPtr& tablet_metadata,
+    StatusOr<std::vector<RowsetPtr>> pick_rowsets(TabletMetadataPtr tablet_metadata, bool calc_score,
                                                   std::vector<bool>* has_dels);
 
 private:
@@ -139,11 +139,11 @@ private:
 
 StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(int64_t version) {
     ASSIGN_OR_RETURN(auto tablet_metadata, _tablet->get_metadata(version));
-    return pick_rowsets(tablet_metadata, nullptr);
+    return pick_rowsets(tablet_metadata, false, nullptr);
 }
 
-StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(const TabletMetadataPtr& tablet_metadata,
-                                                                       std::vector<bool>* has_dels) {
+StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(TabletMetadataPtr tablet_metadata,
+                                                                       bool calc_score, std::vector<bool>* has_dels) {
     std::vector<RowsetPtr> input_rowsets;
     UpdateManager* mgr = _tablet->update_mgr();
     std::priority_queue<RowsetCandidate> rowset_queue;
@@ -174,8 +174,13 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(const Tab
         input_infos << input_rowsets.back()->id() << "|";
 
         if (cur_compaction_result_bytes >
-                    std::max(config::update_compaction_result_bytes, compaction_data_size_threshold) ||
-            input_rowsets.size() >= config::max_update_compaction_num_singleton_deltas) {
+            std::max(config::update_compaction_result_bytes, compaction_data_size_threshold)) {
+            break;
+        }
+        // If calc_score is true, we skip `config::lake_pk_compaction_max_input_rowsets` check,
+        // because `config::lake_pk_compaction_max_input_rowsets` is only used to limit the number
+        // of rowsets for real compaction merges
+        if (!calc_score && input_rowsets.size() >= config::lake_pk_compaction_max_input_rowsets) {
             break;
         }
         rowset_queue.pop();
@@ -186,11 +191,12 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(const Tab
     return input_rowsets;
 }
 
-StatusOr<uint32_t> primary_compaction_score_by_policy(const TabletMetadataPB& metadata) {
+StatusOr<uint32_t> primary_compaction_score_by_policy(TabletManager* tablet_mgr, const TabletMetadataPB& metadata) {
     ASSIGN_OR_RETURN(auto tablet, ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet(metadata.id()));
     auto policy = std::make_shared<PrimaryCompactionPolicy>(std::make_shared<Tablet>(tablet));
     std::vector<bool> has_dels;
-    ASSIGN_OR_RETURN(auto pick_rowsets, policy->pick_rowsets(std::make_shared<TabletMetadataPB>(metadata), &has_dels));
+    ASSIGN_OR_RETURN(auto pick_rowsets,
+                     policy->pick_rowsets(std::make_shared<TabletMetadataPB>(metadata), true, &has_dels));
 
     uint32_t segment_num_score = 0;
     for (int i = 0; i < pick_rowsets.size(); i++) {
@@ -206,9 +212,9 @@ StatusOr<uint32_t> primary_compaction_score_by_policy(const TabletMetadataPB& me
     return segment_num_score;
 }
 
-double primary_compaction_score(const TabletMetadataPB& metadata) {
+double primary_compaction_score(TabletManager* tablet_mgr, const TabletMetadataPB& metadata) {
     // calc compaction score by picked rowsets
-    auto score_st = primary_compaction_score_by_policy(metadata);
+    auto score_st = primary_compaction_score_by_policy(tablet_mgr, metadata);
     if (!score_st.ok()) {
         // should not happen, return score zero if error
         LOG(ERROR) << "primary_compaction_score by policy fail, tablet_id: " << metadata.id()
@@ -579,9 +585,9 @@ StatusOr<CompactionPolicyPtr> CompactionPolicy::create_compaction_policy(TabletP
     return std::make_shared<BaseAndCumulativeCompactionPolicy>(std::move(tablet));
 }
 
-double compaction_score(const TabletMetadataPB& metadata) {
+double compaction_score(TabletManager* tablet_mgr, const TabletMetadataPB& metadata) {
     if (is_primary_key(metadata)) {
-        return primary_compaction_score(metadata);
+        return primary_compaction_score(tablet_mgr, metadata);
     }
     if (config::enable_size_tiered_compaction_strategy) {
         return size_tiered_compaction_score(metadata);

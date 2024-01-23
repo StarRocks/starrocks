@@ -39,6 +39,7 @@
 #include "runtime/types.h"
 #include "testutil/assert.h"
 #include "util/json.h"
+#include "util/orlp/pdqsort.h"
 
 namespace starrocks {
 
@@ -267,6 +268,7 @@ static Permutation make_permutation(int len) {
     Permutation perm(len);
     for (int i = 0; i < perm.size(); i++) {
         perm[i].index_in_chunk = i;
+        perm[i].chunk_index = 0;
     }
     return perm;
 }
@@ -399,7 +401,7 @@ TEST_F(ChunksSorterTest, topn_sort_limit_prune) {
     {
         // nullable column
         auto column = make_nullable_int32_column({0, 0, 0, 2, 2, 2, 3, 3, 4, 5, 6});
-        std::vector<ColumnPtr> data_columns{down_cast<NullableColumn*>(column.get())->data_column()};
+        std::vector<ColumnPtr> columns{column};
         auto null_pred = [&](PermutationItem item) { return column->is_null(item.index_in_chunk); };
         std::pair<int, int> range{0, column->size()};
 
@@ -409,9 +411,9 @@ TEST_F(ChunksSorterTest, topn_sort_limit_prune) {
             Permutation perm = make_permutation(column->size());
             Tie tie(column->size(), 1);
 
-            sort_and_tie_helper_nullable_vertical(false, data_columns, null_pred, SortDesc(true, true), perm, tie,
-                                                  range, true, limit, &limited);
-            EXPECT_EQ(expected[limit], limited);
+            sort_and_tie_helper_nullable_vertical(false, columns, null_pred, SortDesc(true, true), perm, tie, range,
+                                                  true, limit, &limited);
+            EXPECT_EQ(expected[limit], limited) << " at index " << limit;
         }
     }
 }
@@ -1146,6 +1148,24 @@ TEST_F(ChunksSorterTest, test_tie) {
         ASSERT_EQ(iterator.range_last, 5);
         ASSERT_FALSE(iterator.next());
     }
+}
+
+// https://github.com/StarRocks/starrocks/issues/30758
+TEST_F(ChunksSorterTest, test_nan) {
+    std::ifstream ifs("./be/test/exec/test_data/nan_column");
+    std::string context((std::istreambuf_iterator<char>(ifs)), (std::istreambuf_iterator<char>()));
+    DoubleColumn double_column;
+    double_column.resize(86016);
+    auto& data = double_column.get_data();
+    memcpy(data.data(), context.data(), context.size());
+    auto permutation = create_small_permutation(double_column.size());
+    auto inlined = create_inline_permutation<double>(permutation, data);
+    auto begin = inlined.begin() + 26012;
+    auto end = inlined.begin() + 26047;
+
+    ::pdqsort(begin, end, [&](auto lhs, auto rhs) {
+        return SorterComparator<double>::compare(lhs.inline_value, rhs.inline_value) > 0;
+    });
 }
 
 } // namespace starrocks

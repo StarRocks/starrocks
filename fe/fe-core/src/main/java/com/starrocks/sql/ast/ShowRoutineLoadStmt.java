@@ -80,9 +80,11 @@ public class ShowRoutineLoadStmt extends ShowStmt {
                     .add("CustomProperties")
                     .add("Statistic")
                     .add("Progress")
+                    .add("TimestampProgress")
                     .add("ReasonOfStateChanged")
                     .add("ErrorLogUrls")
                     .add("OtherMsg")
+                    .add("LatestSourcePosition")
                     .build();
 
     private final LabelName labelName;

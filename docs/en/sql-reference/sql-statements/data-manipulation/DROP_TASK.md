@@ -15,14 +15,14 @@ Drops an asynchronous ETL task submitted using [SUBMIT TASK](./SUBMIT_TASK.md). 
 ## Syntax
 
 ```SQL
-DROP TASK <task_name>
+DROP TASK `<task_name>`
 ```
 
 ## Parameters
 
 | **Parameter** | **Description**               |
 | ------------- | ----------------------------- |
-| task_name     | The name of the task to drop. |
+| task_name     | The name of the task to drop. Please wrap the task name with backticks (`) to prevent any parse failure. |
 
 ## Usage notes
 
@@ -38,7 +38,7 @@ SELECT * FROM information_schema.task_runs WHERE task_name = '<task_name>';
 ## Examples
 
 ```Plain
-MySQL > SUBMIT /*+set_var(query_timeout=100000)*/ TASK ctas AS
+MySQL > SUBMIT /*+set_var(query_timeout=100000)*/ TASK `ctas` AS
     -> CREATE TABLE insert_wiki_edit_new
     -> AS SELECT * FROM source_wiki_edit;
 +----------+-----------+
@@ -48,6 +48,6 @@ MySQL > SUBMIT /*+set_var(query_timeout=100000)*/ TASK ctas AS
 +----------+-----------+
 1 row in set (1.19 sec)
 
-MySQL > DROP TASK ctas;
+MySQL > DROP TASK `ctas`;
 Query OK, 0 rows affected (0.35 sec)
 ```

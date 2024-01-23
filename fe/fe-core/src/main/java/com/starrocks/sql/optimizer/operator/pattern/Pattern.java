@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.operator.pattern;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.GroupExpression;
@@ -27,7 +28,7 @@ import java.util.List;
  * Pattern is used in rules as a placeholder for group
  */
 public class Pattern {
-    private static final ImmutableList<OperatorType> ALL_SCAN_TYPES = ImmutableList.<OperatorType>builder()
+    public static final ImmutableList<OperatorType> ALL_SCAN_TYPES = ImmutableList.<OperatorType>builder()
             .add(OperatorType.LOGICAL_OLAP_SCAN)
             .add(OperatorType.LOGICAL_HIVE_SCAN)
             .add(OperatorType.LOGICAL_ICEBERG_SCAN)
@@ -70,6 +71,8 @@ public class Pattern {
     }
 
     public Pattern addChildren(Pattern... children) {
+        Preconditions.checkArgument(opType != OperatorType.PATTERN_MULTIJOIN,
+                "MULTI_JOIN cannot has children");
         this.children.addAll(Arrays.asList(children));
         return this;
     }
@@ -90,11 +93,11 @@ public class Pattern {
         return OperatorType.PATTERN_MULTIJOIN.equals(opType);
     }
 
-    public boolean matchWithoutChild(GroupExpression expression) {
-        return matchWithoutChild(expression, 0);
+    public static boolean isScanOperator(OperatorType operatorType) {
+        return ALL_SCAN_TYPES.contains(operatorType);
     }
 
-    public boolean matchWithoutChild(GroupExpression expression, int level) {
+    public boolean matchWithoutChild(GroupExpression expression) {
         if (expression == null) {
             return false;
         }
@@ -112,7 +115,7 @@ public class Pattern {
             return true;
         }
 
-        if (isPatternMultiJoin() && isMultiJoin(expression.getOp().getOpType(), level)) {
+        if (isPatternMultiJoin() && isMultiJoin(expression.getOp().getOpType())) {
             return true;
         }
 
@@ -140,8 +143,8 @@ public class Pattern {
         return getOpType().equals(expression.getOp().getOpType());
     }
 
-    private boolean isMultiJoin(OperatorType operatorType, int level) {
-        if (ALL_SCAN_TYPES.contains(operatorType) && level != 0) {
+    private boolean isMultiJoin(OperatorType operatorType) {
+        if (ALL_SCAN_TYPES.contains(operatorType)) {
             return true;
         } else if (operatorType.equals(OperatorType.LOGICAL_JOIN)) {
             return true;

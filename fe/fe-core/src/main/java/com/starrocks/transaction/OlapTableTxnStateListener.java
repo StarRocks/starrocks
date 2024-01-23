@@ -26,6 +26,7 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.task.AgentBatchTask;
@@ -69,6 +70,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
     public void preCommit(TransactionState txnState, List<TabletCommitInfo> tabletCommitInfos,
                           List<TabletFailInfo> failedTablets) throws TransactionException {
         Preconditions.checkState(txnState.getTransactionStatus() != TransactionStatus.COMMITTED);
+        txnState.clearAutomaticPartitionSnapshot();
         if (table.getState() == OlapTable.OlapTableState.RESTORE) {
             throw new TransactionCommitFailedException("Cannot write RESTORE state table \"" + table.getName() + "\"");
         }
@@ -275,6 +277,16 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
             tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
             isFirstPartition = false;
         }
+
+        if (txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
+            ReplicationTxnCommitAttachment attachment = (ReplicationTxnCommitAttachment) txnState
+                    .getTxnCommitAttachment();
+            Map<Long, Long> partitionVersions = attachment.getPartitionVersions();
+            for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
+                partitionCommitInfo.setVersion(partitionVersions.get(partitionCommitInfo.getPartitionId()));
+            }
+        }
+
         txnState.putIdToTableCommitInfo(table.getId(), tableCommitInfo);
     }
 
@@ -289,6 +301,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
 
     @Override
     public void postAbort(TransactionState txnState, List<TabletFailInfo> failedTablets) {
+        txnState.clearAutomaticPartitionSnapshot();
         Database db = GlobalStateMgr.getCurrentState().getDb(txnState.getDbId());
         if (db != null) {
             db.readLock();
@@ -327,8 +340,8 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
         AgentBatchTask batchTask = null;
         synchronized (CLEAR_TRANSACTION_TASKS) {
             for (Long beId : allBeIds) {
-                ClearTransactionTask task =
-                        new ClearTransactionTask(beId, txnState.getTransactionId(), Lists.newArrayList());
+                ClearTransactionTask task = new ClearTransactionTask(beId, txnState.getTransactionId(),
+                        Lists.newArrayList(), txnState.getTxnType());
                 CLEAR_TRANSACTION_TASKS.add(task);
             }
             // try to group send tasks, not sending every time a txn is aborted. to avoid too many task rpc.

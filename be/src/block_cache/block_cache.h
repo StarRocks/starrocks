@@ -45,10 +45,16 @@ public:
     // Remove data from cache. The offset and size must be aligned by block size
     Status remove_cache(const CacheKey& cache_key, off_t offset, size_t size);
 
+    const DataCacheMetrics cache_metrics() const;
+
     // Shutdown the cache instance to save some state meta
     Status shutdown();
 
     size_t block_size() const { return _block_size; }
+
+    bool is_initialized() { return _initialized.load(std::memory_order_relaxed); }
+
+    static const size_t MAX_BLOCK_SIZE;
 
 private:
 #ifndef BE_TEST
@@ -57,6 +63,7 @@ private:
 
     size_t _block_size = 0;
     std::unique_ptr<KvCache> _kv_cache;
+    std::atomic<bool> _initialized = false;
 };
 
 } // namespace starrocks

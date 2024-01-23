@@ -1,4 +1,7 @@
 -- name: test_bitmap_agg
+set enable_rewrite_bitmap_union_to_bitamp_agg=true;
+-- result:
+-- !result
 CREATE TABLE t1 (
     c1 int,
     c2 boolean,
@@ -9,8 +12,7 @@ CREATE TABLE t1 (
     c7 string
     )
 DUPLICATE KEY(c1)
-DISTRIBUTED BY HASH(c1)
-BUCKETS 1
+DISTRIBUTED BY HASH(c1) BUCKETS 3
 PROPERTIES ("replication_num" = "1");
 -- result:
 -- !result
@@ -46,4 +48,218 @@ SELECT BITMAP_TO_STRING(BITMAP_AGG(c6)) FROM t1;
 SELECT BITMAP_TO_STRING(BITMAP_AGG(c7)) FROM t1;
 -- result:
 111111,222222,333333
+-- !result
+SELECT BITMAP_TO_STRING(BITMAP_UNION(TO_BITMAP(c2))) FROM t1;
+-- result:
+0,1
+-- !result
+SELECT BITMAP_TO_STRING(BITMAP_UNION(TO_BITMAP(c3))) FROM t1;
+-- result:
+11,22,33
+-- !result
+SELECT BITMAP_TO_STRING(BITMAP_UNION(TO_BITMAP(c4))) FROM t1;
+-- result:
+111,222,333
+-- !result
+SELECT BITMAP_TO_STRING(BITMAP_UNION(TO_BITMAP(c5))) FROM t1;
+-- result:
+1111,2222,3333
+-- !result
+SELECT BITMAP_TO_STRING(BITMAP_UNION(TO_BITMAP(c6))) FROM t1;
+-- result:
+11111,22222,33333
+-- !result
+create materialized view mv1 as select c1, bitmap_agg(c2), bitmap_agg(c3), bitmap_agg(c4) from t1 group by c1;
+-- result:
+-- !result
+function: wait_materialized_view_finish()
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select bitmap_agg(c2), bitmap_agg(c3), bitmap_agg(c4) from t1 group by c1", "mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select bitmap_union(to_bitmap(c2)), bitmap_union(to_bitmap(c3)), bitmap_agg(c4) from t1 group by c1", "mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select bitmap_union(to_bitmap(c2)), bitmap_union(to_bitmap(c3)), bitmap_agg(c4) from t1 group by c1", "mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select count(distinct c2), bitmap_union(to_bitmap(c3)), bitmap_agg(c4) from t1 group by c1", "mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("SELECT BITMAP_TO_STRING(BITMAP_UNION(TO_BITMAP(c2))) FROM t1", "mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select bitmap_union_count(to_bitmap(c4)), bitmap_agg(c4) from t1 group by c1", "mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select c1, count(distinct c2), count(distinct c3), count(distinct c4) from t1 group by c1", "mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select c1, multi_distinct_count(c3), multi_distinct_count(c4) from t1 group by c1", "mv1")
+-- result:
+None
+-- !result
+SELECT BITMAP_TO_STRING(BITMAP_UNION(TO_BITMAP(c2))) FROM t1;
+-- result:
+0,1
+-- !result
+SELECT BITMAP_TO_STRING(BITMAP_UNION(TO_BITMAP(c3))) FROM t1;
+-- result:
+11,22,33
+-- !result
+SELECT BITMAP_TO_STRING(BITMAP_UNION(TO_BITMAP(c4))) FROM t1;
+-- result:
+111,222,333
+-- !result
+select c1, BITMAP_TO_STRING(bitmap_union(to_bitmap(c2))), BITMAP_TO_STRING(bitmap_union(to_bitmap(c3))), BITMAP_TO_STRING(bitmap_agg(c4)) from t1 group by c1 order by c1;
+-- result:
+1	1	11	111
+2	0	22	222
+3	1	33	333
+4	None	None	None
+5	1	None	None
+6	None	None	None
+-- !result
+select c1, count(distinct c2), bitmap_union(to_bitmap(c3)), bitmap_agg(c4) from t1 group by c1 order by c1;
+-- result:
+1	1	None	None
+2	1	None	None
+3	1	None	None
+4	0	None	None
+5	1	None	None
+6	0	None	None
+-- !result
+select c1, bitmap_union_count(to_bitmap(c4)), BITMAP_TO_STRING(bitmap_agg(c4)) from t1 group by c1 order by c1;
+-- result:
+1	1	111
+2	1	222
+3	1	333
+4	0	None
+5	0	None
+6	0	None
+-- !result
+select c1, multi_distinct_count(c2), multi_distinct_count(c3), multi_distinct_count(c4) from t1 group by c1 order by c1;
+-- result:
+1	1	1	1
+2	1	1	1
+3	1	1	1
+4	0	0	0
+5	1	0	0
+6	0	0	0
+-- !result
+select c1, count(distinct c2), count(distinct c3), count(distinct c4) from t1 group by c1 order by c1;
+-- result:
+1	1	1	1
+2	1	1	1
+3	1	1	1
+4	0	0	0
+5	1	0	0
+6	0	0	0
+-- !result
+drop materialized view mv1;
+-- result:
+-- !result
+create materialized view mv2
+distributed by random
+refresh deferred manual
+as select c1, bitmap_agg(c2), bitmap_agg(c3), bitmap_agg(c4) from t1 group by c1;
+-- result:
+-- !result
+refresh materialized view mv2 with sync mode;
+function: check_hit_materialized_view("select bitmap_agg(c2), bitmap_agg(c3), bitmap_agg(c4) from t1 group by c1", "mv2")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select bitmap_union(to_bitmap(c2)), bitmap_union(to_bitmap(c3)), bitmap_agg(c4) from t1 group by c1", "mv2")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select bitmap_union(to_bitmap(c2)), bitmap_union(to_bitmap(c3)), bitmap_agg(c4) from t1 group by c1", "mv2")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select count(distinct c2), bitmap_union(to_bitmap(c3)), bitmap_agg(c4) from t1 group by c1", "mv2")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("SELECT BITMAP_TO_STRING(BITMAP_UNION(TO_BITMAP(c2))) FROM t1", "mv2")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select bitmap_union_count(to_bitmap(c4)), bitmap_agg(c4) from t1 group by c1", "mv2")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select c1, multi_distinct_count(c3), multi_distinct_count(c4) from t1 group by c1", "mv2")
+-- result:
+None
+-- !result
+SELECT BITMAP_TO_STRING(BITMAP_UNION(TO_BITMAP(c2))) FROM t1;
+-- result:
+0,1
+-- !result
+SELECT BITMAP_TO_STRING(BITMAP_UNION(TO_BITMAP(c3))) FROM t1;
+-- result:
+11,22,33
+-- !result
+SELECT BITMAP_TO_STRING(BITMAP_UNION(TO_BITMAP(c4))) FROM t1;
+-- result:
+111,222,333
+-- !result
+select BITMAP_TO_STRING(bitmap_union(to_bitmap(c2))), BITMAP_TO_STRING(bitmap_union(to_bitmap(c3))), BITMAP_TO_STRING(bitmap_agg(c4)) from t1 group by c1 order by c1;
+-- result:
+1	11	111
+0	22	222
+1	33	333
+None	None	None
+1		
+None	None	None
+-- !result
+select c1, count(distinct c2), bitmap_union(to_bitmap(c3)), bitmap_agg(c4) from t1 group by c1 order by c1;
+-- result:
+1	1	None	None
+2	1	None	None
+3	1	None	None
+4	0	None	None
+5	1	None	None
+6	0	None	None
+-- !result
+select c1, bitmap_union_count(to_bitmap(c4)), BITMAP_TO_STRING(bitmap_agg(c4)) from t1 group by c1 order by c1;
+-- result:
+1	1	111
+2	1	222
+3	1	333
+4	0	None
+5	0	
+6	0	None
+-- !result
+select c1, count(distinct c2), count(distinct c3), count(distinct c4) from t1 group by c1 order by c1;
+-- result:
+1	1	1	1
+2	1	1	1
+3	1	1	1
+4	0	0	0
+5	1	1	1
+6	0	0	0
+-- !result
+select c1, multi_distinct_count(c2), multi_distinct_count(c3), multi_distinct_count(c4) from t1 group by c1 order by c1;
+-- result:
+1	1	1	1
+2	1	1	1
+3	1	1	1
+4	0	0	0
+5	1	0	0
+6	0	0	0
+-- !result
+drop materialized view mv2;
+-- result:
 -- !result

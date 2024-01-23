@@ -342,6 +342,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int edit_log_roll_num = 50000;
 
+    @ConfField(mutable = true)
+    public static int edit_log_write_slow_log_threshold_ms = 2000;
+
     /**
      * whether ignore unknown log id
      * when fe rolls back to low version, there may be log id that low version fe can not recognise
@@ -573,6 +576,17 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int http_port = 8030;
+
+    /**
+     * Number of worker threads for http server to deal with http requests which may do
+     * some I/O operations. If set with a non-positive value, it will use netty's default
+     * value <code>DEFAULT_EVENT_LOOP_THREADS</code> which is availableProcessors * 2. The
+     * default value is 0 which is same as the previous behaviour.
+     * See <a href="https://github.com/netty/netty/blob/netty-4.1.16.Final/transport/src/main/java/io/netty/channel/MultithreadEventLoopGroup.java#L40">DEFAULT_EVENT_LOOP_THREADS</a>
+     * for details.
+     */
+    @ConfField
+    public static int http_worker_threads_num = 0;
 
     /**
      * The backlog_num for netty http server
@@ -1075,6 +1089,17 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean ignore_materialized_view_error = false;
+
+    /**
+     * To avoid too many related materialized view causing too much fe memory and decreasing performance, set N
+     * to determine which strategy you choose:
+     * N <0      : always use non lock optimization and no copy related materialized views which
+     * may cause metadata concurrency problem but can reduce many lock conflict time and metadata memory-copy consume.
+     * N = 0    : always not use non lock optimization
+     * N > 0    : use non lock optimization when related mvs's num <= N, otherwise don't use non lock optimization
+     */
+    @ConfField(mutable = true)
+    public static int skip_whole_phase_lock_mv_limit = 5;
 
     @ConfField
     public static boolean enable_udf = false;
@@ -2063,9 +2088,9 @@ public class Config extends ConfigBase {
     public static boolean enable_collect_query_detail_info = false;
 
     /**
-     *  StarRocks-manager pull queries every 1 second
-     *  metrics calculate query latency every 15 second
-     *  do not set cacheTime lower than these time
+     * StarRocks-manager pull queries every 1 second
+     * metrics calculate query latency every 15 second
+     * do not set cacheTime lower than these time
      */
     @ConfField(mutable = true)
     public static long query_detail_cache_time_nanosecond = 30000000000L;
@@ -2120,7 +2145,7 @@ public class Config extends ConfigBase {
     @ConfField
     public static int cloud_native_meta_port = 6090;
     /**
-     *  Whether volume can be created from conf. If it is enabled, a builtin storage volume may be created.
+     * Whether volume can be created from conf. If it is enabled, a builtin storage volume may be created.
      */
     @ConfField
     public static boolean enable_load_volume_from_conf = true;
@@ -2278,6 +2303,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int lake_compaction_fail_history_size = 12;
 
+    @ConfField(mutable = true, comment = "the max number of threads for lake table publishing version")
+    public static int lake_publish_version_max_threads = 512;
+
     @ConfField(mutable = true, comment = "the max number of previous version files to keep")
     public static int lake_autovacuum_max_previous_versions = 0;
 
@@ -2287,14 +2315,16 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "the minimum delay between autovacuum runs on any given partition")
     public static long lake_autovacuum_partition_naptime_seconds = 180;
 
-    @ConfField(mutable = true, comment = "History versions within this time range will not be deleted by auto vacuum.\n" +
-            "REMINDER: Set this to a value longer than the maximum possible execution time of queries, to avoid deletion of " +
-            "versions still being accessed.\n" +
-            "NOTE: Increasing this value may increase the space usage of the remote storage system.")
+    @ConfField(mutable = true, comment =
+            "History versions within this time range will not be deleted by auto vacuum.\n" +
+                    "REMINDER: Set this to a value longer than the maximum possible execution time of queries, " +
+                    "to avoid deletion of versions still being accessed.\n" +
+                    "NOTE: Increasing this value may increase the space usage of the remote storage system.")
     public static long lake_autovacuum_grace_period_minutes = 5;
 
-    @ConfField(mutable = true, comment = "time threshold in hours, if a partition has not been updated for longer than this " +
-            "threshold, auto vacuum operations will no longer be triggered for that partition")
+    @ConfField(mutable = true, comment =
+            "time threshold in hours, if a partition has not been updated for longer than this " +
+                    "threshold, auto vacuum operations will no longer be triggered for that partition")
     public static long lake_autovacuum_stale_partition_threshold = 12;
 
     @ConfField
@@ -2489,6 +2519,23 @@ public class Config extends ConfigBase {
     public static boolean enable_mv_automatic_active_check = true;
 
     /**
+     * The refresh partition number when refreshing materialized view at once by default.
+     */
+    @ConfField(mutable = true)
+    public static int default_mv_partition_refresh_number = 1;
+
+    @ConfField(mutable = true,
+            comment = "The default behavior of whether REFRESH IMMEDIATE or not, " +
+                    "which would refresh the materialized view after creating")
+    public static boolean default_mv_refresh_immediate = true;
+
+    /**
+     * Whether analyze the mv after refresh in async mode.
+     */
+    @ConfField(mutable = true)
+    public static boolean mv_auto_analyze_async = true;
+
+    /**
      * To prevent the external catalog from displaying too many entries in the grantsTo system table,
      * you can use this variable to ignore the entries in the external catalog
      */
@@ -2497,6 +2544,30 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static String access_control = "native";
+
+    /**
+     *  Kerberos principal used for mutual authentication with ranger
+     */
+    @ConfField(mutable = true)
+    public static String ranger_spnego_kerberos_principal = "";
+
+    /**
+     *  Kerberos keytab file used for mutual authentication with ranger
+     */
+    @ConfField(mutable = true)
+    public static String ranger_spnego_kerberos_keytab = "";
+
+    /**
+     *  Kerberos krb5.conf configure path, default /etc/krb5.conf
+     */
+    @ConfField(mutable = true)
+    public static String ranger_kerberos_krb5_conf = "";
+
+    /**
+     * Whether to use the unix group as the ranger authentication group
+     */
+    @ConfField(mutable = true)
+    public static boolean ranger_user_ugi = false;
 
     @ConfField(mutable = true)
     public static int catalog_metadata_cache_size = 500;
@@ -2519,6 +2590,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int adaptive_choose_instances_threshold = 32;
 
+    @ConfField(mutable = true, comment = "Max materialized view rewrite cache size during one query's lifecycle " +
+            "so can avoid repeating compute to reduce optimizer time in materialized view rewrite, " +
+            "but may occupy some extra FE's memory. It's well-done when there are many relative " +
+            "materialized views(>10) or query is complex(multi table joins).")
+    public static long mv_query_context_cache_max_size = 1000;
+
     /**
      * Checking the connectivity of port opened by FE,
      * mainly used for checking edit log port currently.
@@ -2533,4 +2610,34 @@ public class Config extends ConfigBase {
     public static int port_connectivity_check_timeout_ms = 10000;
     @ConfField(mutable = true)
     public static boolean allow_system_reserved_names = false;
+
+    @ConfField(mutable = true)
+    public static long routine_load_unstable_threshold_second = 3600;
+
+    /*
+     * Replication config
+     */
+    @ConfField
+    public static int replication_interval_ms = 10;
+    @ConfField(mutable = true)
+    public static int replication_max_parallel_table_count = 100; // 100
+    @ConfField(mutable = true)
+    public static int replication_max_parallel_data_size_mb = 10240; // 10g
+    @ConfField(mutable = true)
+    public static int replication_transaction_timeout_sec = 1 * 60 * 60; // 1hour
+
+    @ConfField(mutable = true)
+    public static boolean jdbc_meta_default_cache_enable = false;
+
+    @ConfField(mutable = true)
+    public static long jdbc_meta_default_cache_expire_sec = 600L;
+
+    @ConfField(mutable = false)
+    public static int jdbc_connection_pool_size = 8;
+
+    @ConfField(mutable = false)
+    public static int jdbc_minimum_idle_connections = 1;
+
+    @ConfField(mutable = false)
+    public static int jdbc_connection_idle_timeout_ms = 600000;
 }

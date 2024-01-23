@@ -27,6 +27,7 @@
 #include "storage/lake/types_fwd.h"
 
 namespace starrocks {
+struct FileInfo;
 class Segment;
 class TabletSchemaPB;
 class TCreateTabletReq;
@@ -84,9 +85,19 @@ public:
 
     [[nodiscard]] Status put_txn_log(const TxnLogPtr& log);
 
+    [[nodiscard]] Status put_txn_log(const TxnLogPtr& log, const std::string& path);
+
+    [[nodiscard]] Status put_txn_slog(const TxnLogPtr& log);
+
+    [[nodiscard]] Status put_txn_slog(const TxnLogPtr& log, const std::string& path);
+
     StatusOr<TxnLogPtr> get_txn_log(int64_t tablet_id, int64_t txn_id);
 
     StatusOr<TxnLogPtr> get_txn_log(const std::string& path, bool fill_cache = true);
+
+    StatusOr<TxnLogPtr> get_txn_slog(int64_t tablet_id, int64_t txn_id);
+
+    StatusOr<TxnLogPtr> get_txn_slog(const std::string& path, bool fill_cache = true);
 
     StatusOr<TxnLogPtr> get_txn_vlog(int64_t tablet_id, int64_t version);
 
@@ -121,6 +132,8 @@ public:
     std::string tablet_metadata_location(int64_t tablet_id, int64_t version) const;
 
     std::string txn_log_location(int64_t tablet_id, int64_t txn_id) const;
+
+    std::string txn_slog_location(int64_t tablet_id, int64_t txn_id) const;
 
     std::string txn_vlog_location(int64_t tablet_id, int64_t version) const;
 

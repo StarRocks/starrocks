@@ -321,7 +321,7 @@ public class SystemInfoService implements GsonPostProcessable {
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         if (null != cluster) {
             // remove worker
-            if (RunMode.allowCreateLakeTable()) {
+            if (RunMode.isSharedDataMode()) {
                 long starletPort = dropComputeNode.getStarletPort();
                 // only need to remove worker after be reported its staretPort
                 if (starletPort != 0) {
@@ -436,7 +436,7 @@ public class SystemInfoService implements GsonPostProcessable {
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         if (null != cluster) {
             // remove worker
-            if (RunMode.allowCreateLakeTable()) {
+            if (RunMode.isSharedDataMode()) {
                 long starletPort = droppedBackend.getStarletPort();
                 // only need to remove worker after be reported its staretPort
                 if (starletPort != 0) {
@@ -966,17 +966,21 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public void updateBackendReportVersion(long backendId, long newReportVersion, long dbId) {
-        AtomicLong atomicLong = null;
-        if ((atomicLong = idToReportVersionRef.get(backendId)) != null) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-            if (db != null) {
-                atomicLong.set(newReportVersion);
-                LOG.debug("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);
+        ComputeNode node = getBackendOrComputeNode(backendId);
+        // only backend need to report version
+        if (node != null && (node instanceof Backend)) {
+            AtomicLong atomicLong = null;
+            if ((atomicLong = idToReportVersionRef.get(backendId)) != null) {
+                Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+                if (db != null) {
+                    atomicLong.set(newReportVersion);
+                    LOG.debug("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);
+                } else {
+                    LOG.warn("failed to update backend report version, db {} does not exist", dbId);
+                }
             } else {
-                LOG.warn("failed to update backend report version, db {} does not exist", dbId);
+                LOG.warn("failed to update backend report version, backend {} does not exist", backendId);
             }
-        } else {
-            LOG.warn("failed to update backend report version, backend {} does not exist", backendId);
         }
     }
 
@@ -1144,7 +1148,7 @@ public class SystemInfoService implements GsonPostProcessable {
         if (null != cluster) {
             cluster.removeComputeNode(computeNodeId);
             // clear map in starosAgent
-            if (RunMode.allowCreateLakeTable()) {
+            if (RunMode.isSharedDataMode()) {
                 long starletPort = cn.getStarletPort();
                 if (starletPort == 0) {
                     return;
@@ -1179,7 +1183,7 @@ public class SystemInfoService implements GsonPostProcessable {
             cluster.removeBackend(backend.getId());
 
             // clear map in starosAgent
-            if (RunMode.allowCreateLakeTable()) {
+            if (RunMode.isSharedDataMode()) {
                 long starletPort = backend.getStarletPort();
                 if (starletPort == 0) {
                     return;

@@ -340,7 +340,7 @@ E: (1064, 'Getting analyzing error from line 1, column 40 to line 1, column 77. 
 -- !result
 ALTER TABLE t ADD COLUMN mc_3 DOUBLE AS DEFAULT "1.0" (array_avg(array_data));
 -- result:
-E: (1064, "Getting syntax error at line 1, column 40. Detail message: Unexpected input 'DEFAULT', the most similar input is {'LEFT', DECIMAL_VALUE, 'DUPLICATE', 'FALSE', 'FILTER', '(', '[', '{', '+', '-', '!', '~', '@', '...'}.")
+E: (1064, "Getting syntax error at line 1, column 40. Detail message: Unexpected input 'DEFAULT', the most similar input is {a legal identifier}.")
 -- !result
 ALTER TABLE t ADD COLUMN mc_3 DOUBLE AS (mc_1);
 -- result:
@@ -379,7 +379,7 @@ E: (1064, 'Getting analyzing error from line 1, column 43 to line 1, column 80. 
 -- !result
 ALTER TABLE t MODIFY COLUMN mc_1 DOUBLE AS DEFAULT "1.0" (array_avg(array_data));
 -- result:
-E: (1064, "Getting syntax error at line 1, column 43. Detail message: Unexpected input 'DEFAULT', the most similar input is {'LEFT', DECIMAL_VALUE, 'DUPLICATE', 'FALSE', 'FILTER', '(', '[', '{', '+', '-', '!', '~', '@', '...'}.")
+E: (1064, "Getting syntax error at line 1, column 43. Detail message: Unexpected input 'DEFAULT', the most similar input is {a legal identifier}.")
 -- !result
 ALTER TABLE t MODIFY COLUMN mc_1 DOUBLE AS (mc_2);
 -- result:
@@ -430,7 +430,7 @@ CREATE TABLE t ( id BIGINT NOT NULL, name BIGINT NOT NULL, job INT NOT NULL, mc 
 -- !result
 ALTER TABLE t ADD COLUMN newcol INT DEFAULT "0" AFTER mc;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Can not add column after Generated Column.')
+E: (1064, 'Unexpected exception: Can not add column after Generated Column')
 -- !result
 ALTER TABLE t MODIFY COLUMN job BIGINT;
 -- result:

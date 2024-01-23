@@ -123,7 +123,7 @@ int64_t QueryContext::compute_query_mem_limit(int64_t parent_mem_limit, int64_t 
 }
 
 void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent, int64_t big_query_mem_limit,
-                                    workgroup::WorkGroup* wg) {
+                                    int64_t spill_mem_limit, workgroup::WorkGroup* wg) {
     std::call_once(_init_mem_tracker_once, [=]() {
         _profile = std::make_shared<RuntimeProfile>("Query" + print_id(_query_id));
         auto* mem_tracker_counter =
@@ -133,8 +133,10 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
             std::string label = "Group=" + wg->name() + ", " + _profile->name();
             _mem_tracker = std::make_shared<MemTracker>(MemTracker::RESOURCE_GROUP_BIG_QUERY, big_query_mem_limit,
                                                         std::move(label), parent);
+            _mem_tracker->set_reserve_limit(spill_mem_limit);
         } else {
             _mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY, query_mem_limit, _profile->name(), parent);
+            _mem_tracker->set_reserve_limit(spill_mem_limit);
         }
 
         MemTracker* p = parent;
@@ -187,7 +189,7 @@ std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic() {
     auto query_statistic = std::make_shared<QueryStatistics>();
     // Not transmit delta if it's the final sink
     if (_is_final_sink) {
-        return query_statistic;
+        return nullptr;
     }
 
     query_statistic->add_cpu_costs(_delta_cpu_cost_ns.exchange(0));

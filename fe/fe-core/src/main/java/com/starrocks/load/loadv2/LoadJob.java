@@ -171,6 +171,9 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     @SerializedName("pg")
     protected int progress;
 
+    @SerializedName("mc")
+    protected String mergeCondition;
+
     public int getProgress() {
         return this.progress;
     }
@@ -184,6 +187,8 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
     // this request id is only used for checking if a load begin request is a duplicate request.
     protected TUniqueId requestId;
+
+    protected int retryTime = 2; // retry time if timeout
 
     // only for persistence param. see readFields() for usage
     private boolean isJobTypeRead = false;
@@ -277,7 +282,20 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         return createTimestamp + timeoutSecond * 1000;
     }
 
-    private boolean isTimeout() {
+    public void reset() {
+        if (ConnectContext.get() != null) {
+            ConnectContext.get().setStartTime();
+            this.createTimestamp = ConnectContext.get().getStartTime();
+        } else {
+            // only for test used
+            this.createTimestamp = System.currentTimeMillis();
+        }
+        idToTasks.clear();
+        finishedTaskIds.clear();
+        loadingStatus.setProgress(0);
+    }
+
+    public boolean isTimeout() {
         return System.currentTimeMillis() > getDeadlineMs();
     }
 
@@ -371,6 +389,9 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             }
             if (properties.containsKey(LoadStmt.PARTIAL_UPDATE_MODE)) {
                 partialUpdateMode = properties.get(LoadStmt.PARTIAL_UPDATE_MODE);
+            }
+            if (properties.containsKey(LoadStmt.MERGE_CONDITION)) {
+                mergeCondition = properties.get(LoadStmt.MERGE_CONDITION);
             }
 
             if (properties.containsKey(LoadStmt.LOAD_MEM_LIMIT)) {
@@ -665,8 +686,9 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         finishTimestamp = System.currentTimeMillis();
         GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
         state = JobState.FINISHED;
+        failMsg = null;
 
-        if (MetricRepo.isInit) {
+        if (MetricRepo.hasInit) {
             MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
         }
         // when load job finished, there is no need to hold the tasks which are the biggest memory consumers.

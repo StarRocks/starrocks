@@ -34,10 +34,12 @@
 #include "storage/lake/transactions.h"
 #include "storage/lake/vacuum.h"
 #include "testutil/sync_point.h"
+#include "util/bthreads/semaphore.h"
 #include "util/countdown_latch.h"
 #include "util/defer_op.h"
 #include "util/thread.h"
 #include "util/threadpool.h"
+#include "util/time.h"
 #include "util/trace.h"
 
 namespace starrocks {
@@ -117,6 +119,39 @@ bvar::PassiveStatus<int> g_publish_version_active_tasks("lake_publish_version_ac
                                                         get_num_publish_active_tasks, nullptr);
 bvar::PassiveStatus<int> g_vacuum_queued_tasks("lake_vacuum_queued_tasks", get_num_vacuum_queued_tasks, nullptr);
 bvar::PassiveStatus<int> g_vacuum_active_tasks("lake_vacuum_active_tasks", get_num_vacuum_active_tasks, nullptr);
+
+// A class use to limit the number of tasks submitted to the thread pool.
+class ConcurrencyLimitedThreadPoolToken {
+public:
+    explicit ConcurrencyLimitedThreadPoolToken(ThreadPool* pool, int max_concurrency)
+            : _pool(pool), _sem(std::make_shared<bthreads::CountingSemaphore<>>(max_concurrency)) {}
+
+    DISALLOW_COPY_AND_MOVE(ConcurrencyLimitedThreadPoolToken);
+
+    Status submit_func(std::function<void()> task, std::chrono::system_clock::time_point deadline) {
+        if (!_sem->try_acquire_until(deadline)) {
+            auto t = MilliSecondsSinceEpochFromTimePoint(deadline);
+            return Status::TimedOut(fmt::format("acquire semaphore reached deadline={}", t));
+        }
+        auto task_with_semaphore_release = [sem = _sem, task = std::move(task)]() {
+            task();
+            // The `ConcurrencyLimitedThreadPoolToken` object may have been destroyed
+            // before `release()` the semaphore, so we use `std::shared_ptr` to manage
+            // the semaphore to ensure it's still alive when calling `release()`.
+            sem->release();
+        };
+        auto st = _pool->submit_func(std::move(task_with_semaphore_release));
+        if (!st.ok()) {
+            _sem->release();
+        }
+        return st;
+    }
+
+private:
+    ThreadPool* _pool;
+    std::shared_ptr<bthreads::CountingSemaphore<>> _sem;
+};
+
 } // namespace
 
 using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
@@ -149,8 +184,11 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
         return;
     }
 
+    auto timeout_ms = request->has_timeout_ms() ? request->timeout_ms() : kDefaultTimeoutForPublishVersion;
+    auto timeout_deadline = std::chrono::system_clock::now() + std::chrono::milliseconds(timeout_ms);
     auto start_ts = butil::gettimeofday_us();
     auto thread_pool = publish_version_thread_pool(_env);
+    auto thread_pool_token = ConcurrencyLimitedThreadPoolToken(thread_pool, thread_pool->max_threads() * 2);
     auto latch = BThreadCountDownLatch(request->tablet_ids_size());
     bthread::Mutex response_mtx;
     scoped_refptr<Trace> trace_gurad = scoped_refptr<Trace>(new Trace());
@@ -158,6 +196,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     TRACE_TO(trace, "got request. txn_id=$0 new_version=$1 #tablets=$2", request->txn_ids(0), request->new_version(),
              request->tablet_ids_size());
 
+    Status::OK().to_protobuf(response->mutable_status());
     for (auto tablet_id : request->tablet_ids()) {
         auto task = [&, tablet_id]() {
             DeferOp defer([&] { latch.count_down(); });
@@ -177,31 +216,45 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
             g_publish_tablet_version_queuing_latency << (run_ts - start_ts);
 
             TRACE_COUNTER_INCREMENT("tablet_id", tablet_id);
-            auto res = lake::publish_version(_tablet_mgr, tablet_id, base_version, new_version, txns, txns_size,
-                                             commit_time);
+
+            StatusOr<lake::TabletMetadataPtr> res;
+            if (std::chrono::system_clock::now() < timeout_deadline) {
+                res = lake::publish_version(_tablet_mgr, tablet_id, base_version, new_version, txns, txns_size,
+                                            commit_time);
+            } else {
+                auto t = MilliSecondsSinceEpochFromTimePoint(timeout_deadline);
+                res = Status::TimedOut(fmt::format("reached deadline={}/timeout={}", t, timeout_ms));
+            }
             if (res.ok()) {
                 auto metadata = std::move(res).value();
-                auto score = compaction_score(*metadata);
+                auto score = compaction_score(_tablet_mgr, *metadata);
                 std::lock_guard l(response_mtx);
                 response->mutable_compaction_scores()->insert({tablet_id, score});
             } else {
                 g_publish_version_failed_tasks << 1;
-                LOG(WARNING) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
-                             << " txn_id=" << txns[0] << " version=" << new_version;
+                if (res.status().is_resource_busy()) {
+                    VLOG(2) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
+                            << " txn_id=" << txns[0] << " version=" << new_version;
+                } else {
+                    LOG(WARNING) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
+                                 << " txn_id=" << txns[0] << " version=" << new_version;
+                }
                 std::lock_guard l(response_mtx);
                 response->add_failed_tablets(tablet_id);
+                res.status().to_protobuf(response->mutable_status());
             }
             TRACE("finished");
             g_publish_tablet_version_latency << (butil::gettimeofday_us() - run_ts);
         };
 
-        auto st = thread_pool->submit_func(task);
+        auto st = thread_pool_token.submit_func(std::move(task), timeout_deadline);
         if (!st.ok()) {
             g_publish_version_failed_tasks << 1;
             LOG(WARNING) << "Fail to submit publish version task: " << st << ". tablet_id=" << tablet_id
                          << " txn_id=" << request->txn_ids()[0];
             std::lock_guard l(response_mtx);
             response->add_failed_tablets(tablet_id);
+            st.to_protobuf(response->mutable_status());
             latch.count_down();
         }
     }
@@ -295,9 +348,10 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
     auto task = [&]() {
         DeferOp defer([&] { latch.count_down(); });
         auto txn_ids = request->txn_ids().data();
-        auto txn_ids_size = request->txn_ids_size();
+        auto txn_types = request->txn_types_size() > 0 ? request->txn_types().data() : nullptr;
+        auto txn_size = request->txn_ids_size();
         for (auto tablet_id : request->tablet_ids()) {
-            lake::abort_txn(_tablet_mgr, tablet_id, txn_ids, txn_ids_size);
+            lake::abort_txn(_tablet_mgr, tablet_id, txn_ids, txn_types, txn_size);
         }
     };
     auto st = thread_pool->submit_func(task);
@@ -446,9 +500,16 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
         cntl->SetFailed("missing tablet_infos");
         return;
     }
-    int64_t timeout_ms = request->has_timeout_ms() ? request->timeout_ms() : kDefaultTimeoutForGetTabletStat;
-    int64_t due_time = butil::gettimeofday_ms() + timeout_ms;
     auto thread_pool = get_tablet_stats_thread_pool(_env);
+    if (UNLIKELY(thread_pool == nullptr)) {
+        cntl->SetFailed("thread pool is null");
+        return;
+    }
+    // The magic number "10" is just a random chosen number, feel free to change it if you have a better choice.
+    auto max_pending = std::max(10, thread_pool->max_threads() * 2);
+    auto timeout_ms = request->has_timeout_ms() ? request->timeout_ms() : kDefaultTimeoutForGetTabletStat;
+    auto timeout_deadline = std::chrono::system_clock::now() + std::chrono::milliseconds(timeout_ms);
+    auto thread_pool_token = ConcurrencyLimitedThreadPoolToken(thread_pool, max_pending);
     auto latch = BThreadCountDownLatch(request->tablet_infos_size());
     bthread::Mutex response_mtx;
     for (const auto& tablet_info : request->tablet_infos()) {
@@ -457,20 +518,14 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
 
             int64_t tablet_id = tablet_info.tablet_id();
             int64_t version = tablet_info.version();
-            int64_t now = butil::gettimeofday_ms();
-            if (now >= due_time) {
+            if (std::chrono::system_clock::now() >= timeout_deadline) {
                 LOG(WARNING) << "Cancelled tablet stat collection task due to timeout exceeded. tablet_id: "
                              << tablet_id << ", version: " << version;
                 return;
             }
 
-            auto tablet = _tablet_mgr->get_tablet(tablet_id);
-            if (!tablet.ok()) {
-                LOG(WARNING) << "Fail to get tablet " << tablet_id << ": " << tablet.status();
-                return;
-            }
-
-            auto tablet_metadata = tablet->get_metadata(version);
+            auto location = _tablet_mgr->tablet_metadata_location(tablet_id, version);
+            auto tablet_metadata = _tablet_mgr->get_tablet_metadata(location, /*fll_cache=*/false);
             if (!tablet_metadata.ok()) {
                 LOG(WARNING) << "Fail to get tablet metadata. tablet_id: " << tablet_id << ", version: " << version
                              << ", error: " << tablet_metadata.status();
@@ -494,7 +549,7 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
             tablet_stat->set_data_size(data_size);
         };
         TEST_SYNC_POINT_CALLBACK("LakeServiceImpl::get_tablet_stats:before_submit", nullptr);
-        if (auto st = thread_pool->submit_func(std::move(task)); !st.ok()) {
+        if (auto st = thread_pool_token.submit_func(std::move(task), timeout_deadline); !st.ok()) {
             LOG(WARNING) << "Fail to get tablet stats task: " << st;
             latch.count_down();
         }

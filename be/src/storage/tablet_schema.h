@@ -227,6 +227,7 @@ bool operator!=(const TabletColumn& a, const TabletColumn& b);
 class TabletSchema {
 public:
     using SchemaId = int64_t;
+    using TabletSchemaCSPtr = std::shared_ptr<const TabletSchema>;
 
     static std::shared_ptr<TabletSchema> create(const TabletSchemaPB& schema_pb);
     static std::shared_ptr<TabletSchema> create(const TabletSchemaPB& schema_pb, TabletSchemaMap* schema_map);
@@ -266,6 +267,7 @@ public:
     bool has_bf_fpp() const { return _has_bf_fpp; }
     double bf_fpp() const { return _bf_fpp; }
     CompressionTypePB compression_type() const { return _compression_type; }
+    void copy_from(const std::shared_ptr<const TabletSchema>& tablet_schema);
 
     // The in-memory property is no longer supported, but leave this API for compatibility.
     // Newly-added code should not rely on this method, it may be removed at any time.
@@ -343,5 +345,8 @@ private:
 
 bool operator==(const TabletSchema& a, const TabletSchema& b);
 bool operator!=(const TabletSchema& a, const TabletSchema& b);
+
+using TabletSchemaSPtr = std::shared_ptr<TabletSchema>;
+using TabletSchemaCSPtr = std::shared_ptr<const TabletSchema>;
 
 } // namespace starrocks

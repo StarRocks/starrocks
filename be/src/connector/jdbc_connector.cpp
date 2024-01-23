@@ -90,7 +90,7 @@ Status JDBCDataSource::open(RuntimeState* state) {
 
 void JDBCDataSource::close(RuntimeState* state) {
     if (_scanner != nullptr) {
-        _scanner->close(state);
+        WARN_IF_ERROR(_scanner->close(state), "close jdbc scanner failed");
     }
 }
 

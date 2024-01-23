@@ -129,7 +129,9 @@ public:
 
     const DictColumnsValidMap& global_dict_columns_valid_info() { return _global_dict_columns_valid_info; }
 
-    std::string segment_path() const;
+    const std::string& segment_path() const;
+
+    uint64_t current_filesz() const;
 
 private:
     Status _write_short_key_index();

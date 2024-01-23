@@ -110,6 +110,7 @@ import com.starrocks.persist.RemoveAlterJobV2OperationLog;
 import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.ReplicaPersistInfo;
+import com.starrocks.persist.ReplicationJobLog;
 import com.starrocks.persist.ResourceGroupOpEntry;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.RoutineLoadOperation;
@@ -189,7 +190,7 @@ public class JournalEntity implements Writable {
         opCode = in.readShort();
         // set it to true after the entity is truly read,
         // to avoid someone forget to call read method.
-        boolean isRead = false;
+        boolean isRead;
         LOG.debug("get opcode: {}", opCode);
         switch (opCode) {
             case OperationType.OP_SAVE_NEXTID:
@@ -817,7 +818,7 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_DYNAMIC_PARTITION:
             case OperationType.OP_MODIFY_IN_MEMORY:
-            case OperationType.OP_SET_FORBIT_GLOBAL_DICT:
+            case OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT:
             case OperationType.OP_MODIFY_REPLICATION_NUM:
             case OperationType.OP_MODIFY_WRITE_QUORUM:
             case OperationType.OP_MODIFY_REPLICATED_STORAGE:
@@ -1035,6 +1036,10 @@ public class JournalEntity implements Writable {
             case OperationType.OP_CREATE_STORAGE_VOLUME:
             case OperationType.OP_UPDATE_STORAGE_VOLUME:
                 data = StorageVolume.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_REPLICATION_JOB:
+                data = ReplicationJobLog.read(in);
                 isRead = true;
                 break;
             default: {

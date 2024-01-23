@@ -74,8 +74,16 @@ Status Tablet::put_txn_log(const TxnLogPtr& log) {
     return _mgr->put_txn_log(log);
 }
 
+Status Tablet::put_txn_slog(const TxnLogPtr& log) {
+    return _mgr->put_txn_slog(log);
+}
+
 StatusOr<TxnLogPtr> Tablet::get_txn_log(int64_t txn_id) {
     return _mgr->get_txn_log(_id, txn_id);
+}
+
+StatusOr<TxnLogPtr> Tablet::get_txn_slog(int64_t txn_id) {
+    return _mgr->get_txn_slog(_id, txn_id);
 }
 
 StatusOr<TxnLogPtr> Tablet::get_txn_vlog(int64_t version) {
@@ -142,14 +150,15 @@ StatusOr<std::vector<RowsetPtr>> Tablet::get_rowsets(const TabletMetadata& metad
     return rowsets;
 }
 
-StatusOr<SegmentPtr> Tablet::load_segment(std::string_view segment_name, int seg_id, size_t* footer_size_hint,
+StatusOr<SegmentPtr> Tablet::load_segment(FileInfo segment_info, int seg_id, size_t* footer_size_hint,
                                           bool fill_data_cache, bool fill_metadata_cache) {
-    auto segment_path = segment_location(segment_name);
+    auto segment_path = segment_location(segment_info.path);
     auto segment = _mgr->metacache()->lookup_segment(segment_path);
     if (segment == nullptr) {
         ASSIGN_OR_RETURN(auto tablet_schema, get_schema());
         ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(segment_path));
-        segment = std::make_shared<Segment>(std::move(fs), segment_path, seg_id, std::move(tablet_schema), _mgr);
+        segment_info.path = segment_path;
+        segment = std::make_shared<Segment>(std::move(fs), segment_info, seg_id, std::move(tablet_schema), _mgr);
         if (fill_metadata_cache) {
             // NOTE: the returned segment may be not the same as the parameter passed in
             // Use the one in cache if the same key already exists
@@ -176,6 +185,10 @@ std::string Tablet::metadata_root_location() const {
 
 std::string Tablet::txn_log_location(int64_t txn_id) const {
     return _mgr->txn_log_location(_id, txn_id);
+}
+
+std::string Tablet::txn_slog_location(int64_t txn_id) const {
+    return _mgr->txn_slog_location(_id, txn_id);
 }
 
 std::string Tablet::txn_vlog_location(int64_t version) const {

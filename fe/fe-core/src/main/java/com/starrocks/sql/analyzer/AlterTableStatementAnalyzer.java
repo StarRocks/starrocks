@@ -20,8 +20,10 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.CompactionClause;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DropIndexClause;
 import com.starrocks.sql.common.MetaUtils;
@@ -53,6 +55,9 @@ public class AlterTableStatementAnalyzer {
         AlterTableClauseVisitor alterTableClauseAnalyzerVisitor = new AlterTableClauseVisitor();
         alterTableClauseAnalyzerVisitor.setTable(table);
         for (AlterClause alterClause : alterClauseList) {
+            if (RunMode.isSharedDataMode() && alterClause instanceof CompactionClause) {
+                throw new SemanticException("manually compact not supported in SHARED_DATA runMode");
+            }
             alterTableClauseAnalyzerVisitor.analyze(alterClause, context);
         }
     }

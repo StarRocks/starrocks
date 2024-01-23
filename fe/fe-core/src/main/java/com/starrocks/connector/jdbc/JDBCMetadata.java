@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.jdbc;
 
 import com.google.common.collect.ImmutableList;
@@ -21,16 +20,18 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
@@ -46,7 +47,13 @@ public class JDBCMetadata implements ConnectorMetadata {
     private String catalogName;
     private JDBCSchemaResolver schemaResolver;
 
+    private HikariDataSource dataSource;
+
     public JDBCMetadata(Map<String, String> properties, String catalogName) {
+        this(properties, catalogName, null);
+    }
+
+    public JDBCMetadata(Map<String, String> properties, String catalogName, HikariDataSource dataSource) {
         this.properties = properties;
         this.catalogName = catalogName;
         try {
@@ -63,11 +70,35 @@ public class JDBCMetadata implements ConnectorMetadata {
             LOG.warn("{} not support yet", properties.get(JDBCResource.DRIVER_CLASS));
             throw new StarRocksConnectorException(properties.get(JDBCResource.DRIVER_CLASS) + " not support yet");
         }
+        if (dataSource == null) {
+            dataSource = createHikariDataSource();
+        }
+        this.dataSource = dataSource;
+        checkAndSetSupportPartitionInformation();
+    }
+
+    private HikariDataSource createHikariDataSource() {
+        HikariConfig config = new HikariConfig();
+        config.setJdbcUrl(properties.get(JDBCResource.URI));
+        config.setUsername(properties.get(JDBCResource.USER));
+        config.setPassword(properties.get(JDBCResource.PASSWORD));
+        config.setDriverClassName(properties.get(JDBCResource.DRIVER_CLASS));
+        config.setMaximumPoolSize(Config.jdbc_connection_pool_size);
+        config.setMinimumIdle(Config.jdbc_minimum_idle_connections);
+        config.setIdleTimeout(Config.jdbc_connection_idle_timeout_ms);
+        return new HikariDataSource(config);
     }
 
     public Connection getConnection() throws SQLException {
-        return DriverManager.getConnection(properties.get(JDBCResource.URI),
-                properties.get(JDBCResource.USER), properties.get(JDBCResource.PASSWORD));
+        return dataSource.getConnection();
+    }
+
+    public void checkAndSetSupportPartitionInformation() {
+        try (Connection connection = getConnection()) {
+            schemaResolver.checkAndSetSupportPartitionInformation(connection);
+        } catch (SQLException e) {
+            throw new StarRocksConnectorException(e.getMessage());
+        }
     }
 
     @Override
@@ -113,7 +144,10 @@ public class JDBCMetadata implements ConnectorMetadata {
         try (Connection connection = getConnection()) {
             ResultSet columnSet = schemaResolver.getColumns(connection, dbName, tblName);
             List<Column> fullSchema = schemaResolver.convertToSRTable(columnSet);
-            List<Column> partitionColumns = listPartitionColumns(dbName, tblName, fullSchema);
+            List<Column> partitionColumns = Lists.newArrayList();
+            if (schemaResolver.isSupportPartitionInformation()) {
+                partitionColumns = listPartitionColumns(dbName, tblName, fullSchema);
+            }
             if (fullSchema.isEmpty()) {
                 return null;
             }
@@ -122,7 +156,7 @@ public class JDBCMetadata implements ConnectorMetadata {
                 return schemaResolver.getTable(JDBCTableIdCache.getTableId(tableKey),
                         tblName, fullSchema, partitionColumns, dbName, catalogName, properties);
             } else {
-                Integer tableId = ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt();
+                int tableId = ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt();
                 JDBCTableIdCache.putTableId(tableKey, tableId);
                 return schemaResolver.getTable(tableId, tblName, fullSchema, partitionColumns, dbName, catalogName, properties);
             }
@@ -144,15 +178,16 @@ public class JDBCMetadata implements ConnectorMetadata {
     public List<Column> listPartitionColumns(String databaseName, String tableName, List<Column> fullSchema) {
         try (Connection connection = getConnection()) {
             Set<String> partitionColumnNames = schemaResolver.listPartitionColumns(connection, databaseName, tableName)
-                    .stream().map(columnName -> columnName.toLowerCase()).collect(Collectors.toSet());
-            if (partitionColumnNames.size() > 0) {
+                    .stream().map(String::toLowerCase).collect(Collectors.toSet());
+            if (!partitionColumnNames.isEmpty()) {
                 return fullSchema.stream().filter(column -> partitionColumnNames.contains(column.getName().toLowerCase()))
                         .collect(Collectors.toList());
             } else {
                 return Lists.newArrayList();
             }
-        } catch (SQLException e) {
-            throw new StarRocksConnectorException(e.getMessage());
+        } catch (SQLException | StarRocksConnectorException e) {
+            LOG.warn(e.getMessage());
+            return Lists.newArrayList();
         }
     }
 

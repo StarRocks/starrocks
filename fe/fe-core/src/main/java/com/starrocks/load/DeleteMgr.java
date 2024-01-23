@@ -232,6 +232,9 @@ public class DeleteMgr implements Writable {
                 // TODO: support list partition prune
                 ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
                 List<Long> partitionIds = listPartitionInfo.getPartitionIds(false);
+                if (partitionIds.isEmpty()) {
+                    return null;
+                }
                 for (Long partitionId : partitionIds) {
                     Partition partition = olapTable.getPartition(partitionId);
                     partitionNames.add(partition.getName());

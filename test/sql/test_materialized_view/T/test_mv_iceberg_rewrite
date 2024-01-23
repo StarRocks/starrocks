@@ -1,0 +1,116 @@
+-- name: test_mv_iceberg_rewrite
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+set catalog mv_iceberg_${uuid0};
+create database mv_ice_db_${uuid0};
+use mv_ice_db_${uuid0};
+create table mv_ice_tbl_${uuid0} (
+  col_str string,
+  col_int int,
+  dt date
+) partition by(dt);
+insert into mv_ice_tbl_${uuid0} values 
+  ('1d8cf2a2c0e14fa89d8117792be6eb6f', 2000, '2023-12-01'),
+  ('3e82e36e56718dc4abc1168d21ec91ab', 2000, '2023-12-01'),
+  ('abc', 2000, '2023-12-02'),
+  (NULL, 2000, '2023-12-02'),
+  ('ab1d8cf2a2c0e14fa89d8117792be6eb6f', 2001, '2023-12-03'),
+  ('3e82e36e56718dc4abc1168d21ec91ab', 2001, '2023-12-03'),
+  ('abc', 2001, '2023-12-04'),
+  (NULL, 2001, '2023-12-04');
+
+set catalog default_catalog;
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt  PROPERTIES("force_external_table_query_rewrite" = "true")
+REFRESH DEFERRED MANUAL AS SELECT dt,sum(col_int) 
+FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt;
+
+-- partial refresh
+REFRESH MATERIALIZED VIEW test_mv1 PARTITION START ("2023-12-01") END ("2023-12-03") WITH SYNC MODE;
+function: check_hit_materialized_view("SELECT dt,sum(col_int) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} WHERE dt='2023-12-01' GROUP BY dt", "test_mv1")
+function: check_hit_materialized_view("SELECT dt,sum(col_int) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} WHERE dt='2023-12-02' GROUP BY dt", "test_mv1")
+function: check_no_hit_materialized_view("SELECT dt,sum(col_int) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} WHERE dt='2023-12-03' GROUP BY dt", "test_mv1")
+
+SELECT dt,sum(col_int) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} WHERE dt='2023-12-02' GROUP BY dt;
+SELECT dt,sum(col_int) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} WHERE dt='2023-12-03' GROUP BY dt;
+SELECT dt,sum(col_int) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} WHERE dt>='2023-12-03' GROUP BY dt order by dt;
+SELECT dt,sum(col_int) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} GROUP BY dt order by dt;
+
+-- total refresh
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+
+function: check_hit_materialized_view("SELECT dt,sum(col_int) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} WHERE dt='2023-12-01' GROUP BY dt", "test_mv1")
+function: check_hit_materialized_view("SELECT dt,sum(col_int) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} WHERE dt='2023-12-02' GROUP BY dt", "test_mv1")
+function: check_hit_materialized_view("SELECT dt,sum(col_int) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} WHERE dt='2023-12-03' GROUP BY dt", "test_mv1")
+function: check_hit_materialized_view("SELECT dt,sum(col_int) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt", "test_mv1")
+function: check_hit_materialized_view("SELECT dt,sum(col_int) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} WHERE dt='2023-12-03' GROUP BY dt", "test_mv1")
+
+SELECT dt,sum(col_int) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} WHERE dt>='2023-12-03' GROUP BY dt order by dt;
+SELECT dt,sum(col_int) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} GROUP BY dt order by dt;
+
+-- drop base table
+use mv_iceberg_${uuid0}.mv_ice_db_${uuid0};
+DROP TABLE mv_ice_tbl_${uuid0};
+set catalog default_catalog;
+use db_${uuid0};
+-- use default_catalog.db_${uuid0};
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+ALTER MATERIALIZED VIEW test_mv1 ACTIVE;
+
+-- recreate it
+use mv_iceberg_${uuid0}.mv_ice_db_${uuid0};
+create table mv_ice_tbl_${uuid0} (
+  col_str string,
+  col_int int,
+  dt date
+) partition by(dt);
+insert into mv_ice_tbl_${uuid0} values 
+  ('1d8cf2a2c0e14fa89d8117792be6eb6f', 2000, '2023-12-01'),
+  ('3e82e36e56718dc4abc1168d21ec91ab', 2000, '2023-12-01');
+set catalog default_catalog;
+REFRESH MATERIALIZED VIEW default_catalog.db_${uuid0}.test_mv1 WITH SYNC MODE;
+select is_active, inactive_reason from information_schema.materialized_views
+  where TABLE_NAME = 'test_mv1' and table_schema = 'db_${uuid0}';
+select * from default_catalog.db_${uuid0}.test_mv1 order by 1, 2;
+
+-- manually inactive and active
+ALTER MATERIALIZED VIEW default_catalog.db_${uuid0}.test_mv1 INACTIVE;
+select is_active, inactive_reason from information_schema.materialized_views
+  where TABLE_NAME = 'test_mv1' and table_schema = 'db_${uuid0}';
+ALTER MATERIALIZED VIEW default_catalog.db_${uuid0}.test_mv1 ACTIVE;
+select is_active, inactive_reason from information_schema.materialized_views
+  where TABLE_NAME = 'test_mv1' and table_schema = 'db_${uuid0}';
+  
+REFRESH MATERIALIZED VIEW default_catalog.db_${uuid0}.test_mv1 WITH SYNC MODE;
+select * from default_catalog.db_${uuid0}.test_mv1 order by 1, 2;
+
+
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} force;
+drop materialized view default_catalog.db_${uuid0}.test_mv1;
+
+-- create unpartitoned mv 
+create table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} (
+  col_str string,
+  col_int int,
+  dt date
+);
+
+CREATE MATERIALIZED VIEW default_catalog.db_${uuid0}.test_mv2
+REFRESH DEFERRED MANUAL AS SELECT dt,col_int 
+FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
+
+REFRESH MATERIALIZED VIEW default_catalog.db_${uuid0}.test_mv2 WITH SYNC MODE;
+
+select state from information_schema.task_runs
+  where `database`='db_${uuid0}' and `DEFINITION` like "%test_mv2%";
+
+drop materialized view default_catalog.db_${uuid0}.test_mv2;
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} force;
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;

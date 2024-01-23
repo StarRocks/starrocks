@@ -438,7 +438,7 @@ public class CreateTableAnalyzer {
                 throw new SemanticException("Generated Column only support olap table");
             }
 
-            if (RunMode.allowCreateLakeTable()) {
+            if (RunMode.isSharedDataMode()) {
                 throw new SemanticException("Does not support generated column in shared data cluster yet");
             }
 

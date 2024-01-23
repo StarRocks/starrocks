@@ -58,7 +58,12 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                     }
                 }
             }
-            partition.setNextVersion(partition.getNextVersion() + 1);
+            // The version of a replication transaction may not continuously
+            if (txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
+                partition.setNextVersion(partitionCommitInfo.getVersion() + 1);
+            } else {
+                partition.setNextVersion(partition.getNextVersion() + 1);
+            }
         }
     }
 
@@ -76,7 +81,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
 
         long maxPartitionVersionTime = -1;
 
-        table.lastVersionUpdateStartTime.set(System.currentTimeMillis());
+        table.lastVersionUpdateStartTime.set(System.nanoTime());
 
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
             long partitionId = partitionCommitInfo.getPartitionId();
@@ -165,7 +170,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
             maxPartitionVersionTime = Math.max(maxPartitionVersionTime, versionTime);
         }
 
-        table.lastVersionUpdateEndTime.set(System.currentTimeMillis());
+        table.lastVersionUpdateEndTime.set(System.nanoTime());
         if (!GlobalStateMgr.isCheckpointThread() && dictCollectedVersions.size() == validDictCacheColumns.size()) {
             for (int i = 0; i < validDictCacheColumns.size(); i++) {
                 String columnName = validDictCacheColumns.get(i);

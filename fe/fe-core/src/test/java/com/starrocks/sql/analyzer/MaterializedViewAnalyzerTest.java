@@ -17,6 +17,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
+import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -76,7 +77,7 @@ public class MaterializedViewAnalyzerTest {
         Assert.assertNotNull(table);
         Assert.assertTrue(table instanceof MaterializedView);
         MaterializedView mv = (MaterializedView) table;
-        mv.setInactiveAndReason("");
+        mv.setInactiveAndReason(AlterJobMgr.MANUAL_INACTIVE_MV_REASON);
         analyzeFail("refresh materialized view mv");
     }
 
@@ -96,9 +97,9 @@ public class MaterializedViewAnalyzerTest {
         ShowExecutor showExecutor = new ShowExecutor(starRocksAssert.getCtx(),
                 (ShowStmt) analyzeSuccess("show full columns from mv1"));
         ShowResultSet showResultSet = showExecutor.execute();
-        Assert.assertEquals("[[a, date, , YES, YES, null, NONE, , a1]," +
-                        " [b, int, , YES, YES, null, NONE, , b2]," +
-                        " [c, int, , YES, YES, null, NONE, , ]]",
+        Assert.assertEquals("[[a, date, , YES, YES, null, , , a1], " +
+                        "[b, int, , YES, YES, null, , , b2], " +
+                        "[c, int, , YES, YES, null, , , ]]",
                 showResultSet.getResultRows().toString());
     }
 

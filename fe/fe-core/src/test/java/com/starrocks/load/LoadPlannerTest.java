@@ -1075,6 +1075,14 @@ public class LoadPlannerTest {
             planner.plan();
         }
         {
+            // set condition update
+            LoadPlanner planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
+                    timezone, timeoutS, startTime, partialUpdate, ctx, sessionVariables, loadMemLimit, execMemLimit,
+                    brokerDesc, fileGroups, fileStatusesList, 1);
+            planner.setMergeConditionStr("v");
+            planner.plan();
+        }
+        {
             // complete table sink
             LoadPlanner planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
                     timezone, timeoutS, startTime, partialUpdate, ctx, sessionVariables, loadMemLimit, execMemLimit,

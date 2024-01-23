@@ -195,7 +195,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
     PROPERTIES (
         "database" = "hive_db_name",
         "table" = "hive_table_name",
-        "hive.metastore.uris" = "thrift://127.0.0.1:9083"
+        "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
     )
     ```
 
@@ -1001,7 +1001,7 @@ PROPERTIES(
     "dynamic_partition.time_unit" = "DAY",
     "dynamic_partition.start" = "-3",
     "dynamic_partition.end" = "3",
-    "dynamic_partition.prefix" = "p",
+    "dynamic_partition.prefix" = "p"
 );
 ```
 

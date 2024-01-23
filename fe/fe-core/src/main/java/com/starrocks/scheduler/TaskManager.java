@@ -60,6 +60,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Queue;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -112,6 +113,7 @@ public class TaskManager {
             registerPeriodicalTask();
             dispatchScheduler.scheduleAtFixedRate(() -> {
                 if (!taskRunManager.tryTaskRunLock()) {
+                    LOG.warn("TaskRun scheduler cannot acquire the lock");
                     return;
                 }
                 try {
@@ -306,6 +308,7 @@ public class TaskManager {
         try {
             taskRun = TaskRunBuilder.newBuilder(task)
                     .properties(option.getTaskRunProperties())
+                    .setExecuteOption(option)
                     .type(option)
                     .setConnectContext(ConnectContext.get()).build();
             submitResult = taskRunManager.submitTaskRun(taskRun, option);
@@ -318,19 +321,25 @@ public class TaskManager {
         try {
             Constants.TaskRunState taskRunState = taskRun.getFuture().get();
             if (taskRunState != Constants.TaskRunState.SUCCESS) {
-                throw new DmlException("execute task: %s failed. task source:%s, task run state:%s",
-                        task.getName(), task.getSource(), taskRunState);
+                String msg = taskRun.getStatus().getErrorMessage();
+                throw new DmlException("execute task %s failed: %s", task.getName(), msg);
             }
             return submitResult;
+        } catch (InterruptedException | ExecutionException e) {
+            Throwable rootCause = e.getCause();
+            throw new DmlException("execute task %s failed: %s", rootCause, task.getName(), rootCause.getMessage());
         } catch (Exception e) {
-            throw new DmlException("execute task: %s failed.", e, task.getName());
+            throw new DmlException("execute task %s failed: %s", e, task.getName(), e.getMessage());
         }
     }
 
     public SubmitResult executeTaskAsync(Task task, ExecuteOption option) {
-        return taskRunManager
-                .submitTaskRun(TaskRunBuilder.newBuilder(task).properties(option.getTaskRunProperties()).type(option).
-                        build(), option);
+        TaskRun taskRun = TaskRunBuilder
+                .newBuilder(task)
+                .properties(option.getTaskRunProperties())
+                .setExecuteOption(option)
+                .build();
+        return taskRunManager.submitTaskRun(taskRun, option);
     }
 
     public void dropTasks(List<Long> taskIdList, boolean isReplay) {
@@ -683,7 +692,7 @@ public class TaskManager {
                 }
                 TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
                 taskRun.initStatus(status.getQueryId(), status.getCreateTime());
-                taskRunManager.arrangeTaskRun(taskRun, status.isMergeRedundant());
+                taskRunManager.arrangeTaskRun(taskRun);
                 break;
             // this will happen in build image
             case RUNNING:

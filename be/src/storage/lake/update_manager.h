@@ -67,9 +67,9 @@ public:
 
     // get rowids from primary index by each upserts
     Status get_rowids_from_pkindex(Tablet* tablet, int64_t base_version, const std::vector<ColumnUniquePtr>& upserts,
-                                   std::vector<std::vector<uint64_t>*>* rss_rowids);
+                                   std::vector<std::vector<uint64_t>*>* rss_rowids, bool need_lock);
     Status get_rowids_from_pkindex(Tablet* tablet, int64_t base_version, const std::vector<ColumnUniquePtr>& upserts,
-                                   std::vector<std::vector<uint64_t>>* rss_rowids);
+                                   std::vector<std::vector<uint64_t>>* rss_rowids, bool need_lock);
 
     // get column data by rssid and rowids
     Status get_column_values(Tablet* tablet, const TabletMetadata& metadata, const TxnLogPB_OpWrite& op_write,
@@ -101,6 +101,8 @@ public:
 
     bool try_remove_primary_index_cache(uint32_t tablet_id);
 
+    void unload_primary_index(int64_t tablet_id);
+
     // if base version != index.data_version, need to clear index cache
     Status check_meta_version(const Tablet& tablet, int64_t base_version);
 
@@ -131,13 +133,14 @@ public:
 
     // get or create primary index, and prepare primary index state
     StatusOr<IndexEntry*> prepare_primary_index(const TabletMetadata& metadata, Tablet* tablet,
-                                                MetaFileBuilder* builder, int64_t base_version, int64_t new_version);
+                                                MetaFileBuilder* builder, int64_t base_version, int64_t new_version,
+                                                std::unique_ptr<std::lock_guard<std::mutex>>& lock);
 
     // commit primary index, only take affect when it is local persistent index
     Status commit_primary_index(IndexEntry* index_entry, Tablet* tablet);
 
     // release index entry if it isn't nullptr
-    void release_primary_index(IndexEntry* index_entry);
+    void release_primary_index_cache(IndexEntry* index_entry);
 
     DynamicCache<uint64_t, LakePrimaryIndex>& index_cache() { return _index_cache; }
 
@@ -148,6 +151,8 @@ public:
     bool try_lock_pk_index_shard(int64_t tablet_id) { return _get_pk_index_shard_lock(tablet_id).try_lock(); }
 
     void unlock_pk_index_shard(int64_t tablet_id) { _get_pk_index_shard_lock(tablet_id).unlock(); }
+
+    void try_remove_cache(uint32_t tablet_id, int64_t txn_id);
 
 private:
     // print memory tracker state
@@ -162,7 +167,8 @@ private:
 
     int32_t _get_condition_column(const TxnLogPB_OpWrite& op_write, const TabletSchema& tablet_schema);
 
-    Status _handle_index_op(Tablet* tablet, int64_t base_version, const std::function<void(LakePrimaryIndex&)>& op);
+    Status _handle_index_op(Tablet* tablet, int64_t base_version, bool need_lock,
+                            const std::function<void(LakePrimaryIndex&)>& op);
 
     std::shared_mutex& _get_pk_index_shard_lock(int64_t tabletId) { return _get_pk_index_shard(tabletId).lock; }
 

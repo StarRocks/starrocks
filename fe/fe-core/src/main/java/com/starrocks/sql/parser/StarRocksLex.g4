@@ -247,6 +247,8 @@ MATERIALIZED: 'MATERIALIZED';
 MAX: 'MAX';
 MAXVALUE: 'MAXVALUE';
 MERGE: 'MERGE';
+MICROSECOND: 'MICROSECOND';
+MILLISECOND: 'MILLISECOND';
 MIN: 'MIN';
 MINUTE: 'MINUTE';
 MINUS: 'MINUS';
@@ -537,7 +539,11 @@ SIMPLE_COMMENT
     ;
 
 BRACKETED_COMMENT
-    : '/*' ('+'? [ \r\n\t\u3000]* | ~'+' .*?) '*/' -> channel(HIDDEN)
+    : '/*'([ \r\n\t\u3000]* | ~'+' .*?) '*/' -> channel(HIDDEN)
+    ;
+
+OPTIMIZER_HINT
+    : '/*+' .*? '*/' -> channel(2)
     ;
 
 SEMICOLON: ';';

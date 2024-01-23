@@ -127,6 +127,7 @@ struct JoinHashTableItems {
 
     std::unique_ptr<MemPool> build_pool = nullptr;
     std::vector<JoinKeyDesc> join_keys;
+    bool mor_reader_mode = false;
 };
 
 struct HashTableProbeState {
@@ -214,7 +215,8 @@ struct HashTableParam {
     const RowDescriptor* row_desc = nullptr;
     const RowDescriptor* build_row_desc = nullptr;
     const RowDescriptor* probe_row_desc = nullptr;
-    std::set<SlotId> output_slots;
+    std::set<SlotId> build_output_slots;
+    std::set<SlotId> probe_output_slots;
     std::set<SlotId> predicate_slots;
     std::vector<JoinKeyDesc> join_keys;
 
@@ -222,6 +224,7 @@ struct HashTableParam {
     RuntimeProfile::Counter* output_build_column_timer = nullptr;
     RuntimeProfile::Counter* output_probe_column_timer = nullptr;
     RuntimeProfile::Counter* output_tuple_column_timer = nullptr;
+    bool mor_reader_mode = false;
 };
 
 template <class T>
@@ -516,6 +519,9 @@ private:
     }
     void _build_output(ChunkPtr* chunk) {
         SCOPED_TIMER(_probe_state->output_build_column_timer);
+        if (_table_items->mor_reader_mode) {
+            return;
+        }
         bool to_nullable = _table_items->right_to_nullable;
         for (size_t i = 0; i < _table_items->build_column_count; i++) {
             HashTableSlotDescriptor hash_table_slot = _table_items->build_slots[i];

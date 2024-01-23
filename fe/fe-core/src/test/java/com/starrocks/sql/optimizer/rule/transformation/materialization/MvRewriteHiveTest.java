@@ -26,12 +26,11 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         MvRewriteTestBase.beforeClass();
-        MvRewriteTestBase.prepareDefaultDatas();
     }
 
     @Test
     public void testHiveJoinMvRewrite() throws Exception {
-        createAndRefreshMv("test", "hive_join_mv_1", "create materialized view hive_join_mv_1" +
+        createAndRefreshMv("create materialized view hive_join_mv_1" +
                 " distributed by hash(s_suppkey)" +
                 "PROPERTIES (\n" +
                 "\"force_external_table_query_rewrite\" = \"true\"\n" +
@@ -75,7 +74,7 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
 
         dropMv("test", "hive_join_mv_1");
 
-        createAndRefreshMv("test", "hive_join_mv_2", "create materialized view hive_join_mv_2" +
+        createAndRefreshMv("create materialized view hive_join_mv_2" +
                 " distributed by hash(s_nationkey)" +
                 "PROPERTIES (\n" +
                 "\"force_external_table_query_rewrite\" = \"true\"\n" +
@@ -112,7 +111,7 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
 
     @Test
     public void testHiveAggregateMvRewrite() throws Exception {
-        createAndRefreshMv("test", "hive_agg_join_mv_1", "create materialized view hive_agg_join_mv_1" +
+        createAndRefreshMv("create materialized view hive_agg_join_mv_1" +
                 " distributed by hash(s_nationkey)" +
                 "PROPERTIES (\n" +
                 "\"force_external_table_query_rewrite\" = \"true\"\n" +
@@ -152,12 +151,11 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
     @Test
     public void testHiveUnionRewrite() throws Exception {
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
-        createAndRefreshMv("test", "hive_union_mv_1",
-                "create materialized view hive_union_mv_1 distributed by hash(s_suppkey) " +
-                        "PROPERTIES (\n" +
-                        "\"force_external_table_query_rewrite\" = \"true\"\n" +
-                        ") " +
-                        " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 5");
+        createAndRefreshMv("create materialized view hive_union_mv_1 distributed by hash(s_suppkey) " +
+                "PROPERTIES (\n" +
+                "\"force_external_table_query_rewrite\" = \"true\"\n" +
+                ") " +
+                " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 5");
         String query1 = "select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 10";
         String plan1 = getFragmentPlan(query1);
         PlanTestBase.assertContains(plan1, "0:UNION");
@@ -165,6 +163,7 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
         PlanTestBase.assertContains(plan1, "1:HdfsScanNode\n" +
                 "     TABLE: supplier\n" +
                 "     NON-PARTITION PREDICATES: 13: s_suppkey < 10, 13: s_suppkey >= 5");
+
         dropMv("test", "hive_union_mv_1");
     }
 
@@ -173,7 +172,7 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
         // enforce choose the hive scan operator, not mv plan
         connectContext.getSessionVariable().setUseNthExecPlan(1);
-        createAndRefreshMv("test", "hive_join_mv_1", "create materialized view hive_join_mv_1" +
+        createAndRefreshMv("create materialized view hive_join_mv_1" +
                 " distributed by hash(s_suppkey)" +
                 "PROPERTIES (\n" +
                 "\"force_external_table_query_rewrite\" = \"true\"\n" +
@@ -194,8 +193,7 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
 
     @Test
     public void testHiveStaleness() throws Exception {
-        createAndRefreshMv("test", "hive_staleness_1",
-                "create materialized view hive_staleness_1 distributed by hash(s_suppkey) " +
+        createAndRefreshMv("create materialized view hive_staleness_1 distributed by hash(s_suppkey) " +
                         "PROPERTIES (\n" +
                         "\"mv_rewrite_staleness_second\" = \"60\"," +
                         "\"force_external_table_query_rewrite\" = \"true\"\n" +
@@ -222,8 +220,7 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
 
     @Test
     public void testHivePartitionPrune1() throws Exception {
-        createAndRefreshMv("test", "hive_partition_prune_mv1",
-                "CREATE MATERIALIZED VIEW `hive_partition_prune_mv1`\n" +
+        createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_partition_prune_mv1`\n" +
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "PARTITION BY (`l_shipdate`)\n" +
                         "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +

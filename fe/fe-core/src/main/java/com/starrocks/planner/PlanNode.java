@@ -50,9 +50,12 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.TreeNode;
 import com.starrocks.common.UserException;
 import com.starrocks.sql.common.PermutationGenerator;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TPlan;
@@ -836,8 +839,9 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         }
         return false;
     }
+
     protected Function<Expr, Boolean> couldBound(RuntimeFilterDescription rfDesc, DescriptorTable descTbl) {
-        return (Expr expr) -> couldBound(expr ,rfDesc, descTbl);
+        return (Expr expr) -> couldBound(expr, rfDesc, descTbl);
     }
 
     protected Function<Expr, Boolean> couldBoundForPartitionExpr() {
@@ -862,8 +866,13 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
             SlotRef slotRef = (SlotRef) probeExpr;
             for (TupleId tupleId : getTupleIds()) {
                 for (SlotDescriptor slot : descTbl.getTupleDesc(tupleId).getSlots()) {
-                    // TopN Filter only works in no-nullable column
-                    if (slot.getId().equals(slotRef.getSlotId()) && (!slotRef.isNullable() || rfDesc.isNullLast())) {
+                    if (!slot.getId().equals(slotRef.getSlotId())) {
+                        continue;
+                    }
+                    if (!slotRef.isNullable() || rfDesc.isNullLast()) {
+                        return true;
+                    }
+                    if (slotRef.isNullable() && canEliminateNull(slot)) {
                         return true;
                     }
                 }
@@ -872,6 +881,19 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         } else {
             return getSlotIds(descTbl).contains(probeExpr.getUsedSlotIds());
         }
+    }
+
+    protected boolean canEliminateNull(Expr expr, SlotDescriptor slot) {
+        if (expr.isBound(slot.getId())) {
+            ScalarOperator operator = SqlToScalarOperatorTranslator.translate(expr);
+            ColumnRefOperator column = new ColumnRefOperator(slot.getId().asInt(), slot.getType(),
+                    "any", true);
+            return Utils.canEliminateNull(Sets.newHashSet(column), operator);
+        }
+        return false;
+    }
+    protected boolean canEliminateNull(SlotDescriptor slot) {
+        return conjuncts.stream().anyMatch(expr -> canEliminateNull(expr, slot));
     }
 
     private boolean tryPushdownRuntimeFilterToChild(DescriptorTable descTbl, RuntimeFilterDescription description,
@@ -919,7 +941,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
                 optPartitionByExprsCandidates, childIdx);
         RoaringBitmap slotIds = getSlotIds(descTbl);
         boolean isBound = slotIds.contains(probeExpr.getUsedSlotIds()) &&
-                partitionByExprs.stream().allMatch(expr->slotIds.contains(expr.getUsedSlotIds()));
+                partitionByExprs.stream().allMatch(expr -> slotIds.contains(expr.getUsedSlotIds()));
         if (isBound) {
             checkRuntimeFilterOnNullValue(description, probeExpr);
         }

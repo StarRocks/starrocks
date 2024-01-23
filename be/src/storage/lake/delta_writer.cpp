@@ -147,7 +147,7 @@ public:
 
     int64_t queueing_memtable_num() const;
 
-    std::vector<std::string> files() const;
+    std::vector<FileInfo> files() const;
 
     int64_t data_size() const;
 
@@ -380,13 +380,15 @@ Status DeltaWriterImpl::finish(DeltaWriter::FinishMode mode) {
     txn_log->set_tablet_id(_tablet_id);
     txn_log->set_txn_id(_txn_id);
     auto op_write = txn_log->mutable_op_write();
+
     for (auto& f : _tablet_writer->files()) {
-        if (is_segment(f)) {
-            op_write->mutable_rowset()->add_segments(std::move(f));
-        } else if (is_del(f)) {
-            op_write->add_dels(std::move(f));
+        if (is_segment(f.path)) {
+            op_write->mutable_rowset()->add_segments(std::move(f.path));
+            op_write->mutable_rowset()->add_segment_size(f.size.value());
+        } else if (is_del(f.path)) {
+            op_write->add_dels(std::move(f.path));
         } else {
-            return Status::InternalError(fmt::format("unknown file {}", f));
+            return Status::InternalError(fmt::format("unknown file {}", f.path));
         }
     }
     op_write->mutable_rowset()->set_num_rows(_tablet_writer->num_rows());
@@ -474,7 +476,7 @@ Status DeltaWriterImpl::_fill_auto_increment_id(const Chunk& chunk) {
     auto metadata = _tablet_manager->get_latest_cached_tablet_metadata(_tablet_id);
     Status st;
     if (metadata != nullptr) {
-        st = tablet.update_mgr()->get_rowids_from_pkindex(&tablet, metadata->version(), upserts, &rss_rowids);
+        st = tablet.update_mgr()->get_rowids_from_pkindex(&tablet, metadata->version(), upserts, &rss_rowids, true);
     }
 
     std::vector<uint8_t> filter;
@@ -535,8 +537,8 @@ void DeltaWriterImpl::close() {
     _merge_condition.clear();
 }
 
-std::vector<std::string> DeltaWriterImpl::files() const {
-    return (_tablet_writer != nullptr) ? _tablet_writer->files() : std::vector<std::string>();
+std::vector<FileInfo> DeltaWriterImpl::files() const {
+    return (_tablet_writer != nullptr) ? _tablet_writer->files() : std::vector<FileInfo>();
 }
 
 int64_t DeltaWriterImpl::data_size() const {
@@ -606,7 +608,7 @@ Status DeltaWriter::flush_async() {
     return _impl->flush_async();
 }
 
-std::vector<std::string> DeltaWriter::files() const {
+std::vector<FileInfo> DeltaWriter::files() const {
     return _impl->files();
 }
 

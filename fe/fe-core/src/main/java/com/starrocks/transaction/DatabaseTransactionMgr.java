@@ -65,6 +65,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.statistic.StatisticUtils;
@@ -318,7 +319,7 @@ public class DatabaseTransactionMgr {
             transactionState.setPrepareTime(System.currentTimeMillis());
             unprotectUpsertTransactionState(transactionState, false);
 
-            if (MetricRepo.isInit) {
+            if (MetricRepo.hasInit) {
                 MetricRepo.COUNTER_TXN_BEGIN.increase(1L);
             }
 
@@ -326,7 +327,7 @@ public class DatabaseTransactionMgr {
         } catch (DuplicatedRequestException e) {
             throw e;
         } catch (Exception e) {
-            if (MetricRepo.isInit) {
+            if (MetricRepo.hasInit) {
                 MetricRepo.COUNTER_TXN_REJECT.increase(1L);
             }
             throw e;
@@ -747,7 +748,9 @@ public class DatabaseTransactionMgr {
                         continue;
                     }
 
-                    if (partition.getVisibleVersion() != partitionCommitInfo.getVersion() - 1) {
+                    // The version of a replication transaction may not continuously
+                    if (txn.getSourceType() != TransactionState.LoadJobSourceType.REPLICATION &&
+                            partition.getVisibleVersion() != partitionCommitInfo.getVersion() - 1) {
                         return false;
                     }
 
@@ -865,7 +868,9 @@ public class DatabaseTransactionMgr {
                                 transactionState);
                         continue;
                     }
-                    if (partition.getVisibleVersion() != partitionCommitInfo.getVersion() - 1) {
+                    // The version of a replication transaction may not continuously
+                    if (transactionState.getSourceType() != TransactionState.LoadJobSourceType.REPLICATION &&
+                            partition.getVisibleVersion() != partitionCommitInfo.getVersion() - 1) {
                         // prevent excessive logging
                         if (transactionState.getLastErrTimeMs() + 3000 < System.nanoTime() / 1000000) {
                             LOG.debug("transactionId {} partition commitInfo version {} is not equal with " +
@@ -1083,7 +1088,13 @@ public class DatabaseTransactionMgr {
                             transactionState);
                     continue;
                 }
-                partitionCommitInfo.setVersion(partition.getNextVersion());
+                if (transactionState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
+                    Map<Long, Long> partitionVersions = ((ReplicationTxnCommitAttachment) transactionState
+                            .getTxnCommitAttachment()).getPartitionVersions();
+                    partitionCommitInfo.setVersion(partitionVersions.get(partitionCommitInfo.getPartitionId()));
+                } else {
+                    partitionCommitInfo.setVersion(partition.getNextVersion());
+                }
                 partitionCommitInfo.setVersionTime(table.isCloudNativeTable() ? 0 : commitTs);
             }
         }
@@ -1548,6 +1559,46 @@ public class DatabaseTransactionMgr {
                 LOG.info("remove expired transaction: {}", transactionState);
                 deleteTransaction(transactionState);
             }
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    // The status of stateBach is VISIBLE or ABORTED
+    // isReplay must be true
+    public void unprotectSetTransactionStateBatch(TransactionStateBatch stateBatch, boolean isReplay) {
+        for (TransactionState transactionState : stateBatch.getTransactionStates()) {
+            if (idToRunningTransactionState.remove(transactionState.getTransactionId()) != null) {
+                if (transactionState.getSourceType() == TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK) {
+                    runningRoutineLoadTxnNums--;
+                } else {
+                    runningTxnNums--;
+                }
+            }
+            transactionGraph.remove(transactionState.getTransactionId());
+            idToFinalStatusTransactionState.put(transactionState.getTransactionId(), transactionState);
+            finalStatusTransactionStateDeque.add(transactionState);
+            updateTxnLabels(transactionState);
+        }
+    }
+
+    private boolean updateCatalogAfterVisibleBatch(TransactionStateBatch transactionStateBatch, Database db) {
+        Table table = db.getTable(transactionStateBatch.getTableId());
+        if (table == null) {
+            return true;
+        }
+        TransactionLogApplier applier = txnLogApplierFactory.create(table);
+        ((LakeTableTxnLogApplier) applier).applyVisibleLogBatch(transactionStateBatch, db);
+        return true;
+    }
+
+    public void replayUpsertTransactionStateBatch(TransactionStateBatch transactionStateBatch) {
+        writeLock();
+        try {
+            LOG.info("replay a transaction state batch{}", transactionStateBatch);
+            Database db = globalStateMgr.getDb(transactionStateBatch.getDbId());
+            updateCatalogAfterVisibleBatch(transactionStateBatch, db);
+            unprotectSetTransactionStateBatch(transactionStateBatch, true);
         } finally {
             writeUnlock();
         }

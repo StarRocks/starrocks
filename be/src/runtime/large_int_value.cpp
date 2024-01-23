@@ -24,26 +24,7 @@
 namespace starrocks {
 
 std::ostream& operator<<(std::ostream& os, __int128 const& value) {
-    std::ostream::sentry s(os);
-    if (s) {
-        unsigned __int128 tmp = value < 0 ? -value : value;
-        char buffer[48];
-        char* d = std::end(buffer);
-        do {
-            --d;
-            *d = "0123456789"[tmp % 10];
-            tmp /= 10;
-        } while (tmp != 0);
-        if (value < 0) {
-            --d;
-            *d = '-';
-        }
-        int len = std::end(buffer) - d;
-        if (os.rdbuf()->sputn(d, len) != len) {
-            os.setstate(std::ios_base::badbit);
-        }
-    }
-    return os;
+    return os << LargeIntValue::to_string(value);
 }
 
 std::istream& operator>>(std::istream& is, __int128& value) {

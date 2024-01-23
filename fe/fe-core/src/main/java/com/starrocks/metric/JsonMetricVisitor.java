@@ -38,14 +38,12 @@ import com.codahale.metrics.Histogram;
 import com.starrocks.monitor.jvm.GcNames;
 import com.starrocks.monitor.jvm.JvmStats;
 
-import java.util.ArrayList;
-import java.util.Iterator;
+import java.util.Collections;
 import java.util.List;
 
 public class JsonMetricVisitor extends MetricVisitor {
-
     private boolean isFirstElement;
-    private StringBuilder sb;
+    private final StringBuilder sb;
 
     public JsonMetricVisitor(String prefix) {
         super(prefix);
@@ -53,53 +51,76 @@ public class JsonMetricVisitor extends MetricVisitor {
         sb = new StringBuilder();
     }
 
+    private void addGcMetric(String metricName, JvmStats.GarbageCollector gc) {
+        buildMetric(metricName, "nounit", String.valueOf(gc.getCollectionCount()),
+                Collections.singletonList(new MetricLabel("type", "count")));
+        buildMetric(metricName, "milliseconds", String.valueOf(gc.getCollectionTime().getMillis()),
+                Collections.singletonList(new MetricLabel("type", "time")));
+    }
+
+    private void addMemPoolMetric(String metricName, JvmStats.MemoryPool memPool) {
+        buildMetric(metricName, "bytes", String.valueOf(memPool.getCommitted()),
+                Collections.singletonList(new MetricLabel("type", "committed")));
+        buildMetric(metricName, "bytes", String.valueOf(memPool.getUsed()),
+                Collections.singletonList(new MetricLabel("type", "used")));
+    }
+
     @Override
     public void visitJvm(JvmStats jvmStats) {
-
-        List<MetricLabel> labels = new ArrayList<>();
-        //gc
-        Iterator<JvmStats.GarbageCollector> gcIter = jvmStats.getGc().iterator();
-        while (gcIter.hasNext()) {
-            JvmStats.GarbageCollector gc = gcIter.next();
+        // gc
+        for (JvmStats.GarbageCollector gc : jvmStats.getGc()) {
             if (gc.getName().equalsIgnoreCase(GcNames.YOUNG)) {
-                labels.clear();
-                labels.add(new MetricLabel("type", "count"));
-                buildMetric("jvm_young_gc", "nounit", String.valueOf(gc.getCollectionCount()), labels);
-
-                labels.clear();
-                labels.add(new MetricLabel("type", "time"));
-                buildMetric("jvm_young_gc", "milliseconds", String.valueOf(gc.getCollectionTime().getMillis()), labels);
+                addGcMetric("jvm_young_gc", gc);
             } else if (gc.getName().equalsIgnoreCase(GcNames.OLD)) {
-                labels.clear();
-                labels.add(new MetricLabel("type", "count"));
-                buildMetric("jvm_old_gc", "nounit", String.valueOf(gc.getCollectionCount()), labels);
-
-                labels.clear();
-                labels.add(new MetricLabel("type", "time"));
-                buildMetric("jvm_old_gc", "milliseconds", String.valueOf(gc.getCollectionTime().getMillis()), labels);
+                addGcMetric("jvm_old_gc", gc);
             }
         }
 
+        // mem overall
+        JvmStats.Mem mem = jvmStats.getMem();
+        buildMetric("jvm_heap_size_bytes", "bytes", String.valueOf(mem.getHeapMax()),
+                Collections.singletonList(new MetricLabel("type", "max")));
+        buildMetric("jvm_heap_size_bytes", "bytes", String.valueOf(mem.getHeapCommitted()),
+                Collections.singletonList(new MetricLabel("type", "committed")));
+        buildMetric("jvm_heap_size_bytes", "bytes", String.valueOf(mem.getHeapUsed()),
+                Collections.singletonList(new MetricLabel("type", "used")));
+
         // mem pool
-        Iterator<JvmStats.MemoryPool> memIter = jvmStats.getMem().iterator();
-        while (memIter.hasNext()) {
-            JvmStats.MemoryPool memPool = memIter.next();
+        for (JvmStats.MemoryPool memPool : jvmStats.getMem()) {
             if (memPool.getName().equalsIgnoreCase(GcNames.PERM)) {
                 double percent = 0.0;
-                if (memPool.getCommitted().getBytes() > 0) {
-                    percent = 100 * ((double) memPool.getUsed().getBytes() / memPool.getCommitted().getBytes());
+                if (memPool.getCommitted() > 0) {
+                    percent = 100 * ((double) memPool.getUsed() / memPool.getCommitted());
                 }
-                labels.clear();
-                labels.add(new MetricLabel("type", GcNames.PERM));
-                buildMetric("jvm_size_percent", "percent", String.valueOf(percent), labels);
+                buildMetric("jvm_size_percent", "percent", String.valueOf(percent),
+                        Collections.singletonList(new MetricLabel("type", GcNames.PERM)));
             } else if (memPool.getName().equalsIgnoreCase(GcNames.OLD)) {
                 double percent = 0.0;
-                if (memPool.getCommitted().getBytes() > 0) {
-                    percent = 100 * ((double) memPool.getUsed().getBytes() / memPool.getCommitted().getBytes());
+                if (memPool.getCommitted() > 0) {
+                    percent = 100 * ((double) memPool.getUsed() / memPool.getCommitted());
                 }
-                labels.clear();
-                labels.add(new MetricLabel("type", GcNames.OLD));
-                buildMetric("jvm_size_percent", "percent", String.valueOf(percent), labels);
+                // **NOTICE**: We shouldn't use 'jvm_size_percent' as a metric name, it should be a type,
+                // but for compatibility reason, we won't remove it.
+                buildMetric("jvm_size_percent", "percent", String.valueOf(percent),
+                        Collections.singletonList(new MetricLabel("type", GcNames.OLD)));
+
+                // {"metric":"jvm_old_size_bytes","type":"committed","unit":"bytes"}
+                // {"metric":"jvm_old_size_bytes","type":"used","unit":"bytes"}
+                addMemPoolMetric("jvm_old_size_bytes", memPool);
+            } else if (memPool.getName().equalsIgnoreCase(GcNames.YOUNG)) {
+                // {"metric":"jvm_young_size_bytes","type":"committed","unit":"bytes"}
+                // {"metric":"jvm_young_size_bytes","type":"used","unit":"bytes"}
+                addMemPoolMetric("jvm_young_size_bytes", memPool);
+            }
+        }
+
+        // buffer pool
+        for (JvmStats.BufferPool pool : jvmStats.getBufferPools()) {
+            if (pool.getName().equalsIgnoreCase("direct")) {
+                buildMetric("jvm_direct_buffer_pool_size_bytes", "bytes", String.valueOf(pool.getTotalCapacity()),
+                        Collections.singletonList(new MetricLabel("type", "capacity")));
+                buildMetric("jvm_direct_buffer_pool_size_bytes", "bytes", String.valueOf(pool.getUsed()),
+                        Collections.singletonList(new MetricLabel("type", "used")));
             }
         }
     }
@@ -114,12 +135,10 @@ public class JsonMetricVisitor extends MetricVisitor {
 
     @Override
     public void visitHistogram(String name, Histogram histogram) {
-        return;
     }
 
     @Override
     public void getNodeInfo() {
-        return;
     }
 
     @Override

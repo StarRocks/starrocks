@@ -683,6 +683,10 @@ public class TabletInvertedIndex {
         }
     }
 
+    public Table<Long, Long, Replica> getReplicaMetaTable() {
+        return replicaMetaTable;
+    }
+
     public void addReplica(long tabletId, Replica replica) {
         if (GlobalStateMgr.isCheckpointThread()) {
             return;

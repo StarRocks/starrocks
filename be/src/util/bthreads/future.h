@@ -218,10 +218,10 @@ public:
 
     void swap(SharedFuture& rhs) noexcept { this->_state.swap(rhs._state); }
 
-    R get() const {
+    const R& get() const {
         SharedStateBase::check_state(this->_state);
         this->wait_and_check_exception();
-        return std::move(this->_state->value());
+        return this->_state->value();
     }
 
 private:

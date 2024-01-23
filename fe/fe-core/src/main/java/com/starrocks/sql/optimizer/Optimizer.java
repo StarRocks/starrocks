@@ -18,7 +18,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
-import com.starrocks.common.Config;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.Explain;
@@ -34,6 +34,7 @@ import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
 import com.starrocks.sql.optimizer.rule.transformation.ApplyExceptionRule;
+import com.starrocks.sql.optimizer.rule.transformation.ConvertToEqualForNullRule;
 import com.starrocks.sql.optimizer.rule.transformation.DeriveRangeJoinPredicateRule;
 import com.starrocks.sql.optimizer.rule.transformation.GroupByCountDistinctRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinLeftAsscomRule;
@@ -88,6 +89,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 import static com.starrocks.sql.optimizer.rule.RuleType.TF_MATERIALIZED_VIEW;
 
@@ -100,6 +102,8 @@ public class Optimizer {
     private final OptimizerConfig optimizerConfig;
 
     private long updateTableId = -1;
+
+    private Set<OlapTable> queryTables;
 
     public Optimizer() {
         this(OptimizerConfig.defaultConfig());
@@ -124,12 +128,19 @@ public class Optimizer {
                                   ColumnRefSet requiredColumns,
                                   ColumnRefFactory columnRefFactory) {
         prepare(connectContext, logicOperatorTree, columnRefFactory);
-        context.setUpdateTableId(updateTableId);
-        if (optimizerConfig.isRuleBased()) {
-            return optimizeByRule(connectContext, logicOperatorTree, requiredProperty, requiredColumns);
-        } else {
-            return optimizeByCost(connectContext, logicOperatorTree, requiredProperty, requiredColumns);
-        }
+
+        OptExpression result = optimizerConfig.isRuleBased() ?
+                optimizeByRule(connectContext, logicOperatorTree, requiredProperty, requiredColumns) :
+                optimizeByCost(connectContext, logicOperatorTree, requiredProperty, requiredColumns);
+
+        // clear caches in OptimizerContext
+        context.clear();
+
+        return result;
+    }
+
+    public void setQueryTables(Set<OlapTable> queryTables) {
+        this.queryTables = queryTables;
     }
 
     public void setUpdateTableId(long updateTableId) {
@@ -244,18 +255,13 @@ public class Optimizer {
                     new OptimizerTraceInfo(connectContext.getQueryId(), connectContext.getExecutor().getParsedStmt());
         }
         context.setTraceInfo(traceInfo);
+        context.setUpdateTableId(updateTableId);
+        context.setQueryTables(queryTables);
 
-        if (Config.enable_experimental_mv
-                && connectContext.getSessionVariable().isEnableMaterializedViewRewrite()
-                && !optimizerConfig.isRuleBased()) {
-            MvRewritePreprocessor preprocessor =
-                    new MvRewritePreprocessor(connectContext, columnRefFactory, context, logicOperatorTree);
-            try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.preprocessMvs")) {
-                preprocessor.prepareMvCandidatesForPlan();
-                if (connectContext.getSessionVariable().isEnableSyncMaterializedViewRewrite()) {
-                    preprocessor.prepareSyncMvCandidatesForPlan();
-                }
-            }
+        // prepare related mvs if needed
+        new MvRewritePreprocessor(connectContext, columnRefFactory, context).prepare(logicOperatorTree);
+        if (context.getCandidateMvs() != null && !context.getCandidateMvs().isEmpty()) {
+            context.setQueryMaterializationContext(new QueryMaterializationContext());
         }
     }
 
@@ -329,6 +335,7 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownAggToMetaScanRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownPredicateRankingWindowRule());
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new ConvertToEqualForNullRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
         deriveLogicalProperty(tree);
@@ -569,7 +576,7 @@ public class Optimizer {
 
         if (!sessionVariable.isMVPlanner()) {
             // add join implementRule
-            String joinImplementationMode = ConnectContext.get().getSessionVariable().getJoinImplementationMode();
+            String joinImplementationMode = connectContext.getSessionVariable().getJoinImplementationMode();
             if ("merge".equalsIgnoreCase(joinImplementationMode)) {
                 context.getRuleSet().addMergeJoinImplementationRule();
             } else if ("hash".equalsIgnoreCase(joinImplementationMode)) {

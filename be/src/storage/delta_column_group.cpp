@@ -197,9 +197,10 @@ Status DeltaColumnGroupListSerializer::_deserialize_delta_column_group_list(cons
     return Status::OK();
 }
 
-void DeltaColumnGroupListHelper::garbage_collection(DeltaColumnGroupList& dcg_list, TabletSegmentId tsid,
-                                                    int64_t min_readable_version,
-                                                    std::vector<std::pair<TabletSegmentId, int64_t>>& garbage_dcgs) {
+void DeltaColumnGroupListHelper::garbage_collection(DeltaColumnGroupList& dcg_list, const TabletSegmentId& tsid,
+                                                    int64_t min_readable_version, const std::string& tablet_path,
+                                                    std::vector<std::pair<TabletSegmentId, int64_t>>* garbage_dcgs,
+                                                    std::vector<std::string>* garbage_files) {
     auto dcg_itr = dcg_list.begin();
     // The delta column group that need to be gc, should satisfy two point:
     // 1. It's version is not larger than min_readable_version
@@ -222,7 +223,9 @@ void DeltaColumnGroupListHelper::garbage_collection(DeltaColumnGroupList& dcg_li
                 }
             }
             if (need_free) {
-                garbage_dcgs.push_back(std::make_pair(tsid, (*dcg_itr)->version()));
+                garbage_dcgs->emplace_back(tsid, (*dcg_itr)->version());
+                std::vector<std::string> dcg_files = (*dcg_itr)->column_files(tablet_path);
+                garbage_files->insert(garbage_files->end(), dcg_files.begin(), dcg_files.end());
                 dcg_itr = dcg_list.erase(dcg_itr);
             } else {
                 for (const auto& cids : all_cids) {

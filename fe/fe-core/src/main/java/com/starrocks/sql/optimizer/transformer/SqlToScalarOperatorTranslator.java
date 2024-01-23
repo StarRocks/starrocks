@@ -834,8 +834,9 @@ public final class SqlToScalarOperatorTranslator {
                 LOG.warn("Can't use IgnoreSlotVisitor with not analyzed slot ref: " + node.toSql());
                 throw unsupportedException("Can't use IgnoreSlotVisitor with not analyzed slot ref");
             }
+            String columnName = node.getColumnName() == null ? node.getLabel() : node.getColumnName();
             return new ColumnRefOperator(node.getSlotId().asInt(),
-                    node.getType(), node.getColumnName(), node.isNullable());
+                    node.getType(), columnName, node.isNullable());
         }
     }
 }

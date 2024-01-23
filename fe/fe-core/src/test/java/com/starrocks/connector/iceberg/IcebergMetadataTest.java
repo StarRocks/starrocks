@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -27,6 +28,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -536,5 +538,41 @@ public class IcebergMetadataTest extends TableTestBase {
 
         Assert.assertEquals(newFilter, IcebergFilter.of("db", "table", 1L, newCallOperator));
         Assert.assertNotEquals(newFilter, IcebergFilter.of("db", "table", 1L, null));
+    }
+
+    @Test
+    public void testGetPartitions1() {
+        mockedNativeTableB.newAppend().appendFile(FILE_B_1).appendFile(FILE_B_2).commit();
+
+        Map<String, String> config = new HashMap<>();
+        config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
+        config.put(ICEBERG_CATALOG_TYPE, "hive");
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog",
+                "resource_name", "db",
+                "table", Lists.newArrayList(), mockedNativeTableB, Maps.newHashMap());
+
+        List<PartitionInfo> partitions = metadata.getPartitions(icebergTable, ImmutableList.of("k2=2", "k2=3"));
+        Assert.assertEquals(2, partitions.size());
+    }
+
+    @Test
+    public void testGetPartitions2() {
+        mockedNativeTableG.newAppend().appendFile(FILE_B_5).commit();
+
+        Map<String, String> config = new HashMap<>();
+        config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
+        config.put(ICEBERG_CATALOG_TYPE, "hive");
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog);
+
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog",
+                "resource_name", "db",
+                "table", Lists.newArrayList(), mockedNativeTableG, Maps.newHashMap());
+
+        List<PartitionInfo> partitions = metadata.getPartitions(icebergTable, Lists.newArrayList());
+        Assert.assertEquals(1, partitions.size());
     }
 }

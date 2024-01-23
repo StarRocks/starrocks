@@ -69,32 +69,37 @@ StarRocks 提供灵活的信息采集方式，您可以根据业务场景选择�
 
 从 2.4.5 版本开始，支持用户配置自动全量采集的时间段，防止因集中采集而导致的集群性能抖动。采集时间段可通过 `statistic_auto_analyze_start_time` 和 `statistic_auto_analyze_end_time` 这两个 FE 配置项来配置。
 
-触发自动采集的判断条件：
+在调度周期内，触发新的自动采集任务需要满足下面的条件：
 
-- 上次统计信息采集之后，该表是否发生过数据变更。
-- 分区数据是否发生过修改，未发生过修改的分区不做重新采集。
-- 采集是否落在配置的自动采集时间段内（默认为全天采集，可进行修改）。
-- 该表的统计信息健康度（`statistic_auto_collect_ratio`）是否低于配置阈值。
+- `enable_statistic_collect`设置为true
+- 采集落在配置的自动采集时间段内（默认为全天采集，可进行修改）。
+- 最新一次统计信息采集任务的更新时间早于分区数据更新的时间。
+- 该表的统计信息健康度（`statistic_auto_collect_ratio`）低于配置阈值。
+
+  *需要注意的是如果某张表的数据变更后，手动触发了对它的抽样采集任务会使得第采样任务的更新时间晚于数据更新时间，不会在这一个调度周期内生成该表的全量采集任务。*
 
 > 健康度计算公式：
 >
-> 1. 当更新分区数量小于 10个 时：1 - MIN(上次统计信息采集后的更新行数/总行数)
+> 1. 当更新分区数量小于 10个时：1 - (上次统计信息采集后的更新行数/总行数)
 >
 > 2. 当更新分区数量大于等于 10 个时： 1 - MIN(上次统计信息采集后的更新行数/总行数, 上次统计信息采集后的更新的分区数/总分区数)
 
 同时，StarRocks 对于不同更新频率、不同大小的表，做了详细的配置策略。
 
-对于数据量较小的表，**StarRocks 默认不做限制，即使表的更新频率很高，也会实时采集**。可以通过 `statistic_auto_collect_small_table_size` 配置小表的大小阈值，或者通过`statistic_auto_collect_small_table_interval` 配置小表的采集间隔。
+- 对于数据量较小的表，**StarRocks 默认不做限制，即使表的更新频率很高，也会实时采集**。可以通过 `statistic_auto_collect_small_table_size` 配置小表的大小阈值，或者通过 `statistic_auto_collect_small_table_interval` 配置小表的采集间隔。
 
-对于数据量较大的表，StarRocks按照以下策略限制：
+- 对于数据量较大的表，StarRocks 按照以下策略限制：
 
-- 默认采集的间隔不低于 12 小时，通过  `statistic_auto_collect_large_table_interval` 配置。
+  - 默认采集的间隔不低于 12 小时，通过 `statistic_auto_collect_large_table_interval` 配置。
+  - 满足采集间隔的条件下，当健康度低于抽样采集阈值时，触发抽样采集，通过 `statistic_auto_collect_sample_threshold` 配置。
+  - 满足采集间隔的条件下，健康度高于抽样采集阈值，低于采集阈值时，触发全量采集，通过 `statistic_auto_collect_ratio` 配置。
+  - 当采集的最大分区大小大于 100G 时，触发抽样采集，通过 `statistic_max_full_collect_data_size` 配置。
 
-- 满足采集间隔的条件下，当健康度低于抽样阈采集值时，触发抽样采集，通过 `statistic_auto_collect_sample_threshold` 配置。
+:::tip
 
-- 满足采集间隔的条件下，健康度高于抽样采集阈值，低于采集阈值时，触发全量采集，通过 `statistic_auto_collect_ratio` 配置。
+需要注意的是如果某张表的数据变更后，手动触发了对它的抽样采集任务会使得采样任务的更新时间晚于数据更新时间，不会在这一个调度周期内生成该表的全量采集任务。
 
-- 当收集的最大分区大小大于 100G 时，触发抽样采集，通过 `statistic_max_full_collect_data_size` 配置。
+:::
 
 自动全量采集任务由系统自动执行，默认配置如下。您可以通过 [ADMIN SET CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 命令修改。
 
@@ -112,10 +117,10 @@ StarRocks 提供灵活的信息采集方式，您可以根据业务场景选择�
 | statistic_auto_collect_large_table_interval | LONG    | 86400        | 自动全量采集任务的大表采集间隔，单位：秒。                               |
 | statistic_auto_collect_ratio                | DOUBLE  | 0.8          | 触发自动统计信息收集的健康度阈值。如果统计信息的健康度小于该阈值，则触发自动采集。           |
 | statistic_auto_collect_sample_threshold     | DOUBLE  | 0.3          | 触发自动统计信息抽样收集的健康度阈值。如果统计信息的健康度小于该阈值，则触发自动抽样采集。       |
-| statistic_max_full_collect_data_size        | LONG    | 107374182400 | 自动统计信息采集的最大分区大小。单位：Byte。如果超过该值，则放弃全量采集，转为对该表进行抽样采集。 |
-| statistic_full_collect_buffer               | LONG    | 20971520     | 自动全量采集任务写入的缓存大小，单位：Byte。                              |
+| statistic_max_full_collect_data_size        | LONG    | 107374182400 | 自动统计信息采集的最大分区大小，默认 100 GB。单位：Byte。如果超过该值，则放弃全量采集，转为对该表进行抽样采集。 |
+| statistic_full_collect_buffer               | LONG    | 20971520     | 自动全量采集任务写入的缓存大小，单位：Byte。默认值：20971520（20 MB）。                              |
 | statistic_collect_max_row_count_per_query   | LONG    | 5000000000   | 统计信息采集单次最多查询的数据行数。统计信息任务会按照该配置自动拆分为多次任务执行。 |
-| statistic_collect_too_many_version_sleep    | LONG    | 600000       | 当统计信息表的写入版本过多时(Too many tablet 异常)，自动采集任务的休眠时间，单位：秒。 |
+| statistic_collect_too_many_version_sleep    | LONG    | 600000       | 当统计信息表的写入版本过多时 (Too many tablet 异常)，自动采集任务的休眠时间。单位：毫秒。默认值：600000（10 分钟）。 |
 
 ### 手动采集 (Manual Collection)
 
@@ -292,7 +297,7 @@ CREATE ANALYZE SAMPLE TABLE tbl_name(c1, c2, c3) PROPERTIES(
     
 -- 自动采集所有数据库的统计信息，不收集`db_name.tbl_name`表。
 CREATE ANALYZE SAMPLE DATABASE db_name PROPERTIES (
-   "statistic_exclude_pattern" = "db_name\.tbl_name"
+   "statistic_exclude_pattern" = "db_name.tbl_name"
 );    
 ```
 

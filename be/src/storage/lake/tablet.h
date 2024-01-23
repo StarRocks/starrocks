@@ -80,7 +80,11 @@ public:
 
     [[nodiscard]] Status put_txn_log(const TxnLogPtr& log);
 
+    [[nodiscard]] Status put_txn_slog(const TxnLogPtr& log);
+
     StatusOr<TxnLogPtr> get_txn_log(int64_t txn_id);
+
+    StatusOr<TxnLogPtr> get_txn_slog(int64_t txn_id);
 
     StatusOr<TxnLogPtr> get_txn_vlog(int64_t version);
 
@@ -106,14 +110,16 @@ public:
 
     StatusOr<std::vector<RowsetPtr>> get_rowsets(const TabletMetadata& metadata);
 
-    StatusOr<SegmentPtr> load_segment(std::string_view segment_name, int seg_id, size_t* footer_size_hint,
-                                      bool fill_data_cache, bool fill_metadata_cache);
+    StatusOr<SegmentPtr> load_segment(FileInfo info, int seg_id, size_t* footer_size_hint, bool fill_data_cache,
+                                      bool fill_metadata_cache);
 
     [[nodiscard]] std::string metadata_location(int64_t version) const;
 
     [[nodiscard]] std::string metadata_root_location() const;
 
     [[nodiscard]] std::string txn_log_location(int64_t txn_id) const;
+
+    [[nodiscard]] std::string txn_slog_location(int64_t txn_id) const;
 
     [[nodiscard]] std::string txn_vlog_location(int64_t version) const;
 

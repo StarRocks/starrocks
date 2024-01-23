@@ -53,6 +53,15 @@ public abstract class Operator {
     // or self reference of groups
     protected long salt = 0;
 
+    // Like LogicalJoinOperator#transformMask, add a mask to avoid one operator's dead-loop in one transform rule.
+    // eg: MV's UNION-ALL RULE:
+    //                 UNION                         UNION
+    //               /        \                    /       \
+    //  OP -->   EXTRA-OP    MV-SCAN  -->     UNION    MV-SCAN     ---> ....
+    //                                       /      \
+    //                                  EXTRA-OP    MV-SCAN
+    protected int opRuleMask = 0;
+
     public Operator(OperatorType opType) {
         this.opType = opType;
     }
@@ -133,6 +142,15 @@ public abstract class Operator {
         return salt;
     }
 
+
+    public int getOpRuleMask() {
+        return opRuleMask;
+    }
+
+    public void setOpRuleMask(int b) {
+        this.opRuleMask = b;
+    }
+
     public RowOutputInfo getRowOutputInfo(List<OptExpression> inputs) {
         if (rowOutputInfo == null) {
             rowOutputInfo = deriveRowOutputInfo(inputs);
@@ -201,6 +219,7 @@ public abstract class Operator {
             builder.predicate = operator.predicate;
             builder.projection = operator.projection;
             builder.salt = operator.salt;
+            builder.opRuleMask = operator.opRuleMask;
             return (B) this;
         }
 
@@ -243,6 +262,11 @@ public abstract class Operator {
 
         public B addSalt() {
             builder.salt = ++saltGenerator;
+            return (B) this;
+        }
+
+        public B setOpBitSet(int opRuleMask) {
+            builder.opRuleMask = opRuleMask;
             return (B) this;
         }
     }

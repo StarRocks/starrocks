@@ -6,9 +6,7 @@ displayed_sidebar: "English"
 
 ## Description
 
-Converts a joda-formatted string into a DATETIME value according to the specified format.
-
-The format is [Joda DateTime](https://www.joda.org/joda-time/apidocs/org/joda/time/format/DateTimeFormat.html), which is like 'yyyy-MM-dd HH:mm:ss'.
+Converts a Joda-formatted string into a DATETIME value in the specified Joda DateTime format like `yyyy-MM-dd HH:mm:ss`.
 
 ## Syntax
 
@@ -19,18 +17,18 @@ DATETIME str_to_jodatime(VARCHAR str, VARCHAR format)
 ## Parameters
 
 - `str`: the time expression you want to convert. It must be of the VARCHAR type.
-- `format`: the Joda DateTime format
+- `format`: the Joda DateTime format of the DATETIME value to be returned. For information about the formats available, see [Joda DateTime](https://www.joda.org/joda-time/apidocs/org/joda/time/format/DateTimeFormat.html).
 
 ## Return value
 
-- Returns a `DATETIME`` value if parse succeed.  
-- Returns `NULL` if parse failed
+- If parsing the input string succeeds, a DATETIME value is returned.
+- If parsing the input string fails, `NULL` is returned.
 
 ## Examples
 
-Example 1: Convert the input into a DATETIME value.
+Example 1: Convert the string `2014-12-21 12:34:56` into a DATETIME value in `yyyy-MM-dd HH:mm:ss` format.
 
-```Plain Text
+```SQL
 MySQL > select str_to_jodatime('2014-12-21 12:34:56', 'yyyy-MM-dd HH:mm:ss');
 +--------------------------------------------------------------+
 | str_to_jodatime('2014-12-21 12:34:56', 'yyyy-MM-dd HH:mm:ss') |
@@ -39,10 +37,9 @@ MySQL > select str_to_jodatime('2014-12-21 12:34:56', 'yyyy-MM-dd HH:mm:ss');
 +--------------------------------------------------------------+
 ```
 
+Example 2: Convert the string `21/December/23 12:34:56` with a text-style month into a DATETIME value in `dd/MMMM/yy HH:mm:ss` format.
 
-Example 2: Convert the input into a DATETIME value with text-style month
-
-```Plain Text
+```SQL
 MySQL > select str_to_jodatime('21/December/23 12:34:56', 'dd/MMMM/yy HH:mm:ss');
 +------------------------------------------------------------------+
 | str_to_jodatime('21/December/23 12:34:56', 'dd/MMMM/yy HH:mm:ss') |
@@ -51,11 +48,10 @@ MySQL > select str_to_jodatime('21/December/23 12:34:56', 'dd/MMMM/yy HH:mm:ss')
 +------------------------------------------------------------------+
 ```
 
+Example 3: Convert the string `21/December/23 12:34:56.123` accurate to milliseconds into a DATETIME value in `dd/MMMM/yy HH:mm:ss.SSS` format.
 
-Example 3: Convert the input into a DATETIME value with milliseconds precision
-
-```Plain Text
-MySQL root@127.1:(none)> select str_to_jodatime('21/December/23 12:34:56.123', 'dd/MMMM/yy HH:mm:ss.SSS');
+```SQL
+MySQL > select str_to_jodatime('21/December/23 12:34:56.123', 'dd/MMMM/yy HH:mm:ss.SSS');
 +--------------------------------------------------------------------------+
 | str_to_jodatime('21/December/23 12:34:56.123', 'dd/MMMM/yy HH:mm:ss.SSS') |
 +--------------------------------------------------------------------------+
@@ -63,7 +59,6 @@ MySQL root@127.1:(none)> select str_to_jodatime('21/December/23 12:34:56.123', '
 +--------------------------------------------------------------------------+
 ```
 
+## Keywords
 
-## keyword
-
-str_to_jodatime, DATETIME
+STR_TO_JODATIME, DATETIME

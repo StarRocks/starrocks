@@ -434,6 +434,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - **Default**: 60
 - **Description**: The timeout duration for each Routine Load task within the cluster. Since v3.1.0, Routine Load job supports a new parameter `task_timeout_second` in [job_properties](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md#job_properties). This parameter applies to individual load tasks within a Routine Load job, which is more flexible.
 
+#### routine_load_unstable_threshold_second
+- **Unit**: s
+- **Default**: 3600
+- **Description**: Routine Load job is set in the UNSTABLE state if any task within the Routine Load job lags. To be specific, the difference between the timestamp of the message being consumed the current time exceeds this threshold. Also, unconsumed messages exist in the data source.
+
 ##### max_tolerable_backend_down_num
 
 - **Unit**: -
@@ -639,13 +644,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - **Unit**: -
 - **Default**: 0.5
-- **Description**: The threshold for determining whether the BE disk usage is balanced. This parameter takes effect only when `tablet_sched_balancer_strategy` is set to `disk_and_tablet`. If the disk usage of all BEs is lower than 50%, disk usage is considered balanced. For the `disk_and_tablet` policy, if the difference between the highest and lowest BE disk usage is greater than 10%, disk usage is considered unbalanced and tablet re-balancing is triggered. The alias is `balance_load_disk_safe_threshold`.
+- **Description**: The percentage threshold for determining whether the disk usage of BEs is balanced. If the disk usage of all BEs is lower than this value, it is considered balanced. If the disk usage is greater than this value and the difference between the highest and lowest BE disk usage is greater than 10%, the disk usage is considered unbalanced and a tablet re-balancing is triggered. The alias is `balance_load_disk_safe_threshold`.
 
 ##### tablet_sched_balance_load_score_threshold
 
 - **Unit**: -
 - **Default**: 0.1
-- **Description**: The threshold for determining whether the BE load is balanced. This parameter takes effect only when `tablet_sched_balancer_strategy` is set to `be_load_score`. A BE whose load is 10% lower than the average load is in a low load state, and a BE whose load is 10% higher than the average load is in a high load state. The alias is `balance_load_score_threshold`.
+- **Description**: The percentage threshold for determining whether the load of a BE is balanced. If a BE has a lower load than the average load of all BEs and the difference is greater than this value, this BE is in a low load state. On the contrary, if a BE has a higher load than the average load and the difference is greater than this value, this BE is in a high load state. The alias is `balance_load_score_threshold`.
 
 ##### tablet_sched_repair_delay_factor_second
 
@@ -670,6 +675,63 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - **Unit**: ms
 - **Default**: `15 * 60 * 100`
 - **Description**: When the tablet clone tasks are being scheduled, if a tablet has not been scheduled for the specified time in this parameter, StarRocks gives it a higher priority to schedule it as soon as possible.
+
+#### Shared-data specific
+
+##### lake_compaction_score_selector_min_score
+
+- **Default**: 10.0
+- **Description**: The Compaction Score threshold that triggers Compaction operations. When the Compaction Score of a partition is greater than or equal to this value, the system performs Compaction on that partition.
+- **Introduced in**: v3.1.0
+
+The Compaction Score indicates whether a partition needs Compaction and is scored based on the number of files in the partition. Excessive number of files can impact query performance, so the system periodically performs Compaction to merge small files and reduce the file count. You can check the Compaction Score for a partition based on the `MaxCS` column in the result returned by running [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md).
+
+##### lake_compaction_max_tasks
+
+- **Default**: -1
+- **Description**: The maximum number of concurrent Compaction tasks allowed.
+- **Introduced in**: v3.1.0
+
+The system calculates the number of Compaction tasks based on the number of tablets in a partition. For example, if a partition has 10 tablets, performing one Compaction on that partition creates 10 Compaction tasks. If the number of concurrently executing Compaction tasks exceeds this threshold, the system will not create new Compaction tasks. Setting this item to `0` disables Compaction, and setting it to `-1` allows the system to automatically calculate this value based on an adaptive strategy.
+
+##### lake_compaction_history_size
+
+- **Default**: 12
+- **Description**: The number of recent successful Compaction task records to keep in the memory of the Leader FE node. You can view recent successful Compaction task records using the `SHOW PROC '/compactions'` command. Note that the Compaction history is stored in the FE process memory, and it will be lost if the FE process is restarted.
+- **Introduced in**: v3.1.0
+
+##### lake_compaction_fail_history_size
+
+- **Default**: 12
+- **Description**: The number of recent failed Compaction task records to keep in the memory of the Leader FE node. You can view recent failed Compaction task records using the `SHOW PROC '/compactions'` command. Note that the Compaction history is stored in the FE process memory, and it will be lost if the FE process is restarted.
+- **Introduced in**: v3.1.0
+
+##### lake_autovacuum_parallel_partitions
+
+- **Default**: 8
+- **Description**: The maximum number of partitions that can undergo AutoVacuum simultaneously. AutoVaccum is the Garbage Collection after Compactions.
+- **Introduced in**: v3.1.0
+
+##### lake_autovacuum_partition_naptime_seconds
+
+- **Unit**: Seconds
+- **Default**: 180
+- **Description**: The minimum interval between AutoVacuum operations on the same partition.
+- **Introduced in**: v3.1.0
+
+##### lake_autovacuum_grace_period_minutes
+
+- **Unit**: Minutes
+- **Default**: 5
+- **Description**: The time range for retaining historical data versions. Historical data versions within this time range are not automatically cleaned via AutoVacuum after Compactions. You need to set this value greater than the maximum query time to avoid that the data accessed by running queries get deleted before the queries finish.
+- **Introduced in**: v3.1.0
+
+##### lake_autovacuum_stale_partition_threshold
+
+- **Unit**: Hours
+- **Default**: 12
+- **Description**: If a partition has no updates (loading, DELETE, or Compactions) within this time range, the system will not perform AutoVacuum on this partition.
+- **Introduced in**: v3.1.0
 
 #### Other FE dynamic parameters
 
@@ -767,6 +829,18 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - **Default**: FALSE
 - Whether to allow users to create columns whose names initiated with `__op` and `__row`. To enable this feaure, set this paramter to `TRUE`. Please note that thess name formats are reserved for special purposes in StarRocks and creating such columns may result in undefined behavior. Therefore this feature is disabled by default. This item is supported from v3.1.5 onwards.
+
+##### enable_mv_automatic_active_check
+
+- **Default**: TRUE
+- **Description**: Whether to enable the system to automatically check and re-activate the asynchronous materialized views that are set inactive because their base tables (views) had undergone Schema Change or had been dropped and re-created. Please note that this feature will not re-activate the materialized views that are manually set inactive by users. This item is supported from v3.1.6 onwards.
+
+##### default_mv_refresh_immediate
+
+- **Unit**: -
+- **Default**: TRUE
+- **Description**: Whether to refresh an asynchronous materialized view immediately after creation. When this item is set to `true`, newly created materialized view will be refreshed immediately.
+- **Introduced in**: v3.1.7
 
 ### Configure FE static parameters
 
@@ -881,6 +955,12 @@ This section provides an overview of the static parameters that you can configur
 
 - **Default:** 8030
 - **Description:** The port on which the HTTP server in the FE node listens.
+
+##### http_worker_threads_num
+
+- **Default:** 0
+- **Description:** Number of worker threads for http server to deal with http requests. For a negative or 0 value, the number of threads will be twice the number of cpu cores.
+- Introduced in: 2.5.18，3.0.10，3.1.7，3.2.2
 
 ##### http_backlog_num
 
@@ -1129,11 +1209,6 @@ This section provides an overview of the static parameters that you can configur
 - **Default:** HDD
 - **Description:** The default storage media that is used for a table or partition at the time of table or partition creation if no storage media is specified. Valid values: `HDD` and `SSD`. When you create a table or partition, the default storage media specified by this parameter is used if you do not specify a storage media type for the table or partition.
 
-##### tablet_sched_balancer_strategy
-
-- **Default:** disk_and_tablet
-- **Description:** The policy based on which load balancing is implemented among tablets. The alias of this parameter is `tablet_balancer_strategy`. Valid values: `disk_and_tablet` and `be_load_score`.
-
 ##### tablet_sched_storage_cooldown_second
 
 - **Default:** -1
@@ -1325,6 +1400,12 @@ curl -XPOST http://be_host:http_port/api/update_config?<configuration_item>=<val
 
 BE dynamic parameters are as follows.
 
+#### enable_stream_load_verbose_log
+
+- **Default:** false
+- **Description:** Specifies whether to log the HTTP requests and responses for Stream Load jobs.
+- **Introduced in:** 2.5.17, 3.0.9, 3.1.6, 3.2.1
+
 #### report_task_interval_seconds
 
 - **Default:** 10 seconds
@@ -1457,8 +1538,8 @@ BE dynamic parameters are as follows.
 
 #### trash_file_expire_time_sec
 
-- **Default:** 259,200 seconds
-- **Description:** The time interval at which to clean trash files.
+- **Default:** 86,400 seconds
+- **Description:** The time interval at which to clean trash files. The default value has been changed from 259,200 to 86,400 since v2.5.17, v3.0.9, and v3.1.6.
 
 #### base_compaction_check_interval_seconds
 
@@ -1544,11 +1625,6 @@ BE dynamic parameters are as follows.
 
 - **Default:** 5,000 ms
 - **Description:** The timeout for a thrift RPC.
-
-#### txn_commit_rpc_timeout_ms
-
-- **Default:** 60,000 ms
-- **Description:** The timeout of a load transaction. From v3.1 onwards, this parameter controls the timeout of a transaction commit RPC.
 
 #### max_consumer_num_per_group
 
@@ -1655,10 +1731,40 @@ BE dynamic parameters are as follows.
 - **Default:** 10 (Number of Threads)
 - **Description:** The thread pool size allowed on each BE for interacting with Kafka. Currently, the FE responsible for processing Routine Load requests depends on BEs to interact with Kafka, and each BE in StarRocks has its own thread pool for interactions with Kafka. If a large number of Routine Load tasks are distributed to a BE, the BE's thread pool for interactions with Kafka may be too busy to process all tasks in a timely manner. In this situation, you can adjust the value of this parameter to suit your needs.
 
+#### lake_enable_vertical_compaction_fill_data_cache
+
+- **Default:** false
+- **Description:** Whether to allow compaction tasks to cache data on local disks in a shared-data cluster.
+- **Introduced in:** v3.1.7, v3.2.3
+
+#### compact_threads
+
+- **Default:** 4
+- **Description:** The maximum number of threads used for concurrent compaction tasks. This configuration is changed to dynamic from v3.1.7 and v3.2.2 onwards.
+- **Introduced in:** v3.0.0
+
 #### update_compaction_ratio_threshold
 
 - **Default:** 0.5
 - **Description:** The maximum proportion of data that a compaction can merge for a Primary Key table in a shared-data cluster. We recommend shrinking this value if a single tablet becomes excessively large. This parameter is supported from v3.1.5 onwards.
+
+#### create_tablet_worker_count
+
+- **Default**: 3
+- **Unit**: N/A
+- **Description**: The number of threads used to create a tablet. This configuration is changed to dynamic from v3.1.7 onwards.
+
+#### number_tablet_writer_threads
+
+- **Default**: 16
+- **Unit**: N/A
+- **Description**: The number of threads used for Stream Load. This configuration is changed to dynamic from v3.1.7 onwards.
+
+#### pipeline_connector_scan_thread_num_per_cpu
+
+- **Default**: 8
+- **Unit**: N/A
+- **Description**: The number of scan threads assigned to Pipeline Connector per CPU core in the BE node. This configuration is changed to dynamic from v3.1.7 onwards.
 
 ### Configure BE static parameters
 
@@ -1718,19 +1824,13 @@ BE static parameters are as follows.
 
 - **Default**: 9070
 - **Unit**: N/A
-- **Description**: The BE heartbeat service port for the StarRocks shared-data cluster.
+- **Description**: An extra agent service port for CN (BE in v3.0) in a shared-data cluster.
 
 #### heartbeat_service_thread_count
 
 - **Default**: 1
 - **Unit**: N/A
 - **Description**: The thread count of the BE heartbeat service.
-
-#### create_tablet_worker_count
-
-- **Default**: 3
-- **Unit**: N/A
-- **Description**: The number of threads used to create a tablet.
 
 #### drop_tablet_worker_count
 
@@ -1785,6 +1885,20 @@ BE static parameters are as follows.
 - **Default**: 1
 - **Unit**: N/A
 - **Description**: The number of threads used for checking the consistency of tablets.
+
+#### object_storage_connect_timeout_ms
+
+- **Default**: `-1`, which means to use the default timeout duration of the SDK configurations.
+- **Unit**: ms
+- **Description**: Timeout duration to establish socket connections with object storage.
+- **Introduced in:** 3.0.9
+
+#### object_storage_request_timeout_ms
+
+- **Default**: `-1`, which means to use the default timeout duration of the SDK configurations.
+- **Unit**: ms
+- **Description**: Timeout duration to establish HTTP connections with object storage.
+- **Introduced in:** 3.0.9
 
 #### sys_log_dir
 
@@ -1961,12 +2075,6 @@ BE static parameters are as follows.
 - **Unit**: Hour
 - **Description**: The reservation time for the files produced by small-scale loadings.
 
-#### number_tablet_writer_threads
-
-- **Default**: 16
-- **Unit**: N/A
-- **Description**: The number of threads used for Stream Load.
-
 #### streaming_load_rpc_max_alive_time_sec
 
 - **Default**: 1200
@@ -2049,7 +2157,7 @@ BE static parameters are as follows.
 
 - **Default**: 90%
 - **Unit**: N/A
-- **Description**: BE process memory upper limit. You can set it as a percentage ("80%") or a physical limit ("100GB").
+- **Description**: BE process memory upper limit. You can set it as a percentage ("80%") or a physical limit ("100G"). The default hard limit is 90% of the server's memory size, and the soft limit is 80%. You need to configure this parameter if you want to deploy StarRocks with other memory-intensive services on a same server.
 
 #### flush_thread_num_per_store
 

@@ -236,6 +236,10 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
         return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::LogicalType::None(),
                                                       ::parquet::Type::DOUBLE, -1, file_column_id.field_id);
     }
+    case TYPE_BINARY:
+    case TYPE_VARBINARY:
+        return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::LogicalType::None(),
+                                                      ::parquet::Type::BYTE_ARRAY, -1, file_column_id.field_id);
     case TYPE_CHAR:
     case TYPE_VARCHAR: {
         return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::LogicalType::String(),
@@ -351,7 +355,7 @@ Status FileWriterBase::write(Chunk* chunk) {
     }
 
     _generate_chunk_writer();
-    _chunk_writer->write(chunk);
+    RETURN_IF_ERROR(_chunk_writer->write(chunk));
 
     if (_chunk_writer->estimated_buffered_bytes() > _max_row_group_size && !is_last_row_group()) {
         RETURN_IF_ERROR(_flush_row_group());
@@ -394,11 +398,7 @@ Status SyncFileWriter::_flush_row_group() {
             _chunk_writer->close();
         } catch (const ::parquet::ParquetStatusException& e) {
             _chunk_writer.reset();
-
-            // this is to avoid calling ParquetFileWriter.Close which incurs segfault
             _closed = true;
-            _writer.release();
-
             auto st = Status::IOError(fmt::format("{}: {}", "flush rowgroup error", e.what()));
             LOG(WARNING) << st;
             return st;
@@ -415,7 +415,12 @@ Status SyncFileWriter::close() {
     }
 
     RETURN_IF_ERROR(_flush_row_group());
-    _writer->Close();
+    try {
+        _writer->Close();
+    } catch (const ::parquet::ParquetStatusException& e) {
+        LOG(WARNING) << "close writer error: " << e.what();
+        return Status::IOError(fmt::format("{}: {}", "close writer error", e.what()));
+    }
 
     auto arrow_st = _outstream->Close();
     if (!arrow_st.ok()) {

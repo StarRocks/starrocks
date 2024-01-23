@@ -229,8 +229,13 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     auto option_query_mem_limit = query_options.__isset.query_mem_limit ? query_options.query_mem_limit : -1;
     int64_t query_mem_limit = _query_ctx->compute_query_mem_limit(parent_mem_tracker->limit(), per_instance_mem_limit,
                                                                   degree_of_parallelism, option_query_mem_limit);
-    int64_t big_query_mem_limit = wg != nullptr && wg->use_big_query_mem_limit() ? wg->big_query_mem_limit() : -1;
-    _query_ctx->init_mem_tracker(query_mem_limit, parent_mem_tracker, big_query_mem_limit, wg.get());
+    int64_t big_query_mem_limit = wg->use_big_query_mem_limit() ? wg->big_query_mem_limit() : -1;
+    int64_t spill_mem_limit_bytes = -1;
+    if (query_options.__isset.enable_spill && query_options.enable_spill == true) {
+        spill_mem_limit_bytes = query_mem_limit * query_options.spill_mem_limit_threshold;
+    }
+    _query_ctx->init_mem_tracker(query_mem_limit, parent_mem_tracker, big_query_mem_limit, spill_mem_limit_bytes,
+                                 wg.get());
 
     auto query_mem_tracker = _query_ctx->mem_tracker();
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(query_mem_tracker.get());
@@ -380,7 +385,9 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
         auto* scan_node = down_cast<ScanNode*>(i);
         const std::vector<TScanRangeParams>& scan_ranges = request.scan_ranges_of_node(scan_node->id());
         const auto& scan_ranges_per_driver_seq = request.per_driver_seq_scan_ranges_of_node(scan_node->id());
-        _fragment_ctx->cache_param().num_lanes = scan_node->io_tasks_per_scan_operator();
+
+        // num_lanes ranges in [1,16] in default 4.
+        _fragment_ctx->cache_param().num_lanes = std::min(16, std::max(1, config::query_cache_num_lanes_per_driver));
 
         if (scan_ranges_per_driver_seq.empty()) {
             _fragment_ctx->set_enable_cache(false);

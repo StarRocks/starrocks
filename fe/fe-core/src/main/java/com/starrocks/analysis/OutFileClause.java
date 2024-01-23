@@ -97,7 +97,8 @@ public class OutFileClause implements ParseNode {
         PrimitiveType.VARCHAR,
         PrimitiveType.DECIMAL32,
         PrimitiveType.DECIMAL64,
-        PrimitiveType.DECIMAL128
+        PrimitiveType.DECIMAL128,
+        PrimitiveType.VARBINARY
     );
 
     public static final Set<PrimitiveType> CSV_SUPPORTED_PRIMITIVE_TYPES = ImmutableSet.of(

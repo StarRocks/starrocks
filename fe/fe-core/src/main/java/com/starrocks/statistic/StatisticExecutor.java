@@ -289,8 +289,10 @@ public class StatisticExecutor {
                         Lists.newArrayList(histogramStatsMeta.getColumn()), refreshAsync);
             }
         } else {
+            long existUpdateRows = GlobalStateMgr.getCurrentAnalyzeMgr().getExistUpdateRows(table.getId());
             BasicStatsMeta basicStatsMeta = new BasicStatsMeta(db.getId(), table.getId(),
-                    statsJob.getColumns(), statsJob.getType(), analyzeStatus.getEndTime(), statsJob.getProperties());
+                    statsJob.getColumns(), statsJob.getType(), analyzeStatus.getEndTime(),
+                    statsJob.getProperties(), existUpdateRows);
             GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(basicStatsMeta);
             GlobalStateMgr.getCurrentAnalyzeMgr().refreshBasicStatisticsCache(
                     basicStatsMeta.getDbId(), basicStatsMeta.getTableId(), basicStatsMeta.getColumns(), refreshAsync);

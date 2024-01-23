@@ -67,6 +67,9 @@ public class RewriteTreeTask extends OptimizerTask {
         SessionVariable sessionVariable = context.getOptimizerContext().getSessionVariable();
 
         for (Rule rule : rules) {
+            if (rule.exhausted(context.getOptimizerContext())) {
+                continue;
+            }
             if (!match(rule.getPattern(), root) || !rule.check(root, context.getOptimizerContext())) {
                 continue;
             }

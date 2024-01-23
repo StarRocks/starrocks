@@ -34,6 +34,8 @@
 
 #pragma once
 
+#include <memory>
+
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "common/status.h"
@@ -86,7 +88,7 @@ class SortExecExprs;
 class DataStreamRecvr {
 public:
     ~DataStreamRecvr();
-    void bind_profile(int32_t driver_sequence, RuntimeProfile* profile);
+    void bind_profile(int32_t driver_sequence, const std::shared_ptr<RuntimeProfile>& profile);
 
     Status get_chunk(std::unique_ptr<Chunk>* chunk);
     Status get_chunk_for_pipeline(std::unique_ptr<Chunk>* chunk, const int32_t driver_sequence);
@@ -200,6 +202,7 @@ private:
     std::shared_ptr<MemTracker> _instance_mem_tracker;
 
     struct Metrics {
+        std::shared_ptr<RuntimeProfile> runtime_profile;
         // Number of bytes received
         RuntimeProfile::Counter* bytes_received_counter = nullptr;
         RuntimeProfile::Counter* bytes_pass_through_counter = nullptr;

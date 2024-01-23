@@ -166,6 +166,14 @@ public class OptimizerTraceUtil {
         }
     }
 
+    public static void logMVRewrite(String mvName, String format, Object... objects) {
+        PlannerProfile.LogTracer tracer = PlannerProfile.getLogTracer(mvName);
+        if (tracer != null) {
+            FormattingTuple ft = MessageFormatter.arrayFormat(format, objects);
+            tracer.log("[MV TRACE] REWRITE: " + ft.getMessage());
+        }
+    }
+
     public static void logMVRewrite(MvRewriteContext mvRewriteContext, String format, Object... object) {
         MaterializationContext mvContext = mvRewriteContext.getMaterializationContext();
         if (mvContext.getOptimizerContext().getSessionVariable().isEnableMVOptimizerTraceLog()) {
@@ -193,7 +201,7 @@ public class OptimizerTraceUtil {
             LOG.info("[MV TRACE] [REWRITE {} {}] {}",
                     optimizerContext.getTraceInfo().getQueryId(),
                     rule.type().name(),
-                    String.format(format, object));
+                    MessageFormatter.arrayFormat(format, object).getMessage());
         }
 
         // Trace log if needed.

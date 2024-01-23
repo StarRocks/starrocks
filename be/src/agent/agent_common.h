@@ -86,7 +86,7 @@ struct AgentTaskRequestWithoutReqBody {
     int64_t recv_time;
 };
 
-const int MIN_TRANSACTION_PUBLISH_WORKER_COUNT = 8;
+const int MIN_TRANSACTION_PUBLISH_WORKER_COUNT = 1;
 
 using CreateTabletAgentTaskRequest = AgentTaskRequestWithReqBody<TCreateTabletReq>;
 using DropTabletAgentTaskRequest = AgentTaskRequestWithReqBody<TDropTabletReq>;
@@ -105,5 +105,7 @@ using ReleaseSnapshotAgentTaskRequest = AgentTaskRequestWithReqBody<TReleaseSnap
 using MoveDirAgentTaskRequest = AgentTaskRequestWithReqBody<TMoveDirReq>;
 using UpdateTabletMetaInfoAgentTaskRequest = AgentTaskRequestWithReqBody<TUpdateTabletMetaInfoReq>;
 using DropAutoIncrementMapAgentTaskRequest = AgentTaskRequestWithReqBody<TDropAutoIncrementMapReq>;
+using RemoteSnapshotAgentTaskRequest = AgentTaskRequestWithReqBody<TRemoteSnapshotRequest>;
+using ReplicateSnapshotAgentTaskRequest = AgentTaskRequestWithReqBody<TReplicateSnapshotRequest>;
 
 } // namespace starrocks

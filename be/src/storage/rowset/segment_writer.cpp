@@ -65,7 +65,7 @@ SegmentWriter::SegmentWriter(std::unique_ptr<WritableFile> wfile, uint32_t segme
 
 SegmentWriter::~SegmentWriter() = default;
 
-std::string SegmentWriter::segment_path() const {
+const std::string& SegmentWriter::segment_path() const {
     return _wfile->filename();
 }
 
@@ -223,6 +223,10 @@ uint64_t SegmentWriter::estimate_segment_size() {
     }
     size += _index_builder->size();
     return size;
+}
+
+uint64_t SegmentWriter::current_filesz() const {
+    return _wfile->size();
 }
 
 Status SegmentWriter::finalize(uint64_t* segment_file_size, uint64_t* index_size, uint64_t* footer_position) {

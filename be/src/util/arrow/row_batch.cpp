@@ -106,15 +106,15 @@ Status convert_to_arrow_type(const TypeDescriptor& type, std::shared_ptr<arrow::
         break;
     case TYPE_ARRAY: {
         std::shared_ptr<arrow::DataType> type0;
-        convert_to_arrow_type(type.children[0], &type0);
+        RETURN_IF_ERROR(convert_to_arrow_type(type.children[0], &type0));
         *result = arrow::list(type0);
         break;
     }
     case TYPE_MAP: {
         std::shared_ptr<arrow::DataType> type0;
-        convert_to_arrow_type(type.children[0], &type0);
+        RETURN_IF_ERROR(convert_to_arrow_type(type.children[0], &type0));
         std::shared_ptr<arrow::DataType> type1;
-        convert_to_arrow_type(type.children[1], &type1);
+        RETURN_IF_ERROR(convert_to_arrow_type(type.children[1], &type1));
         *result = arrow::map(type0, type1);
         break;
     }
@@ -127,8 +127,8 @@ Status convert_to_arrow_type(const TypeDescriptor& type, std::shared_ptr<arrow::
         }
         for (auto i = 0; i < type.children.size(); ++i) {
             std::shared_ptr<arrow::DataType> type0;
-            convert_to_arrow_type(type.children[i], &type0);
-            fields.push_back(arrow::field(type.field_names[i], type0));
+            RETURN_IF_ERROR(convert_to_arrow_type(type.children[i], &type0));
+            fields.emplace_back(arrow::field(type.field_names[i], type0));
         }
         *result = arrow::struct_(fields);
         break;

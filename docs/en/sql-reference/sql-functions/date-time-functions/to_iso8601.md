@@ -6,29 +6,35 @@ displayed_sidebar: "English"
 
 ## Description
 
-Convert a date into an ISO 8601 string.
+Converts the specified date into a string in ISO 8601 format.
 
 ## Syntax
 
 ```Haskell
-VARCHAR TO_ISO8601(DATETIME date)
+VARCHAR TO_ISO8601(DATETIME | DATE date)
 ```
 
 ## Parameters
 
-- The `date` parameter must be a valid date or date expression.
+`date`: the date you want to convert. It must be a valid date or date expression.
 
 ## Examples
 
-```Plain Text
-mysql> select to_iso8601(date'2020-01-01');
+Example 1: Convert the date `2020-01-01` into a string in ISO 8601 format.
+
+```SQL
+MySQL > select to_iso8601(date'2020-01-01');
 +--------------------------+
 | to_iso8601('2020-01-01') |
 +--------------------------+
 | 2020-01-01               |
 +--------------------------+
+```
 
-mysql> select to_iso8601(datetime'2020-01-01 00:00:00.01');
+Example 2: Convert the date `2020-01-01 00:00:00.01` into a string in ISO 8601 format.
+
+```SQL
+MySQL > select to_iso8601(datetime'2020-01-01 00:00:00.01');
 +------------------------------------------+
 | to_iso8601('2020-01-01 00:00:00.010000') |
 +------------------------------------------+
@@ -36,6 +42,6 @@ mysql> select to_iso8601(datetime'2020-01-01 00:00:00.01');
 +------------------------------------------+
 ```
 
-## keyword
+## Keywords
 
-FORMAT
+TO_ISO8601

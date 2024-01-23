@@ -48,7 +48,9 @@ public class ExecuteOption {
     }
 
     public boolean isMergeRedundant() {
-        return mergeRedundant;
+        // If old task run is a sync-mode task, skip to merge it to avoid sync-mode task
+        // hanging after removing it.
+        return !isSync && mergeRedundant;
     }
 
     public void setMergeRedundant(boolean mergeRedundant) {
@@ -63,8 +65,8 @@ public class ExecuteOption {
         return isManual;
     }
 
-    public void setManual() {
-        this.isManual = true;
+    public void setManual(boolean isManual) {
+        this.isManual = isManual;
     }
 
     public boolean getIsSync() {
@@ -73,5 +75,13 @@ public class ExecuteOption {
 
     public void setSync(boolean isSync) {
         this.isSync = isSync;
+    }
+
+    @Override
+    public String toString() {
+        return String.format("ExecuteOption{priority=%s, mergeRedundant=%s, isManual=%s, " +
+                        "isSync=%s, taskRunProperties={%s}}",
+                priority, mergeRedundant, isManual, isSync, taskRunProperties
+        );
     }
 }

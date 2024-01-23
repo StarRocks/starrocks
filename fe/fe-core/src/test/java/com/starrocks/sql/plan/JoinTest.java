@@ -2773,4 +2773,20 @@ public class JoinTest extends PlanTestBase {
             connectContext.getSessionVariable().setPreferComputeNode(false);
         }
     }
+
+    @Test
+    public void testNullAwareLeftAntiJoin() throws Exception {
+        String query = "SELECT subt0.v1\n" +
+                "FROM\n" +
+                "  (SELECT t0_6.v1,\n" +
+                "          t0_6.v2,\n" +
+                "          t0_6.v3\n" +
+                "   FROM t0 AS t0_6) subt0 \n" +
+                "WHERE (NOT ((subt0.v2) IN (\n" +
+                "                                (SELECT t0_6.v2\n" +
+                "                                 FROM t0 AS t0_6\n" +
+                "                                 WHERE (t0_6.v1) = (subt0.v1)))))";
+        String plan = getFragmentPlan(query);
+        assertContains(plan, "other join predicates: 1: v1 = 4: v1");
+    }
 }

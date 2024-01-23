@@ -19,6 +19,7 @@
 #include <utility>
 
 #include "column/chunk.h"
+#include "exec/mor_processor.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "fs/fs.h"
@@ -34,9 +35,9 @@ class RuntimeFilterProbeCollector;
 
 struct HdfsScanStats {
     int64_t raw_rows_read = 0;
-    // late materialization
-    int64_t skip_read_rows = 0;
-    int64_t num_rows_read = 0;
+    int64_t rows_read = 0;
+    int64_t late_materialize_skip_rows = 0;
+
     int64_t io_ns = 0;
     int64_t io_count = 0;
     int64_t bytes_read = 0;
@@ -66,8 +67,7 @@ struct HdfsScanStats {
     // page skip
     int64_t page_skip = 0;
 
-    // ORC only!
-    std::vector<int64_t> stripe_sizes;
+    std::vector<int64_t> orc_stripe_sizes;
 
     // Iceberg v2 only!
     int64_t iceberg_delete_file_build_ns = 0;
@@ -79,8 +79,9 @@ class HdfsParquetProfile;
 
 struct HdfsScanProfile {
     RuntimeProfile* runtime_profile = nullptr;
+    RuntimeProfile::Counter* raw_rows_read_counter = nullptr;
     RuntimeProfile::Counter* rows_read_counter = nullptr;
-    RuntimeProfile::Counter* rows_skip_counter = nullptr;
+    RuntimeProfile::Counter* late_materialize_skip_rows_counter = nullptr;
     RuntimeProfile::Counter* scan_ranges_counter = nullptr;
 
     RuntimeProfile::Counter* reader_init_timer = nullptr;
@@ -141,7 +142,7 @@ struct HdfsScannerParams {
 
     int64_t modification_time = 0;
 
-    const TupleDescriptor* tuple_desc = nullptr;
+    TupleDescriptor* tuple_desc = nullptr;
 
     // columns read from file
     std::vector<SlotDescriptor*> materialize_slots;
@@ -182,6 +183,7 @@ struct HdfsScannerParams {
     std::atomic<int32_t>* lazy_column_coalesce_counter;
     bool can_use_any_column = false;
     bool can_use_min_max_count_opt = false;
+    MORParams mor_params;
 };
 
 struct HdfsScannerContext {
@@ -282,7 +284,7 @@ public:
 
     int64_t num_bytes_read() const { return _app_stats.bytes_read; }
     int64_t raw_rows_read() const { return _app_stats.raw_rows_read; }
-    int64_t num_rows_read() const { return _app_stats.num_rows_read; }
+    int64_t num_rows_read() const { return _app_stats.rows_read; }
     int64_t cpu_time_spent() const { return _total_running_time - _app_stats.io_ns; }
     int64_t io_time_spent() const { return _app_stats.io_ns; }
     int64_t estimated_mem_usage() const;
@@ -335,6 +337,7 @@ private:
     Status _build_scanner_context();
     MonotonicStopWatch _pending_queue_sw;
     void update_hdfs_counter(HdfsScanProfile* profile);
+    Status _init_mor_processor(RuntimeState* runtime_state, const MORParams& params);
 
 protected:
     std::atomic_bool _pending_token = false;
@@ -350,6 +353,7 @@ protected:
     std::shared_ptr<io::CacheInputStream> _cache_input_stream = nullptr;
     std::shared_ptr<io::SharedBufferedInputStream> _shared_buffered_input_stream = nullptr;
     int64_t _total_running_time = 0;
+    std::shared_ptr<DefaultMORProcessor> _mor_processor;
 };
 
 } // namespace starrocks

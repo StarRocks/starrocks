@@ -2,7 +2,7 @@
 displayed_sidebar: "Chinese"
 ---
 
-# 查询相关问题
+# 查询常见问题
 
 ## 构建物化视图失败：fail to allocate memory
 

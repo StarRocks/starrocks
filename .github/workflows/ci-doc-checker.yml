@@ -35,6 +35,18 @@ jobs:
         run: |
           echo "doc=${{ steps.changes.outputs.doc }}" >> $GITHUB_OUTPUT
 
+  remove-doc-label:
+    needs: doc-checker
+    runs-on: ubuntu-latest
+    name: REMOVE DOC LABEL
+    if: ${{ needs.doc-checker.outputs.output1 != 'true' }}
+    steps:
+      - name: remove document label
+        uses: actions-ecosystem/action-remove-labels@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          labels: documentation
+
   add-doc-label:
     needs: doc-checker
     runs-on: ubuntu-latest
@@ -86,6 +98,31 @@ jobs:
           files: 'docs/**/*.md'
           ignore: node_modules
           version: 0.28.1
+      - name: docusaurus-mdx-checker
+        if: always()
+        run: |
+          npx docusaurus-mdx-checker -c docs
+      - name: link check
+        if: always()
+        uses: lycheeverse/lychee-action@v1.8.0
+        with:
+          fail: true
+          args: >
+            --config docs/lychee.toml
+            --offline "docs/**/*.md"
+
+      - name: Docusaurus build
+        env:
+          DISABLE_VERSIONING: true
+        working-directory: ./docs/docusaurus
+        run: |
+          rm -rf ./docs
+          rm -rf ./i18n/zh/docusaurus-plugin-content-dos/current
+          mkdir -p ./i18n/zh/docusaurus-plugin-content-docs
+          mv ../en ./docs
+          mv ../zh ./i18n/zh/docusaurus-plugin-content-docs/current
+          yarn install --frozen-lockfile
+          yarn build
 
   behavior-unchange:
     runs-on: ubuntu-latest

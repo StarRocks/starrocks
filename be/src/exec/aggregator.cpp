@@ -1348,27 +1348,30 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
             }
         }
 
-        {
-            SCOPED_TIMER(_agg_stat->group_by_append_timer);
-            hash_map_with_key.insert_keys_to_columns(hash_map_with_key.results, group_by_columns, read_index);
-        }
+        if (read_index > 0) {
+            {
+                SCOPED_TIMER(_agg_stat->group_by_append_timer);
+                hash_map_with_key.insert_keys_to_columns(hash_map_with_key.results, group_by_columns, read_index);
+            }
 
-        {
-            SCOPED_TIMER(_agg_stat->agg_append_timer);
-            if (!use_intermediate) {
-                for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-                    TRY_CATCH_BAD_ALLOC(_agg_functions[i]->batch_finalize(_agg_fn_ctxs[i], read_index, _tmp_agg_states,
-                                                                          _agg_states_offsets[i],
-                                                                          agg_result_columns[i].get()));
-                }
-            } else {
-                for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-                    TRY_CATCH_BAD_ALLOC(_agg_functions[i]->batch_serialize(_agg_fn_ctxs[i], read_index, _tmp_agg_states,
-                                                                           _agg_states_offsets[i],
-                                                                           agg_result_columns[i].get()));
+            {
+                SCOPED_TIMER(_agg_stat->agg_append_timer);
+                if (!use_intermediate) {
+                    for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+                        TRY_CATCH_BAD_ALLOC(_agg_functions[i]->batch_finalize(_agg_fn_ctxs[i], read_index,
+                                                                              _tmp_agg_states, _agg_states_offsets[i],
+                                                                              agg_result_columns[i].get()));
+                    }
+                } else {
+                    for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+                        TRY_CATCH_BAD_ALLOC(_agg_functions[i]->batch_serialize(_agg_fn_ctxs[i], read_index,
+                                                                               _tmp_agg_states, _agg_states_offsets[i],
+                                                                               agg_result_columns[i].get()));
+                    }
                 }
             }
         }
+
         RETURN_IF_ERROR(check_has_error());
         _is_ht_eos = (it == end);
 

@@ -17,9 +17,9 @@ Modifies an existing table, including:
 - [Modify bitmap index](#modify-bitmap-indexes)
 - [Manual data version compaction](#manual-compaction-from-31)
 
-> **NOTE**
->
-> This operation requires the ALTER privilege on the destination table.
+:::tip
+This operation requires the ALTER privilege on the destination table.
+:::
 
 ## Syntax
 
@@ -31,18 +31,20 @@ alter_clause1[, alter_clause2, ...]
 `alter_clause` is classified into six operations: partition, rollup, schema change, rename, index, swap, comment, and compact.
 
 - rename: renames a table, rollup index, or partition. **Note that column names cannot be modified.**
-- comment: modifies the table comment (supported from **v3.1 onwards**).
-- swap: atomic exchange of two tables.
+- comment: modifies the table comment (supported from **v3.1 onwards**). Currently, column comments cannot be modified.
 - partition: modifies partition properties, drops a partition, or adds a partition.
+- bucket: modifies the bucketing method and number of buckets.
+- column: adds, drops, or reorders columns, or modifies column type.
+- rollup index: creates or drops a rollup index.
+- bitmap index: modifies index (only Bitmap index can be modified).
+- swap: atomic exchange of two tables.
 - schema change: adds, drops, or reorders columns, or modifies column type.
-- rollup: creates or drops a rollup index.
-- index: modifies index (only Bitmap index can be modified).
 - compact: performs manual compaction to merge versions of loaded data (supported from **v3.1 onwards**).
 
 :::note
 
 - Schema change, rollup, and partition operations cannot be performed in one ALTER TABLE statement.
-- Schema change and rollup are asynchronous operations. A success message is return immediately after the task is submitted. You can run the [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) command to check the progress.
+- Schema change and rollup are asynchronous operations. A success message is returned immediately after the task is submitted. You can run the [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) command to check the progress.
 - Partition, rename, swap, and index are synchronous operations, and a command return indicates that the execution is finished.
 :::
 
@@ -77,6 +79,10 @@ Syntax:
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 ```
+
+:::tip
+Currently, column comments cannot be modified.
+:::
 
 ### Modify partition
 
@@ -163,8 +169,8 @@ DROP TEMPORARY PARTITION <partition_name>
 
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
-    MODIFY PARTITION { <partition_name> | partition_name_list | (*) }
-        SET ("key" = "value", ...);
+MODIFY PARTITION { <partition_name> | ( <partition1_name> [, <partition2_name> ...] ) | (*) }
+SET ("key" = "value", ...);
 ```
 
 **Usages**
@@ -218,8 +224,9 @@ Syntax:
 
   ```sql
   ALTER TABLE [<db_name>.]<tbl_name>
-  ADD COLUMN (column_name1 column_type [KEY | agg_type] DEFAULT "default_value" AFTER (column_name))
-  ADD COLUMN (column_name2 column_type [KEY | agg_type] DEFAULT "default_value" AFTER (column_name))
+  ADD COLUMN column_name1 column_type [KEY | agg_type] DEFAULT "default_value" AFTER column_name,
+  ADD COLUMN column_name2 column_type [KEY | agg_type] DEFAULT "default_value" AFTER column_name
+  [, ...]
   [TO rollup_index_name]
   [PROPERTIES ("key"="value", ...)]
   ```
@@ -415,7 +422,7 @@ Bitmap index supports the following modifications:
 Syntax:
 
 ```sql
- ALTER TABLE [<db_name>.]<tbl_name>
+ALTER TABLE [<db_name>.]<tbl_name>
 ADD INDEX index_name (column [, ...],) [USING BITMAP] [COMMENT 'balabala'];
 ```
 
@@ -457,8 +464,13 @@ Before v3.1, compaction is performed in two ways:
 Starting from v3.1, StarRocks offers a SQL interface for users to manually perform compaction by running SQL commands. They can choose a specific table or partition for compaction. This provides more flexibility and control over the compaction process.
 
 Syntax:
+```SQL
+ALTER TABLE <tbl_name> [ BASE | COMULATIVE ] COMPACT [ <partition_name> | ( <partition1_name> [, <partition2_name> ...] ) ]
+```
 
-```sql
+That is:
+
+```SQL
 -- Perform compaction on the entire table.
 ALTER TABLE <tbl_name> COMPACT
 

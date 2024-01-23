@@ -270,7 +270,7 @@ public class OperationType {
     public static final short OP_MODIFY_IN_MEMORY = 267;
 
     // global dict
-    public static final short OP_SET_FORBIT_GLOBAL_DICT = 268;
+    public static final short OP_SET_FORBIDDEN_GLOBAL_DICT = 268;
 
     // plugin 270~275
     public static final short OP_INSTALL_PLUGIN = 270;
@@ -416,6 +416,7 @@ public class OperationType {
     //Txn json format log
     public static final short OP_UPSERT_TRANSACTION_STATE_V2 = 12110;
     public static final short OP_SAVE_TRANSACTION_ID_V2 = 12111;
+    public static final short OP_UPSERT_TRANSACTION_STATE_BATCH = 12112;
 
     //colocate table json format log
     public static final short OP_COLOCATE_ADD_TABLE_V2 = 12130;
@@ -485,6 +486,9 @@ public class OperationType {
 
     // alter catalog
     public static final short OP_ALTER_CATALOG = 13300;
+
+    // Replication job
+    public static final short OP_REPLICATION_JOB = 13500;
 
     /**
      * NOTICE: OperationType cannot use a value exceeding 20000, and an error will be reported if it exceeds

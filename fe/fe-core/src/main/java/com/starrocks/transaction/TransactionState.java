@@ -57,7 +57,10 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.Backend;
 import com.starrocks.task.PublishVersionTask;
+import com.starrocks.thrift.TOlapTablePartition;
 import com.starrocks.thrift.TPartitionVersionInfo;
+import com.starrocks.thrift.TTabletLocation;
+import com.starrocks.thrift.TTxnType;
 import com.starrocks.thrift.TUniqueId;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.StatusCode;
@@ -75,6 +78,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import javax.validation.constraints.NotNull;
@@ -101,7 +105,8 @@ public class TransactionState implements Writable {
         DELETE(6),                     // synchronization delete job use this type
         LAKE_COMPACTION(7),            // compaction of LakeTable
         FRONTEND_STREAMING(8),          // FE streaming load use this type
-        MV_REFRESH(9);                  // Refresh MV
+        MV_REFRESH(9),                  // Refresh MV
+        REPLICATION(10);                // Replication
 
         private final int flag;
 
@@ -133,6 +138,8 @@ public class TransactionState implements Writable {
                     return FRONTEND_STREAMING;
                 case 9:
                     return MV_REFRESH;
+                case 10:
+                    return REPLICATION;
                 default:
                     return null;
             }
@@ -305,6 +312,12 @@ public class TransactionState implements Writable {
     private String traceParent = null;
     private Set<TabletCommitInfo> tabletCommitInfos = null;
 
+    // For a transaction, we need to ensure that different clients obtain consistent partition information,
+    // to avoid inconsistencies caused by replica migration and other operations during the transaction process.
+    // Therefore, a snapshot of this information is maintained here.
+    private ConcurrentMap<String, TOlapTablePartition> partitionNameToTPartition = Maps.newConcurrentMap();
+    private ConcurrentMap<Long, TTabletLocation> tabletIdToTTabletLocation = Maps.newConcurrentMap();
+
     public TransactionState() {
         this.dbId = -1;
         this.tableIdList = Lists.newArrayList();
@@ -375,18 +388,22 @@ public class TransactionState implements Writable {
     public boolean tabletCommitInfosContainsReplica(long tabletId, long backendId, ReplicaState state) {
         TabletCommitInfo info = new TabletCommitInfo(tabletId, backendId);
         if (this.tabletCommitInfos == null) {
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
-            // if tabletCommitInfos is null, skip this check and return true
-            LOG.warn("tabletCommitInfos is null in TransactionState, tabletid {} backend {} transid {}",
-                    tabletId, backend != null ? backend.toString() : "", transactionId);
+            if (LOG.isDebugEnabled()) {
+                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+                // if tabletCommitInfos is null, skip this check and return true
+                LOG.debug("tabletCommitInfos is null in TransactionState, tabletid {} backend {} transid {}",
+                        tabletId, backend != null ? backend.toString() : "", transactionId);
+            }
             return true;
         }
         if (state != ReplicaState.NORMAL) {
             // Skip check when replica is CLONE, ALTER or SCHEMA CHANGE
             // We handle version missing in finishTask when change state to NORMAL
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
-            LOG.debug("skip tabletCommitInfos check because tablet {} backend {} is in state {}",
-                    tabletId, backend != null ? backend.toString() : "", state);
+            if (LOG.isDebugEnabled()) {
+                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+                LOG.debug("skip tabletCommitInfos check because tablet {} backend {} is in state {}",
+                        tabletId, backend != null ? backend.toString() : "", state);
+            }
             return true;
         }
         return this.tabletCommitInfos.contains(info);
@@ -480,13 +497,13 @@ public class TransactionState implements Writable {
 
         // after status changed
         if (transactionStatus == TransactionStatus.VISIBLE) {
-            if (MetricRepo.isInit) {
+            if (MetricRepo.hasInit) {
                 MetricRepo.COUNTER_TXN_SUCCESS.increase(1L);
             }
             txnSpan.addEvent("set_visible");
             txnSpan.end();
         } else if (transactionStatus == TransactionStatus.ABORTED) {
-            if (MetricRepo.isInit) {
+            if (MetricRepo.hasInit) {
                 MetricRepo.COUNTER_TXN_FAILED.increase(1L);
             }
             txnSpan.setAttribute("state", "aborted");
@@ -747,6 +764,10 @@ public class TransactionState implements Writable {
         return sourceType;
     }
 
+    public TTxnType getTxnType() {
+        return sourceType == LoadJobSourceType.REPLICATION ? TTxnType.TXN_REPLICATION : TTxnType.TXN_NORMAL;
+    }
+
     public Map<Long, PublishVersionTask> getPublishVersionTasks() {
         return publishVersionTasks;
     }
@@ -956,7 +977,8 @@ public class TransactionState implements Writable {
                     txnSpan,
                     createTime,
                     this,
-                    Config.enable_sync_publish);
+                    Config.enable_sync_publish,
+                    this.getTxnType());
             this.addPublishVersionTask(backendId, task);
             tasks.add(task);
         }
@@ -1043,4 +1065,18 @@ public class TransactionState implements Writable {
     public String getTraceParent() {
         return traceParent;
     }
+
+    public ConcurrentMap<String, TOlapTablePartition> getPartitionNameToTPartition() {
+        return partitionNameToTPartition;
+    }
+
+    public ConcurrentMap<Long, TTabletLocation> getTabletIdToTTabletLocation() {
+        return tabletIdToTTabletLocation;
+    }
+
+    public void clearAutomaticPartitionSnapshot() {
+        partitionNameToTPartition.clear();
+        tabletIdToTTabletLocation.clear();
+    }
+
 }

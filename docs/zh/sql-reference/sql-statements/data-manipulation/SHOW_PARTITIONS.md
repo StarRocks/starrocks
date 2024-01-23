@@ -47,6 +47,7 @@ SHOW [TEMPORARY] PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT]
 | DataSize                 | 分区中数据大小。                                             |
 | IsInMemory               | 该分区数据是否全部存储在内存中。                             |
 | RowCount                 | 该分区数据行数。                                             |
+| MaxCS                    | 该分区最大 Compaction Score。仅限存算分离集群。                   |
 
 ## 示例
 

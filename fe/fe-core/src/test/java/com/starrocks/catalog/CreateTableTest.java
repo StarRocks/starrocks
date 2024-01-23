@@ -83,7 +83,7 @@ public class CreateTableTest {
 
     private static void createTable(String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
     }
 
     private static void alterTableWithNewParser(String sql) throws Exception {
@@ -578,7 +578,7 @@ public class CreateTableTest {
         ExceptionChecker.expectThrowsNoException(
                 () -> createTable("create table test.tmp1\n" + "(k1 int, k2 int)\n"));
         ExceptionChecker.expectThrowsNoException(
-                () -> createTable("create table test.tmp2\n" + "(k1 int, k2 float)\n"));
+                () -> createTable("create table test.tmp2\n" + "(k1 int, k2 float) PROPERTIES(\"replication_num\" = \"1\");\n"));
         ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Data type of first column cannot be HLL",
                 () -> createTable("create table test.tmp3\n" + "(k1 hll, k2 float)\n"));
     }
@@ -600,7 +600,7 @@ public class CreateTableTest {
                 .getTable("aggregate_table_sum");
         String columns = table.getColumns().toString();
         System.out.println("columns = " + columns);
-        Assert.assertTrue(columns.contains("`sum_decimal` decimal128(38, 4) SUM"));
+        Assert.assertTrue(columns.contains("`sum_decimal` decimal(38, 4) SUM"));
         Assert.assertTrue(columns.contains("`sum_bigint` bigint(20) SUM "));
     }
 
@@ -1214,7 +1214,7 @@ public class CreateTableTest {
         ));
 
         // column types do not match
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
                 "processing constraint failed when creating table",
                 () -> createTable(
                         "CREATE TABLE test.base_table2(\n" +
@@ -1239,7 +1239,7 @@ public class CreateTableTest {
                 ));
 
         // key size does not match
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
                 "processing constraint failed when creating table",
                 () -> createTable(
                         "CREATE TABLE test.base_table2(\n" +
@@ -1261,7 +1261,7 @@ public class CreateTableTest {
                                 ");"
                 ));
 
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
                 "processing constraint failed when creating table",
                 () -> createTable(
                         "CREATE TABLE test.base_table2(\n" +
@@ -1286,7 +1286,7 @@ public class CreateTableTest {
         ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
                 "Not support MAXVALUE in multi partition range values.",
                 () -> createTable(
-                        "create table test_multi_partition_max_value (\n" +
+                        "create table test.test_multi_partition_max_value (\n" +
                                 "f1 bigint, f2 date, f3 string, f4 bigint\n" +
                                 ")\n" +
                                 "partition by range(f1, f2, f4) (\n" +

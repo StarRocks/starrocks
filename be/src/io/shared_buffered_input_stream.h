@@ -26,6 +26,7 @@ namespace starrocks::io {
 class SharedBufferedInputStream : public SeekableInputStream {
 public:
     struct IORange {
+        IORange(const int64_t offset, const int64_t size) : offset(offset), size(size) {}
         int64_t offset;
         int64_t size;
         bool operator<(const IORange& x) const { return offset < x.offset; }

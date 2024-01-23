@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
@@ -88,7 +89,16 @@ public class Utils {
         return list;
     }
 
-    private static void extractConjunctsImpl(ScalarOperator root, List<ScalarOperator> result) {
+    public static Set<ScalarOperator> extractConjunctSet(ScalarOperator root) {
+        Set<ScalarOperator> list = Sets.newHashSet();
+        if (null == root) {
+            return list;
+        }
+        extractConjunctsImpl(root, list);
+        return list;
+    }
+
+    private static void extractConjunctsImpl(ScalarOperator root, Collection<ScalarOperator> result) {
         if (!OperatorType.COMPOUND.equals(root.getOpType())) {
             result.add(root);
             return;
@@ -599,6 +609,30 @@ public class Utils {
             }
         }
         return false;
+    }
+
+    public static boolean isNotAlwaysNullResultWithNullScalarOperator(ScalarOperator scalarOperator) {
+        for (ScalarOperator child : scalarOperator.getChildren()) {
+            if (isNotAlwaysNullResultWithNullScalarOperator(child)) {
+                return true;
+            }
+        }
+
+        if (scalarOperator.isColumnRef() || scalarOperator.isConstantRef() || scalarOperator instanceof CastOperator) {
+            return false;
+        } else if (scalarOperator instanceof CallOperator) {
+            Function fn = ((CallOperator) scalarOperator).getFunction();
+            if (fn == null) {
+                return true;
+            }
+            if (!GlobalStateMgr.getCurrentState()
+                    .isNotAlwaysNullResultWithNullParamFunction(fn.getFunctionName().getFunction())
+                    && !fn.isUdf()
+                    && !FunctionSet.ASSERT_TRUE.equals(fn.getFunctionName().getFunction())) {
+                return false;
+            }
+        }
+        return true;
     }
 
     // RoaringBitmap can be considered as a Set<Integer> contains only unsigned integers,

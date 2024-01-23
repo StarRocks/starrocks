@@ -40,6 +40,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.staros.starlet.StarletAgentFactory;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.Database;
@@ -50,11 +51,13 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LogUtil;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.hive.ReplayMetadataMgr;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalEntity;
@@ -69,6 +72,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.PlannerProfile;
@@ -105,6 +109,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TResultSinkType;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.codec.binary.Hex;
 import org.junit.Assert;
 
@@ -210,7 +215,7 @@ public class UtFrameUtils {
         return statementBase;
     }
 
-    private static void startFEServer(String runningDir, boolean startBDB) throws Exception {
+    private static void startFEServer(String runningDir, boolean startBDB, RunMode runMode) throws Exception {
         // get STARROCKS_HOME
         String starRocksHome = System.getenv("STARROCKS_HOME");
         if (Strings.isNullOrEmpty(starRocksHome)) {
@@ -218,29 +223,47 @@ public class UtFrameUtils {
         }
 
         Config.plugin_dir = starRocksHome + "/plugins";
+        Config.max_create_table_timeout_second = 180;
         // start fe in "STARROCKS_HOME/fe/mocked/"
         MockedFrontend frontend = MockedFrontend.getInstance();
         Map<String, String> feConfMap = Maps.newHashMap();
+        // TODO: support startBDB = false in shared-data mode
+        if (!startBDB && runMode == RunMode.SHARED_DATA) {
+            throw new NotImplementedException("Have to set 'startBDB = true' when creating a shared-data cluster");
+        }
         // set additional fe config
-
         if (startBDB) {
             feConfMap.put("edit_log_port", String.valueOf(findValidPort()));
         }
+
+        feConfMap.put("run_mode", runMode.getName());
+        if (runMode == RunMode.SHARED_DATA) {
+            feConfMap.put("cloud_native_meta_port", String.valueOf(findValidPort()));
+            feConfMap.put("enable_load_volume_from_conf", "true");
+            feConfMap.put("cloud_native_storage_type", "S3");
+            feConfMap.put("aws_s3_path", "dummy_unittest_bucket/dummy_sub_path");
+            feConfMap.put("aws_s3_region", "dummy_region");
+            feConfMap.put("aws_s3_endpoint", "http://localhost:55555");
+            feConfMap.put("aws_s3_access_key", "dummy_access_key");
+            feConfMap.put("aws_s3_secret_key", "dummy_secret_key");
+            // turn on mock starletAgent inside StarOS
+            StarletAgentFactory.forTest = true;
+        }
         feConfMap.put("tablet_create_timeout_second", "10");
         frontend.init(starRocksHome + "/" + runningDir, feConfMap);
-        frontend.start(startBDB, new String[0]);
+        frontend.start(startBDB, runMode, new String[0]);
     }
 
-    public static synchronized void createMinStarRocksCluster(boolean startBDB) {
+    public static synchronized void createMinStarRocksCluster(boolean startBDB, RunMode runMode) {
         // to avoid call createMinStarRocksCluster multiple times
         if (CREATED_MIN_CLUSTER.get()) {
             return;
         }
         try {
-            ClientPool.heartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
+            ClientPool.beHeartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
             ClientPool.backendPool = new MockGenericPool.BackendThriftPool("backend");
 
-            startFEServer("fe/mocked/test/" + UUID.randomUUID().toString() + "/", startBDB);
+            startFEServer("fe/mocked/test/" + UUID.randomUUID().toString() + "/", startBDB, runMode);
 
             addMockBackend(10001);
 
@@ -257,7 +280,14 @@ public class UtFrameUtils {
     }
 
     public static void createMinStarRocksCluster() {
-        createMinStarRocksCluster(false);
+        createMinStarRocksCluster(false, RunMode.SHARED_NOTHING);
+    }
+
+    // create a min starrocks cluster with the given runMode
+    public static void createMinStarRocksCluster(RunMode runMode) {
+        // TODO: support creating shared-data cluster without the real BDBJE journal
+        boolean startBdb = (runMode == RunMode.SHARED_DATA);
+        createMinStarRocksCluster(startBdb, runMode);
     }
 
     public static Backend addMockBackend(int backendId) throws Exception {
@@ -277,8 +307,15 @@ public class UtFrameUtils {
         be.setBePort(backend.getBeThriftPort());
         be.setBrpcPort(backend.getBrpcPort());
         be.setHttpPort(backend.getHttpPort());
+        be.setStarletPort(backend.getStarletPort());
         GlobalStateMgr.getCurrentSystemInfo().addBackend(be);
-
+        if (RunMode.isSharedDataMode()) {
+            int starletPort = backend.getStarletPort();
+            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+            long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
+            String workerAddress = backend.getHost() + ":" + starletPort;
+            GlobalStateMgr.getCurrentStarOSAgent().addWorker(be.getId(), workerAddress, workerGroupId);
+        }
         return be;
     }
 
@@ -394,14 +431,19 @@ public class UtFrameUtils {
 
     public static Pair<String, ExecPlan> getPlanAndFragment(ConnectContext connectContext, String originStmt)
             throws Exception {
-        connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
+        if (connectContext.getSessionVariable().getEnableQueryDump()) {
+            connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
+            connectContext.getDumpInfo().setOriginStmt(originStmt);
+        }
         originStmt = LogUtil.removeLineSeparator(originStmt);
 
         List<StatementBase> statements;
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Parser")) {
             statements = SqlParser.parse(originStmt, connectContext.getSessionVariable());
         }
-        connectContext.getDumpInfo().setOriginStmt(originStmt);
+        if (connectContext.getDumpInfo() != null) {
+            connectContext.getDumpInfo().setOriginStmt(originStmt);
+        }
         SessionVariable oldSessionVariable = connectContext.getSessionVariable();
         StatementBase statementBase = statements.get(0);
 
@@ -459,7 +501,8 @@ public class UtFrameUtils {
                                     connectContext.getSessionVariable().getSqlMode()).get(0);
                     com.starrocks.sql.analyzer.Analyzer.analyze(viewStatement, connectContext);
                 } catch (Exception e) {
-                    System.out.println(e.getMessage());
+                    System.out.println("invalid view def: " + createTableStmt.getInlineViewDef()
+                            + "\nError msg:"  + e.getMessage());
                     throw e;
                 }
             } catch (SemanticException | AnalysisException e) {
@@ -663,6 +706,35 @@ public class UtFrameUtils {
         ExecPlan execPlan = new InsertPlanner().plan(statement, connectContext);
         t.close();
         return new Pair<>(LogicalPlanPrinter.print(execPlan.getPhysicalPlan()), execPlan);
+    }
+
+    public static String setUpTestDump(ConnectContext connectContext, QueryDumpInfo replayDumpInfo) throws Exception {
+        String replaySql = initMockEnv(connectContext, replayDumpInfo);
+        replaySql = LogUtil.removeLineSeparator(replaySql);
+        return replaySql;
+    }
+
+    public static Pair<String, ExecPlan> replaySql(ConnectContext connectContext, String sql) throws Exception {
+        StatementBase statementBase;
+        statementBase = com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+        if (statementBase instanceof QueryStatement) {
+            replaceTableCatalogName(statementBase);
+        }
+
+        com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, connectContext);
+
+        if (statementBase instanceof QueryStatement) {
+            return getQueryExecPlan((QueryStatement) statementBase, connectContext);
+        } else if (statementBase instanceof InsertStmt) {
+            return getInsertExecPlan((InsertStmt) statementBase, connectContext);
+        } else {
+            Preconditions.checkState(false, "Do not support the statement");
+            return null;
+        }
+    }
+
+    public static void tearDownTestDump() {
+        tearMockEnv();
     }
 
     public static Pair<String, ExecPlan> getNewPlanAndFragmentFromDump(ConnectContext connectContext,
@@ -902,6 +974,7 @@ public class UtFrameUtils {
         ctx.setCurrentUserIdentity(userIdentity);
         ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
         ctx.setQualifiedUser(userIdentity.getUser());
+        ctx.setQueryId(UUIDUtil.genUUID());
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         globalStateMgr.initAuth(true);
         ctx.setGlobalStateMgr(globalStateMgr);

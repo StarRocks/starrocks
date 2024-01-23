@@ -25,6 +25,7 @@ public class TaskRunBuilder {
     private Map<String, String> properties;
     private Constants.TaskType type;
     private ConnectContext connectContext;
+    private ExecuteOption executeOption = new ExecuteOption();
 
     public static TaskRunBuilder newBuilder(Task task) {
         return new TaskRunBuilder(task);
@@ -47,6 +48,7 @@ public class TaskRunBuilder {
         taskRun.setProperties(mergeProperties());
         taskRun.setTask(task);
         taskRun.setType(getTaskType());
+        taskRun.setExecuteOption(executeOption);
         if (task.getSource().equals(Constants.TaskSource.MV)) {
             taskRun.setProcessor(new PartitionBasedMvRefreshProcessor());
         } else {
@@ -56,7 +58,11 @@ public class TaskRunBuilder {
     }
 
     private Constants.TaskType getTaskType() {
-        return type != null ? type : task.getType();
+        if (executeOption.isManual()) {
+            return Constants.TaskType.MANUAL;
+        } else {
+            return task.getType();
+        }
     }
 
     private Map<String, String> mergeProperties() {
@@ -86,5 +92,14 @@ public class TaskRunBuilder {
 
     public Long getTaskId() {
         return task.getId();
+    }
+
+    public ExecuteOption getExecuteOption() {
+        return executeOption;
+    }
+
+    public TaskRunBuilder setExecuteOption(ExecuteOption executeOption) {
+        this.executeOption = executeOption;
+        return this;
     }
 }

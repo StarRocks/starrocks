@@ -70,12 +70,12 @@ from t_hash t0 join t_random t1 on t0.k1 = t1.k1;
 -- !result
 SHOW CREATE MATERIALIZED VIEW mv1;
 -- result:
-mv1	CREATE MATERIALIZED VIEW `mv1` (k1, v1)
+mv1	CREATE MATERIALIZED VIEW `mv1` (`k1`, `v1`)
 DISTRIBUTED BY RANDOM
 REFRESH ASYNC
 PROPERTIES (
-"replication_num" = "1",
 "replicated_storage" = "true",
+"replication_num" = "1",
 "storage_medium" = "HDD"
 )
 AS SELECT `t0`.`k1`, `t1`.`v1`
@@ -89,12 +89,12 @@ select k1, count(v1)  from t_random group by k1;
 -- !result
 SHOW CREATE MATERIALIZED VIEW mv2;
 -- result:
-mv2	CREATE MATERIALIZED VIEW `mv2` (k1, count(v1))
+mv2	CREATE MATERIALIZED VIEW `mv2` (`k1`, `count(v1)`)
 DISTRIBUTED BY RANDOM
 REFRESH ASYNC
 PROPERTIES (
-"replication_num" = "1",
 "replicated_storage" = "true",
+"replication_num" = "1",
 "storage_medium" = "HDD"
 )
 AS SELECT `t_random`.`k1`, count(`t_random`.`v1`) AS `count(v1)`
@@ -110,12 +110,12 @@ from t_hash t0 join t1 on t0.k1 = t1.k1;
 -- !result
 SHOW CREATE MATERIALIZED VIEW mv3;
 -- result:
-mv3	CREATE MATERIALIZED VIEW `mv3` (k1, v1)
+mv3	CREATE MATERIALIZED VIEW `mv3` (`k1`, `v1`)
 DISTRIBUTED BY RANDOM
 REFRESH ASYNC
 PROPERTIES (
-"replication_num" = "1",
 "replicated_storage" = "true",
+"replication_num" = "1",
 "storage_medium" = "HDD"
 )
 AS SELECT `t0`.`k1`, `t1`.`v1`
@@ -130,12 +130,12 @@ from t_random t0 join t1 on t0.k1 = t1.k1;
 -- !result
 SHOW CREATE MATERIALIZED VIEW mv4;
 -- result:
-mv4	CREATE MATERIALIZED VIEW `mv4` (k1, v1)
+mv4	CREATE MATERIALIZED VIEW `mv4` (`k1`, `v1`)
 DISTRIBUTED BY RANDOM
 REFRESH ASYNC
 PROPERTIES (
-"replication_num" = "1",
 "replicated_storage" = "true",
+"replication_num" = "1",
 "storage_medium" = "HDD"
 )
 AS SELECT `t0`.`k1`, `t1`.`v1`
@@ -150,12 +150,12 @@ from t1 join t2 on t1.k1 = t2.k1;
 -- !result
 SHOW CREATE MATERIALIZED VIEW mv_part1;
 -- result:
-mv_part1	CREATE MATERIALIZED VIEW `mv_part1` (k1, v1)
+mv_part1	CREATE MATERIALIZED VIEW `mv_part1` (`k1`, `v1`)
 DISTRIBUTED BY RANDOM
 REFRESH ASYNC
 PROPERTIES (
-"replication_num" = "1",
 "replicated_storage" = "true",
+"replication_num" = "1",
 "storage_medium" = "HDD"
 )
 AS SELECT `t1`.`k1`, `t2`.`v1`
@@ -176,13 +176,13 @@ select k1, v1, v2 from t2;
 -- !result
 SHOW CREATE MATERIALIZED VIEW mv5;
 -- result:
-mv5	CREATE MATERIALIZED VIEW `mv5` (k1, v1, v2)
+mv5	CREATE MATERIALIZED VIEW `mv5` (`k1`, `v1`, `v2`)
 PARTITION BY (`k1`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 2 
 REFRESH ASYNC
 PROPERTIES (
-"replication_num" = "1",
 "replicated_storage" = "true",
+"replication_num" = "1",
 "storage_medium" = "HDD"
 )
 AS SELECT `t1`.`k1`, `t1`.`v1`, `t1`.`v2`
@@ -204,13 +204,13 @@ select k1, v1, v2 from t2;
 -- !result
 SHOW CREATE MATERIALIZED VIEW mv6;
 -- result:
-mv6	CREATE MATERIALIZED VIEW `mv6` (k1, v1, v2)
+mv6	CREATE MATERIALIZED VIEW `mv6` (`k1`, `v1`, `v2`)
 PARTITION BY (`k1`)
 DISTRIBUTED BY RANDOM
 REFRESH ASYNC
 PROPERTIES (
-"replication_num" = "1",
 "replicated_storage" = "true",
+"replication_num" = "1",
 "storage_medium" = "HDD"
 )
 AS SELECT `t1`.`k1`, `t1`.`v1`, `t1`.`v2`

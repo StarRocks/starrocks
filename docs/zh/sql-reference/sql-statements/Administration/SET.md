@@ -8,6 +8,12 @@ displayed_sidebar: "Chinese"
 
 为 StarRocks 设置指定的系统变量或用户自定义变量。您可以通过 [SHOW VARIABLES](../Administration/SHOW_VARIABLES.md) 查看 StarRocks 的系统变量。有关系统变量的详细信息，请参阅[系统变量](../../../reference/System_variable.md)。有关用户自定义变量的详细信息，请参阅[用户自定义变量](../../../reference/user_defined_variables.md)。
 
+:::tip
+
+该操作不需要权限。
+
+:::
+
 ## 语法
 
 ```SQL

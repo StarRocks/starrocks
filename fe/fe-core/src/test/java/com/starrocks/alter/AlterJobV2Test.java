@@ -310,7 +310,6 @@ public class AlterJobV2Test {
             }
 
             {
-                // TODO: How to distinguish columns used by MV?
                 // modify column which define in mv
                 String alterStmtStr = "alter table test.modify_column_test4 modify column k2 varchar(30) ";
                 AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr,
@@ -320,7 +319,9 @@ public class AlterJobV2Test {
                 waitForSchemaChangeAlterJobFinish();
                 MaterializedView mv = (MaterializedView) GlobalStateMgr
                         .getCurrentState().getDb("test").getTable("mv4");
-                Assert.assertTrue(mv.isActive());
+                Assert.assertFalse(mv.isActive());
+                System.out.println(mv.getInactiveReason());
+                Assert.assertTrue(mv.getInactiveReason().contains("base table schema changed for columns: k2"));
             }
         } catch (Exception e) {
             Assert.fail();

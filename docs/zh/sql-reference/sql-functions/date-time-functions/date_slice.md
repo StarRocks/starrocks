@@ -21,7 +21,7 @@ DATE date_slice(DATE dt, INTERVAL N type[, boundary])
 - `dt`：需要转化的时间。支持的数据类型为 DATE。
 - `INTERVAL N type`：时间粒度周期，例如 `interval 5 day` 表示时间粒度为 5 天。
   - `N` 是 INT 类型的时间周期的长度。
-  - `type` 是时间粒度周期的单位，取值可以是 YEAR，QUARTER，MONTH，WEEK，DAY。 对于 DATE 类型的输入值，`type` 不能为时分秒，否则返回报错。
+  - `type` 是时间粒度周期的单位，取值可以是 YEAR，QUARTER，MONTH，WEEK，DAY，HOUR，MINUTE，SECOND。 对于 DATE 类型的输入值，`type` 不能为时分秒，否则返回报错。
 - `boundary`：可选，用于指定返回时间周期的起始时刻 (FLOOR) 还是结束时刻 (CEIL)。取值范围：FLOOR，CEIL。如果不指定，默认为 FLOOR。
 
 ## 返回值说明

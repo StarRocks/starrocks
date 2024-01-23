@@ -47,7 +47,6 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
-import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ResourceGroup;
@@ -75,8 +74,6 @@ import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.RuntimeProfileParser;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.connector.ConnectorMetadata;
-import com.starrocks.connector.exception.RemoteFileNotFoundException;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.InsertOverwriteJob;
 import com.starrocks.load.InsertOverwriteJobMgr;
@@ -91,7 +88,6 @@ import com.starrocks.mysql.MysqlEofPacket;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
@@ -101,8 +97,6 @@ import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.QueryStatisticsItemPB;
 import com.starrocks.qe.QueryState.MysqlStateType;
-import com.starrocks.rpc.RpcException;
-import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ExplainAnalyzer;
@@ -515,8 +509,11 @@ public class StmtExecutor {
                 Preconditions.checkNotNull(execPlan, "query must has a plan");
 
                 int retryTime = Config.max_query_retry_time;
+                ExecuteExceptionHandler.RetryContext retryContext =
+                        new ExecuteExceptionHandler.RetryContext(0, execPlan, context, parsedStmt);
                 for (int i = 0; i < retryTime; i++) {
                     boolean needRetry = false;
+                    retryContext.setRetryTime(i);
                     try {
                         //reset query id for each retry
                         if (i > 0) {
@@ -529,41 +526,13 @@ public class StmtExecutor {
 
                         Preconditions.checkState(execPlanBuildByNewPlanner, "must use new planner");
 
-                        handleQueryStmt(execPlan);
+                        handleQueryStmt(retryContext.getExecPlan());
                         break;
-                    } catch (RemoteFileNotFoundException e) {
-                        // If modifications are made to the partition files of a Hive table by user,
-                        // such as through "insert overwrite partition", the Frontend couldn't be aware of these changes.
-                        // As a result, queries may use the file information cached in the FE for execution.
-                        // When the Backend cannot find the corresponding files, it returns a "Status::ACCESS_REMOTE_FILE_ERROR."
-                        // To handle this exception, we perform a retry. Before initiating the retry, we need to
-                        // refresh the metadata cache for the table and clear the query-level metadata cache.
+                    } catch (Exception e) {
                         if (i == retryTime - 1) {
                             throw e;
                         }
-
-                        List<ScanNode> scanNodes = execPlan.getScanNodes();
-                        boolean existExternalCatalog = false;
-                        for (ScanNode scanNode : scanNodes) {
-                            if (scanNode instanceof HdfsScanNode) {
-                                HiveTable hiveTable = ((HdfsScanNode) scanNode).getHiveTable();
-                                String catalogName = hiveTable.getCatalogName();
-                                if (CatalogMgr.isExternalCatalog(catalogName)) {
-                                    existExternalCatalog = true;
-                                    ConnectorMetadata metadata = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                                            .getOptionalMetadata(hiveTable.getCatalogName()).get();
-                                    // refresh catalog level metadata cache
-                                    metadata.refreshTable(hiveTable.getDbName(), hiveTable, new ArrayList<>(), true);
-                                    // clear query level metadata cache
-                                    metadata.clear();
-                                }
-                            }
-                        }
-
-                        if (!existExternalCatalog) {
-                            throw e;
-                        }
-
+                        ExecuteExceptionHandler.handle(e, retryContext);
                         if (!context.getMysqlChannel().isSend()) {
                             String originStmt;
                             if (parsedStmt.getOrigStmt() != null) {
@@ -577,36 +546,16 @@ public class StmtExecutor {
                             throw e;
                         }
                         PlannerProfile.addCustomProperties("HMS.RETRY", String.valueOf(i + 1));
-                    } catch (RpcException e) {
-                        // When enable_collect_query_detail_info is set to true, the plan will be recorded in the query detail,
-                        // and hence there is no need to log it here.
-                        if (i == 0 && context.getQueryDetail() == null && Config.log_plan_cancelled_by_crash_be) {
-                            LOG.warn("Query cancelled by crash of backends or RpcException, [QueryId={}] [SQL={}] [Plan={}]",
-                                    DebugUtil.printId(context.getExecutionId()),
-                                    originStmt == null ? "" : originStmt.originStmt,
-                                    execPlan.getExplainString(TExplainLevel.COSTS),
-                                    e);
-                        }
-                        if (i == retryTime - 1) {
-                            throw e;
-                        }
-                        if (!context.getMysqlChannel().isSend()) {
-                            String originStmt;
-                            if (parsedStmt.getOrigStmt() != null) {
-                                originStmt = parsedStmt.getOrigStmt().originStmt;
-                            } else {
-                                originStmt = this.originStmt.originStmt;
-                            }
-                            needRetry = true;
-                            LOG.warn("retry {} times. stmt: {}", (i + 1), originStmt);
-                        } else {
-                            throw e;
-                        }
                     } finally {
                         boolean isAsync = false;
-                        if (!needRetry) {
+                        if (needRetry) {
+                            // If the runtime profile is enabled, then we need to clean up the profile record related
+                            // to this failed execution.
+                            String queryId = DebugUtil.printId(context.getExecutionId());
+                            ProfileManager.getInstance().removeProfile(queryId);
+                        } else {
                             if (context.isProfileEnabled()) {
-                                isAsync = tryProcessProfileAsync(execPlan);
+                                isAsync = tryProcessProfileAsync(execPlan, i);
                                 if (parsedStmt.isExplain() &&
                                         StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
                                     handleExplainStmt(ExplainAnalyzer.analyze(
@@ -682,21 +631,22 @@ public class StmtExecutor {
             // the exception happens when interact with client
             // this exception shows the connection is gone
             context.getState().setError(e.getMessage());
-            throw e;
         } catch (UserException e) {
             String sql = originStmt != null ? originStmt.originStmt : "";
             // analysis exception only print message, not print the stack
             LOG.info("execute Exception, sql: {}, error: {}", sql, e.getMessage());
             context.getState().setError(e.getMessage());
-            context.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+            if (parsedStmt instanceof KillStmt) {
+                // ignore kill stmt execute err(not monitor it)
+                context.getState().setErrType(QueryState.ErrType.IGNORE_ERR);
+            } else {
+                context.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+            }
         } catch (Throwable e) {
             String sql = originStmt != null ? originStmt.originStmt : "";
             LOG.warn("execute Exception, sql " + sql, e);
             context.getState().setError(e.getMessage());
-            if (parsedStmt instanceof KillStmt) {
-                // ignore kill stmt execute err(not monitor it)
-                context.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
-            }
+            context.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
         } finally {
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
             if (context.getState().isError() && coord != null) {
@@ -775,10 +725,18 @@ public class StmtExecutor {
         leaderOpExecutor.execute();
     }
 
-    private boolean tryProcessProfileAsync(ExecPlan plan) {
-        if (coord == null || coord.getQueryProfile() == null) {
+    private boolean tryProcessProfileAsync(ExecPlan plan, int retryIndex) {
+        if (coord == null) {
             return false;
         }
+
+        // Disable runtime profile processing after the query is finished.
+        coord.setTopProfileSupplier(null);
+
+        if (coord.getQueryProfile() == null) {
+            return false;
+        }
+
         // This process will get information from the context, so it must be executed synchronously.
         // Otherwise, the context may be changed, for example, containing the wrong query id.
         profile = buildTopLevelProfile();
@@ -803,6 +761,9 @@ public class StmtExecutor {
             long totalTimeMs = now - startTime;
             summaryProfile.addInfoString(ProfileManager.END_TIME, TimeUtils.longToTimeString(now));
             summaryProfile.addInfoString(ProfileManager.TOTAL_TIME, DebugUtil.getPrettyStringMs(totalTimeMs));
+            if (retryIndex > 0) {
+                summaryProfile.addInfoString(ProfileManager.RETRY_TIMES, Integer.toString(retryIndex + 1));
+            }
 
             ProfilingExecPlan profilingPlan = plan == null ? null : plan.getProfilingPlan();
             String profileContent = ProfileManager.getInstance().pushProfile(profilingPlan, profile);
@@ -1561,7 +1522,7 @@ public class StmtExecutor {
         } finally {
             boolean isAsync = false;
             if (context.isProfileEnabled()) {
-                isAsync = tryProcessProfileAsync(execPlan);
+                isAsync = tryProcessProfileAsync(execPlan, 0);
                 if (parsedStmt.isExplain() &&
                         StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
                     handleExplainStmt(ExplainAnalyzer.analyze(ProfilingExecPlan.buildFrom(execPlan), profile, null));

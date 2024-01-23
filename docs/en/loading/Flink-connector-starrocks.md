@@ -16,7 +16,9 @@ The Flink connector supports DataStream API, Table API & SQL, and Python API. It
 
 | Connector | Flink                    | StarRocks     | Java | Scala     |
 |-----------|--------------------------|---------------| ---- |-----------|
-| 1.2.7     | 1.11,1.12,1.13,1.14,1.15 | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.9 | 1.15,1.16,1.17,1.18 | 2.1 and later| 8 | 2.11,2.12 |
+| 1.2.8     | 1.13,1.14,1.15,1.16,1.17 | 2.1 and later| 8    | 2.11,2.12 |
+| 1.2.7     | 1.11,1.12,1.13,1.14,1.15 | 2.1 and later| 8    | 2.11,2.12 |
 
 ## Obtain Flink connector
 
@@ -94,16 +96,16 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 | load-url                          | Yes          | NONE              | The HTTP URL of the FE in your StarRocks cluster. You can specify multiple URLs, which must be separated by a semicolon (;). Format: `<fe_host1>:<fe_http_port1>;<fe_host2>:<fe_http_port2>`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | database-name                     | Yes          | NONE              | The name of the StarRocks database into which you want to load data.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | table-name                        | Yes          | NONE              | The name of the table that you want to use to load data into StarRocks.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| username                          | Yes          | NONE              | The username of the account that you want to use to load data into StarRocks.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| username                          | Yes          | NONE              | The username of the account that you want to use to load data into StarRocks.  The account needs [SELECT and INSERT privileges](../sql-reference/sql-statements/account-management/GRANT.md).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | password                          | Yes          | NONE              | The password of the preceding account.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| sink.version                      | No           | AUTO              | The implementation to use. This parameter is supported from Flink connector version 1.2.4 onwards. <ul><li>`V1`: Use [Stream Load](../loading/StreamLoad.md) interface to load data. Connectors before 1.2.4 only support this mode. </li> <li>`V2`: Use [Transaction Stream Load](../loading/Stream_Load_transaction_interface.md) interface to load data. It requires StarRocks to be at least version 2.4. Recommends `V2` because it optimizes the memory usage and provides a more stable exactly-once implementation. </li> <li>`AUTO`: If the version of StarRocks supports transaction Stream Load, will choose `V2` automatically, otherwise choose `V1` </li></ul> |
-| sink.label-prefix                 | No           | NONE              | The label prefix used by Stream Load.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| sink.semantic                     | No           | at-least-once     | The semantics that is supported by your sink. Valid values: **at-least-once** and **exactly-once**.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| sink.semantic                     | No           | at-least-once     | The semantic  guaranteed by sink. Valid values: **at-least-once** and **exactly-once**.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| sink.version                      | No           | AUTO              | The interface used to load data. This parameter is supported from Flink connector version 1.2.4 onwards. <ul><li>`V1`: Use [Stream Load](../loading/StreamLoad.md) interface to load data. Connectors before 1.2.4 only support this mode. </li> <li>`V2`: Use [Stream Load transaction](../loading/Stream_Load_transaction_interface.md) interface to load data. It requires StarRocks to be at least version 2.4. Recommends `V2` because it optimizes the memory usage and provides a more stable exactly-once implementation. </li> <li>`AUTO`: If the version of StarRocks supports transaction Stream Load, will choose `V2` automatically, otherwise choose `V1` </li></ul> |
+| sink.label-prefix | No | NONE | The label prefix used by Stream Load. Recommend to configure it if you are using exactly-once with connector 1.2.8 and later. See [exactly-once usage notes](#exactly-once). |
 | sink.buffer-flush.max-bytes       | No           | 94371840(90M)     | The maximum size of data that can be accumulated in memory before being sent to StarRocks at a time. The maximum value ranges from 64 MB to 10 GB. Setting this parameter to a larger value can improve loading performance but may increase loading latency.                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | sink.buffer-flush.max-rows        | No           | 500000            | The maximum number of rows that can be accumulated in memory before being sent to StarRocks at a time. This parameter is available only when you set `sink.version` to `V1` and set `sink.semantic` to `at-least-once`. Valid values: 64000 to 5000000.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | sink.buffer-flush.interval-ms     | No           | 300000            | The interval at which data is flushed. This parameter is available only when you set `sink.semantic` to `at-least-once`. Valid values: 1000 to 3600000. Unit: ms.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | sink.max-retries                  | No           | 3                 | The number of times that the system retries to perform the Stream Load job. This parameter is available only when you set `sink.version` to `V1`. Valid values: 0 to 10.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| sink.connect.timeout-ms           | No           | 1000              | The timeout for establishing HTTP connection. Valid values: 100 to 60000. Unit: ms.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| sink.connect.timeout-ms           | No           | 30000              | The timeout for establishing HTTP connection. Valid values: 100 to 60000. Unit: ms. Before Flink connector v1.2.9, the default value is `1000`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | sink.wait-for-continue.timeout-ms | No           | 10000             | Supported since 1.2.7. The timeout for waiting response of HTTP 100-continue from the FE. Valid values: `3000` to `60000`. Unit: ms                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | sink.ignore.update-before         | No           | true              | Supported since version 1.2.8. Whether to ignore `UPDATE_BEFORE` records from Flink when loading data to Primary Key tables. If this parameter is set to false, the record is treated as a delete operation to StarRocks table.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | sink.properties.*                 | No           | NONE              | The parameters that are used to control Stream Load behavior. For example, the parameter `sink.properties.format` specifies the format used for Stream Load, such as CSV or JSON. For a list of supported parameters and their descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md).                                                                                                                                                                                                                                                                                                                                 |
@@ -112,6 +114,7 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 | sink.properties.column_separator  | No           | \t                | The column separator for CSV-formatted data.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | sink.properties.max_filter_ratio  | No           | 0                 | The maximum error tolerance of the Stream Load. It's the maximum percentage of data records that can be filtered out due to inadequate data quality. Valid values: `0` to `1`. Default value: `0`. See [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md) for details.                                                                                                                                                                                                                                                                                                                                                                      |
 | sink.parallelism                  | No           | NONE              | The parallelism of the connector. Only available for Flink SQL. If not set, Flink planner will decide the parallelism. In the scenario of multi-parallelism, users need to guarantee data is written in the correct order.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| sink.properties.strict_mode | No | false | Specifies whether to enable the strict mode for Stream Load. It affects the loading behavior when there are unqualified rows, such as inconsistent column values. Valid values: `true` and `false`. Default value: `false`. See [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md) for details. |
 
 ## Data type mapping between Flink and StarRocks
 
@@ -397,7 +400,7 @@ There are several ways to implement a Flink DataStream job according to the type
             .build();
 
     /**
-     * The connector will use a Java object array (Object[]) to represent a row to be loaded into the StarRocks table,
+     * The Flink connector will use a Java object array (Object[]) to represent a row to be loaded into the StarRocks table,
      * and each element is the value for a column.
      * You need to define the schema of the Object[] which matches that of the StarRocks table.
      */
@@ -434,6 +437,19 @@ There are several ways to implement a Flink DataStream job according to the type
         }
     }  
     ```
+
+### Synchronize data with Flink CDC 3.0 (with schema change supported)
+
+[Flink CDC 3.0](https://github.com/ververica/flink-cdc-connectors/releases) framework can be used
+to easily [build a streaming ELT pipeline from CDC sources](https://ververica.github.io/flink-cdc-connectors/master/content/overview/cdc-pipeline.html) (such as MySQL and Kafka) to StarRocks. The pipeline can synchronize whole database, merged sharding tables, and schema changes from sources to StarRocks.
+
+Since v1.2.9, the Flink connector for StarRocks is integrated into this framework as [StarRocks Pipeline Connector](https://ververica.github.io/flink-cdc-connectors/master/content/pipelines/starrocks-pipeline.html). The StarRocks Pipeline Connector supports:
+
+- Automatic creation of databases and tables
+- Schema change synchronization
+- Full and incremental data synchronization
+
+For quick start, see [Streaming ELT from MySQL to StarRocks using Flink CDC 3.0 with StarRocks Pipeline Connector](https://ververica.github.io/flink-cdc-connectors/master/content/quickstart/mysql-starrocks-pipeline-tutorial.html).
 
 ## Best practices
 
@@ -568,30 +584,31 @@ takes effect only when the new value for `score` is has a greater or equal to th
         'table-name' = 'score_board',
         'username' = 'root',
         'password' = '',
-        'sink.properties.merge_condition' = 'score'
-    );
+        'sink.properties.merge_condition' = 'score',
+        'sink.version' = 'V1'
+        );
     ```
 
 3. Insert two data rows into the Flink table. The primary keys of the data rows are as same as these of rows in the StarRocks table. The first data row has a smaller value in the column `score`, and the second data row has a larger  value in the column `score`.
 
     ```SQL
-    INSERT INTO `score_board` VALUES (1, 'starrocks', 99), (2, 'flink', 101);
+    INSERT INTO `score_board` VALUES (1, 'starrocks-update', 99), (2, 'flink-update', 101);
     ```
 
 4. Query the StarRocks table in MySQL client.
 
     ```SQL
     mysql> select * from score_board;
-    +------+-----------+-------+
-    | id   | name      | score |
-    +------+-----------+-------+
-    |    1 | starrocks |   100 |
-    |    2 | flink     |   101 |
-    +------+-----------+-------+
-    2 rows in set (0.02 sec)
+    +------+--------------+-------+
+    | id   | name         | score |
+    +------+--------------+-------+
+    |    1 | starrocks    |   100 |
+    |    2 | flink-update |   101 |
+    +------+--------------+-------+
+    2 rows in set (0.03 sec)
     ```
 
-  You can see that only the value of `score` in the second data row changes, and the value of `score` in the first data row does not change.
+   You can see that only the values of the second data row change, and the values of the first data row do not change.
 
 ### Load data into columns of BITMAP type
 

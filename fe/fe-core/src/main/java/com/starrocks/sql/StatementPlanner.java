@@ -22,6 +22,7 @@ import com.starrocks.common.Config;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -32,6 +33,8 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UpdateStmt;
+import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerTraceUtil;
@@ -51,6 +54,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
+
 public class StatementPlanner {
 
     public static ExecPlan plan(StatementBase stmt, ConnectContext session) {
@@ -67,7 +72,7 @@ public class StatementPlanner {
         boolean needWholePhaseLock = true;
 
         // 1. For all queries, we need db lock when analyze phase
-        try {
+        try (ConnectContext.ScopeGuard guard = session.bindScope()) {
             lock(dbs);
             try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Analyzer")) {
                 Analyzer.analyze(stmt, session);
@@ -91,7 +96,12 @@ public class StatementPlanner {
             if (stmt instanceof QueryStatement) {
                 return planQuery(stmt, resultSinkType, session, false);
             } else if (stmt instanceof InsertStmt) {
-                return new InsertPlanner().plan((InsertStmt) stmt, session);
+                InsertStmt insertStmt = (InsertStmt) stmt;
+                boolean isSelect = !(insertStmt.getQueryStatement().getQueryRelation() instanceof ValuesRelation);
+                boolean isLeader = GlobalStateMgr.getCurrentState().isLeader();
+                boolean useOptimisticLock = isOnlyOlapTableQueries && isSelect && isLeader &&
+                        !session.getSessionVariable().isCboUseDBLock();
+                return new InsertPlanner(dbs, useOptimisticLock).plan((InsertStmt) stmt, session);
             } else if (stmt instanceof UpdateStmt) {
                 return new UpdatePlanner().plan((UpdateStmt) stmt, session);
             } else if (stmt instanceof DeleteStmt) {
@@ -113,7 +123,7 @@ public class StatementPlanner {
         QueryStatement queryStmt = (QueryStatement) stmt;
         resultSinkType = queryStmt.hasOutFileClause() ? TResultSinkType.FILE : resultSinkType;
         ExecPlan plan;
-        if (!isOnlyOlapTable || session.getSessionVariable().isCboUseDBLock()) {
+        if (!isOnlyOlapTable || !GlobalStateMgr.getCurrentState().isLeader() || session.getSessionVariable().isCboUseDBLock()) {
             plan = createQueryPlan(queryStmt.getQueryRelation(), session, resultSinkType);
         } else {
             plan = createQueryPlanWithReTry(queryStmt, session, resultSinkType);
@@ -177,9 +187,10 @@ public class StatementPlanner {
         // only collect once to save the original olapTable info
         Set<OlapTable> olapTables = collectOriginalOlapTables(queryStmt, dbs);
         for (int i = 0; i < Config.max_query_retry_time; ++i) {
-            long planStartTime = System.currentTimeMillis();
+            long planStartTime = OptimisticVersion.generate();
             if (!isSchemaValid) {
-                colNames = reAnalyzeStmt(queryStmt, dbs, session);
+                reAnalyzeStmt(queryStmt, dbs, session);
+                colNames = queryStmt.getQueryRelation().getColumnOutputNames();
             }
 
             LogicalPlan logicalPlan;
@@ -191,6 +202,11 @@ public class StatementPlanner {
             try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer")) {
                 // 2. Optimize logical plan and build physical plan
                 Optimizer optimizer = new Optimizer();
+                // FIXME: refactor this into Optimizer.optimize() method.
+                // set query tables into OptimizeContext so can be added for mv rewrite
+                if (Config.skip_whole_phase_lock_mv_limit >= 0) {
+                    optimizer.setQueryTables(olapTables);
+                }
                 optimizedPlan = optimizer.optimize(
                         session,
                         logicalPlan.getRoot(),
@@ -207,18 +223,26 @@ public class StatementPlanner {
                  */
                 // For only olap table queries, we need to lock db here.
                 // Because we need to ensure multi partition visible versions are consistent.
-                long buildFragmentStartTime = System.currentTimeMillis();
+                long buildFragmentStartTime = OptimisticVersion.generate();
                 ExecPlan plan = PlanFragmentBuilder.createPhysicalPlan(
                         optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames,
                         resultSinkType,
                         !session.getSessionVariable().isSingleNodeExecPlan());
-                isSchemaValid = olapTables.stream().noneMatch(t ->
-                        t.lastSchemaUpdateTime.get() > planStartTime);
+                isSchemaValid = olapTables.stream().noneMatch(t -> t.lastSchemaUpdateTime.get() > planStartTime);
                 isSchemaValid = isSchemaValid && olapTables.stream().allMatch(t ->
                         t.lastVersionUpdateEndTime.get() < buildFragmentStartTime &&
                                 t.lastVersionUpdateEndTime.get() >= t.lastVersionUpdateStartTime.get());
                 if (isSchemaValid) {
                     return plan;
+                }
+
+                // if exists table is applying visible log, we wait 10 ms to retry
+                if (olapTables.stream().anyMatch(t -> t.lastVersionUpdateStartTime.get() > t.lastVersionUpdateEndTime.get())) {
+                    try (PlannerProfile.ScopedTimer timer = PlannerProfile.getScopedTimer("PlanRetrySleepTime")) {
+                        Thread.sleep(10);
+                    } catch (InterruptedException e) {
+                        throw new StarRocksPlannerException("query had been interrupted", INTERNAL_ERROR);
+                    }
                 }
             }
         }
@@ -227,7 +251,7 @@ public class StatementPlanner {
         return null;
     }
 
-    private static Set<OlapTable> collectOriginalOlapTables(QueryStatement queryStmt, Map<String, Database> dbs) {
+    public static Set<OlapTable> collectOriginalOlapTables(StatementBase queryStmt, Map<String, Database> dbs) {
         Set<OlapTable> olapTables = Sets.newHashSet();
         try {
             // Need lock to avoid olap table metas ConcurrentModificationException
@@ -239,13 +263,15 @@ public class StatementPlanner {
         }
     }
 
-    public static List<String> reAnalyzeStmt(QueryStatement queryStmt, Map<String, Database> dbs, ConnectContext session) {
+    public static Set<OlapTable> reAnalyzeStmt(StatementBase queryStmt, Map<String, Database> dbs,
+                                               ConnectContext session) {
         try {
             lock(dbs);
             Analyzer.analyze(queryStmt, session);
-            // only copy olap table
-            AnalyzerUtils.copyOlapTable(queryStmt, Sets.newHashSet());
-            return queryStmt.getQueryRelation().getColumnOutputNames();
+            // only copy the latest olap table
+            Set<OlapTable> copiedTables = Sets.newHashSet();
+            AnalyzerUtils.copyOlapTable(queryStmt, copiedTables);
+            return copiedTables;
         } finally {
             unLock(dbs);
         }

@@ -72,27 +72,29 @@ namespace starrocks {
 
 using strings::Substitute;
 
-StatusOr<std::shared_ptr<Segment>> Segment::open(std::shared_ptr<FileSystem> fs, const std::string& path,
+StatusOr<std::shared_ptr<Segment>> Segment::open(std::shared_ptr<FileSystem> fs, FileInfo segment_file_info,
                                                  uint32_t segment_id, const TabletSchema* tablet_schema,
                                                  size_t* footer_length_hint,
                                                  const FooterPointerPB* partial_rowset_footer) {
-    auto segment = std::make_shared<Segment>(std::move(fs), path, segment_id, tablet_schema);
+    auto segment = std::make_shared<Segment>(std::move(fs), std::move(segment_file_info), segment_id, tablet_schema);
     RETURN_IF_ERROR(segment->_open(footer_length_hint, partial_rowset_footer, true));
     return std::move(segment);
 }
 
-StatusOr<std::shared_ptr<Segment>> Segment::open(std::shared_ptr<FileSystem> fs, const std::string& path,
+StatusOr<std::shared_ptr<Segment>> Segment::open(std::shared_ptr<FileSystem> fs, FileInfo segment_file_info,
                                                  uint32_t segment_id, std::shared_ptr<const TabletSchema> tablet_schema,
                                                  size_t* footer_length_hint,
                                                  const FooterPointerPB* partial_rowset_footer,
                                                  bool skip_fill_local_cache, lake::TabletManager* tablet_manager) {
-    auto segment = std::make_shared<Segment>(std::move(fs), path, segment_id, std::move(tablet_schema), tablet_manager);
+    auto segment = std::make_shared<Segment>(std::move(fs), std::move(segment_file_info), segment_id,
+                                             std::move(tablet_schema), tablet_manager);
     RETURN_IF_ERROR(segment->open(footer_length_hint, partial_rowset_footer, skip_fill_local_cache));
     return std::move(segment);
 }
 
-Status Segment::parse_segment_footer(RandomAccessFile* read_file, SegmentFooterPB* footer, size_t* footer_length_hint,
-                                     const FooterPointerPB* partial_rowset_footer) {
+StatusOr<size_t> Segment::parse_segment_footer(RandomAccessFile* read_file, SegmentFooterPB* footer,
+                                               size_t* footer_length_hint,
+                                               const FooterPointerPB* partial_rowset_footer) {
     // Footer := SegmentFooterPB, FooterPBSize(4), FooterPBChecksum(4), MagicNumber(4)
     ASSIGN_OR_RETURN(auto file_size, read_file->get_size());
 
@@ -128,13 +130,13 @@ Status Segment::parse_segment_footer(RandomAccessFile* read_file, SegmentFooterP
                 strings::Substitute("Bad segment file $0: magic number not match", read_file->filename()));
     }
 
+    if (footer_length_hint != nullptr && footer_length > *footer_length_hint) {
+        *footer_length_hint = footer_length + 128 /* allocate slightly more bytes next time*/;
+    }
+
     if (file_size < 12 + footer_length) {
         return Status::Corruption(strings::Substitute("Bad segment file $0: file size $1 < $2", read_file->filename(),
                                                       file_size, 12 + footer_length));
-    }
-
-    if (footer_length_hint != nullptr && footer_length > *footer_length_hint) {
-        *footer_length_hint = footer_length + 128 /* allocate slightly more bytes next time*/;
     }
 
     buff.resize(buff.size() - 12); // Remove the last 12 bytes.
@@ -178,19 +180,42 @@ Status Segment::parse_segment_footer(RandomAccessFile* read_file, SegmentFooterP
                                     read_file->filename(), actual_checksum, checksum));
     }
 
-    return Status::OK();
+    return footer_length + 12;
 }
 
-Segment::Segment(std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id,
+Status Segment::write_segment_footer(WritableFile* write_file, const SegmentFooterPB& footer) {
+    std::string footer_buf;
+    if (!footer.SerializeToString(&footer_buf)) {
+        return Status::InternalError("failed to serialize segment footer");
+    }
+
+    faststring fixed_buf;
+    // footer's size
+    put_fixed32_le(&fixed_buf, footer_buf.size());
+    // footer's checksum
+    uint32_t checksum = crc32c::Value(footer_buf.data(), footer_buf.size());
+    put_fixed32_le(&fixed_buf, checksum);
+    // Append magic number. we don't write magic number in the header because
+    // that will need an extra seek when reading
+    fixed_buf.append(k_segment_magic, k_segment_magic_length);
+
+    Slice slices[2] = {footer_buf, fixed_buf};
+    return write_file->appendv(&slices[0], 2);
+}
+
+Segment::Segment(std::shared_ptr<FileSystem> fs, FileInfo segment_file_info, uint32_t segment_id,
                  const TabletSchema* tablet_schema)
-        : _fs(std::move(fs)), _fname(std::move(path)), _tablet_schema(tablet_schema), _segment_id(segment_id) {
+        : _fs(std::move(fs)),
+          _segment_file_info(std::move(segment_file_info)),
+          _tablet_schema(tablet_schema),
+          _segment_id(segment_id) {
     MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->segment_metadata_mem_tracker(), _basic_info_mem_usage());
 }
 
-Segment::Segment(std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id,
+Segment::Segment(std::shared_ptr<FileSystem> fs, FileInfo segment_file_info, uint32_t segment_id,
                  std::shared_ptr<const TabletSchema> tablet_schema, lake::TabletManager* tablet_manager)
         : _fs(std::move(fs)),
-          _fname(std::move(path)),
+          _segment_file_info(std::move(segment_file_info)),
           _tablet_schema(std::move(tablet_schema)),
           _segment_id(segment_id),
           _tablet_manager(tablet_manager) {
@@ -223,7 +248,8 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
                       bool skip_fill_local_cache) {
     SegmentFooterPB footer;
     RandomAccessFileOptions opts{.skip_fill_local_cache = skip_fill_local_cache};
-    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(opts, _fname));
+
+    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(opts, _segment_file_info));
     RETURN_IF_ERROR(Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint, partial_rowset_footer));
     RETURN_IF_ERROR(_create_column_readers(&footer));
     _num_rows = footer.num_rows();
@@ -267,7 +293,8 @@ StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const Schema& schema, const Se
             const TabletColumn& tablet_column = _tablet_schema->column(column_id);
             if (tablet_column.is_key() || _use_segment_zone_map_filter(read_options)) {
                 read_options.stats->segment_stats_filtered += _column_readers[column_id]->num_rows();
-                return Status::EndOfFile(strings::Substitute("End of file $0, empty iterator", _fname));
+                return Status::EndOfFile(
+                        strings::Substitute("End of file $0, empty iterator", _segment_file_info.path));
             } else {
                 break;
             }
@@ -318,7 +345,7 @@ Status Segment::load_index(bool skip_fill_local_cache) {
 Status Segment::_load_index(bool skip_fill_local_cache) {
     // read and parse short key index page
     RandomAccessFileOptions file_opts{.skip_fill_local_cache = skip_fill_local_cache};
-    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(file_opts, _fname));
+    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(file_opts, _segment_file_info));
 
     PageReadOptions opts;
     opts.use_page_cache = !config::disable_storage_page_cache;
@@ -421,8 +448,8 @@ Status Segment::new_bitmap_index_iterator(uint32_t cid, const IndexReadOptions& 
 }
 
 StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx) {
-    return Segment::open(_fs, dcg.column_files(parent_name(_fname))[idx], 0,
-                         TabletSchema::create_with_uid(*_tablet_schema, dcg.column_ids()[idx]), nullptr);
+    FileInfo info{.path = dcg.column_files(parent_name(_segment_file_info.path))[idx]};
+    return Segment::open(_fs, info, 0, TabletSchema::create_with_uid(*_tablet_schema, dcg.column_ids()[idx]), nullptr);
 }
 
 Status Segment::get_short_key_index(std::vector<std::string>* sk_index_values) {

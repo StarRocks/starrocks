@@ -27,15 +27,15 @@ public:
     TableFunctionState() = default;
     virtual ~TableFunctionState() = default;
 
-    void set_params(starrocks::Columns columns) {
+    void set_params(Columns columns) {
         this->_columns = std::move(columns);
         set_processed_rows(0);
         on_new_params();
     }
 
-    starrocks::Columns& get_columns() { return _columns; }
+    Columns& get_columns() { return _columns; }
 
-    void set_offset(int64_t offset) { this->_offset = offset; }
+    virtual void set_offset(int64_t offset) { this->_offset = offset; }
 
     int64_t get_offset() { return _offset; }
 
@@ -59,7 +59,7 @@ private:
     virtual void on_new_params(){};
 
     //Params of table function
-    starrocks::Columns _columns;
+    Columns _columns;
 
     size_t _processed_rows = 0;
 
@@ -87,7 +87,8 @@ public:
     virtual Status open(RuntimeState* runtime_state, TableFunctionState* state) const = 0;
 
     //Table function processing logic
-    virtual std::pair<Columns, UInt32Column::Ptr> process(TableFunctionState* state) const = 0;
+    virtual std::pair<Columns, UInt32Column::Ptr> process(RuntimeState* runtime_state,
+                                                          TableFunctionState* state) const = 0;
 
     //Release the resources constructed in init and prepare
     virtual Status close(RuntimeState* runtime_state, TableFunctionState* context) const = 0;

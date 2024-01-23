@@ -53,10 +53,15 @@ import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.FixMethodOrder;
 import org.junit.Ignore;
 import org.junit.Test;
+import org.junit.runners.MethodSorters;
 
 import java.util.Arrays;
 import java.util.Collection;
@@ -69,7 +74,9 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.scheduler.TaskRun.PARTITION_END;
 import static com.starrocks.scheduler.TaskRun.PARTITION_START;
+import static com.starrocks.sql.plan.PlanTestBase.cleanupEphemeralMVs;
 
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
 
     @BeforeClass
@@ -304,6 +311,21 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                         "\"partition_refresh_number\" = \"1\"" +
                         ") " +
                         "as select str2date(d,'%Y%m%d') ss, a, b, c from jdbc0.partitioned_db0.tbl1;");
+    }
+
+    @AfterClass
+    public static void afterClass() throws Exception {
+        cleanupEphemeralMVs(starRocksAssert, startSuiteTime);
+    }
+
+    @Before
+    public void before() {
+        startCaseTime = java.time.Instant.now().getEpochSecond();
+    }
+
+    @After
+    public void after() throws Exception {
+        cleanupEphemeralMVs(starRocksAssert, startCaseTime);
     }
 
     protected void assertPlanContains(ExecPlan execPlan, String... explain) throws Exception {
@@ -714,7 +736,8 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         MockIcebergMetadata mockIcebergMetadata =
                 (MockIcebergMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
                         getOptionalMetadata(MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME).get();
-        mockIcebergMetadata.addRowsToPartition("partitioned_db", "t1", 100, "date=2020-01-02");
+        mockIcebergMetadata.updatePartitions("partitioned_db", "t1",
+                ImmutableList.of("date=2020-01-02"));
         // refresh only one partition
         Task task = TaskBuilder.buildMvTask(partitionedMaterializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
@@ -737,7 +760,8 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                 ImmutableMap.copyOf(partitionVersionMap));
 
         // add new row and refresh again
-        mockIcebergMetadata.addRowsToPartition("partitioned_db", "t1", 100, "date=2020-01-01");
+        mockIcebergMetadata.updatePartitions("partitioned_db", "t1",
+                ImmutableList.of("date=2020-01-01"));
         taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
@@ -825,7 +849,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
 
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
-        assertPlanContains(execPlan, "partitions=7/7");
+        assertPlanContains(execPlan, "partitions=6/6");
 
         MockedHiveMetadata mockedHiveMetadata = (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
                 getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
@@ -836,7 +860,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
         mvContext = processor.getMvContext();
         execPlan = mvContext.getExecPlan();
-        assertPlanContains(execPlan, "par_date >= '2020-01-03', 9: par_date < '2020-01-04'", "partitions=2/7");
+        assertPlanContains(execPlan, "par_date >= '2020-01-03', 9: par_date < '2020-01-04'", "partitions=2/6");
 
         mockedHiveMetadata.updatePartitions("partitioned_db", "t1",
                 ImmutableList.of("par_col=0"));
@@ -845,7 +869,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         processor = (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
         mvContext = processor.getMvContext();
         execPlan = mvContext.getExecPlan();
-        assertPlanContains(execPlan, "partitions=7/7", "partitions=3/3");
+        assertPlanContains(execPlan, "partitions=6/6", "partitions=3/3");
     }
 
     @Test

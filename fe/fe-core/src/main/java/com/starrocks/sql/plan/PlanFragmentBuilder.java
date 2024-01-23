@@ -1122,15 +1122,7 @@ public class PlanFragmentBuilder {
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
             tupleDescriptor.setTable(referenceTable);
 
-            // set slot
-            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
-                SlotDescriptor slotDescriptor =
-                        context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
-                slotDescriptor.setColumn(entry.getValue());
-                slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
-                slotDescriptor.setIsMaterialized(true);
-                context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
-            }
+            prepareContextSlots(node, context, tupleDescriptor);
 
             DeltaLakeScanNode deltaLakeScanNode =
                     new DeltaLakeScanNode(context.getNextNodeId(), tupleDescriptor, "DeltaLakeScanNode");
@@ -1219,8 +1211,9 @@ public class PlanFragmentBuilder {
             // set slot
             prepareContextSlots(node, context, tupleDescriptor);
 
+            TupleDescriptor equalityDeleteTupleDesc = context.getDescTbl().createTupleDescriptor();
             IcebergScanNode icebergScanNode =
-                    new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, "IcebergScanNode");
+                    new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, "IcebergScanNode", equalityDeleteTupleDesc);
             icebergScanNode.computeStatistics(optExpression.getStatistics());
             icebergScanNode.setScanOptimzeOption(node.getScanOptimzeOption());
             try {
@@ -1235,8 +1228,6 @@ public class PlanFragmentBuilder {
 
                 icebergScanNode.preProcessIcebergPredicate(node.getPredicate());
                 icebergScanNode.setupScanRangeLocations(context.getDescTbl());
-                // set slot for equality delete file
-                icebergScanNode.appendEqualityColumns(node, columnRefFactory, context);
 
                 HDFSScanNodePredicates scanNodePredicates = icebergScanNode.getScanNodePredicates();
                 prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
@@ -1791,7 +1782,7 @@ public class PlanFragmentBuilder {
             PlanFragment originalInputFragment = visit(optExpr.inputAt(0), context);
 
             PlanFragment inputFragment = removeExchangeNodeForLocalShuffleAgg(originalInputFragment, context);
-            boolean withLocalShuffle = inputFragment != originalInputFragment;
+            boolean withLocalShuffle = inputFragment != originalInputFragment || inputFragment.isWithLocalShuffle();
 
             Map<ColumnRefOperator, CallOperator> aggregations = node.getAggregations();
             List<ColumnRefOperator> groupBys = node.getGroupBys();
@@ -1920,6 +1911,7 @@ public class PlanFragmentBuilder {
             if (node.isOnePhaseAgg() || node.isMergedLocalAgg() || node.getType().isDistinctGlobal()) {
                 // For ScanNode->LocalShuffle->AggNode, we needn't assign scan ranges per driver sequence.
                 inputFragment.setAssignScanRangesPerDriverSeq(!withLocalShuffle);
+                inputFragment.setWithLocalShuffleIfTrue(withLocalShuffle);
                 aggregationNode.setWithLocalShuffle(withLocalShuffle);
                 aggregationNode.setIdenticallyDistributed(true);
             }
@@ -2909,7 +2901,6 @@ public class PlanFragmentBuilder {
 
             List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(
                     leftChildColumns, rightChildColumns, onPredicates);
-            Preconditions.checkState(!eqOnPredicates.isEmpty(), "must be eq-join");
 
             for (BinaryPredicateOperator s : eqOnPredicates) {
                 if (!optExpr.inputAt(0).getLogicalProperty().getOutputColumns()
@@ -2917,6 +2908,8 @@ public class PlanFragmentBuilder {
                     s.swap();
                 }
             }
+            eqOnPredicates = eqOnPredicates.stream().filter(p -> !p.isCorrelated()).collect(Collectors.toList());
+            Preconditions.checkState(!eqOnPredicates.isEmpty(), "must be eq-join");
 
             List<Expr> eqJoinConjuncts =
                     eqOnPredicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
@@ -2929,7 +2922,7 @@ public class PlanFragmentBuilder {
                 }
             }
 
-            List<ScalarOperator> otherJoin = Utils.extractConjuncts(onPredicate);
+            List<ScalarOperator> otherJoin = onPredicates;
             otherJoin.removeAll(eqOnPredicates);
             List<Expr> otherJoinConjuncts = otherJoin.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
                             new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))

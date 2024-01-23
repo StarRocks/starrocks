@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "English"
+toc_max_heading_level: 4
 ---
 
 # Load data from HDFS
@@ -22,7 +23,7 @@ Make sure the source data you want to load into StarRocks is properly stored in 
 
 <InsertPrivNote />
 
-### Gather connection details
+### Gather authentication details
 
 You can use the simple authentication method to establish connections with your HDFS cluster. To use simple authentication, you need to gather the username and password of the account that you can use to access the NameNode of the HDFS cluster.
 
@@ -86,10 +87,10 @@ This is a continuation of the previous example. The previous query is wrapped in
 
 > **NOTE**
 >
-> The syntax of CREATE TABLE when using schema inference does not allow setting the number of replicas, so set it before creating the table. The example below is for a system with a single replica:
+> The syntax of CREATE TABLE when using schema inference does not allow setting the number of replicas, so set it before creating the table. The example below is for a system with three replicas:
 >
 > ```SQL
-> ADMIN SET FRONTEND CONFIG ('default_replication_num' = "1");
+> ADMIN SET FRONTEND CONFIG ('default_replication_num' = "3");
 > ```
 
 Create a database and switch to it:
@@ -197,11 +198,7 @@ CREATE TABLE user_behavior_declared
 )
 ENGINE = OLAP 
 DUPLICATE KEY(UserID)
-DISTRIBUTED BY HASH(UserID)
-PROPERTIES
-(
-    "replication_num" = "1"
-);
+DISTRIBUTED BY HASH(UserID);
 ```
 
 After creating the table, you can load it with INSERT INTO SELECT FROM FILES():
@@ -274,7 +271,7 @@ SELECT * FROM information_schema.loads WHERE LABEL = 'insert_0d86c3f9-851f-11ee-
 REJECTED_RECORD_PATH: NULL
 ```
 
-For information about the fields provided in the `loads` view, see [Information Schema](../administration/information_schema#loads).
+For information about the fields provided in the `loads` view, see [Information Schema](../administration/information_schema.md#loads).
 
 > **NOTE**
 >
@@ -288,7 +285,6 @@ This method supports the Parquet, ORC, and CSV file formats.
 
 ### Advantages of Broker Load
 
-- Broker Load supports [data transformation](../loading/Etl_in_loading.md) and [data changes](../loading/Load_to_Primary_Key_tables.md) such as UPSERT and DELETE operations during loading.
 - Broker Load runs in the background and clients do not need to stay connected for the job to continue.
 - Broker Load is preferred for long-running jobs, with the default timeout spanning 4 hours.
 - In addition to Parquet and ORC file formats, Broker Load supports CSV files.
@@ -327,11 +323,7 @@ CREATE TABLE user_behavior
 )
 ENGINE = OLAP 
 DUPLICATE KEY(UserID)
-DISTRIBUTED BY HASH(UserID)
-PROPERTIES
-(
-    "replication_num" = "1"
-);
+DISTRIBUTED BY HASH(UserID);
 ```
 
 #### Start a Broker Load

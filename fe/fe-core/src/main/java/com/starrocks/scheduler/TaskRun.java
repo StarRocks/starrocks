@@ -22,6 +22,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.loadv2.InsertLoadJob;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
@@ -66,8 +67,13 @@ public class TaskRun implements Comparable<TaskRun> {
 
     private Constants.TaskType type;
 
+    private ExecuteOption executeOption;
+
+    private final String uuid;
+
     TaskRun() {
         future = new CompletableFuture<>();
+        uuid = UUIDUtil.genUUID().toString();
     }
 
     public long getTaskId() {
@@ -115,6 +121,14 @@ public class TaskRun implements Comparable<TaskRun> {
 
     public Constants.TaskType getType() {
         return this.type;
+    }
+
+    public ExecuteOption getExecuteOption() {
+        return executeOption;
+    }
+
+    public void setExecuteOption(ExecuteOption executeOption) {
+        this.executeOption = executeOption;
     }
 
     public Map<String, String>  refreshTaskProperties(ConnectContext ctx) {
@@ -279,6 +293,9 @@ public class TaskRun implements Comparable<TaskRun> {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
+        if (status.getDefinition() == null) {
+            return false;
+        }
         TaskRun taskRun = (TaskRun) o;
         return status.getDefinition().equals(taskRun.getStatus().getDefinition());
     }
@@ -292,13 +309,11 @@ public class TaskRun implements Comparable<TaskRun> {
     public String toString() {
         return "TaskRun{" +
                 "taskId=" + taskId +
-                ", properties=" + properties +
-                ", future=" + future +
-                ", task=" + task +
-                ", runCtx=" + runCtx +
-                ", processor=" + processor +
-                ", status=" + status +
                 ", type=" + type +
+                ", uuid=" + uuid +
+                ", task_state=" + status.getState() +
+                ", properties=" + properties +
+                ", extra_message =" + status.getExtraMessage() +
                 '}';
     }
 }

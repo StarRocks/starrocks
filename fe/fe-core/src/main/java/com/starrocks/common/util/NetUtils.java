@@ -105,7 +105,7 @@ public class NetUtils {
         for (Integer port : ports) {
             try (Socket socket = new Socket()) {
                 socket.connect(new InetSocketAddress(host, port), timeout);
-            } catch (IOException e) {
+            } catch (IOException | IllegalArgumentException e) {
                 accessible = false;
                 break;
             }

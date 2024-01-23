@@ -246,7 +246,7 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
         List<ScanNode> scanNodes = execPlan.getScanNodes();
         TDescriptorTable descTable = execPlan.getDescTbl().toThrift();
         TQueryGlobals queryGlobals =
-                CoordinatorPreprocessor.genQueryGlobals(connectContext.getStartTime(),
+                CoordinatorPreprocessor.genQueryGlobals(connectContext.getStartTimeInstant(),
                         connectContext.getSessionVariable().getTimeZone());
         TQueryOptions queryOptions = connectContext.getSessionVariable().toThrift();
         this.queryCoordinator =

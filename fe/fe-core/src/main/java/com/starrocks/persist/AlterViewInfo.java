@@ -23,6 +23,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -41,18 +42,22 @@ public class AlterViewInfo implements Writable {
     private long sqlMode;
     @SerializedName(value = "newFullSchema")
     private List<Column> newFullSchema;
+    @SerializedName(value = "comment")
+    private String comment;
 
     public AlterViewInfo() {
         // for persist
         newFullSchema = Lists.newArrayList();
     }
 
-    public AlterViewInfo(long dbId, long tableId, String inlineViewDef, List<Column> newFullSchema, long sqlMode) {
+    public AlterViewInfo(long dbId, long tableId, String inlineViewDef, List<Column> newFullSchema, long sqlMode,
+                         String comment) {
         this.dbId = dbId;
         this.tableId = tableId;
         this.inlineViewDef = inlineViewDef;
         this.newFullSchema = newFullSchema;
         this.sqlMode = sqlMode;
+        this.comment = comment;
     }
 
     public long getDbId() {
@@ -75,6 +80,10 @@ public class AlterViewInfo implements Writable {
         return sqlMode;
     }
 
+    public String getComment() {
+        return comment;
+    }
+
     @Override
     public int hashCode() {
         return Objects.hash(dbId, tableId, inlineViewDef, sqlMode, newFullSchema);
@@ -91,7 +100,8 @@ public class AlterViewInfo implements Writable {
         AlterViewInfo otherInfo = (AlterViewInfo) other;
         return dbId == otherInfo.getDbId() && tableId == otherInfo.getTableId() &&
                 inlineViewDef.equalsIgnoreCase(otherInfo.getInlineViewDef()) && sqlMode == otherInfo.getSqlMode() &&
-                newFullSchema.equals(otherInfo.getNewFullSchema());
+                newFullSchema.equals(otherInfo.getNewFullSchema())
+                && StringUtils.equalsIgnoreCase(comment, otherInfo.getComment());
     }
 
     @Override

@@ -388,6 +388,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：秒
 - 默认值：60
 
+#### routine_load_unstable_threshold_second
+
+- 含义：Routine Load 导入作业的任一导入任务消费延迟，即正在消费的消息时间戳与当前时间的差值超过该阈值，且数据源中存在未被消费的消息，则导入作业置为 UNSTABLE 状态。
+- 单位：秒
+- 默认值：3600
+
 ##### max_tolerable_backend_down_num
 
 - 含义：允许的最大故障 BE 数。如果故障的 BE 节点数超过该阈值，则不能自动恢复 Routine Load 作业。
@@ -495,7 +501,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### enable_auto_tablet_distribution
 
-- 含义：是否开启自动设置分桶功能。<ul><li>设置为 `true` 表示开启，您在建表或新增分区时无需指定分桶数目，StarRocks 自动决定分桶数量。自动设置分桶数目的策略，请参见[确定分桶数量)](../table_design/Data_distribution.md#确定分桶数量)。</li><li>设置为 `false` 表示关闭，您在建表时需要手动指定分桶数量。<br />新增分区时，如果您不指定分桶数量，则新分区的分桶数量继承建表时候的分桶数量。当然您也可以手动指定新增分区的分桶数量。</li></ul>
+- 含义：是否开启自动设置分桶功能。<ul><li>设置为 `true` 表示开启，您在建表或新增分区时无需指定分桶数目，StarRocks 自动决定分桶数量。自动设置分桶数目的策略，请参见[确定分桶数量](../table_design/Data_distribution.md#设置分桶数量)。</li><li>设置为 `false` 表示关闭，您在建表时需要手动指定分桶数量。<br />新增分区时，如果您不指定分桶数量，则新分区的分桶数量继承建表时候的分桶数量。当然您也可以手动指定新增分区的分桶数量。</li></ul>
 - 默认值：TRUE
 - 引入版本：2.5.6
 
@@ -572,12 +578,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### tablet_sched_balance_load_disk_safe_threshold
 
-- 含义：判断 BE 磁盘使用率是否均衡的阈值。只有 `tablet_sched_balancer_strategy` 设置为 `disk_and_tablet`时，该参数才生效。<br />如果所有 BE 的磁盘使用率低于 50%，认为磁盘使用均衡。<br />对于 disk_and_tablet 策略，如果最大和最小 BE 磁盘使用率之差高于 10%，认为磁盘使用不均衡，会触发 tablet 重新均衡。参数别名`balance_load_disk_safe_threshold`。
+- 含义：判断 BE 磁盘使用率是否均衡的百分比阈值。如果所有 BE 的磁盘使用率低于该值，认为磁盘使用均衡。当有 BE 磁盘使用率超过该阈值时，如果最大和最小 BE 磁盘使用率之差高于 10%，则认为磁盘使用不均衡，会触发 Tablet 重新均衡。参数别名`balance_load_disk_safe_threshold`。
 - 默认值：0.5
 
 ##### tablet_sched_balance_load_score_threshold
 
-- 含义：用于判断 BE 负载是否均衡。只有 `tablet_sched_balancer_strategy` 设置为 `be_load_score`时，该参数才生效。<br />负载比平均负载低 10% 的 BE 处于低负载状态，比平均负载高 10% 的 BE 处于高负载状态。参数别名 `balance_load_score_threshold`。
+- 含义：用于判断 BE 负载是否均衡的百分比阈值。如果一个 BE 的负载低于所有 BE 的平均负载，且差值大于该阈值，则认为该 BE 处于低负载状态。相反，如果一个 BE 的负载比平均负载高且差值大于该阈值，则认为该 BE 处于高负载状态。参数别名 `balance_load_score_threshold`。
 - 默认值：0.1
 
 ##### tablet_sched_repair_delay_factor_second
@@ -603,6 +609,63 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 含义：克隆 Tablet 调度时，如果超过该时间一直未被调度，则将该 Tablet 的调度优先级升高，以尽可能优先调度。
 - 单位：毫秒
 - 默认值：15 \* 60 \* 100
+
+#### 存算分离相关动态参数
+
+##### lake_compaction_score_selector_min_score
+
+- 含义：触发 Compaction 操作的 Compaction Score 阈值。当一个表分区的 Compaction Score 大于或等于该值时，系统会对该分区执行 Compaction 操作。
+- 默认值： 10.0
+- 引入版本：v3.1.0
+
+Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分，您可以通过 [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) 语句返回中的 `MaxCS` 一列的值来查看某个分区的 Compaction Score。Compaction Score 和分区中的文件数量有关系。文件数量过多将影响查询性能，因此系统后台会定期执行 Compaction 操作来合并小文件，减少文件数量。
+
+##### lake_compaction_max_tasks
+
+- 含义：允许同时执行的 Compaction 任务数。
+- 默认值：-1
+- 引入版本：v3.1.0
+
+系统依据分区中 Tablet 数量来计算 Compaction 任务数。如果一个分区有 10 个 Tablet，那么对该分区作一次 Compaciton 就会创建 10 个 Compaction 任务。如果正在执行中的 Compaction 任务数超过该阈值，系统将不会创建新的 Compaction 任务。将该值设置为 `0` 表示禁止 Compaction，设置为 `-1` 表示系统依据自适应策略自动计算该值。
+
+##### lake_compaction_history_size
+
+- 含义：在 Leader FE 节点内存中保留多少条最近成功的 Compaction 任务历史记录。您可以通过 `SHOW PROC '/compactions'` 命令查看最近成功的 Compaction 任务记录。请注意，Compaction 历史记录是保存在 FE 进程内存中的，FE 进程重启后历史记录会丢失。
+- 默认值：12
+- 引入版本：v3.1.0
+
+##### lake_compaction_fail_history_size
+
+- 含义：在 Leader FE 节点内存中保留多少条最近失败的 Compaction 任务历史记录。您可以通过 `SHOW PROC '/compactions'` 命令查看最近失败的 Compaction 任务记录。请注意，Compaction 历史记录是保存在 FE 进程内存中的，FE 进程重启后历史记录会丢失。
+- 默认值：12
+- 引入版本：v3.1.0
+
+##### lake_autovacuum_parallel_partitions
+
+- 含义：最多可以同时对多少个表分区进行垃圾数据清理（AutoVacuum，即在 Compaction 后进行的垃圾文件回收）。
+- 默认值：8
+- 引入版本：v3.1.0
+
+##### lake_autovacuum_partition_naptime_seconds
+
+- 含义：对同一个表分区进行垃圾数据清理的最小间隔时间。
+- 单位：秒
+- 默认值：180
+- 引入版本：v3.1.0
+
+##### lake_autovacuum_grace_period_minutes
+
+- 含义：保留历史数据版本的时间范围。此时间范围内的历史数据版本不会被自动清理。您需要将该值设置为大于最大查询时间，以避免正在访问中的数据被删除导致查询失败。
+- 单位：分钟
+- 默认值：5
+- 引入版本：v3.1.0
+
+##### lake_autovacuum_stale_partition_threshold
+
+- 含义：如果某个表分区在该阈值范围内没有任何更新操作(导入、删除或 Compaction)，将不再触发该分区的自动垃圾数据清理操作。
+- 单位：小时
+- 默认值：12
+- 引入版本：v3.1.0
 
 #### 其他动态参数
 
@@ -683,6 +746,17 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - **默认值**: FALSE
 - 是否允许用户创建以 `__op` 或 `__row` 开头命名的列。TRUE 表示启用此功能。请注意，在 StarRocks 中，这样的列名被保留用于特殊目的，创建这样的列可能导致未知行为，因此系统默认禁止使用这类名字。该参数自 v3.1.5 起新增。
+
+##### enable_mv_automatic_active_check
+
+- 含义：是否允许系统自动检查和重新激活异步物化视图。启用此功能后，系统将会自动激活因基表（或视图）Schema Change 或重建而失效（Inactive）的物化视图。请注意，此功能不会激活由用户手动设置为 Inactive 的物化视图。此项功能支持从 v3.1.6 版本开始。
+- 默认值: TRUE
+
+##### default_mv_refresh_immediate
+
+- 含义：创建异步物化视图后，是否立即刷新该物化视图。当设置为 `true` 时，异步物化视图创建后会立即刷新。
+- 默认值：TRUE
+- 引入版本：v3.1.7
 
 ### 配置 FE 静态参数
 
@@ -803,6 +877,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 含义：FE 节点上 HTTP 服务器的端口。
 - 默认值：8030
 
+##### http_worker_threads_num
+
+- 含义：Http Server 用于处理 HTTP 请求的线程数。如果配置为负数或 0 ，线程数将设置为 CPU 核数的 2 倍。
+- 默认值：0
+- 引入版本：2.5.18，3.0.10，3.1.7，3.2.2
+
 ##### http_backlog_num
 
 - 含义：HTTP 服务器支持的 Backlog 队列长度。
@@ -849,7 +929,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 含义：FE 节点上 MySQL 服务器的端口。
 - 默认值：9030
 
-##### mysql_service_nio_enabled  
+#### mysql_service_nio_enabled
 
 - 含义：是否开启 MySQL 服务器的异步 I/O 选项。
 - 默认值：TRUE
@@ -944,7 +1024,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 含义：允许回滚的最大事务数。
 - 默认值：100
 
-##### bdbje_replica_ack_timeout_second  
+#### bdbje_replica_ack_timeout_second
 
 - 含义：FE 所在 StarRocks 集群中，元数据从 Leader FE 写入到多个 Follower FE 时，Leader FE 等待足够多的 Follower FE 发送 ACK 消息的超时时间。当写入的元数据较多时，可能返回 ACK 的时间较长，进而导致等待超时。如果超时，会导致写元数据失败，FE 进程退出，此时可以适当地调大该参数取值。
 - 单位：秒
@@ -989,7 +1069,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - 含义：导入作业的轮询间隔。
 - 单位：秒。
-- 默认值：5  
+- 默认值：5
 
 ##### transaction_clean_interval_second
 
@@ -1046,11 +1126,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 #### 存储（FE 静态）
 
-##### tablet_sched_balancer_strategy
-
-- 含义：Tablet 均衡策略。参数别名为 `tablet_balancer_strategy`。取值范围：`disk_and_tablet` 和 `be_load_score`。
-- 默认值：`disk_and_tablet`
-
 ##### tablet_sched_storage_cooldown_second
 
 - 含义：从 Table 创建时间点开始计算，自动降冷的时延。降冷是指从 SSD 介质迁移到 HDD 介质。<br />参数别名为 `storage_cooldown_second`。默认值 `-1` 表示不进行自动降冷。如需启用自动降冷功能，请显式设置参数取值大于 0。
@@ -1090,7 +1165,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### aws_s3_region
 
-- 含义：需访问的 S3 存储空间的地区，如 `us-west-2`。  
+- 含义：需访问的 S3 存储空间的地区，如 `us-west-2`。
 
 ##### aws_s3_endpoint
 
@@ -1232,6 +1307,12 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 以下是 BE 动态参数列表。
 
+#### enable_stream_load_verbose_log
+
+- 含义：是否在日志中记录 Stream Load 的 HTTP 请求和响应信息。
+- 默认值：false
+- **引入版本：**2.5.17、3.0.9、3.1.6、3.2.1
+
 #### report_task_interval_seconds
 
 - 含义：汇报单个任务的间隔。建表，删除表，导入，schema change 都可以被认定是任务。
@@ -1311,7 +1392,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：单列上允许下推的最大谓词数量，如果超出数量限制，谓词不会下推到存储层。
 - 默认值：1024
 
-#### exchg_node_buffer_size_bytes  
+#### exchg_node_buffer_size_bytes
 
 - 含义：Exchange 算子中，单个查询在接收端的 buffer 容量。<br />这是一个软限制，如果数据的发送速度过快，接收端会触发反压来限制发送速度。
 - 单位：字节
@@ -1353,7 +1434,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 单位：秒
 - 默认值：30
 
-#### max_percentage_of_error_disk  
+#### max_percentage_of_error_disk
 
 - 含义：错误磁盘达到一定比例，BE 退出。
 - 单位：%
@@ -1364,7 +1445,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：每个 row block 最多存放的行数。
 - 默认值：1024
 
-#### pending_data_expire_time_sec  
+#### pending_data_expire_time_sec
 
 - 含义：存储引擎保留的未生效数据的最大时长。
 - 单位：秒
@@ -1390,9 +1471,9 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### trash_file_expire_time_sec
 
-- 含义：回收站清理的间隔，默认 72 个小时。
+- 含义：回收站清理的间隔，默认 24 个小时。自 v2.5.17、v3.0.9 以及 v3.1.6 起，默认值由 259,200 变为 86,400。
 - 单位：秒
-- 默认值：259200
+- 默认值：86,400
 
 #### base_compaction_check_interval_seconds
 
@@ -1440,7 +1521,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 单位：毫秒
 - 默认值：500
 
-#### load_error_log_reserve_hours  
+#### load_error_log_reserve_hours
 
 - 含义：导入数据信息保留的时长。
 - 单位：小时
@@ -1452,7 +1533,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 单位：MB
 - 默认值：102400
 
-#### streaming_load_max_batch_size_mb  
+#### streaming_load_max_batch_size_mb
 
 - 含义：流式导入单个 JSON 文件大小的上限。
 - 单位：MB
@@ -1487,12 +1568,6 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：Thrift 超时的时长。
 - 单位：毫秒
 - 默认值：5000
-
-#### txn_commit_rpc_timeout_ms
-
-- 含义：导入事务的超时时长。自 3.1 版本起，改为控制 RPC 请求的超时时长。
-- 单位：毫秒
-- 默认值：20000
 
 #### max_consumer_num_per_group
 
@@ -1539,7 +1614,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 单位：字节
 - 默认值：107374182400
 
-#### tablet_meta_checkpoint_min_new_rowsets_num  
+#### tablet_meta_checkpoint_min_new_rowsets_num
 
 - 含义：自上次 TabletMeta Checkpoint 至今新创建的 rowset 数量。
 - 默认值：10
@@ -1623,10 +1698,37 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：单个 BE 上与 Kafka 交互的线程池大小。当前 Routine Load FE 与 Kafka 的交互需经由 BE 完成，而每个 BE 上实际执行操作的是一个单独的线程池。当 Routine Load 任务较多时，可能会出现线程池线程繁忙的情况，可以调整该配置。
 - 默认值：10
 
+#### lake_enable_vertical_compaction_fill_data_cache
+
+- 含义：存算分离集群下，是否允许 Compaction 任务在执行时缓存数据到本地磁盘上。
+- 默认值：false
+- 引入版本：v3.1.7、v3.2.3
+
+#### compact_threads
+
+- 含义：并发 Compaction 任务的最大线程数。自 v3.1.7，v3.2.2 起变为动态参数。
+- 默认值：4
+- 引入版本：v3.0.0
+
 #### update_compaction_ratio_threshold
 
 - 含义：存算分离集群下主键模型表单次 Compaction 可以合并的最大数据比例。如果单个 Tablet 过大，建议适当调小该配置项取值。自 v3.1.5 起支持。
 - 默认值：0.5
+
+#### create_tablet_worker_count
+
+- 含义：创建 Tablet 的线程数。自 v3.1.7 起变为动态参数。
+- 默认值：3
+
+#### number_tablet_writer_threads
+
+- 含义：用于 Stream Load 的线程数。自 v3.1.7 起变为动态参数。
+- 默认值：16
+
+#### pipeline_connector_scan_thread_num_per_cpu
+
+- 含义：BE 节点中每个 CPU 核心分配给 Pipeline Connector 的扫描线程数量。自 v3.1.7 起变为动态参数。
+- 默认值：8
 
 #### max_garbage_sweep_interval
 
@@ -1650,7 +1752,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 默认值：false
 - 引入版本：3.0
 
-#### hdfs_client_hedged_read_threadpool_size  
+#### hdfs_client_hedged_read_threadpool_size
 
 - 含义：指定 HDFS 客户端侧 Hedged Read 线程池的大小，即 HDFS 客户端侧允许有多少个线程用于服务 Hedged Read。该参数从 3.0 版本起支持，对应 HDFS 集群配置文件 `hdfs-site.xml` 中的 `dfs.client.hedged.read.threadpool.size` 参数。
 - 默认值：128
@@ -1685,7 +1787,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### starlet_port
 
-- 含义：StarRocks 存算分离集群用于 BE 心跳服务的端口。
+- 含义：存算分离集群中 CN（v3.0 中的 BE）的额外 Agent 服务端口。
 - 默认值：9070
 
 #### heartbeat_service_port
@@ -1697,11 +1799,6 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 - 含义：心跳线程数。
 - 默认值：1
-
-#### create_tablet_worker_count
-
-- 含义：创建 tablet 的线程数。
-- 默认值：3
 
 #### drop_tablet_worker_count
 
@@ -1742,6 +1839,18 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 - 含义：计算 tablet 的校验和 (checksum)。
 - 默认值：1
+
+#### object_storage_connect_timeout_ms
+
+- 含义：对象存储 Socket 连接的超时时间。
+- 默认值：`-1`，表示使用 SDK 中的默认时间。
+- 引入版本：3.0.9
+
+#### object_storage_request_timeout_ms
+
+- 含义：对象存储 HTTP 连接的超时时间。
+- 默认值：`-1`，表示使用 SDK 中的默认时间。
+- 引入版本：3.0.9
 
 #### sys_log_dir
 
@@ -1829,7 +1938,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 - 含义：文件句柄缓存的容量。
 - 默认值：16384
-  
+
 #### min_file_descriptor_number
 
 - 含义：BE 进程的文件句柄 limit 要求的下线。
@@ -1870,11 +1979,6 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 - 含义：小批量导入生成的文件保留的时。
 - 默认值：4
-
-#### number_tablet_writer_threads
-
-- 含义：流式导入的线程数。
-- 默认值：16
 
 #### streaming_load_rpc_max_alive_time_sec
 
@@ -1945,7 +2049,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### mem_limit
 
-- 含义：BE 进程内存上限。可设为比例上限（如 "80%"）或物理上限（如 "100GB"）。
+- 含义：BE 进程内存上限。可设为比例上限（如 "80%"）或物理上限（如 "100G"）。默认硬上限为 BE 所在机器内存的 90%，软上限为 BE 所在机器内存的 80%。如果 BE 为独立部署，则无需配置，如果 BE 与其它占用内存较多的服务混合部署，则需要合理配置。
 - 默认值：90%
 
 #### flush_thread_num_per_store
@@ -1958,12 +2062,12 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：是否启用 Data Cache。<ul><li>`true`：启用。</li><li>`false`：不启用，为默认值。</li></ul> 如要启用，设置该参数值为 `true`。
 - 默认值：false
 
-#### block_cache_disk_path  
+#### block_cache_disk_path
 
 - 含义：磁盘路径。支持添加多个路径，多个路径之间使用分号(;) 隔开。建议 BE 机器有几个磁盘即添加几个路径。配置路径后，StarRocks 会自动创建名为 **cachelib_data** 的文件用于缓存 block。
 - 默认值：N/A
 
-#### block_cache_meta_path  
+#### block_cache_meta_path
 
 - 含义：Block 的元数据存储目录，可自定义。推荐创建在 **`$STARROCKS_HOME`** 路径下。
 - 默认值：N/A
@@ -1990,24 +2094,24 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：JDBC 连接池大小。每个 BE 节点上访问 `jdbc_url` 相同的外表时会共用同一个连接池。
 - 默认值：8
 
-#### jdbc_minimum_idle_connections  
+#### jdbc_minimum_idle_connections
 
 - 含义：JDBC 连接池中最少的空闲连接数量。
 - 默认值：1
 
-#### jdbc_connection_idle_timeout_ms  
+#### jdbc_connection_idle_timeout_ms
 
 - 含义：JDBC 空闲连接超时时间。如果 JDBC 连接池内的连接空闲时间超过此值，连接池会关闭超过 `jdbc_minimum_idle_connections` 配置项中指定数量的空闲连接。
 - 单位：毫秒
 - 默认值：600000
 
-#### query_cache_capacity  
+#### query_cache_capacity
 
 - 含义：指定 Query Cache 的大小。单位：字节。默认为 512 MB。最小不低于 4 MB。如果当前的 BE 内存容量无法满足您期望的 Query Cache 大小，可以增加 BE 的内存容量，然后再设置合理的 Query Cache 大小。<br />每个 BE 都有自己私有的 Query Cache 存储空间，BE 只 Populate 或 Probe 自己本地的 Query Cache 存储空间。
 - 单位：字节
 - 默认值：536870912
 
-#### enable_event_based_compaction_framework  
+#### enable_event_based_compaction_framework
 
 - 含义：是否开启 Event-based Compaction Framework。`true` 代表开启。`false` 代表关闭。开启则能够在 tablet 数比较多或者单个 tablet 数据量比较大的场景下大幅降低 compaction 的开销。
 - 默认值：TRUE

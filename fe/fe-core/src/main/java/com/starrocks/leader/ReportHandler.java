@@ -104,6 +104,7 @@ import com.starrocks.thrift.TTablet;
 import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTaskType;
+import com.starrocks.thrift.TTxnType;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.thrift.TWorkGroupOp;
 import org.apache.commons.lang.StringUtils;
@@ -1097,7 +1098,7 @@ public class ReportHandler extends Daemon {
                         new PublishVersionTask(backendId, txnId, dbId, commitTime,
                                 map.get(txnId).values().stream().collect(Collectors.toList()), null, null,
                                 createPublishVersionTaskTime, null,
-                                Config.enable_sync_publish);
+                                Config.enable_sync_publish, TTxnType.TXN_NORMAL);
                 batchTask.addTask(task);
                 // add to AgentTaskQueue for handling finish report.
                 AgentTaskQueue.addTask(task);
@@ -1378,7 +1379,7 @@ public class ReportHandler extends Daemon {
         AgentBatchTask batchTask = new AgentBatchTask();
         for (Long transactionId : transactionsToClear.keySet()) {
             ClearTransactionTask clearTransactionTask = new ClearTransactionTask(backendId,
-                    transactionId, transactionsToClear.get(transactionId));
+                    transactionId, transactionsToClear.get(transactionId), TTxnType.TXN_NORMAL);
             batchTask.addTask(clearTransactionTask);
         }
 
@@ -1462,7 +1463,7 @@ public class ReportHandler extends Daemon {
                 TabletStatus status =
                         tablet.getColocateHealthStatus(visibleVersion, replicationNum, backendsSet);
                 if (status == TabletStatus.HEALTHY) {
-                    throw new MetaNotFoundException("colocate tablet [" + tableId + "] is healthy");
+                    throw new MetaNotFoundException("colocate tablet [" + tabletId + "] is healthy");
                 } else {
                     return;
                 }

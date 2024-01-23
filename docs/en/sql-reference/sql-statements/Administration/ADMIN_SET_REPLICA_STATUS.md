@@ -10,7 +10,13 @@ This statement is used to set the status of the specified replicas.
 
 This command currently only used to manually set the status of some replicas to BAD or OK, allowing the system to automatically repair these replicas.
 
-Syntax:
+:::tip
+
+This operation requires the SYSTEM-level OPERATE privilege. You can follow the instructions in [GRANT](../account-management/GRANT.md) to grant this privilege.
+
+:::
+
+## Syntax
 
 ```sql
 ADMIN SET REPLICA STATUS

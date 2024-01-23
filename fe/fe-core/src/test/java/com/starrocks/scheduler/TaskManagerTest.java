@@ -54,7 +54,8 @@ public class TaskManagerTest {
 
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
-
+    private static final ExecuteOption DEFAULT_MERGE_OPTION = makeExecuteOption(true, false);
+    private static final ExecuteOption DEFAULT_NO_MERGE_OPTION = makeExecuteOption(false, false);
     @Before
     public void setUp() {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
@@ -215,21 +216,27 @@ public class TaskManagerTest {
 
         long taskId = 1;
 
-        TaskRun taskRun1 = TaskRunBuilder.newBuilder(task).build();
+        TaskRun taskRun1 = TaskRunBuilder
+                .newBuilder(task)
+                .setExecuteOption(makeExecuteOption(true, false))
+                .build();
         long now = System.currentTimeMillis();
         taskRun1.setTaskId(taskId);
         taskRun1.initStatus("1", now);
         taskRun1.getStatus().setDefinition("select 1");
         taskRun1.getStatus().setPriority(0);
 
-        TaskRun taskRun2 = TaskRunBuilder.newBuilder(task).build();
+        TaskRun taskRun2 = TaskRunBuilder
+                .newBuilder(task)
+                .setExecuteOption(DEFAULT_MERGE_OPTION)
+                .build();
         taskRun2.setTaskId(taskId);
         taskRun2.initStatus("2", now);
         taskRun2.getStatus().setDefinition("select 1");
         taskRun2.getStatus().setPriority(10);
 
-        taskRunManager.arrangeTaskRun(taskRun1, true);
-        taskRunManager.arrangeTaskRun(taskRun2, true);
+        taskRunManager.arrangeTaskRun(taskRun1);
+        taskRunManager.arrangeTaskRun(taskRun2);
 
         Map<Long, PriorityBlockingQueue<TaskRun>> pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
         Assert.assertEquals(1, pendingTaskRunMap.get(taskId).size());
@@ -247,21 +254,27 @@ public class TaskManagerTest {
 
         long taskId = 1;
 
-        TaskRun taskRun1 = TaskRunBuilder.newBuilder(task).build();
+        TaskRun taskRun1 = TaskRunBuilder
+                .newBuilder(task)
+                .setExecuteOption(DEFAULT_MERGE_OPTION)
+                .build();
         long now = System.currentTimeMillis();
         taskRun1.setTaskId(taskId);
         taskRun1.initStatus("1", now);
         taskRun1.getStatus().setDefinition("select 1");
         taskRun1.getStatus().setPriority(0);
 
-        TaskRun taskRun2 = TaskRunBuilder.newBuilder(task).build();
+        TaskRun taskRun2 = TaskRunBuilder
+                .newBuilder(task)
+                .setExecuteOption(DEFAULT_MERGE_OPTION)
+                .build();
         taskRun2.setTaskId(taskId);
         taskRun2.initStatus("2", now);
         taskRun2.getStatus().setDefinition("select 1");
         taskRun2.getStatus().setPriority(10);
 
-        taskRunManager.arrangeTaskRun(taskRun2, true);
-        taskRunManager.arrangeTaskRun(taskRun1, true);
+        taskRunManager.arrangeTaskRun(taskRun2);
+        taskRunManager.arrangeTaskRun(taskRun1);
 
         Map<Long, PriorityBlockingQueue<TaskRun>> pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
         Assert.assertEquals(1, pendingTaskRunMap.get(taskId).size());
@@ -279,21 +292,27 @@ public class TaskManagerTest {
 
         long taskId = 1;
 
-        TaskRun taskRun1 = TaskRunBuilder.newBuilder(task).build();
+        TaskRun taskRun1 = TaskRunBuilder
+                .newBuilder(task)
+                .setExecuteOption(DEFAULT_MERGE_OPTION)
+                .build();
         long now = System.currentTimeMillis();
         taskRun1.setTaskId(taskId);
         taskRun1.initStatus("1", now + 10);
         taskRun1.getStatus().setDefinition("select 1");
         taskRun1.getStatus().setPriority(0);
 
-        TaskRun taskRun2 = TaskRunBuilder.newBuilder(task).build();
+        TaskRun taskRun2 = TaskRunBuilder
+                .newBuilder(task)
+                .setExecuteOption(DEFAULT_MERGE_OPTION)
+                .build();
         taskRun2.setTaskId(taskId);
         taskRun2.initStatus("2", now);
         taskRun2.getStatus().setDefinition("select 1");
         taskRun2.getStatus().setPriority(0);
 
-        taskRunManager.arrangeTaskRun(taskRun1, true);
-        taskRunManager.arrangeTaskRun(taskRun2, true);
+        taskRunManager.arrangeTaskRun(taskRun1);
+        taskRunManager.arrangeTaskRun(taskRun2);
 
         Map<Long, PriorityBlockingQueue<TaskRun>> pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
         Assert.assertEquals(1, pendingTaskRunMap.get(taskId).size());
@@ -311,21 +330,27 @@ public class TaskManagerTest {
 
         long taskId = 1;
 
-        TaskRun taskRun1 = TaskRunBuilder.newBuilder(task).build();
+        TaskRun taskRun1 = TaskRunBuilder
+                .newBuilder(task)
+                .setExecuteOption(DEFAULT_MERGE_OPTION)
+                .build();
         long now = System.currentTimeMillis();
         taskRun1.setTaskId(taskId);
         taskRun1.initStatus("1", now + 10);
         taskRun1.getStatus().setDefinition("select 1");
         taskRun1.getStatus().setPriority(0);
 
-        TaskRun taskRun2 = TaskRunBuilder.newBuilder(task).build();
+        TaskRun taskRun2 = TaskRunBuilder
+                .newBuilder(task)
+                .setExecuteOption(DEFAULT_MERGE_OPTION)
+                .build();
         taskRun2.setTaskId(taskId);
         taskRun2.initStatus("2", now);
         taskRun2.getStatus().setDefinition("select 1");
         taskRun2.getStatus().setPriority(0);
 
-        taskRunManager.arrangeTaskRun(taskRun2, true);
-        taskRunManager.arrangeTaskRun(taskRun1, true);
+        taskRunManager.arrangeTaskRun(taskRun2);
+        taskRunManager.arrangeTaskRun(taskRun1);
 
         Map<Long, PriorityBlockingQueue<TaskRun>> pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
         Assert.assertEquals(1, pendingTaskRunMap.get(taskId).size());
@@ -343,32 +368,40 @@ public class TaskManagerTest {
 
         long taskId = 1;
 
-        TaskRun taskRun1 = TaskRunBuilder.newBuilder(task).build();
+        TaskRun taskRun1 = TaskRunBuilder
+                .newBuilder(task)
+                .setExecuteOption(DEFAULT_NO_MERGE_OPTION)
+                .build();
         long now = System.currentTimeMillis();
         taskRun1.setTaskId(taskId);
         taskRun1.initStatus("1", now);
         taskRun1.getStatus().setDefinition("select 1");
         taskRun1.getStatus().setPriority(0);
 
-        TaskRun taskRun2 = TaskRunBuilder.newBuilder(task).build();
+        TaskRun taskRun2 = TaskRunBuilder
+                .newBuilder(task)
+                .setExecuteOption(DEFAULT_NO_MERGE_OPTION)
+                .build();
         taskRun2.setTaskId(taskId);
         taskRun2.initStatus("2", now);
         taskRun2.getStatus().setDefinition("select 1");
         taskRun2.getStatus().setPriority(10);
 
-        TaskRun taskRun3 = TaskRunBuilder.newBuilder(task).build();
+        TaskRun taskRun3 = TaskRunBuilder
+                .newBuilder(task)
+                .setExecuteOption(DEFAULT_NO_MERGE_OPTION)
+                .build();
         taskRun3.setTaskId(taskId);
         taskRun3.initStatus("3", now + 10);
         taskRun3.getStatus().setDefinition("select 1");
         taskRun3.getStatus().setPriority(10);
 
-        taskRunManager.arrangeTaskRun(taskRun2, false);
-        taskRunManager.arrangeTaskRun(taskRun1, false);
-        taskRunManager.arrangeTaskRun(taskRun3, false);
+        taskRunManager.arrangeTaskRun(taskRun2);
+        taskRunManager.arrangeTaskRun(taskRun1);
+        taskRunManager.arrangeTaskRun(taskRun3);
 
         Map<Long, PriorityBlockingQueue<TaskRun>> pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
         Assert.assertEquals(3, pendingTaskRunMap.get(taskId).size());
-
     }
 
     @Test
@@ -445,5 +478,85 @@ public class TaskManagerTest {
                 parseLocalDateTime("2023-04-18 20:00:10")));
         Assert.assertEquals(0, TaskManager.getInitialDelayTime(20, parseLocalDateTime("2023-04-18 19:08:30"),
                 parseLocalDateTime("2023-04-18 21:00:10")));
+    }
+
+    private static ExecuteOption makeExecuteOption(boolean isMergeRedundant, boolean isSync) {
+        ExecuteOption executeOption = new ExecuteOption();
+        executeOption.setMergeRedundant(isMergeRedundant);
+        executeOption.setSync(isSync);
+        return  executeOption;
+    }
+
+    private TaskRun makeTaskRun(long taskId, Task task, ExecuteOption executeOption) {
+        TaskRun taskRun = TaskRunBuilder
+                .newBuilder(task)
+                .setExecuteOption(executeOption)
+                .build();
+        taskRun.setTaskId(taskId);
+        return taskRun;
+    }
+
+    @Test
+    public void testTaskRunMergeRedundant1() {
+        TaskRunManager taskRunManager = new TaskRunManager();
+        Task task = new Task("test");
+        task.setDefinition("select 1");
+        long taskId = 1;
+
+        TaskRun taskRun1 = makeTaskRun(taskId, task, makeExecuteOption(true, false));
+        TaskRun taskRun2 = makeTaskRun(taskId, task, makeExecuteOption(true, true));
+
+        // If it's a sync refresh, no merge redundant anyway
+        SubmitResult result = taskRunManager.submitTaskRun(taskRun1, taskRun1.getExecuteOption());
+        Assert.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.SUBMITTED);
+        result = taskRunManager.submitTaskRun(taskRun2, taskRun2.getExecuteOption());
+        Assert.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.SUBMITTED);
+
+        Map<Long, PriorityBlockingQueue<TaskRun>> pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
+        Assert.assertEquals(2, pendingTaskRunMap.get(taskId).size());
+
+        // If it's a sync refresh, no merge redundant anyway
+        TaskRun taskRun3 = makeTaskRun(taskId, task, makeExecuteOption(false, true));
+        result = taskRunManager.submitTaskRun(taskRun3, taskRun3.getExecuteOption());
+        Assert.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.SUBMITTED);
+
+        pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
+        Assert.assertEquals(3, pendingTaskRunMap.get(taskId).size());
+
+        // merge it
+        TaskRun taskRun4 = makeTaskRun(taskId, task, makeExecuteOption(true, false));
+        result = taskRunManager.submitTaskRun(taskRun4, taskRun4.getExecuteOption());
+        Assert.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.SUBMITTED);
+
+        pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
+        Assert.assertEquals(3, pendingTaskRunMap.get(taskId).size());
+
+        // no merge it
+        TaskRun taskRun5 = makeTaskRun(taskId, task, makeExecuteOption(false, false));
+        result = taskRunManager.submitTaskRun(taskRun5, taskRun5.getExecuteOption());
+        Assert.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.SUBMITTED);
+        pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
+        Assert.assertEquals(4, pendingTaskRunMap.get(taskId).size());
+
+        for (int i = 4; i < Config.task_runs_queue_length; i++) {
+            TaskRun taskRun = makeTaskRun(taskId, task, makeExecuteOption(false, false));
+            result = taskRunManager.submitTaskRun(taskRun, taskRun.getExecuteOption());
+            Assert.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.SUBMITTED);
+            pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
+            Assert.assertEquals(i + 1, pendingTaskRunMap.get(taskId).size());
+        }
+        // no assign it: exceed queue's size
+        TaskRun taskRun6 = makeTaskRun(taskId, task, makeExecuteOption(false, false));
+        result = taskRunManager.submitTaskRun(taskRun6, taskRun6.getExecuteOption());
+        Assert.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.REJECTED);
+        pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
+        Assert.assertEquals(Config.task_runs_queue_length, pendingTaskRunMap.get(taskId).size());
+
+        // no assign it: exceed queue's size
+        TaskRun taskRun7 = makeTaskRun(taskId, task, makeExecuteOption(false, false));
+        result = taskRunManager.submitTaskRun(taskRun7, taskRun7.getExecuteOption());
+        Assert.assertTrue(result.getStatus() == SubmitResult.SubmitStatus.REJECTED);
+        pendingTaskRunMap = taskRunManager.getPendingTaskRunMap();
+        Assert.assertEquals(Config.task_runs_queue_length, pendingTaskRunMap.get(taskId).size());
     }
 }

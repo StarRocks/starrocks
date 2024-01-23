@@ -24,6 +24,11 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
     public static void setUp() throws Exception {
         MaterializedViewTestBase.setUp();
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
+
+        starRocksAssert.useTable("depts");
+        starRocksAssert.useTable("depts_null");
+        starRocksAssert.useTable("emps");
+        starRocksAssert.useTable("emps_null");
     }
 
     @Test
@@ -279,5 +284,24 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
 
         starRocksAssert.dropMaterializedView("test_partition_expr_mv1");
         starRocksAssert.dropTable("test_partition_expr_tbl1");
+    }
+
+    @Test
+    public void testMvRewriteForColumnReorder() throws Exception {
+        {
+            starRocksAssert.withMaterializedView("create materialized view mv0" +
+                    " distributed by hash(t1a, t1b)" +
+                    " order by (t1a, t1b)" +
+                    " as" +
+                    " select sum(t1f) as total, t1a, t1b from test.test_all_type group by t1a, t1b");
+            String query = "select sum(t1f) as total, t1a, t1b from test.test_all_type group by t1a, t1b;";
+            {
+                sql(query, true).match("mv0")
+                        .contains("1:t1a := 12:t1a\n" +
+                                "            2:t1b := 13:t1b\n" +
+                                "            11:sum := 14:total");
+            }
+            starRocksAssert.dropMaterializedView("mv0");
+        }
     }
 }

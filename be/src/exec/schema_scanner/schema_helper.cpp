@@ -56,6 +56,17 @@ Status SchemaHelper::list_materialized_view_status(const std::string& ip, const 
                                                        });
 }
 
+Status SchemaHelper::list_object_dependencies(const std::string& ip, int32_t port, const TObjectDependencyReq& req,
+                                              TObjectDependencyRes* res) {
+    return ThriftRpcHelper::rpc<FrontendServiceClient>(
+            ip, port, [&req, &res](FrontendServiceConnection& client) { client->listObjectDependencies(*res, req); });
+}
+
+Status SchemaHelper::list_fe_locks(const std::string& ip, int32_t port, const TFeLocksReq& req, TFeLocksRes* res) {
+    return ThriftRpcHelper::rpc<FrontendServiceClient>(
+            ip, port, [&req, &res](FrontendServiceConnection& client) { client->listFeLocks(*res, req); });
+}
+
 Status SchemaHelper::get_tables_info(const std::string& ip, const int32_t port, const TGetTablesInfoRequest& request,
                                      TGetTablesInfoResponse* response) {
     return ThriftRpcHelper::rpc<FrontendServiceClient>(

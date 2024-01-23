@@ -237,6 +237,26 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
         }
     }
 
+    if (_scan_range.__isset.delete_column_slot_ids && !_scan_range.delete_column_slot_ids.empty()) {
+        std::map<SlotId, SlotDescriptor*> id_to_slots;
+        for (const auto& slot : _materialize_slots) {
+            id_to_slots.emplace(slot->id(), slot);
+        }
+
+        int32_t delete_column_index = slots.size();
+        auto* delete_column_tuple_desc =
+                state->desc_tbl().get_tuple_descriptor(_provider->_hdfs_scan_node.mor_tuple_id);
+
+        std::vector<SlotDescriptor*> equality_delete_slots;
+        for (SlotDescriptor* d_slot_desc : delete_column_tuple_desc->slots()) {
+            _equality_delete_slots.emplace_back(d_slot_desc);
+            if (id_to_slots.find(d_slot_desc->id()) == id_to_slots.end()) {
+                _materialize_slots.push_back(d_slot_desc);
+                _materialize_index_in_chunk.push_back(delete_column_index++);
+            }
+        }
+    }
+
     if (hdfs_scan_node.__isset.hive_column_names) {
         _hive_column_names = hdfs_scan_node.hive_column_names;
     }
@@ -261,6 +281,7 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     // 1. can_use_any_column = true
     // 2. only one materialized slot
     // 3. besides that, all slots are partition slots.
+    // 4. scan iceberg data file without equality delete files.
     auto check_opt_on_iceberg = [&]() {
         if (!_can_use_any_column) {
             return false;
@@ -269,6 +290,9 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
             return false;
         }
         if (_materialize_slots.size() != 1) {
+            return false;
+        }
+        if (!_scan_range.delete_column_slot_ids.empty()) {
             return false;
         }
         return true;
@@ -332,8 +356,9 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
 
     _profile.runtime_profile = _runtime_profile;
+    _profile.raw_rows_read_counter = ADD_COUNTER(_runtime_profile, "RawRowsRead", TUnit::UNIT);
     _profile.rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
-    _profile.rows_skip_counter = ADD_COUNTER(_runtime_profile, "RowsSkip", TUnit::UNIT);
+    _profile.late_materialize_skip_rows_counter = ADD_COUNTER(_runtime_profile, "LateMaterializeSkipRows", TUnit::UNIT);
     _profile.scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
 
     _profile.reader_init_timer = ADD_TIMER(_runtime_profile, "ReaderInit");
@@ -608,6 +633,15 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.case_sensitive = _case_sensitive;
     scanner_params.profile = &_profile;
     scanner_params.open_limit = nullptr;
+
+    if (!_equality_delete_slots.empty()) {
+        MORParams& mor_params = scanner_params.mor_params;
+        mor_params.tuple_desc = _tuple_desc;
+        mor_params.equality_slots = _equality_delete_slots;
+        mor_params.mor_tuple_id = _provider->_hdfs_scan_node.mor_tuple_id;
+        mor_params.runtime_profile = _runtime_profile;
+    }
+
     for (const auto& delete_file : scan_range.delete_files) {
         scanner_params.deletes.emplace_back(&delete_file);
     }
@@ -661,7 +695,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
 
         // After catching the AWS 404 file not found error and returning it to the FE,
         // the FE will refresh the file information of table and re-execute the SQL operation.
-        if (st.is_io_error() && st.message().starts_with("code=404")) {
+        if (st.is_io_error() && st.message().to_string().find("404") != std::string::npos) {
             st = Status::RemoteFileNotFound(st.message());
         }
         return st.clone_and_append(msg);

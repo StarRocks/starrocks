@@ -170,7 +170,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
         LOG.info("create full statistics table start");
         TableName tableName = new TableName(StatsConstants.STATISTICS_DB_NAME,
                 StatsConstants.FULL_STATISTICS_TABLE_NAME);
-        KeysType keysType = RunMode.allowCreateLakeTable() ? KeysType.UNIQUE_KEYS : KeysType.PRIMARY_KEYS;
+        KeysType keysType = RunMode.isSharedDataMode() ? KeysType.UNIQUE_KEYS : KeysType.PRIMARY_KEYS;
         Map<String, String> properties = Maps.newHashMap();
 
         try {
@@ -202,7 +202,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
         LOG.info("create histogram statistics table start");
         TableName tableName = new TableName(StatsConstants.STATISTICS_DB_NAME,
                 StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME);
-        KeysType keysType = RunMode.allowCreateLakeTable() ? KeysType.UNIQUE_KEYS : KeysType.PRIMARY_KEYS;
+        KeysType keysType = RunMode.isSharedDataMode() ? KeysType.UNIQUE_KEYS : KeysType.PRIMARY_KEYS;
         Map<String, String> properties = Maps.newHashMap();
 
         try {
@@ -240,7 +240,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
         LOG.info("create external full statistics table start");
         TableName tableName = new TableName(StatsConstants.STATISTICS_DB_NAME,
                 StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME);
-        KeysType keysType = RunMode.allowCreateLakeTable() ? KeysType.UNIQUE_KEYS : KeysType.PRIMARY_KEYS;
+        KeysType keysType = RunMode.isSharedDataMode() ? KeysType.UNIQUE_KEYS : KeysType.PRIMARY_KEYS;
         Map<String, String> properties = Maps.newHashMap();
         try {
             int defaultReplicationNum = AutoInferUtil.calDefaultReplicationNum();
@@ -272,7 +272,8 @@ public class StatisticsMetaManager extends FrontendDaemon {
             BasicStatsMeta basicStatsMeta = entry.getValue();
             GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(
                     basicStatsMeta.getDbId(), basicStatsMeta.getTableId(), basicStatsMeta.getColumns(),
-                    basicStatsMeta.getType(), LocalDateTime.MIN, basicStatsMeta.getProperties()));
+                    basicStatsMeta.getType(), LocalDateTime.MIN, basicStatsMeta.getProperties(),
+                    basicStatsMeta.getUpdateRows()));
         }
 
         for (AnalyzeJob analyzeJob : GlobalStateMgr.getCurrentAnalyzeMgr().getAllAnalyzeJobList()) {

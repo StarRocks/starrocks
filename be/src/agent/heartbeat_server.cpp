@@ -131,6 +131,13 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
         }
         heartbeat_result.backend_info.__set_reboot_time(reboot_time);
     }
+
+    // Temporary solution for modifying the default value of disable_column_pool in lower versions
+    // to avoid behavior changes.
+    if (!config::disable_column_pool && master_info.run_mode == TRunMode::SHARED_DATA) {
+        LOG(INFO) << "config::disable_column_pool is set true in shared_data mode";
+        config::disable_column_pool = true;
+    }
 }
 
 StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const TMasterInfo& master_info) {

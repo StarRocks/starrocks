@@ -809,7 +809,7 @@ void PInternalServiceImplBase<T>::_get_file_schema(google::protobuf::RpcControll
         return;
     }
 
-    RuntimeState state{};
+    RuntimeState state(_exec_env);
     RuntimeProfile profile{"dummy_profile", false};
     ScannerCounter counter{};
     std::unique_ptr<FileScanner> p_scanner;

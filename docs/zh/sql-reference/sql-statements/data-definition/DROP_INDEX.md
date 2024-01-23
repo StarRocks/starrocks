@@ -8,6 +8,12 @@ displayed_sidebar: "Chinese"
 
 删除指定表的某个 bitmap 索引。创建 bitmap 索引会占用额外的存储空间，所以不用的索引建议删除。删除索引后，存储空间会立即释放。
 
+:::tip
+
+该操作需要对应表的 ALTER 权限。请参考 [GRANT](../account-management/GRANT.md) 为用户赋权。
+
+:::
+
 ## 语法
 
 ```SQL

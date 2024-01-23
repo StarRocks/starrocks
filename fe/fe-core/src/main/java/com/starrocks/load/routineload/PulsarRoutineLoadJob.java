@@ -128,6 +128,12 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
     }
 
     @Override
+    protected String getSourceProgressString() {
+        // empty implement.
+        return "";
+    }
+
+    @Override
     public void prepare() throws UserException {
         super.prepare();
         // should reset converted properties each time the job being prepared.
@@ -282,13 +288,14 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
     @Override
     protected void updateProgress(RLTaskTxnCommitAttachment attachment) throws UserException {
         super.updateProgress(attachment);
-        this.progress.update(attachment);
+        this.progress.update(attachment.getProgress());
+        this.timestampProgress.update(attachment.getTimestampProgress());
     }
 
     @Override
     protected void replayUpdateProgress(RLTaskTxnCommitAttachment attachment) {
         super.replayUpdateProgress(attachment);
-        this.progress.update(attachment);
+        this.progress.update(attachment.getProgress());
     }
 
     @Override

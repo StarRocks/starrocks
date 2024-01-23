@@ -93,12 +93,12 @@ INTO TABLE <table_name>
   > - Broker Load supports accessing AWS S3 according to the S3 or S3A protocol. Therefore, when you load data from AWS S3, you can include `s3://` or `s3a://` as the prefix in the S3 URI that you pass as the file path.
   > - Broker Load supports accessing Google GCS only according to the gs protocol. Therefore, when you load data from Google GCS, you must include `gs://` as the prefix in the GCS URI that you pass as the file path.
   > - When you load data from Blob Storage, you must use the wasb or wasbs protocol to access your data:
-  >   - If your storage account allows access over HTTP, use the wasb protocol and write the file path as `wasb://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>/*`.
-  >   - If your storage account allows access over HTTPS, use the wasbs protocol and write the file path as `wasbs://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>/*`
-  > - When you load data from Data Lake Storage Gen1, you must use the adl protocol to access your data and write the file path as `adl://<data_lake_storage_gen1_name>.azuredatalakestore.net/<path>/<file_name>`.
+  >   - If your storage account allows access over HTTP, use the wasb protocol and write the file path as `wasb://<container_name>@<storage_account_name>.blob.core.windows.net/<path>/<file_name>/*`.
+  >   - If your storage account allows access over HTTPS, use the wasbs protocol and write the file path as `wasbs://<container_name>@<storage_account_name>.blob.core.windows.net/<path>/<file_name>/*`.
   > - When you load data from Data Lake Storage Gen2, you must use the abfs or abfss protocol to access your data:
-  >   - If your storage account allows access over HTTP, use the abfs protocol and write the file path as `abfs://<container>@<storage_account>.dfs.core.windows.net/<file_name>`.
-  >   - If your storage account allows access over HTTPS, use the abfss protocol and write the file path as `abfss://<container>@<storage_account>.dfs.core.windows.net/<file_name>`.
+  >   - If your storage account allows access over HTTP, use the abfs protocol and write the file path as `abfs://<container_name>@<storage_account_name>.dfs.core.windows.net/<file_name>`.
+  >   - If your storage account allows access over HTTPS, use the abfss protocol and write the file path as `abfss://<container_name>@<storage_account_name>.dfs.core.windows.net/<file_name>`.
+  > - When you load data from Data Lake Storage Gen1, you must use the adl protocol to access your data and write the file path as `adl://<data_lake_storage_gen1_name>.azuredatalakestore.net/<path>/<file_name>`.
 
 - `INTO TABLE`
 
@@ -442,8 +442,8 @@ If you choose Blob Storage as your storage system, take one of the following act
 - To choose the Shared Key authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "azure.blob.storage_account" = "<blob_storage_account_name>",
-  "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
+  "azure.blob.storage_account" = "<storage_account_name>",
+  "azure.blob.shared_key" = "<storage_account_shared_key>"
   ```
 
   The following table describes the parameters you need to configure in `StorageCredentialParams`.
@@ -456,18 +456,68 @@ If you choose Blob Storage as your storage system, take one of the following act
 - To choose the SAS Token authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "azure.blob.account_name" = "<blob_storage_account_name>",
-  "azure.blob.container_name" = "<blob_container_name>",
-  "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
+  "azure.blob.storage_account" = "<storage_account_name>",
+  "azure.blob.container" = "<container_name>",
+  "azure.blob.sas_token" = "<storage_account_SAS_token>"
   ```
 
   The following table describes the parameters you need to configure in `StorageCredentialParams`.
 
   | **Parameter**             | **Required** | **Description**                                              |
   | ------------------------- | ------------ | ------------------------------------------------------------ |
-  | azure.blob.account_name   | Yes          | The username of your Blob Storage account.                   |
-  | azure.blob.container_name | Yes          | The name of the blob container that stores your data.        |
+  | azure.blob.storage_account| Yes          | The username of your Blob Storage account.                   |
+  | azure.blob.container      | Yes          | The name of the blob container that stores your data.        |
   | azure.blob.sas_token      | Yes          | The SAS token that is used to access your Blob Storage account. |
+
+##### Azure Data Lake Storage Gen2
+
+If you choose Data Lake Storage Gen2 as your storage system, take one of the following actions:
+
+- To choose the Managed Identity authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls2.oauth2_use_managed_identity" = "true",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**                           | **Required** | **Description**                                              |
+  | --------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_use_managed_identity | Yes          | Specifies whether to enable the Managed Identity authentication method. Set the value to `true`. |
+  | azure.adls2.oauth2_tenant_id            | Yes          | The ID of the tenant whose data you want to access.          |
+  | azure.adls2.oauth2_client_id            | Yes          | The client (application) ID of the managed identity.         |
+
+- To choose the Shared Key authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls2.storage_account" = "<storage_account_name>",
+  "azure.adls2.shared_key" = "<storage_account_shared_key>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**               | **Required** | **Description**                                              |
+  | --------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.storage_account | Yes          | The username of your Data Lake Storage Gen2 storage account. |
+  | azure.adls2.shared_key      | Yes          | The shared key of your Data Lake Storage Gen2 storage account. |
+
+- To choose the Service Principal authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls2.oauth2_client_id" = "<service_client_id>",
+  "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
+  "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
+  ```
+
+  The following table describes the parameters you need to configure `in StorageCredentialParams`.
+
+  | **Parameter**                      | **Required** | **Description**                                              |
+  | ---------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_client_id       | Yes          | The client (application) ID of the service principal.        |
+  | azure.adls2.oauth2_client_secret   | Yes          | The value of the new client (application) secret created.    |
+  | azure.adls2.oauth2_client_endpoint | Yes          | The OAuth 2.0 token endpoint (v1) of the service principal or application. |
 
 ##### Azure Data Lake Storage Gen1
 
@@ -500,56 +550,6 @@ If you choose Data Lake Storage Gen1 as your storage system, take one of the fol
   | azure.adls1.oauth2_client_id  | Yes          | The client (application) ID of the .                         |
   | azure.adls1.oauth2_credential | Yes          | The value of the new client (application) secret created.    |
   | azure.adls1.oauth2_endpoint   | Yes          | The OAuth 2.0 token endpoint (v1) of the service principal or application. |
-
-##### Azure Data Lake Storage Gen2
-
-If you choose Data Lake Storage Gen2 as your storage system, take one of the following actions:
-
-- To choose the Managed Identity authentication method, configure `StorageCredentialParams` as follows:
-
-  ```SQL
-  "azure.adls2.oauth2_use_managed_identity" = "true",
-  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
-  "azure.adls2.oauth2_client_id" = "<service_client_id>"
-  ```
-
-  The following table describes the parameters you need to configure in `StorageCredentialParams`.
-
-  | **Parameter**                           | **Required** | **Description**                                              |
-  | --------------------------------------- | ------------ | ------------------------------------------------------------ |
-  | azure.adls2.oauth2_use_managed_identity | Yes          | Specifies whether to enable the Managed Identity authentication method. Set the value to `true`. |
-  | azure.adls2.oauth2_tenant_id            | Yes          | The ID of the tenant whose data you want to access.          |
-  | azure.adls2.oauth2_client_id            | Yes          | The client (application) ID of the managed identity.         |
-
-- To choose the Shared Key authentication method, configure `StorageCredentialParams` as follows:
-
-  ```SQL
-  "azure.adls2.storage_account" = "<storage_account_name>",
-  "azure.adls2.shared_key" = "<shared_key>"
-  ```
-
-  The following table describes the parameters you need to configure in `StorageCredentialParams`.
-
-  | **Parameter**               | **Required** | **Description**                                              |
-  | --------------------------- | ------------ | ------------------------------------------------------------ |
-  | azure.adls2.storage_account | Yes          | The username of your Data Lake Storage Gen2 storage account. |
-  | azure.adls2.shared_key      | Yes          | The shared key of your Data Lake Storage Gen2 storage account. |
-
-- To choose the Service Principal authentication method, configure `StorageCredentialParams` as follows:
-
-  ```SQL
-  "azure.adls2.oauth2_client_id" = "<service_client_id>",
-  "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
-  "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
-  ```
-
-  The following table describes the parameters you need to configure `in StorageCredentialParams`.
-
-  | **Parameter**                      | **Required** | **Description**                                              |
-  | ---------------------------------- | ------------ | ------------------------------------------------------------ |
-  | azure.adls2.oauth2_client_id       | Yes          | The client (application) ID of the service principal.        |
-  | azure.adls2.oauth2_client_secret   | Yes          | The value of the new client (application) secret created.    |
-  | azure.adls2.oauth2_client_endpoint | Yes          | The OAuth 2.0 token endpoint (v1) of the service principal or application. |
 
 ### opt_properties
 
@@ -628,6 +628,16 @@ The following parameters are supported:
   You can use the [ALTER LOAD](../../../sql-reference/sql-statements/data-manipulation/ALTER_LOAD.md) statement to change the priority of an existing load job that is in the `QUEUEING` or `LOADING` state.
 
   StarRocks allows setting the `priority` parameter for a Broker Load job since v2.5.
+
+- `merge_condition`
+
+  Specifies the name of the column you want to use as the condition to determine whether updates can take effect. The update from a source record to a destination record takes effect only when the source data record has a greater or equal value than the destination data record in the specified column.
+  
+  Broker Load supports conditional updates since v3.1. For more information, see [Change data through loading](../../../loading/Load_to_Primary_Key_tables.md#conditional-updates).
+  
+  > **NOTE**
+  >
+  > The column that you specify cannot be a primary key column. Additionally, only tables that use the Primary Key table support conditional updates.
 
 ## Column mapping
 

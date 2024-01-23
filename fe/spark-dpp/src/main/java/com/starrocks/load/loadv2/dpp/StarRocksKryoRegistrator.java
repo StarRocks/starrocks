@@ -18,6 +18,8 @@
 package com.starrocks.load.loadv2.dpp;
 
 import com.esotericsoftware.kryo.Kryo;
+import com.starrocks.types.BitmapValue;
+import com.starrocks.types.Roaring64Map;
 import org.apache.spark.serializer.KryoRegistrator;
 
 /**

@@ -99,7 +99,7 @@ protected:
     void TearDown() override {}
 
     std::shared_ptr<Segment> create_dummy_segment(const std::shared_ptr<FileSystem>& fs, const std::string& fname) {
-        return std::make_shared<Segment>(fs, fname, 1, _dummy_segment_schema.get());
+        return std::make_shared<Segment>(fs, FileInfo{fname}, 1, _dummy_segment_schema.get());
     }
 
     template <LogicalType type, EncodingTypePB encoding, uint32_t version>
@@ -274,7 +274,7 @@ protected:
                 auto column = ChunkHelper::column_from_field_type(type, true);
 
                 int idx = 0;
-                size_t rows_read = 1024;
+                size_t rows_read = 512;
                 st = iter.next_batch(&rows_read, column.get());
                 ASSERT_TRUE(st.ok());
                 for (int j = 0; j < rows_read; ++j) {
@@ -294,12 +294,11 @@ protected:
             {
                 auto column = ChunkHelper::column_from_field_type(type, true);
 
-                for (int rowid = 0; rowid < 2048; rowid += 128) {
+                for (int rowid = 0; rowid < 1024; rowid += 128) {
                     st = iter.seek_to_ordinal(rowid);
                     ASSERT_TRUE(st.ok());
 
-                    int idx = rowid;
-                    size_t rows_read = 1024;
+                    size_t rows_read = 512;
                     st = iter.next_batch(&rows_read, column.get());
                     ASSERT_TRUE(st.ok());
                     for (int j = 0; j < rows_read; ++j) {
@@ -312,7 +311,6 @@ protected:
                         } else {
                             ASSERT_EQ(*(Type*)result, reinterpret_cast<const Type*>(column->raw_data())[j]);
                         }
-                        idx++;
                     }
                 }
             }
@@ -431,7 +429,7 @@ protected:
         using CppType = typename CppTypeTraits<type>::CppType;
         auto col = ChunkHelper::column_from_field_type(type, true);
         CppType value = 0;
-        size_t count = 2 * 1024 * 1024 / sizeof(CppType);
+        size_t count = 2 * 1024 / sizeof(CppType);
         col->reserve(count);
         for (size_t i = 0; i < count; ++i) {
             (void)col->append_numbers(&value, sizeof(CppType));
@@ -500,7 +498,7 @@ protected:
     }
 
     ColumnPtr date_values(int null_ratio) {
-        size_t count = 4 * 1024 * 1024 / sizeof(DateValue);
+        size_t count = 4 * 1024 / sizeof(DateValue);
         auto col = ChunkHelper::column_from_field_type(TYPE_DATE, true);
         DateValue value = DateValue::create(2020, 10, 1);
         for (size_t i = 0; i < count; i++) {

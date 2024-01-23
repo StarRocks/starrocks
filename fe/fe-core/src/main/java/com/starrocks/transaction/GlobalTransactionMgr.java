@@ -707,6 +707,15 @@ public class GlobalTransactionMgr implements Writable {
         }
     }
 
+    public void replayUpsertTransactionStateBatch(TransactionStateBatch transactionStateBatch) {
+        try {
+            DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(transactionStateBatch.getDbId());
+            dbTransactionMgr.replayUpsertTransactionStateBatch(transactionStateBatch);
+        } catch (AnalysisException e) {
+            LOG.warn("replay upsert transaction batch[" + transactionStateBatch + "] failed", e);
+        }
+    }
+
     public void replayDeleteTransactionState(TransactionState transactionState) {
         try {
             DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(transactionState.getDbId());

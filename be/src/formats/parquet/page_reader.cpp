@@ -115,11 +115,11 @@ Status PageReader::read_bytes(void* buffer, size_t size) {
 }
 
 Status PageReader::skip_bytes(size_t size) {
-    if (_offset + size > _next_header_pos) {
+    if (UNLIKELY(_offset + size > _next_header_pos)) {
         return Status::InternalError("Size to skip exceed page size");
     }
     _offset += size;
-    _stream->skip(size);
+    RETURN_IF_ERROR(_stream->skip(size));
     return Status::OK();
 }
 
@@ -127,7 +127,7 @@ StatusOr<std::string_view> PageReader::peek(size_t size) {
     if (_offset + size > _next_header_pos) {
         return Status::InternalError("Size to read exceed page size");
     }
-    _stream->seek(_offset);
+    RETURN_IF_ERROR(_stream->seek(_offset));
     ASSIGN_OR_RETURN(auto ret, _stream->peek(size));
     return ret;
 }

@@ -79,10 +79,6 @@ public class MaterializedViewMetricsRegistry {
                         if (null == m.getValue()) {
                             continue;
                         }
-                        // GAUGE metrics is a bit heavy, skip it when in mini mode.
-                        if (Metric.MetricType.GAUGE == m.type) {
-                            continue;
-                        }
                         if (Metric.MetricType.COUNTER == m.type && ((Long) m.getValue()).longValue() == 0L) {
                             continue;
                         }
@@ -93,11 +89,17 @@ public class MaterializedViewMetricsRegistry {
                     visitor.visit(m);
                 }
             }
+        }
 
-            for (Map.Entry<String, Histogram> e : MaterializedViewMetricsRegistry.getInstance()
-                    .metricRegistry.getHistograms().entrySet()) {
-                visitor.visitHistogram(e.getKey(), e.getValue());
+        // Histogram metrics should only output once
+        for (Map.Entry<String, Histogram> e : MaterializedViewMetricsRegistry.getInstance()
+                .metricRegistry.getHistograms().entrySet()) {
+            if (minifyMetrics) {
+                if (e.getValue().getCount() == 0) {
+                    continue;
+                }
             }
+            visitor.visitHistogram(e.getKey(), e.getValue());
         }
     }
 }

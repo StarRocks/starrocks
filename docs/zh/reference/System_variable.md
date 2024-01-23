@@ -207,6 +207,10 @@ group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该�
 
 用于设置通过 INSERT 语句进行数据导入时，是否开启严格模式 (Strict Mode)。默认为 `true`，即开启严格模式。关于该模式的介绍，可以参阅[严格模式](../loading/load_concept/strict_mode.md)。
 
+### enable_materialized_view_rewrite_for_insert (3.1.7 and later)
+
+是否允许 StarRocks 改写 INSERT INTO SELECT 语句中的查询。默认为 `false`，即默认关闭该场景下的物化视图查询改写。
+
 ### enable_materialized_view_union_rewrite（2.5 及以后）
 
 是否开启物化视图 Union 改写。默认值：`true`。
@@ -218,6 +222,12 @@ group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该�
 ### enable_spill（3.0 及以后）
 
 是否启用中间结果落盘。默认值：`false`。如果将其设置为 `true`，StarRocks 会将中间结果落盘，以减少在查询中处理聚合、排序或连接算子时的内存使用量。
+
+### enable_strict_order_by
+
+是否校验 ORDER BY 引用列是否有歧义。设置为默认值 `TRUE` 时，如果查询中的输出列存在不同的表达式使用重复别名的情况，且按照该别名进行排序，查询会报错，例如 `select distinct t1.* from tbl1 t1 order by t1.k1;`。该行为和 2.3 及之前版本的逻辑一致。如果取值为 `FALSE`，采用宽松的去重机制，把这类查询作为有效 SQL 处理。
+
+该变量从 2.5.18，3.1.7 版本开始支持。
 
 ### enable_profile
 
@@ -481,7 +491,7 @@ GROUP BY 聚合的高基数上限。GROUP BY 聚合的输出预估超过该行�
 
 ### query_mem_limit
 
-用于设置每个 BE 节点上查询的内存限制。默认值为 `0`，表示没有限制。支持 `B`、`K`、`KB`、`M`、`MB`、`G`、`GB`、`T`、`TB`、`P`、`PB` 等单位。
+用于设置每个 BE 节点上查询的内存限制。单位：Byte。默认值为 `0`，表示没有限制。该项仅在启用 Pipeline Engine 后生效。
 
 ### query_queue_concurrency_limit (global)
 
@@ -558,7 +568,28 @@ GRF 成功下推跨过 Exchange 算子后，是否在 Exchange Node 上放置 GR
 
 ### sql_mode
 
-用于指定 SQL 模式，以适应某些 SQL 方言。
+用于指定 SQL 模式，以适应某些 SQL 方言。有效值包括：
+
+* `PIPES_AS_CONCAT`：管道符号 `|` 用于连接字符串。例如：`select 'hello ' || 'world'`。
+* `ONLY_FULL_GROUP_BY` (默认值)：SELECT LIST 中只能包含 GROUP BY 列或者聚合函数。
+* `ALLOW_THROW_EXCEPTION`：类型转换报错而不是返回 NULL。
+* `FORBID_INVALID_DATE`：禁止非法的日期。
+* `MODE_DOUBLE_LITERAL`：将浮点类型解释为 DOUBLE 而非 DECIMAL。
+* `SORT_NULLS_LAST`：排序后，将 NULL 值放到最后。
+* `ERROR_IF_OVERFLOW`：运算溢出时，报错而不是返回 NULL，目前仅 DECIMAL 支持这一行为。
+* `GROUP_CONCAT_LEGACY`：使用 2.5 及以前的 `group_concat` 的语法。该选项从 3.0.9，3.1.6 开始支持。
+
+不同模式之间可以独立设置，您可以单独开启某一个模式，例如：
+
+```SQL
+set sql_mode = 'PIPES_AS_CONCAT';
+```
+
+或者，您也可以同时设置多个模式，例如：
+
+```SQL
+set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
+```
 
 ### sql_safe_updates
 
@@ -597,9 +628,15 @@ GRF 成功下推跨过 Exchange 算子后，是否在 Exchange Node 上放置 GR
 
 用于设置当前会话的时区。时区会对某些时间函数的结果产生影响。
 
+### transaction_read_only
+
+* 含义：用于兼容 MySQL 5.8 以上客户端，无实际作用。别名 `tx_read_only`。该变量用于指定事务访问模式。取值 `ON` 表示只读。取值 `OFF` 表示可读可写。
+* 默认值：OFF
+* 引入版本：v2.5.18, v3.0.9, v3.1.7
+
 ### tx_isolation
 
-用于兼容 MySQL 客户端。无实际作用。
+用于兼容 MySQL 客户端，无实际作用。别名 `transaction_isolation`。
 
 ### use_compute_nodes
 

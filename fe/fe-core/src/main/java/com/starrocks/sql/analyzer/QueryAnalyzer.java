@@ -36,6 +36,7 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunction;
@@ -59,6 +60,7 @@ import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
+import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
@@ -690,7 +692,7 @@ public class QueryAnalyzer {
                 queryOutputScope = process(node.getQueryStatement(), scope);
             } catch (SemanticException e) {
                 throw new SemanticException("View " + node.getName() + " references invalid table(s) or column(s) or " +
-                        "function(s) or definer/invoker of view lack rights to use them");
+                        "function(s) or definer/invoker of view lack rights to use them: " + e.getMessage(), e);
             }
             View view = node.getView();
             List<Field> fields = Lists.newArrayList();
@@ -959,6 +961,22 @@ public class QueryAnalyzer {
                             || ((OlapTable) table).getState() == OlapTable.OlapTableState.RESTORE_WITH_LOAD)) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_STATE, "RESTORING");
             }
+
+            PartitionNames partitionNamesObject = tableRelation.getPartitionNames();
+            if (partitionNamesObject != null && table.isNativeTable()) {
+                List<String> partitionNames = partitionNamesObject.getPartitionNames();
+                if (partitionNames != null) {
+                    boolean isTemp = partitionNamesObject.isTemp();
+                    for (String partitionName : partitionNames) {
+                        Partition partition = table.getPartition(partitionName, isTemp);
+                        if (partition == null) {
+                            throw new SemanticException("Unknown partition '%s' in table '%s'", partitionName,
+                                    table.getName());
+                        }
+                    }
+                }
+            }
+
             return table;
         } catch (AnalysisException e) {
             throw new SemanticException(e.getMessage());

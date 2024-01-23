@@ -75,6 +75,7 @@
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "storage/lake/fixed_location_provider.h"
+#include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/starlet_location_provider.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
@@ -302,7 +303,9 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths, bool as_cn) {
     }
 
     _broker_mgr = new BrokerMgr(this);
+#ifndef BE_TEST
     _bfd_parser = BfdParser::create();
+#endif
     _load_channel_mgr = new LoadChannelMgr();
     _load_stream_mgr = new LoadStreamMgr();
     _brpc_stub_cache = new BrpcStubCache();
@@ -348,6 +351,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _lake_update_manager = new lake::UpdateManager(_lake_location_provider, update_mem_tracker());
     _lake_tablet_manager =
             new lake::TabletManager(_lake_location_provider, _lake_update_manager, config::lake_metadata_cache_limit);
+    _lake_replication_txn_manager = new lake::ReplicationTxnManager(_lake_tablet_manager);
     if (config::starlet_cache_dir.empty()) {
         std::vector<std::string> starlet_cache_paths;
         std::for_each(store_paths.begin(), store_paths.end(), [&](StorePath root_path) {
@@ -362,6 +366,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _lake_update_manager = new lake::UpdateManager(_lake_location_provider, update_mem_tracker());
     _lake_tablet_manager =
             new lake::TabletManager(_lake_location_provider, _lake_update_manager, config::lake_metadata_cache_limit);
+    _lake_replication_txn_manager = new lake::ReplicationTxnManager(_lake_tablet_manager);
 #endif
 
     _agent_server = new AgentServer(this, false);
@@ -465,6 +470,8 @@ Status ExecEnv::init_mem_tracker() {
     _clone_mem_tracker = regist_tracker(-1, "clone", process_mem_tracker());
     int64_t consistency_mem_limit = calc_max_consistency_memory(process_mem_tracker()->limit());
     _consistency_mem_tracker = regist_tracker(consistency_mem_limit, "consistency", process_mem_tracker());
+    _datacache_mem_tracker = regist_tracker(-1, "datacache", _process_mem_tracker.get());
+    _replication_mem_tracker = regist_tracker(-1, "replication", _process_mem_tracker.get());
 
     MemChunkAllocator::init_instance(_chunk_allocator_mem_tracker.get(), config::chunk_reserved_bytes_limit);
 
@@ -570,6 +577,7 @@ void ExecEnv::_destroy() {
     SAFE_DELETE(_lake_tablet_manager);
     SAFE_DELETE(_lake_location_provider);
     SAFE_DELETE(_lake_update_manager);
+    SAFE_DELETE(_lake_replication_txn_manager);
     SAFE_DELETE(_cache_mgr);
     _metrics = nullptr;
 

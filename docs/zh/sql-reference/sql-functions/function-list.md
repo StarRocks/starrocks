@@ -34,26 +34,27 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 
 | 函数                |                 功能      |
 |  :-:                |                :-:       |
-|  [add_months](./date-time-functions/add_months.md)  |   在给定的日期（DATE、DATETIME）上增加一个整数月。     |
-|  [adddate，days_add](./date-time-functions/adddate.md)          |  向日期添加指定的时间间隔。        |
-|  [convert_tz](./date-time-functions/convert_tz.md)          |   将给定的时间转化为另一个时区的时间。  |
-|  [current_date，curdate](./date-time-functions/curdate.md)          |   获取当前的日期，以 DATE 类型返回。  |
-|  [current_time，curtime](./date-time-functions/curtime.md)      |  获取当前的时间，以 TIME 类型返回。  |
-|  [current_timestamp](./date-time-functions/current_timestamp.md)      |  获取当前时间，以 DATETIME 类型返回。   |
-|  [date](./date-time-functions/date.md)      |  从日期或时间日期表达式中截取日期部分。  |
-|  [date_add](./date-time-functions/date_add.md)      |  向日期添加指定的时间间隔。    |
-|[date_diff](./date-time-functions/date_diff.md)| 根据指定的时间单位返回两个日期的差值。 |
-|  [date_format](./date-time-functions/date_format.md)      |  按照 format 指定的格式来显示日期/时间数据。   |
-|  [date_slice](./date-time-functions/date_slice.md)      |  根据指定的时间粒度周期，将给定的时间转化到其所在的时间粒度周期的起始或结束时刻。  |
-|  [date_sub, subdate](./date-time-functions/date_sub.md)    |    从日期中减去指定的时间间隔。   |
-|   [date_trunc](./date-time-functions/date_trunc.md)     |    根据指定的精度级别，将一个日期时间截断。  |
-|  [datediff](./date-time-functions/datediff.md)   |  计算两个日期的差值，结果精确到天。        |
-|  [day](./date-time-functions/day.md) | 返回指定日期中的天信息。|
+| [add_months](./date-time-functions/add_months.md)  |   在给定的日期（DATE、DATETIME）上增加一个整数月。     |
+| [adddate](./date-time-functions/adddate.md)          |  向日期添加指定的时间间隔。        |
+| [convert_tz](./date-time-functions/convert_tz.md)          |   将给定的时间转化为另一个时区的时间。  |
+| [current_date，curdate](./date-time-functions/curdate.md)          |   获取当前的日期，以 DATE 类型返回。  |
+| [current_time，curtime](./date-time-functions/curtime.md)      |  获取当前的时间，以 TIME 类型返回。  |
+| [current_timestamp](./date-time-functions/current_timestamp.md)      |  获取当前时间，以 DATETIME 类型返回。   |
+| [date](./date-time-functions/date.md)      |  从日期或时间日期表达式中截取日期部分。  |
+| [date_add，adddate](./date-time-functions/date_add.md)      |  向日期添加指定的时间间隔。    |
+| [date_diff](./date-time-functions/date_diff.md)| 根据指定的时间单位返回两个日期的差值。 |
+| [date_format](./date-time-functions/date_format.md)      |  按照 format 指定的格式来显示日期/时间数据。   |
+| [date_slice](./date-time-functions/date_slice.md)      |  根据指定的时间粒度周期，将给定的时间转化到其所在的时间粒度周期的起始或结束时刻。  |
+| [date_sub，subdate](./date-time-functions/date_sub.md)    |    从日期中减去指定的时间间隔。   |
+| [date_trunc](./date-time-functions/date_trunc.md)     |    根据指定的精度级别，将一个日期时间截断。  |
+| [datediff](./date-time-functions/datediff.md)   |  计算两个日期的差值，结果精确到天。        |
+| [day](./date-time-functions/day.md) | 返回指定日期中的天信息。|
 | [dayname](./date-time-functions/dayname.md)| 返回指定日期对应的星期名称。|
 | [dayofmonth](./date-time-functions/dayofmonth.md)| 返回日期中的天信息，返回值范围 1~31。  |
 | [dayofweek](./date-time-functions/dayofweek.md)| 返回指定日期的工作日索引值。  |
+| [dayofweek_iso](./date-time-functions/day_of_week_iso.md)| 根据 ISO 标准，计算某一个日期对应的是一周内的星期几。  |
 | [dayofyear](./date-time-functions/dayofyear.md)|  计算指定日期为对应年中的哪一天。   |
-| [days_add](./date-time-functions/adddate.md)| 向日期添加指定的时间间隔。  |
+| [days_add](./date-time-functions/days_add.md)| 向日期添加指定的天数。  |
 | [days_diff](./date-time-functions/days_diff.md)|  计算开始时间和结束时间相差几天。 |
 | [days_sub](./date-time-functions/days_sub.md)| 从给定日期或者日期时间中减去指定的天数，获得新的 DATETIME 结果。  |
 | [from_days](./date-time-functions/from_days.md)|  通过计算当前时间距离 0000-01-01 的天数，计算出当前是时间哪一天。 |
@@ -62,8 +63,9 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [hours_add](./date-time-functions/hours_add.md)| 给指定的日期时间增加指定的小时数。  |
 | [hours_diff](./date-time-functions/hours_diff.md)|  计算开始时间和结束时间相差多少个小时。 |
 | [hours_sub](./date-time-functions/hours_sub.md)| 从指定的日期时间中减少指定的小时数。  |
-|[last_day](./date-time-functions/last_day.md)| 根据指定的时间单位，返回输入的日期对应的最后一天。|
-|[makedate](./date-time-functions/makedate.md)| 根据给定的年份和天数值，构造一个日期值。 |
+| [jodatime_format](./date-time-functions/jodatime_format.md)| 将某一个日期转换成指定的 Joda DateTimeFormat 格式的字符串。  |
+| [last_day](./date-time-functions/last_day.md)| 根据指定的时间单位，返回输入的日期对应的最后一天。|
+| [makedate](./date-time-functions/makedate.md)| 根据给定的年份和天数值，构造一个日期值。 |
 | [microseconds_add](./date-time-functions/microseconds_add.md)| 向一个日期时间添加指定的时间间隔，单位为微秒。  |
 | [microseconds_sub](./date-time-functions/microseconds_sub.md)| 从一个日期时间中减去指定的时间间隔，单位为微秒。  |
 | [minute](./date-time-functions/minute.md)| 获得日期中的分钟的信息，返回值范围为 0~59。  |
@@ -83,19 +85,24 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [seconds_add](./date-time-functions/seconds_add.md)| 向一个日期时间添加指定的时间间隔，单位为秒。  |
 | [seconds_diff](./date-time-functions/seconds_diff.md)| 计算开始时间和结束时间相差多少秒。  |
 | [seconds_sub](./date-time-functions/seconds_sub.md)|  给指定的日期时间或日期减去指定的秒数。 |
-| [str_to_date](./date-time-functions/str_to_date.md)| 按照 format 指定的格式将 str 转换为 DATETIME 类型的值。  |
 | [str2date](./date-time-functions/str2date.md)| 按照 format 指定的格式将 str 转换为 DATE 类型的值。  |
+| [str_to_date](./date-time-functions/str_to_date.md)| 按照 format 指定的格式将 str 转换为 DATETIME 类型的值。  |
+| [str_to_jodatime](./date-time-functions/str_to_jodatime.md)| 将某一个 Joda 格式的字符串转换为指定的 Joda DateTime 格式的 DATETIME 值。  |
 | [time_slice](./date-time-functions/time_slice.md)| 根据指定的时间粒度周期，将给定的时间转化为其所在的时间粒度周期的起始或结束时刻。  |
 | [time_to_sec](./date-time-functions/time_to_sec.md)| 将 time 时间值转换为秒数。  |
 | [timediff](./date-time-functions/timediff.md)| 返回两个 DATETIME 类型值之间的差值，返回 TIME 类型。  |
 | [timestamp](./date-time-functions/timestamp.md)|  将时间表达式转换为 DATETIME 值。 |
 | [timestampadd](./date-time-functions/timestampadd.md)| 将整数表达式间隔添加到日期或日期时间表达式中。  |
 | [timestampdiff](./date-time-functions/timestampdiff.md)|  返回两个日期或日期时间表达式的差值。 |
-| [to_days](./date-time-functions/to_days.md)| 返回指定日期距离 0000-01-01 的天数。  |
 | [to_date](./date-time-functions/to_date.md)| 返回 DATETIME 类型值中的日期部分。  |
+| [to_days](./date-time-functions/to_days.md)| 返回指定日期距离 0000-01-01 的天数。  |
+| [to_iso8601](./date-time-functions/to_iso8601.md)| 将某一个日期转换为 ISO 8601 标准格式的字符串。  |
+| [to_tera_date](./date-time-functions/to_tera_date.md)| 将某一个 VARCHAR 类型的值转换成指定格式的日期。  |
+| [to_tera_timestamp](./date-time-functions/to_tera_timestamp.md)| 将某一个 VARCHAR 类型的值按指定的格式转换成 DATETIME 类型的值。  |
 | [unix_timestamp](./date-time-functions/unix_timestamp.md)| 将 DATE 或 DATETIME 类型的值转化为 UNIX 时间戳。  |
 | [utc_timestamp](./date-time-functions/utc_timestamp.md)| 返回当前 UTC 日期时间。  |
 | [week](./date-time-functions/week.md)| 根据指定的周数计算逻辑，计算指定的日期时间属于一年中的第几周。  |
+| [week_iso](./date-time-functions/week_iso.md)| 根据 ISO 标准，计算某一个日期对应的是一年内的第几个周。  |
 | [weekofyear](./date-time-functions/weekofyear.md)|  计算指定的日期时间属于一年中的第几周。 |
 | [weeks_add](./date-time-functions/weeks_add.md)|  向原始的日期时间加上指定周数。 |
 | [weeks_diff](./date-time-functions/weeks_diff.md)|  计算开始时间和结束时间相差几周。 |
@@ -160,10 +167,11 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [avg](./aggregate-functions/avg.md)| 用于返回选中字段的平均值。 |
 |  [bitmap](./aggregate-functions/bitmap.md)| 通过 bitmap 函数实现聚合。 |
 |  [bitmap_agg](./bitmap-functions/bitmap_agg.md)| 将一列中的多行非 NULL 数值合并成一行 BITMAP 值，即多行转一行。 |
-| [corr](./aggregate-functions/corr.md) | 返回两个随机变量的皮尔逊相关系数. |
-| [covar_pop](./aggregate-functions/covar_pop.md)| 返回两个随机变量的总体协方差。 |
-| [covar_samp](./aggregate-functions/covar_samp.md)| 返回两个随机变量的样本协方差。 |
-|  [count](./aggregate-functions/count.md)| 返回满足条件的行数。 |
+|  [corr](./aggregate-functions/corr.md) | 返回两个随机变量的皮尔逊相关系数. |
+|  [covar_pop](./aggregate-functions/covar_pop.md)| 返回两个随机变量的总体协方差。 |
+|  [covar_samp](./aggregate-functions/covar_samp.md)| 返回两个随机变量的样本协方差。 |
+|  [count](./aggregate-functions/count.md)| 计算总行数。 |
+|  [count_if](./aggregate-functions/count_if.md)| 计算满足指定条件的记录数。 |
 |  [group_concat](./string-functions/group_concat.md)| 将结果集中的多行结果连接成一个字符串。|
 |  [grouping](./aggregate-functions/grouping.md)| 判断一个列是否为聚合列，如果是聚合列则返回 0，否则返回 1。|
 |  [grouping_id](./aggregate-functions/grouping_id.md)| 用于区分相同分组标准的分组统计结果。 |
@@ -294,8 +302,8 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [bitmap_min](./bitmap-functions/bitmap_min.md)| 获取 Bitmap 中的最小值。|
 |  [bitmap_or](./bitmap-functions/bitmap_or.md)| 计算两个 bitmap 的并集，返回新的 bitmap。|
 |  [bitmap_remove](./bitmap-functions/bitmap_remove.md)| 从 Bitmap 中删除指定的数值。 |
-| [bitmap_subset_in_range](./bitmap-functions/bitmap_subset_in_range.md)| 从 Bitmap 中返回取值在指定范围内的元素。|
-| [bitmap_subset_limit](./bitmap-functions/bitmap_subset_limit.md)| 根据指定的起始值，从 BITMAP 中截取指定个数的元素。|
+|  [bitmap_subset_in_range](./bitmap-functions/bitmap_subset_in_range.md)| 从 Bitmap 中返回取值在指定范围内的元素。|
+|  [bitmap_subset_limit](./bitmap-functions/bitmap_subset_limit.md)| 根据指定的起始值，从 BITMAP 中截取指定个数的元素。|
 |  [bitmap_to_array](./bitmap-functions/bitmap_to_array.md)| 将 BITMAP 中的所有值组合成 BIGINT 类型的数组。|
 |  [bitmap_to_base64](./bitmap-functions/bitmap_to_base64.md)| 将 bitmap 转换为 Base64 字符串。|
 |  [bitmap_to_binary](./bitmap-functions/bitmap_to_binary.md)| 将 bitmap 转换为特定格式的 binary 字符串。|
@@ -306,8 +314,10 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [bitmap_union_int](./bitmap-functions/bitmap_union_int.md)| 计算 TINYINT，SMALLINT 和 INT 类型的列中不重复值的个数。|
 |  [bitmap_xor](./bitmap-functions/bitmap_xor.md)| 计算两个 Bitmap 中不重复元素所构成的集合。|
 |  [intersect_count](./bitmap-functions/intersect_count.md)| 求 bitmap 交集大小。|
+|  [subdivide_bitmap](./bitmap-functions/subdivide_bitmap.md)| 将大 bitmap 拆成多个子 bitmap。|
 |  [sub_bitmap](./bitmap-functions/sub_bitmap.md)| 计算两个 bitmap 之间相同元素的个数。|
 |  [to_bitmap](./bitmap-functions/to_bitmap.md)| 将输入值转换为 bitmap。 |
+|  [unnest_bitmap](./bitmap-functions/unnest_bitmap.md)| 将 bitmap 展开成多行。|
 
 ## JSON 函数
 
@@ -320,7 +330,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [cast](./json-functions/json-query-and-processing-functions/cast.md)| 实现 JSON 类型数据与 SQL 类型间的相互转换。|
 |  [get_json_double](./json-functions/json-query-and-processing-functions/get_json_double.md)| 解析并获取 JSON 字符串内指定路径中的浮点型内容。|
 |  [get_json_int](./json-functions/json-query-and-processing-functions/get_json_int.md)| 解析并获取 JSON 字符串内指定路径中的整型内容。|
-|  [get_json_string](./json-functions/json-query-and-processing-functions/get_json_string.md)| 解析并获取 JSON 字符串内指定路径中的字符串。|
+|  [get_json_string, get_json_object](./json-functions/json-query-and-processing-functions/get_json_string.md)| 解析并获取 JSON 字符串内指定路径中的字符串。|
 |  [json_each](./json-functions/json-query-and-processing-functions/json_each.md)| 将 JSON 对象的最外层按照键和值展开为两列，返回一行或多行数据的集合。|
 |  [json_exists](./json-functions/json-query-and-processing-functions/json_exists.md)| 查询 JSON 对象中指定路径是否存在满足特定条件的值。|
 |  [json_keys](./json-functions/json-query-and-processing-functions/json_keys.md)| 返回 JSON 对象中所有最上层成员 (key) 组成的数组。|
@@ -360,7 +370,9 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [files](./table-functions/files.md) | 从云存储或 HDFS 读取数据文件。|
 | [generate_series](./table-functions/generate_series.md) | 生成一系列从 start 到 end 的数值，步长为 step。 |
 | [json_each](./json-functions/json-query-and-processing-functions/json_each.md) | 将 JSON 对象的最外层按照键和值展开为两列，返回一行或多行数据的集合。 |
+| [subdivide_bitmap](./bitmap-functions/subdivide_bitmap.md)| 将大 bitmap 拆成多个子 bitmap。|
 | [unnest](./array-functions/unnest.md) | 用于将一个数组展开成多行。|
+| [unnest_bitmap](./bitmap-functions/unnest_bitmap.md) | 用于将一个 bitmap 展开成多行。|
 
 ## Bit 函数
 

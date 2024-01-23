@@ -75,6 +75,8 @@ public class FeConstants {
     public static boolean showScanNodeLocalShuffleColumnsInExplain = true;
     // set to true when replay from query dump
     public static boolean isReplayFromQueryDump = false;
+    // Whether to canonize predicate after mv rewrite which make uts more stable
+    public static boolean isCanonizePredicateAfterMVRewrite = false;
     // set false to resolve ut
     public static boolean enablePruneEmptyOutputScan = true;
     public static boolean showJoinLocalShuffleInExplain = true;

@@ -44,6 +44,7 @@
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/column_viewer.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "common/statusor.h"
@@ -80,8 +81,8 @@ namespace starrocks {
 
 namespace stream_load {
 
-NodeChannel::NodeChannel(OlapTableSink* parent, int64_t node_id, bool is_incremental)
-        : _parent(parent), _node_id(node_id), _is_incremental(is_incremental) {
+NodeChannel::NodeChannel(OlapTableSink* parent, int64_t node_id, bool is_incremental, ExprContext* where_clause)
+        : _parent(parent), _node_id(node_id), _is_incremental(is_incremental), _where_clause(where_clause) {
     // restrict the chunk memory usage of send queue & brpc write buffer
     _mem_tracker = std::make_unique<MemTracker>(config::send_channel_buffer_limit, "", nullptr);
 }
@@ -449,10 +450,21 @@ Status NodeChannel::add_chunk(Chunk* input, const std::vector<int64_t>& tablet_i
 
     SCOPED_TIMER(_parent->_pack_chunk_timer);
     // 1. append data
-    _cur_chunk->append_selective(*input, indexes.data(), from, size);
-    auto req = _rpc_request.mutable_requests(0);
-    for (size_t i = 0; i < size; ++i) {
-        req->add_tablet_ids(tablet_ids[indexes[from + i]]);
+    if (_where_clause == nullptr) {
+        _cur_chunk->append_selective(*input, indexes.data(), from, size);
+        auto req = _rpc_request.mutable_requests(0);
+        for (size_t i = 0; i < size; ++i) {
+            req->add_tablet_ids(tablet_ids[indexes[from + i]]);
+        }
+    } else {
+        std::vector<uint32_t> filtered_indexes;
+        RETURN_IF_ERROR(_filter_indexes_with_where_expr(input, indexes, filtered_indexes));
+        size_t filter_size = filtered_indexes.size();
+        _cur_chunk->append_selective(*input, filtered_indexes.data(), from, filter_size);
+        auto req = _rpc_request.mutable_requests(0);
+        for (size_t i = 0; i < filter_size; ++i) {
+            req->add_tablet_ids(tablet_ids[filtered_indexes[from + i]]);
+        }
     }
 
     if (_cur_chunk->num_rows() < _runtime_state->chunk_size()) {
@@ -476,6 +488,27 @@ Status NodeChannel::add_chunk(Chunk* input, const std::vector<int64_t>& tablet_i
     }
 
     return _send_request(false);
+}
+
+Status NodeChannel::_filter_indexes_with_where_expr(Chunk* input, const std::vector<uint32_t>& indexes,
+                                                    std::vector<uint32_t>& filtered_indexes) {
+    DCHECK(_where_clause != nullptr);
+    // Filter data
+    ASSIGN_OR_RETURN(ColumnPtr filter_col, _where_clause->evaluate(input))
+
+    size_t size = filter_col->size();
+    Buffer<uint8_t> filter(size, 0);
+    ColumnViewer<TYPE_BOOLEAN> col(filter_col);
+    for (size_t i = 0; i < size; ++i) {
+        filter[i] = !col.is_null(i) && col.value(i);
+    }
+
+    for (auto index : indexes) {
+        if (filter[index]) {
+            filtered_indexes.emplace_back(index);
+        }
+    }
+    return Status::OK();
 }
 
 Status NodeChannel::add_chunks(Chunk* input, const std::vector<std::vector<int64_t>>& tablet_ids,
@@ -867,7 +900,11 @@ void NodeChannel::_cancel(int64_t index_id, const Status& err_st) {
     request.release_id();
 }
 
-IndexChannel::~IndexChannel() = default;
+IndexChannel::~IndexChannel() {
+    if (_where_clause != nullptr) {
+        _where_clause->close(_parent->_state);
+    }
+}
 
 Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPartition>& tablets, bool is_incremental) {
     for (const auto& tablet : tablets) {
@@ -881,7 +918,7 @@ Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPart
             NodeChannel* channel = nullptr;
             auto it = _node_channels.find(node_id);
             if (it == std::end(_node_channels)) {
-                auto channel_ptr = std::make_unique<NodeChannel>(_parent, node_id, is_incremental);
+                auto channel_ptr = std::make_unique<NodeChannel>(_parent, node_id, is_incremental, _where_clause);
                 channel = channel_ptr.get();
                 _node_channels.emplace(node_id, std::move(channel_ptr));
                 if (is_incremental) {
@@ -897,6 +934,10 @@ Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPart
     }
     for (auto& it : _node_channels) {
         RETURN_IF_ERROR(it.second->init(state));
+    }
+    if (_where_clause != nullptr) {
+        RETURN_IF_ERROR(_where_clause->prepare(_parent->_state));
+        RETURN_IF_ERROR(_where_clause->open(_parent->_state));
     }
     _write_quorum_type = _parent->_write_quorum_type;
     return Status::OK();
@@ -976,7 +1017,7 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     _server_wait_flush_timer = ADD_TIMER(_profile, "RpcServerWaitFlushTime");
 
     _schema = std::make_shared<OlapTableSchemaParam>();
-    RETURN_IF_ERROR(_schema->init(table_sink.schema));
+    RETURN_IF_ERROR(_schema->init(table_sink.schema, state));
     _vectorized_partition = _pool->add(new OlapTablePartitionParam(_schema, table_sink.partition));
     RETURN_IF_ERROR(_vectorized_partition->init(state));
     _location = _pool->add(new OlapTableLocationParam(table_sink.location));
@@ -1009,6 +1050,8 @@ Status OlapTableSink::prepare(RuntimeState* state) {
     SCOPED_TIMER(_profile->total_time_counter());
 
     RETURN_IF_ERROR(DataSink::prepare(state));
+
+    _state = state;
 
     _sender_id = state->per_fragment_instance_idx();
     _num_senders = state->num_per_fragment_instances();
@@ -1120,7 +1163,7 @@ Status OlapTableSink::_init_node_channels(RuntimeState* state) {
                 tablets.emplace_back(std::move(tablet_info));
             }
         }
-        auto channel = std::make_unique<IndexChannel>(this, index->index_id);
+        auto channel = std::make_unique<IndexChannel>(this, index->index_id, index->where_clause);
         RETURN_IF_ERROR(channel->init(state, tablets, false));
         _channels.emplace_back(std::move(channel));
     }
@@ -1236,14 +1279,28 @@ Status OlapTableSink::_automatic_create_partition() {
     request.__set_table_id(_vectorized_partition->table_id());
     request.__set_partition_values(_partition_not_exist_row_values);
 
-    VLOG(1) << "automatic partition rpc begin request " << request;
+    LOG(INFO) << "load_id=" << print_id(_load_id) << ", txn_id: " << std::to_string(_txn_id)
+              << "automatic partition rpc begin request " << request;
     TNetworkAddress master_addr = get_master_address();
     auto timeout_ms = _runtime_state->query_options().query_timeout * 1000 / 2;
-    RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
-            master_addr.hostname, master_addr.port,
-            [&request, &result](FrontendServiceConnection& client) { client->createPartition(result, request); },
-            timeout_ms));
-    VLOG(1) << "automatic partition rpc end response " << result;
+    int retry_times = 0;
+    int64_t start_ts = butil::gettimeofday_s();
+
+    do {
+        if (retry_times++ > 1) {
+            SleepFor(MonoDelta::FromMilliseconds(std::min(5000, timeout_ms)));
+            VLOG(1) << "load_id=" << print_id(_load_id) << ", txn_id: " << std::to_string(_txn_id)
+                    << "automatic partition rpc retry " << retry_times;
+        }
+        RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
+                master_addr.hostname, master_addr.port,
+                [&request, &result](FrontendServiceConnection& client) { client->createPartition(result, request); },
+                timeout_ms));
+    } while (result.status.status_code == TStatusCode::SERVICE_UNAVAILABLE &&
+             butil::gettimeofday_s() - start_ts < timeout_ms / 1000);
+
+    LOG(INFO) << "load_id=" << print_id(_load_id) << ", txn_id: " << std::to_string(_txn_id)
+              << "automatic partition rpc end response " << result;
     if (result.status.status_code == TStatusCode::OK) {
         // add new created partitions
         RETURN_IF_ERROR(_vectorized_partition->add_partitions(result.partitions));

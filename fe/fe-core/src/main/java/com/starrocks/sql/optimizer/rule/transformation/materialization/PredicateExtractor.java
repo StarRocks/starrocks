@@ -26,8 +26,8 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent.DateTruncReplaceChecker;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent.TimeSliceReplaceChecker;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent.DateTruncEquivalent;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent.TimeSliceRewriteEquivalent;
 
 import java.util.List;
 import java.util.Optional;
@@ -133,11 +133,11 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
             return null;
         }
 
-        if (DateTruncReplaceChecker.INSTANCE.isEquivalent(op1, op2)) {
+        if (DateTruncEquivalent.INSTANCE.isEquivalent(op1, op2)) {
             TreeRangeSet<ConstantOperator> rangeSet = TreeRangeSet.create();
             rangeSet.addAll(range(predicate.getBinaryType(), op2));
             return new ColumnRangePredicate(op1.getChild(1).cast(), rangeSet);
-        } else if (TimeSliceReplaceChecker.INSTANCE.isEquivalent(op1, op2)) {
+        } else if (TimeSliceRewriteEquivalent.INSTANCE.isEquivalent(op1, op2)) {
             TreeRangeSet<ConstantOperator> rangeSet = TreeRangeSet.create();
             rangeSet.addAll(range(predicate.getBinaryType(), op2));
             return new ColumnRangePredicate(op1.getChild(0).cast(), rangeSet);

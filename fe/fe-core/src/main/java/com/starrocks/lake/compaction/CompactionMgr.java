@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.lake.compaction;
 
 import com.google.gson.annotations.SerializedName;
@@ -90,8 +89,7 @@ public class CompactionMgr {
             v.setCurrentVersion(currentVersion);
             v.setCompactionScore(compactionScore);
             if (v.getCompactionVersion() == null) {
-                // Set version-1 as last compaction version
-                v.setCompactionVersion(new PartitionVersion(version - 1, versionTime));
+                v.setCompactionVersion(new PartitionVersion(0, versionTime));
             }
             return v;
         });
@@ -141,6 +139,11 @@ public class CompactionMgr {
     @Nullable
     public PartitionStatistics getStatistics(PartitionIdentifier identifier) {
         return partitionStatisticsHashMap.get(identifier);
+    }
+
+    public double getMaxCompactionScore() {
+        return partitionStatisticsHashMap.values().stream().mapToDouble(stat -> stat.getCompactionScore().getMax())
+                .max().orElse(0);
     }
 
     void enableCompactionAfter(PartitionIdentifier partition, long delayMs) {

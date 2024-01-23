@@ -21,6 +21,12 @@ import "types.proto";
 import "tablet_schema.proto";
 import "olap_file.proto";
 
+message DelvecDataPB {
+    optional int64 version = 1;
+    // serialized data
+    optional bytes data = 2;
+}
+
 message DelvecPagePB {
     optional int64 version = 1;
     // position in file
@@ -56,6 +62,7 @@ message RowsetMetadataPB {
     optional DeletePredicatePB delete_predicate = 6;
     // approximate, BE upgrade from old version can't get exact number of dels
     optional int64 num_dels = 7;
+    repeated uint64 segment_size = 8 [packed=true];
 }
 
 
@@ -89,6 +96,8 @@ message TabletMetadataPB {
     // The commit time on the FE for the transaction that created this tablet metadata.
     // Meansured as the number of seconds since the Epoch, 1970-01-01 00:00:00 +0000 (UTC).
     optional int64 commit_time = 13;
+    // If the tablet is replicated from another cluster, the source_schema saved the schema in the cluster
+    optional TabletSchemaPB source_schema = 14;
 }
 
 message MetadataUpdateInfoPB {
@@ -129,12 +138,20 @@ message TxnLogPB {
         repeated MetadataUpdateInfoPB metadata_update_infos = 1;
     }
 
+    message OpReplication {
+        optional ReplicationTxnMetaPB txn_meta = 1;
+        repeated OpWrite op_writes = 2;
+        map<uint32, DelvecDataPB> delvecs = 3;
+        optional TabletSchemaPB source_schema = 4;
+    }
+
     optional int64 tablet_id = 1;
     optional int64 txn_id = 2;
     optional OpWrite op_write = 3;
     optional OpCompaction op_compaction = 4;
     optional OpSchemaChange op_schema_change = 5;
     optional OpAlterMetadata op_alter_metadata = 6;
+    optional OpReplication op_replication = 7;
 }
 
 message TabletMetadataLockPB {}
