@@ -70,7 +70,7 @@ displayed_sidebar: "Chinese"
 
 #### 存算分离
 
-- 支持[主键模型表](https://docs.starrocks.io/zh/docs/table_design/table_types/primary_key_table/)的索引在本地磁盘的持久化。
+- 支持[主键表](https://docs.starrocks.io/zh/docs/table_design/table_types/primary_key_table/)的索引在本地磁盘的持久化。
 - 支持 Data Cache 在多磁盘间均匀分布。
 
 #### 物化视图
@@ -158,12 +158,12 @@ displayed_sidebar: "Chinese"
 
 #### 导入、导出和存储  
 
-- 优化主键模型（Primary Key）表持久化索引功能，优化内存使用逻辑，同时降低 I/O 的读写放大。
-- 主键模型（Primary Key）表支持本地多块磁盘间数据均衡。
+- 优化主键表（Primary Key）表持久化索引功能，优化内存使用逻辑，同时降低 I/O 的读写放大。
+- 主键表（Primary Key）表支持本地多块磁盘间数据均衡。
 - 分区中数据可以随着时间推移自动进行降冷操作（List 分区方式暂不支持）。相对原来的设置，更方便进行分区冷热管理。有关详细信息，请参见[设置数据的初始存储介质、自动降冷时间](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-definition/CREATE_TABLE#设置数据的初始存储介质自动降冷时间和副本数)。
-- 主键模型数据写入时的 Publish 过程由异步改为同步，导入作业成功返回后数据立即可见。有关详细信息，请参见 [enable_sync_publish](https://docs.starrocks.io/zh/docs/administration/FE_configuration#enable_sync_publish)。
+- 主键表数据写入时的 Publish 过程由异步改为同步，导入作业成功返回后数据立即可见。有关详细信息，请参见 [enable_sync_publish](https://docs.starrocks.io/zh/docs/administration/FE_configuration#enable_sync_publish)。
 - 支持 Fast Schema Evolution 模式，由表属性 [`fast_schema_evolution`](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-definition/CREATE_TABLE#设置-fast-schema-evolution) 控制。启用该模式可以在进行加减列变更时提高执行速度并降低资源使用。该属性默认值是 `false`（即关闭）。不支持建表后通过 ALTER TABLE 修改该表属性。
-- 对于采用随机分桶的**明细模型**表，系统进行了优化，会根据集群信息及导入中的数据量大小[按需动态调整 Tablet 数量](https://docs.starrocks.io/zh/docs/table_design/Data_distribution#设置分桶数量)。
+- 对于采用随机分桶的**明细表**，系统进行了优化，会根据集群信息及导入中的数据量大小[按需动态调整 Tablet 数量](https://docs.starrocks.io/zh/docs/table_design/Data_distribution#设置分桶数量)。
 
 #### 查询
 

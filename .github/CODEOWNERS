@@ -17,6 +17,9 @@
 /be/src/types/   @StarRocks/execution-maintainer
 /be/src/udf/     @StarRocks/execution-maintainer
 
+# open formats
+/be/src/formats/  @StarRocks/open-format-maintainer
+
 # storage engine 
 /be/src/fs/       @StarRocks/storage-maintainer
 /be/src/io/       @StarRocks/storage-maintainer
@@ -47,6 +50,10 @@
 /fe/fe-core/src/main/java/com/starrocks/catalog/    @StarRocks/metadata-maintainer
 /fe/fe-core/src/main/java/com/starrocks/metric/     @StarRocks/metadata-maintainer
 /fe/fe-core/src/main/java/com/starrocks/system/     @StarRocks/metadata-maintainer
+
+# connector
+/fe/fe-core/src/main/java/com/starrocks/connector/  @StarRocks/connector-maintainer
+/fe/fe-core/src/main/java/com/starrocks/credential/  @StarRocks/connector-maintainer
 
 # parser
 /fe/fe-core/src/main/java/com/starrocks/planner/  @StarRocks/parser
