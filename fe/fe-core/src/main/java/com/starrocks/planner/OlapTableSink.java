@@ -471,11 +471,29 @@ public class OlapTableSink extends DataSink {
                         Column column = slotDesc.getColumn();
                         if (column.getName().equalsIgnoreCase(slotRefs.get(0).getColumnName())) {
                             slotRefs.get(0).setDesc(slotDesc);
+                            break;
                         }
                     }
                     partitionParam.setPartition_exprs(Expr.treesToThrift(exprPartitionInfo.getPartitionExprs()));
                 } else if (rangePartitionInfo instanceof ExpressionRangePartitionInfoV2) {
                     ExpressionRangePartitionInfoV2 expressionRangePartitionInfoV2 = (ExpressionRangePartitionInfoV2) rangePartitionInfo;
+                    List<Expr> partitionExprs = expressionRangePartitionInfoV2.getPartitionExprs();
+                    Preconditions.checkArgument(partitionExprs.size() == 1,
+                            "Number of partition expr is not 1 for expression partition table, expr num="
+                                    + partitionExprs.size());
+                    Expr expr = partitionExprs.get(0);
+                    List<SlotRef> slotRefs = Lists.newArrayList();
+                    expr.collect(SlotRef.class, slotRefs);
+                    Preconditions.checkState(slotRefs.size() == 1);
+                    // default slot is table column slot, when there are some expr on column
+                    // the slot desc will change, so we need to reset the slot desc
+                    for (SlotDescriptor slotDesc : tupleDescriptor.getSlots()) {
+                        Column column = slotDesc.getColumn();
+                        if (column.getName().equalsIgnoreCase(slotRefs.get(0).getColumnName())) {
+                            slotRefs.get(0).setDesc(slotDesc);
+                            break;
+                        }
+                    }
                     partitionParam.setPartition_exprs(Expr.treesToThrift(expressionRangePartitionInfoV2.getPartitionExprs()));
                 }
                 break;
