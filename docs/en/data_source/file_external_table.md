@@ -8,6 +8,10 @@ File external table is a special type of external table. It allows you to direct
 
 This feature is supported from StarRocks v2.5.
 
+:::note
+The File external feature was designed to help with importing data into StarRocks NOT to perform queries against external systems as a normal operation.   Although you can query and use functions like JOIN, it is not performant.   A more performant solution would be to import the data into StarRocks. 
+:::
+
 ## Limits
 
 - File external tables must be created in databases within the [default_catalog](../data_source/catalog/default_catalog.md). You can run [SHOW CATALOGS](../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) to query catalogs created in the cluster.
