@@ -103,12 +103,7 @@ import com.starrocks.sql.ast.ViewRelation;
 
 import java.util.ArrayList;
 import java.util.List;
-<<<<<<< HEAD
-=======
-import java.util.Map;
-import java.util.Set;
 import java.util.StringJoiner;
->>>>>>> 7c12370545 ([BugFix] remove backquote of field name in struct (#39753))
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.FunctionSet.IGNORE_NULL_WINDOW_FUNCTION;
