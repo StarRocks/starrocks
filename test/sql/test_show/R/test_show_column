@@ -21,6 +21,19 @@ PROPERTIES (
 );
 -- result:
 -- !result
+CREATE TABLE site_access2(
+    event_day DATE,
+    site_id INT DEFAULT '10',
+    city_code VARCHAR(100),
+    user_name VARCHAR(32) DEFAULT '',
+    pv BIGINT SUM DEFAULT '0'
+)
+DISTRIBUTED BY HASH(site_id)
+PROPERTIES (
+  "replication_num" = "1"
+);
+-- result:
+-- !result
 use test_show2;
 -- result:
 -- !result
