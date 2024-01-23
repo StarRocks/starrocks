@@ -15,6 +15,7 @@
 
 package com.starrocks.scheduler.persist;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.cluster.ClusterNamespace;
@@ -49,23 +50,6 @@ public class TaskRunStatus implements Writable {
     @SerializedName("createTime")
     private long createTime;
 
-    // task run success/fail time which this task run is finished
-    // NOTE: finishTime - createTime =
-    //          pending time in task queue  + process task time + other time
-    @SerializedName("finishTime")
-    private long finishTime;
-
-    // task run starts to process time
-    // NOTE: finishTime - processStartTime = process task run time(exclude pending time)
-    @SerializedName("processStartTime")
-    private long processStartTime;
-
-    @SerializedName("state")
-    private Constants.TaskRunState state = Constants.TaskRunState.PENDING;
-
-    @SerializedName("progress")
-    private int progress;
-
     @SerializedName("dbName")
     private String dbName;
 
@@ -78,12 +62,6 @@ public class TaskRunStatus implements Writable {
 
     @SerializedName("user")
     private String user;
-
-    @SerializedName("errorCode")
-    private int errorCode;
-
-    @SerializedName("errorMessage")
-    private String errorMessage;
 
     @SerializedName("expireTime")
     private long expireTime;
@@ -98,11 +76,36 @@ public class TaskRunStatus implements Writable {
     @SerializedName("source")
     private Constants.TaskSource source = Constants.TaskSource.CTAS;
 
+    //////////// Variables should be volatile which can be visited by multi threads ///////////
+
+    @SerializedName("errorCode")
+    private volatile int errorCode;
+
+    @SerializedName("errorMessage")
+    private volatile String errorMessage;
+
+    // task run success/fail time which this task run is finished
+    // NOTE: finishTime - createTime =
+    //          pending time in task queue  + process task time + other time
+    @SerializedName("finishTime")
+    private volatile long finishTime;
+
+    // task run starts to process time
+    // NOTE: finishTime - processStartTime = process task run time(exclude pending time)
+    @SerializedName("processStartTime")
+    private volatile long processStartTime = 0;
+
+    @SerializedName("state")
+    private volatile Constants.TaskRunState state = Constants.TaskRunState.PENDING;
+
+    @SerializedName("progress")
+    private volatile int progress;
+
     @SerializedName("mvExtraMessage")
-    private MVTaskRunExtraMessage mvTaskRunExtraMessage = new MVTaskRunExtraMessage();
+    private volatile MVTaskRunExtraMessage mvTaskRunExtraMessage = new MVTaskRunExtraMessage();
 
     @SerializedName("properties")
-    private Map<String, String> properties;
+    private volatile Map<String, String> properties;
 
     public TaskRunStatus() {
     }
@@ -297,13 +300,16 @@ public class TaskRunStatus implements Writable {
 
     public Constants.TaskRunState getLastRefreshState() {
         if (isRefreshFinished()) {
-            return Constants.TaskRunState.SUCCESS;
-        }
-
-        if (!state.equals(Constants.TaskRunState.FAILED)) {
-            return Constants.TaskRunState.RUNNING;
-        } else {
+            Preconditions.checkArgument(Constants.isFinishState(state),
+                    String.format("state %s must be finish state", state));
             return state;
+        } else {
+            // TODO: how to distinguish TaskRunStatus per partition.
+            if (processStartTime == 0) {
+                return state;
+            } else {
+                return Constants.TaskRunState.RUNNING;
+            }
         }
     }
 
