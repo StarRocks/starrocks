@@ -260,6 +260,7 @@ void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
     registry->register_metric("chunk_allocator_mem_bytes", &_memory_metrics->chunk_allocator_mem_bytes);
     registry->register_metric("clone_mem_bytes", &_memory_metrics->clone_mem_bytes);
     registry->register_metric("consistency_mem_bytes", &_memory_metrics->consistency_mem_bytes);
+    registry->register_metric("datacache_mem_bytes", &_memory_metrics->datacache_mem_bytes);
 
     registry->register_metric("total_column_pool_bytes", &_memory_metrics->column_pool_total_bytes);
     registry->register_metric("local_column_pool_bytes", &_memory_metrics->column_pool_local_bytes);
@@ -361,6 +362,7 @@ void SystemMetrics::_update_memory_metrics() {
     SET_MEM_METRIC_VALUE(clone_mem_tracker, clone_mem_bytes)
     SET_MEM_METRIC_VALUE(column_pool_mem_tracker, column_pool_mem_bytes)
     SET_MEM_METRIC_VALUE(consistency_mem_tracker, consistency_mem_bytes)
+    SET_MEM_METRIC_VALUE(datacache_mem_tracker, datacache_mem_bytes)
 #undef SET_MEM_METRIC_VALUE
 
 #define UPDATE_COLUMN_POOL_METRIC(var, type)                 \

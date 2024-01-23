@@ -25,43 +25,48 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectIn
 
 import java.io.IOException;
 
-// This function similar to the function(bitmap_to_string) of StarRocks
-public class UDFBitmapToString extends GenericUDF {
-    private transient BinaryObjectInspector inspector;
+public class UDFBitmapXor extends GenericUDF {
+    private transient BinaryObjectInspector inspector0;
+    private transient BinaryObjectInspector inspector1;
 
     @Override
     public ObjectInspector initialize(ObjectInspector[] args) throws UDFArgumentException {
-        if (args.length != 1) {
-            throw new UDFArgumentException("Argument number of bitmap_from_string should be 1.");
+        if (args.length != 2) {
+            throw new UDFArgumentException("Argument number of bitmap_xor should be 2");
         }
 
         ObjectInspector arg0 = args[0];
-        if (!(arg0 instanceof BinaryObjectInspector)) {
-            throw new UDFArgumentException("First argument of bitmap_to_string should be binary or string type.");
+        ObjectInspector arg1 = args[1];
+        if (!(arg0 instanceof BinaryObjectInspector) || !(arg1 instanceof BinaryObjectInspector)) {
+            throw new UDFArgumentException("Argument of bitmap_xor should be binary type");
         }
-        this.inspector = (BinaryObjectInspector) arg0;
+        this.inspector0 = (BinaryObjectInspector) arg0;
+        this.inspector1 = (BinaryObjectInspector) arg1;
 
-        return PrimitiveObjectInspectorFactory.javaStringObjectInspector;
+        return PrimitiveObjectInspectorFactory.javaByteArrayObjectInspector;
     }
 
     @Override
     public Object evaluate(DeferredObject[] args) throws HiveException {
-        if (args[0].get() == null) {
+        if (args[0].get() == null || args[1].get() == null) {
             return null;
         }
 
-        byte[] bytes = PrimitiveObjectInspectorUtils.getBinary(args[0].get(), this.inspector).getBytes();
+        byte[] bytes0 = PrimitiveObjectInspectorUtils.getBinary(args[0].get(), this.inspector0).getBytes();
+        byte[] bytes1 = PrimitiveObjectInspectorUtils.getBinary(args[1].get(), this.inspector1).getBytes();
 
         try {
-            BitmapValue bitmap = BitmapValue.bitmapFromBytes(bytes);
-            return bitmap.serializeToString();
+            BitmapValue bitmap0 = BitmapValue.bitmapFromBytes(bytes0);
+            BitmapValue bitmap1 = BitmapValue.bitmapFromBytes(bytes1);
+            bitmap0.xor(bitmap1);
+            return BitmapValue.bitmapToBytes(bitmap0);
         } catch (IOException e) {
             throw new HiveException(e);
         }
     }
 
     @Override
-    public String getDisplayString(String[] children) {
-        return "USAGE: bitmap_to_string(bitmap)";
+    public String getDisplayString(String[] strings) {
+        return "USAGE: bitmap_xor(bitmap, bitmap)";
     }
 }

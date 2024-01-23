@@ -1,4 +1,6 @@
 -- name: test_bitmap_agg
+set enable_rewrite_bitmap_union_to_bitamp_agg=true;
+
 CREATE TABLE t1 (
     c1 int,
     c2 boolean,

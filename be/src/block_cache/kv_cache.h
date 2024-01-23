@@ -17,8 +17,11 @@
 #include "block_cache/cache_options.h"
 #include "block_cache/io_buffer.h"
 #include "common/status.h"
+#include "starcache/star_cache.h"
 
 namespace starrocks {
+
+using DataCacheMetrics = starcache::CacheMetrics;
 
 class KvCache {
 public:
@@ -37,7 +40,7 @@ public:
     // Remove data from cache. The offset must be aligned by block size
     virtual Status remove_cache(const std::string& key) = 0;
 
-    virtual std::unordered_map<std::string, double> cache_stats() = 0;
+    virtual const DataCacheMetrics cache_metrics() = 0;
 
     virtual Status shutdown() = 0;
 };

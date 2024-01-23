@@ -33,6 +33,12 @@ namespace starrocks {
 
 namespace fs = std::filesystem;
 
+// The cachelib doesn't support a item (key+valueu+attribute) larger than 4 MB without chain.
+// So, we check and limit the block_size configured by users to avoid unexpected errors.
+// For starcache, in theory we doesn't have a hard limitation for block size, but a very large
+// block_size may cause heavy read amplification. So, we also limit it to 2 MB as an empirical value.
+const size_t BlockCache::MAX_BLOCK_SIZE = 2 * 1024 * 1024;
+
 BlockCache* BlockCache::instance() {
     static BlockCache cache;
     return &cache;
@@ -57,7 +63,7 @@ Status BlockCache::init(const CacheOptions& options) {
             }
         }
     }
-    _block_size = options.block_size;
+    _block_size = std::min(options.block_size, MAX_BLOCK_SIZE);
 #ifdef WITH_CACHELIB
     if (options.engine == "cachelib") {
         _kv_cache = std::make_unique<CacheLibWrapper>();
@@ -74,7 +80,10 @@ Status BlockCache::init(const CacheOptions& options) {
         LOG(ERROR) << "unsupported block cache engine: " << options.engine;
         return Status::NotSupported("unsupported block cache engine");
     }
-    return _kv_cache->init(options);
+
+    RETURN_IF_ERROR(_kv_cache->init(options));
+    _initialized.store(true, std::memory_order_relaxed);
+    return Status::OK();
 }
 
 Status BlockCache::write_cache(const CacheKey& cache_key, off_t offset, const IOBuffer& buffer, size_t ttl_seconds,
@@ -136,9 +145,14 @@ Status BlockCache::remove_cache(const CacheKey& cache_key, off_t offset, size_t 
     return _kv_cache->remove_cache(block_key);
 }
 
+const DataCacheMetrics BlockCache::cache_metrics() const {
+    return _kv_cache->cache_metrics();
+}
+
 Status BlockCache::shutdown() {
     Status st = _kv_cache->shutdown();
     _kv_cache = nullptr;
+    _initialized.store(false, std::memory_order_relaxed);
     return st;
 }
 

@@ -29,6 +29,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/empty_iterator.h"
 #include "storage/kv_store.h"
+#include "storage/primary_key_dump.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
@@ -721,6 +722,7 @@ public:
                           const TabletMetaSharedPtr& snapshot_tablet_meta);
     void load_snapshot(const std::string& meta_dir, const TabletSharedPtr& tablet, SegmentFooterPB* footer);
     void test_schema_change_optimiazation_adding_generated_column(bool enable_persistent_index);
+    void test_pk_dump(size_t rowset_cnt);
 
 protected:
     TabletSharedPtr _tablet;
@@ -1452,6 +1454,30 @@ TEST_F(TabletUpdatesTest, remove_expired_versions_with_persistent_index) {
     test_remove_expired_versions(true);
 }
 
+void TabletUpdatesTest::test_pk_dump(size_t rowset_cnt) {
+    PrimaryKeyDumpPB dump_pb;
+    {
+        // dump primary key tablet
+        PrimaryKeyDump dump(_tablet.get());
+        ASSERT_TRUE(dump.dump().ok());
+    }
+    const std::string dump_filepath =
+            _tablet->schema_hash_path() + "/" + std::to_string(_tablet->tablet_id()) + ".pkdump";
+    {
+        // read primary index dump
+        starrocks::PrimaryKeyDumpPB dump_pb;
+        ASSERT_TRUE(PrimaryKeyDump::read_deserialize_from_file(dump_filepath, &dump_pb).ok());
+        ASSERT_TRUE(PrimaryKeyDump::deserialize_pkcol_pkindex_from_meta(
+                            dump_filepath, dump_pb, [&](const starrocks::Chunk& chunk) {},
+                            [&](const std::string& filename, const starrocks::PartialKVsPB& kvs) {})
+                            .ok());
+        ASSERT_TRUE(dump_pb.tablet_meta().tablet_id() == _tablet->tablet_id());
+        ASSERT_TRUE(dump_pb.tablet_meta().table_id() == _tablet->belonged_table_id());
+        ASSERT_TRUE(dump_pb.rowset_metas_size() == rowset_cnt);
+        ASSERT_TRUE(dump_pb.rowset_stats_size() == rowset_cnt);
+    }
+}
+
 // NOLINTNEXTLINE
 void TabletUpdatesTest::test_apply(bool enable_persistent_index, bool has_merge_condition = false) {
     const int N = 10;
@@ -1491,6 +1517,7 @@ void TabletUpdatesTest::test_apply(bool enable_persistent_index, bool has_merge_
     for (int i = 2; i <= max_version; i++) {
         ASSERT_EQ(N, read_tablet(_tablet, i));
     }
+    test_pk_dump(rowsets.size());
 }
 
 TEST_F(TabletUpdatesTest, apply) {

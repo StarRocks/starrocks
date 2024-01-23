@@ -49,6 +49,7 @@ class Schema;
 class TabletReader;
 class ChunkChanger;
 class SegmentIterator;
+class PrimaryKeyDump;
 
 // save the context when reading from delta column files
 struct GetDeltaColumnContext {
@@ -324,6 +325,10 @@ public:
     double get_pk_index_write_amp_score();
 
     Status pk_index_major_compaction();
+
+    Status get_rowset_stats(std::map<uint32_t, std::string>* output_rowset_stats);
+
+    Status primary_index_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb);
 
 private:
     friend class Tablet;

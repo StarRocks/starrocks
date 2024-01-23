@@ -826,6 +826,12 @@ under the License.
             <version>0.7.2</version>
             <scope>test</scope>
         </dependency>
+
+        <dependency>
+            <groupId>com.zaxxer</groupId>
+            <artifactId>HikariCP</artifactId>
+            <version>${hikaricp.version}</version>
+        </dependency>
     </dependencies>
 
     <build>
