@@ -476,7 +476,7 @@ public class OlapTableSink extends DataSink {
                     ExpressionRangePartitionInfoV2 expressionRangePartitionInfoV2 = (ExpressionRangePartitionInfoV2) rangePartitionInfo;
                     List<Expr> partitionExprs = expressionRangePartitionInfoV2.getPartitionExprs();
                     Preconditions.checkArgument(partitionExprs.size() == 1,
-                            "Number of partition expr is not 1 for automatic partition table, expr num="
+                            "Number of partition expr is not 1 for expression partition table, expr num="
                                     + partitionExprs.size());
                     Expr expr = partitionExprs.get(0);
                     List<SlotRef> slotRefs = Lists.newArrayList();
