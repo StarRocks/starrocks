@@ -41,6 +41,18 @@ public class StructTypePlanTest extends PlanTestBase {
                 "c3 struct<a int, b int, c struct<a int, b int>, d array<int>>) " +
                 "duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
+<<<<<<< HEAD
+=======
+        starRocksAssert.withTable("create table array_struct_nest(c1 int, " +
+                "c2 array<struct<c2_sub1 int, c2_sub2 int>>, " +
+                "c3 struct<c3_sub1 array<struct<c3_sub1_sub1 int, c3_sub1_sub2 int>>, c3_sub2 int>) " +
+                "duplicate key(c1) distributed by hash(c1) buckets 1 " +
+                "properties('replication_num'='1');");
+        starRocksAssert.withTable("create table index_struct_nest(c1 int,\n" +
+                "index_struct array<struct<`index` bigint(20), char_col varchar(1048576)>>)\n" +
+                "duplicate key(c1) distributed by hash(c1) buckets 1\n" +
+                "properties('replication_num'='1')");
+>>>>>>> 7c12370545 ([BugFix] remove backquote of field name in struct (#39753))
         FeConstants.runningUnitTest = false;
     }
 
@@ -60,6 +72,7 @@ public class StructTypePlanTest extends PlanTestBase {
                 "  3:EXCHANGE");
         sql = "select c2 from test1 union all select c2_0 from test1";
         plan = getFragmentPlan(sql);
+<<<<<<< HEAD
         assertContains(plan, "2:Project\n" +
                 "  |  <slot 6> : CAST(3: c2 AS STRUCT<int(11), varchar(10)>)\n" +
                 "  |  \n" +
@@ -68,6 +81,14 @@ public class StructTypePlanTest extends PlanTestBase {
                 "  |----6:EXCHANGE\n" +
                 "  |    \n" +
                 "  3:EXCHANGE");
+=======
+        assertContains(plan, "CAST(3: c2 AS struct<a int(11), b varchar(10)>)");
+
+        sql = "select index_struct[1].`index` from index_struct_nest";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "1:Project\n" +
+                "  |  <slot 3> : 2: index_struct[1].index[true]");
+>>>>>>> 7c12370545 ([BugFix] remove backquote of field name in struct (#39753))
     }
 
     @Test

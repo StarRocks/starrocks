@@ -6249,7 +6249,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         List<StarRocksParser.SubfieldDescContext> subfields =
                 context.subfieldDescs().subfieldDesc();
         for (StarRocksParser.SubfieldDescContext type : subfields) {
-            fields.add(new StructField(type.identifier().getText(), getType(type.type()), null));
+            Identifier fieldIdentifier = (Identifier) visit(type.identifier());
+            String fieldName = fieldIdentifier.getValue();
+            fields.add(new StructField(fieldName, getType(type.type()), null));
         }
 
         return new StructType(fields);
