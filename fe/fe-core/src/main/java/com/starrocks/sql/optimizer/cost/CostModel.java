@@ -411,15 +411,13 @@ public class CostModel {
             double leftSize = leftStatistics.getOutputSize(context.getChildOutputColumns(0));
             double rightSize = rightStatistics.getOutputSize(context.getChildOutputColumns(1));
 
-            long crossJoinCostPenalty = ConnectContext.get().getSessionVariable().getCrossJoinCostPenalty();
-
             double cpuCost = StatisticUtils.multiplyOutputSize(StatisticUtils.multiplyOutputSize(leftSize, rightSize),
                     EXECUTE_COST_PENALTY);
             double memCost = StatisticUtils.multiplyOutputSize(rightSize, EXECUTE_COST_PENALTY * 100D);
 
 
             if (join.getJoinType().isCrossJoin()) {
-                cpuCost = StatisticUtils.multiplyOutputSize(cpuCost, crossJoinCostPenalty);
+                cpuCost = StatisticUtils.multiplyOutputSize(cpuCost, EXECUTE_COST_PENALTY);
             }
             // Right cross join could not be parallelized, so apply more punishment
             if (join.getJoinType().isRightJoin()) {
