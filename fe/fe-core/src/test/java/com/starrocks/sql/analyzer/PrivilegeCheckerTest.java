@@ -1600,11 +1600,56 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testShowTabletStmt() throws Exception {
-        verifyGrantRevoke(
-                "show tablet from example_db.example_table",
-                "grant OPERATE on system to test",
-                "revoke OPERATE on system from test",
-                "Access denied;");
+        // test no priv
+        String showTabletSql = "show tablet from db1.tbl1";
+        StatementBase showTabletStmt =
+                UtFrameUtils.parseStmtWithNewParser(showTabletSql, starRocksAssert.getCtx());
+        ShowExecutor executor = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) showTabletStmt);
+        try {
+            executor.execute();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Access denied"));
+        }
+        // show table from tbl
+        // test any priv, can show tablet, but ip:port is hidden
+        grantRevokeSqlAsRoot("grant SELECT on TABLE db1.tbl1 to test");
+        ShowResultSet showResultSet = executor.execute();
+        Assert.assertTrue(showResultSet.getResultRows().get(0).toString().contains("*:0"));
+
+
+        // test OPERATE priv, can show tablet, ip:port is not hidden
+        grantRevokeSqlAsRoot("grant OPERATE on SYSTEM to test");
+        showResultSet = executor.execute();
+        System.out.println(showResultSet.getResultRows().get(0));
+        Assert.assertTrue(showResultSet.getResultRows().get(0).toString().contains("127.0.0.1"));
+
+        grantRevokeSqlAsRoot("revoke OPERATE on SYSTEM from test");
+        // show tablet id
+        // test any priv, can show tablet, but ip:port is hidden
+        long tabletId = Long.parseLong(showResultSet.getResultRows().get(0).get(0));
+        showTabletSql = "show tablet " + tabletId;
+        showTabletStmt = UtFrameUtils.parseStmtWithNewParser(showTabletSql, starRocksAssert.getCtx());
+        executor = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) showTabletStmt);
+        showResultSet = executor.execute();
+        System.out.println(showResultSet.getResultRows().get(0));
+        String detailCmd = showResultSet.getResultRows().get(0).get(9);
+        System.out.println(detailCmd);
+        showTabletStmt = UtFrameUtils.parseStmtWithNewParser(detailCmd, starRocksAssert.getCtx());
+        executor = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) showTabletStmt);
+        showResultSet = executor.execute();
+        System.out.println(showResultSet.getResultRows().get(0));
+        Assert.assertTrue(showResultSet.getResultRows().get(0).toString().contains("*:0"));
+
+        // test OPERATE priv
+        grantRevokeSqlAsRoot("grant OPERATE on SYSTEM to test");
+        executor = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) showTabletStmt);
+        showResultSet = executor.execute();
+        System.out.println(showResultSet.getResultRows().get(0));
+        Assert.assertTrue(showResultSet.getResultRows().get(0).toString().contains("127.0.0.1"));
+
+        // clean
+        grantRevokeSqlAsRoot("revoke OPERATE on SYSTEM from test");
+        grantRevokeSqlAsRoot("revoke SELECT on TABLE db1.tbl1 from test");
     }
 
     @Test
