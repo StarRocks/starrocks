@@ -237,41 +237,41 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### update_compaction_check_interval_seconds
 
-- 含义：主键表 Update Compaction 的检查间隔。
+- 含义：主键表 Compaction 的检查间隔。
 - 单位：秒
 - 默认值：60
 
 #### update_compaction_num_threads_per_disk
 
-- 含义：每个磁盘 Update Compaction 线程的数目。
+- 含义：主键表每个磁盘 Compaction 线程的数目。
 - 默认值：1
 
 #### update_compaction_per_tablet_min_interval_seconds
 
-- 含义：Primary Key 表每个 tablet 做 Update Compaction 的最小时间间隔。
+- 含义：主键表每个 tablet 做 Compaction 的最小时间间隔。
 - 默认值：120
 - 单位：秒
 
 #### max_update_compaction_num_singleton_deltas
 
-- 含义：单次 Update Compaction 合并的最大 Rowset 数。
+- 含义：主键表单次 Compaction 合并的最大 Rowset 数。
 - 默认值：1000
 
 #### update_compaction_size_threshold
 
-- 含义：Primary Key 表的 Compaction Score 是基于文件大小计算的，与其他表类型的文件数量不同。通过该参数可以使 Primary key 表的 Compaction Score 与其他类型表的相近，便于用户理解。
+- 含义：主键表的 Compaction Score 是基于文件大小计算的，与其他表类型的文件数量不同。通过该参数可以使 主键表的 Compaction Score 与其他类型表的相近，便于用户理解。
 - 单位：字节
 - 默认值：268435456
 
 #### update_compaction_result_bytes
 
-- 含义：单次 Update Compaction 合并的最大结果的大小。
+- 含义：主键表单次 Compaction 合并的最大结果的大小。
 - 单位：字节
 - 默认值：1073741824
 
 #### update_compaction_delvec_file_io_amp_ratio
 
-- 含义：用于控制 Primary Key 表包含 Delvec 文件的 Rowset 做 Compaction 的优先级。该值越大优先级越高。
+- 含义：用于控制主键表包含 Delvec 文件的 Rowset 做 Compaction 的优先级。该值越大优先级越高。
 - 默认值：2
 
 #### repair_compaction_interval_seconds
@@ -424,7 +424,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### tablet_max_pending_versions
 
-- 含义：Primary Key 表每个 tablet 上允许已提交 (committed) 但是未 apply 的最大版本数。
+- 含义：主键表每个 tablet 上允许已提交 (committed) 但是未 apply 的最大版本数。
 - 默认值：1000
 
 #### tablet_max_versions

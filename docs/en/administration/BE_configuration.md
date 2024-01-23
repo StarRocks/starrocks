@@ -208,22 +208,22 @@ BE dynamic parameters are as follows.
 #### update_compaction_check_interval_seconds
 
 - **Default:** 60
-- **Description:** The time interval at which to check Update Compaction for Primary Key tables.
+- **Description:** The time interval at which to check compaction for Primary Key tables.
 
 #### update_compaction_num_threads_per_disk
 
 - **Default:** 1
-- **Description:** The number of Update Compaction threads per disk.
+- **Description:** The number of Compaction threads per disk for Primary Key tables.
 
 #### update_compaction_per_tablet_min_interval_seconds
 
 - **Default:** 120
-- **Description:** The minimum time interval at which Update Compaction is triggered for each tablet in a Primary Key table.
+- **Description:** The minimum time interval at which compaction is triggered for each tablet in a Primary Key table.
 
 #### max_update_compaction_num_singleton_deltas
 
 - **Default:** 1000
-- **Description:** The maximum number of rowsets that can be merged in a single Update Compaction.
+- **Description:** The maximum number of rowsets that can be merged in a single Compaction for Primary Key tables.
 
 #### update_compaction_size_threshold
 
@@ -235,7 +235,7 @@ BE dynamic parameters are as follows.
 
 - **Default:** 1073741824
 - **Unit:** Bytes
-- **Description:** The maximum result size of a single Update Compaction.
+- **Description:** The maximum result size of a single compaction for Primary Key tables.
 
 #### update_compaction_delvec_file_io_amp_ratio
 
