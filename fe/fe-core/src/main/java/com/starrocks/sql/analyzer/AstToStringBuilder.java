@@ -176,7 +176,8 @@ public class AstToStringBuilder {
         // when you just want to a function name as its alias set it false
         protected boolean addFunctionDbName;
 
-        // when you want to get a legal expr name with backquote set it false
+        // when you want to get an expr name with backquote set it true
+        // when you just want to get the real expr name set it false
         protected boolean withBackquote;
 
         public AST2StringBuilderVisitor() {

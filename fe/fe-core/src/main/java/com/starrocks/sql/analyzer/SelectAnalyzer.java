@@ -257,7 +257,7 @@ public class SelectAnalyzer {
                             true, item.getExpr().isNullable()));
                 }
 
-                // outputExprInOrderByScope is used to record which expressions in outputExpressioskn are to be
+                // outputExprInOrderByScope is used to record which expressions in outputExpression are to be
                 // recorded in the first level of OrderByScope (order by expressions can refer to columns in output)
                 // Which columns satisfy the condition?
                 // 1. An expression of type SlotRef.
