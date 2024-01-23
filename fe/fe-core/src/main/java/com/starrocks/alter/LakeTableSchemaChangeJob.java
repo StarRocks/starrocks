@@ -299,20 +299,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                     long originIndexId = indexIdMap.get(shadowIdxId);
                     KeysType originKeysType = table.getKeysTypeByIndexId(originIndexId);
                     List<Column> originSchema = table.getSchemaByIndexId(originIndexId);
-
-                    // copy for generate some const default value
-                    List<Column> copiedShadowSchema = Lists.newArrayList();
-                    for (Column column : shadowSchema) {
-                        Column.DefaultValueType defaultValueType = column.getDefaultValueType();
-                        if (defaultValueType == Column.DefaultValueType.CONST) {
-                            Column copiedColumn = new Column(column);
-                            copiedColumn.setDefaultValue(column.calculatedDefaultValueWithTime(startTime));
-                            copiedShadowSchema.add(copiedColumn);
-                        } else {
-                            copiedShadowSchema.add(column);
-                        }
-                    }
-
                     List<Integer> copiedSortKeyIdxes = indexMeta.getSortKeyIdxes();
                     if (indexMeta.getSortKeyIdxes() != null) {
                         if (originSchema.size() > shadowSchema.size()) {
@@ -362,7 +348,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                                 new CreateReplicaTask(backendId, dbId, tableId, partitionId,
                                         shadowIdxId, shadowTabletId, shadowShortKeyColumnCount, 0,
                                         Partition.PARTITION_INIT_VERSION,
-                                        originKeysType, TStorageType.COLUMN, storageMedium, copiedShadowSchema,
+                                        originKeysType, TStorageType.COLUMN, storageMedium, shadowSchema,
                                         bfColumns, bfFpp,
                                         countDownLatch, indexes, table.isInMemory(), table.enablePersistentIndex(),
                                         table.primaryIndexCacheExpireSec(), TTabletType.TABLET_TYPE_LAKE,

@@ -2664,6 +2664,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_fast_schema_evolution = true;
 
+    // This configuration will be removed after the shared data mode supports fast schema evolution
+    @ConfField(mutable = true)
+    public static boolean experimental_enable_fast_schema_evolution_in_shared_data = false;
+
     @ConfField(mutable = false)
     public static int pipe_listener_interval_millis = 1000;
     @ConfField(mutable = false)
