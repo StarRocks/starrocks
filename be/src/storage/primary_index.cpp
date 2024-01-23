@@ -964,7 +964,7 @@ PrimaryIndex::~PrimaryIndex() {
     TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id);
     if (tablet != nullptr) {
         if (_persistent_index != nullptr && !tablet->get_enable_persistent_index()) {
-            auto st = _persistent_index->delete_pindex_file();
+            auto st = _persistent_index->delete_pindex_files();
             if (!st.ok()) {
                 LOG(ERROR) << "tablet:" << tablet->tablet_id() << " clear pindex failed:" << st;
             }
