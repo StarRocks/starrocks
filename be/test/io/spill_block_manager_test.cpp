@@ -41,6 +41,7 @@
 #include "exec/spill/dir_manager.h"
 #include "exec/spill/executor.h"
 #include "exec/spill/file_block_manager.h"
+#include "exec/spill/hybird_block_manager.h"
 #include "exec/spill/log_block_manager.h"
 #include "exec/spill/mem_table.h"
 #include "exec/spill/spill_components.h"
@@ -82,20 +83,25 @@ class SpillBlockManagerTest : public ::testing::Test {
 public:
     void SetUp() override {
         dummy_query_id = generate_uuid();
-        path = config::storage_root_path + "/spill_test_data";
+        local_path = fmt::format("{}/{}", config::storage_root_path, "local_data");
+        remote_path = fmt::format("{}/{}", config::storage_root_path, "remote_data");
         auto fs = FileSystem::Default();
-        ASSERT_OK(fs->create_dir_recursive(path));
-        auto dir = create_spill_dir(path, INT64_MAX);
-        LOG(WARNING) << "TRACE:" << path;
-        dummy_dir_mgr = create_spill_dir_manager({dir});
+        ASSERT_OK(fs->create_dir_recursive(local_path));
+        ASSERT_OK(fs->create_dir_recursive(remote_path));
+        auto local_dir = create_spill_dir(local_path, 100);
+        auto remote_dir = create_spill_dir(remote_path, INT64_MAX);
+        local_dir_mgr = create_spill_dir_manager({local_dir});
+        remote_dir_mgr = create_spill_dir_manager({remote_dir});
     }
 
     void TearDown() override {}
 
 protected:
     TUniqueId dummy_query_id;
-    std::string path;
-    std::unique_ptr<spill::DirManager> dummy_dir_mgr;
+    std::string local_path;
+    std::string remote_path;
+    std::unique_ptr<spill::DirManager> local_dir_mgr;
+    std::unique_ptr<spill::DirManager> remote_dir_mgr;
     RuntimeState dummy_state;
     RuntimeProfile dummy_profile{"dummy"};
 };
@@ -156,7 +162,7 @@ TEST_F(SpillBlockManagerTest, dir_choose_strategy) {
 
 TEST_F(SpillBlockManagerTest, log_block_allocation_test) {
     auto log_block_mgr = std::make_shared<spill::LogBlockManager>(dummy_query_id);
-    log_block_mgr->set_dir_manager(dummy_dir_mgr.get());
+    log_block_mgr->set_dir_manager(local_dir_mgr.get());
     ASSERT_OK(log_block_mgr->open());
 
     std::vector<spill::BlockPtr> blocks;
@@ -167,7 +173,8 @@ TEST_F(SpillBlockManagerTest, log_block_allocation_test) {
         auto res = log_block_mgr->acquire_block(opts);
         ASSERT_TRUE(res.ok());
         auto block = res.value();
-        std::string expected = fmt::format("LogBlock[container={}/{}/{}]", path, print_id(dummy_query_id), "node1-1-0");
+        std::string expected =
+                fmt::format("LogBlock[container={}/{}/{}]", local_path, print_id(dummy_query_id), "node1-1-0");
         ASSERT_EQ(block->debug_string(), expected);
         blocks.emplace_back(std::move(block));
     }
@@ -178,7 +185,8 @@ TEST_F(SpillBlockManagerTest, log_block_allocation_test) {
         auto res = log_block_mgr->acquire_block(opts);
         ASSERT_TRUE(res.ok());
         auto block = res.value();
-        std::string expected = fmt::format("LogBlock[container={}/{}/{}]", path, print_id(dummy_query_id), "node1-1-1");
+        std::string expected =
+                fmt::format("LogBlock[container={}/{}/{}]", local_path, print_id(dummy_query_id), "node1-1-1");
         ASSERT_EQ(block->debug_string(), expected);
         blocks.emplace_back(std::move(block));
     }
@@ -191,13 +199,14 @@ TEST_F(SpillBlockManagerTest, log_block_allocation_test) {
         auto res = log_block_mgr->acquire_block(opts);
         ASSERT_TRUE(res.ok());
         auto block = res.value();
-        std::string expected = fmt::format("LogBlock[container={}/{}/{}]", path, print_id(dummy_query_id), "node1-1-0");
+        std::string expected =
+                fmt::format("LogBlock[container={}/{}/{}]", local_path, print_id(dummy_query_id), "node1-1-0");
         ASSERT_EQ(block->debug_string(), expected);
     }
 }
 
 TEST_F(SpillBlockManagerTest, file_block_allocation_test) {
-    auto file_block_mgr = std::make_shared<spill::FileBlockManager>(dummy_query_id, dummy_dir_mgr.get());
+    auto file_block_mgr = std::make_shared<spill::FileBlockManager>(dummy_query_id, local_dir_mgr.get());
     ASSERT_OK(file_block_mgr->open());
 
     std::vector<spill::BlockPtr> blocks;
@@ -209,7 +218,7 @@ TEST_F(SpillBlockManagerTest, file_block_allocation_test) {
         ASSERT_TRUE(res.ok());
         auto block = res.value();
         std::string expected =
-                fmt::format("FileBlock[container={}/{}/{}]", path, print_id(dummy_query_id), "node1-1-0");
+                fmt::format("FileBlock[container={}/{}/{}]", local_path, print_id(dummy_query_id), "node1-1-0");
         ASSERT_EQ(block->debug_string(), expected);
         blocks.emplace_back(std::move(block));
     }
@@ -221,7 +230,7 @@ TEST_F(SpillBlockManagerTest, file_block_allocation_test) {
         ASSERT_TRUE(res.ok());
         auto block = res.value();
         std::string expected =
-                fmt::format("FileBlock[container={}/{}/{}]", path, print_id(dummy_query_id), "node1-1-1");
+                fmt::format("FileBlock[container={}/{}/{}]", local_path, print_id(dummy_query_id), "node1-1-1");
         ASSERT_EQ(block->debug_string(), expected);
         blocks.emplace_back(std::move(block));
     }
@@ -235,7 +244,57 @@ TEST_F(SpillBlockManagerTest, file_block_allocation_test) {
         ASSERT_TRUE(res.ok());
         auto block = res.value();
         std::string expected =
-                fmt::format("FileBlock[container={}/{}/{}]", path, print_id(dummy_query_id), "node1-1-2");
+                fmt::format("FileBlock[container={}/{}/{}]", local_path, print_id(dummy_query_id), "node1-1-2");
+        ASSERT_EQ(block->debug_string(), expected);
+    }
+}
+
+TEST_F(SpillBlockManagerTest, hybird_block_allocation_test) {
+    std::shared_ptr<spill::HyBirdBlockManager> hybird_block_mgr;
+    {
+        auto local_block_mgr = std::make_unique<spill::LogBlockManager>(dummy_query_id);
+        local_block_mgr->set_dir_manager(local_dir_mgr.get());
+        ASSERT_OK(local_block_mgr->open());
+
+        auto remote_block_mgr = std::make_unique<spill::FileBlockManager>(dummy_query_id, remote_dir_mgr.get());
+        ASSERT_OK(remote_block_mgr->open());
+
+        hybird_block_mgr = std::make_shared<spill::HyBirdBlockManager>(dummy_query_id, std::move(local_block_mgr),
+                                                                       std::move(remote_block_mgr));
+        ASSERT_OK(hybird_block_mgr->open());
+    }
+    {
+        // 1. allocate the first block, local block manager can hold it
+        spill::AcquireBlockOptions opts{
+                .query_id = dummy_query_id, .plan_node_id = 1, .name = "node1", .block_size = 10};
+        auto res = hybird_block_mgr->acquire_block(opts);
+        ASSERT_TRUE(res.ok());
+        auto block = res.value();
+        std::string expected =
+                fmt::format("LogBlock[container={}/{}/{}]", local_path, print_id(dummy_query_id), "node1-1-0");
+        ASSERT_EQ(block->debug_string(), expected);
+        ASSERT_OK(hybird_block_mgr->release_block(block));
+    }
+    {
+        // 2. allocate the second block, local block manager's capacity exceeds limit, and it will be put in remote block manger
+        spill::AcquireBlockOptions opts{
+                .query_id = dummy_query_id, .plan_node_id = 1, .name = "node1", .block_size = 100};
+        auto res = hybird_block_mgr->acquire_block(opts);
+        ASSERT_TRUE(res.ok());
+        auto block = res.value();
+        std::string expected =
+                fmt::format("FileBlock[container={}/{}/{}]", remote_path, print_id(dummy_query_id), "node1-1-0");
+        ASSERT_EQ(block->debug_string(), expected);
+    }
+    {
+        // 3. allocate the third block, it's small enough that local block manger can hold it
+        spill::AcquireBlockOptions opts{
+                .query_id = dummy_query_id, .plan_node_id = 1, .name = "node1", .block_size = 90};
+        auto res = hybird_block_mgr->acquire_block(opts);
+        ASSERT_TRUE(res.ok());
+        auto block = res.value();
+        std::string expected =
+                fmt::format("LogBlock[container={}/{}/{}]", local_path, print_id(dummy_query_id), "node1-1-0");
         ASSERT_EQ(block->debug_string(), expected);
     }
 }
