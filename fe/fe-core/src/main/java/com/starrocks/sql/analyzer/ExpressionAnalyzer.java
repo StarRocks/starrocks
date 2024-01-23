@@ -840,7 +840,7 @@ public class ExpressionAnalyzer {
 
             List<Expr> queryExpressions = Lists.newArrayList();
             node.collect(arg -> arg instanceof Subquery, queryExpressions);
-            if (queryExpressions.size() > 0 && node.getChildren().size() > 2) {
+            if (!queryExpressions.isEmpty() && node.getChildren().size() > 2) {
                 throw new SemanticException("In Predicate only support literal expression list", node.getPos());
             }
 
@@ -855,7 +855,7 @@ public class ExpressionAnalyzer {
 
             for (Expr child : node.getChildren()) {
                 Type type = child.getType();
-                if (type.isJsonType() && queryExpressions.size() > 0) { // TODO: enable it after support join on JSON
+                if (type.isJsonType() && !queryExpressions.isEmpty()) { // TODO: enable it after support join on JSON
                     throw new SemanticException("In predicate of JSON does not support subquery", child.getPos());
                 }
                 if (!Type.canCastTo(type, compatibleType)) {
