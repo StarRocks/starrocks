@@ -208,6 +208,7 @@ BE dynamic parameters are as follows.
 #### update_compaction_check_interval_seconds
 
 - **Default:** 60
+- **Unit:** Seconds
 - **Description:** The time interval at which to check compaction for Primary Key tables.
 
 #### update_compaction_num_threads_per_disk
