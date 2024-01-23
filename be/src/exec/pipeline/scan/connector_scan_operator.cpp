@@ -47,6 +47,7 @@ private:
     int64_t chunk_source_mem_bytes_update_count = 0;
     int64_t arb_chunk_source_mem_bytes = 0;
     mutable int64_t debug_output_timestamp = 0;
+    std::atomic<int64_t> idle_scan_operator_count = 0;
 
     std::atomic<int64_t> open_scan_operator_count = 0;
     std::atomic<int64_t> active_scan_operator_count = 0;
@@ -61,7 +62,14 @@ public:
 
         int64_t max_count = std::max(1L, scan_mem_limit_value / chunk_source_mem_bytes_value);
         int64_t avail_count = max_count;
-        int64_t per_count = avail_count / dop + 1;
+        // int64_t avail_count = std::max(0L, max_count - running_count);
+        int64_t per_count = avail_count / dop;
+        int64_t idle_scan_operator_count_value = idle_scan_operator_count.load(std::memory_order_relaxed);
+        DCHECK(idle_scan_operator_count <= dop);
+
+        if (driver_sequence < (avail_count - per_count * dop + idle_scan_operator_count_value)) {
+            per_count += 1;
+        }
 
         [[maybe_unused]] auto build_debug_string = [&]() {
             std::stringstream ss;
@@ -109,12 +117,8 @@ public:
     void set_data_source_mem_bytes(int64_t value) { data_source_mem_bytes = value; }
     int64_t get_data_source_mem_bytes() const { return data_source_mem_bytes; }
     int64_t get_chunk_source_mem_bytes() const { return chunk_source_mem_bytes.load(std::memory_order_relaxed); }
-
-    int64_t update_open_scan_operator_count(int delta) {
-        return open_scan_operator_count.fetch_add(delta, std::memory_order_seq_cst);
-    }
-    int64_t update_active_scan_operator_count(int delta) {
-        return active_scan_operator_count.fetch_add(delta, std::memory_order_seq_cst);
+    void update_idle_scan_operator_count(int delta) {
+        idle_scan_operator_count.fetch_add(delta, std::memory_order_relaxed);
     }
 };
 
@@ -569,6 +573,14 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
     P.last_cs_speed = cs_speed;
     P.last_cs_pull_chunks = cs_pull_chunks;
     return io_tasks;
+}
+
+void ConnectorScanOperator::on_morsel_queue_empty() {
+    if (_morsel_queue_empty_event_fired) return;
+    _morsel_queue_empty_event_fired = true;
+    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
+    ConnectorScanOperatorIOTasksMemLimiter* L = factory->_io_tasks_mem_limiter;
+    L->update_idle_scan_operator_count(1);
 }
 
 // ==================== ConnectorChunkSource ====================
