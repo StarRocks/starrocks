@@ -2028,7 +2028,8 @@ void SegmentIterator::close() {
               << "segment read time: " << t_read_time << " "
               << "segment seek column time: " << _opts.stats->block_seek_ns << " "
               << "segment read column time: " << _opts.stats->block_fetch_ns << " "
-              << "segment inverted search time" << t_inverted_search_time;
+              << "segment inverted search time: " << t_inverted_search_time << " "
+              << "segment file name: " << _segment->file_name();
 
 }
 
