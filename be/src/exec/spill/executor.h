@@ -91,13 +91,18 @@ private:
 };
 
 struct IOTaskExecutor {
+    virtual Status submit(std::function<void(workgroup::YieldContext&)> func) = 0;
+};
+using IOTaskExecutorPtr = std::shared_ptr<IOTaskExecutor>;
+
+struct AsyncIOTaskExecutor final : IOTaskExecutor {
     workgroup::ScanExecutor* pool;
     workgroup::WorkGroupPtr wg;
 
-    IOTaskExecutor(workgroup::ScanExecutor* pool_, workgroup::WorkGroupPtr wg_) : pool(pool_), wg(std::move(wg_)) {}
+    AsyncIOTaskExecutor(workgroup::ScanExecutor* pool_, workgroup::WorkGroupPtr wg_)
+            : pool(pool_), wg(std::move(wg_)) {}
 
-    template <class Func>
-    Status submit(Func&& func) {
+    Status submit(std::function<void(workgroup::YieldContext&)> func) override {
         workgroup::ScanTask task(wg.get(), func);
         if (pool->submit(std::move(task))) {
             return Status::OK();
@@ -116,14 +121,12 @@ struct IOTaskExecutor {
 
     void force_submit(workgroup::ScanTask io_task) { pool->force_submit(std::move(io_task)); }
 };
-using IOTaskExecutorPtr = std::shared_ptr<IOTaskExecutor>;
 
-struct SyncTaskExecutor {
-    template <class Func>
-    Status submit(Func&& func) {
+struct SyncTaskExecutor final : public IOTaskExecutor {
+    Status submit(std::function<void(workgroup::YieldContext&)> func) override {
         workgroup::YieldContext yield_ctx;
         do {
-            std::forward<Func>(func)(yield_ctx);
+            func(yield_ctx);
         } while (!yield_ctx.is_finished());
         return Status::OK();
     }

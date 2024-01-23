@@ -212,6 +212,10 @@ public:
     Status reset_state(RuntimeState* state);
     IOTaskExecutorPtr local_io_executor() const { return _local_io_executor; }
 
+#ifdef BE_TEST
+    void set_local_io_executor(IOTaskExecutorPtr executor) { _local_io_executor = std::move(executor); }
+#endif
+
 private:
     Status _acquire_input_stream(RuntimeState* state);
 

@@ -48,7 +48,7 @@ Status SpillableHashJoinProbeOperator::prepare(RuntimeState* state) {
             "SpillProberPeakMemoryUsage", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
     RETURN_IF_ERROR(_probe_spiller->prepare(state));
     auto wg = state->fragment_ctx()->workgroup();
-    _executor = std::make_shared<spill::IOTaskExecutor>(ExecEnv::GetInstance()->scan_executor(), wg);
+    _executor = std::make_shared<spill::AsyncIOTaskExecutor>(ExecEnv::GetInstance()->scan_executor(), wg);
     return Status::OK();
 }
 

@@ -37,6 +37,7 @@
 #include "exec/pipeline/spill_process_operator.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
+#include "spill/executor.h"
 
 namespace starrocks {
 
@@ -291,7 +292,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> TopNNode::_decompose_to_
     // TODO: avoid create spill channel when when disable spill
 
     auto workgroup = context->fragment_context()->workgroup();
-    auto executor = std::make_shared<spill::IOTaskExecutor>(ExecEnv::GetInstance()->scan_executor(), workgroup);
+    auto executor = std::make_shared<spill::AsyncIOTaskExecutor>(ExecEnv::GetInstance()->scan_executor(), workgroup);
     auto spill_channel_factory =
             std::make_shared<SpillProcessChannelFactory>(degree_of_parallelism, std::move(executor));
 

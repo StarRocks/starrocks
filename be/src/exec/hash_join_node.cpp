@@ -42,6 +42,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/runtime_filter_worker.h"
 #include "simd/simd.h"
+#include "spill/executor.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -454,7 +455,7 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
     size_t num_right_partitions = context->source_operator(rhs_operators)->degree_of_parallelism();
 
     auto workgroup = context->fragment_context()->workgroup();
-    auto executor = std::make_shared<spill::IOTaskExecutor>(ExecEnv::GetInstance()->scan_executor(), workgroup);
+    auto executor = std::make_shared<spill::AsyncIOTaskExecutor>(ExecEnv::GetInstance()->scan_executor(), workgroup);
     auto build_side_spill_channel_factory =
             std::make_shared<SpillProcessChannelFactory>(num_right_partitions, std::move(executor));
 
