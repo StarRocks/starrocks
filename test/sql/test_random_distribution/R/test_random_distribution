@@ -62,11 +62,9 @@ PARTITION BY date_trunc('day', k)
 DISTRIBUTED BY RANDOM
 PROPERTIES (
 "replication_num" = "3",
-"bucket_size" = "4294967296",
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
-"fast_schema_evolution" = "true",
 "compression" = "LZ4"
 );
 -- !result
@@ -103,11 +101,9 @@ PARTITION BY RANGE(`k`)
 DISTRIBUTED BY RANDOM BUCKETS 10
 PROPERTIES (
 "replication_num" = "3",
-"bucket_size" = "4294967296",
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
-"fast_schema_evolution" = "true",
 "compression" = "LZ4"
 );
 -- !result
@@ -127,11 +123,9 @@ PARTITION p2 VALUES [("0"), ("20")))
 DISTRIBUTED BY RANDOM BUCKETS 10
 PROPERTIES (
 "replication_num" = "3",
-"bucket_size" = "4294967296",
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
-"fast_schema_evolution" = "true",
 "compression" = "LZ4"
 );
 -- !result
@@ -152,11 +146,9 @@ PARTITION p3 VALUES [("20"), ("30")))
 DISTRIBUTED BY RANDOM BUCKETS 10
 PROPERTIES (
 "replication_num" = "3",
-"bucket_size" = "4294967296",
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
-"fast_schema_evolution" = "true",
 "compression" = "LZ4"
 );
 -- !result
@@ -178,11 +170,9 @@ PARTITION p4 VALUES [("30"), ("40")))
 DISTRIBUTED BY RANDOM BUCKETS 10
 PROPERTIES (
 "replication_num" = "3",
-"bucket_size" = "4294967296",
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
-"fast_schema_evolution" = "true",
 "compression" = "LZ4"
 );
 -- !result
@@ -223,11 +213,9 @@ DUPLICATE KEY(`k`)
 DISTRIBUTED BY RANDOM BUCKETS 10
 PROPERTIES (
 "replication_num" = "3",
-"bucket_size" = "4294967296",
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
-"fast_schema_evolution" = "true",
 "compression" = "LZ4"
 );
 -- !result
@@ -247,11 +235,9 @@ DUPLICATE KEY(`k`, `v`)
 DISTRIBUTED BY RANDOM BUCKETS 10
 PROPERTIES (
 "replication_num" = "3",
-"bucket_size" = "4294967296",
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
-"fast_schema_evolution" = "true",
 "compression" = "LZ4"
 );
 -- !result
@@ -277,11 +263,9 @@ PARTITION BY RANGE(`k`)
 DISTRIBUTED BY RANDOM BUCKETS 10
 PROPERTIES (
 "replication_num" = "3",
-"bucket_size" = "4294967296",
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
-"fast_schema_evolution" = "true",
 "compression" = "LZ4"
 );
 -- !result
