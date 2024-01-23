@@ -48,6 +48,7 @@ public class AlterTableTest {
         Config.dynamic_partition_enable = true;
         Config.dynamic_partition_check_interval_seconds = 1;
         Config.enable_strict_storage_medium_check = false;
+        Config.enable_experimental_rowstore = true;
         UtFrameUtils.createMinStarRocksCluster();
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();

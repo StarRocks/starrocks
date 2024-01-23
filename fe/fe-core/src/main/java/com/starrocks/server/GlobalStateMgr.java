@@ -304,7 +304,6 @@ import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.File;
 import java.io.IOException;
-import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -1651,20 +1650,6 @@ public class GlobalStateMgr {
         LOG.info("finish processing all tables' related materialized views in {}ms", duration);
     }
 
-    private void checkOpTypeValid() throws IOException {
-        try {
-            for (Field field : OperationType.class.getDeclaredFields()) {
-                short id = field.getShort(null);
-                if (id > OperationType.OP_TYPE_EOF) {
-                    throw new IOException("OperationType cannot use a value exceeding 20000, " +
-                            "and an error will be reported if it exceeds : " + field.getName() + " = " + id);
-                }
-            }
-        } catch (IllegalAccessException e) {
-            throw new IOException(e);
-        }
-    }
-
     public void loadHeader(DataInputStream dis) throws IOException {
         // for new format, version schema is [starrocksMetaVersion], and the int value must be positive
         // for old format, version schema is [-1, metaVersion, starrocksMetaVersion]
@@ -1686,7 +1671,6 @@ public class GlobalStateMgr {
         }
 
         MetaContext.get().setStarRocksMetaVersion(starrocksMetaVersion);
-        checkOpTypeValid();
         ImageHeader header = GsonUtils.GSON.fromJson(Text.readString(dis), ImageHeader.class);
         idGenerator.setId(header.getBatchEndId());
         isDefaultClusterCreated = header.isDefaultClusterCreated();
@@ -1984,10 +1968,10 @@ public class GlobalStateMgr {
                 // apply
                 EditLog.loadJournal(this, entity);
             } catch (Throwable e) {
-                if (canSkipBadReplayedJournal()) {
+                if (canSkipBadReplayedJournal(e)) {
                     LOG.error("!!! DANGER: SKIP JOURNAL {}: {} !!!",
                             replayedJournalId.incrementAndGet(),
-                            entity == null ? null : entity.getData(),
+                            entity == null ? null : GsonUtils.GSON.toJson(entity.getData()),
                             e);
                     if (!readSucc) {
                         cursor.skipNext();
@@ -2033,11 +2017,11 @@ public class GlobalStateMgr {
         return false;
     }
 
-    private boolean canSkipBadReplayedJournal() {
+    protected boolean canSkipBadReplayedJournal(Throwable t) {
         try {
             for (String idStr : Config.metadata_journal_skip_bad_journal_ids.split(",")) {
-                if (!StringUtils.isEmpty(idStr) && Long.valueOf(idStr) == replayedJournalId.get() + 1) {
-                    LOG.info("skip bad replayed journal id {} because configured {}",
+                if (!StringUtils.isEmpty(idStr) && Long.parseLong(idStr) == replayedJournalId.get() + 1) {
+                    LOG.error("skip bad replayed journal id {} because configured {}",
                             idStr, Config.metadata_journal_skip_bad_journal_ids);
                     return true;
                 }
@@ -2045,6 +2029,26 @@ public class GlobalStateMgr {
         } catch (Exception e) {
             LOG.warn("failed to parse metadata_journal_skip_bad_journal_ids: {}",
                     Config.metadata_journal_skip_bad_journal_ids, e);
+        }
+
+        short opCode = OperationType.OP_INVALID;
+        if (t instanceof JournalException) {
+            opCode = ((JournalException) t).getOpCode();
+        }
+        if (t instanceof JournalInconsistentException) {
+            opCode = ((JournalInconsistentException) t).getOpCode();
+        }
+
+        if (opCode != OperationType.OP_INVALID
+                && OperationType.IGNORABLE_OPERATIONS.contains(opCode)) {
+            if (Config.metadata_journal_ignore_replay_failure) {
+                LOG.error("skip ignorable journal load failure, opCode: {}", opCode);
+                return true;
+            } else {
+                LOG.error("the failure of opCode: {} is ignorable, " +
+                        "you can set metadata_journal_ignore_replay_failure to true to ignore this failure", opCode);
+                return false;
+            }
         }
         return false;
     }
