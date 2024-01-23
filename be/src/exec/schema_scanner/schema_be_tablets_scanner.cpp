@@ -102,7 +102,7 @@ Status SchemaBeTabletsScanner::start(RuntimeState* state) {
     _infos.clear();
     auto manager = StorageEngine::instance()->tablet_manager();
     manager->get_tablets_basic_infos(_param->table_id, _param->partition_id, _param->tablet_id, _infos,
-                                     authorized_table_ids);
+                                     &authorized_table_ids);
     LOG(INFO) << strings::Substitute("get_tablets_basic_infos table_id:$0 partition:$1 tablet:$2 #info:$3",
                                      _param->table_id, _param->partition_id, _param->tablet_id, _infos.size());
     _cur_idx = 0;

@@ -1522,7 +1522,7 @@ void TabletManager::get_tablets_by_partition(int64_t partition_id, std::vector<T
 
 void TabletManager::get_tablets_basic_infos(int64_t table_id, int64_t partition_id, int64_t tablet_id,
                                             std::vector<TabletBasicInfo>& tablet_infos,
-                                            std::set<int64_t>& authorized_table_ids) {
+                                            std::set<int64_t>* authorized_table_ids) {
     if (tablet_id != -1) {
         auto tablet = get_tablet(tablet_id, true, nullptr);
         if (tablet) {
@@ -1554,7 +1554,8 @@ void TabletManager::get_tablets_basic_infos(int64_t table_id, int64_t partition_
                 auto& tablet = itr.second;
                 auto table_id_in_meta = tablet->tablet_meta()->table_id();
                 if ((table_id == -1 || table_id_in_meta == table_id) &&
-                    authorized_table_ids.find(table_id_in_meta) != authorized_table_ids.end()) {
+                    (authorized_table_ids != nullptr &&
+                     authorized_table_ids->find(table_id_in_meta) != authorized_table_ids->end())) {
                     auto& info = tablet_infos.emplace_back();
                     tablet->get_basic_info(info);
                 }
