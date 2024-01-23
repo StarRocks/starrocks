@@ -24,7 +24,7 @@ namespace starrocks {
 
 bool IRHelper::support_jit(const LogicalType& type) {
     return type == TYPE_BOOLEAN || type == TYPE_TINYINT || type == TYPE_SMALLINT || type == TYPE_INT ||
-           type == TYPE_BIGINT                          // || type == TYPE_LARGEINT // Integer types;
+           type == TYPE_BIGINT || type == TYPE_LARGEINT // Integer types;
            || type == TYPE_FLOAT || type == TYPE_DOUBLE // Floating point types;
             ;
 }

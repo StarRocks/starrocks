@@ -1137,7 +1137,8 @@ public:
     };
 
     bool is_compilable() const override {
-        return !AllowThrowException && IRHelper::support_jit(FromType) && IRHelper::support_jit(ToType);
+        return !AllowThrowException && FromType != TYPE_LARGEINT && ToType != TYPE_LARGEINT &&
+               IRHelper::support_jit(FromType) && IRHelper::support_jit(ToType);
     }
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,

@@ -29,8 +29,7 @@
 #include "exprs/unary_function.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Value.h"
-#include "runtime/decimalv3.h"
-#include "util/pred_guard.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -185,7 +184,7 @@ public:
         }
     }
 
-    bool is_compilable() const override { return IRHelper::support_jit(Type); }
+    bool is_compilable() const override { return Type != TYPE_LARGEINT && IRHelper::support_jit(Type); }
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
                                          const std::vector<LLVMDatum>& datums) const override {
@@ -255,7 +254,7 @@ public:
         }
     }
 
-    bool is_compilable() const override { return IRHelper::support_jit(Type); }
+    bool is_compilable() const override { return Type != TYPE_LARGEINT && IRHelper::support_jit(Type); }
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
                                          const std::vector<LLVMDatum>& datums) const override {

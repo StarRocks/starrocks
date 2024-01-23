@@ -640,22 +640,25 @@ TEST_F(VectorizedArithmeticExprTest, constMod128Expr) {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
         // TODO(Yueyang): support __int128 mod.
-        // ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
-        ASSERT_FALSE(ptr->is_nullable());
-        ASSERT_TRUE(ptr->is_constant());
-        ASSERT_FALSE(ptr->is_numeric());
+        ExprsTestHelper::verify_with_jit(
+                ptr, expr.get(), &runtime_state,
+                [](ColumnPtr const& ptr) {
+                    ASSERT_FALSE(ptr->is_nullable());
+                    ASSERT_TRUE(ptr->is_constant());
+                    ASSERT_FALSE(ptr->is_numeric());
 
-        auto v = std::static_pointer_cast<ConstColumn>(ptr);
-        ASSERT_EQ(1, v->size());
+                    auto v = std::static_pointer_cast<ConstColumn>(ptr);
+                    ASSERT_EQ(1, v->size());
 
-        for (int j = 0; j < v->size(); ++j) {
-            ASSERT_EQ(0, ColumnHelper::cast_to_raw<TYPE_LARGEINT>(v->data_column())->get_data()[j]);
-        }
+                    for (int j = 0; j < v->size(); ++j) {
+                        ASSERT_EQ(0, ColumnHelper::cast_to_raw<TYPE_LARGEINT>(v->data_column())->get_data()[j]);
+                    }
 
-        for (int j = 0; j < v->size(); ++j) {
-            ASSERT_FALSE(v->is_null(j));
-        }
-        // });
+                    for (int j = 0; j < v->size(); ++j) {
+                        ASSERT_FALSE(v->is_null(j));
+                    }
+                },
+                false);
     }
 }
 
@@ -691,22 +694,25 @@ TEST_F(VectorizedArithmeticExprTest, constModN128Expr) {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
         // TODO(Yueyang): support __int128 mod.
-        // ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
-        ASSERT_FALSE(ptr->is_nullable());
-        ASSERT_TRUE(ptr->is_constant());
-        ASSERT_FALSE(ptr->is_numeric());
+        ExprsTestHelper::verify_with_jit(
+                ptr, expr.get(), &runtime_state,
+                [](ColumnPtr const& ptr) {
+                    ASSERT_FALSE(ptr->is_nullable());
+                    ASSERT_TRUE(ptr->is_constant());
+                    ASSERT_FALSE(ptr->is_numeric());
 
-        auto v = std::static_pointer_cast<ConstColumn>(ptr);
-        ASSERT_EQ(1, v->size());
+                    auto v = std::static_pointer_cast<ConstColumn>(ptr);
+                    ASSERT_EQ(1, v->size());
 
-        for (int j = 0; j < v->size(); ++j) {
-            ASSERT_EQ(0, ColumnHelper::cast_to_raw<TYPE_LARGEINT>(v->data_column())->get_data()[j]);
-        }
+                    for (int j = 0; j < v->size(); ++j) {
+                        ASSERT_EQ(0, ColumnHelper::cast_to_raw<TYPE_LARGEINT>(v->data_column())->get_data()[j]);
+                    }
 
-        for (int j = 0; j < v->size(); ++j) {
-            ASSERT_FALSE(v->is_null(j));
-        }
-        // });
+                    for (int j = 0; j < v->size(); ++j) {
+                        ASSERT_FALSE(v->is_null(j));
+                    }
+                },
+                false);
     }
 }
 
