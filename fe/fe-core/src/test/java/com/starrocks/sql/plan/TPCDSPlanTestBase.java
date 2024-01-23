@@ -25,6 +25,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
@@ -56,6 +57,9 @@ public class TPCDSPlanTestBase extends PlanTestBase {
             .put("web_site", 30L)
             .build();
 
+    // query name -> query sql
+    private static final Map<String, String> SQL_MAP = new LinkedHashMap<>();
+
     public void setTPCDSFactor(int factor) {
         ROW_COUNT_MAP.forEach((t, v) -> {
             OlapTable table = getOlapTable(t);
@@ -82,6 +86,14 @@ public class TPCDSPlanTestBase extends PlanTestBase {
         });
     }
 
+    public static Map<String, String> getSqlMap() {
+        return SQL_MAP;
+    }
+
+    public static String getSql(String queryName) {
+        return SQL_MAP.get(queryName);
+    }
+
     @BeforeClass
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
@@ -93,7 +105,8 @@ public class TPCDSPlanTestBase extends PlanTestBase {
 
     private static String from(String name) {
         String path = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath();
-        File file = new File(path + "/tpcds/query" + name + ".sql");
+        String queryName = "query" + name;
+        File file = new File(path + "/tpcds/" + queryName + ".sql");
         StringBuilder sb = new StringBuilder();
         try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
             String str;
@@ -103,7 +116,9 @@ public class TPCDSPlanTestBase extends PlanTestBase {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        return sb.toString();
+        String sql = sb.toString();
+        SQL_MAP.put(queryName, sql);
+        return sql;
     }
 
     public static final String Q01 = from("01");
