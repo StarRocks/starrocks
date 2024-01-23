@@ -46,7 +46,890 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 You can only set the static parameters of a FE by changing them in the corresponding configuration file **fe.conf**, and restart the FE to allow the changes to take effect.
 
+<<<<<<< HEAD
 ## Understand FE parameters
+=======
+- Unit: ms
+- Default: 5000
+- Description: The threshold used to determine whether a query is a slow query. If the response time of a query exceeds this threshold, it is recorded as a slow query in `fe.audit.log`.
+
+### Metadata and cluster management
+
+#### catalog_try_lock_timeout_ms
+
+- **Unit**: ms
+- **Default**: 5000
+- **Description**: The timeout duration to obtain the global lock.
+
+#### edit_log_roll_num
+
+- **Unit**: -
+- **Default**: 50000
+- **Description**: The maximum number of metadata log entries that can be written before a log file is created for these log entries. This parameter is used to control the size of log files. The new log file is written to the BDBJE database.
+
+#### ignore_unknown_log_id
+
+- **Unit**: -
+- **Default**: FALSE
+- **Description**: Whether to ignore an unknown log ID. When an FE is rolled back, the FEs of the earlier version may be unable to recognize some log IDs. If the value is `TRUE`, the FE ignores unknown log IDs. If the value is `FALSE`, the FE exits.
+
+#### ignore_materialized_view_error
+
+- **Unit**: -
+- **Default**: FALSE
+- **Description**: Whether FE ignores the metadata exception caused by materialized view errors. If FE fails to start due to the metadata exception caused by materialized view errors, you can set this parameter to `true` to allow FE to ignore the exception. This parameter is supported from v2.5.10 onwards.
+
+#### ignore_meta_check
+
+- **Unit**: -
+- **Default**: FALSE
+- **Description**: Whether non-leader FEs ignore the metadata gap from the leader FE. If the value is TRUE, non-leader FEs ignore the metadata gap from the leader FE and continue providing data reading services. This parameter ensures continuous data reading services even when you stop the leader FE for a long period of time. If the value is FALSE, non-leader FEs do not ignore the metadata gap from the leader FE and stop providing data reading services.
+
+#### meta_delay_toleration_second
+
+- **Unit**: s
+- **Default**: 300
+- **Description**: The maximum duration by which the metadata on the follower and observer FEs can lag behind that on the leader FE. Unit: seconds. If this duration is exceeded, the non-leader FEs stops providing services.
+
+#### drop_backend_after_decommission
+
+- **Unit**: -
+- **Default**: TRUE
+- **Description**: Whether to delete a BE after the BE is decommissioned. `TRUE` indicates that the BE is deleted immediately after it is decommissioned. `FALSE` indicates that the BE is not deleted after it is decommissioned.
+
+#### enable_collect_query_detail_info
+
+- **Unit**: -
+- **Default**: FALSE
+- **Description**: Whether to collect the profile of a query. If this parameter is set to `TRUE`, the system collects the profile of the query. If this parameter is set to `FALSE`, the system does not collect the profile of the query.
+
+#### enable_background_refresh_connector_metadata
+
+- **Unit**: -
+- **Default**: `true` in v3.0<br />`false` in v2.5
+- **Description**: Whether to enable the periodic Hive metadata cache refresh. After it is enabled, StarRocks polls the metastore (Hive Metastore or AWS Glue) of your Hive cluster, and refreshes the cached metadata of the frequently accessed Hive catalogs to perceive data changes. `true` indicates to enable the Hive metadata cache refresh, and `false` indicates to disable it. This parameter is supported from v2.5.5 onwards.
+
+#### background_refresh_metadata_interval_millis
+
+- **Unit**: ms
+- **Default**: 600000
+- **Description**: The interval between two consecutive Hive metadata cache refreshes. This parameter is supported from v2.5.5 onwards.
+
+#### background_refresh_metadata_time_secs_since_last_access_secs
+
+- **Unit**: s
+- **Default**: 86400
+- **Description**: The expiration time of a Hive metadata cache refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its cached metadata. This parameter is supported from v2.5.5 onwards.
+
+#### enable_statistics_collect_profile
+
+- **Unit**: N/A
+- **Default**: false
+- **Description**: Whether to generate profiles for statistics queries. You can set this item to `true` to allow StarRocks to generate query profiles for queries on system statistics. This parameter is supported from v3.1.5 onwards.
+
+### Query engine
+
+#### max_allowed_in_element_num_of_delete
+
+- Unit: -
+- Default: 10000
+- Description: The maximum number of elements allowed for the IN predicate in a DELETE statement.
+
+#### enable_materialized_view
+
+- Unit: -
+- Default: TRUE
+- Description: Whether to enable the creation of materialized views.
+
+#### enable_decimal_v3
+
+- Unit: -
+- Default: TRUE
+- Description: Whether to support the DECIMAL V3 data type.
+
+#### enable_sql_blacklist
+
+- Unit: -
+- Default: FALSE
+- Description: Whether to enable blacklist check for SQL queries. When this feature is enabled, queries in the blacklist cannot be executed.
+
+#### dynamic_partition_check_interval_seconds
+
+- Unit: s
+- Default: 600
+- Description: The interval at which new data is checked. If new data is detected, StarRocks automatically creates partitions for the data.
+
+#### dynamic_partition_enable
+
+- Unit: -
+- Default: TRUE
+- Description: Whether to enable the dynamic partitioning feature. When this feature is enabled, StarRocks dynamically creates partitions for new data and automatically deletes expired partitions to ensure the freshness of data.
+
+#### http_slow_request_threshold_ms
+
+- Unit: ms
+- Default: 5000
+- Description: If the response time for an HTTP request exceeds the value specified by this parameter, a log is generated to track this request.
+- Introduced in: 2.5.15，3.1.5
+
+#### max_partitions_in_one_batch
+
+- Unit: -
+- Default: 4096
+- Description: The maximum number of partitions that can be created when you bulk create partitions.
+
+#### max_query_retry_time
+
+- Unit: -
+- Default: 2
+- Description: The maximum number of query retries on an FE.
+
+#### max_create_table_timeout_second
+
+- Unit: s
+- Default: 600
+- Description: The maximum timeout duration for creating a table.
+
+#### create_table_max_serial_replicas
+
+- Unit: -
+- Default: 128
+- Description: The maximum number of replicas to create serially. If actual replica count exceeds this, replicas will be created concurrently. Try to reduce this config if table creation is taking a long time to complete.
+
+#### max_running_rollup_job_num_per_table
+
+- Unit: -
+- Default: 1
+- Description: The maximum number of rollup jobs can run in parallel for a table.
+
+#### max_planner_scalar_rewrite_num
+
+- Unit: -
+- Default: 100000
+- Description: The maximum number of times that the optimizer can rewrite a scalar operator.
+
+#### enable_statistic_collect
+
+- Unit: -
+- Default: TRUE
+- Description: Whether to collect statistics for the CBO. This feature is enabled by default.
+
+#### enable_collect_full_statistic
+
+- Unit: -
+- Default: TRUE
+- Description: Whether to enable automatic full statistics collection. This feature is enabled by default.
+
+#### statistic_auto_collect_ratio
+
+- Unit: -
+- Default: 0.8
+- Description: The threshold for determining whether the statistics for automatic collection are healthy. If statistics health is below this threshold, automatic collection is triggered.
+
+#### statistic_max_full_collect_data_size
+
+- Unit: LONG
+- Default: 107374182400
+- Description: The size, in bytes, of the largest partition for the automatic collection of statistics. If a partition exceeds this value, then sampled collection is performed instead of full.
+
+#### statistic_collect_max_row_count_per_query
+
+- Unit: INT
+- Default: 5000000000
+- Description: The maximum number of rows to query for a single analyze task. An analyze task will be split into multiple queries if this value is exceeded.
+
+#### statistic_collect_interval_sec
+
+- Unit: s
+- Default: 300
+- Description: The interval for checking data updates during automatic collection.
+
+#### statistic_auto_analyze_start_time
+
+- Unit: STRING
+- Default: 00:00:00
+- Description: The start time of automatic collection. Value range: `00:00:00` - `23:59:59`.
+
+#### statistic_auto_analyze_end_time
+
+- Unit: STRING
+- Default: 23:59:59
+- Description: The end time of automatic collection. Value range: `00:00:00` - `23:59:59`.
+
+#### statistic_sample_collect_rows
+
+- Unit: -
+- Default: 200000
+- Description: The minimum number of rows to collect for sampled collection. If the parameter value exceeds the actual number of rows in your table, full collection is performed.
+
+#### histogram_buckets_size
+
+- Unit: -
+- Default: 64
+- Description: The default bucket number for a histogram.
+
+#### histogram_mcv_size
+
+- Unit: -
+- Default: 100
+- Description: The number of most common values (MCV) for a histogram.
+
+#### histogram_sample_ratio
+
+- Unit: -
+- Default: 0.1
+- Description: The sampling ratio for a histogram.
+
+#### histogram_max_sample_row_count
+
+- Unit: -
+- Default: 10000000
+- Description: The maximum number of rows to collect for a histogram.
+
+#### statistics_manager_sleep_time_sec
+
+- Unit: s
+- Default: 60
+- Description: The interval at which metadata is scheduled. The system performs the following operations based on this interval:
+  - Create tables for storing statistics.
+  - Delete statistics that have been deleted.
+  - Delete expired statistics.
+
+#### statistic_update_interval_sec
+
+- Unit: s
+- Default: `24 * 60 * 60`
+- Description: The interval at which the cache of statistical information is updated. Unit: seconds.
+
+#### statistic_analyze_status_keep_second
+
+- Unit: s
+- Default: 259200
+- Description: The duration to retain the history of collection tasks. The default value is 3 days.
+
+#### statistic_collect_concurrency
+
+- Unit: -
+- Default: 3
+- Description: The maximum number of manual collection tasks that can run in parallel. The value defaults to 3, which means you can run a maximum of three manual collection tasks in parallel. If the value is exceeded, incoming tasks will be in the PENDING state, waiting to be scheduled.
+
+#### statistic_auto_collect_small_table_rows
+
+- Unit: -
+- Default: 10000000
+- Description: Threshold to determine whether a table in an external data source (Hive, Iceberg, Hudi) is a small table during automatic collection. If the table has rows less than this value, the table is considered a small table.
+- Introduced in: v3.2
+
+#### enable_local_replica_selection
+
+- Unit: -
+- Default: FALSE
+- Description: Whether to select local replicas for queries. Local replicas reduce the network transmission cost. If this parameter is set to TRUE, the CBO preferentially selects tablet replicas on BEs that have the same IP address as the current FE. If this parameter is set to `FALSE`, both local replicas and non-local replicas can be selected. The default value is FALSE.
+
+#### max_distribution_pruner_recursion_depth
+
+- Unit: -
+- Default: 100
+- Description: The maximum recursion depth allowed by the partition pruner. Increasing the recursion depth can prune more elements but also increases CPU consumption.
+
+#### enable_udf
+
+- Unit: -
+- Default: FALSE
+- Description: Whether to enable UDF.
+
+### Loading and unloading
+
+#### max_broker_load_job_concurrency
+
+- **Unit**: -
+- **Default**: 5
+- **Description**: The maximum number of concurrent Broker Load jobs allowed within the StarRocks cluster. This parameter is valid only for Broker Load. The value of this parameter must be less than the value of `max_running_txn_num_per_db`. From v2.5 onwards, the default value is changed from `10` to `5`. The alias of this parameter is `async_load_task_pool_size`.
+
+#### load_straggler_wait_second
+
+- **Unit**: s
+- **Default**: 300
+- **Description**: The maximum loading lag that can be tolerated by a BE replica. If this value is exceeded, cloning is performed to clone data from other replicas. Unit: seconds.
+
+#### desired_max_waiting_jobs
+
+- **Unit**: -
+- **Default**: 1024
+- **Description**: The maximum number of pending jobs in an FE. The number refers to all jobs, such as table creation, loading, and schema change jobs. If the number of pending jobs in an FE reaches this value, the FE will reject new load requests. This parameter takes effect only for asynchronous loading. From v2.5 onwards, the default value is changed from 100 to 1024.
+
+#### max_load_timeout_second
+
+- **Unit**: s
+- **Default**: 259200
+- **Description**: The maximum timeout duration allowed for a load job. The load job fails if this limit is exceeded. This limit applies to all types of load jobs.
+
+#### min_load_timeout_second
+
+- **Unit**: s
+- **Default**: 1
+- **Description**: The minimum timeout duration allowed for a load job. This limit applies to all types of load jobs. Unit: seconds.
+
+#### max_running_txn_num_per_db
+
+- **Unit**: -
+- **Default**: 100
+- **Description**: The maximum number of load transactions allowed to be running for each database within a StarRocks cluster. The default value is `100`. When the actual number of load transactions running for a database exceeds the value of this parameter, new load requests will not be processed. New requests for synchronous load jobs will be denied, and new requests for asynchronous load jobs will be placed in queue. We do not recommend you increase the value of this parameter because this will increase system load.
+
+#### load_parallel_instance_num
+
+- **Unit**: -
+- **Default**: 1
+- **Description**: The maximum number of concurrent loading instances for each load job on a BE.
+
+#### disable_load_job
+
+- **Unit**: -
+- **Default**: FALSE
+- **Description**: Whether to disable loading when the cluster encounters an error. This prevents any loss caused by cluster errors. The default value is `FALSE`, indicating that loading is not disabled.
+
+#### history_job_keep_max_second
+
+- **Unit**: s
+- **Default**: 604800
+- **Description**: The maximum duration a historical job can be retained, such as schema change jobs, in seconds.
+
+#### label_keep_max_num
+
+- **Unit**: -
+- **Default**: 1000
+- **Description**: The maximum number of load jobs that can be retained within a period of time. If this number is exceeded, the information of historical jobs will be deleted.
+
+#### label_keep_max_second
+
+- **Unit**: s
+- **Default**: 259200
+- **Description**: The maximum duration in seconds to keep the labels of load jobs that have been completed and are in the FINISHED or CANCELLED state. The default value is 3 days. After this duration expires, the labels will be deleted. This parameter applies to all types of load jobs. A value too large consumes a lot of memory.
+
+#### max_routine_load_job_num
+
+- **Unit**: -
+- **Default**: 100
+- **Description**: The maximum number of Routine Load jobs in a StarRocks cluster. This parameter is deprecated since v3.1.0.
+
+#### max_routine_load_task_concurrent_num
+
+- **Unit**: -
+- **Default**: 5
+- **Description**: The maximum number of concurrent tasks for each Routine Load job.
+
+#### max_routine_load_task_num_per_be
+
+- **Unit**: -
+- **Default**: 16
+- **Description**: The maximum number of concurrent Routine Load tasks on each BE. Since v3.1.0, the default value for this parameter is increased to 16 from 5, and no longer needs to be less than or equal to the value of BE static parameter `routine_load_thread_pool_size` (deprecated).
+
+#### max_routine_load_batch_size
+
+- **Unit**: Byte
+- **Default**: 4294967296
+- **Description**: The maximum amount of data that can be loaded by a Routine Load task, in bytes.
+
+#### routine_load_task_consume_second
+
+- **Unit**: s
+- **Default**: 15
+- **Description**: The maximum time for each Routine Load task within the cluster to consume data. Since v3.1.0, Routine Load job supports a new parameter `task_consume_second` in [job_properties](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md#job_properties). This parameter applies to individual load tasks within a Routine Load job, which is more flexible.
+
+#### routine_load_task_timeout_second
+
+- **Unit**: s
+- **Default**: 60
+- **Description**: The timeout duration for each Routine Load task within the cluster. Since v3.1.0, Routine Load job supports a new parameter `task_timeout_second` in [job_properties](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md#job_properties). This parameter applies to individual load tasks within a Routine Load job, which is more flexible.
+
+#### routine_load_unstable_threshold_second
+- **Unit**: s
+- **Default**: 3600
+- **Description**: Routine Load job is set to the UNSTABLE state if any task within the Routine Load job lags. To be specific:
+  - The difference between the timestamp of the message being consumed and the current time exceeds this threshold.
+  - Unconsumed messages exist in the data source.
+
+#### max_tolerable_backend_down_num
+
+- **Unit**: -
+- **Default**: 0
+- **Description**: The maximum number of faulty BE nodes allowed. If this number is exceeded, Routine Load jobs cannot be automatically recovered.
+
+#### period_of_auto_resume_min
+
+- **Unit**: Min
+- **Default**: 5
+- **Description**: The interval at which Routine Load jobs are automatically recovered.
+
+#### spark_load_default_timeout_second
+
+- **Unit**: s
+- **Default**: 86400
+- **Description**: The timeout duration for each Spark Load job, in seconds.
+
+#### spark_home_default_dir
+
+- **Unit**: -
+- **Default**: StarRocksFE.STARROCKS_HOME_DIR + "/lib/spark2x"
+- **Description**: The root directory of a Spark client.
+
+#### stream_load_default_timeout_second
+
+- **Unit**: s
+- **Default**: 600
+- **Description**: The default timeout duration for each Stream Load job, in seconds.
+
+#### max_stream_load_timeout_second
+
+- **Unit**: s
+- **Default**: 259200
+- **Description**: The maximum allowed timeout duration for a Stream Load job, in seconds.
+
+#### insert_load_default_timeout_second
+
+- **Unit**: s
+- **Default**: 3600
+- **Description**: The timeout duration for the INSERT INTO statement that is used to load data, in seconds.
+
+#### broker_load_default_timeout_second
+
+- **Unit**: s
+- **Default**: 14400
+- **Description**: The timeout duration for a Broker Load job, in seconds.
+
+#### min_bytes_per_broker_scanner
+
+- **Unit**: Byte
+- **Default**: 67108864
+- **Description**: The minimum allowed amount of data that can be processed by a Broker Load instance, in bytes.
+
+#### max_broker_concurrency
+
+- **Unit**: -
+- **Default**: 100
+- **Description**: The maximum number of concurrent instances for a Broker Load task. This parameter is deprecated from v3.1 onwards.
+
+#### export_max_bytes_per_be_per_task
+
+- **Unit**: Byte
+- **Default**: 268435456
+- **Description**: The maximum amount of data that can be exported from a single BE by a single data unload task, in bytes.
+
+#### export_running_job_num_limit
+
+- **Unit**: -
+- **Default**: 5
+- **Description**: The maximum number of data exporting tasks that can run in parallel.
+
+#### export_task_default_timeout_second
+
+- **Unit**: s
+- **Default**: 7200
+- **Description**: The timeout duration for a data exporting task, in seconds.
+
+#### empty_load_as_error
+
+- **Unit**: -
+- **Default**: TRUE
+- **Description**: Whether to return an error message "all partitions have no load data" if no data is loaded. Values:
+  - TRUE: If no data is loaded, the system displays a failure message and returns an error "all partitions have no load data".
+  - FALSE: If no data is loaded, the system displays a success message and returns OK, instead of an error.
+
+#### external_table_commit_timeout_ms
+
+- **Unit**: ms
+- **Default**: 10000
+- **Description**: The timeout duration for committing (publishing) a write transaction to a StarRocks external table. The default value `10000` indicates a 10-second timeout duration.
+
+#### enable_sync_publish
+
+- **Unit**: -
+- **Default**: TRUE
+- **Description**: Whether to synchronously execute the apply task at the publish phase of a load transaction. This parameter is applicable only to Primary Key tables. Valid values:
+  - `TRUE` (default): The apply task is synchronously executed at the publish phase of a load transaction. It means that the load transaction is reported as successful only after the apply task is completed, and the loaded data can truly be queried. When a task loads a large volume of data at a time or loads data frequently, setting this parameter to `true` can improve query performance and stability, but may increase load latency.
+  - `FALSE`: The apply task is asynchronously executed at the publish phase of a load transaction. It means that the load transaction is reported as successful after the apply task is submitted, but the loaded data cannot be immediately queried. In this case, concurrent queries need to wait for the apply task to complete or time out before they can continue. When a task loads a large volume of data at a time or loads data frequently, setting this parameter to `false` may affect query performance and stability.
+- **Introduced in**: v3.2.0
+
+### Storage
+
+#### default_replication_num
+
+- **Unit**: -
+- **Default**: 3
+- **Description**: `default_replication_num` sets the default number of replicas for each data partition when creating a table in StarRocks. This setting can be overridden when creating a table by specifying `replication_num=x` in the CREATE TABLE DDL.
+
+#### enable_strict_storage_medium_check
+
+- **Unit**: -
+- **Default**: FALSE
+- **Description**: Whether the FE strictly checks the storage medium of BEs when users create tables. If this parameter is set to `TRUE`, the FE checks the storage medium of BEs when users create tables and returns an error if the storage medium of the BE is different from the `storage_medium` parameter specified in the CREATE TABLE statement. For example, the storage medium specified in the CREATE TABLE statement is SSD but the actual storage medium of BEs is HDD. As a result, the table creation fails. If this parameter is `FALSE`, the FE does not check the storage medium of BEs when users create a table.
+
+#### enable_auto_tablet_distribution
+
+- **Unit**: -
+- **Default**: TRUE
+- **Description**: Whether to automatically set the number of buckets.
+  - If this parameter is set to `TRUE`, you don't need to specify the number of buckets when you create a table or add a partition. StarRocks automatically determines the number of buckets.
+  - If this parameter is set to `FALSE`, you need to manually specify the number of buckets when you create a table or add a partition. If you do not specify the bucket count when adding a new partition to a table, the new partition inherits the bucket count set at the creation of the table. However, you can also manually specify the number of buckets for the new partition. Starting from version 2.5.7, StarRocks supports setting this parameter.
+
+#### storage_usage_soft_limit_percent
+
+- **Unit**: %
+- **Default**: 90
+- **Description**: If the storage usage (in percentage) of the BE storage directory exceeds this value and the remaining storage space is less than `storage_usage_soft_limit_reserve_bytes`, tablets cannot be cloned into this directory.
+
+#### storage_usage_soft_limit_reserve_bytes
+
+- **Unit**: Byte
+- **Default**: `200 * 1024 * 1024 * 1024`
+- **Description**: If the remaining storage space in the BE storage directory is less than this value and the storage usage (in percentage) exceeds `storage_usage_soft_limit_percent`, tablets cannot be cloned into this directory.
+
+#### catalog_trash_expire_second
+
+- **Unit**: s
+- **Default**: 86400
+- **Description**: The longest duration the metadata can be retained after a table or database is deleted. If this duration expires, the data will be deleted and cannot be recovered. Unit: seconds.
+
+#### alter_table_timeout_second
+
+- **Unit**: s
+- **Default**: 86400
+- **Description**: The timeout duration for the schema change operation (ALTER TABLE). Unit: seconds.
+
+#### enable_fast_schema_evolution
+
+- **Default**: FALSE
+- **Description**: Whether to enable fast schema evolution for all tables within the StarRocks cluster. Valid values are `TRUE` and `FALSE` (default). Enabling fast schema evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped.
+  > **NOTE**
+  >
+  > - StarRocks shared-data clusters do not support this parameter.
+  > - If you need to configure the fast schema evolution for a specific table, such as disabling fast schema evolution for a specific table, you can set the table property [`fast_schema_evolution`](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#set-fast-schema-evolution) at table creation.
+- **Introduced in**: v3.2.0
+
+#### recover_with_empty_tablet
+
+- **Unit**: -
+- **Default**: FALSE
+- **Description**: Whether to replace a lost or corrupted tablet replica with an empty one. If a tablet replica is lost or corrupted, data queries on this tablet or other healthy tablets may fail. Replacing the lost or corrupted tablet replica with an empty tablet ensures that the query can still be executed. However, the result may be incorrect because data is lost. The default value is `FALSE`, which means lost or corrupted tablet replicas are not replaced with empty ones, and the query fails.
+
+#### tablet_create_timeout_second
+
+- **Unit**: s
+- **Default**: 10
+- **Description**: The timeout duration for creating a tablet, in seconds.
+
+#### tablet_delete_timeout_second
+
+- **Unit**: s
+- **Default**: 2
+- **Description**: The timeout duration for deleting a tablet, in seconds.
+
+#### check_consistency_default_timeout_second
+
+- **Unit**: s
+- **Default**: 600
+- **Description**: The timeout duration for a replica consistency check. You can set this parameter based on the size of your tablet.
+
+#### tablet_sched_slot_num_per_path
+
+- **Unit**: -
+- **Default**: 8
+- **Description**: The maximum number of tablet-related tasks that can run concurrently in a BE storage directory. The alias is `schedule_slot_num_per_path`. From v2.5 onwards, the default value of this parameter is changed from `4` to `8`.
+
+#### tablet_sched_max_scheduling_tablets
+
+- **Unit**: -
+- **Default**: 10000
+- **Description**: The maximum number of tablets that can be scheduled at the same time. If the value is exceeded, tablet balancing and repair checks will be skipped.
+
+#### tablet_sched_disable_balance
+
+- **Unit**: -
+- **Default**: FALSE
+- **Description**: Whether to disable tablet balancing. `TRUE` indicates that tablet balancing is disabled. `FALSE` indicates that tablet balancing is enabled. The alias is `disable_balance`.
+
+#### tablet_sched_disable_colocate_balance
+
+- **Unit**: -
+- **Default**: FALSE
+- **Description**: Whether to disable replica balancing for Colocate Table. `TRUE` indicates replica balancing is disabled. `FALSE` indicates replica balancing is enabled. The alias is `disable_colocate_balance`.
+
+#### tablet_sched_max_balancing_tablets
+
+- **Unit**: -
+- **Default**: 500
+- **Description**: The maximum number of tablets that can be balanced at the same time. If this value is exceeded, tablet re-balancing will be skipped. The alias is `max_balancing_tablets`.
+
+#### tablet_sched_balance_load_disk_safe_threshold
+
+- **Unit**: -
+- **Default**: 0.5
+- **Description**: The percentage threshold for determining whether the disk usage of BEs is balanced. If the disk usage of all BEs is lower than this value, it is considered balanced. If the disk usage is greater than this value and the difference between the highest and lowest BE disk usage is greater than 10%, the disk usage is considered unbalanced and a tablet re-balancing is triggered. The alias is `balance_load_disk_safe_threshold`.
+
+#### tablet_sched_balance_load_score_threshold
+
+- **Unit**: -
+- **Default**: 0.1
+- **Description**: The percentage threshold for determining whether the load of a BE is balanced. If a BE has a lower load than the average load of all BEs and the difference is greater than this value, this BE is in a low load state. On the contrary, if a BE has a higher load than the average load and the difference is greater than this value, this BE is in a high load state. The alias is `balance_load_score_threshold`.
+
+#### tablet_sched_repair_delay_factor_second
+
+- **Unit**: s
+- **Default**: 60
+- **Description**: The interval at which replicas are repaired, in seconds. The alias is `tablet_repair_delay_factor_second`.
+
+#### tablet_sched_min_clone_task_timeout_sec
+
+- **Unit**: s
+- **Default**: 3 * 60
+- **Description**: The minimum timeout duration for cloning a tablet, in seconds.
+
+#### tablet_sched_max_clone_task_timeout_sec
+
+- **Unit**: s
+- **Default**: `2 * 60 * 60`
+- **Description**: The maximum timeout duration for cloning a tablet, in seconds. The alias is `max_clone_task_timeout_sec`.
+
+#### tablet_sched_max_not_being_scheduled_interval_ms
+
+- **Unit**: ms
+- **Default**: `15 * 60 * 100`
+- **Description**: When the tablet clone tasks are being scheduled, if a tablet has not been scheduled for the specified time in this parameter, StarRocks gives it a higher priority to schedule it as soon as possible.
+
+### Shared-data specific
+
+#### lake_compaction_score_selector_min_score
+
+- **Default**: 10.0
+- **Description**: The Compaction Score threshold that triggers Compaction operations. When the Compaction Score of a partition is greater than or equal to this value, the system performs Compaction on that partition.
+- **Introduced in**: v3.1.0
+
+The Compaction Score indicates whether a partition needs Compaction and is scored based on the number of files in the partition. Excessive number of files can impact query performance, so the system periodically performs Compaction to merge small files and reduce the file count. You can check the Compaction Score for a partition based on the `MaxCS` column in the result returned by running [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md).
+
+#### lake_compaction_max_tasks
+
+- **Default**: -1
+- **Description**: The maximum number of concurrent Compaction tasks allowed.
+- **Introduced in**: v3.1.0
+
+The system calculates the number of Compaction tasks based on the number of tablets in a partition. For example, if a partition has 10 tablets, performing one Compaction on that partition creates 10 Compaction tasks. If the number of concurrently executing Compaction tasks exceeds this threshold, the system will not create new Compaction tasks. Setting this item to `0` disables Compaction, and setting it to `-1` allows the system to automatically calculate this value based on an adaptive strategy.
+
+#### lake_compaction_history_size
+
+- **Default**: 12
+- **Description**: The number of recent successful Compaction task records to keep in the memory of the Leader FE node. You can view recent successful Compaction task records using the `SHOW PROC '/compactions'` command. Note that the Compaction history is stored in the FE process memory, and it will be lost if the FE process is restarted.
+- **Introduced in**: v3.1.0
+
+#### lake_compaction_fail_history_size
+
+- **Default**: 12
+- **Description**: The number of recent failed Compaction task records to keep in the memory of the Leader FE node. You can view recent failed Compaction task records using the `SHOW PROC '/compactions'` command. Note that the Compaction history is stored in the FE process memory, and it will be lost if the FE process is restarted.
+- **Introduced in**: v3.1.0
+
+#### lake_publish_version_max_threads
+
+- **Default**: 512
+- **Description**: The maximum number of threads for Version Publish tasks.
+- **Introduced in**: v3.2.0
+
+#### lake_autovacuum_parallel_partitions
+
+- **Default**: 8
+- **Description**: The maximum number of partitions that can undergo AutoVacuum simultaneously. AutoVaccum is the Garbage Collection after Compactions.
+- **Introduced in**: v3.1.0
+
+#### lake_autovacuum_partition_naptime_seconds
+
+- **Unit**: Seconds
+- **Default**: 180
+- **Description**: The minimum interval between AutoVacuum operations on the same partition.
+- **Introduced in**: v3.1.0
+
+#### lake_autovacuum_grace_period_minutes
+
+- **Unit**: Minutes
+- **Default**: 5
+- **Description**: The time range for retaining historical data versions. Historical data versions within this time range are not automatically cleaned via AutoVacuum after Compactions. You need to set this value greater than the maximum query time to avoid that the data accessed by running queries get deleted before the queries finish.
+- **Introduced in**: v3.1.0
+
+#### lake_autovacuum_stale_partition_threshold
+
+- **Unit**: Hours
+- **Default**: 12
+- **Description**: If a partition has no updates (loading, DELETE, or Compactions) within this time range, the system will not perform AutoVacuum on this partition.
+- **Introduced in**: v3.1.0
+
+#### lake_enable_ingest_slowdown
+
+- **Default**: false
+- **Description**: Whether to enable Data Ingestion Slowdown. When Data Ingestion Slowdown is enabled, if the Compaction Score of a partition exceeds `lake_ingest_slowdown_threshold`, loading tasks on that partition will be throttled down.
+- **Introduced in**: v3.2.0
+
+#### lake_ingest_slowdown_threshold
+
+- **Default**: 100
+- **Description**: The Compaction Score threshold that triggers Data Ingestion Slowdown. This configuration only takes effect when `lake_enable_ingest_slowdown` is set to `true`.
+- **Introduced in**: v3.2.0
+
+> **Note**
+>
+> When `lake_ingest_slowdown_threshold` is less than `lake_compaction_score_selector_min_score`, the effective threshold will be `lake_compaction_score_selector_min_score`.
+
+#### lake_ingest_slowdown_ratio
+
+- **Default**: 0.1
+- **Description**: The ratio of the loading rate slowdown when Data Ingestion Slowdown is triggered.
+- **Introduced in**: v3.2.0
+
+Data loading tasks consist of two phases: data writing and data committing (COMMIT). Data Ingestion Slowdown is achieved by delaying data committing. The delay ratio is calculated using the following formula: `(compaction_score - lake_ingest_slowdown_threshold) * lake_ingest_slowdown_ratio`. For example, if the data writing phase takes 5 minutes, `lake_ingest_slowdown_ratio` is 0.1, and the Compaction Score is 10 higher than `lake_ingest_slowdown_threshold`, the delay in data committing time is `5 * 10 * 0.1 = 5` minutes, which means the average loading speed is halved.
+
+> **Note**
+>
+> - If a loading task writes to multiple partitions simultaneously, the maximum Compaction Score among all partitions is used to calculate the delay in committing time.
+> - The delay in committing time is calculated during the first attempt to commit. Once set, it will not change. Once the delay time is up, as long as the Compaction Score is not above `lake_compaction_score_upper_bound`, the system will perform the data committing operation.
+> - If the delay in committing time exceeds the timeout of the loading task, the task will fail directly.
+
+#### lake_compaction_score_upper_bound
+
+- **Default**: 0
+- **Description**: The upper limit of the Compaction Score for a partition. `0` indicates no upper limit. This item only takes effect when `lake_enable_ingest_slowdown` is set to `true`. When the Compaction Score of a partition reaches or exceeds this upper limit, all loading tasks on that partition will be indefinitely delayed until the Compaction Score drops below this value or the task times out.
+- **Introduced in**: v3.2.0
+
+### Other FE dynamic parameters
+
+#### plugin_enable
+
+- **Unit**: -
+- **Default**: TRUE
+- **Description**: Whether plugins can be installed on FEs. Plugins can be installed or uninstalled only on the Leader FE.
+
+#### max_small_file_number
+
+- **Unit**: -
+- **Default**: 100
+- **Description**: The maximum number of small files that can be stored on an FE directory.
+
+#### max_small_file_size_bytes
+
+- **Unit**: Byte
+- **Default**: 1024 * 1024
+- **Description**: The maximum size of a small file, in bytes.
+
+#### agent_task_resend_wait_time_ms
+
+- **Unit**: ms
+- **Default**: 5000
+- **Description**: The duration the FE must wait before it can resend an agent task. An agent task can be resent only when the gap between the task creation time and the current time exceeds the value of this parameter. This parameter is used to prevent repetitive sending of agent tasks. Unit: ms.
+
+#### backup_job_default_timeout_ms
+
+- **Unit**: ms
+- **Default**: 86400*1000
+- **Description**: The timeout duration of a backup job. If this value is exceeded, the backup job fails.
+
+#### report_queue_size
+
+- **Unit**: -
+- **Default**: 100
+- **Description**: The maximum number of jobs that can wait in a report queue. The report is about disk, task, and tablet information of BEs. If too many report jobs are piling up in a queue, OOM will occur.
+
+#### enable_experimental_mv
+
+- **Unit**: -
+- **Default**: TRUE
+- **Description**: Whether to enable the asynchronous materialized view feature. TRUE indicates this feature is enabled. From v2.5.2 onwards, this feature is enabled by default. For versions earlier than v2.5.2, this feature is disabled by default.
+
+#### authentication_ldap_simple_bind_base_dn
+
+- **Unit**: -
+- **Default**: Empty string
+- **Description**: The base DN, which is the point from which the LDAP server starts to search for users' authentication information.
+
+#### authentication_ldap_simple_bind_root_dn
+
+- **Unit**: -
+- **Default**: Empty string
+- **Description**: The administrator DN used to search for users' authentication information.
+
+#### authentication_ldap_simple_bind_root_pwd
+
+- **Unit**: -
+- **Default**: Empty string
+- **Description**: The password of the administrator used to search for users' authentication information.
+
+#### authentication_ldap_simple_server_host
+
+- **Unit**: -
+- **Default**: Empty string
+- **Description**: The host on which the LDAP server runs.
+
+#### authentication_ldap_simple_server_port
+
+- **Unit**: -
+- **Default**: 389
+- **Description**: The port of the LDAP server.
+
+#### authentication_ldap_simple_user_search_attr
+
+- **Unit**: -
+- **Default**: uid
+- **Description**: The name of the attribute that identifies users in LDAP objects.
+
+#### max_upload_task_per_be
+
+- **Unit**: -
+- **Default**: 0
+- **Description**: In each BACKUP operation, the maximum number of upload tasks StarRocks assigned to a BE node. When this item is set to less than or equal to 0, no limit is imposed on the task number. This item is supported from v3.1.0 onwards.
+
+#### max_download_task_per_be
+
+- **Unit**: -
+- **Default**: 0
+- **Description**: In each RESTORE operation, the maximum number of download tasks StarRocks assigned to a BE node. When this item is set to less than or equal to 0, no limit is imposed on the task number. This item is supported from v3.1.0 onwards.
+
+#### allow_system_reserved_names
+
+- **Default**: FALSE
+- **Description**: Whether to allow users to create columns whose names are initiated with `__op` and `__row`. To enable this feaure, set this parameter to `TRUE`. Please note that these name formats are reserved for special purposes in StarRocks and creating such columns may result in undefined behavior. Therefore this feature is disabled by default. This item is supported from v3.2.0 onwards.
+
+#### enable_backup_materialized_view
+
+- **Default**: TRUE
+- **Description**: Whehter to enable the BACKUP and RESTORE of asynchronous materialized views when backing up or restoring a specific database. If this item is set to `false`, StarRocks will skip backing up asynchronized materialized views. This item is supported from v3.2.0 onwards.
+
+#### enable_colocate_mv_index
+
+- **Default**: TRUE
+- **Description**: Whether to support colocating the synchronous materialized view index with the base table when creating a synchronous materialized view. If this item is set to `true`, tablet sink will speed up the write performance of synchronous materialized views. This item is supported from v3.2.0 onwards.
+
+#### enable_mv_automatic_active_check
+
+- **Default**: TRUE
+- **Description**: Whether to enable the system to automatically check and re-activate the asynchronous materialized views that are set inactive because their base tables (views) had undergone Schema Change or had been dropped and re-created. Please note that this feature will not re-activate the materialized views that are manually set inactive by users. This item is supported from v3.1.6 onwards.
+
+##### jdbc_meta_default_cache_enable
+
+- **Unit**: -
+- **Default**: FALSE
+- **Description**: The default value for whether the JDBC Catalog metadata cache is enabled. When set to True, newly created JDBC Catalogs will default to metadata caching enabled.
+
+##### jdbc_meta_default_cache_expire_sec
+
+- **Unit**: Second
+- **Default**: 600
+- **Description**: The default expiration time for the JDBC Catalog metadata cache. When jdbc_meta_default_cache_enable is set to true, newly created JDBC Catalogs will default to setting the expiration time of the metadata cache.
+
+##### default_mv_refresh_immediate
+
+- **Unit**: -
+- **Default**: TRUE
+- **Description**: Whether to refresh an asynchronous materialized view immediately after creation. When this item is set to `true`, newly created materialized view will be refreshed immediately.
+- **Introduced in**: v3.2.3
+
+## Configure FE static parameters
+
+This section provides an overview of the static parameters that you can configure in the FE configuration file **fe.conf**. After you reconfigure these parameters for an FE, you must restart the FE for the changes to take effect.
+>>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091))
 
 ### Logging
 
@@ -709,6 +1592,7 @@ You can only set the static parameters of a FE by changing them in the correspon
 - Description: The type of edit log that can be generated. Set the value to `BDB`.
 - Introduced in: -
 
+<<<<<<< HEAD
 ##### edit_log_port
 
 - Default: 9010
@@ -717,6 +1601,17 @@ You can only set the static parameters of a FE by changing them in the correspon
 - Is mutable: No
 - Description: The port that is used for communication among the Leader, Follower, and Observer FEs in the cluster.
 - Introduced in: -
+=======
+#### bdbje_reset_election_group
+
+- **Default:** FALSE
+- **Description:** Whether to reset the BDBJE replication group. If this parameter is set to `TRUE`, the FE will reset the BDBJE replication group (that is, remove the information of all electable FE nodes) and start as the leader FE. After the reset, this FE will be the only member in the cluster, and other FEs can rejoin this cluster by using `ALTER SYSTEM ADD/DROP FOLLOWER/OBSERVER 'xxx'`. Use this setting only when no leader FE can be elected because the data of most follower FEs have been damaged. `reset_election_group` is used to replace `metadata_failure_recovery`.
+
+#### metadata_journal_ignore_replay_failure
+
+- **Default:** FALSE
+- **Description:** Whether to ignore journal replay failures. `TRUE` indicates journal replay failures will be ignored. However, this configuration does not take effect for failures that will damage cluster data.
+>>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091))
 
 ##### edit_log_roll_num
 
