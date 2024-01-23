@@ -526,6 +526,7 @@ When the Spark load job status is not `CANCELLED` or `FINISHED`, it can be cance
 
 The most suitable scenario for using Spark load is when the raw data is in the file system (HDFS) and the data volume is in the tens of GB to TB level. Use Stream Load or Broker Load for smaller data volumes.
 
+
 For the full spark load import example, refer to the demo on github: [https://github.com/StarRocks/demo/blob/master/docs/03_sparkLoad2StarRocks.md](https://github.com/StarRocks/demo/blob/master/docs/03_sparkLoad2StarRocks.md)
 
 ## FAQs
