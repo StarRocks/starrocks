@@ -112,11 +112,13 @@ public:
     void begin_driver_process() override;
     void end_driver_process(PipelineDriver* driver) override;
     bool is_running_all_io_tasks() const override;
+    void on_morsel_queue_empty() override;
 
 public:
     int64_t _adjust_scan_mem_limit(int64_t old_chunk_source_mem_bytes, int64_t new_chunk_source_mem_bytes);
     mutable ConnectorScanOperatorAdaptiveProcessor* _adaptive_processor;
     bool _enable_adaptive_io_tasks = true;
+    bool _morsel_queue_empty_event_fired = false;
 };
 
 class ConnectorChunkSource : public ChunkSource {
