@@ -120,7 +120,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     @Override
-    public Boolean getUseFastSchemaEvolution() {
+    public boolean getUseFastSchemaEvolution() {
         return false;
     }
 
@@ -1438,6 +1438,52 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 String.format("can not find partition info for mv:%s on base tables:%s", name, baseTableNames));
     }
 
+<<<<<<< HEAD
+=======
+    public Map<Table, Column> getRelatedPartitionTableAndColumn() {
+        Map<Table, Column> result = Maps.newHashMap();
+        if (partitionExprMaps == null || partitionExprMaps.isEmpty()) {
+            return result;
+        }
+        Map<Table, SlotRef> tableToSlotMap = getTableToPartitionSlotMap();
+        for (BaseTableInfo baseTableInfo : baseTableInfos) {
+            Table table = baseTableInfo.getTableChecked();
+            if (!tableToSlotMap.containsKey(table)) {
+                continue;
+            }
+            List<Column> partitionColumns = PartitionUtil.getPartitionColumns(table);
+            if (partitionColumns.isEmpty()) {
+                continue;
+            }
+            SlotRef slotRef = tableToSlotMap.get(table);
+            if (table.isNativeTableOrMaterializedView()) {
+                if (partitionColumns.size() != 1) {
+                    continue;
+                }
+                Column partitionColumn = partitionColumns.get(0);
+                if (com.starrocks.common.util.StringUtils.areColumnNamesEqual(slotRef.getColumnName(),
+                        partitionColumn.getName())) {
+                    result.put(table, partitionColumn);
+                }
+            } else {
+                for (Column partitionColumn : partitionColumns) {
+                    if (com.starrocks.common.util.StringUtils.areColumnNamesEqual(slotRef.getColumnName(),
+                            partitionColumn.getName())) {
+                        result.put(table, partitionColumn);
+                    }
+                }
+            }
+        }
+        if (!result.isEmpty()) {
+            return result;
+        }
+        String baseTableNames = baseTableInfos.stream()
+                .map(tableInfo -> tableInfo.getTableChecked().getName()).collect(Collectors.joining(","));
+        throw new RuntimeException(
+                String.format("can not find partition info for mv:%s on base tables:%s", name, baseTableNames));
+    }
+
+>>>>>>> 475122dd7a ([Enhancement] Refactor analyze logic for unified fast/non-fast schema evolution paths (#38347))
     public ExecPlan getMaintenancePlan() {
         return maintenancePlan;
     }
