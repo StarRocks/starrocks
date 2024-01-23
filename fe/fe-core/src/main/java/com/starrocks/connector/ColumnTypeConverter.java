@@ -735,13 +735,14 @@ public class ColumnTypeConverter {
         Matcher matcher = Pattern.compile(ARRAY_PATTERN).matcher(typeStr.toLowerCase(Locale.ROOT));
         Type itemType;
         if (matcher.find()) {
-            if (fromHiveTypeToArrayType(matcher.group(1)).equals(Type.UNKNOWN_TYPE)) {
+            Type innerType = fromHiveType(matcher.group(1));
+            if (Type.UNKNOWN_TYPE.equals(innerType)) {
                 itemType = Type.UNKNOWN_TYPE;
             } else {
-                itemType = new ArrayType(fromHiveTypeToArrayType(matcher.group(1)));
+                itemType = new ArrayType(innerType);
             }
         } else {
-            itemType = fromHiveType(typeStr);
+            throw new StarRocksConnectorException("Failed to get ArrayType at " + typeStr);
         }
         return itemType;
     }
