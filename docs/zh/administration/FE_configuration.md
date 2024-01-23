@@ -70,7 +70,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 #### ignore_unknown_log_id
 
-- 含义：是否忽略未知的 logID。当 FE 回滚到低版本时，可能存在低版本 BE 无法识别的 logID。<br />如果为 TRUE，则 FE 会忽略这些 logID；否则 FE 会退出。
+- 含义：是否忽略未知的 logID。当 FE 回滚到低版本时，可能存在低版本 FE 无法识别的 logID。<br />如果为 TRUE，则 FE 会忽略这些 logID；否则 FE 会退出。
 - 默认值：FALSE
 
 #### ignore_materialized_view_error
@@ -1061,9 +1061,14 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 含义：Heartbeat Manager 中存储心跳任务的阻塞队列大小。
 - 默认值：1024
 
-#### metadata_failure_recovery
+#### bdbje_reset_election_group
 
-- 含义：是否强制重置 FE 的元数据。请谨慎使用该配置项。
+- 含义：是否重置 BDBJE 复制组。如果设置为 `TRUE`，FE 将重置 BDBJE 复制组（即删除所有 FE 节点的信息）并以 Leader 身份启动。重置后，该 FE 将成为集群中唯一的成员，其他 FE 节点通过 `ALTER SYSTEM ADD/DROP FOLLOWER/OBSERVER 'xxx'` 重新加入该集群。仅当无法成功选举出 leader FE 时（因为大部分 follower FE 数据已损坏）才使用此配置。该参数用来替代 `metadata_failure_recovery`。
+- 默认值：FALSE
+
+#### metadata_journal_ignore_replay_failure
+
+- 含义：是否忽略回放失败的日志。设置为 `TRUE` 表示忽略回放失败的日志，但是对于会损坏集群数据的失败，此配置并不生效。
 - 默认值：FALSE
 
 #### edit_log_port
