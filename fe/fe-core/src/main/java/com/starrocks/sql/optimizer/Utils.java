@@ -54,6 +54,7 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
+import org.apache.commons.collections4.SetUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.roaringbitmap.RoaringBitmap;
@@ -681,19 +682,12 @@ public class Utils {
 
     public static boolean couldGenerateMultiStageAggregate(LogicalProperty inputLogicalProperty,
                                                            Operator inputOp, Operator childOp) {
-        // 1. Must do one stage aggregate If the child contains limit,
-        //    the aggregation must be a single node to ensure correctness.
-        //    eg. select count(*) from (select * table limit 2) t
-        if (childOp.hasLimit()) {
-            return false;
-        }
-
-        // 2. check if must generate multi stage aggregate.
+        // 1. check if must generate multi stage aggregate.
         if (mustGenerateMultiStageAggregate(inputOp, childOp)) {
             return true;
         }
 
-        // 3. Respect user hint
+        // 2. Respect user hint
         int aggStage = ConnectContext.get().getSessionVariable().getNewPlannerAggStage();
         if (aggStage == ONE_STAGE.ordinal() ||
                 (aggStage == AUTO.ordinal() && inputLogicalProperty.oneTabletProperty().supportOneTabletOpt)) {
@@ -730,6 +724,23 @@ public class Utils {
                     && (callOperator.getChildren().size() > 1 ||
                     callOperator.getChildren().stream().anyMatch(c -> c.getType().isComplexType())));
         }
+    }
+
+    public static Optional<List<ColumnRefOperator>> extractCommonDistinctCols(Collection<CallOperator> aggCallOperators) {
+        Set<ColumnRefOperator> distinctChildren = Sets.newHashSet();
+        for (CallOperator callOperator : aggCallOperators) {
+            if (callOperator.isDistinct()) {
+                if (distinctChildren.isEmpty()) {
+                    distinctChildren = Sets.newHashSet(callOperator.getColumnRefs());
+                } else {
+                    Set<ColumnRefOperator> nextDistinctChildren = Sets.newHashSet(callOperator.getColumnRefs());
+                    if (!SetUtils.isEqualSet(distinctChildren, nextDistinctChildren)) {
+                        return Optional.empty();
+                    }
+                }
+            }
+        }
+        return Optional.of(Lists.newArrayList(distinctChildren));
     }
 
     public static boolean hasNonDeterministicFunc(ScalarOperator operator) {

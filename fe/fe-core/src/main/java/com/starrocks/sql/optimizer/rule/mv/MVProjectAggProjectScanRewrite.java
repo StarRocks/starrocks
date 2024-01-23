@@ -167,7 +167,6 @@ public class MVProjectAggProjectScanRewrite {
                             aggOperator.getPartitionByColumns(),
                             newAggMap,
                             aggOperator.isSplit(),
-                            aggOperator.getSingleDistinctFunctionPos(),
                             aggOperator.getLimit(),
                             aggOperator.getPredicate()), optExpression.inputAt(0).getInputs()));
                     return new Pair<>(kv.getKey(), aggColumnRef);

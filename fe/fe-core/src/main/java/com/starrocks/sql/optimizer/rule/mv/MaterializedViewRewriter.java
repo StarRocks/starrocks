@@ -203,7 +203,6 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
                 aggregationOperator.getPartitionByColumns(),
                 newAggMap,
                 aggregationOperator.isSplit(),
-                aggregationOperator.getSingleDistinctFunctionPos(),
                 aggregationOperator.getLimit(),
                 aggregationOperator.getPredicate()), optExpression.getInputs());
     }
