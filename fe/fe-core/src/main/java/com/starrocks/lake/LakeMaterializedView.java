@@ -18,6 +18,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
+import com.starrocks.alter.AlterJobV2Builder;
+import com.starrocks.alter.LakeTableAlterJobV2Builder;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
@@ -111,6 +113,11 @@ public class LakeMaterializedView extends MaterializedView {
     public Runnable delete(boolean replay) {
         onErase(replay);
         return replay ? null : new DeleteLakeTableTask(this);
+    }
+
+    @Override
+    public AlterJobV2Builder alterTable() {
+        return new LakeTableAlterJobV2Builder(this);
     }
 
     @Override

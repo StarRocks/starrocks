@@ -21,12 +21,12 @@ import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
-import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
@@ -37,9 +37,12 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
-    private final LakeTable table;
 
-    public LakeTableAlterJobV2Builder(LakeTable table) {
+    // The table could be either an LakeTable or LakeMaterializedView
+    private final OlapTable table;
+
+    public LakeTableAlterJobV2Builder(OlapTable table) {
+        Preconditions.checkArgument(table.isCloudNativeTableOrMaterializedView());
         this.table = table;
     }
 
