@@ -148,6 +148,15 @@ fi
 if [[ -z ${USE_SSE4_2} ]]; then
     USE_SSE4_2=ON
 fi
+<<<<<<< HEAD
+=======
+if [[ -z ${JEMALLOC_DEBUG} ]]; then
+    JEMALLOC_DEBUG=OFF
+fi
+if [[ -z ${CCACHE} ]]; then
+    CCACHE=ccache
+fi
+>>>>>>> 6b07d1da8e ([Tool] add option for ccache (#39758))
 
 if [ -e /proc/cpuinfo ] ; then
     # detect cpuinfo
@@ -246,6 +255,7 @@ echo "Get params:
     BUILD_FE            -- $BUILD_FE
     BUILD_SPARK_DPP     -- $BUILD_SPARK_DPP
     BUILD_HIVE_UDF      -- $BUILD_HIVE_UDF
+    CCACHE              -- ${CCACHE}
     CLEAN               -- $CLEAN
     RUN_UT              -- $RUN_UT
     WITH_GCOV           -- $WITH_GCOV
@@ -336,7 +346,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                   -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}        \
                   -DSTARROCKS_HOME=${STARROCKS_HOME}                    \
                   -DSTARLET_INSTALL_DIR=${STARLET_INSTALL_DIR}          \
-                  -DCMAKE_CXX_COMPILER_LAUNCHER=ccache                  \
+                  -DCMAKE_CXX_COMPILER_LAUNCHER=${CCACHE}                  \
                   -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}                \
                   -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV}              \
                   -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 \
