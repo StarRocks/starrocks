@@ -505,13 +505,21 @@ public class Config extends ConfigBase {
     public static long agent_task_resend_wait_time_ms = 5000;
 
     /**
+<<<<<<< HEAD
      * If true, FE will reset bdbje replication group(that is, to remove all electable nodes info)
      * and is supposed to start as Leader.
      * If all the electable nodes can not start, we can copy the meta data
      * to another node and set this config to true to try to restart the FE.
+=======
+     * If true, FE will reset bdbje replication group(that is, to remove all electable nodes' info)
+     * and is supposed to start as Leader. After reset, this node will be the only member in the cluster,
+     * and the others node should be rejoin to this cluster by `Alter system add/drop follower/observer 'xxx'`;
+     * Use this configuration only when the leader cannot be successfully elected
+     * (Because most of the follower data has been damaged).
+>>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091))
      */
     @ConfField
-    public static String metadata_failure_recovery = "false";
+    public static String bdbje_reset_election_group = "false";
 
     /**
      * If the bdb data is corrupted, and you want to start the cluster only with image, set this param to true
@@ -2257,7 +2265,12 @@ public class Config extends ConfigBase {
     public static boolean enable_new_publish_mechanism = false;
 
     @ConfField(mutable = true)
+<<<<<<< HEAD
     public static boolean enable_sync_publish = false;
+=======
+    public static boolean enable_sync_publish = true;
+
+>>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091))
     /**
      * Normally FE will quit when replaying a bad journal. This configuration provides a bypass mechanism.
      * If this was set to a positive value, FE will skip the corresponding bad journals before it quits.
@@ -2265,6 +2278,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static String metadata_journal_skip_bad_journal_ids = "";
+
+    /**
+     * Set this configuration to true to ignore specific operation (with IgnorableOnReplayFailed annotation) replay failures.
+     */
+    @ConfField
+    public static boolean metadata_journal_ignore_replay_failure = false;
 
     /**
      * Number of profile infos reserved by `ProfileManager` for recently executed query.

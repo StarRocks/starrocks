@@ -456,6 +456,14 @@ public class EditLog {
                     globalStateMgr.replayDeleteReplica(info);
                     break;
                 }
+<<<<<<< HEAD
+=======
+                case OperationType.OP_BATCH_DELETE_REPLICA : {
+                    BatchDeleteReplicaInfo info = (BatchDeleteReplicaInfo) journal.getData();
+                    globalStateMgr.replayBatchDeleteReplica(info);
+                    break;
+                }
+>>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091))
                 case OperationType.OP_ADD_COMPUTE_NODE: {
                     ComputeNode computeNode = (ComputeNode) journal.getData();
                     GlobalStateMgr.getCurrentSystemInfo().replayAddComputeNode(computeNode);
@@ -1059,7 +1067,7 @@ public class EditLog {
             }
         } catch (Exception e) {
             JournalInconsistentException exception =
-                    new JournalInconsistentException("failed to load journal type " + opCode);
+                    new JournalInconsistentException(opCode, "failed to load journal type " + opCode);
             exception.initCause(e);
             throw exception;
         }
@@ -1328,7 +1336,19 @@ public class EditLog {
     }
 
     public void logDeleteReplica(ReplicaPersistInfo info) {
+<<<<<<< HEAD
         logEdit(OperationType.OP_DELETE_REPLICA, info);
+=======
+        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
+            logJsonObject(OperationType.OP_DELETE_REPLICA_V2, info);
+        } else {
+            logEdit(OperationType.OP_DELETE_REPLICA, info);
+        }
+    }
+
+    public void logBatchDeleteReplica(BatchDeleteReplicaInfo info) {
+        logEdit(OperationType.OP_BATCH_DELETE_REPLICA, info);
+>>>>>>> 9694e107df ([Enhancement] Make some operation type ignorable when replaying journal fails (#39091))
     }
 
     public void logTimestamp(Timestamp stamp) {
