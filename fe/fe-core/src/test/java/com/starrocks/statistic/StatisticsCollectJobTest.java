@@ -950,6 +950,121 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     }
 
     @Test
+    public void testIcebergPartitionTransformFullStatisticsBuildCollectSQLList() {
+        // test partition column type is timestamp without time zone
+        Database database = connectContext.getGlobalStateMgr().getMetadataMgr().getDb("iceberg0", "partitioned_transforms_db");
+        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("iceberg0", "partitioned_transforms_db",
+                "t0_year");
+
+        ExternalFullStatisticsCollectJob collectJob = (ExternalFullStatisticsCollectJob)
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("iceberg0",
+                        database,
+                        table, null,
+                        Lists.newArrayList("id", "data", "ts"),
+                        StatsConstants.AnalyzeType.FULL,
+                        StatsConstants.ScheduleType.ONCE,
+                        Maps.newHashMap());
+        List<List<String>> collectSqlList = collectJob.buildCollectSQLList(1);
+        assertContains(collectSqlList.get(0).toString(), "`ts` >= '2019-01-01 00:00:00' and `ts` < '2020-01-01 00:00:00'");
+
+        table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("iceberg0", "partitioned_transforms_db",
+                "t0_month");
+        collectJob = (ExternalFullStatisticsCollectJob)
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("iceberg0",
+                        database,
+                        table, null,
+                        Lists.newArrayList("id", "data", "ts"),
+                        StatsConstants.AnalyzeType.FULL,
+                        StatsConstants.ScheduleType.ONCE,
+                        Maps.newHashMap());
+        collectSqlList = collectJob.buildCollectSQLList(1);
+        assertContains(collectSqlList.get(0).toString(), "ts` >= '2022-01-01 00:00:00' and `ts` < '2022-02-01 00:00:00'");
+
+        table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("iceberg0", "partitioned_transforms_db",
+                "t0_day");
+        collectJob = (ExternalFullStatisticsCollectJob)
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("iceberg0",
+                        database,
+                        table, null,
+                        Lists.newArrayList("id", "data", "ts"),
+                        StatsConstants.AnalyzeType.FULL,
+                        StatsConstants.ScheduleType.ONCE,
+                        Maps.newHashMap());
+        collectSqlList = collectJob.buildCollectSQLList(1);
+        assertContains(collectSqlList.get(0).toString(), "`ts` >= '2022-01-01 00:00:00' and `ts` < '2022-01-02 00:00:00'");
+
+        table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("iceberg0", "partitioned_transforms_db",
+                "t0_hour");
+        collectJob = (ExternalFullStatisticsCollectJob)
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("iceberg0",
+                        database,
+                        table, null,
+                        Lists.newArrayList("id", "data", "ts"),
+                        StatsConstants.AnalyzeType.FULL,
+                        StatsConstants.ScheduleType.ONCE,
+                        Maps.newHashMap());
+        collectSqlList = collectJob.buildCollectSQLList(1);
+        assertContains(collectSqlList.get(0).toString(), "`ts` >= '2022-01-01 00:00:00' and `ts` < '2022-01-01 01:00:00'");
+
+        // test partition column type is timestamp with time zone
+        String oldTimeZone = connectContext.getSessionVariable().getTimeZone();
+        connectContext.getSessionVariable().setTimeZone("America/New_York");
+
+        table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("iceberg0", "partitioned_transforms_db",
+                "t0_year_tz");
+        collectJob = (ExternalFullStatisticsCollectJob)
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("iceberg0",
+                        database,
+                        table, null,
+                        Lists.newArrayList("id", "data", "ts"),
+                        StatsConstants.AnalyzeType.FULL,
+                        StatsConstants.ScheduleType.ONCE,
+                        Maps.newHashMap());
+        collectSqlList = collectJob.buildCollectSQLList(1);
+        assertContains(collectSqlList.get(0).toString(), "`ts` >= '2018-12-31 19:00:00' and `ts` < '2019-12-31 19:00:00'");
+
+        table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("iceberg0", "partitioned_transforms_db",
+                "t0_month_tz");
+        collectJob = (ExternalFullStatisticsCollectJob)
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("iceberg0",
+                        database,
+                        table, null,
+                        Lists.newArrayList("id", "data", "ts"),
+                        StatsConstants.AnalyzeType.FULL,
+                        StatsConstants.ScheduleType.ONCE,
+                        Maps.newHashMap());
+        collectSqlList = collectJob.buildCollectSQLList(1);
+        assertContains(collectSqlList.get(0).toString(), "`ts` >= '2021-12-31 19:00:00' and `ts` < '2022-01-31 19:00:00'");
+
+        table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("iceberg0", "partitioned_transforms_db",
+                "t0_day_tz");
+        collectJob = (ExternalFullStatisticsCollectJob)
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("iceberg0",
+                        database,
+                        table, null,
+                        Lists.newArrayList("id", "data", "ts"),
+                        StatsConstants.AnalyzeType.FULL,
+                        StatsConstants.ScheduleType.ONCE,
+                        Maps.newHashMap());
+        collectSqlList = collectJob.buildCollectSQLList(1);
+        assertContains(collectSqlList.get(0).toString(), "`ts` >= '2021-12-31 19:00:00' and `ts` < '2022-01-01 19:00:00'");
+
+        table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("iceberg0", "partitioned_transforms_db",
+                "t0_hour_tz");
+        collectJob = (ExternalFullStatisticsCollectJob)
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("iceberg0",
+                        database,
+                        table, null,
+                        Lists.newArrayList("id", "data", "ts"),
+                        StatsConstants.AnalyzeType.FULL,
+                        StatsConstants.ScheduleType.ONCE,
+                        Maps.newHashMap());
+        collectSqlList = collectJob.buildCollectSQLList(1);
+        assertContains(collectSqlList.get(0).toString(), "`ts` >= '2021-12-31 19:00:00' and `ts` < '2021-12-31 20:00:00'");
+        connectContext.getSessionVariable().setTimeZone(oldTimeZone);
+    }
+
+    @Test
     public void testExcludeStatistics() {
         OlapTable table = (OlapTable) connectContext.getGlobalStateMgr()
                 .getDb("test").getTable("t0_stats_partition");

@@ -23,6 +23,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
@@ -30,8 +31,11 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
+import com.starrocks.connector.iceberg.IcebergPartitionTransform;
+import com.starrocks.connector.iceberg.IcebergPartitionUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QueryState;
@@ -44,6 +48,7 @@ import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.thrift.TStatisticData;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.commons.lang.StringUtils;
+import org.apache.iceberg.PartitionField;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.velocity.VelocityContext;
@@ -179,6 +184,9 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
                 String partitionValue = partitionValues.get(i);
                 if (partitionValue.equals(nullValue)) {
                     partitionPredicate.add(StatisticUtils.quoting(partitionColumnName) + " IS NULL");
+                } else if (isSupportedPartitionTransform(partitionColumnName)) {
+                    partitionPredicate.add(IcebergPartitionUtils.convertPartitionFieldToPredicate((IcebergTable) table,
+                            partitionColumnName, partitionValue));
                 } else {
                     partitionPredicate.add(StatisticUtils.quoting(partitionColumnName) + " = '" + partitionValue + "'");
                 }
@@ -188,6 +196,30 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
 
         builder.append(build(context, BATCH_FULL_STATISTIC_TEMPLATE));
         return builder.toString();
+    }
+
+
+    boolean isSupportedPartitionTransform(String partitionColumn) {
+        // only iceberg table support partition transform
+        if (!table.isIcebergTable()) {
+            return false;
+        }
+        IcebergTable icebergTable = (IcebergTable) table;
+        PartitionField partitionField = icebergTable.getPartitionField(partitionColumn);
+        if (partitionField == null) {
+            LOG.warn("Partition column {} not found in table {}", partitionColumn, table.getName());
+            throw new StarRocksConnectorException("Partition column " + partitionColumn + " not found in table " +
+                    table.getName());
+        }
+
+        IcebergPartitionTransform transform = IcebergPartitionTransform.fromString(partitionField.transform().toString());
+        if (!IcebergPartitionUtils.isSupportedConvertPartitionTransform(transform)) {
+            LOG.warn("Partition transform {} not supported to analyze, table: {}", transform, table.getName());
+            throw new StarRocksConnectorException("Partition transform " + transform + " not supported to analyze, " +
+                    "table: " + table.getName());
+        }
+
+        return true;
     }
 
     @Override
