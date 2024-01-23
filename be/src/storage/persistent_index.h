@@ -787,6 +787,8 @@ private:
     std::atomic<bool> _major_compaction_running{false};
     // write amplification score, 0.0 means this index doesn't need major compaction
     std::atomic<double> _write_amp_score{0.0};
+    // Latest major compaction time. In second.
+    int64_t _latest_compaction_time = 0;
 };
 
 } // namespace starrocks
