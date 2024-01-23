@@ -15,7 +15,7 @@ import RoutineLoadPrivNote from '../../../assets/commonMarkdown/RoutineLoadPrivN
 ## 语法
 
 ```SQL
-SHOW [ALL] ROUTINE LOAD FOR [<db_name>.]<job_name>
+SHOW [ALL] ROUTINE LOAD [ FOR [<db_name>.]<job_name> | FROM <db_name> ]
 [ WHERE [ STATE = { "NEED_SCHEDULE" | "RUNNING" | "PAUSED" | "UNSTABLE" | "STOPPED" | "CANCELLED"  } ] ]
 [ ORDER BY <field_name> [ ASC | DESC ] ]
 [ LIMIT { [offset, ] limit | limit OFFSET offset } ]
@@ -31,8 +31,8 @@ SHOW [ALL] ROUTINE LOAD FOR [<db_name>.]<job_name>
 
 | **参数**                          | **必选** | **说明**                                                     |
 | --------------------------------- | -------- | ------------------------------------------------------------ |
-| db_name                           | 否       | 导入作业所属数据库名称。                                     |
-| job_name                          | ✅        | 导入作业名称。                                               |
+| db_name                           | 否       | 导入作业所属数据库名称。注意在使用 FROM 子句时，该参数为必填参数。                                     |
+| job_name                          | 否        | 导入作业名称。 注意在使用 FOR 子句时，该参数为必填参数。                                              |
 | ALL                               | 否       | 显示所有导入作业，包括处于 `STOPPED` 和 `CANCELLED` 状态的导入作业。 |
 | STATE                             | 否       | 导入作业状态。                                               |
 | ORDER BY field_name [ASC \| DESC] | 否       | 将返回结果按照指定字段升序或降序排列，当前支持的排序字段（`field_name`）包括 `Id`、`Name`、`CreateTime`、`PauseTime`、`EndTime`、`TableName`、`State` 和 `CurrentTaskNum`。如要升序排列，指定 `ORDER BY field_name ASC`。如要降序排列，指定 `ORDER BY field_name DESC`。如既不指定排序字段也不指定排列顺序，则默认按照 `Id` 升序排列。 |
