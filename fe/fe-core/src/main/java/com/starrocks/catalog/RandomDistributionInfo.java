@@ -43,6 +43,7 @@ import com.starrocks.sql.ast.RandomDistributionDesc;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -112,6 +113,11 @@ public class RandomDistributionInfo extends DistributionInfo {
         DistributionInfo distributionInfo = new RandomDistributionInfo();
         distributionInfo.readFields(in);
         return distributionInfo;
+    }
+
+    @Override
+    public List<Column> getDistributionColumns() {
+        return Collections.emptyList();
     }
 
     @Override

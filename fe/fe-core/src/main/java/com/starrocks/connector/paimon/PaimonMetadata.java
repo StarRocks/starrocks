@@ -43,7 +43,6 @@ import org.apache.logging.log4j.Logger;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.data.InternalRow;
-import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.predicate.Predicate;
 import org.apache.paimon.predicate.PredicateBuilder;
 import org.apache.paimon.reader.RecordReader;
@@ -244,8 +243,7 @@ public class PaimonMetadata implements ConnectorMetadata {
     public static long getRowCount(List<? extends Split> splits) {
         long rowCount = 0;
         for (Split split : splits) {
-            DataSplit dataSplit = (DataSplit) split;
-            rowCount += dataSplit.dataFiles().stream().map(DataFileMeta::rowCount).reduce(0L, Long::sum);
+            rowCount += split.rowCount();
         }
         return rowCount;
     }
@@ -320,7 +318,7 @@ public class PaimonMetadata implements ConnectorMetadata {
 
     private Map<String, Long> fetchChangedPartitionWithVersion(PaimonTable paimonTable, long mvSnapshotId) {
         Map<String, Long> partitionToSnapshotId = new HashMap<>();
-        FileMonitorTable fileMonitorTable = new FileMonitorTable(paimonTable.getNativeTable());
+        FileMonitorTable fileMonitorTable = new FileMonitorTable((AbstractFileStoreTable) paimonTable.getNativeTable());
         Long latestId = fileMonitorTable.snapshotManager().latestSnapshotId();
         long latestSnapshotId = latestId == null ? Long.MIN_VALUE : latestId;
         LOG.debug("Paimon table {} latest snapshotId {}, currentId {}",
@@ -368,7 +366,7 @@ public class PaimonMetadata implements ConnectorMetadata {
                 public void accept(InternalRow row) {
                     try {
                         FileMonitorTable.FileChange fileChange = FileMonitorTable.toFileChange(row);
-                        RowDataConverter converter = new RowDataConverter(paimonTable.getNativeTable().
+                        RowDataConverter converter = new RowDataConverter(((AbstractFileStoreTable) paimonTable.getNativeTable()).
                                 schema().logicalPartitionType());
                         List<String> partitionValues = converter.convert(fileChange.partition(),
                                 paimonTable.getPartitionColumnNames());
@@ -395,7 +393,7 @@ public class PaimonMetadata implements ConnectorMetadata {
     @Override
     public List<com.starrocks.connector.PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
         PaimonTable paimonTable = (PaimonTable) table;
-        FileMonitorTable fileMonitorTable = new FileMonitorTable(paimonTable.getNativeTable());
+        FileMonitorTable fileMonitorTable = new FileMonitorTable((AbstractFileStoreTable) paimonTable.getNativeTable());
         Long latestSnapshotId = fileMonitorTable.snapshotManager().latestSnapshotId();
         long latestId = latestSnapshotId == null ? Long.MIN_VALUE : latestSnapshotId;
         return partitionNames.stream().map(

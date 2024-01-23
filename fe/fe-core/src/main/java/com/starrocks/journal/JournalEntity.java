@@ -174,7 +174,7 @@ import java.io.IOException;
 public class JournalEntity implements Writable {
     public static final Logger LOG = LogManager.getLogger(Checkpoint.class);
 
-    private short opCode;
+    private short opCode = OperationType.OP_INVALID;
     private Writable data;
 
     public short getOpCode() {
@@ -477,7 +477,7 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_BATCH_DELETE_REPLICA_BATCH: {
+            case OperationType.OP_BATCH_DELETE_REPLICA: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), BatchDeleteReplicaInfo.class);
                 isRead = true;
                 break;

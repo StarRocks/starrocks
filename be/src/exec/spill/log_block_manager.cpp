@@ -171,19 +171,7 @@ public:
     Status append(const std::vector<Slice>& data) override {
         size_t total_size = 0;
         std::for_each(data.begin(), data.end(), [&](const Slice& slice) { total_size += slice.size; });
-        // try to apply for the required size from dir first, if it fails, just return an error directly.
-        // if the subsequent operations fail, the applied size should be rolled back.
-        if (!_container->dir()->inc_size(total_size)) {
-            return Status::Aborted(fmt::format("spill dir {} current used size has exceed limit {}!",
-                                               _container->dir()->dir(), _container->dir()->get_max_size()));
-        }
-        Status ret;
-        DeferOp defer([&]() {
-            if (!ret.ok()) {
-                _container->dir()->dec_size(total_size);
-            }
-        });
-        RETURN_IF_ERROR(ret = _container->append_data(data, total_size));
+        RETURN_IF_ERROR(_container->append_data(data, total_size));
         _size += total_size;
         return Status::OK();
     }
@@ -197,8 +185,12 @@ public:
     std::shared_ptr<BlockReader> get_reader() override { return std::make_shared<LogBlockReader>(this); }
 
     std::string debug_string() const override {
+#ifndef BE_TEST
         return fmt::format("LogBlock:{}[container={}, offset={}, len={}]", (void*)this, _container->path(), _offset,
                            _size);
+#else
+        return fmt::format("LogBlock[container={}]", _container->path(), _offset, _size);
+#endif
     }
 
 private:
@@ -250,6 +242,7 @@ void LogBlockManager::close() {}
 StatusOr<BlockPtr> LogBlockManager::acquire_block(const AcquireBlockOptions& opts) {
     DCHECK(opts.block_size > 0) << "block size should be larger than 0";
     AcquireDirOptions acquire_dir_opts;
+    acquire_dir_opts.data_size = opts.block_size;
 #ifdef BE_TEST
     ASSIGN_OR_RETURN(auto dir, _dir_mgr->acquire_writable_dir(acquire_dir_opts));
 #else

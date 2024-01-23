@@ -309,6 +309,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_PUSH_DOWN_AGGREGATE = "cbo_push_down_aggregate";
     public static final String CBO_DEBUG_ALIVE_BACKEND_NUMBER = "cbo_debug_alive_backend_number";
     public static final String CBO_PRUNE_SUBFIELD = "cbo_prune_subfield";
+    public static final String CBO_PRUNE_JSON_SUBFIELD = "cbo_prune_json_subfield";
     public static final String ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL =
             "enable_rewrite_groupingsets_to_union_all";
 
@@ -877,6 +878,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_PRUNE_SUBFIELD, flag = VariableMgr.INVISIBLE)
     private boolean cboPruneSubfield = true;
 
+    // it's need BE to enable flat json, else will take a poor performance
+    @VarAttr(name = CBO_PRUNE_JSON_SUBFIELD)
+    private boolean cboPruneJsonSubfield = false;
+
     @VarAttr(name = ENABLE_SQL_DIGEST, flag = VariableMgr.INVISIBLE)
     private boolean enableSQLDigest = false;
 
@@ -1260,6 +1265,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_HYPERSCAN_VEC)
     private boolean enableHyperscanVec = true;
+
+    public boolean isCboPruneJsonSubfield() {
+        return cboPruneJsonSubfield;
+    }
+
+    public void setCboPruneJsonSubfield(boolean cboPruneJsonSubfield) {
+        this.cboPruneJsonSubfield = cboPruneJsonSubfield;
+    }
 
     public void setEnableArrayLowCardinalityOptimize(boolean enableArrayLowCardinalityOptimize) {
         this.enableArrayLowCardinalityOptimize = enableArrayLowCardinalityOptimize;

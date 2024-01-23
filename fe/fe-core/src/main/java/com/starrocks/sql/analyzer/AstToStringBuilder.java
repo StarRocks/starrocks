@@ -78,6 +78,7 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.WriteQuorum;
@@ -146,6 +147,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.StringJoiner;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.FunctionSet.IGNORE_NULL_WINDOW_FUNCTION;
@@ -161,11 +163,11 @@ import static java.util.stream.Collectors.toList;
  */
 public class AstToStringBuilder {
     public static String toString(ParseNode expr) {
-        return toString(expr, true);
+        return new AST2StringBuilderVisitor().visit(expr);
     }
 
-    public static String toString(ParseNode expr, boolean addFunctionDbName) {
-        return new AST2StringBuilderVisitor(addFunctionDbName).visit(expr);
+    public static String getAliasName(ParseNode expr, boolean addFunctionDbName, boolean withBackquote) {
+        return new AST2StringBuilderVisitor(addFunctionDbName, withBackquote).visit(expr);
     }
 
     public static class AST2StringBuilderVisitor extends AstVisitor<String, Void> {
@@ -174,12 +176,17 @@ public class AstToStringBuilder {
         // when you just want to a function name as its alias set it false
         protected boolean addFunctionDbName;
 
+        // when you want to get an expr name with backquote set it true
+        // when you just want to get the real expr name set it false
+        protected boolean withBackquote;
+
         public AST2StringBuilderVisitor() {
-            this(true);
+            this(true, true);
         }
 
-        public AST2StringBuilderVisitor(boolean addFunctionDbName) {
+        public AST2StringBuilderVisitor(boolean addFunctionDbName, boolean withBackquote) {
             this.addFunctionDbName = addFunctionDbName;
+            this.withBackquote = withBackquote;
         }
 
         // ------------------------------------------- Privilege Statement -------------------------------------------------
@@ -1028,7 +1035,16 @@ public class AstToStringBuilder {
 
         @Override
         public String visitSubfieldExpr(SubfieldExpr node, Void context) {
-            return String.format("%s.%s", visit(node.getChild(0)), Joiner.on('.').join(node.getFieldNames()));
+            StringJoiner joiner = new StringJoiner(".");
+            for (String field : node.getFieldNames()) {
+                if (withBackquote) {
+                    joiner.add(ParseUtil.backquote(field));
+                } else {
+                    joiner.add(field);
+                }
+
+            }
+            return String.format("%s.%s", visit(node.getChild(0)), joiner);
         }
 
         public String visitGroupingFunctionCall(GroupingFunctionCallExpr node, Void context) {

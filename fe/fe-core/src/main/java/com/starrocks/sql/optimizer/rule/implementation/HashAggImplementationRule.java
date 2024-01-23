@@ -39,7 +39,6 @@ public class HashAggImplementationRule extends ImplementationRule {
                 logical.getGroupingKeys(),
                 logical.getPartitionByColumns(),
                 logical.getAggregations(),
-                logical.getSingleDistinctFunctionPos(),
                 logical.isSplit(),
                 logical.getLimit(),
                 logical.getPredicate(),

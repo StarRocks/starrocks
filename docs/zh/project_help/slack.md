@@ -18,4 +18,6 @@ description: "与社区互动"
 
 您也可以扫码加入微信社区群，与其他社区用户一起进行开放讨论，寻求实时技术支持。
 
-![image](../assets/wechat_group.png)
+![image](../assets/wechat_scan.png)
+
+在微信搜索 StarRocks 公众号并关注，可以获取最新的技术文档和活动推送。

@@ -692,7 +692,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
 
                         CallOperator newCall =
                                 new CallOperator(oldCall.getFnName(), newReturnType, newArguments, newFunction,
-                                        oldCall.isDistinct());
+                                        oldCall.isDistinct(), oldCall.isRemovedDistinct());
 
                         newAggMapEntry.add(Maps.immutableEntry(outputColumn, newCall));
                     } else {
@@ -742,7 +742,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             }
             final PhysicalHashAggregateOperator newHashAggregator =
                     new PhysicalHashAggregateOperator(aggOperator.getType(), newGroupBys, newPartitionsBy, newAggMap,
-                            aggOperator.getSingleDistinctFunctionPos(), aggOperator.isSplit(), aggOperator.getLimit(),
+                            aggOperator.isSplit(), aggOperator.getLimit(),
                             aggOperator.getPredicate(), aggOperator.getProjection());
             newHashAggregator.setMergedLocalAgg(aggOperator.isMergedLocalAgg());
             newHashAggregator.setUseSortAgg(aggOperator.isUseSortAgg());
