@@ -2916,7 +2916,7 @@ size_t TabletUpdates::_get_rowset_num_deletes(const Rowset& rowset) {
 }
 
 Status TabletUpdates::_get_extra_file_size(int64_t* pindex_size, int64_t* col_size) const {
-    const std::string tablet_path = _tablet.schema_hash_path();
+    std::filesystem::path tablet_path(_tablet.schema_hash_path().c_str());
     try {
         for (const auto& entry : std::filesystem::directory_iterator(tablet_path)) {
             if (entry.is_regular_file()) {
@@ -2935,13 +2935,13 @@ Status TabletUpdates::_get_extra_file_size(int64_t* pindex_size, int64_t* col_si
             }
         }
     } catch (const std::filesystem::filesystem_error& ex) {
-        std::string err_msg = "Iterate dir " + tablet_path + " Filesystem error: " + ex.what();
+        std::string err_msg = "Iterate dir " + tablet_path.string() + " Filesystem error: " + ex.what();
         return Status::InternalError(err_msg);
     } catch (const std::exception& ex) {
-        std::string err_msg = "Iterate dir " + tablet_path + " Standard error: " + ex.what();
+        std::string err_msg = "Iterate dir " + tablet_path.string() + " Standard error: " + ex.what();
         return Status::InternalError(err_msg);
     } catch (...) {
-        std::string err_msg = "Iterate dir " + tablet_path + " Unknown exception occurred.";
+        std::string err_msg = "Iterate dir " + tablet_path.string() + " Unknown exception occurred.";
         return Status::InternalError(err_msg);
     }
     return Status::OK();
