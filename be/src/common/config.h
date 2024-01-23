@@ -375,6 +375,9 @@ CONF_mInt32(number_tablet_writer_threads, "16");
 CONF_mInt64(max_queueing_memtable_per_tablet, "2");
 // when memory limit exceed and memtable last update time exceed this time, memtable will be flushed
 CONF_mInt64(stale_memtable_flush_time_sec, "30");
+// the time that secondary replica wait for the commit request from primary replica
+// exceed this time, the secondary replica will abort
+CONF_mInt64(secondary_replica_commit_timeout_sec, "60");
 
 // delta writer hang after this time, be will exit since storage is in error state
 CONF_Int32(be_exit_after_disk_write_hang_second, "60");

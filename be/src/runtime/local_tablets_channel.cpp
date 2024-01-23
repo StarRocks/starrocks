@@ -74,6 +74,9 @@ LocalTabletsChannel::~LocalTabletsChannel() {
 Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                                  std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) {
     std::unique_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
+    if (_rpc_start_ts == 0) {
+        _rpc_start_ts = butil::gettimeofday_s();
+    }
     _txn_id = params.txn_id();
     _index_id = params.index_id();
     _schema = schema;
@@ -265,7 +268,7 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     // be executed ahead of the write requests submitted by other senders.
     if (request.eos() && _close_sender(request.partition_ids().data(), request.partition_ids_size()) == 0) {
         close_channel = true;
-        _commit_tablets(request, context);
+        _commit_primary_replicas(request, context);
     }
 
     // Must reset the context pointer before waiting on the |count_down_latch|,
@@ -284,41 +287,7 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
 
     // We need wait all secondary replica commit before we close the channel
     if (_is_replicated_storage && close_channel && response->status().status_code() == TStatusCode::OK) {
-        bool timeout = false;
-        for (auto& [tablet_id, delta_writer] : _delta_writers) {
-            // Wait util seconary replica commit/abort by primary
-            if (delta_writer->replica_state() == Secondary) {
-                int i = 0;
-                do {
-                    auto state = delta_writer->get_state();
-                    if (state == kCommitted || state == kAborted || state == kUninitialized) {
-                        break;
-                    }
-                    i++;
-                    // only sleep in bthread
-                    bthread_usleep(10000); // 10ms
-                    auto t1 = std::chrono::steady_clock::now();
-                    if (std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000 >
-                        request.timeout_ms()) {
-                        LOG(INFO) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
-                                  << " wait tablet " << tablet_id << " secondary replica finish timeout "
-                                  << request.timeout_ms() << "ms still in state " << state;
-                        timeout = true;
-                        break;
-                    }
-
-                    if (i % 6000 == 0) {
-                        LOG(INFO) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
-                                  << " wait tablet " << tablet_id << " secondary replica finish already "
-                                  << std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000
-                                  << "ms still in state " << state;
-                    }
-                } while (true);
-            }
-            if (timeout) {
-                break;
-            }
-        }
+        _wait_secondary_replicas_commit(request);
     }
 
     {
@@ -502,8 +471,8 @@ void LocalTabletsChannel::_abort_replica_tablets(
     }
 }
 
-void LocalTabletsChannel::_commit_tablets(const PTabletWriterAddChunkRequest& request,
-                                          const std::shared_ptr<LocalTabletsChannel::WriteContext>& context) {
+void LocalTabletsChannel::_commit_primary_replicas(const PTabletWriterAddChunkRequest& request,
+                                                   const std::shared_ptr<LocalTabletsChannel::WriteContext>& context) {
     vector<int64_t> commit_tablet_ids;
     std::unordered_map<int64_t, std::vector<int64_t>> node_id_to_abort_tablets;
     {
@@ -537,6 +506,49 @@ void LocalTabletsChannel::_commit_tablets(const PTabletWriterAddChunkRequest& re
 
     // abort seconary replicas located on other nodes which have no data
     _abort_replica_tablets(request, "", node_id_to_abort_tablets);
+}
+
+void LocalTabletsChannel::_wait_secondary_replicas_commit(const PTabletWriterAddChunkRequest& request) {
+    auto start_wait_ts = butil::gettimeofday_s();
+    bool timeout = false;
+    for (auto& [tablet_id, delta_writer] : _delta_writers) {
+        // Wait util seconary replica commit/abort by primary
+        if (delta_writer->replica_state() == Secondary) {
+            do {
+                auto state = delta_writer->get_state();
+                if (state == kCommitted || state == kAborted || state == kUninitialized) {
+                    break;
+                }
+                // only sleep in bthread
+                bthread_usleep(10000); // 10ms
+
+                int64_t now = butil::gettimeofday_s();
+                auto total_rpc_time = now - _rpc_start_ts;
+                // whole rpc timeout
+                if (total_rpc_time > request.timeout_ms() / 1000) {
+                    LOG(WARNING) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
+                                 << " wait tablet " << tablet_id << " secondary replica finish timeout "
+                                 << request.timeout_ms() << "ms still in state " << state;
+                    timeout = true;
+                    break;
+                }
+
+                auto wait_time = now - start_wait_ts;
+                // for secondary replica, we only wait at most secondary_replica_commit_timeout_sec second
+                // since it's the time that primary replica send commit to secondary
+                if (wait_time > std::min(request.timeout_ms() / 500, config::secondary_replica_commit_timeout_sec)) {
+                    LOG(WARNING) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
+                                 << " wait tablet " << tablet_id << " secondary replica finish already "
+                                 << wait_time * 1000 << "ms still in state " << state << " abort it";
+                    delta_writer->abort(false);
+                    break;
+                }
+            } while (true);
+        }
+        if (timeout) {
+            break;
+        }
+    }
 }
 
 int LocalTabletsChannel::_close_sender(const int64_t* partitions, size_t partitions_size) {
