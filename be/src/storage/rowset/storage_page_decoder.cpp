@@ -23,17 +23,8 @@ namespace starrocks {
 
 class BitShuffleDataDecoder : public DataDecoder {
 public:
-    BitShuffleDataDecoder(PageTypePB page_type) : _page_type(page_type) {}
+    BitShuffleDataDecoder() = default;
     ~BitShuffleDataDecoder() override = default;
-
-    size_t get_null_size(PageFooterPB* footer) {
-        if (_page_type == DICTIONARY_PAGE) {
-            return 0;
-        } else {
-            const DataPageFooterPB& data_footer = footer->data_page_footer();
-            return data_footer.nullmap_size();
-        }
-    }
 
     void reserve_head(uint8_t head_size) override {
         DCHECK(_reserve_head_size == 0);
@@ -65,8 +56,12 @@ public:
                     strings::Substitute("decompress failed: expected number of bytes consumed=$0 vs real consumed=$1",
                                         compressed_body.size, bytes));
         }
-
-        auto null_size = get_null_size(footer);
+        DCHECK(footer->has_type()) << "type must be set";
+        uint32_t null_size = 0;
+        if (footer->type() == DATA_PAGE) {
+            const DataPageFooterPB& data_footer = footer->data_page_footer();
+            null_size = data_footer.nullmap_size();
+        }
         memcpy(decompressed_body.data + decompressed_body.size,
                page_slice->data + header_size + (compressed_size - BITSHUFFLE_PAGE_HEADER_SIZE),
                null_size + footer_size);
@@ -78,13 +73,12 @@ public:
     }
 
 private:
-    PageTypePB _page_type;
     uint8_t _reserve_head_size = 0;
 };
 
 class DictDictDecoder : public DataDecoder {
 public:
-    DictDictDecoder() { _bit_shuffle_decoder = std::make_unique<BitShuffleDataDecoder>(DICTIONARY_PAGE); }
+    DictDictDecoder() { _bit_shuffle_decoder = std::make_unique<BitShuffleDataDecoder>(); }
     ~DictDictDecoder() override = default;
 
     Status decode_page_data(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
@@ -99,7 +93,7 @@ private:
 class BinaryDictDataDecoder : public DataDecoder {
 public:
     BinaryDictDataDecoder() {
-        _bit_shuffle_decoder = std::make_unique<BitShuffleDataDecoder>(DATA_PAGE);
+        _bit_shuffle_decoder = std::make_unique<BitShuffleDataDecoder>();
         _bit_shuffle_decoder->reserve_head(BINARY_DICT_PAGE_HEADER_SIZE);
     }
     ~BinaryDictDataDecoder() override = default;
@@ -126,7 +120,7 @@ private:
 };
 
 static DataDecoder g_base_decoder;
-static BitShuffleDataDecoder g_bit_shuffle_decoder(DATA_PAGE);
+static BitShuffleDataDecoder g_bit_shuffle_decoder;
 static BinaryDictDataDecoder g_binary_dict_decoder;
 static DictDictDecoder g_dict_dict_decoder;
 

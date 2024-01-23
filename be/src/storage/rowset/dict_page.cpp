@@ -72,7 +72,7 @@ uint32_t DictPageBuilder<Type>::add(const uint8_t* vals, uint32_t count) {
             auto iter = _dictionary.find(value);
             if (iter != _dictionary.end()) {
                 value_code = iter->second;
-            } else if (_dict_builder->add(&value, 1) > 0) {
+            } else if (_dict_builder->add((const uint8_t*)&value, 1) > 0) {
                 value_code = _dictionary.size();
                 _dictionary.insert_or_assign(value, value_code);
             } else {
