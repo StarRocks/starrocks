@@ -468,6 +468,7 @@ public class OlapTableSink extends DataSink {
                         Column column = slotDesc.getColumn();
                         if (column.getName().equalsIgnoreCase(slotRefs.get(0).getColumnName())) {
                             slotRefs.get(0).setDesc(slotDesc);
+                            break;
                         }
                     }
                     partitionParam.setPartition_exprs(Expr.treesToThrift(exprPartitionInfo.getPartitionExprs()));
@@ -487,6 +488,7 @@ public class OlapTableSink extends DataSink {
                         Column column = slotDesc.getColumn();
                         if (column.getName().equalsIgnoreCase(slotRefs.get(0).getColumnName())) {
                             slotRefs.get(0).setDesc(slotDesc);
+                            break;
                         }
                     }
                     partitionParam.setPartition_exprs(Expr.treesToThrift(expressionRangePartitionInfoV2.getPartitionExprs()));
