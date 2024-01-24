@@ -37,11 +37,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
-<<<<<<< HEAD
 import com.starrocks.common.MarkedCountDownLatch;
-import com.starrocks.common.Pair;
-=======
->>>>>>> c45a0755c2 ([Feature](2/n) Support fast schema evolution in shared data mode (#38568))
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;

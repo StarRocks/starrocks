@@ -31,9 +31,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
-import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
@@ -81,8 +79,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         if (db == null) {
             throw new AlterCancelException("database does not exist, dbId:" + dbId);
         }
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        db.readLock();
 
         try {
             olapTable = (OlapTable) db.getTable(tableName);
@@ -91,7 +88,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             }
             partitions.addAll(olapTable.getPartitions());
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            db.readUnlock();
         }
 
         if (this.watershedTxnId == -1) {
@@ -129,8 +126,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             // database has been dropped
             throw new AlterCancelException("database does not exist, dbId:" + dbId);
         }
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
+        db.writeLock();
 
         LakeTable table = (LakeTable) db.getTable(tableId);
         if (table == null) {
@@ -156,7 +152,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             // NOTE: !!! below this point, this update meta job must success unless the database or table been dropped. !!!
             updateNextVersion(table);
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            db.writeUnlock();
         }
     }
 
@@ -181,8 +177,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             LOG.warn("database does not exist, dbId:" + dbId);
             throw new AlterCancelException("database does not exist, dbId:" + dbId);
         }
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
+        db.writeLock();
 
         try {
             LakeTable table = (LakeTable) db.getTable(tableId);
@@ -202,7 +197,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             table.setState(OlapTable.OlapTableState.NORMAL);
 
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            db.writeUnlock();
         }
 
         LOG.info("update meta job finished: {}", jobId);
@@ -214,8 +209,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             // database has been dropped
             throw new AlterCancelException("database does not exist, dbId:" + dbId);
         }
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        db.readLock();
 
         LakeTable table = (LakeTable) db.getTable(tableId);
         if (table == null) {
@@ -235,7 +229,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                 }
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            db.readUnlock();
         }
         return true;
     }
@@ -266,8 +260,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                                           String partitionName) throws DdlException {
         // be id -> <tablet id,schemaHash>
         Map<Long, Set<Long>> beIdToTabletSet = Maps.newHashMap();
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        db.readLock();
         try {
             OlapTable olapTable = (OlapTable) db.getTable(tableName);
             Partition partition = olapTable.getPartition(partitionName);
@@ -288,7 +281,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                 }
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            db.readUnlock();
         }
 
         int totalTaskNum = beIdToTabletSet.keySet().size();
@@ -378,8 +371,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             // database has been dropped
             return false;
         }
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
+        db.writeLock();
         LakeTable table;
         try {
             table = (LakeTable) db.getTable(tableId);
@@ -402,7 +394,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                 span.end();
             }
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            db.writeUnlock();
         }
 
         GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
@@ -445,8 +437,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             LOG.warn("database does not exist, dbId:" + dbId);
             return;
         }
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
+        db.writeLock();
         LakeTable table = (LakeTable) db.getTable(tableId);
         if (table == null) {
             return;
@@ -466,7 +457,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                 throw new RuntimeException("unknown job state '{}'" + jobState.name());
             }
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            db.writeUnlock();
         }
     }
 

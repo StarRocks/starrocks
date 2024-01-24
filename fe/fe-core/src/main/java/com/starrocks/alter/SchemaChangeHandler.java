@@ -1954,16 +1954,9 @@ public class SchemaChangeHandler extends AlterHandler {
                                                 String partitionName,
                                                 BinlogConfig binlogConfig,
                                                 TTabletMetaType metaType) throws DdlException {
-<<<<<<< HEAD
-        // be id -> <tablet id,schemaHash>
-        Map<Long, Set<Pair<Long, Integer>>> beIdToTabletIdWithHash = Maps.newHashMap();
-        db.readLock();
-=======
         // be id -> Set<tablet id>
         Map<Long, Set<Long>> beIdToTabletId = Maps.newHashMap();
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
->>>>>>> c45a0755c2 ([Feature](2/n) Support fast schema evolution in shared data mode (#38568))
+        db.readLock();
         try {
             OlapTable olapTable = (OlapTable) db.getTable(tableName);
             Partition partition = olapTable.getPartition(partitionName);
@@ -2045,16 +2038,9 @@ public class SchemaChangeHandler extends AlterHandler {
                                           String partitionName,
                                           boolean metaValue,
                                           TTabletMetaType metaType) throws DdlException {
-<<<<<<< HEAD
-        // be id -> <tablet id,schemaHash>
-        Map<Long, Set<Pair<Long, Integer>>> beIdToTabletIdWithHash = Maps.newHashMap();
-        db.readLock();
-=======
         // be id -> <tablet id>
         Map<Long, Set<Long>> beIdToTabletSet = Maps.newHashMap();
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
->>>>>>> c45a0755c2 ([Feature](2/n) Support fast schema evolution in shared data mode (#38568))
+        db.readLock();
         try {
             OlapTable olapTable = (OlapTable) db.getTable(tableName);
             Partition partition = olapTable.getPartition(partitionName);
