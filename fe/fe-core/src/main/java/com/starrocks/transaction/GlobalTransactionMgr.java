@@ -67,6 +67,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -412,24 +413,28 @@ public class GlobalTransactionMgr implements MemoryTrackable {
     }
 
     public void abortTransaction(long dbId, long transactionId, String reason) throws UserException {
-        abortTransaction(dbId, transactionId, reason, Lists.newArrayList());
+        abortTransaction(dbId, transactionId, reason, Collections.emptyList());
     }
 
     public void abortTransaction(long dbId, long transactionId, String reason, List<TabletFailInfo> failedTablets)
             throws UserException {
-        abortTransaction(dbId, transactionId, reason, failedTablets, null);
+        abortTransaction(dbId, transactionId, reason, Collections.emptyList(), failedTablets, null);
     }
 
     public void abortTransaction(Long dbId, Long transactionId, String reason, TxnCommitAttachment txnCommitAttachment)
             throws UserException {
-        abortTransaction(dbId, transactionId, reason, Lists.newArrayList(), txnCommitAttachment);
+        abortTransaction(dbId, transactionId, reason, Collections.emptyList(), Collections.emptyList(),
+                txnCommitAttachment);
     }
 
-    public void abortTransaction(long dbId, long transactionId, String reason, List<TabletFailInfo> failedTablets,
+    public void abortTransaction(long dbId, long transactionId, String reason,
+                                 List<TabletCommitInfo> finishedTablets,
+                                 List<TabletFailInfo> failedTablets,
                                  TxnCommitAttachment txnCommitAttachment)
             throws UserException {
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
-        dbTransactionMgr.abortTransaction(transactionId, true, reason, txnCommitAttachment, failedTablets);
+        dbTransactionMgr.abortTransaction(transactionId, true, reason, txnCommitAttachment,
+                finishedTablets, failedTablets);
     }
 
     // for http cancel stream load api
@@ -770,7 +775,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
             try {
                 DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(txnInfo.first);
                 dbTransactionMgr.abortTransaction(txnInfo.second, false, "coordinate BE is down", null,
-                        Lists.newArrayList());
+                        Collections.emptyList(), Collections.emptyList());
             } catch (UserException e) {
                 LOG.warn("Abort txn on coordinate BE {} failed, msg={}", coordinateHost, e.getMessage());
             }
