@@ -412,7 +412,7 @@ jobs:
     needs: [ deploy, SQL-Tester, admit, be-ut, fe-ut ]
     if: always()
     env:
-      BRANCH: ${{ github.base_ref }}
+      BRANCH: ${{ needs.deploy.outputs.branch }}
       CONF_FILE: ${{ needs.deploy.outputs.deploy_conf_file }}
       GH_TOKEN: ${{ github.token }}
       PR_NUMBER: ${{ needs.deploy.outputs.pr_number }}
@@ -425,7 +425,7 @@ jobs:
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           cp -f $CONF_FILE ./conf/starrocks_deploy.conf
           cat ./conf/starrocks_deploy.conf
-          ./bin/backup_log_cores.sh --branch $BRANCH --pr $PR_NUMBER --build Release --conf $CONF_FILE --repository ${{ github.repository }}
+          ./bin/backup_log_cores.sh --branch "$BRANCH" --pr "$PR_NUMBER" --build Release --conf "$CONF_FILE" --repository ${{ github.repository }}
 
       - name: Clean ECS
         if: steps.backup.outcome == 'success'
