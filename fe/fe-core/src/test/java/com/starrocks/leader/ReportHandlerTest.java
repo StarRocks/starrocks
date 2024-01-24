@@ -155,7 +155,8 @@ public class ReportHandlerTest {
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         AlterTableStmt alterTableStmt = 
                         (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
-        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        SchemaChangeHandler schemaChangeHandler = 
+                        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getSchemaChangeHandler();
         schemaChangeHandler.process(alterTableStmt.getOps(), db, olapTable);
         Assert.assertEquals(OlapTableState.NORMAL, olapTable.getState());
 
