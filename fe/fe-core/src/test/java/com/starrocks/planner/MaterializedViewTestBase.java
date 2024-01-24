@@ -81,6 +81,9 @@ public class MaterializedViewTestBase extends PlanTestBase {
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
 
         new MockUp<MaterializedView>() {
+            /**
+             * {@link MaterializedView#getPartitionNamesToRefreshForMv(Set, boolean)}
+             */
             @Mock
             public boolean getPartitionNamesToRefreshForMv(Set<String> toRefreshPartitions,
                                                            boolean isQueryRewrite) {
@@ -89,6 +92,9 @@ public class MaterializedViewTestBase extends PlanTestBase {
         };
 
         new MockUp<UtFrameUtils>() {
+            /**
+             * {@link UtFrameUtils#isPrintPlanTableNames()}
+             */
             @Mock
             boolean isPrintPlanTableNames() {
                 return true;
@@ -96,6 +102,9 @@ public class MaterializedViewTestBase extends PlanTestBase {
         };
 
         new MockUp<PlanTestBase>() {
+            /**
+             * {@link com.starrocks.sql.plan.PlanTestNoneDBBase#isIgnoreExplicitColRefIds()}
+             */
             @Mock
             boolean isIgnoreExplicitColRefIds() {
                 return true;

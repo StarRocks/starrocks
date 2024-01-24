@@ -17,6 +17,7 @@ package com.starrocks.catalog;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 
 import java.util.List;
 
@@ -41,6 +42,7 @@ public class MvPlanContext {
     // because we will not use other fields
     private boolean isValidMvPlan;
     private String invalidReason;
+    private final int mvScanOpNum;
 
     public MvPlanContext(boolean valid, String invalidReason) {
         this.logicalPlan = null;
@@ -48,6 +50,7 @@ public class MvPlanContext {
         this.refFactory = null;
         this.isValidMvPlan = valid;
         this.invalidReason = invalidReason;
+        this.mvScanOpNum = 0;
     }
 
     public MvPlanContext(
@@ -58,6 +61,7 @@ public class MvPlanContext {
         this.outputColumns = outputColumns;
         this.refFactory = refFactory;
         this.isValidMvPlan = true;
+        this.mvScanOpNum = MvUtils.getOlapScanNode(logicalPlan).size();
     }
 
     public OptExpression getLogicalPlan() {
@@ -78,5 +82,9 @@ public class MvPlanContext {
 
     public String getInvalidReason() {
         return invalidReason;
+    }
+
+    public int getMvScanOpNum() {
+        return mvScanOpNum;
     }
 }

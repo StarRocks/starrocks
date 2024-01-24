@@ -30,8 +30,10 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.TestWithFeService;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
@@ -75,6 +77,13 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test");
         starRocksAssert.useDatabase("test");
+
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
+
+        if (!starRocksAssert.databaseExist("_statistics_")) {
+            StatisticsMetaManager m = new StatisticsMetaManager();
+            m.createStatisticsTablesForTest();
+        }
 
         new MockUp<StmtExecutor>() {
             @Mock
