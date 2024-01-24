@@ -290,7 +290,8 @@ public class MetaFunctions {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
                         "In module " + moduleName + " - " + clazzName + " field " + fieldName  + " not found.");
             } catch (IllegalAccessException e) {
-                throw new RuntimeException(e);
+                ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                        "Get module " + moduleName + " - " + clazzName + " field " + fieldName  + " error.");
             }
         }
 
