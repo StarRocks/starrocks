@@ -83,7 +83,7 @@ public class LakePublishBatchTest {
             }
 
             @Mock
-            public FilePathInfo allocateFilePath(String storageVolumeId, long tableId) {
+            public FilePathInfo allocateFilePath(String storageVolumeId, long dbId, long tableId) {
                 FilePathInfo.Builder builder = FilePathInfo.newBuilder();
                 FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
 

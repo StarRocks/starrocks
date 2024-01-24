@@ -191,13 +191,18 @@ public class StarOSAgent {
         return null;
     }
 
-    public FilePathInfo allocateFilePath(long tableId) throws DdlException {
+    private static String constructTablePath(long dbId, long tableId) {
+        return String.format("DB%d/%d", dbId, tableId);
+    }
+
+    public FilePathInfo allocateFilePath(long dbId, long tableId) throws DdlException {
         try {
             FileStoreType fsType = getFileStoreType(Config.cloud_native_storage_type);
             if (fsType == null || fsType == FileStoreType.INVALID) {
                 throw new DdlException("Invalid cloud native storage type: " + Config.cloud_native_storage_type);
             }
-            FilePathInfo pathInfo = client.allocateFilePath(serviceId, fsType, Long.toString(tableId));
+            String suffix = constructTablePath(dbId, tableId);
+            FilePathInfo pathInfo = client.allocateFilePath(serviceId, fsType, suffix);
             LOG.debug("Allocate file path from starmgr: {}", pathInfo);
             return pathInfo;
         } catch (StarClientException e) {
@@ -205,10 +210,10 @@ public class StarOSAgent {
         }
     }
 
-    public FilePathInfo allocateFilePath(String storageVolumeId, long tableId) throws DdlException {
+    public FilePathInfo allocateFilePath(String storageVolumeId, long dbId, long tableId) throws DdlException {
         try {
-            FilePathInfo pathInfo = client.allocateFilePath(serviceId,
-                     storageVolumeId, Long.toString(tableId));
+            String suffix = constructTablePath(dbId, tableId);
+            FilePathInfo pathInfo = client.allocateFilePath(serviceId, storageVolumeId, suffix);
             LOG.debug("Allocate file path from starmgr: {}", pathInfo);
             return pathInfo;
         } catch (StarClientException e) {
