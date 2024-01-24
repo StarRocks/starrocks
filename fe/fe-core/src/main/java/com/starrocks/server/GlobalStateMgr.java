@@ -469,6 +469,14 @@ public class GlobalStateMgr {
         return journalObservable;
     }
 
+    public SystemInfoService getOrCreateSystemInfo(Integer clusterId) {
+        return nodeMgr.getOrCreateSystemInfo(clusterId);
+    }
+
+    public MemoryUsageTracker getMemoryUsageTracker() {
+        return memoryUsageTracker;
+    }
+
     public TNodesInfo createNodesInfo(Integer clusterId) {
         TNodesInfo nodesInfo = new TNodesInfo();
         SystemInfoService systemInfoService = nodeMgr.getOrCreateSystemInfo(clusterId);

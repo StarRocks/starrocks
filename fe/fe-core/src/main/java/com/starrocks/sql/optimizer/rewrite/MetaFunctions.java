@@ -31,6 +31,9 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.hive.Partition;
+import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.MemoryUsageTracker;
+import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeType;
@@ -42,7 +45,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.collections4.SetUtils;
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.spark.util.SizeEstimator;
 
+import java.lang.reflect.Field;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -232,6 +237,64 @@ public class MetaFunctions {
         authOperatorPrivilege();
         TaskRunManager trm = GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager();
         return ConstantOperator.createVarchar(trm.inspect());
+    }
+
+    @ConstantFunction(name = "inspect_memory", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator inspectMemory(ConstantOperator moduleName) {
+        Map<String, MemoryTrackable> statMap = MemoryUsageTracker.REFERENCE.get(moduleName.getVarchar());
+        if (statMap == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                    "Module " + moduleName + " not found.");
+        }
+        long estimateSize = 0;
+        for (Map.Entry<String, MemoryTrackable> statEntry : statMap.entrySet()) {
+            MemoryTrackable tracker = statEntry.getValue();
+            estimateSize += tracker.estimateSize();
+        }
+
+        return ConstantOperator.createVarchar(new ByteSizeValue(estimateSize).toString());
+    }
+
+    @ConstantFunction(name = "inspect_memory_detail", argTypes = {VARCHAR, VARCHAR},
+            returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator inspectMemoryDetail(ConstantOperator moduleName, ConstantOperator clazzInfo) {
+        Map<String, MemoryTrackable> statMap = MemoryUsageTracker.REFERENCE.get(moduleName.getVarchar());
+        if (statMap == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                    "Module " + moduleName + " not found.");
+        }
+        String classInfo = clazzInfo.getVarchar();
+        String clazzName;
+        String fieldName = null;
+        if (classInfo.contains(".")) {
+            clazzName = classInfo.split("\\.")[0];
+            fieldName = classInfo.split("\\.")[1];
+        } else {
+            clazzName = classInfo;
+        }
+        MemoryTrackable memoryTrackable = statMap.get(clazzName);
+        if (memoryTrackable == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                    "In module " + moduleName + " - " + clazzName + " not found.");
+        }
+        long estimateSize = 0;
+        if (fieldName == null) {
+            estimateSize = memoryTrackable.estimateSize();
+        } else {
+            try {
+                Field field = memoryTrackable.getClass().getDeclaredField(fieldName);
+                field.setAccessible(true);
+                Object object = field.get(memoryTrackable);
+                estimateSize = SizeEstimator.estimate(object);
+            } catch (NoSuchFieldException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                        "In module " + moduleName + " - " + clazzName + " field " + fieldName  + " not found.");
+            } catch (IllegalAccessException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+        return ConstantOperator.createVarchar(new ByteSizeValue(estimateSize).toString());
     }
 
 }
