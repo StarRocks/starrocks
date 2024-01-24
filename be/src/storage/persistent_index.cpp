@@ -4530,6 +4530,11 @@ Status PersistentIndex::major_compaction(Tablet* tablet) {
         _major_compaction_running.store(false);
         _cancel_major_compaction = false;
     });
+    // re-use config update_compaction_per_tablet_min_interval_seconds here to control pk index major compaction
+    if (UnixSeconds() - _latest_compaction_time <= config::update_compaction_per_tablet_min_interval_seconds) {
+        return Status::OK();
+    }
+    _latest_compaction_time = UnixSeconds();
     // merge all l2 files
     PersistentIndexMetaPB prev_index_meta;
     RETURN_IF_ERROR(
