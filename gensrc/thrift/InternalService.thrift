@@ -124,6 +124,14 @@ enum TOverflowMode {
   REPORT_ERROR = 1;
 }
 
+enum TTimeUnit {
+    NANOSECOND = 0;
+    MICROSECOND = 1;
+    MILLISECOND = 2;
+    SECOND = 3;
+    MINUTE = 4;
+}
+
 struct TQueryQueueOptions {
   1: optional bool enable_global_query_queue;
   2: optional bool enable_group_level_query_queue;
@@ -244,7 +252,7 @@ struct TQueryOptions {
   107: optional i64 global_runtime_filter_build_max_size;
   108: optional i64 runtime_filter_rpc_http_min_size;
 
-  109: optional i64 big_query_profile_second_threshold = 0;
+  109: optional i64 big_query_profile_threshold = 0;
 
   110: optional TQueryQueueOptions query_queue_options;
 
@@ -255,7 +263,7 @@ struct TQueryOptions {
 
   114: optional bool enable_jit = false;
 
-  115: optional i64 big_query_profile_millisecond_threshold = 0;
+  115: optional TTimeUnit big_query_profile_threshold_unit = TTimeUnit.SECOND;
 }
 
 
