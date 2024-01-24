@@ -244,7 +244,7 @@ struct TQueryOptions {
   107: optional i64 global_runtime_filter_build_max_size;
   108: optional i64 runtime_filter_rpc_http_min_size;
 
-  109: optional i64 big_query_profile_second_threshold;
+  109: optional i64 big_query_profile_second_threshold = 0;
 
   110: optional TQueryQueueOptions query_queue_options;
 
@@ -254,6 +254,8 @@ struct TQueryOptions {
   113: optional bool enable_hyperscan_vec;
 
   114: optional bool enable_jit = false;
+
+  115: optional i64 big_query_profile_millisecond_threshold = 0;
 }
 
 

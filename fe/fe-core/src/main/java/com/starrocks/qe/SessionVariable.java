@@ -512,6 +512,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String BIG_QUERY_LOG_SCAN_BYTES_THRESHOLD = "big_query_log_scan_bytes_threshold";
     public static final String BIG_QUERY_LOG_SCAN_ROWS_THRESHOLD = "big_query_log_scan_rows_threshold";
     public static final String BIG_QUERY_PROFILE_SECOND_THRESHOLD = "big_query_profile_second_threshold";
+    public static final String BIG_QUERY_PROFILE_MILLISECOND_THRESHOLD = "big_query_profile_millisecond_threshold";
 
     public static final String SQL_DIALECT = "sql_dialect";
 
@@ -930,7 +931,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableAsyncProfile = true;
 
     @VariableMgr.VarAttr(name = BIG_QUERY_PROFILE_SECOND_THRESHOLD)
-    private int bigQueryProfileSecondThreshold = 0;
+    private long bigQueryProfileSecondThreshold = 0;
+
+    @VariableMgr.VarAttr(name = BIG_QUERY_PROFILE_MILLISECOND_THRESHOLD, flag = VariableMgr.INVISIBLE)
+    private long bigQueryProfileMilliSecondThreshold = 0;
 
     @VariableMgr.VarAttr(name = RESOURCE_GROUP_ID, alias = RESOURCE_GROUP_ID_V2,
             show = RESOURCE_GROUP_ID_V2, flag = VariableMgr.INVISIBLE)
@@ -1924,11 +1928,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public boolean isEnableBigQueryProfile() {
-        return bigQueryProfileSecondThreshold > 0;
+        return bigQueryProfileSecondThreshold > 0 || bigQueryProfileMilliSecondThreshold > 0;
     }
 
-    public int getBigQueryProfileSecondThreshold() {
-        return bigQueryProfileSecondThreshold;
+    public long getBigQueryProfileMilliSecondThreshold() {
+        return bigQueryProfileSecondThreshold * 1000L + bigQueryProfileMilliSecondThreshold;
     }
 
     public int getWaitTimeoutS() {
@@ -3202,6 +3206,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setQuery_delivery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryDeliveryTimeoutS));
         tResult.setEnable_profile(enableProfile);
         tResult.setBig_query_profile_second_threshold(bigQueryProfileSecondThreshold);
+        tResult.setBig_query_profile_millisecond_threshold(bigQueryProfileMilliSecondThreshold);
         tResult.setRuntime_profile_report_interval(runtimeProfileReportInterval);
         tResult.setBatch_size(chunkSize);
         tResult.setLoad_mem_limit(loadMemLimit);

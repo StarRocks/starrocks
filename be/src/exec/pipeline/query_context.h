@@ -102,8 +102,10 @@ public:
         }
         return MonotonicNanos() - _query_begin_time > _big_query_profile_threshold_ns;
     }
-    void set_big_query_profile_threshold(int64_t big_query_profile_threshold_s) {
-        _big_query_profile_threshold_ns = 1'000'000'000L * big_query_profile_threshold_s;
+    void set_big_query_profile_threshold(int64_t big_query_profile_threshold_s,
+                                         int64_t big_query_profile_threshold_ms) {
+        _big_query_profile_threshold_ns =
+                1'000'000'000L * big_query_profile_threshold_s + 1'000'000L * big_query_profile_threshold_ms;
     }
     void set_runtime_profile_report_interval(int64_t runtime_profile_report_interval_s) {
         _runtime_profile_report_interval_ns = 1'000'000'000L * runtime_profile_report_interval_s;
