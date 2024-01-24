@@ -188,7 +188,7 @@ public:
                                                                    const TabletSchemaCSPtr& tablet_schema,
                                                                    KVStore* meta, int64_t version,
                                                                    OlapReaderStatistics* stats,
-                                                                   KVStore* dcg_meta = nullptr);
+                                                                   KVStore* dcg_meta = nullptr, size_t chunk_size = 0);
 
     // only used for updatable tablets' rowset in column mode partial update
     // simply get iterators to iterate all rows without complex options like predicates
