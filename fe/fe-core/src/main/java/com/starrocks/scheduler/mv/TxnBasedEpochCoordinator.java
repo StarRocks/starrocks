@@ -160,7 +160,8 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
         long txnId = epoch.getTxnId();
         String failReason = "";
         try {
-            GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(dbId, txnId, failReason);
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(dbId, txnId, failReason,
+                    epoch.getCommitInfos(), epoch.getFailedInfos(), null);
             epoch.onFailed();
         } catch (UserException e) {
             LOG.warn("Abort transaction failed: {}", txnId);
