@@ -88,7 +88,7 @@ public class DeltaLakeTable extends Table {
     @Override
     public String getUUID() {
         if (CatalogMgr.isExternalCatalog(catalogName)) {
-            return String.join(".", catalogName, dbName, tableName);
+            return String.join(".", catalogName, dbName, tableName, Long.toString(createTime));
         } else {
             return Long.toString(id);
         }

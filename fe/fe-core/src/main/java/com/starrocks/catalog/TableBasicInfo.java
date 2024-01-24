@@ -27,8 +27,6 @@ public interface TableBasicInfo {
 
     Table.TableType getType();
 
-    String getUUID();
-
     boolean isOlapView();
 
     boolean isMaterializedView();

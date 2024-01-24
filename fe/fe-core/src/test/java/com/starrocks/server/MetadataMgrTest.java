@@ -174,7 +174,7 @@ public class MetadataMgrTest {
 
         com.starrocks.catalog.Table tbl1 = metadataMgr.getTable("hive_catalog", "hive_db", "hive_table");
         Assert.assertNotNull(tbl1);
-        Assert.assertEquals("hive_catalog.hive_db.hive_table", tbl1.getUUID());
+        Assert.assertEquals("hive_catalog.hive_db.hive_table.20201010", tbl1.getUUID());
 
         com.starrocks.catalog.Table tbl2 = metadataMgr.getTable("not_exist_catalog", "xxx", "xxx");
         Assert.assertNull(tbl2);

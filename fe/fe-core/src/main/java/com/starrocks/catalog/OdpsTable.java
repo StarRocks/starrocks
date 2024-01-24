@@ -116,7 +116,7 @@ public class OdpsTable extends Table implements HiveMetaStoreTable {
 
     @Override
     public String getUUID() {
-        return String.join(".", catalogName, dbName, name);
+        return String.join(".", catalogName, dbName, name, Long.toString(createTime));
     }
 
     @Override

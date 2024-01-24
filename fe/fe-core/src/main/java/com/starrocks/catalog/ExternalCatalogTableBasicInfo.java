@@ -28,16 +28,12 @@ public class ExternalCatalogTableBasicInfo implements TableBasicInfo {
     private final Table.TableType tableType;
 
     public ExternalCatalogTableBasicInfo(String catalogName, String dbName, String tableName, Table.TableType tableType) {
-        checkNotNull(catalogName);
-        checkNotNull(dbName);
-        checkNotNull(tableName);
-        checkNotNull(tableType);
         checkArgument(!CatalogMgr.isInternalCatalog(catalogName));
         checkArgument(tableType != Table.TableType.OLAP);
-        this.catalogName = catalogName;
-        this.dbName = dbName;
-        this.tableName = tableName;
-        this.tableType = tableType;
+        this.catalogName = checkNotNull(catalogName);
+        this.dbName = checkNotNull(dbName);
+        this.tableName = checkNotNull(tableName);
+        this.tableType = checkNotNull(tableType);
     }
 
     @Override
@@ -68,13 +64,6 @@ public class ExternalCatalogTableBasicInfo implements TableBasicInfo {
     @Override
     public Table.TableType getType() {
         return tableType;
-    }
-
-    // a uniform way to generate uuid for external table
-    @Override
-    public String getUUID() {
-        checkState(CatalogMgr.isExternalCatalog(catalogName));
-        return String.join(".", catalogName, dbName, tableName);
     }
 
     @Override

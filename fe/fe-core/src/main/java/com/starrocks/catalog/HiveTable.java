@@ -222,7 +222,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     @Override
     public String getUUID() {
         if (CatalogMgr.isExternalCatalog(catalogName)) {
-            return String.join(".", catalogName, hiveDbName, hiveTableName);
+            return String.join(".", catalogName, hiveDbName, hiveTableName, Long.toString(createTime));
         } else {
             return Long.toString(id);
         }
