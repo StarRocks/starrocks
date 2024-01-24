@@ -1173,7 +1173,7 @@ CONF_mInt64(lake_local_pk_index_unused_threshold_seconds, "86400"); // 1 day
 
 CONF_mBool(lake_enable_vertical_compaction_fill_data_cache, "false");
 
-CONF_Int32(dictionary_cache_refresh_timeout_ms, "60000"); // 1 min
-CONF_Int32(dictionary_cache_refresh_threadpool_size, "8");
+CONF_mInt32(dictionary_cache_refresh_timeout_ms, "60000"); // 1 min
+CONF_mInt32(dictionary_cache_refresh_threadpool_size, "8");
 
 } // namespace starrocks::config
