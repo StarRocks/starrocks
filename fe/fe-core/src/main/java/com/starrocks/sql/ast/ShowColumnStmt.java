@@ -152,8 +152,11 @@ public class ShowColumnStmt extends ShowStmt {
 
         where = where.substitute(aliasMap);
         where = new CompoundPredicate(CompoundPredicate.Operator.AND, where,
-                new BinaryPredicate(BinaryPredicate.Operator.EQ, new SlotRef(TABLE_NAME, "TABLE_SCHEMA"),
-                        new StringLiteral(tableName.getDb())));
+                new CompoundPredicate(CompoundPredicate.Operator.AND,
+                        new BinaryPredicate(BinaryPredicate.Operator.EQ, new SlotRef(TABLE_NAME, "TABLE_NAME"),
+                                new StringLiteral(tableName.getTbl())),
+                        new BinaryPredicate(BinaryPredicate.Operator.EQ, new SlotRef(TABLE_NAME, "TABLE_SCHEMA"),
+                                new StringLiteral(tableName.getDb()))));
         return new QueryStatement(new SelectRelation(selectList, new TableRelation(TABLE_NAME),
                 where, null, null));
     }
