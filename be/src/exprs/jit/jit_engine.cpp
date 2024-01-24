@@ -217,10 +217,10 @@ void JITEngine::print_module(const llvm::Module& module) {
     LOG(INFO) << "JIT: Generated IR:\n" << str;
 }
 
-void* JITEngine::lookup_function(const std::string& expr_name, bool mast_exist) {
+void* JITEngine::lookup_function(const std::string& expr_name, bool must_exist) {
     auto addr = _jit->lookup(expr_name);
     if (UNLIKELY(!addr || UNLIKELY(addr->isNull()))) {
-        if (!mast_exist) {
+        if (!must_exist) {
             return nullptr;
         }
 
@@ -235,9 +235,9 @@ void* JITEngine::lookup_function(const std::string& expr_name, bool mast_exist) 
     return reinterpret_cast<void*>(addr->toPtr<JITScalarFunction>());
 }
 
-void* JITEngine::lookup_function_with_lock(const std::string& expr_name, bool mast_exist) {
+void* JITEngine::lookup_function_with_lock(const std::string& expr_name, bool must_exist) {
     std::lock_guard<std::mutex> lock(_mutex);
-    return lookup_function(expr_name, mast_exist);
+    return lookup_function(expr_name, must_exist);
 }
 
 } // namespace starrocks
