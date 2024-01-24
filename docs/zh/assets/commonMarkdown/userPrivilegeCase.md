@@ -49,7 +49,6 @@
    SET CATALOG hive_catalog;
    -- 赋予角色所有表的查询权限。注意当前仅支持查询 Hive 表的视图 (自 3.1 版本起)。
    GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE read_catalog_only;
-   GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE read_catalog_only;
    ```
 
 4. 指定外部数据目录（External Catalog）下的写权限
