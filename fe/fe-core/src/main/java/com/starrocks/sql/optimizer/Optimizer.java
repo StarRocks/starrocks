@@ -214,7 +214,9 @@ public class Optimizer {
         }
         OptimizerTraceUtil.logOptExpression(connectContext, "after extract best plan:\n%s", result);
 
-        // set costs audio log before physicalRuleRewrite
+        result = new PruneSubfieldsForComplexType().rewrite(result, rootTaskContext);
+
+        // set costs audit log before physicalRuleRewrite
         // statistics won't set correctly after physicalRuleRewrite.
         // we need set plan costs before physical rewrite stage.
         final CostEstimate costs = Explain.buildCost(result);
@@ -650,7 +652,6 @@ public class Optimizer {
         result = new PredicateReorderRule(rootTaskContext.getOptimizerContext().getSessionVariable()).rewrite(result,
                 rootTaskContext);
         result = new ExtractAggregateColumn().rewrite(result, rootTaskContext);
-        result = new PruneSubfieldsForComplexType().rewrite(result, rootTaskContext);
         result = new JoinLocalShuffleRule().rewrite(result, rootTaskContext);
 
         // This must be put at last of the optimization. Because wrapping reused ColumnRefOperator with CloneOperator
