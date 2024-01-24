@@ -889,6 +889,10 @@
       "link": {"type": "doc", "id": "data_source/data_lakes"},
       "items": [
         {
+          "type": "doc",
+          "id": "data_source/icebergtutorial"
+        },
+        {
           "type": "category",
           "label": "Catalog",
           "link": {"type": "doc", "id": "data_source/catalog/catalog_intro"},
