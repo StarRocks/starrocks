@@ -284,6 +284,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             "cbo_materialized_view_rewrite_rule_output_limit";
     public static final String CBO_MATERIALIZED_VIEW_REWRITE_CANDIDATE_LIMIT =
             "cbo_materialized_view_rewrite_candidate_limit";
+    public static final String CBO_MATERIALIZED_VIEW_REWRITE_RELATED_MVS_LIMIT =
+            "cbo_materialized_view_rewrite_related_mvs_limit";
 
     public static final String CBO_MAX_REORDER_NODE_USE_EXHAUSTIVE = "cbo_max_reorder_node_use_exhaustive";
     public static final String CBO_ENABLE_DP_JOIN_REORDER = "cbo_enable_dp_join_reorder";
@@ -1481,6 +1483,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      */
     @VarAttr(name = CBO_MATERIALIZED_VIEW_REWRITE_CANDIDATE_LIMIT, flag = VariableMgr.INVISIBLE)
     private int cboMaterializedViewRewriteCandidateLimit = 12;
+
+    /**
+     * Materialized view rewrite related mv limit: how many related MVs would be considered for rewrite to a query?
+     */
+    @VarAttr(name = CBO_MATERIALIZED_VIEW_REWRITE_RELATED_MVS_LIMIT, flag = VariableMgr.INVISIBLE)
+    private int cboMaterializedViewRewriteRelatedMVsLimit = 64;
 
     @VarAttr(name = QUERY_EXCLUDING_MV_NAMES, flag = VariableMgr.INVISIBLE)
     private String queryExcludingMVNames = "";
@@ -2861,6 +2869,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCboMaterializedViewRewriteCandidateLimit(int limit) {
         this.cboMaterializedViewRewriteCandidateLimit = limit;
+    }
+
+    public int getCboMaterializedViewRewriteRelatedMVsLimit() {
+        return cboMaterializedViewRewriteRelatedMVsLimit;
+    }
+
+    public void setCboMaterializedViewRewriteRelatedMVsLimit(int cboMaterializedViewRewriteRelatedMVsLimit) {
+        this.cboMaterializedViewRewriteRelatedMVsLimit = cboMaterializedViewRewriteRelatedMVsLimit;
     }
 
     public String getQueryExcludingMVNames() {
