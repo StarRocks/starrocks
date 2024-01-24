@@ -313,14 +313,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "(up{service=\"$beservice\", namespace=\"$namespace\"} == 0) +0",
+          "expr": "(up{service=~\"${service:pipe}\", namespace=\"$namespace\"} == 0) +0",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "$cluster_name-{{instance}}: DEAD",
           "refId": "B"
         },
         {
-          "expr": "(up{service=\"$beservice\", namespace=\"$namespace\"} == 1) +0",
+          "expr": "(up{service=~\"${service:pipe}\", namespace=\"$namespace\"} == 1) +0",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "$cluster_name-{{instance}}: ALIVE",
@@ -473,7 +473,7 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "${StarRocks_Prometheus}",
-      "description": "The Backend CPU idle overview of each StarRocks cluster.\nThe detail Backend CPU idle info can be seen in 'BE' section.",
+      "description": "The Backend CPU idle overview of each StarRocks cluster.\nThe detail Backend CPU idle info can be seen in 'BE/CN' section.",
       "fill": 0,
       "fillGradient": 0,
       "gridPos": {
@@ -513,7 +513,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "(sum(rate(starrocks_be_cpu{service=\"$beservice\", namespace=\"$namespace\", mode=\"idle\"}[$interval]))) / (sum(rate(starrocks_be_cpu{service=\"$beservice\", namespace=\"$namespace\"}[$interval])))",
+          "expr": "(sum(rate(starrocks_be_cpu{service=~\"${service:pipe}\", namespace=\"$namespace\", mode=\"idle\"}[$interval]))) / (sum(rate(starrocks_be_cpu{service=~\"${service:pipe}\", namespace=\"$namespace\"}[$interval])))",
           "format": "time_series",
           "intervalFactor": 2,
           "legendFormat": "$cluster_name",
@@ -524,7 +524,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Cluster BE CPU Idle",
+      "title": "Cluster BE/CN CPU Idle",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -568,7 +568,7 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "${StarRocks_Prometheus}",
-      "description": "The Backend memory usage overview of each StarRocks cluster.\nThe detail backend memory usage can be seen in 'BE' section.",
+      "description": "The Backend memory usage overview of each StarRocks cluster.\nThe detail backend memory usage can be seen in 'BE/CN' section.",
       "fill": 0,
       "fillGradient": 0,
       "gridPos": {
@@ -607,7 +607,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "avg(starrocks_be_process_mem_bytes{service=\"$beservice\", namespace=\"$namespace\"})",
+          "expr": "avg(starrocks_be_process_mem_bytes{service=~\"${service:pipe}\", namespace=\"$namespace\"})",
           "format": "time_series",
           "intervalFactor": 2,
           "legendFormat": "$cluster_name",
@@ -618,7 +618,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "Cluster BE Mem Stat",
+      "title": "Cluster BE/CN Mem Stat",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -809,14 +809,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "(starrocks_be_disks_state{namespace=\"$namespace\", service=\"$beservice\"} == 0)+0",
+          "expr": "(starrocks_be_disks_state{namespace=\"$namespace\", service=~\"${service:pipe}\"} == 0)+0",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}: {{path}} OFFLINE",
           "refId": "A"
         },
         {
-          "expr": "(starrocks_be_disks_state{namespace=\"$namespace\", service=\"$beservice\"} == 1)+0",
+          "expr": "(starrocks_be_disks_state{namespace=\"$namespace\", service=~\"${service:pipe}\"} == 1)+0",
           "format": "time_series",
           "hide": false,
           "intervalFactor": 1,
@@ -1096,14 +1096,14 @@
       "pluginVersion": "8.0.6",
       "targets": [
         {
-          "expr": "count(up{namespace=\"$namespace\", service=\"$beservice\"})",
+          "expr": "count(up{namespace=\"$namespace\", service=~\"${service:pipe}\"})",
           "format": "time_series",
           "instant": true,
           "intervalFactor": 1,
           "refId": "A"
         }
       ],
-      "title": "[$cluster_name] BE Node",
+      "title": "[$cluster_name] BE/CN Node",
       "type": "stat"
     },
     {
@@ -1171,14 +1171,14 @@
       "pluginVersion": "8.0.6",
       "targets": [
         {
-          "expr": "count(up{namespace=\"$namespace\", service=\"$beservice\"}==1)",
+          "expr": "count(up{namespace=\"$namespace\", service=~\"${service:pipe}\"}==1)",
           "format": "time_series",
           "instant": true,
           "intervalFactor": 1,
           "refId": "A"
         }
       ],
-      "title": "[$cluster_name] BE Alive",
+      "title": "[$cluster_name] BE/CN Alive",
       "type": "stat"
     },
     {
@@ -1246,7 +1246,7 @@
       "pluginVersion": "8.0.6",
       "targets": [
         {
-          "expr": "SUM(starrocks_be_disks_data_used_capacity{namespace=\"$namespace\", service=\"$beservice\"})",
+          "expr": "SUM(starrocks_be_disks_data_used_capacity{namespace=\"$namespace\", service=~\"${service:pipe}\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "refId": "B"
@@ -1321,7 +1321,7 @@
       "pluginVersion": "8.0.6",
       "targets": [
         {
-          "expr": "SUM(starrocks_be_disks_total_capacity{namespace=\"$namespace\", service=\"$beservice\"})",
+          "expr": "SUM(starrocks_be_disks_total_capacity{namespace=\"$namespace\", service=~\"${service:pipe}\"})",
           "format": "time_series",
           "instant": true,
           "intervalFactor": 1,
@@ -1777,7 +1777,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "starrocks_be_max_disk_io_util_percent{namespace=\"$namespace\", service=\"$beservice\"}",
+          "expr": "starrocks_be_max_disk_io_util_percent{namespace=\"$namespace\", service=~\"${service:pipe}\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}",
@@ -1788,7 +1788,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "[$cluster_name] BE IO Util",
+      "title": "[$cluster_name] BE/CN IO Util",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -1832,7 +1832,7 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "${StarRocks_Prometheus}",
-      "description": "The compaction score of each BE",
+      "description": "The compaction score of each BE/CN",
       "fill": 0,
       "fillGradient": 0,
       "gridPos": {
@@ -1885,7 +1885,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "[$cluster_name] BE Compaction Score",
+      "title": "[$cluster_name] BE/CN Compaction Score",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -4037,14 +4037,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=\"$beservice\", type=\"publish\", status=\"total\"})",
+          "expr": "sum(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"publish\", status=\"total\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "Total",
           "refId": "A"
         },
         {
-          "expr": "irate(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=\"$beservice\", type=\"publish\", status=\"failed\"}[$interval])",
+          "expr": "irate(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"publish\", status=\"failed\"}[$interval])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}",
@@ -4055,7 +4055,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "[$cluster_name] Publish Task on BE",
+      "title": "[$cluster_name] Publish Task on BE/CN",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -4100,7 +4100,7 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "${StarRocks_Prometheus}",
-      "description": "Show the txn request on BE",
+      "description": "Show the txn request on BE/CN",
       "fill": 0,
       "fillGradient": 0,
       "gridPos": {
@@ -4146,28 +4146,44 @@
       "steppedLine": false,
       "targets": [
         {
+<<<<<<< HEAD
           "expr": "sum(starrocks_be_txn_request{group=\"be\", namespace=\"$namespace\", service=\"$beservice\", type=\"begin\"})",
+=======
+          "expr": "sum(starrocks_be_txn_request{app_kubernetes_io_component=\"be\", namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"begin\"})",
+>>>>>>> 7901d9e75a ([Doc] Support both BE and CN on dashboard (#39780))
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "begin",
           "refId": "A"
         },
         {
+<<<<<<< HEAD
           "expr": "sum(starrocks_be_txn_request{group=\"be\", namespace=\"$namespace\", service=\"$beservice\", type=\"exec\"})",
+=======
+          "expr": "sum(starrocks_be_txn_request{app_kubernetes_io_component=\"be\", namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"exec\"})",
+>>>>>>> 7901d9e75a ([Doc] Support both BE and CN on dashboard (#39780))
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "exec",
           "refId": "B"
         },
         {
+<<<<<<< HEAD
           "expr": "sum(starrocks_be_txn_request{group=\"be\", namespace=\"$namespace\", service=\"$beservice\", type=\"commit\"})",
+=======
+          "expr": "sum(starrocks_be_txn_request{app_kubernetes_io_component=\"be\", namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"commit\"})",
+>>>>>>> 7901d9e75a ([Doc] Support both BE and CN on dashboard (#39780))
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "commit",
           "refId": "C"
         },
         {
+<<<<<<< HEAD
           "expr": "sum(starrocks_be_txn_request{group=\"be\", namespace=\"$namespace\", service=\"$beservice\", type=\"rollback\"})",
+=======
+          "expr": "sum(starrocks_be_txn_request{app_kubernetes_io_component=\"be\", namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"rollback\"})",
+>>>>>>> 7901d9e75a ([Doc] Support both BE and CN on dashboard (#39780))
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "rollback",
@@ -4178,7 +4194,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "[$cluster_name] Txn Requset on BE",
+      "title": "[$cluster_name] Txn Requset on BE/CN",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -4266,14 +4282,22 @@
       "steppedLine": false,
       "targets": [
         {
+<<<<<<< HEAD
           "expr": "sum(rate(starrocks_be_stream_load{group=\"be\", namespace=\"$namespace\", service=\"$beservice\", type=\"receive_bytes\"}[$interval]))",
+=======
+          "expr": "sum(rate(starrocks_be_stream_load{app_kubernetes_io_component=\"be\", namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"receive_bytes\"}[$interval]))",
+>>>>>>> 7901d9e75a ([Doc] Support both BE and CN on dashboard (#39780))
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "bytes",
           "refId": "A"
         },
         {
+<<<<<<< HEAD
           "expr": "sum(rate(starrocks_be_stream_load{group=\"be\", namespace=\"$namespace\", service=\"$beservice\", type=\"load_rows\"}[$interval]))",
+=======
+          "expr": "sum(rate(starrocks_be_stream_load{app_kubernetes_io_component=\"be\", namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"load_rows\"}[$interval]))",
+>>>>>>> 7901d9e75a ([Doc] Support both BE and CN on dashboard (#39780))
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "rows",
@@ -5235,7 +5259,7 @@
       "id": 50,
       "panels": [],
       "repeat": null,
-      "title": "BE",
+      "title": "BE/CN",
       "type": "row"
     },
     {
@@ -5285,7 +5309,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "(sum(rate(starrocks_be_cpu{namespace=\"$namespace\", service=\"$beservice\", mode=\"idle\"}[$interval])) by (instance)) / (sum(rate(starrocks_be_cpu{namespace=\"$namespace\", service=\"$beservice\"}[$interval])) by (instance)) * 100",
+          "expr": "(sum(rate(starrocks_be_cpu{namespace=\"$namespace\", service=~\"${service:pipe}\", mode=\"idle\"}[$interval])) by (instance)) / (sum(rate(starrocks_be_cpu{namespace=\"$namespace\", service=~\"${service:pipe}\"}[$interval])) by (instance)) * 100",
           "format": "time_series",
           "intervalFactor": 2,
           "legendFormat": "{{instance}}",
@@ -5296,7 +5320,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "[$cluster_name] BE CPU Idle",
+      "title": "[$cluster_name] BE/CN CPU Idle",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -5383,7 +5407,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "starrocks_be_process_mem_bytes{namespace=\"$namespace\", service=\"$beservice\"}",
+          "expr": "starrocks_be_process_mem_bytes{namespace=\"$namespace\", service=~\"${service:pipe}\"}",
           "format": "time_series",
           "intervalFactor": 2,
           "legendFormat": "{{instance}}",
@@ -5394,7 +5418,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "[$cluster_name] BE Mem",
+      "title": "[$cluster_name] BE/CN Mem",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -5482,7 +5506,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "irate(starrocks_be_network_send_bytes{namespace=\"$namespace\", service=\"$beservice\", device!=\"lo\"}[$interval])",
+          "expr": "irate(starrocks_be_network_send_bytes{namespace=\"$namespace\", service=~\"${service:pipe}\", device!=\"lo\"}[$interval])",
           "format": "time_series",
           "hide": false,
           "intervalFactor": 1,
@@ -5490,7 +5514,7 @@
           "refId": "A"
         },
         {
-          "expr": "irate(starrocks_be_network_receive_bytes{namespace=\"$namespace\", service=\"$beservice\", device!=\"lo\"}[$interval])",
+          "expr": "irate(starrocks_be_network_receive_bytes{namespace=\"$namespace\", service=~\"${service:pipe}\", device!=\"lo\"}[$interval])",
           "format": "time_series",
           "hide": false,
           "intervalFactor": 1,
@@ -5588,7 +5612,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "(SUM(starrocks_be_disks_total_capacity{namespace=\"$namespace\", service=\"$beservice\"}) by (instance, path) - SUM(starrocks_be_disks_avail_capacity{namespace=\"$namespace\", service=\"$beservice\"}) by (instance, path)) / SUM(starrocks_be_disks_total_capacity{namespace=\"$namespace\", service=\"$beservice\"}) by (instance, path)",
+          "expr": "(SUM(starrocks_be_disks_total_capacity{namespace=\"$namespace\", service=~\"${service:pipe}\"}) by (instance, path) - SUM(starrocks_be_disks_avail_capacity{namespace=\"$namespace\", service=~\"${service:pipe}\"}) by (instance, path)) / SUM(starrocks_be_disks_total_capacity{namespace=\"$namespace\", service=~\"${service:pipe}\"}) by (instance, path)",
           "format": "time_series",
           "hide": false,
           "instant": false,
@@ -5597,7 +5621,7 @@
           "refId": "C"
         },
         {
-          "expr": "(SUM(starrocks_be_disks_data_used_capacity{namespace=\"$namespace\", service=\"$beservice\"}) by (instance, path)) / SUM(starrocks_be_disks_total_capacity{namespace=\"$namespace\", service=\"$beservice\"}) by (instance, path)",
+          "expr": "(SUM(starrocks_be_disks_data_used_capacity{namespace=\"$namespace\", service=~\"${service:pipe}\"}) by (instance, path)) / SUM(starrocks_be_disks_total_capacity{namespace=\"$namespace\", service=~\"${service:pipe}\"}) by (instance, path)",
           "format": "time_series",
           "hide": true,
           "intervalFactor": 1,
@@ -5792,14 +5816,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "starrocks_be_process_fd_num_used{namespace=\"$namespace\", service=\"$beservice\"}",
+          "expr": "starrocks_be_process_fd_num_used{namespace=\"$namespace\", service=~\"${service:pipe}\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}-used",
           "refId": "A"
         },
         {
-          "expr": "starrocks_be_process_fd_num_limit_soft{namespace=\"$namespace\", service=\"$beservice\"}",
+          "expr": "starrocks_be_process_fd_num_limit_soft{namespace=\"$namespace\", service=~\"${service:pipe}\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}-soft limit",
@@ -5810,7 +5834,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "[$cluster_name] BE FD count",
+      "title": "[$cluster_name] BE/CN FD count",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -5893,7 +5917,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "starrocks_be_process_thread_num{namespace=\"$namespace\", service=\"$beservice\"}",
+          "expr": "starrocks_be_process_thread_num{namespace=\"$namespace\", service=~\"${service:pipe}\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}",
@@ -5904,7 +5928,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "[$cluster_name] BE thread num",
+      "title": "[$cluster_name] BE/CN thread num",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -5988,7 +6012,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(starrocks_be_disk_io_time_ms{namespace=\"$namespace\", service=\"$beservice\"}[$interval]) / 10",
+          "expr": "rate(starrocks_be_disk_io_time_ms{namespace=\"$namespace\", service=~\"${service:pipe}\"}[$interval]) / 10",
           "format": "time_series",
           "hide": true,
           "intervalFactor": 1,
@@ -5996,7 +6020,7 @@
           "refId": "A"
         },
         {
-          "expr": "starrocks_be_max_disk_io_util_percent{namespace=\"$namespace\", service=\"$beservice\"}",
+          "expr": "starrocks_be_max_disk_io_util_percent{namespace=\"$namespace\", service=~\"${service:pipe}\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}",
@@ -6105,14 +6129,14 @@
       "steppedLine": true,
       "targets": [
         {
-          "expr": "rate(starrocks_be_compaction_bytes_total{type=\"base\", namespace=\"$namespace\", service=\"$beservice\"}[$interval])",
+          "expr": "rate(starrocks_be_compaction_bytes_total{type=\"base\", namespace=\"$namespace\", service=~\"${service:pipe}\"}[$interval])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}",
           "refId": "A"
         },
         {
-          "expr": "sum(starrocks_be_compaction_bytes_total{type=\"base\", namespace=\"$namespace\", service=\"$beservice\"})",
+          "expr": "sum(starrocks_be_compaction_bytes_total{type=\"base\", namespace=\"$namespace\", service=~\"${service:pipe}\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "Total",
@@ -6123,7 +6147,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "[$cluster_name] BE Compaction Base",
+      "title": "[$cluster_name] BE/CN Compaction Base",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -6221,14 +6245,14 @@
       "steppedLine": true,
       "targets": [
         {
-          "expr": "rate(starrocks_be_compaction_bytes_total{type=\"cumulative\", namespace=\"$namespace\", service=\"$beservice\"}[$interval])",
+          "expr": "rate(starrocks_be_compaction_bytes_total{type=\"cumulative\", namespace=\"$namespace\", service=~\"${service:pipe}\"}[$interval])",
           "format": "time_series",
           "intervalFactor": 2,
           "legendFormat": "{{instance}}",
           "refId": "A"
         },
         {
-          "expr": "SUM(starrocks_be_compaction_bytes_total{type=\"cumulative\", namespace=\"$namespace\", service=\"$beservice\"})",
+          "expr": "SUM(starrocks_be_compaction_bytes_total{type=\"cumulative\", namespace=\"$namespace\", service=~\"${service:pipe}\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "Total",
@@ -6239,7 +6263,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "[$cluster_name] BE Compaction Cumulate",
+      "title": "[$cluster_name] BE/CN Compaction Cumulate",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -6338,14 +6362,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(starrocks_be_push_request_write_bytes{namespace=\"$namespace\", service=\"$beservice\"}[$interval])",
+          "expr": "rate(starrocks_be_push_request_write_bytes{namespace=\"$namespace\", service=~\"${service:pipe}\"}[$interval])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(starrocks_be_push_request_write_bytes{namespace=\"$namespace\", service=\"$beservice\"}[$interval]))",
+          "expr": "sum(rate(starrocks_be_push_request_write_bytes{namespace=\"$namespace\", service=~\"${service:pipe}\"}[$interval]))",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "Total rate",
@@ -6356,7 +6380,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "[$cluster_name] BE Push Bytes",
+      "title": "[$cluster_name] BE/CN Push Bytes",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -6447,14 +6471,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(starrocks_be_push_request_write_rows{namespace=\"$namespace\", service=\"$beservice\"}[$interval])",
+          "expr": "rate(starrocks_be_push_request_write_rows{namespace=\"$namespace\", service=~\"${service:pipe}\"}[$interval])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(starrocks_be_push_request_write_rows{namespace=\"$namespace\", service=\"$beservice\"}[$interval]))",
+          "expr": "sum(rate(starrocks_be_push_request_write_rows{namespace=\"$namespace\", service=~\"${service:pipe}\"}[$interval]))",
           "format": "time_series",
           "intervalFactor": 2,
           "legendFormat": "Total",
@@ -6465,7 +6489,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "[$cluster_name] BE Push Rows",
+      "title": "[$cluster_name] BE/CN Push Rows",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -6555,7 +6579,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(starrocks_be_query_scan_bytes{namespace=\"$namespace\", service=\"$beservice\"}[$interval])",
+          "expr": "rate(starrocks_be_query_scan_bytes{namespace=\"$namespace\", service=~\"${service:pipe}\"}[$interval])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}",
@@ -6572,7 +6596,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "[$cluster_name] BE Scan Bytes",
+      "title": "[$cluster_name] BE/CN Scan Bytes",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -6662,7 +6686,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "rate(starrocks_be_query_scan_rows{namespace=\"$namespace\", service=\"$beservice\"}[$interval])",
+          "expr": "rate(starrocks_be_query_scan_rows{namespace=\"$namespace\", service=~\"${service:pipe}\"}[$interval])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}",
@@ -6673,7 +6697,7 @@
       "timeFrom": null,
       "timeRegions": [],
       "timeShift": null,
-      "title": "[$cluster_name] BE Scan Rows",
+      "title": "[$cluster_name] BE/CN Scan Rows",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -6766,7 +6790,7 @@
       "steppedLine": true,
       "targets": [
         {
-          "expr": "irate(starrocks_be_meta_request_total{namespace=\"$namespace\", service=\"$beservice\", type=\"write\"}[$interval])",
+          "expr": "irate(starrocks_be_meta_request_total{namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"write\"}[$interval])",
           "format": "time_series",
           "hide": false,
           "intervalFactor": 1,
@@ -6774,7 +6798,7 @@
           "refId": "B"
         },
         {
-          "expr": "starrocks_be_meta_request_duration{namespace=\"$namespace\", service=\"$beservice\", type=\"write\"} / starrocks_be_meta_request_total{namespace=\"$namespace\", service=\"$beservice\", type=\"write\"}",
+          "expr": "starrocks_be_meta_request_duration{namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"write\"} / starrocks_be_meta_request_total{namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"write\"}",
           "format": "time_series",
           "hide": false,
           "intervalFactor": 1,
@@ -6879,7 +6903,7 @@
       "steppedLine": true,
       "targets": [
         {
-          "expr": "irate(starrocks_be_meta_request_total{namespace=\"$namespace\", service=\"$beservice\", type=\"read\"}[$interval])",
+          "expr": "irate(starrocks_be_meta_request_total{namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"read\"}[$interval])",
           "format": "time_series",
           "hide": false,
           "intervalFactor": 1,
@@ -6887,7 +6911,7 @@
           "refId": "B"
         },
         {
-          "expr": "starrocks_be_meta_request_duration{namespace=\"$namespace\", service=\"$beservice\", type=\"read\"} / starrocks_be_meta_request_total{namespace=\"$namespace\", service=\"$beservice\", type=\"read\"}",
+          "expr": "starrocks_be_meta_request_duration{namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"read\"} / starrocks_be_meta_request_total{namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"read\"}",
           "format": "time_series",
           "hide": false,
           "intervalFactor": 1,
@@ -6947,7 +6971,7 @@
       },
       "id": 75,
       "panels": [],
-      "title": "BE tasks",
+      "title": "BE/CN tasks",
       "type": "row"
     },
     {
@@ -7005,14 +7029,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "SUM(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=\"$beservice\", type=\"report_all_tablets\", status=\"total\"})",
+          "expr": "SUM(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"report_all_tablets\", status=\"total\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "Total",
           "refId": "A"
         },
         {
-          "expr": "irate(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=\"$beservice\", type=\"report_all_tablets\", status=\"failed\"}[$interval])",
+          "expr": "irate(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"report_all_tablets\", status=\"failed\"}[$interval])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}",
@@ -7117,14 +7141,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "SUM(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=\"$beservice\", type=\"report_tablet\", status=\"total\"})",
+          "expr": "SUM(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"report_tablet\", status=\"total\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "Total",
           "refId": "A"
         },
         {
-          "expr": "irate(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=\"$beservice\", type=\"report_tablet\", status=\"failed\"}[$interval])",
+          "expr": "irate(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"report_tablet\", status=\"failed\"}[$interval])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}",
@@ -7229,14 +7253,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "SUM(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=\"$beservice\", type=\"finish_task\", status=\"total\"})",
+          "expr": "SUM(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"finish_task\", status=\"total\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "Total",
           "refId": "A"
         },
         {
-          "expr": "irate(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=\"$beservice\", type=\"finish_task\", status=\"failed\"}[$interval])",
+          "expr": "irate(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"finish_task\", status=\"failed\"}[$interval])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}",
@@ -7338,7 +7362,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(starrocks_be_push_requests_total{namespace=\"$namespace\", service=\"$beservice\", status=\"SUCCESS\"})",
+          "expr": "sum(starrocks_be_push_requests_total{namespace=\"$namespace\", service=~\"${service:pipe}\", status=\"SUCCESS\"})",
           "format": "time_series",
           "hide": false,
           "intervalFactor": 1,
@@ -7346,7 +7370,7 @@
           "refId": "A"
         },
         {
-          "expr": "irate(starrocks_be_push_requests_total{namespace=\"$namespace\", service=\"$beservice\", status=\"FAIL\"}[$interval])",
+          "expr": "irate(starrocks_be_push_requests_total{namespace=\"$namespace\", service=~\"${service:pipe}\", status=\"FAIL\"}[$interval])",
           "format": "time_series",
           "hide": false,
           "intervalFactor": 1,
@@ -7454,7 +7478,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "irate(starrocks_be_push_request_duration_us{namespace=\"$namespace\", service=\"$beservice\"}[$interval])",
+          "expr": "irate(starrocks_be_push_request_duration_us{namespace=\"$namespace\", service=~\"${service:pipe}\"}[$interval])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}",
@@ -7559,14 +7583,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "SUM(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=\"$beservice\", type=\"delete\", status=\"total\"})",
+          "expr": "SUM(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"delete\", status=\"total\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "Total",
           "refId": "A"
         },
         {
-          "expr": "irate(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=\"$beservice\", type=\"delete\", status=\"failed\"}[$interval])",
+          "expr": "irate(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"delete\", status=\"failed\"}[$interval])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}",
@@ -7671,14 +7695,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "SUM(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=\"$beservice\", type=\"base_compaction\", status=\"total\"})",
+          "expr": "SUM(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"base_compaction\", status=\"total\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "Total",
           "refId": "A"
         },
         {
-          "expr": "irate(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=\"$beservice\", type=\"base_compaction\", status=\"failed\"}[$interval])",
+          "expr": "irate(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"base_compaction\", status=\"failed\"}[$interval])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}",
@@ -7785,14 +7809,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "SUM(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=\"$beservice\", type=\"cumulative_compaction\", status=\"total\"})",
+          "expr": "SUM(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"cumulative_compaction\", status=\"total\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "Total",
           "refId": "A"
         },
         {
-          "expr": "irate(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=\"$beservice\", type=\"cumulative_compaction\", status=\"failed\"}[$interval])",
+          "expr": "irate(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"cumulative_compaction\", status=\"failed\"}[$interval])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}",
@@ -7897,14 +7921,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "SUM(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=\"$beservice\", type=\"clone\", status=\"total\"})",
+          "expr": "SUM(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"clone\", status=\"total\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "Total",
           "refId": "A"
         },
         {
-          "expr": "irate(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=\"$beservice\", type=\"clone\", status=\"failed\"}[$interval])",
+          "expr": "irate(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"clone\", status=\"failed\"}[$interval])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}",
@@ -8009,14 +8033,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "SUM(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=\"$beservice\", type=\"create_rollup\", status=\"total\"})",
+          "expr": "SUM(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"create_rollup\", status=\"total\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "Total",
           "refId": "A"
         },
         {
-          "expr": "irate(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=\"$beservice\", type=\"create_rollup\", status=\"failed\"}[$interval])",
+          "expr": "irate(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"create_rollup\", status=\"failed\"}[$interval])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}",
@@ -8121,14 +8145,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "SUM(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=\"$beservice\", type=\"schema_change\", status=\"total\"})",
+          "expr": "SUM(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"schema_change\", status=\"total\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "Total",
           "refId": "A"
         },
         {
-          "expr": "irate(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=\"$beservice\", type=\"schema_change\", status=\"failed\"}[$interval])",
+          "expr": "irate(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"schema_change\", status=\"failed\"}[$interval])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}",
@@ -8233,14 +8257,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "SUM(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=\"$beservice\", type=\"create_tablet\", status=\"total\"})",
+          "expr": "SUM(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"create_tablet\", status=\"total\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "Total",
           "refId": "A"
         },
         {
-          "expr": "irate(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=\"$beservice\", type=\"create_tablet\", status=\"failed\"}[$interval])",
+          "expr": "irate(starrocks_be_engine_requests_total{namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"create_tablet\", status=\"failed\"}[$interval])",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "{{instance}}",
@@ -8352,6 +8376,7 @@
         "useTags": false
       },
       {
+<<<<<<< HEAD
         "current": {
           "selected": false,
           "text": "",
@@ -8379,6 +8404,8 @@
         "useTags": false
       },
       {
+=======
+>>>>>>> 7901d9e75a ([Doc] Support both BE and CN on dashboard (#39780))
         "allValue": null,
         "current": {
           "selected": false,
@@ -8467,6 +8494,33 @@
         "useTags": false
       },
       {
+        "current": {
+          "selected": false,
+          "text": "",
+          "value": ""
+        },
+        "datasource": "${StarRocks_Prometheus}",
+        "definition": "",
+        "hide": 0,
+        "includeAll": true,
+        "label": "be/cn",
+        "multi": true,
+        "name": "service",
+        "options": [],
+        "query": {
+          "query": "label_values(kube_service_info{namespace=\"$namespace\", service=~\".*be-service|.*cn-service\"}, service)",
+          "refId": "prometheus-service-Variable-Query"
+        },
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "tagValuesQuery": "",
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      },
+      {
         "allValue": null,
         "current": {
           "selected": false,
@@ -8479,12 +8533,12 @@
         "error": null,
         "hide": 0,
         "includeAll": false,
-        "label": null,
+        "label": "be/cn_instance",
         "multi": false,
-        "name": "be_instance",
+        "name": "instance",
         "options": [],
         "query": {
-          "query": "label_values(up{namespace=\"$namespace\", service=\"$beservice\"}, instance)",
+          "query": "label_values(up{namespace=\"$namespace\", service=~\"${service:pipe}\"}, instance)",
           "refId": ""
         },
         "refresh": 1,
