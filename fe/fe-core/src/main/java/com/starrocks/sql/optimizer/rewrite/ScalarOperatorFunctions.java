@@ -37,42 +37,32 @@ package com.starrocks.sql.optimizer.rewrite;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonNull;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonPrimitive;
 import com.google.re2j.Pattern;
 import com.starrocks.analysis.DecimalLiteral;
-import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Database;
-import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
+<<<<<<< HEAD
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.hive.Partition;
 import com.starrocks.privilege.AccessDeniedException;
+=======
+>>>>>>> 24ad897fba ([Refactor] refactor the structure of meta functions (#39662))
 import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.ObjectType;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import org.apache.commons.collections4.MapUtils;
-import org.apache.commons.collections4.SetUtils;
 import org.apache.commons.lang.StringUtils;
+<<<<<<< HEAD
 import org.apache.commons.lang3.tuple.Pair;
+=======
+import org.apache.http.NameValuePair;
+import org.apache.http.client.utils.URLEncodedUtils;
+>>>>>>> 24ad897fba ([Refactor] refactor the structure of meta functions (#39662))
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -94,7 +84,6 @@ import java.time.temporal.TemporalAdjusters;
 import java.time.temporal.TemporalUnit;
 import java.util.HashSet;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 import static com.starrocks.catalog.PrimitiveType.BIGINT;
@@ -1125,6 +1114,7 @@ public class ScalarOperatorFunctions {
         return opened.shiftRight(shiftBy).and(INT_128_MASK1_ARR1[shiftBy]);
     }
 
+<<<<<<< HEAD
     // =================================== meta functions ==================================== //
 
     private static Table inspectExternalTable(TableName tableName) {
@@ -1305,6 +1295,8 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createVarchar(trm.inspect());
     }
 
+=======
+>>>>>>> 24ad897fba ([Refactor] refactor the structure of meta functions (#39662))
     @ConstantFunction.List(list = {
             @ConstantFunction(name = "coalesce", argTypes = {BOOLEAN}, returnType = BOOLEAN),
             @ConstantFunction(name = "coalesce", argTypes = {TINYINT}, returnType = TINYINT),
