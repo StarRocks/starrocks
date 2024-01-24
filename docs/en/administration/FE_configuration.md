@@ -1465,17 +1465,15 @@ DO NOT change run_mode after the cluster is deployed. Otherwise, the cluster fai
 #### jdbc_connection_pool_size
 
 - **Default:** 8
-- **Description:** The maximum capacity of the JDBC Connection Pool when accessing the JDBC Catalog.
-
+- **Description:** The maximum capacity of the JDBC connection pool for accessing JDBC catalogs.
 
 #### jdbc_minimum_idle_connections
 
 - **Default:** 1
-- **Description:** The minimum number of idle connections in the JDBC Connection Pool when accessing the JDBC Catalog.
-
+- **Description:** The minimum number of idle connections in the JDBC connection pool for accessing JDBC catalogs.
 
 #### jdbc_connection_idle_timeout_ms
 
+- **Unit**: ms
 - **Default:** 600000
-- **Description:** When accessing the JDBC Catalog, connections exceeding this time are considered idle. Unit: Millisecond.
-
+- **Description:** The maximum amount of time after which a connection for accessing a JDBC catalog times out. Timed-out connections are considered idle.
