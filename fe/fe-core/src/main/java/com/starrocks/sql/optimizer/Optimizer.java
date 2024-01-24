@@ -261,7 +261,8 @@ public class Optimizer {
         context.setQueryTables(queryTables);
 
         // prepare related mvs if needed
-        new MvRewritePreprocessor(connectContext, columnRefFactory, context).prepare(logicOperatorTree);
+        new MvRewritePreprocessor(connectContext, columnRefFactory, context, logicOperatorTree)
+                .prepare(logicOperatorTree);
         if (context.getCandidateMvs() != null && !context.getCandidateMvs().isEmpty()) {
             context.setQueryMaterializationContext(new QueryMaterializationContext());
         }
