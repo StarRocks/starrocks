@@ -155,13 +155,13 @@ public class ReportHandlerTest {
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         AlterTableStmt alterTableStmt = 
                         (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
-        SchemaChangeHandler schemaChangeHandler = 
-                        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getSchemaChangeHandler();
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         schemaChangeHandler.process(alterTableStmt.getOps(), db, olapTable);
         Assert.assertEquals(OlapTableState.NORMAL, olapTable.getState());
 
         long backendId = 10001L;
-        List<Long> tabletIds = GlobalStateMgr.getCurrentInvertedIndex().getTabletIdsByBackendId(10001);
+        List<Long> tabletIds = 
+                    GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001);
         Assert.assertFalse(tabletIds.isEmpty());
 
         Map<Long, TTablet> backendTablets = new HashMap<Long, TTablet>();
