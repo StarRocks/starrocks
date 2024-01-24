@@ -73,7 +73,8 @@ Status HiveDataSource::_try_to_rewrite_tuple_desc_type() {
     std::vector<ColumnAccessPathPtr> column_access_paths;
     if (_provider->_hdfs_scan_node.__isset.column_access_paths) {
         for (int i = 0; i < _provider->_hdfs_scan_node.column_access_paths.size(); ++i) {
-            ASSIGN_OR_RETURN(auto path, ColumnAccessPath::create(_provider->_hdfs_scan_node.column_access_paths[i], _runtime_state, &_pool));
+            ASSIGN_OR_RETURN(auto path, ColumnAccessPath::create(_provider->_hdfs_scan_node.column_access_paths[i],
+                                                                 _runtime_state, &_pool));
             column_access_paths.emplace_back(std::move(path));
         }
     }
