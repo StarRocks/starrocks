@@ -909,6 +909,10 @@ public class GlobalStateMgr {
         return getCurrentState().getClusterInfo();
     }
 
+    public RoutineLoadScheduler getRoutineLoadScheduler() {
+        return routineLoadScheduler;
+    }
+
     public static StarOSAgent getCurrentStarOSAgent() {
         return getCurrentState().getStarOSAgent();
     }

@@ -136,6 +136,86 @@ public class RoutineLoadSchedulerTest {
         }
     }
 
+    @Test
+    public void testReschedule(@Mocked GlobalStateMgr globalStateMgr,
+                               @Injectable RoutineLoadMgr routineLoadManager,
+                               @Injectable SystemInfoService systemInfoService,
+                               @Injectable Database database,
+                               @Injectable OlapTable olapTable) {
+        RoutineLoadTaskScheduler routineLoadTaskScheduler = new RoutineLoadTaskScheduler(routineLoadManager);
+        Deencapsulation.setField(globalStateMgr, "routineLoadTaskScheduler", routineLoadTaskScheduler);
+
+        KafkaRoutineLoadJob kafkaRoutineLoadJob = new KafkaRoutineLoadJob(1L, "test", 1L, 1L,
+                "xxx", "test");
+        Deencapsulation.setField(kafkaRoutineLoadJob, "state", RoutineLoadJob.JobState.NEED_SCHEDULE);
+        List<RoutineLoadJob> routineLoadJobList = new ArrayList<>();
+        routineLoadJobList.add(kafkaRoutineLoadJob);
+
+        Deencapsulation.setField(kafkaRoutineLoadJob, "desireTaskConcurrentNum", 3);
+
+        // 1. there're 2 alive bes and the job is divided into 2 tasks.
+        new Expectations() {
+            {
+                globalStateMgr.getRoutineLoadMgr();
+                minTimes = 0;
+                result = routineLoadManager;
+                routineLoadManager.getRoutineLoadJobByState(Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE));
+                minTimes = 0;
+                result = routineLoadJobList;
+                globalStateMgr.getDb(anyLong);
+                minTimes = 0;
+                result = database;
+                database.getTable(1L);
+                minTimes = 0;
+                result = olapTable;
+                systemInfoService.getAliveBackendNumber();
+                minTimes = 1;
+                result = 2;
+                routineLoadManager.getSizeOfIdToRoutineLoadTask();
+                minTimes = 0;
+                result = 1;
+            }
+        };
+
+        RoutineLoadScheduler routineLoadScheduler = new RoutineLoadScheduler();
+        Deencapsulation.setField(routineLoadScheduler, "routineLoadManager", routineLoadManager);
+
+        routineLoadScheduler.runAfterCatalogReady();
+
+        List<RoutineLoadTaskInfo> routineLoadTaskInfoList =
+                Deencapsulation.getField(kafkaRoutineLoadJob, "routineLoadTaskInfoList");
+        Assert.assertEquals(2, routineLoadTaskInfoList.size());
+
+        // 2. the job is not changed.
+        routineLoadScheduler.runAfterCatalogReady();
+        routineLoadTaskInfoList =
+                Deencapsulation.getField(kafkaRoutineLoadJob, "routineLoadTaskInfoList");
+        Assert.assertEquals(2, routineLoadTaskInfoList.size());
+
+        // 3. there're 3 alive bes and the job is divided into 3 tasks.
+        new Expectations() {
+            {
+                systemInfoService.getAliveBackendNumber();
+                times = 1;
+                result = 3;
+
+                routineLoadManager.getRoutineLoadJobByState(Sets.newHashSet(RoutineLoadJob.JobState.RUNNING));
+                minTimes = 0;
+                result = routineLoadJobList;
+            }
+        };
+
+        routineLoadScheduler.setNeedReschedule();
+        Deencapsulation.setField(kafkaRoutineLoadJob, "routineLoadTaskInfoList", Lists.newArrayList());
+
+        routineLoadScheduler.runAfterCatalogReady();
+        routineLoadTaskInfoList =
+                Deencapsulation.getField(kafkaRoutineLoadJob, "routineLoadTaskInfoList");
+
+        Assert.assertEquals(3, routineLoadTaskInfoList.size());
+    }
+
+
     public void functionTest(@Mocked GlobalStateMgr globalStateMgr,
                              @Mocked SystemInfoService systemInfoService,
                              @Injectable Database database) throws DdlException, InterruptedException {
@@ -179,7 +259,7 @@ public class RoutineLoadSchedulerTest {
         executorService.submit(routineLoadTaskScheduler);
 
         KafkaRoutineLoadJob kafkaRoutineLoadJob1 = new KafkaRoutineLoadJob(1L, "test_custom_partition",
-                 1L, 1L, "xxx", "test_1");
+                1L, 1L, "xxx", "test_1");
         List<Integer> customKafkaPartitions = new ArrayList<>();
         customKafkaPartitions.add(2);
         Deencapsulation.setField(kafkaRoutineLoadJob1, "customKafkaPartitions", customKafkaPartitions);
