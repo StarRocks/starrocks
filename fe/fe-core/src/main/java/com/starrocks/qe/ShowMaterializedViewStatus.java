@@ -216,7 +216,7 @@ public class ShowMaterializedViewStatus {
         @SerializedName("priority")
         private int priority = Constants.TaskRunPriority.LOWEST.value();
         @SerializedName("lastTaskRunState")
-        private Constants.TaskRunState lastTaskRunState;
+        private Constants.TaskRunState lastTaskRunState = Constants.TaskRunState.PENDING;
 
         public boolean isManual() {
             return isManual;
