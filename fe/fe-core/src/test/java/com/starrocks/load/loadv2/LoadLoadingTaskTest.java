@@ -18,7 +18,6 @@ import com.starrocks.catalog.CatalogIdGenerator;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.IdGenerator;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
