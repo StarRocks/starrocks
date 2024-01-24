@@ -284,7 +284,7 @@ public class AlterJobMgr {
             context.setCurrentUserIdentity(UserIdentity.ROOT);
             context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
 
-            String createMvSql = materializedView.getMaterializedViewDdlStmt(false);
+            String createMvSql = materializedView.getMaterializedViewDdlStmt(false, isReplay);
             QueryStatement mvQueryStatement = null;
             try {
                 mvQueryStatement = recreateMVQuery(materializedView, context, createMvSql);
