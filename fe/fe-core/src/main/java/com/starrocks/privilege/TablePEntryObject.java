@@ -31,6 +31,10 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
+import static com.google.common.base.Preconditions.checkArgument;
+import static com.starrocks.catalog.ExternalCatalog.getCompatibleDbUUID;
+import static com.starrocks.catalog.ExternalCatalog.getCompatibleTableUUID;
+
 public class TablePEntryObject implements PEntryObject {
     @SerializedName(value = "ci")
     private long catalogId;
@@ -101,38 +105,40 @@ public class TablePEntryObject implements PEntryObject {
             catalogId = catalog.getId();
         }
 
-        String dbUUID;
-        String tblUUID;
-
         if (Objects.equals(tokens.get(0), "*")) {
-            dbUUID = PrivilegeBuiltinConstants.ALL_DATABASES_UUID;
-            tblUUID = PrivilegeBuiltinConstants.ALL_TABLES_UUID;
-        } else {
-            Database database = mgr.getMetadataMgr().getDb(catalogName, tokens.get(0));
-            if (database == null) {
-                throw new PrivObjNotFoundException("cannot find db: " + tokens.get(0));
-            }
-            dbUUID = database.getUUID();
+            return new TablePEntryObject(
+                    catalogId,
+                    PrivilegeBuiltinConstants.ALL_DATABASES_UUID,
+                    PrivilegeBuiltinConstants.ALL_TABLES_UUID);
+        }
 
-            if (Objects.equals(tokens.get(1), "*")) {
-                tblUUID = PrivilegeBuiltinConstants.ALL_TABLES_UUID;
-            } else {
-                TableBasicInfo table = null;
-                try {
-                    table = mgr.getMetadataMgr().getTableBasicInfo(catalogName, tokens.get(0), tokens.get(1));
-                } catch (StarRocksConnectorException e) {
-                    throw new PrivObjNotFoundException("cannot find table " +
-                            tokens.get(1) + " in db " + tokens.get(0) + ", msg: " + e.getMessage());
-                }
-                if (table == null || table.isOlapView() || table.isMaterializedView()) {
-                    throw new PrivObjNotFoundException("cannot find table " +
-                            tokens.get(1) + " in db " + tokens.get(0));
-                }
-                tblUUID = table.getUUID();
+        String dbUUID = DbPEntryObject.getDatabaseUUID(mgr, catalogName, tokens.get(0));
+        String tableUUID = getTableUUID(mgr, catalogName, tokens.get(0), tokens.get(1));
+        return new TablePEntryObject(catalogId, dbUUID, tableUUID);
+    }
+
+    private static String getTableUUID(GlobalStateMgr mgr, String catalogName, String dbToken, String tableToken) throws PrivObjNotFoundException {
+        checkArgument(!dbToken.equals("*"));
+        if (tableToken.equals("*")) {
+            return PrivilegeBuiltinConstants.ALL_TABLES_UUID;
+        }
+
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+            Table table;
+            try {
+                table = mgr.getMetadataMgr().getTable(catalogName, dbToken, tableToken);
+            } catch (StarRocksConnectorException e) {
+                throw new PrivObjNotFoundException("cannot find table " +
+                        tableToken + " in db " + dbToken + ", msg: " + e.getMessage());
+            }
+            if (table == null || table.isOlapView() || table.isMaterializedView()) {
+                throw new PrivObjNotFoundException("cannot find table " +
+                        tableToken + " in db " + dbToken);
             }
         }
 
-        return new TablePEntryObject(catalogId, dbUUID, tblUUID);
+        // for table in external catalog, return tableName directly without validation
+        return tableToken;
     }
 
     /**
@@ -155,12 +161,12 @@ public class TablePEntryObject implements PEntryObject {
             return this.catalogId == other.catalogId;
         }
         if (Objects.equals(other.tableUUID, PrivilegeBuiltinConstants.ALL_TABLES_UUID)) {
-            return this.catalogId == other.catalogId && Objects.equals(this.databaseUUID, other.databaseUUID);
+            return this.catalogId == other.catalogId &&
+                    Objects.equals(getCompatibleDbUUID(this.databaseUUID), getCompatibleDbUUID(other.databaseUUID));
         }
         return this.catalogId == other.catalogId &&
-                Objects.equals(other.databaseUUID, this.databaseUUID) &&
-                Objects.equals(ExternalCatalog.getCompatibleTableUUID(other.tableUUID),
-                        ExternalCatalog.getCompatibleTableUUID(this.tableUUID));
+                Objects.equals(getCompatibleDbUUID(this.databaseUUID), getCompatibleDbUUID(other.databaseUUID)) &&
+                Objects.equals(getCompatibleTableUUID(other.tableUUID), getCompatibleTableUUID(this.tableUUID));
     }
 
     @Override

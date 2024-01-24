@@ -97,7 +97,7 @@ public class NativeAccessController implements AccessController {
         Preconditions.checkNotNull(tableName.getDb());
 
         checkAnyActionOnObject(currentUser, roleIds, ObjectType.TABLE,
-                Lists.newArrayList(catalog, tableName.getDb(), tableName.getTbl()));
+                Lists.newArrayList(catalog, tableName.getDb(), tableName.getTbl())); // tokens
     }
 
     @Override

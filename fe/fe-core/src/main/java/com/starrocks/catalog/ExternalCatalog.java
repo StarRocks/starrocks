@@ -28,7 +28,8 @@ public class ExternalCatalog extends Catalog {
         Preconditions.checkNotNull(config.get(CATALOG_TYPE));
     }
 
-    // database uuid format: external_catalog_name.db_name
+    // old database uuid format: external_catalog_name.db_name
+    // new database uuid format: db_name
     public static String getDbNameFromUUID(String uuid) {
         // To be in compatible with code before external table privilege is supported
         return uuid.contains(".") ? uuid.split("\\.")[1] : uuid;
@@ -42,18 +43,26 @@ public class ExternalCatalog extends Catalog {
     }
 
     // old table uuid format: external_catalog_name.db_name.table_name.creation_time
-    // new table uuid format: external_catalog_name.db_name.table_name
-    // truncates the creation_time(4th part of uuid, if exists) to get a compatible table uuid
+    // new table uuid format: table_name
     public static String getCompatibleTableUUID(String uuid) {
         if (!uuid.contains(".")) {
             return uuid;
         }
 
         String[] parts = uuid.split("\\.");
-        if (parts.length == 3) {
+        checkArgument(parts.length == 4, "got unexpected external table uuid format");
+        return parts[2];
+    }
+
+    // old database uuid format: external_catalog_name.db_name
+    // new database uuid format: db_name
+    public static String getCompatibleDbUUID(String uuid) {
+        if (!uuid.contains(".")) {
             return uuid;
         }
-        checkArgument(parts.length == 4, "got unexpected external table uuid format");
-        return String.join(".", parts[0], parts[1], parts[2]);
+
+        String[] parts = uuid.split("\\.");
+        checkArgument(parts.length == 2, "got unexpected external database uuid format");
+        return parts[1];
     }
 }
