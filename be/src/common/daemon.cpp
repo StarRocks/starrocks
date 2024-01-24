@@ -209,14 +209,20 @@ void calculate_metrics(void* arg_this) {
         }
 
         // update datacache mem_tracker
+<<<<<<< HEAD
         auto datacache_mem_tracker = ExecEnv::GetInstance()->datacache_mem_tracker();
+=======
+>>>>>>> dc19002105 ([BugFix] Check datacache memtacker before updating it to avoid the visiting null pointer. (#39848))
         int64_t datacache_mem_bytes = 0;
-        BlockCache* block_cache = BlockCache::instance();
-        if (block_cache->is_initialized()) {
-            auto datacache_metrics = block_cache->cache_metrics();
-            datacache_mem_bytes = datacache_metrics.mem_used_bytes + datacache_metrics.meta_used_bytes;
+        auto datacache_mem_tracker = GlobalEnv::GetInstance()->datacache_mem_tracker();
+        if (datacache_mem_tracker) {
+            BlockCache* block_cache = BlockCache::instance();
+            if (block_cache->is_initialized()) {
+                auto datacache_metrics = block_cache->cache_metrics();
+                datacache_mem_bytes = datacache_metrics.mem_used_bytes + datacache_metrics.meta_used_bytes;
+            }
+            datacache_mem_tracker->set(datacache_mem_bytes);
         }
-        datacache_mem_tracker->set(datacache_mem_bytes);
 
         auto* mem_metrics = StarRocksMetrics::instance()->system_metrics()->memory_metrics();
 
