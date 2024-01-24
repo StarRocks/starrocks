@@ -200,7 +200,6 @@ StatusOr<JdoSystem_t> JindoClientFactory::new_client(const S3URI& uri, const FSO
 
     for (size_t i = 0; i < _items; i++) {
         if (option_equals(_configs[i], jdo_options)) {
-            LOG(INFO) << "Reuse jindo client for " << uri_prefix << ", index " << i;
             jdo_freeOptions(jdo_options);
             return _clients[i];
         }

@@ -21,10 +21,14 @@
 namespace starrocks::io {
 
 StatusOr<int64_t> JindoInputStream::read(void* out, int64_t count) {
-    if (UNLIKELY(_open_handle == nullptr)) {
-        std::string msg = fmt::format("Failed to open {}, _open_handle is null", _file_path);
-        LOG(WARNING) << msg;
-        return Status::IOError(msg);
+    if (_open_handle == nullptr) {
+        JdoContext_t jdo_ctx = jdo_createContext1(_jindo_client);
+        _open_handle = jdo_open(jdo_ctx, _file_path.c_str(), JDO_OPEN_FLAG_READ_ONLY, 0777);
+        Status init_status = io::check_jindo_status(jdo_ctx);
+        jdo_freeContext(jdo_ctx);
+        if (!init_status.ok()) {
+            return init_status;
+        }
     }
     if (UNLIKELY(_size == -1)) {
         ASSIGN_OR_RETURN(_size, JindoInputStream::get_size());
