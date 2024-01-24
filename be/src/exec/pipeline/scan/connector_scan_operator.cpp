@@ -32,7 +32,8 @@ int64_t ConnectorScanOperatorMemShareArbitrator::update_chunk_source_mem_bytes(i
     return scan_mem_limit * (new_value * 1.0 / std::max(total, new_value));
 }
 
-struct ConnectorScanOperatorIOTasksMemLimiter {
+class ConnectorScanOperatorIOTasksMemLimiter {
+private:
     mutable std::mutex lock;
 
     const int64_t dop = 0;
@@ -44,31 +45,31 @@ struct ConnectorScanOperatorIOTasksMemLimiter {
     int64_t data_source_mem_bytes = 0;
     std::atomic<int64_t> chunk_source_mem_bytes = 0;
     int64_t chunk_source_mem_bytes_update_count = 0;
-    int64_t last_arb_chunk_source_mem_bytes = 0;
+    int64_t arb_chunk_source_mem_bytes = 0;
     mutable int64_t debug_output_timestamp = 0;
 
+    std::atomic<int64_t> open_scan_operator_count = 0;
+    std::atomic<int64_t> active_scan_operator_count = 0;
+
+public:
     ConnectorScanOperatorIOTasksMemLimiter(int64_t dop) : dop(dop) {}
 
     int available_chunk_source_count(int32_t plan_node_id, int driver_sequence) const {
         int64_t scan_mem_limit_value = scan_mem_limit.load(std::memory_order_relaxed);
-        int64_t running_count = running_chunk_source_count.load(std::memory_order_relaxed);
+        int64_t running_chunk_source_count_value = running_chunk_source_count.load(std::memory_order_relaxed);
         int64_t chunk_source_mem_bytes_value = get_chunk_source_mem_bytes();
 
         int64_t max_count = std::max(1L, scan_mem_limit_value / chunk_source_mem_bytes_value);
         int64_t avail_count = max_count;
-        // int64_t avail_count = std::max(0L, max_count - running_count);
-        int64_t per_count = avail_count / dop;
-
-        if (driver_sequence < (avail_count - per_count * dop)) {
-            per_count += 1;
-        }
+        int64_t per_count = avail_count / dop + 1;
 
         [[maybe_unused]] auto build_debug_string = [&]() {
             std::stringstream ss;
             ss << "available_chunk_source_count. max_count=" << max_count << "(" << scan_mem_limit_value << "/"
                << chunk_source_mem_bytes_value << "), query_scan_mem_limit = " << query_scan_mem_limit
-               << ", running_count = " << running_count << ", dop = " << dop << ", avail_count = " << avail_count
-               << ", op_id = " << plan_node_id << "/" << driver_sequence << ", per_count = " << per_count;
+               << ", running_chunk_source_count = " << running_chunk_source_count_value << ", dop = " << dop
+               << ", avail_count = " << avail_count << ", op_id = " << plan_node_id << "/" << driver_sequence
+               << ", per_count = " << per_count;
             return ss.str();
         };
 
@@ -99,14 +100,22 @@ struct ConnectorScanOperatorIOTasksMemLimiter {
 
     void set_query_scan_mem_limit(int64_t value) { query_scan_mem_limit = value; }
     void update_scan_mem_limit(int64_t value) { scan_mem_limit.store(value, std::memory_order_relaxed); }
-    void update_last_arb_chunk_source_mem_bytes(int64_t value) {
+    void update_arb_chunk_source_mem_bytes(int64_t value) {
         value = std::min(value, query_scan_mem_limit);
-        last_arb_chunk_source_mem_bytes = value;
+        arb_chunk_source_mem_bytes = value;
     }
+    int64_t get_arb_chunk_source_mem_bytes() const { return arb_chunk_source_mem_bytes; }
 
     void set_data_source_mem_bytes(int64_t value) { data_source_mem_bytes = value; }
     int64_t get_data_source_mem_bytes() const { return data_source_mem_bytes; }
     int64_t get_chunk_source_mem_bytes() const { return chunk_source_mem_bytes.load(std::memory_order_relaxed); }
+
+    int64_t update_open_scan_operator_count(int delta) {
+        return open_scan_operator_count.fetch_add(delta, std::memory_order_seq_cst);
+    }
+    int64_t update_active_scan_operator_count(int delta) {
+        return active_scan_operator_count.fetch_add(delta, std::memory_order_seq_cst);
+    }
 };
 
 ConnectorScanOperatorFactory::ConnectorScanOperatorFactory(int32_t id, ScanNode* scan_node, RuntimeState* state,
@@ -141,7 +150,7 @@ const std::vector<ExprContext*>& ConnectorScanOperatorFactory::partition_exprs()
 
 void ConnectorScanOperatorFactory::set_chunk_source_mem_bytes(int64_t value) {
     _io_tasks_mem_limiter->update_chunk_source_mem_bytes(value);
-    _io_tasks_mem_limiter->update_last_arb_chunk_source_mem_bytes(value);
+    _io_tasks_mem_limiter->update_arb_chunk_source_mem_bytes(value);
 }
 
 void ConnectorScanOperatorFactory::set_scan_mem_limit(int64_t value) {
@@ -213,7 +222,8 @@ int64_t ConnectorScanOperator::_adjust_scan_mem_limit(int64_t old_value, int64_t
     int64_t new_scan_mem_limit = arb->update_chunk_source_mem_bytes(old_value, new_value);
 
     L->update_scan_mem_limit(new_scan_mem_limit);
-    L->update_last_arb_chunk_source_mem_bytes(new_value);
+    L->update_arb_chunk_source_mem_bytes(new_value);
+
     ChunkBufferLimiter* limiter = factory->get_chunk_buffer().limiter();
     limiter->update_mem_limit(new_scan_mem_limit * ConnectorScanOperatorMemShareArbitrator::kChunkBufferMemRatio);
 
@@ -244,25 +254,37 @@ Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
     if (options.__isset.connector_io_tasks_slow_io_latency_ms) {
         _adaptive_processor->slow_io_latency_ms = options.connector_io_tasks_slow_io_latency_ms;
     }
+
+    {
+        auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
+        ConnectorScanOperatorIOTasksMemLimiter* L = factory->_io_tasks_mem_limiter;
+        L->update_open_scan_operator_count(1);
+    }
     return Status::OK();
 }
 
 void ConnectorScanOperator::do_close(RuntimeState* state) {
-    if (_driver_sequence == 0 && _adaptive_processor->started_running) {
-        auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
-        ConnectorScanOperatorIOTasksMemLimiter* L = factory->_io_tasks_mem_limiter;
-        _adjust_scan_mem_limit(L->last_arb_chunk_source_mem_bytes, 0);
+    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
+    ConnectorScanOperatorIOTasksMemLimiter* L = factory->_io_tasks_mem_limiter;
+    int64_t c = L->update_open_scan_operator_count(-1);
+    if (c == 1) {
+        if (L->update_active_scan_operator_count(0) > 0) {
+            _adjust_scan_mem_limit(L->get_arb_chunk_source_mem_bytes(), 0);
+        }
     }
 }
 
 ChunkSourcePtr ConnectorScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
     auto* scan_node = down_cast<ConnectorScanNode*>(_scan_node);
     auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
+    ConnectorScanOperatorIOTasksMemLimiter* L = factory->_io_tasks_mem_limiter;
 
-    if (_driver_sequence == 0 && _adaptive_processor->started_running == false) {
+    if (_adaptive_processor->started_running == false) {
         _adaptive_processor->started_running = true;
-        ConnectorScanOperatorIOTasksMemLimiter* L = factory->_io_tasks_mem_limiter;
-        _adjust_scan_mem_limit(0, L->last_arb_chunk_source_mem_bytes);
+        int64_t c = L->update_active_scan_operator_count(1);
+        if (c == 0) {
+            _adjust_scan_mem_limit(0, L->get_arb_chunk_source_mem_bytes());
+        }
     }
 
     return std::make_shared<ConnectorChunkSource>(this, _chunk_source_profiles[chunk_source_index].get(),
@@ -444,7 +466,7 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
     // scan operator(0) as representative of this scan node,
     // to adjust mem limit via mem share arbitrater.
     if (_driver_sequence == 0) {
-        _adjust_scan_mem_limit(L->last_arb_chunk_source_mem_bytes, L->get_chunk_source_mem_bytes());
+        _adjust_scan_mem_limit(L->get_arb_chunk_source_mem_bytes(), L->get_chunk_source_mem_bytes());
     }
 
     // adjust io tasks according information collected
