@@ -37,7 +37,6 @@ package com.starrocks.server;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
-import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -167,11 +166,8 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockLoader;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.plugin.PluginMgr;
-import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.JournalObservable;
@@ -186,7 +182,6 @@ import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MVJobExecutor;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
-import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
@@ -2136,85 +2131,6 @@ public class GlobalStateMgr {
         } // end calc shortKeyColumnCount
 
         return shortKeyColumnCount;
-    }
-
-    // Change current warehouse of this session.
-    public void changeWarehouse(ConnectContext ctx, String newWarehouseName) throws AnalysisException {
-        if (!warehouseMgr.warehouseExists(newWarehouseName)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_WAREHOUSE_ERROR, newWarehouseName);
-        }
-        ctx.setCurrentWarehouse(newWarehouseName);
-    }
-
-    // Change current catalog of this session, and reset current database.
-    // We can support "use 'catalog <catalog_name>'" from mysql client or "use catalog <catalog_name>" from jdbc.
-    public void changeCatalog(ConnectContext ctx, String newCatalogName) throws DdlException {
-        if (!catalogMgr.catalogExists(newCatalogName)) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
-        }
-        if (!CatalogMgr.isInternalCatalog(newCatalogName)) {
-            try {
-                Authorizer.checkAnyActionOnCatalog(ctx.getCurrentUserIdentity(),
-                        ctx.getCurrentRoleIds(), newCatalogName);
-            } catch (AccessDeniedException e) {
-                AccessDeniedException.reportAccessDenied(newCatalogName, ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
-                        PrivilegeType.ANY.name(), ObjectType.CATALOG.name(), newCatalogName);
-            }
-        }
-        ctx.setCurrentCatalog(newCatalogName);
-        ctx.setDatabase("");
-    }
-
-    // Change current catalog and database of this session.
-    // identifier could be "CATALOG.DB" or "DB".
-    // For "CATALOG.DB", we change the current catalog database.
-    // For "DB", we keep the current catalog and change the current database.
-    public void changeCatalogDb(ConnectContext ctx, String identifier) throws DdlException {
-        String dbName;
-
-        String[] parts = identifier.split("\\.", 2); // at most 2 parts
-        if (parts.length != 1 && parts.length != 2) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_AND_DB_ERROR, identifier);
-        }
-
-        if (parts.length == 1) { // use database
-            dbName = identifier;
-        } else { // use catalog.database
-            String newCatalogName = parts[0];
-            if (!catalogMgr.catalogExists(newCatalogName)) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
-            }
-            if (!CatalogMgr.isInternalCatalog(newCatalogName)) {
-                try {
-                    Authorizer.checkAnyActionOnCatalog(ctx.getCurrentUserIdentity(),
-                            ctx.getCurrentRoleIds(), newCatalogName);
-                } catch (AccessDeniedException e) {
-                    AccessDeniedException.reportAccessDenied(newCatalogName,
-                            ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
-                            PrivilegeType.ANY.name(), ObjectType.CATALOG.name(), newCatalogName);
-                }
-            }
-            ctx.setCurrentCatalog(newCatalogName);
-            dbName = parts[1];
-        }
-
-        if (!Strings.isNullOrEmpty(dbName) && metadataMgr.getDb(ctx.getCurrentCatalog(), dbName) == null) {
-            LOG.debug("Unknown catalog {} and db {}", ctx.getCurrentCatalog(), dbName);
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-        }
-
-        // Here we check the request permission that sent by the mysql client or jdbc.
-        // So we didn't check UseDbStmt permission in PrivilegeCheckerV2.
-        try {
-            Authorizer.checkAnyActionOnOrInDb(ctx.getCurrentUserIdentity(),
-                    ctx.getCurrentRoleIds(), ctx.getCurrentCatalog(), dbName);
-        } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(ctx.getCurrentCatalog(),
-                    ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
-                    PrivilegeType.ANY.name(), ObjectType.DATABASE.name(), dbName);
-        }
-
-        ctx.setDatabase(dbName);
     }
 
     // for test only

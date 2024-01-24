@@ -227,7 +227,7 @@ public class MysqlProto {
         String db = authPacket.getDb();
         if (!Strings.isNullOrEmpty(db)) {
             try {
-                GlobalStateMgr.getCurrentState().changeCatalogDb(context, db);
+                context.changeCatalogDb(db);
             } catch (DdlException e) {
                 sendResponsePacket(context);
                 return new NegotiateResult(authPacket, false);
@@ -288,7 +288,7 @@ public class MysqlProto {
         String db = changeUserPacket.getDb();
         if (!Strings.isNullOrEmpty(db)) {
             try {
-                GlobalStateMgr.getCurrentState().changeCatalogDb(context, db);
+                context.changeCatalogDb(db);
             } catch (DdlException e) {
                 LOG.error("Command `Change user` failed at stage changing db, from [{}] to [{}], err[{}] ",
                         previousQualifiedUser, changeUserPacket.getUser(), e.getMessage());

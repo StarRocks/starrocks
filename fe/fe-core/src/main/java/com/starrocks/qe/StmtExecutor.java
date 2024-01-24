@@ -1402,7 +1402,7 @@ public class StmtExecutor {
     private void handleUseDbStmt() throws AnalysisException {
         UseDbStmt useDbStmt = (UseDbStmt) parsedStmt;
         try {
-            context.getGlobalStateMgr().changeCatalogDb(context, useDbStmt.getIdentifier());
+            context.changeCatalogDb(useDbStmt.getIdentifier());
         } catch (Exception e) {
             context.getState().setError(e.getMessage());
             return;
@@ -1415,7 +1415,7 @@ public class StmtExecutor {
         UseCatalogStmt useCatalogStmt = (UseCatalogStmt) parsedStmt;
         try {
             String catalogName = useCatalogStmt.getCatalogName();
-            context.getGlobalStateMgr().changeCatalog(context, catalogName);
+            context.changeCatalog(catalogName);
         } catch (Exception e) {
             context.getState().setError(e.getMessage());
             return;
@@ -1427,7 +1427,7 @@ public class StmtExecutor {
         SetCatalogStmt setCatalogStmt = (SetCatalogStmt) parsedStmt;
         try {
             String catalogName = setCatalogStmt.getCatalogName();
-            context.getGlobalStateMgr().changeCatalog(context, catalogName);
+            context.changeCatalog(catalogName);
         } catch (Exception e) {
             context.getState().setError(e.getMessage());
             return;
