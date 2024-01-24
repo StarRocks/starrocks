@@ -84,6 +84,7 @@ import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.AbstractTxnStateChangeCallback;
 import com.starrocks.transaction.BeginTransactionException;
+import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TableCommitInfo;
 import com.starrocks.transaction.TransactionException;
 import com.starrocks.transaction.TransactionState;
@@ -451,7 +452,8 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     }
 
     public void beginTxn()
-            throws LabelAlreadyUsedException, BeginTransactionException, AnalysisException, DuplicatedRequestException {
+            throws LabelAlreadyUsedException, BeginTransactionException,
+            RunningTxnExceedException, AnalysisException, DuplicatedRequestException {
     }
 
     /**
@@ -459,11 +461,11 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
      * if job has been cancelled, this step will be ignored
      *
      * @throws LabelAlreadyUsedException  the job is duplicated
-     * @throws BeginTransactionException  the limit of load job is exceeded
+     * @throws RunningTxnExceedException  the limit of load job is exceeded
      * @throws AnalysisException          there are error params in job
      * @throws DuplicatedRequestException
      */
-    public void execute() throws LabelAlreadyUsedException, BeginTransactionException, AnalysisException,
+    public void execute() throws LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException,
             DuplicatedRequestException, LoadException {
         writeLock();
         try {
@@ -473,18 +475,22 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         }
     }
 
-    public void unprotectedExecute() throws LabelAlreadyUsedException, BeginTransactionException, AnalysisException,
+    public void unprotectedExecute() throws LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException,
             DuplicatedRequestException, LoadException {
         // check if job state is pending
         if (state != JobState.PENDING) {
             return;
         }
-        // the limit of job will be restrict when begin txn
-        beginTxn();
-        unprotectedExecuteJob();
-        // update spark load job state from PENDING to ETL when pending task is finished
-        if (jobType != EtlJobType.SPARK) {
-            unprotectedUpdateState(JobState.LOADING);
+        try {
+            // the limit of job will be restrict when begin txn
+            beginTxn();
+            unprotectedExecuteJob();
+            // update spark load job state from PENDING to ETL when pending task is finished
+            if (jobType != EtlJobType.SPARK) {
+                unprotectedUpdateState(JobState.LOADING);
+            }
+        } catch (BeginTransactionException e) {
+            throw new LoadException(e.getMessage());
         }
     }
 

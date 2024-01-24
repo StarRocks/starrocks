@@ -86,6 +86,7 @@ import com.starrocks.meta.lock.Locker;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
@@ -1186,7 +1187,8 @@ public class LeaderImpl {
             txnId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
                     request.getTable_ids(), request.getLabel(),
                     new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
-                    LoadJobSourceType.valueOf(request.getSource_type()), request.getTimeout_second());
+                    LoadJobSourceType.valueOf(request.getSource_type()), request.getTimeout_second(), 
+                    WarehouseManager.DEFAULT_CLUSTER_ID);
         } catch (Exception e) {
             LOG.warn("begin remote txn failed, label {}", request.getLabel(), e);
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);

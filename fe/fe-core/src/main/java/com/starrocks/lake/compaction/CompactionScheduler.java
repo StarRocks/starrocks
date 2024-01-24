@@ -44,6 +44,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.VisibleStateWaiter;
@@ -291,7 +292,7 @@ public class CompactionScheduler extends Daemon {
 
             partition.setMinRetainVersion(currentVersion);
 
-        } catch (BeginTransactionException | AnalysisException | LabelAlreadyUsedException | DuplicatedRequestException e) {
+        } catch (RunningTxnExceedException | AnalysisException | LabelAlreadyUsedException | DuplicatedRequestException e) {
             LOG.error("Fail to create transaction for compaction job. {}", e.getMessage());
             return null;
         } catch (Throwable e) {
@@ -374,8 +375,8 @@ public class CompactionScheduler extends Daemon {
 
     // REQUIRE: has acquired the exclusive lock of Database.
     protected long beginTransaction(PartitionIdentifier partition)
-            throws BeginTransactionException, AnalysisException, LabelAlreadyUsedException,
-            DuplicatedRequestException, WarehouseUnavailableException {
+            throws RunningTxnExceedException, AnalysisException, LabelAlreadyUsedException, DuplicatedRequestException,
+            BeginTransactionException, WarehouseUnavailableException {
         long dbId = partition.getDbId();
         long tableId = partition.getTableId();
         long partitionId = partition.getPartitionId();

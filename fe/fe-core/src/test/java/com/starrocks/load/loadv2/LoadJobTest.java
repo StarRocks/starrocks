@@ -55,8 +55,8 @@ import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.task.LeaderTask;
 import com.starrocks.task.LeaderTaskExecutor;
 import com.starrocks.thrift.TUniqueId;
-import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.warehouse.LocalWarehouse;
 import mockit.Expectations;
@@ -133,7 +133,7 @@ public class LoadJobTest {
     public void testExecute(@Mocked GlobalTransactionMgr globalTransactionMgr,
                             @Mocked LeaderTaskExecutor leaderTaskExecutor,
                             @Mocked WarehouseManagerEpack warehouseMgr)
-            throws LabelAlreadyUsedException, BeginTransactionException, AnalysisException, DuplicatedRequestException,
+            throws LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException, DuplicatedRequestException,
             WarehouseUnavailableException {
         LoadJob loadJob = new BrokerLoadJob();
         new Expectations() {
