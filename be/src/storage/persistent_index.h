@@ -684,8 +684,8 @@ private:
     bool _can_dump_directly();
     bool _need_flush_advance();
     bool _need_merge_advance();
-    Status _flush_advance_or_append_wal(size_t n, const Slice* keys, const IndexValue* values);
-
+    Status _flush_advance_or_append_wal(size_t n, const Slice* keys, const IndexValue* values,
+                                        std::vector<size_t>* replace_idxes);
     Status _delete_major_compaction_tmp_index_file();
     Status _delete_tmp_index_file();
 
@@ -787,6 +787,8 @@ private:
     std::atomic<bool> _major_compaction_running{false};
     // write amplification score, 0.0 means this index doesn't need major compaction
     std::atomic<double> _write_amp_score{0.0};
+    // Latest major compaction time. In second.
+    int64_t _latest_compaction_time = 0;
 };
 
 } // namespace starrocks

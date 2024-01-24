@@ -17,18 +17,21 @@ public class TaskRunExecutor {
     private final ExecutorService taskRunPool = ThreadPoolManager
             .newDaemonCacheThreadPool(Config.max_task_runs_threads_num, "starrocks-taskrun-pool", true);
 
-    public void executeTaskRun(TaskRun taskRun) {
+    /**
+     * Async execute a task-run, use the return value to indicate submit success or not
+     */
+    public boolean executeTaskRun(TaskRun taskRun) {
         if (taskRun == null) {
-            return;
+            return false;
         }
         TaskRunStatus status = taskRun.getStatus();
         if (status == null) {
-            return;
+            return false;
         }
-        if (status.getState() == Constants.TaskRunState.SUCCESS ||
-                status.getState() == Constants.TaskRunState.FAILED) {
-            LOG.warn("TaskRun {} is in final status {} ", status.getQueryId(), status.getState());
-            return;
+        if (status.getState() != Constants.TaskRunState.PENDING) {
+            LOG.warn("TaskRun {}/{} is in {} state, avoid execute it again", status.getTaskName(),
+                    status.getQueryId(), status.getState());
+            return false;
         }
 
         CompletableFuture<Constants.TaskRunState> future = CompletableFuture.supplyAsync(() -> {
@@ -59,6 +62,7 @@ public class TaskRunExecutor {
                 taskRun.getFuture().completeExceptionally(e);
             }
         });
+        return true;
     }
 
 }

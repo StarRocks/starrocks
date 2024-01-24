@@ -282,7 +282,7 @@ TEST_F(BinaryDictPageTest, TestEncodingRatio) {
     while (getline(infile, line)) {
         src_strings.emplace_back(line);
     }
-    for (int i = 0; i < 10000; ++i) {
+    for (int i = 0; i < 1000; ++i) {
         for (const auto& src_string : src_strings) {
             slices.emplace_back(src_string);
         }

@@ -101,7 +101,8 @@ public class AnalyzeShowTest {
                         "information_schema.COLUMNS.COLUMN_KEY AS Key, " +
                         "information_schema.COLUMNS.COLUMN_DEFAULT AS Default, " +
                         "information_schema.COLUMNS.EXTRA AS Extra " +
-                        "FROM information_schema.COLUMNS WHERE information_schema.COLUMNS.COLUMN_NAME = 'v1'",
+                        "FROM information_schema.COLUMNS WHERE (information_schema.COLUMNS.COLUMN_NAME = 'v1') " +
+                        "AND (information_schema.COLUMNS.TABLE_SCHEMA = 'test')",
                 AstToStringBuilder.toString(statement.toSelectStmt()));
     }
 
