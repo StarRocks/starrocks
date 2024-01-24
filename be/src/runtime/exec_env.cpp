@@ -383,8 +383,8 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
 
     RETURN_IF_ERROR(ThreadPoolBuilder("dictionary_cache") // thread pool for dictionary cache Sink
                             .set_min_threads(1)
-                            .set_max_threads(8)
-                            .set_max_queue_size(1000)
+                            .set_max_threads(config::dictionary_cache_refresh_threadpool_size)
+                            .set_max_queue_size(INT32_MAX) // unlimit queue size
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&_dictionary_cache_pool));
 
