@@ -406,7 +406,7 @@ public:
 
     Status iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) override;
 
-    Status delete_file(const std::string& path) override { return Status::NotSupported("HdfsFileSystem::delete_file"); }
+    Status delete_file(const std::string& path) override;
 
     Status create_dir(const std::string& dirname) override {
         return Status::NotSupported("HdfsFileSystem::create_dir");
@@ -541,6 +541,15 @@ Status HdfsFileSystem::iterate_dir2(const std::string& dir, const std::function<
         hdfsFreeFileInfo(fileinfo, numEntries);
     }
     return Status::OK();
+}
+
+Status HdfsFileSystem::delete_file(const std::string& path) {
+    std::string namenode;
+    RETURN_IF_ERROR(get_namenode_from_path(path, &namenode));
+    std::shared_ptr<HdfsFsClient> hdfs_client;
+    RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, hdfs_client, _options));
+    int status = hdfsDelete(hdfs_client->hdfs_fs, path.c_str(), 0);
+    return status == 0 ? Status::OK() : Status::Unknown(fmt::format("Failed to delete file={}", path));
 }
 
 Status HdfsFileSystem::_path_exists(hdfsFS fs, const std::string& path) {

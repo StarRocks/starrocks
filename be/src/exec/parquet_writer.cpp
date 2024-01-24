@@ -17,6 +17,7 @@
 
 #include <fmt/format.h>
 
+#include <future>
 #include <utility>
 
 #include "formats/parquet/file_writer.h"
@@ -89,14 +90,23 @@ Status RollingAsyncParquetWriter::append_chunk(Chunk* chunk, RuntimeState* state
 }
 
 Status RollingAsyncParquetWriter::rollback(RuntimeState* state) {
-    for (auto& writer : _pending_commits) {
-        if (writer != nullptr) {
-            auto st = _fs->delete_file(writer->file_location());
-            if (!st.ok()) {
-                return st;
-            }
-        }
+    if (_pending_commits.empty()) {
+        return Status::OK();
     }
+    std::future<void> rt = std::async(
+            std::launch::async,
+            [](std::shared_ptr<FileSystem> file_system,
+               std::vector<std::shared_ptr<starrocks::parquet::AsyncFileWriter>> pending_commits) {
+                for (auto& writer : pending_commits) {
+                    if (writer != nullptr) {
+                        auto st = file_system->delete_file(writer->file_location());
+                        if (!st.ok()) {
+                            LOG(WARNING) << "delete file error: " << writer->file_location();
+                        }
+                    }
+                }
+            },
+            _fs, _pending_commits);
     return Status::OK();
 }
 
