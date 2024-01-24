@@ -1602,6 +1602,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         connectContext.getSessionVariable().setPipelineDop(2);
         connectContext.setExecutionId(new TUniqueId(0x33, 0x0));
         String sql = "select count(*) from lineitem group by l_shipmode";
+        sql = "select count(*) from lineorder_new_l group by P_SIZE";
         ExecPlan execPlan = getExecPlan(sql);
         Coordinator coord = new Coordinator(connectContext, execPlan.getFragments(), execPlan.getScanNodes(),
                 execPlan.getDescTbl().toThrift());

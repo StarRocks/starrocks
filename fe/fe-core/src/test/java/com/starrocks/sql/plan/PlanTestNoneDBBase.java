@@ -81,15 +81,12 @@ public class PlanTestNoneDBBase {
         Config.tablet_sched_max_scheduling_tablets = -1;
         Config.alter_scheduler_interval_millisecond = 1;
         UtFrameUtils.createMinStarRocksCluster();
-
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
         FeConstants.enablePruneEmptyOutputScan = false;
         FeConstants.showJoinLocalShuffleInExplain = false;
-        UtFrameUtils.addMockBackend(10002);
-        UtFrameUtils.addMockBackend(10003);
     }
 
     public static void assertContains(String text, String... pattern) {
