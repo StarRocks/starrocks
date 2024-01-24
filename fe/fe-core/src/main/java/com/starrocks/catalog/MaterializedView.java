@@ -1021,6 +1021,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     public String getMaterializedViewDdlStmt(boolean simple) {
+        return getMaterializedViewDdlStmt(simple, false);
+    }
+
+    public String getMaterializedViewDdlStmt(boolean simple, boolean isReplay) {
         StringBuilder sb = new StringBuilder();
         sb.append("CREATE MATERIALIZED VIEW `").append(getName()).append("` (");
         List<String> colDef = Lists.newArrayList();
@@ -1129,7 +1133,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 sb.append("\"").append(value).append("\"");
             }
         }
-        if (!hasStorageMedium) {
+        // NOTE: why not append unique properties when replaying ?
+        // Actually we don't need any properties of MV when replaying, but only the schema information
+        // And in ShareData mode, the storage_volume property cannot be retrieved in the Checkpointer thread
+        if (!hasStorageMedium && !isReplay) {
             appendUniqueProperties(sb);
         }
 
