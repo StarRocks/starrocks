@@ -486,6 +486,7 @@ enum TAccessPathType {
     FIELD,      // STRUCT FIELD
     INDEX,      // ARRAY/MAP INDEX-AT POSITION DATA
     ALL,        // ARRAY/MAP ALL DATA
+    VALUE,      // MAP VALUE
 }
 
 struct TColumnAccessPath {
@@ -1054,6 +1055,8 @@ struct THdfsScanNode {
     16: optional bool use_partition_column_value_only;
 
     17: optional Types.TTupleId mor_tuple_id;
+
+    18: optional list<TColumnAccessPath> column_access_paths;
 }
 
 struct TProjectNode {

@@ -68,6 +68,45 @@ std::string HiveDataSource::name() const {
     return "HiveDataSource";
 }
 
+Status HiveDataSource::_try_to_rewrite_tuple_desc_type() {
+    // Init complex type ColumnAccessPaths
+    std::vector<ColumnAccessPathPtr> column_access_paths;
+    if (_provider->_hdfs_scan_node.__isset.column_access_paths) {
+        for (int i = 0; i < _provider->_hdfs_scan_node.column_access_paths.size(); ++i) {
+            ASSIGN_OR_RETURN(auto path, ColumnAccessPath::create(_provider->_hdfs_scan_node.column_access_paths[i], _runtime_state, &_pool));
+            column_access_paths.emplace_back(std::move(path));
+        }
+    }
+
+    std::unordered_map<std::string, ColumnAccessPathPtr> column_name_2_column_access_path_mapping;
+
+    for (auto& column_access_path : column_access_paths) {
+        if (column_access_path->is_from_predicate()) {
+            // TODO(SmithCruise) We don't support complex type late materialize in catalog now,
+            // so ignore ColumnAccessPath from predicates
+            continue;
+        }
+        column_name_2_column_access_path_mapping.emplace(column_access_path->path(), std::move(column_access_path));
+    }
+
+    const std::vector<SlotDescriptor*>& slots = _tuple_desc->slots();
+
+    for (SlotDescriptor* slot : slots) {
+        const auto it = column_name_2_column_access_path_mapping.find(slot->col_name());
+        if (it == column_name_2_column_access_path_mapping.end()) {
+            continue;
+        }
+        TypeDescriptor& type = slot->type();
+        if (!type.is_complex_type()) {
+            continue;
+        }
+        ColumnAccessPathUtil::rewrite_complex_type_descriptor(type, it->second);
+        std::cout << "name: " << slot->col_name() << ", type: " << type.debug_string() << std::endl;
+    }
+
+    return Status::OK();
+}
+
 Status HiveDataSource::open(RuntimeState* state) {
     // right now we don't force user to set JAVA_HOME.
     // but when we access hdfs via JNI, we have to make sure JAVA_HOME is set,
@@ -84,6 +123,8 @@ Status HiveDataSource::open(RuntimeState* state) {
 
     _runtime_state = state;
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(hdfs_scan_node.tuple_id);
+    // rewrite tuple desc type
+    RETURN_IF_ERROR(_try_to_rewrite_tuple_desc_type());
     _hive_table = dynamic_cast<const HiveTableDescriptor*>(_tuple_desc->table_desc());
     if (_hive_table == nullptr) {
         return Status::RuntimeError(

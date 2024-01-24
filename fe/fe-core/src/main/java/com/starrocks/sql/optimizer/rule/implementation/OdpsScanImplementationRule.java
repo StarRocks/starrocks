@@ -35,6 +35,7 @@ public class OdpsScanImplementationRule extends ImplementationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalOdpsScanOperator scan = (LogicalOdpsScanOperator) input.getOp();
         PhysicalOdpsScanOperator physicalOdpsScan = new PhysicalOdpsScanOperator(scan);
+        physicalOdpsScan.setColumnAccessPaths(scan.getColumnAccessPaths());
         OptExpression result = new OptExpression(physicalOdpsScan);
         return Lists.newArrayList(result);
     }

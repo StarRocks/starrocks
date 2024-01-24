@@ -360,24 +360,31 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         MOCK_TABLE_MAP.putIfAbsent(MOCKED_SUBFIELD_DB, new CaseInsensitiveMap<>());
         Map<String, HiveTableInfo> mockTables = MOCK_TABLE_MAP.get(MOCKED_SUBFIELD_DB);
 
-        // Mock table region
         List<FieldSchema> cols = Lists.newArrayList();
         cols.add(new FieldSchema("col_int", "int", null));
         cols.add(new FieldSchema("col_struct", "struct<c0: int, c1: struct<c11: int>>", null));
+        cols.add(new FieldSchema("c1", "int", null));
+        cols.add(new FieldSchema("c2", "array<struct<c2_sub1: int, c2_sub2: int>>", null));
+        cols.add(new FieldSchema("c3",
+                "struct<c3_sub1: array<struct<c3_sub1_sub1: int, c3_sub1_sub2: int>>, c3_sub2: int>", null));
         StorageDescriptor sd =
                 new StorageDescriptor(cols, "", MAPRED_PARQUET_INPUT_FORMAT_CLASS, "", false,
                         -1, null, Lists.newArrayList(), Lists.newArrayList(), Maps.newHashMap());
 
-        CaseInsensitiveMap<String, ColumnStatistic> regionStats = new CaseInsensitiveMap<>();
-        regionStats.put("col_int", ColumnStatistic.unknown());
-        regionStats.put("col_struct", ColumnStatistic.unknown());
+        CaseInsensitiveMap<String, ColumnStatistic> subfieldStats = new CaseInsensitiveMap<>();
+        subfieldStats.put("col_int", ColumnStatistic.unknown());
+        subfieldStats.put("col_struct", ColumnStatistic.unknown());
+        subfieldStats.put("c1", ColumnStatistic.unknown());
+        subfieldStats.put("c2", ColumnStatistic.unknown());
+        subfieldStats.put("c3", ColumnStatistic.unknown());
 
         Table tbl =
                 new Table("subfield", MOCKED_SUBFIELD_DB, null, 0, 0, 0, sd, Lists.newArrayList(), Maps.newHashMap(), null, null,
                         "EXTERNAL_TABLE");
         mockTables.put(tbl.getTableName(),
                 new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(tbl, MOCKED_HIVE_CATALOG_NAME),
-                        ImmutableList.of(), 5, regionStats, MOCKED_FILES));
+                        ImmutableList.of(), 5, subfieldStats, MOCKED_FILES));
+
 
     }
 

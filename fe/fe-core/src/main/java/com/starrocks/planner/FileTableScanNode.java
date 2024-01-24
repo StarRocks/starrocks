@@ -15,14 +15,12 @@
 package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
-import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.FileTable;
-import com.starrocks.catalog.Type;
+import com.starrocks.catalog.Table;
 import com.starrocks.connector.RemoteFileBlockDesc;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteScanRangeLocations;
-import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -40,16 +38,14 @@ import com.starrocks.thrift.TScanRangeLocations;
 import java.util.ArrayList;
 import java.util.List;
 
-public class FileTableScanNode extends ScanNode {
+public class FileTableScanNode extends CatalogScanNode {
     private final List<TScanRangeLocations> scanRangeLocationsList = new ArrayList<>();
     private final FileTable fileTable;
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
-    private CloudConfiguration cloudConfiguration = null;
 
     public FileTableScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
         this.fileTable = (FileTable) desc.getTable();
-        setupCredential();
     }
 
     public HDFSScanNodePredicates getScanNodePredicates() {
@@ -60,8 +56,10 @@ public class FileTableScanNode extends ScanNode {
         return fileTable;
     }
 
-    private void setupCredential() {
-        cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(fileTable.getFileProperties());
+    @Override
+    protected void setupCloudCredential(Table table) {
+        cloudConfiguration =
+                CloudConfigurationFactory.buildCloudConfigurationForStorage(((FileTable) table).getFileProperties());
     }
 
     @Override
@@ -144,13 +142,7 @@ public class FileTableScanNode extends ScanNode {
         output.append("\n");
 
         if (detailLevel == TExplainLevel.VERBOSE) {
-            for (SlotDescriptor slotDescriptor : desc.getSlots()) {
-                Type type = slotDescriptor.getOriginType();
-                if (type.isComplexType()) {
-                    output.append(prefix)
-                            .append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
-                }
-            }
+            output.append(explainCatalogComplexTypePrune(prefix));
         }
 
         return output.toString();
@@ -173,8 +165,9 @@ public class FileTableScanNode extends ScanNode {
             msg.hdfs_scan_node.setTable_name(fileTable.getName());
         }
 
+        setColumnAccessPathToThrift(tHdfsScanNode);
+        setCloudConfigurationToThrift(tHdfsScanNode);
         HdfsScanNode.setScanOptimizeOptionToThrift(tHdfsScanNode, this);
-        HdfsScanNode.setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);
         HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         HdfsScanNode.setNonPartitionConjunctsToThrift(msg, this, this.getScanNodePredicates());
     }

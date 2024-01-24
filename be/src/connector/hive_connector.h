@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "column/column_access_path.h"
 #include "column/vectorized_fwd.h"
 #include "connector/connector.h"
 #include "exec/connector_scan_node.h"
@@ -82,6 +83,8 @@ private:
     const THdfsScanRange _scan_range;
 
     // ============= init func =============
+    // Try to rewrite TypeDescriptor based on ColumnAccessPath
+    Status _try_to_rewrite_tuple_desc_type();
     Status _init_conjunct_ctxs(RuntimeState* state);
     void _update_has_any_predicate();
     Status _decompose_conjunct_ctxs(RuntimeState* state);

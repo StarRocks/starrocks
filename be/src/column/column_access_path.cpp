@@ -189,4 +189,139 @@ StatusOr<std::unique_ptr<ColumnAccessPath>> ColumnAccessPath::create(const TAcce
     return p;
 }
 
+void ColumnAccessPathUtil::rewrite_struct_type_descriptor(TypeDescriptor& original_type,
+                                                          const ColumnAccessPathPtr& access_path) {
+    DCHECK(original_type.is_struct_type());
+
+    if (is_select_all_subfields(access_path)) {
+        return;
+    }
+
+    // build child access path mapping
+    std::unordered_map<std::string, const ColumnAccessPathPtr&> subfield_mapping{};
+    for (const auto& child : access_path->children()) {
+        subfield_mapping.emplace(child->path(), child);
+    }
+
+    std::vector<std::string> new_subfield_names{};
+    std::vector<TypeDescriptor> new_subfield_types{};
+
+    for (size_t i = 0; i < original_type.children.size(); i++) {
+        TypeDescriptor& subfield_type = original_type.children[i];
+        const auto& subfield_name = original_type.field_names[i];
+
+        const auto& it = subfield_mapping.find(subfield_name);
+        if (it == subfield_mapping.end()) {
+            continue;
+        }
+
+        if (subfield_type.is_complex_type()) {
+            const ColumnAccessPathPtr& child_path = it->second;
+            DCHECK(child_path->is_field());
+            rewrite_complex_type_descriptor(subfield_type, child_path);
+        }
+
+        new_subfield_names.emplace_back(subfield_name);
+        new_subfield_types.emplace_back(subfield_type);
+    }
+
+    original_type.children = new_subfield_types;
+    original_type.field_names = new_subfield_names;
+}
+
+void ColumnAccessPathUtil::rewrite_map_type_descriptor(TypeDescriptor& original_type,
+                                                       const ColumnAccessPathPtr& access_path) {
+    DCHECK(original_type.is_map_type());
+    if (is_select_all_subfields(access_path)) {
+        return;
+    }
+
+    DCHECK_EQ(1, access_path->children().size());
+    ColumnAccessPathPtr& value_path = access_path->children()[0];
+
+    bool access_key = false;
+    bool access_value = false;
+
+    // TODO(SmithCruise) Not support to read offset column only
+    if (value_path->is_key() || value_path->is_offset()) {
+        access_key = true;
+    } else if (value_path->is_value()) {
+        access_value = true;
+    } else if (value_path->is_index() || value_path->is_all()) {
+        access_key = true;
+        access_value = true;
+    } else {
+        DCHECK(false) << "Error ColumnAccessPaths for MapType";
+        // Defense code, just select all
+        access_key = true;
+        access_value = true;
+    }
+
+    TypeDescriptor& key_type = original_type.children[0];
+    TypeDescriptor& value_type = original_type.children[1];
+
+    if (!access_key) {
+        key_type.type = TYPE_UNKNOWN;
+    }
+    if (!access_value) {
+        value_type.type = TYPE_UNKNOWN;
+        value_type.children.resize(0);
+        value_type.field_names.resize(0);
+    } else {
+        // Map value column may contains complex type, rewrite it either
+        if (value_type.is_complex_type()) {
+            // Consider for [/col2/VALUE/INDEX/a], we need to advance one level if it has child
+            // If is_value()=true, means it's map_values() function,
+            if (!value_path->children().empty()) {
+                DCHECK_EQ(1, value_path->children().size());
+                const ColumnAccessPathPtr& value_child_path = value_path->children()[0];
+                DCHECK(value_child_path->is_index());
+                rewrite_complex_type_descriptor(value_type, value_child_path);
+            }
+        }
+    }
+}
+
+void ColumnAccessPathUtil::rewrite_array_type_descriptor(TypeDescriptor& original_type,
+                                                         const ColumnAccessPathPtr& access_path) {
+    DCHECK(original_type.is_array_type());
+
+    TypeDescriptor& element_type = original_type.children[0];
+
+    if (!element_type.is_complex_type()) {
+        return;
+    }
+
+    if (is_select_all_subfields(access_path)) {
+        return;
+    }
+
+    DCHECK_EQ(1, access_path->children().size());
+    const ColumnAccessPathPtr& element_path = access_path->children()[0];
+    DCHECK(element_path->is_index());
+
+    rewrite_complex_type_descriptor(element_type, element_path);
+}
+
+void ColumnAccessPathUtil::rewrite_complex_type_descriptor(TypeDescriptor& original_type,
+                                                           const ColumnAccessPathPtr& access_path) {
+    if (original_type.is_struct_type()) {
+        rewrite_struct_type_descriptor(original_type, access_path);
+    } else if (original_type.is_map_type()) {
+        rewrite_map_type_descriptor(original_type, access_path);
+    } else if (original_type.is_array_type()) {
+        rewrite_array_type_descriptor(original_type, access_path);
+    } else {
+        DCHECK(false);
+    }
+}
+
+bool ColumnAccessPathUtil::is_select_all_subfields(const ColumnAccessPathPtr& path) {
+    if (path == nullptr || path->is_all() || path->children().empty()) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
 } // namespace starrocks
