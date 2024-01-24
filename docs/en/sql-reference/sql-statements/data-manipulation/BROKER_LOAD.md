@@ -118,7 +118,7 @@ INTO TABLE <table_name>
 
    Specifies the partitions into which you want to load data. By default, if you do not specify this parameter, the source data will be loaded into all partitions of the StarRocks table.
 
-- `TEMPORARY_PARTITION`
+- `TEMPORARY PARTITION`
 
   Specifies the name of the [temporary partition](../../../table_design/Temporary_partition.md) into which you want to load data. You can specify multiple temporary partitions, which must be separated by commas (,).
 
