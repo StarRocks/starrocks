@@ -164,6 +164,8 @@ public class TPCDSPlanTestBase extends PlanTestBase {
     public static final String Q38 = from("38");
     public static final String Q39_1 = from("39-1");
     public static final String Q39_2 = from("39-2");
+    public static final String Q39_1_2 = from("39-1-2");
+    public static final String Q39_2_2 = from("39-2-2");
     public static final String Q40 = from("40");
     public static final String Q41 = from("41");
     public static final String Q42 = from("42");
@@ -189,6 +191,7 @@ public class TPCDSPlanTestBase extends PlanTestBase {
     public static final String Q62 = from("62");
     public static final String Q63 = from("63");
     public static final String Q64 = from("64");
+    public static final String Q64_2 = from("64-2");
     public static final String Q65 = from("65");
     public static final String Q66 = from("66");
     public static final String Q67 = from("67");
