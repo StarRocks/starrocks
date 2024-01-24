@@ -116,7 +116,8 @@ public class TablePEntryObject implements PEntryObject {
         return new TablePEntryObject(catalogId, dbUUID, tableUUID);
     }
 
-    private static String getTableUUID(GlobalStateMgr mgr, String catalogName, String dbToken, String tableToken) throws PrivObjNotFoundException {
+    private static String getTableUUID(GlobalStateMgr mgr, String catalogName, String dbToken, String tableToken)
+            throws PrivObjNotFoundException {
         checkArgument(!dbToken.equals("*"));
         if (tableToken.equals("*")) {
             return PrivilegeBuiltinConstants.ALL_TABLES_UUID;
