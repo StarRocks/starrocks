@@ -192,7 +192,7 @@ public class StarOSAgent {
     }
 
     private static String constructTablePath(long dbId, long tableId) {
-        return String.format("DB%d/%d", dbId, tableId);
+        return String.format("db%d/%d", dbId, tableId);
     }
 
     public FilePathInfo allocateFilePath(long dbId, long tableId) throws DdlException {
