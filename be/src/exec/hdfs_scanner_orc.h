@@ -37,11 +37,17 @@ public:
     void disable_use_orc_sargs() { _use_orc_sargs = false; }
 
 private:
+    StatusOr<size_t> _do_get_next(ChunkPtr* chunk);
+
     // it means if we can skip this file without reading.
     // Normally it happens when we peek file column statistics,
     // and if we are sure there is no row matches, we can skip this file.
     // by skipping this file, we return EOF when client try to get chunk.
     bool _should_skip_file;
+
+    // hdfs_scanner_orc will only eval conjunctions in _eval_conjunct_ctxs_by_materialized_slot
+    // _eval_conjunct_ctxs_by_materialized_slot's slot must be existed in orc file
+    std::unordered_map<SlotId, std::vector<ExprContext*>> _eval_conjunct_ctxs_by_materialized_slot{};
 
     // disable orc search argument would be much easier for
     // writing unittest of customized filter
