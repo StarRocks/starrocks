@@ -228,6 +228,7 @@ public:
         // ASSERT_TRUE(jit_ptr->is_nullable() == ptr->is_nullable());
         ASSERT_TRUE(jit_ptr->size() == ptr->size());
         for (int i = 0; i < jit_ptr->size(); ++i) {
+            ASSERT_TRUE(jit_ptr->is_null(i) == ptr->is_null(i));
             ASSERT_TRUE(jit_ptr->equals(i, *ptr, i));
         }
 

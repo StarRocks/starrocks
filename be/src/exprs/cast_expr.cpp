@@ -1168,17 +1168,18 @@ public:
 
                         // TODO(Yueyang): fix __int128
                         auto* max = llvm::ConstantInt::get(l->getType(), std::numeric_limits<ToCppType>::max(), true);
-                        auto* min = llvm::ConstantInt::get(l->getType(), std::numeric_limits<ToCppType>::min(), true);
+                        auto* min =
+                                llvm::ConstantInt::get(l->getType(), std::numeric_limits<ToCppType>::lowest(), true);
                         max_overflow = b.CreateICmpSGT(l, max);
                         min_overflow = b.CreateICmpSLT(l, min);
                     } else if constexpr (lt_is_float<FromType>) {
                         RETURN_IF(!l->getType()->isFloatingPointTy(),
                                   Status::JitCompileError("Check overflow failed, data type is not float point"));
 
-                        llvm::Value* max = llvm::ConstantFP::get(
-                                l->getType(), static_cast<double>(std::numeric_limits<ToCppType>::max()));
-                        llvm::Value* min = llvm::ConstantFP::get(
-                                l->getType(), static_cast<double>(std::numeric_limits<ToCppType>::min()));
+                        auto* max = llvm::ConstantFP::get(l->getType(),
+                                                          static_cast<double>(std::numeric_limits<ToCppType>::max()));
+                        auto* min = llvm::ConstantFP::get(
+                                l->getType(), static_cast<double>(std::numeric_limits<ToCppType>::lowest()));
                         max_overflow = b.CreateFCmpOGT(l, max);
                         min_overflow = b.CreateFCmpOLT(l, min);
                     }

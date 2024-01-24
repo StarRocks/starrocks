@@ -315,8 +315,9 @@ static void numeric_cast_with_jit(RuntimeState* runtime_state, TExprNode& cast_e
 
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr));
 
+    cast_expr.type = gen_type_desc(cast_expr.child_type);
+
     for (auto& d : data) {
-        cast_expr.type = gen_type_desc(cast_expr.child_type);
         MockVectorizedExpr<FromType> col1(cast_expr, 1, d);
         expr->_children.push_back(&col1);
 
