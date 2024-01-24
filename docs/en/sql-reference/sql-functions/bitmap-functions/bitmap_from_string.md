@@ -8,7 +8,7 @@ displayed_sidebar: "English"
 
 Converts a string into a BITMAP. The string is composed of a set of UINT64 numbers separated by commas. For example, the "0, 1, 2" string will be converted into a Bitmap, in which bits 0, 1 and 2 are set. If the input field is invalid, NULL will be returned.
 
-This function deduplicates the input string during the conversion. It must be used with other functions, such as [bitmap_to_string](bitmap_to_string.md).
+This function deduplicates the input string during the conversion. It must be used with other functions, such as [bitmap_to_string](bitmap_to_string.md) to return results on terminals.
 
 ## Syntax
 
@@ -16,12 +16,14 @@ This function deduplicates the input string during the conversion. It must be us
 BITMAP BITMAP_FROM_STRING(VARCHAR input)
 ```
 
+## Return value
+
+Returns a BITMAP value. If the input string is invalid, NULL is returned. If the input string is empty, an empty value is returned.
+
 ## Examples
 
 ```Plain Text
-
 -- The input is empty and an empty value is returned.
-
 MySQL > select bitmap_to_string(bitmap_empty());
 +----------------------------------+
 | bitmap_to_string(bitmap_empty()) |
@@ -30,7 +32,6 @@ MySQL > select bitmap_to_string(bitmap_empty());
 +----------------------------------+
 
 -- `0,1,2` is returned.
-
 MySQL > select bitmap_to_string(bitmap_from_string("0, 1, 2"));
 +-------------------------------------------------+
 | bitmap_to_string(bitmap_from_string('0, 1, 2')) |
