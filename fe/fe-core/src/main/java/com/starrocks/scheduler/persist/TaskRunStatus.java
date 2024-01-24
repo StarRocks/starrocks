@@ -304,12 +304,9 @@ public class TaskRunStatus implements Writable {
                     String.format("state %s must be finish state", state));
             return state;
         } else {
+            // {@code processStartTime == 0} means taskRun have not been scheduled, its state should be pending.
             // TODO: how to distinguish TaskRunStatus per partition.
-            if (processStartTime == 0) {
-                return state;
-            } else {
-                return Constants.TaskRunState.RUNNING;
-            }
+            return processStartTime == 0 ? state : Constants.TaskRunState.RUNNING;
         }
     }
 
