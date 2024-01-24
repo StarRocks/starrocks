@@ -56,6 +56,7 @@ import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.Coordinator;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TLoadJobType;
@@ -159,6 +160,8 @@ public class LoadLoadingTask extends LoadTask {
     }
 
     private void executeOnce() throws Exception {
+        checkMeta();
+
         // New one query id,
         Coordinator curCoordinator;
         curCoordinator = getCoordinatorFactory().createBrokerLoadScheduler(loadPlanner);
@@ -266,6 +269,17 @@ public class LoadLoadingTask extends LoadTask {
 
     private long getLeftTimeMs() {
         return jobDeadlineMs - System.currentTimeMillis();
+    }
+
+    private void checkMeta() throws LoadException {
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(db.getId());
+        if (database == null) {
+            throw new LoadException("db: " + db.getId() + " has been dropped");
+        }
+
+        if (database.getTable(table.getId()) == null) {
+            throw new LoadException("table: " + table.getId() + " has been dropped");
+        }
     }
 
     public static class Builder {
