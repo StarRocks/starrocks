@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.optimizer.rule.transformation.materialization;
+package com.starrocks.benchmark;
 
 import com.carrotsearch.junitbenchmarks.BenchmarkOptions;
 import com.carrotsearch.junitbenchmarks.BenchmarkRule;
@@ -59,5 +59,4 @@ public class QueryDumpPlannerBenchTest extends ReplayFromDumpTestBase {
         connectContext.setThreadLocalInfo();
         UtFrameUtils.replaySql(connectContext, sql);
     }
-
 }

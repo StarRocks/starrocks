@@ -784,6 +784,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return this.foreignKeyConstraints;
     }
 
+    public boolean hasForeignKeyConstraints() {
+        return this.foreignKeyConstraints != null && !this.foreignKeyConstraints.isEmpty();
+    }
+
     public synchronized List<Long> allocatePartitionIdByKey(List<PartitionKey> keys) {
         long size = partitionKeyToId.size();
         List<Long> ret = new ArrayList<>();

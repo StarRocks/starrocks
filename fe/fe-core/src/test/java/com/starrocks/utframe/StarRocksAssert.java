@@ -547,6 +547,48 @@ public class StarRocksAssert {
         return this;
     }
 
+    public StarRocksAssert withRefreshedMaterializedViews(List<String> sqls, ExceptionConsumer action) {
+        return withMaterializedViews(sqls, action, true);
+    }
+
+    public StarRocksAssert withMaterializedViews(List<String> sqls, ExceptionConsumer action) {
+        return withMaterializedViews(sqls, action, false);
+    }
+
+    /**
+     * Create mvs with using sqls and refresh it or not by {@code isRefresh}, and then do {@code action} after
+     * create it success.
+     */
+    private StarRocksAssert withMaterializedViews(List<String> sqls, ExceptionConsumer action, boolean isRefresh) {
+        List<String> mvNames = Lists.newArrayList();
+        try {
+            for (String sql : sqls) {
+                StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+                Preconditions.checkState(stmt instanceof CreateMaterializedViewStatement);
+                CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement) stmt;
+                String mvName = createMaterializedViewStatement.getTableName().getTbl();
+                System.out.println(sql);
+                mvNames.add(mvName);
+                withMaterializedView(sql, true, isRefresh);
+            }
+            action.accept(mvNames);
+        } catch (Exception e) {
+            Assert.fail();
+        } finally {
+            // Create mv may fail.
+            for (String mvName : mvNames) {
+                if (!Strings.isNullOrEmpty(mvName)) {
+                    try {
+                        dropMaterializedView(mvName);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }
+        return this;
+    }
+
     public StarRocksAssert withMaterializedView(String sql, ExceptionRunnable action) {
         String mvName = null;
         try {

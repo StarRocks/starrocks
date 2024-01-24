@@ -153,7 +153,7 @@ public class MvUtils {
                 logMVPrepare(connectContext, "Table/MaterializedView {} has related materialized views: {}",
                         table.getName(), mvIds);
                 newMvIds.addAll(mvIds);
-            } else {
+            } else if (currentLevel == 0) {
                 logMVPrepare(connectContext, "Table/MaterializedView {} has no related materialized views, " +
                                 "identifier:{}", table.getName(), table.getTableIdentifier());
             }
@@ -302,6 +302,9 @@ public class MvUtils {
     }
 
     public static List<LogicalOlapScanOperator> getOlapScanNode(OptExpression root) {
+        if (root == null) {
+            return Lists.newArrayList();
+        }
         List<LogicalOlapScanOperator> olapScanOperators = Lists.newArrayList();
         getOlapScanNode(root, olapScanOperators);
         return olapScanOperators;

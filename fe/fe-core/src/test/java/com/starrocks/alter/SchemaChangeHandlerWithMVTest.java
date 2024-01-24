@@ -84,6 +84,13 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
             m.createStatisticsTablesForTest();
         }
 
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
+
+        if (!starRocksAssert.databaseExist("_statistics_")) {
+            StatisticsMetaManager m = new StatisticsMetaManager();
+            m.createStatisticsTablesForTest();
+        }
+
         new MockUp<StmtExecutor>() {
             @Mock
             public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
