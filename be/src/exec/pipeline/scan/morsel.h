@@ -111,7 +111,6 @@ private:
 class ScanSplitContext {
 public:
     virtual ~ScanSplitContext() = default;
-    bool is_last_split = false;
 };
 using ScanSplitContextPtr = std::unique_ptr<ScanSplitContext>;
 
@@ -151,7 +150,6 @@ public:
     void set_split_context(ScanSplitContextPtr&& split_context) {
         if (split_context == nullptr) return;
         _split_context = std::move(split_context);
-        _is_last_split = _split_context->is_last_split;
     }
     ScanSplitContext* get_split_context() {
         if (_split_context != nullptr) {
@@ -164,12 +162,6 @@ public:
     int32_t owner_id() const { return _owner_id; }
     int32_t partition_id() const { return _partition_id; }
 
-    bool is_last_split() const { return _is_last_split; }
-    void set_last_split(bool v) { _is_last_split = v; }
-
-    bool is_ticket_checker_entered() const { return _ticket_checker_entered; }
-    void set_ticket_checker_entered(bool v) { _ticket_checker_entered = v; }
-
 private:
     std::unique_ptr<TScanRange> _scan_range;
     ScanSplitContextPtr _split_context = nullptr;
@@ -177,8 +169,6 @@ private:
     int64_t _owner_id = 0;
     int64_t _version = 0;
     int64_t _partition_id = 0;
-    bool _is_last_split = true;
-    bool _ticket_checker_entered = false;
 };
 
 /// MorselQueueFactory.
