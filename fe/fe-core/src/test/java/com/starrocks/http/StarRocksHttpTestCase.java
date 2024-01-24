@@ -59,7 +59,6 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.load.Load;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.EditLog;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
@@ -251,178 +250,170 @@ public abstract class StarRocksHttpTestCase {
     }
 
     private static GlobalStateMgr newDelegateCatalog() {
-        try {
-            GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
-            Auth auth = new Auth();
-            //EasyMock.expect(globalStateMgr.getAuth()).andReturn(starrocksAuth).anyTimes();
-            Database db = new Database(testDbId, "testDb");
-            OlapTable table = newTable(TABLE_NAME);
-            db.registerTableUnlocked(table);
-            OlapTable table1 = newTable(TABLE_NAME + 1);
-            db.registerTableUnlocked(table1);
-            EsTable esTable = newEsTable("es_table");
-            db.registerTableUnlocked(esTable);
-            OlapTable newEmptyTable = newEmptyTable("test_empty_table");
-            db.registerTableUnlocked(newEmptyTable);
-            ConcurrentHashMap<String, Database> nameToDb = new ConcurrentHashMap<>();
-            nameToDb.put(db.getFullName(), db);
-            LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
+        GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
+        Auth auth = new Auth();
+        //EasyMock.expect(globalStateMgr.getAuth()).andReturn(starrocksAuth).anyTimes();
+        Database db = new Database(testDbId, "testDb");
+        OlapTable table = newTable(TABLE_NAME);
+        db.registerTableUnlocked(table);
+        OlapTable table1 = newTable(TABLE_NAME + 1);
+        db.registerTableUnlocked(table1);
+        EsTable esTable = newEsTable("es_table");
+        db.registerTableUnlocked(esTable);
+        OlapTable newEmptyTable = newEmptyTable("test_empty_table");
+        db.registerTableUnlocked(newEmptyTable);
+        ConcurrentHashMap<String, Database> nameToDb = new ConcurrentHashMap<>();
+        nameToDb.put(db.getFullName(), db);
+        LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
 
-            new Expectations(globalStateMgr) {
-                {
-                    globalStateMgr.getAuth();
-                    minTimes = 0;
-                    result = auth;
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getAuth();
+                minTimes = 0;
+                result = auth;
 
-                    globalStateMgr.getDb(db.getId());
-                    minTimes = 0;
-                    result = db;
+                globalStateMgr.getDb(db.getId());
+                minTimes = 0;
+                result = db;
 
-                    globalStateMgr.getDb(DB_NAME);
-                    minTimes = 0;
-                    result = db;
+                globalStateMgr.getDb(DB_NAME);
+                minTimes = 0;
+                result = db;
 
-                    globalStateMgr.isLeader();
-                    minTimes = 0;
-                    result = true;
+                globalStateMgr.isLeader();
+                minTimes = 0;
+                result = true;
 
-                    globalStateMgr.getDb("emptyDb");
-                    minTimes = 0;
-                    result = null;
+                globalStateMgr.getDb("emptyDb");
+                minTimes = 0;
+                result = null;
 
-                    globalStateMgr.getDb(anyString);
-                    minTimes = 0;
-                    result = new Database();
+                globalStateMgr.getDb(anyString);
+                minTimes = 0;
+                result = new Database();
 
-                    globalStateMgr.getLoadInstance();
-                    minTimes = 0;
-                    result = new Load();
+                globalStateMgr.getLoadInstance();
+                minTimes = 0;
+                result = new Load();
 
-                    globalStateMgr.getEditLog();
-                    minTimes = 0;
-                    result = editLog;
+                globalStateMgr.getEditLog();
+                minTimes = 0;
+                result = editLog;
 
-                    globalStateMgr.changeCatalogDb((ConnectContext) any, "blockDb");
-                    minTimes = 0;
+                //globalStateMgr.changeCatalogDb((ConnectContext) any, "blockDb");
+                //minTimes = 0;
 
-                    globalStateMgr.changeCatalogDb((ConnectContext) any, anyString);
-                    minTimes = 0;
+                //globalStateMgr.changeCatalogDb((ConnectContext) any, anyString);
+                //minTimes = 0;
 
-                    globalStateMgr.initDefaultCluster();
-                    minTimes = 0;
+                globalStateMgr.initDefaultCluster();
+                minTimes = 0;
 
-                    globalStateMgr.getLocalMetastore();
-                    minTimes = 0;
-                    result = localMetastore;
-                }
-            };
+                globalStateMgr.getLocalMetastore();
+                minTimes = 0;
+                result = localMetastore;
+            }
+        };
 
-            new Expectations(localMetastore) {
-                {
-                    localMetastore.listDbNames();
-                    minTimes = 0;
-                    result = Lists.newArrayList("testDb");
+        new Expectations(localMetastore) {
+            {
+                localMetastore.listDbNames();
+                minTimes = 0;
+                result = Lists.newArrayList("testDb");
 
-                    localMetastore.getFullNameToDb();
-                    minTimes = 0;
-                    result = nameToDb;
-                }
-            };
+                localMetastore.getFullNameToDb();
+                minTimes = 0;
+                result = nameToDb;
+            }
+        };
 
-            return globalStateMgr;
-        } catch (DdlException e) {
-            return null;
-        }
+        return globalStateMgr;
     }
 
     private static GlobalStateMgr newDelegateGlobalStateMgr() {
-        try {
-            GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
-            Auth auth = new Auth();
-            //EasyMock.expect(globalStateMgr.getAuth()).andReturn(starrocksAuth).anyTimes();
-            Database db = new Database(testDbId, "testDb");
-            OlapTable table = newTable(TABLE_NAME);
-            db.registerTableUnlocked(table);
-            OlapTable table1 = newTable(TABLE_NAME + 1);
-            db.registerTableUnlocked(table1);
-            EsTable esTable = newEsTable("es_table");
-            db.registerTableUnlocked(esTable);
-            OlapTable newEmptyTable = newEmptyTable("test_empty_table");
-            db.registerTableUnlocked(newEmptyTable);
+        GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
+        Auth auth = new Auth();
+        //EasyMock.expect(globalStateMgr.getAuth()).andReturn(starrocksAuth).anyTimes();
+        Database db = new Database(testDbId, "testDb");
+        OlapTable table = newTable(TABLE_NAME);
+        db.registerTableUnlocked(table);
+        OlapTable table1 = newTable(TABLE_NAME + 1);
+        db.registerTableUnlocked(table1);
+        EsTable esTable = newEsTable("es_table");
+        db.registerTableUnlocked(esTable);
+        OlapTable newEmptyTable = newEmptyTable("test_empty_table");
+        db.registerTableUnlocked(newEmptyTable);
 
-            LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
-            MetadataMgr metadataMgr = new MetadataMgr(localMetastore, null, null);
+        LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
+        MetadataMgr metadataMgr = new MetadataMgr(localMetastore, null, null);
 
-            new Expectations(globalStateMgr) {
-                {
-                    globalStateMgr.getAuth();
-                    minTimes = 0;
-                    result = auth;
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getAuth();
+                minTimes = 0;
+                result = auth;
 
-                    globalStateMgr.getDb(db.getId());
-                    minTimes = 0;
-                    result = db;
+                globalStateMgr.getDb(db.getId());
+                minTimes = 0;
+                result = db;
 
-                    globalStateMgr.getDb(DB_NAME);
-                    minTimes = 0;
-                    result = db;
+                globalStateMgr.getDb(DB_NAME);
+                minTimes = 0;
+                result = db;
 
-                    globalStateMgr.isLeader();
-                    minTimes = 0;
-                    result = true;
+                globalStateMgr.isLeader();
+                minTimes = 0;
+                result = true;
 
-                    globalStateMgr.getDb("emptyDb");
-                    minTimes = 0;
-                    result = null;
+                globalStateMgr.getDb("emptyDb");
+                minTimes = 0;
+                result = null;
 
-                    globalStateMgr.getDb(anyString);
-                    minTimes = 0;
-                    result = new Database();
+                globalStateMgr.getDb(anyString);
+                minTimes = 0;
+                result = new Database();
 
-                    globalStateMgr.getLoadInstance();
-                    minTimes = 0;
-                    result = new Load();
+                globalStateMgr.getLoadInstance();
+                minTimes = 0;
+                result = new Load();
 
-                    globalStateMgr.getEditLog();
-                    minTimes = 0;
-                    result = editLog;
+                globalStateMgr.getEditLog();
+                minTimes = 0;
+                result = editLog;
 
-                    globalStateMgr.changeCatalogDb((ConnectContext) any, "blockDb");
-                    minTimes = 0;
+                //globalStateMgr.changeCatalogDb((ConnectContext) any, "blockDb");
+                //minTimes = 0;
 
-                    globalStateMgr.changeCatalogDb((ConnectContext) any, anyString);
-                    minTimes = 0;
+                //globalStateMgr.changeCatalogDb((ConnectContext) any, anyString);
+                //minTimes = 0;
 
-                    globalStateMgr.initDefaultCluster();
-                    minTimes = 0;
+                globalStateMgr.initDefaultCluster();
+                minTimes = 0;
 
-                    globalStateMgr.getMetadataMgr();
-                    minTimes = 0;
-                    result = metadataMgr;
-                }
-            };
+                globalStateMgr.getMetadataMgr();
+                minTimes = 0;
+                result = metadataMgr;
+            }
+        };
 
-            new Expectations(metadataMgr) {
-                {
-                    metadataMgr.getDb("default_catalog", "testDb");
-                    minTimes = 0;
-                    result = db;
+        new Expectations(metadataMgr) {
+            {
+                metadataMgr.getDb("default_catalog", "testDb");
+                minTimes = 0;
+                result = db;
 
-                    metadataMgr.getTable("default_catalog", "testDb", "testTbl");
-                    minTimes = 0;
-                    result = table;
+                metadataMgr.getTable("default_catalog", "testDb", "testTbl");
+                minTimes = 0;
+                result = table;
 
-                    metadataMgr.getTable("default_catalog", "testDb", "test_empty_table");
-                    minTimes = 0;
-                    result = newEmptyTable;
-                }
-            };
-            ;
+                metadataMgr.getTable("default_catalog", "testDb", "test_empty_table");
+                minTimes = 0;
+                result = newEmptyTable;
+            }
+        };
+        ;
 
-            return globalStateMgr;
-        } catch (DdlException e) {
-            return null;
-        }
+        return globalStateMgr;
     }
 
     private static void assignBackends() {

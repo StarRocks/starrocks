@@ -1779,7 +1779,7 @@ public class AuthorizationMgrTest {
             }
         };
 
-        connectCtx.getGlobalStateMgr().changeCatalog(connectCtx, "hive_catalog_1");
+        connectCtx.changeCatalog("hive_catalog_1");
 
         MetaContext.get().setStarRocksMetaVersion(3);
 
