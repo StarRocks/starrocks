@@ -2041,7 +2041,7 @@ public class LocalMetastore implements ConnectorMetadata {
         return colocateTableIndex;
     }
 
-    void setLakeStorageInfo(OlapTable table, String storageVolumeId, Map<String, String> properties)
+    void setLakeStorageInfo(Database db, OlapTable table, String storageVolumeId, Map<String, String> properties)
             throws DdlException {
         DataCacheInfo dataCacheInfo = null;
         try {
@@ -2052,8 +2052,8 @@ public class LocalMetastore implements ConnectorMetadata {
 
         // get service shard storage info from StarMgr
         FilePathInfo pathInfo = !storageVolumeId.isEmpty() ?
-                stateMgr.getStarOSAgent().allocateFilePath(storageVolumeId, table.getId()) :
-                stateMgr.getStarOSAgent().allocateFilePath(table.getId());
+                stateMgr.getStarOSAgent().allocateFilePath(storageVolumeId, db.getId(), table.getId()) :
+                stateMgr.getStarOSAgent().allocateFilePath(db.getId(), table.getId());
         table.setStorageInfo(pathInfo, dataCacheInfo);
     }
 
@@ -3235,7 +3235,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 StorageVolumeMgr svm = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
                 svm.bindTableToStorageVolume(volume, db.getId(), materializedView.getId());
                 String storageVolumeId = svm.getStorageVolumeIdOfTable(materializedView.getId());
-                setLakeStorageInfo(materializedView, storageVolumeId, properties);
+                setLakeStorageInfo(db, materializedView, storageVolumeId, properties);
             }
 
             // datacache.partition_duration
