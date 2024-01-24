@@ -31,8 +31,8 @@ You can add the `\G` option to the statement (such as `SHOW ROUTINE LOAD FOR <jo
 
 | **Parameter**                     | **Required** | **Description**                                              |
 | --------------------------------- | ------------ | ------------------------------------------------------------ |
-| db_name                           | No           | The name of the database to which the load job belongs. Note that this parameter is required in `FROM` clause. |
-| job_name                          | No           | The name of the load job. Note that this parameter is required in `FOR` clause.            |
+| db_name                           | No           | The name of the database to which the load job belongs. Note that this parameter is required if the `FROM` clause is used. |
+| job_name                          | No           | The name of the load job. Note that this parameter is required if the `FOR` clause is used.         |
 | ALL                               | No           | Displays all load jobs, including those in the `STOPPED` or  `CANCELLED` states. |
 | STATE                             | No           |  The status of the load job.                                       |
 | ORDER BY field_name [ASC \| DESC] | No           | Sorts the return result in ascending or descending order based on the specified field. The following fields are supported: `Id`, `Name`, `CreateTime`, `PauseTime`, `EndTime`, `TableName`, `State`, and `CurrentTaskNum`.<ul><li>To sort the return result in ascending order, specify `ORDER BY field_name ASC`.</li><li>To sort the return result in descending order, specify `ORDER BY field_name DESC`.</li></ul>If you do not specify the field or the sort order, the return result is sorted in ascending order of `Id` by default. |
