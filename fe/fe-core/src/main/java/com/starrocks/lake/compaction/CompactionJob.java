@@ -44,6 +44,10 @@ public class CompactionJob {
         this.startTs = System.currentTimeMillis();
     }
 
+    Database getDb() {
+        return db;
+    }
+
     public long getTxnId() {
         return txnId;
     }
