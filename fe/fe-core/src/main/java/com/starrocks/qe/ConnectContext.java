@@ -801,11 +801,11 @@ public class ConnectContext {
         if (v > 0) {
             return v;
         }
-        return globalStateMgr.getClusterInfo().getAliveBackendNumber();
+        return globalStateMgr.getNodeMgr().getClusterInfo().getAliveBackendNumber();
     }
 
     public int getTotalBackendNumber() {
-        return globalStateMgr.getClusterInfo().getTotalBackendNumber();
+        return globalStateMgr.getNodeMgr().getClusterInfo().getTotalBackendNumber();
     }
 
     public void setPending(boolean pending) {

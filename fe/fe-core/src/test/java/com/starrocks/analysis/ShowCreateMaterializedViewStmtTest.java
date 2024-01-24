@@ -96,7 +96,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "as select tbl1.k1, tbl2.k2 from tbl1 join tbl2 on tbl1.k1 = tbl2.k1;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
-        currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+        currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
         Table table = currentState.getDb("test").getTable("mv9");
         List<String> createTableStmt = Lists.newArrayList();
         AstToStringBuilder.getDdlStmt(table, createTableStmt, null, null, false, true);
@@ -124,7 +124,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "as select t2.c1, t1.c2 from hive0.partitioned_db.t1 join hive0.partitioned_db2.t2 on t1.c2 = t2.c2;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
-        currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+        currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
         Table table = currentState.getDb("test").getTable("mv10");
         List<String> createTableStmt = Lists.newArrayList();
         AstToStringBuilder.getDdlStmt(table, createTableStmt, null, null, false, true);
@@ -153,7 +153,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "as select l_orderkey,l_partkey,l_shipdate from hive0.tpch.lineitem;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
-        currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+        currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
         Table table = currentState.getDb("test").getTable("mv8");
         List<String> createTableStmt = Lists.newArrayList();
         AstToStringBuilder.getDdlStmt(table, createTableStmt, null, null, false, true);

@@ -410,7 +410,7 @@ public class IcebergMetadataTest extends TableTestBase {
             }
         };
 
-        GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeJob(new ExternalAnalyzeJob("iceberg_catalog",
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeJob(new ExternalAnalyzeJob("iceberg_catalog",
                 "iceberg_db", "table1", Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), StatsConstants.ScheduleStatus.PENDING,
                 LocalDateTime.MIN));

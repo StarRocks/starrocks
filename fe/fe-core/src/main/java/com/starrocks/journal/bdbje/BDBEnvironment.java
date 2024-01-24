@@ -117,7 +117,7 @@ public class BDBEnvironment {
      */
     public static BDBEnvironment initBDBEnvironment(String nodeName) throws JournalException, InterruptedException {
         // check for port use
-        Pair<String, Integer> selfNode = GlobalStateMgr.getCurrentState().getSelfNode();
+        Pair<String, Integer> selfNode = GlobalStateMgr.getCurrentState().getNodeMgr().getSelfNode();
         try {
             if (NetUtils.isPortUsing(selfNode.first, selfNode.second)) {
                 String errMsg = String.format("edit_log_port %d is already in use. will exit.", selfNode.second);
@@ -140,7 +140,7 @@ public class BDBEnvironment {
             dbEnv.mkdirs();
         }
 
-        Pair<String, Integer> helperNode = GlobalStateMgr.getCurrentState().getHelperNode();
+        Pair<String, Integer> helperNode = GlobalStateMgr.getCurrentState().getNodeMgr().getHelperNode();
         String helperHostPort = helperNode.first + ":" + helperNode.second;
 
         BDBEnvironment bdbEnvironment = new BDBEnvironment(dbEnv, nodeName, selfNodeHostPort,
@@ -413,7 +413,7 @@ public class BDBEnvironment {
     }
 
     public ReplicationGroupAdmin getReplicationGroupAdmin() {
-        Set<InetSocketAddress> addrs = GlobalStateMgr.getCurrentState()
+        Set<InetSocketAddress> addrs = GlobalStateMgr.getCurrentState().getNodeMgr()
                 .getFrontends(FrontendNodeType.FOLLOWER)
                 .stream()
                 .filter(Frontend::isAlive)

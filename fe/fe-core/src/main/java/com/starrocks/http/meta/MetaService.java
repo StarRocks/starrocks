@@ -316,7 +316,7 @@ public class MetaService {
 
             if (!Strings.isNullOrEmpty(host) && !Strings.isNullOrEmpty(portString)) {
                 int port = Integer.parseInt(portString);
-                Frontend fe = GlobalStateMgr.getCurrentState().checkFeExist(host, port);
+                Frontend fe = GlobalStateMgr.getCurrentState().getNodeMgr().checkFeExist(host, port);
                 if (fe == null) {
                     response.updateHeader("role", FrontendNodeType.UNKNOWN.name());
                 } else {

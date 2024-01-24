@@ -271,7 +271,7 @@ public class StreamLoadMgr implements MemoryTrackable {
 
         // add callback before txn created, because callback will be performed on replay without txn begin
         // register txn state listener
-        GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(task);
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().addCallback(task);
     }
 
     public TNetworkAddress executeLoadTask(String label, int channelId, HttpHeaders headers,

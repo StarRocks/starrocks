@@ -267,13 +267,13 @@ public class AnalyzeMgr implements Writable {
             return;
         }
 
-        GlobalStateMgr.getCurrentStatisticStorage().expireTableAndColumnStatistics(table, columns);
+        GlobalStateMgr.getCurrentState().getStatisticStorage().expireTableAndColumnStatistics(table, columns);
         if (async) {
-            GlobalStateMgr.getCurrentStatisticStorage().refreshTableStatistic(table);
-            GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table, columns);
+            GlobalStateMgr.getCurrentState().getStatisticStorage().refreshTableStatistic(table);
+            GlobalStateMgr.getCurrentState().getStatisticStorage().getColumnStatistics(table, columns);
         } else {
-            GlobalStateMgr.getCurrentStatisticStorage().refreshTableStatisticSync(table);
-            GlobalStateMgr.getCurrentStatisticStorage().getColumnStatisticsSync(table, columns);
+            GlobalStateMgr.getCurrentState().getStatisticStorage().refreshTableStatisticSync(table);
+            GlobalStateMgr.getCurrentState().getStatisticStorage().getColumnStatisticsSync(table, columns);
         }
     }
 
@@ -286,11 +286,11 @@ public class AnalyzeMgr implements Writable {
             return;
         }
 
-        GlobalStateMgr.getCurrentStatisticStorage().expireConnectorTableColumnStatistics(table, columns);
+        GlobalStateMgr.getCurrentState().getStatisticStorage().expireConnectorTableColumnStatistics(table, columns);
         if (async) {
-            GlobalStateMgr.getCurrentStatisticStorage().getConnectorTableStatistics(table, columns);
+            GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorTableStatistics(table, columns);
         } else {
-            GlobalStateMgr.getCurrentStatisticStorage().getConnectorTableStatisticsSync(table, columns);
+            GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorTableStatisticsSync(table, columns);
         }
     }
 
@@ -332,11 +332,11 @@ public class AnalyzeMgr implements Writable {
             return;
         }
 
-        GlobalStateMgr.getCurrentStatisticStorage().expireHistogramStatistics(table.getId(), columns);
+        GlobalStateMgr.getCurrentState().getStatisticStorage().expireHistogramStatistics(table.getId(), columns);
         if (async) {
-            GlobalStateMgr.getCurrentStatisticStorage().getHistogramStatistics(table, columns);
+            GlobalStateMgr.getCurrentState().getStatisticStorage().getHistogramStatistics(table, columns);
         } else {
-            GlobalStateMgr.getCurrentStatisticStorage().getHistogramStatisticsSync(table, columns);
+            GlobalStateMgr.getCurrentState().getStatisticStorage().getHistogramStatisticsSync(table, columns);
         }
     }
 
@@ -349,7 +349,7 @@ public class AnalyzeMgr implements Writable {
     }
 
     public void clearStatisticFromDroppedTable() {
-        List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
         Set<Long> tables = new HashSet<>();
         for (Long dbId : dbIds) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
@@ -414,7 +414,7 @@ public class AnalyzeMgr implements Writable {
 
         if (checkTableIds.contains(CHECK_ALL_TABLES)) {
             checkTableIds.clear();
-            List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
+            List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
             for (Long dbId : dbIds) {
                 Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
                 if (null == db || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
@@ -720,13 +720,13 @@ public class AnalyzeMgr implements Writable {
     }
 
     private void updateBasicStatsMeta(long dbId, long tableId, long loadedRows) {
-        BasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(tableId);
+        BasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().get(tableId);
         if (basicStatsMeta == null) {
             // first load without analyze op, we need fill a meta with loaded rows for cardinality estimation
             BasicStatsMeta meta = new BasicStatsMeta(dbId, tableId, Lists.newArrayList(),
                     StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(),
                     StatsConstants.buildInitStatsProp(), loadedRows);
-            GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().put(tableId, meta);
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().put(tableId, meta);
         } else {
             basicStatsMeta.increaseUpdateRows(loadedRows);
         }

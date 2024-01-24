@@ -174,9 +174,9 @@ public class AgentBatchTask implements Runnable {
             TNetworkAddress address = null;
             boolean ok = false;
             try {
-                ComputeNode computeNode = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+                ComputeNode computeNode = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(backendId);
                 if (RunMode.isSharedDataMode() && computeNode == null) {
-                    computeNode = GlobalStateMgr.getCurrentSystemInfo().getComputeNode(backendId);
+                    computeNode = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNode(backendId);
                 }
 
                 if (computeNode == null || !computeNode.isAlive()) {

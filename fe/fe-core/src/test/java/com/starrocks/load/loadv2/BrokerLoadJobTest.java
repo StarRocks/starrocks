@@ -680,7 +680,7 @@ public class BrokerLoadJobTest {
                 globalStateMgr.getDb(anyLong);
                 minTimes = 0;
                 result = database;
-                globalStateMgr.getCurrentGlobalTransactionMgr();
+                globalStateMgr.getCurrentState().getGlobalTransactionMgr();
                 result = transactionMgr;
                 transactionMgr.commitTransaction(anyLong, anyLong, (List<TabletCommitInfo>) any,
                         (List<TabletFailInfo>) any, (TxnCommitAttachment) any);

@@ -67,7 +67,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     private Map<Long, Long> commitVersionMap = new HashMap<>();
 
     public LakeTableAlterMetaJobBase(long jobId, JobType jobType, long dbId, long tableId,
-                                                  String tableName, long timeoutMs) {
+                                     String tableName, long timeoutMs) {
         super(jobId, jobType, dbId, tableId, tableName, timeoutMs);
     }
 
@@ -95,8 +95,8 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         }
 
         if (this.watershedTxnId == -1) {
-            this.watershedTxnId =
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
+            this.watershedTxnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                    .getTransactionIDGenerator().getNextTransactionId();
             GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
         }
 

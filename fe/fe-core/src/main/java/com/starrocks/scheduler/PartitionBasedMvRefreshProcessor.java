@@ -1861,7 +1861,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 new RangePartitionDesc(materializedView.getPartitionColumnNames(), partitionDescs);
 
         try {
-            GlobalStateMgr.getCurrentState().addPartitions(
+            GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(
                     database, materializedView.getName(),
                     new AddPartitionClause(rangePartitionDesc, distributionDesc,
                             partitionProperties, false));
@@ -1884,7 +1884,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             MultiItemListPartitionDesc multiItemListPartitionDesc =
                     new MultiItemListPartitionDesc(false, mvPartitionName, partitionKeyList, partitionProperties);
             try {
-                GlobalStateMgr.getCurrentState().addPartitions(
+                GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(
                         database, materializedView.getName(), new AddPartitionClause(
                                 multiItemListPartitionDesc, distributionDesc,
                                 partitionProperties, false));
@@ -1912,7 +1912,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 throw new DmlException("drop partition failed. partition:" + dropPartitionName + " not exist");
             }
 
-            GlobalStateMgr.getCurrentState().dropPartition(
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(
                     db, materializedView,
                     new DropPartitionClause(false, dropPartitionName, false, true));
         } catch (Exception e) {

@@ -189,7 +189,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
         // wait previous transactions finished
         this.watershedTxnId =
-                GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
         this.jobState = JobState.WAITING_TXN;
         this.optimizeOperation = optimizeClause.toString();
         span.setAttribute("createPartitionElapse", createPartitionElapse);
@@ -480,10 +480,10 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             GlobalStateMgr.getCurrentState().getEditLog().logReplaceTempPartition(info);
             // mark all source tablet ids force delete to drop it directly on BE,
             // not to move it to trash
-            sourceTablets.forEach(GlobalStateMgr.getCurrentInvertedIndex()::markTabletForceDelete);
+            sourceTablets.forEach(GlobalStateMgr.getCurrentState().getTabletInvertedIndex()::markTabletForceDelete);
 
             try {
-                GlobalStateMgr.getCurrentColocateIndex().updateLakeTableColocationInfo(targetTable,
+                GlobalStateMgr.getCurrentState().getColocateTableIndex().updateLakeTableColocationInfo(targetTable,
                         true /* isJoin */, null /* expectGroupId */);
             } catch (DdlException e) {
                 // log an error if update colocation info failed, insert overwrite already succeeded
@@ -572,7 +572,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             }
             // mark all source tablet ids force delete to drop it directly on BE,
             // not to move it to trash
-            sourceTablets.forEach(GlobalStateMgr.getCurrentInvertedIndex()::markTabletForceDelete);
+            sourceTablets.forEach(GlobalStateMgr.getCurrentState().getTabletInvertedIndex()::markTabletForceDelete);
             targetTable.setState(OlapTableState.NORMAL);
         } catch (Exception e) {
             LOG.warn("exception when cancel optimize job.", e);
@@ -583,7 +583,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
     // Check whether transactions of the given database which txnId is less than 'watershedTxnId' are finished.
     protected boolean isPreviousLoadFinished() throws AnalysisException {
-        return GlobalStateMgr.getCurrentGlobalTransactionMgr()
+        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                 .isPreviousTransactionsFinished(watershedTxnId, dbId, Lists.newArrayList(tableId));
     }
 
@@ -669,7 +669,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 targetTable.dropTempPartition(partition.getName(), true);
             }
         }
-        sourceTablets.forEach(GlobalStateMgr.getCurrentInvertedIndex()::markTabletForceDelete);
+        sourceTablets.forEach(GlobalStateMgr.getCurrentState().getTabletInvertedIndex()::markTabletForceDelete);
 
         if (allPartitionOptimized) {
             this.distributionInfo = replayedJob.distributionInfo;

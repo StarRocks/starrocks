@@ -181,15 +181,16 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
             List<Long> aliveNodeIds = new ArrayList<>();
             // TODO: need to refactor after be split into cn + dn
             if (RunMode.isSharedDataMode()) {
-                Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
                 for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
-                    ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
+                    ComputeNode node =
+                            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
                     if (node != null && node.isAlive()) {
                         aliveNodeIds.add(nodeId);
                     }
                 }
             } else {
-                aliveNodeIds.addAll(GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true));
+                aliveNodeIds.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true));
             }
 
             // add new nodes
@@ -248,7 +249,7 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
             long maxConcurrentTasks = beNum * Config.max_routine_load_task_num_per_be;
             // When calculating the used slots, we only consider Jobs in the NEED_SCHEDULE and RUNNING states.
             List<RoutineLoadJob> jobs = getRoutineLoadJobByState(Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE,
-                        RoutineLoadJob.JobState.RUNNING));
+                    RoutineLoadJob.JobState.RUNNING));
             long curTaskNum = 0;
             for (RoutineLoadJob job : jobs) {
                 curTaskNum += job.calculateCurrentConcurrentTaskNum();
@@ -285,7 +286,7 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         }
         routineLoadJobList.add(routineLoadJob);
         // add txn state callback in factory
-        GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(routineLoadJob);
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().addCallback(routineLoadJob);
         if (!Config.enable_dict_optimize_routine_load) {
             IDictManager.getInstance().disableGlobalDict(routineLoadJob.getTableId());
         }
@@ -695,7 +696,7 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         List<RoutineLoadJob> jobs = map.computeIfAbsent(routineLoadJob.getName(), k -> Lists.newArrayList());
         jobs.add(routineLoadJob);
         if (!routineLoadJob.getState().isFinalState()) {
-            GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(routineLoadJob);
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().addCallback(routineLoadJob);
         }
     }
 

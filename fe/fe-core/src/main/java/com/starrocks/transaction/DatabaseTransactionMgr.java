@@ -892,7 +892,8 @@ public class DatabaseTransactionMgr {
 
                                 // if all unfinished backends already down through heartbeat detect, we don't need to wait anymore
                                 for (Long backendID : unfinishedBackends) {
-                                    if (GlobalStateMgr.getCurrentSystemInfo().checkBackendAlive(backendID)) {
+                                    if (GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                                            .checkBackendAlive(backendID)) {
                                         return false;
                                     }
                                 }
@@ -1486,7 +1487,7 @@ public class DatabaseTransactionMgr {
             applier.applyVisibleLog(transactionState, tableCommitInfo, db);
         }
         try {
-            GlobalStateMgr.getCurrentAnalyzeMgr().updateLoadRows(transactionState);
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().updateLoadRows(transactionState);
         } catch (Throwable t) {
             LOG.warn("update load rows failed for txn: {}", transactionState, t);
         }

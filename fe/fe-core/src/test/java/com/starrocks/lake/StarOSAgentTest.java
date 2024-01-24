@@ -400,12 +400,15 @@ public class StarOSAgentTest {
         ShardInfo shard = ShardInfo.newBuilder().setShardId(10L).addAllReplicaInfo(replicas).build();
         List<ShardInfo> shards = Lists.newArrayList(shard);
 
+        /*
         new MockUp<GlobalStateMgr>() {
             @Mock
-            public SystemInfoService getCurrentSystemInfo() {
+            public SystemInfoService getCurrentState().getNodeMgr().getClusterInfo() {
                 return service;
             }
         };
+
+         */
 
         new MockUp<SystemInfoService>() {
             @Mock

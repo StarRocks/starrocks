@@ -169,7 +169,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
             if (deleteRedundantReplica(replica.getBackendId(), replica.getVersion())) {
                 replicas.add(replica);
                 if (updateInvertedIndex) {
-                    GlobalStateMgr.getCurrentInvertedIndex().addReplica(id, replica);
+                    GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addReplica(id, replica);
                 }
             }
         }
@@ -223,7 +223,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
 
     public List<String> getBackends() {
         List<String> backends = new ArrayList<String>();
-        SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
             for (Replica replica : replicas) {
                 Backend backend = infoService.getBackend(replica.getBackendId());
@@ -239,7 +239,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     // for loading data
     public List<Long> getNormalReplicaBackendIds() {
         List<Long> beIds = Lists.newArrayList();
-        SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
             for (Replica replica : replicas) {
                 if (replica.isBad()) {
@@ -259,7 +259,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     public Multimap<Replica, Long> getNormalReplicaBackendPathMap(int clusterId) {
         Multimap<Replica, Long> map = LinkedHashMultimap.create();
         try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
-            SystemInfoService infoService = GlobalStateMgr.getCurrentState().getOrCreateSystemInfo(clusterId);
+            SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getOrCreateSystemInfo(clusterId);
             for (Replica replica : replicas) {
                 if (replica.isBad()) {
                     continue;
@@ -359,7 +359,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         try (CloseableLock ignored = CloseableLock.lock(this.rwLock.writeLock())) {
             if (replicas.contains(replica)) {
                 replicas.remove(replica);
-                GlobalStateMgr.getCurrentInvertedIndex().deleteReplica(id, replica.getBackendId());
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteReplica(id, replica.getBackendId());
                 return true;
             }
         }
@@ -373,7 +373,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                 Replica replica = iterator.next();
                 if (replica.getBackendId() == backendId) {
                     iterator.remove();
-                    GlobalStateMgr.getCurrentInvertedIndex().deleteReplica(id, backendId);
+                    GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteReplica(id, backendId);
                     return true;
                 }
             }
@@ -760,7 +760,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
      * If not, unavailable backends will be relocated by ColocateTableBalancer first.
      */
     private TabletStatus getColocateHealthStatusUnlocked(long visibleVersion,
-                                                int replicationNum, Set<Long> backendsSet) {
+                                                         int replicationNum, Set<Long> backendsSet) {
         // 1. check if replicas' backends are mismatch
         Set<Long> replicaBackendIds = getBackendIds();
         for (Long backendId : backendsSet) {
@@ -791,7 +791,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                 return TabletStatus.VERSION_INCOMPLETE;
             }
 
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
+            Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(replica.getBackendId());
             if (backend != null && !backend.isDiskDecommissioned(replica.getPathHash())) {
                 diskStableCnt++;
             }
@@ -869,7 +869,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     }
 
     private String getReplicaBackendState(long backendId) {
-        SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         Backend backend = infoService.getBackend(backendId);
         if (backend == null) {
             return "NIL";
@@ -932,7 +932,8 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                                 replicas.size()));
                         empty = false;
                     }
-                    Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
+                    Backend backend =
+                            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(replica.getBackendId());
                     sb.append(String.format(" %s:%d%s",
                             backend == null ? Long.toString(replica.getBackendId()) : backend.getHost(), replicaVersion,
                             replica.getState() == ReplicaState.ALTER ? "ALTER" : ""));

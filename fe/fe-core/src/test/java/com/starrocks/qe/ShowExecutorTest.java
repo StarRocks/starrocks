@@ -79,6 +79,7 @@ import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.QualifiedName;
@@ -724,15 +725,24 @@ public class ShowExecutorTest {
             }
         };
 
+        NodeMgr nodeMgr = new NodeMgr();
         new MockUp<GlobalStateMgr>() {
             @Mock
-            SystemInfoService getCurrentSystemInfo() {
-                return clusterInfo;
+            NodeMgr getNodeMgr() {
+                return nodeMgr;
             }
 
             @Mock
             StarOSAgent getStarOSAgent() {
                 return starosAgent;
+            }
+        };
+
+        new Expectations(nodeMgr) {
+            {
+                nodeMgr.getClusterInfo();
+                minTimes = 0;
+                result = clusterInfo;
             }
         };
 
@@ -787,6 +797,27 @@ public class ShowExecutorTest {
         ComputeNode node = new ComputeNode(1L, "127.0.0.1", 80);
         node.updateResourceUsage(10, 100L, 1L, 30);
 
+        NodeMgr nodeMgr = new NodeMgr();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            NodeMgr getNodeMgr() {
+                return nodeMgr;
+            }
+
+            @Mock
+            StarOSAgent getStarOSAgent() {
+                return starosAgent;
+            }
+        };
+
+        new Expectations(nodeMgr) {
+            {
+                nodeMgr.getClusterInfo();
+                minTimes = 0;
+                result = clusterInfo;
+            }
+        };
+
         new MockUp<SystemInfoService>() {
             @Mock
             List<Long> getComputeNodeIds(boolean needAlive) {
@@ -799,18 +830,6 @@ public class ShowExecutorTest {
                     return node;
                 }
                 return null;
-            }
-        };
-
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            SystemInfoService getCurrentSystemInfo() {
-                return clusterInfo;
-            }
-
-            @Mock
-            StarOSAgent getStarOSAgent() {
-                return starosAgent;
             }
         };
 

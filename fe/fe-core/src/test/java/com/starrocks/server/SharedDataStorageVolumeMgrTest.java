@@ -687,7 +687,7 @@ public class SharedDataStorageVolumeMgrTest {
 
     @Test
     public void testGetTableBindingsOfBuiltinStorageVolume() throws DdlException, AlreadyExistsException {
-        new MockUp<GlobalStateMgr>() {
+        new MockUp<LocalMetastore>() {
             @Mock
             public List<Long> getDbIdsIncludeRecycleBin() {
                 return Arrays.asList(1L);

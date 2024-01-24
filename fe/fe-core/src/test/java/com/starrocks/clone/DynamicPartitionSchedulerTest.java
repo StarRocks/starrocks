@@ -116,7 +116,7 @@ public class DynamicPartitionSchedulerTest {
         CreateMaterializedViewStatement createMaterializedViewStatement =
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         try {
-            GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStatement);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createMaterializedViewStatement);
             Assert.fail();
         } catch (Exception ex) {
             Assert.assertTrue(ex.getMessage().contains("Illegal Partition TTL Number"));

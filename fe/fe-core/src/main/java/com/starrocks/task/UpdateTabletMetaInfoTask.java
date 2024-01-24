@@ -194,7 +194,7 @@ public abstract class UpdateTabletMetaInfoTask extends AgentTask {
 
         @Override
         public List<TTabletMetaInfo> getTTabletMetaInfoList() {
-            TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+            TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
             List<TTabletMetaInfo> metaInfos = Lists.newArrayList();
             for (Long tabletId : tabletSet) {
                 TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);

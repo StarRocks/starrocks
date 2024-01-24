@@ -262,7 +262,7 @@ public class OlapTable extends Table {
         // for persist
         super(type);
 
-        this.clusterId = GlobalStateMgr.getCurrentState().getClusterId();
+        this.clusterId = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId();
 
         this.bfColumns = null;
         this.bfFpp = 0;
@@ -282,7 +282,7 @@ public class OlapTable extends Table {
     public OlapTable(long id, String tableName, List<Column> baseSchema, KeysType keysType,
                      PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo, TableIndexes indexes) {
         this(id, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo,
-                GlobalStateMgr.getCurrentState().getClusterId(), indexes, TableType.OLAP);
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId(), indexes, TableType.OLAP);
     }
 
     public OlapTable(long id, String tableName, List<Column> baseSchema, KeysType keysType,
@@ -811,7 +811,7 @@ public class OlapTable extends Table {
             index.addTablet(newTablet, null /* tablet meta */, false/* update inverted index */);
 
             // replicas
-            List<Long> beIds = GlobalStateMgr.getCurrentSystemInfo()
+            List<Long> beIds = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                     .seqChooseBackendIds(replicationNum, true, true);
             if (CollectionUtils.isEmpty(beIds)) {
                 return new Status(ErrCode.COMMON_ERROR, "failed to find "
@@ -1182,14 +1182,14 @@ public class OlapTable extends Table {
                 RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
                 if (!isForceDrop) {
                     // recycle range partition
-                    GlobalStateMgr.getCurrentRecycleBin().recyclePartition(dbId, id, partition,
+                    GlobalStateMgr.getCurrentState().getRecycleBin().recyclePartition(dbId, id, partition,
                             rangePartitionInfo.getRange(partition.getId()),
                             rangePartitionInfo.getDataProperty(partition.getId()),
                             rangePartitionInfo.getReplicationNum(partition.getId()),
                             rangePartitionInfo.getIsInMemory(partition.getId()),
                             rangePartitionInfo.getDataCacheInfo(partition.getId()));
                 } else if (!reserveTablets) {
-                    GlobalStateMgr.getCurrentState().onErasePartition(partition);
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().onErasePartition(partition);
                 }
                 // drop partition info
                 rangePartitionInfo.dropPartition(partition.getId());
@@ -1204,12 +1204,12 @@ public class OlapTable extends Table {
                     physicalPartitionIdToPartitionId.keySet().removeAll(partition.getSubPartitions()
                             .stream().map(PhysicalPartition::getId)
                             .collect(Collectors.toList()));
-                    GlobalStateMgr.getCurrentState().onErasePartition(partition);
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().onErasePartition(partition);
                 }
                 // drop partition info
                 listPartitionInfo.dropPartition(partition.getId());
             }
-            GlobalStateMgr.getCurrentAnalyzeMgr().dropPartition(partition.getId());
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropPartition(partition.getId());
         }
     }
 
@@ -1529,7 +1529,7 @@ public class OlapTable extends Table {
         }
 
         // If the colocate group is not stable, return false
-        ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
+        ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         if (colocateIndex.isGroupUnstable(colocateIndex.getGroup(getId()))) {
             return false;
         }
@@ -1952,7 +1952,7 @@ public class OlapTable extends Table {
 
         // The table may be restored from another cluster, it should be set to current
         // cluster id.
-        clusterId = GlobalStateMgr.getCurrentState().getClusterId();
+        clusterId = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId();
 
         lastSchemaUpdateTime = new AtomicLong(-1);
         // Record the start and end time for data load version update phase
@@ -2092,7 +2092,7 @@ public class OlapTable extends Table {
             throw InvalidOlapTableStateException.of(state, getName());
         }
         // check if all tablets are healthy, and no tablet is in tablet scheduler
-        long unhealthyTabletId = checkAndGetUnhealthyTablet(GlobalStateMgr.getCurrentSystemInfo(),
+        long unhealthyTabletId = checkAndGetUnhealthyTablet(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
                 GlobalStateMgr.getCurrentState().getTabletScheduler());
         if (unhealthyTabletId != TabletInvertedIndex.NOT_EXIST_VALUE) {
             throw new DdlException("Table [" + name + "] is not stable. "
@@ -2639,7 +2639,7 @@ public class OlapTable extends Table {
             idToPartition.remove(srcPartition.getId());
             nameToPartition.remove(sourcePartitionName);
             partitionInfo.dropPartition(srcPartition.getId());
-            GlobalStateMgr.getCurrentState().onErasePartition(srcPartition);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().onErasePartition(srcPartition);
         }
 
         Partition partition = tempPartitions.getPartition(tempPartitionName);
@@ -2880,7 +2880,7 @@ public class OlapTable extends Table {
     }
 
     public void onErase(boolean isReplay) {
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         Collection<Partition> allPartitions = getAllPartitions();
         for (Partition partition : allPartitions) {
             for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {

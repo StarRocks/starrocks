@@ -82,7 +82,7 @@ public class SysFeLocks {
         }
 
         TFeLocksRes response = new TFeLocksRes();
-        Collection<Database> dbs = GlobalStateMgr.getCurrentState().getFullNameToDb().values();
+        Collection<Database> dbs = GlobalStateMgr.getCurrentState().getLocalMetastore().getFullNameToDb().values();
         for (Database db : CollectionUtils.emptyIfNull(dbs)) {
             TFeLocksItem item = resolveLockInfo(db);
             response.addToItems(item);

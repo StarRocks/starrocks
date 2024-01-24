@@ -429,7 +429,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                 return false;
             }
             try {
-                GlobalStateMgr.getCurrentState().dropPartition(db, olapTable, dropPartitionClause);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, olapTable, dropPartitionClause);
                 clearDropPartitionFailedMsg(tableName);
             } catch (DdlException e) {
                 recordDropPartitionFailedMsg(db.getOriginName(), tableName, e.getMessage());
@@ -441,7 +441,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
         if (!skipAddPartition) {
             for (AddPartitionClause addPartitionClause : addPartitionClauses) {
                 try {
-                    GlobalStateMgr.getCurrentState().addPartitions(db, tableName, addPartitionClause);
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(db, tableName, addPartitionClause);
                     clearCreatePartitionFailedMsg(tableName);
                 } catch (DdlException | AnalysisException e) {
                     recordCreatePartitionFailedMsg(db.getOriginName(), tableName, e.getMessage());
@@ -518,7 +518,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                 Locker locker = new Locker();
                 locker.lockDatabase(db, LockType.WRITE);
                 try {
-                    GlobalStateMgr.getCurrentState().dropPartition(db, olapTable, dropPartitionClause);
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, olapTable, dropPartitionClause);
                     clearDropPartitionFailedMsg(tableName);
                 } catch (DdlException e) {
                     recordDropPartitionFailedMsg(db.getOriginName(), tableName, e.getMessage());
@@ -653,7 +653,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
     }
 
     private void initDynamicPartitionTable() {
-        for (Long dbId : GlobalStateMgr.getCurrentState().getDbIds()) {
+        for (Long dbId : GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds()) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db == null) {
                 continue;

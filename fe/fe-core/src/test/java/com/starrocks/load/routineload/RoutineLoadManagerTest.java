@@ -313,12 +313,6 @@ public class RoutineLoadManagerTest {
             }
         };
 
-        new MockUp<GlobalStateMgr>() {
-            public SystemInfoService getCurrentSystemInfo() {
-                return systemInfoService;
-            }
-        };
-
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         routineLoadManager.updateBeTaskSlot();
         routineLoadManager.takeBeTaskSlot();
@@ -336,12 +330,6 @@ public class RoutineLoadManagerTest {
                 systemInfoService.getBackendIds(true);
                 minTimes = 0;
                 result = beIds;
-            }
-        };
-
-        new MockUp<GlobalStateMgr>() {
-            public SystemInfoService getCurrentSystemInfo() {
-                return systemInfoService;
             }
         };
 

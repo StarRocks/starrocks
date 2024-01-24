@@ -32,7 +32,7 @@ public class InternalCatalogMemoryTracker implements MemoryTrackable {
     @Override
     public long estimateSize() {
         long estimateSize = 0L;
-        List<Database> databases = new ArrayList<>(GlobalStateMgr.getCurrentState().getIdToDb().values());
+        List<Database> databases = new ArrayList<>(GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().values());
         for (Database database : databases) {
             List<Table> tables = database.getTables();
             for (Table table : tables) {
@@ -49,7 +49,7 @@ public class InternalCatalogMemoryTracker implements MemoryTrackable {
     @Override
     public Map<String, Long> estimateCount() {
         long estimateCount = 0;
-        List<Database> databases = new ArrayList<>(GlobalStateMgr.getCurrentState().getIdToDb().values());
+        List<Database> databases = new ArrayList<>(GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().values());
         for (Database database : databases) {
             List<Table> tables = database.getTables();
             for (Table table : tables) {

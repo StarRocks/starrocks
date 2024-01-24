@@ -515,20 +515,20 @@ public class StarOSAgent {
     }
 
     private Optional<Long> getBackendIdByHostStarletPort(String host, int starletPort) {
-        long backendId = GlobalStateMgr.getCurrentSystemInfo()
+        long backendId = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                 .getBackendIdWithStarletPort(host, starletPort);
         if (backendId == -1L) {
-            backendId = GlobalStateMgr.getCurrentSystemInfo().
+            backendId = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().
                     getComputeNodeIdWithStarletPort(host, starletPort);
         }
         return backendId == -1 ? Optional.empty() : Optional.of(backendId);
     }
 
     private Optional<Long> getBackendIdByHostHeartbeatPort(String host, int heartbeatPort) {
-        ComputeNode node = GlobalStateMgr.getCurrentSystemInfo()
+        ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                 .getBackendWithHeartbeatPort(host, heartbeatPort);
         if (node == null) {
-            node = GlobalStateMgr.getCurrentSystemInfo().
+            node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().
                     getComputeNodeWithHeartbeatPort(host, heartbeatPort);
         }
         return node == null ? Optional.empty() : Optional.of(node.getId());

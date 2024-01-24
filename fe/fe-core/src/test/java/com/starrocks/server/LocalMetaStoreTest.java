@@ -148,8 +148,8 @@ public class LocalMetaStoreTest {
     @Test
     public void testLoadClusterV2() throws Exception {
         LocalMetastore localMetaStore = new LocalMetastore(GlobalStateMgr.getCurrentState(),
-                GlobalStateMgr.getCurrentRecycleBin(),
-                GlobalStateMgr.getCurrentColocateIndex());
+                GlobalStateMgr.getCurrentState().getRecycleBin(),
+                GlobalStateMgr.getCurrentState().getColocateTableIndex());
 
         UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
         localMetaStore.save(image.getDataOutputStream());
