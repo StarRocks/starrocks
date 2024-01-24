@@ -22,6 +22,7 @@ INSERT { INTO | OVERWRITE } [db_name.]<table_name>
   | <query> }
 ```
 
+
 ## Parameters
 
 | **Parameter** | Description                                                  |
