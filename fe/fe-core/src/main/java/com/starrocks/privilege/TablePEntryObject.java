@@ -135,6 +135,7 @@ public class TablePEntryObject implements PEntryObject {
                 throw new PrivObjNotFoundException("cannot find table " +
                         tableToken + " in db " + dbToken);
             }
+            return table.getUUID();
         }
 
         // for table in external catalog, return tableName directly without validation
