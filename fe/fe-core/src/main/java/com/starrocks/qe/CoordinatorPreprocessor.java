@@ -690,7 +690,13 @@ public class CoordinatorPreprocessor {
                             hostSet.add(e.second);
                             recordUsedBackend(e.second, e.first);
                         });
-                        maxParallelism = hostSet.size() * fragment.getParallelExecNum();
+
+                        // The adaptive choose nodes process may change the selected nodes number.
+                        // When enable pipeline engine but dop is not 0, We have to change the maxParallelism value
+                        // to ensure it keeps equal with the size of hostSet.
+                        if (usePipeline) {
+                            maxParallelism = hostSet.size();
+                        }
                     }
                 }
 

@@ -17,16 +17,21 @@ package com.starrocks.sql.plan;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.ConfigBase;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.planner.AggregationNode;
 import com.starrocks.planner.PlanFragment;
+import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.Coordinator;
+import com.starrocks.qe.CoordinatorPreprocessor;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.rule.transformation.DeriveRangeJoinPredicateRule;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
@@ -1588,5 +1593,45 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String plan = getCostExplain(sql);
         assertCContains(plan, "C_NAME-->[-Infinity, Infinity, 0.0, 25.0, 600000.0] ESTIMATE",
                 "C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE");
+    }
+
+    @Test
+    public void testDecreaseNodesInPipeline() throws Exception {
+        ConfigBase.setMutableConfig("adaptive_choose_instances_threshold", "3");
+        connectContext.getSessionVariable().setChooseExecuteInstancesMode("auto");
+        connectContext.getSessionVariable().setPipelineDop(2);
+        connectContext.setExecutionId(new TUniqueId(0x33, 0x0));
+        String sql = "select count(*) from lineitem group by l_shipmode";
+        ExecPlan execPlan = getExecPlan(sql);
+        Coordinator coord = new Coordinator(connectContext, execPlan.getFragments(), execPlan.getScanNodes(),
+                execPlan.getDescTbl().toThrift());
+        coord.prepareExec();
+        PlanFragmentId botFragment = coord.getFragments().get(2).getFragmentId();
+        CoordinatorPreprocessor.FragmentExecParams params1 = coord.getFragmentExecParamsMap().get(botFragment);
+        Assert.assertEquals(3, params1.instanceExecParams.size());
+
+        PlanFragmentId exchangeFragment = coord.getFragments().get(1).getFragmentId();
+        CoordinatorPreprocessor.FragmentExecParams params2 = coord.getFragmentExecParamsMap().get(exchangeFragment);
+
+        // in pipeline engine, decrease nodes to 1. The instance exec param size should be 1.
+        Assert.assertEquals(1, params2.instanceExecParams.size());
+        Assert.assertEquals(1, params2.perExchNumSenders.size());
+
+        connectContext.getSessionVariable().setEnablePipelineEngine(false);
+        execPlan = getExecPlan(sql);
+        coord = new Coordinator(connectContext, execPlan.getFragments(), execPlan.getScanNodes(),
+                execPlan.getDescTbl().toThrift());
+        coord.prepareExec();
+        botFragment = coord.getFragments().get(2).getFragmentId();
+        params1 = coord.getFragmentExecParamsMap().get(botFragment);
+        Assert.assertEquals(3, params1.instanceExecParams.size());
+
+        exchangeFragment = coord.getFragments().get(1).getFragmentId();
+        params2 = coord.getFragmentExecParamsMap().get(exchangeFragment);
+
+        // not in pipeline engine, decrease nodes to 1. The instance exec param size also be 3.
+        Assert.assertEquals(3, params2.instanceExecParams.size());
+        Assert.assertEquals(1, params2.instanceExecParams.stream().map(e -> e.getHost()).collect(Collectors.toSet()).size());
+        Assert.assertEquals(1, params2.perExchNumSenders.size());
     }
 }

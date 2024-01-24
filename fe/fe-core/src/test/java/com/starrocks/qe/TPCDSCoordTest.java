@@ -86,7 +86,6 @@ public class TPCDSCoordTest extends TPCDSPlanTestBase {
         // 2 fragements to consumer filter(1)
         Assert.assertEquals(3, fragments.size());
 
-        System.out.println(plan);
         ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(ctx, sql).second;
         Coordinator coord = new Coordinator(ctx, execPlan.getFragments(), execPlan.getScanNodes(),
                 execPlan.getDescTbl().toThrift());
