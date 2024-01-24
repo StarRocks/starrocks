@@ -1352,16 +1352,16 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 #### jdbc_connection_pool_size
 
-- 含义：访问JDBC Catalog, JDBC Connection Pool容量上限
+- 含义：访问 JDBC Catalog 时，JDBC Connection Pool 的容量上限。
 - 默认值：8
 
 #### jdbc_minimum_idle_connections
 
-- 含义：访问JDBC Catalog, JDBC Connection Pool中处于idle状态的最低数量
+- 含义：访问 JDBC Catalog 时，JDBC Connection Pool 中处于 idle 状态的连接最低数量。
 - 默认值：1
 
 #### jdbc_connection_idle_timeout_ms
 
-- 含义：访问JDBC Catalog, 超过这个时间的连接被认为是idle状态
+- 含义：访问 JDBC Catalog 时，连接建立的超时时长。超过参数取值时间的连接被认为是 idle 状态。
 - 单位：毫秒
 - 默认值：600000
