@@ -2192,16 +2192,25 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### jdbc_connection_pool_size
 
+<<<<<<< HEAD:docs/zh/administration/Configuration.md
 - 含义：JDBC 连接池大小。每个 BE 节点上访问 `jdbc_url` 相同的外表时会共用同一个连接池。
+=======
+- 含义：访问 JDBC Catalog 时，JDBC Connection Pool 的容量上限。
+>>>>>>> f7275527ab ([Doc] optimize FE param desc for JDBC catalog (#39894)):docs/zh/administration/FE_configuration.md
 - 默认值：8
 
 #### jdbc_minimum_idle_connections
 
+<<<<<<< HEAD:docs/zh/administration/Configuration.md
 - 含义：JDBC 连接池中最少的空闲连接数量。
+=======
+- 含义：访问 JDBC Catalog 时，JDBC Connection Pool 中处于 idle 状态的连接最低数量。
+>>>>>>> f7275527ab ([Doc] optimize FE param desc for JDBC catalog (#39894)):docs/zh/administration/FE_configuration.md
 - 默认值：1
 
 #### jdbc_connection_idle_timeout_ms
 
+<<<<<<< HEAD:docs/zh/administration/Configuration.md
 - 含义：JDBC 空闲连接超时时间。如果 JDBC 连接池内的连接空闲时间超过此值，连接池会关闭超过 `jdbc_minimum_idle_connections` 配置项中指定数量的空闲连接。
 - 单位：毫秒
 - 默认值：600000
@@ -2222,3 +2231,8 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：在存算分离集群中，RPC 请求的最大并发数。当达到此阈值时，新请求会被拒绝。将此项设置为 0 表示对并发不做限制。
 - 单位：N/A
 - 默认值：0
+=======
+- 含义：访问 JDBC Catalog 时，连接建立的超时时长。超过参数取值时间的连接被认为是 idle 状态。
+- 单位：毫秒
+- 默认值：600000
+>>>>>>> f7275527ab ([Doc] optimize FE param desc for JDBC catalog (#39894)):docs/zh/administration/FE_configuration.md
