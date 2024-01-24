@@ -49,7 +49,7 @@ class PageBuilderOptions {
 public:
     uint32_t data_page_size = DEFAULT_PAGE_SIZE;
 
-    uint32_t dict_page_size = DEFAULT_PAGE_SIZE;
+    uint32_t dict_page_size = config::dictionary_page_size;
 };
 
 class IndexReadOptions {
