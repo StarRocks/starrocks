@@ -62,6 +62,7 @@ import com.starrocks.thrift.TReplicateSnapshotRequest;
 import com.starrocks.thrift.TSnapshotRequest;
 import com.starrocks.thrift.TStorageMediumMigrateReq;
 import com.starrocks.thrift.TTaskType;
+import com.starrocks.thrift.TUpdateSchemaReq;
 import com.starrocks.thrift.TUpdateTabletMetaInfoReq;
 import com.starrocks.thrift.TUploadReq;
 import org.apache.logging.log4j.LogManager;
@@ -398,6 +399,12 @@ public class AgentBatchTask implements Runnable {
                 ReplicateSnapshotTask replicateSnapshotTask = (ReplicateSnapshotTask) task;
                 TReplicateSnapshotRequest req = replicateSnapshotTask.toThrift();
                 tAgentTaskRequest.setReplicate_snapshot_req(req);
+                return tAgentTaskRequest;
+            }
+            case UPDATE_SCHEMA: {
+                UpdateSchemaTask updateSchemaTask = (UpdateSchemaTask) task;
+                TUpdateSchemaReq req = updateSchemaTask.toThrift();
+                tAgentTaskRequest.setUpdate_schema_req(req);
                 return tAgentTaskRequest;
             }
             default:

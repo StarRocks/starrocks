@@ -333,6 +333,9 @@ public class LeaderImpl {
                 case REPLICATE_SNAPSHOT:
                     finishReplicateSnapshotTask(task, request);
                     break;
+                case UPDATE_SCHEMA:
+                    finishUpdateSchemaTask(task, request);
+                    break;
                 default:
                     break;
             }
@@ -452,6 +455,11 @@ public class LeaderImpl {
         } finally {
             AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
         }
+    }
+
+    private void finishUpdateSchemaTask(AgentTask task, TFinishTaskRequest request) {
+        LOG.info("finish update schema task");
+        AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
     }
 
     private void finishRealtimePush(AgentTask task, TFinishTaskRequest request) {

@@ -45,8 +45,10 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Table;
+import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.ColocateTableIndex;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
@@ -96,11 +98,14 @@ import com.starrocks.task.DropReplicaTask;
 import com.starrocks.task.LeaderTask;
 import com.starrocks.task.PublishVersionTask;
 import com.starrocks.task.StorageMediaMigrationTask;
+import com.starrocks.task.UpdateSchemaTask;
 import com.starrocks.task.UpdateTabletMetaInfoTask;
 import com.starrocks.thrift.TBackend;
+import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TDataCacheMetrics;
 import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TMasterResult;
+import com.starrocks.thrift.TOlapTableColumnParam;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TReportRequest;
 import com.starrocks.thrift.TResourceUsage;
@@ -504,6 +509,9 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
 
         // 13. send primary index cache expire sec to be
         handleSetPrimaryIndexCacheExpireSec(backendId, backendTablets);
+
+        // 14. send update tablet schema to be
+        handleUpdateTableSchema(backendId, backendTablets);
 
         final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         Backend reportBackend = currentSystemInfo.getBackend(backendId);
@@ -1471,6 +1479,128 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 AgentTaskExecutor.submit(batchTask);
             }
         }
+    }
+
+    public static void testHandleUpdateTableSchema(long backendId, Map<Long, TTablet> backendTablets) {
+        handleUpdateTableSchema(backendId, backendTablets);
+    }
+
+    private static void handleUpdateTableSchema(long backendId, Map<Long, TTablet> backendTablets) {
+        Table<Long, Long, List<Long>> tableToIndexTabletMap = HashBasedTable.create();
+        Map<Long, Long> tableToDb = Maps.newHashMap();
+
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        // split tablets by db, table and index
+        for (TTablet backendTablet : backendTablets.values()) {
+            for (TTabletInfo tabletInfo : backendTablet.tablet_infos) {
+                if (!tabletInfo.isSetTablet_schema_version()) {
+                    continue;
+                }
+                long tabletId = tabletInfo.getTablet_id();
+                TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
+                if (tabletMeta == null) {
+                    continue;
+                }
+
+                long dbId = tabletMeta != null ? tabletMeta.getDbId() : TabletInvertedIndex.NOT_EXIST_VALUE;
+                long tableId = tabletMeta != null ? tabletMeta.getTableId() : TabletInvertedIndex.NOT_EXIST_VALUE;
+                long indexId = tabletMeta != null ? tabletMeta.getIndexId() : TabletInvertedIndex.NOT_EXIST_VALUE;
+
+                Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+                if (db == null) {
+                    continue;
+                }
+                Locker locker = new Locker();
+                locker.lockDatabase(db, LockType.READ);
+                try {
+                    OlapTable olapTable = (OlapTable) db.getTable(tableId);
+                    if (olapTable == null) {
+                        continue;
+                    }
+                    MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
+                    if (indexMeta == null) {
+                        continue;
+                    }
+                    int schemaVersion = tabletInfo.tablet_schema_version;
+                    int latestSchemaVersion = indexMeta.getSchemaVersion();
+                    if (schemaVersion < latestSchemaVersion) {
+                        List<Long> tabletsList = tableToIndexTabletMap.get(tableId, indexId);
+                        if (tabletsList != null) {
+                            tabletsList.add(Long.valueOf(tabletId));
+                        } else {
+                            tabletsList = Lists.newArrayList();
+                            tabletsList.add(Long.valueOf(tabletId));
+                            tableToIndexTabletMap.put(tableId, indexId, tabletsList);
+                        }
+                        tableToDb.put(tableId, dbId);
+                    }
+                } finally {
+                    locker.unLockDatabase(db, LockType.READ);
+                }
+            }
+        }
+
+        // create AgentBatch Task
+        AgentBatchTask updateSchemaBatchTask = new AgentBatchTask();
+        for (Table.Cell<Long, Long, List<Long>> cell : tableToIndexTabletMap.cellSet()) {
+            Long tableId = cell.getRowKey();
+            Long indexId = cell.getColumnKey();
+            List<Long> tablets = cell.getValue();
+            Long dbId = tableToDb.get(tableId);
+
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            if (db == null) {
+                continue;
+            }
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
+            try {
+                OlapTable olapTable = (OlapTable) db.getTable(tableId);
+                if (olapTable == null) {
+                    continue;
+                }
+                MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
+                if (indexMeta == null) {
+                    continue;
+                }
+
+                List<String> columns = Lists.newArrayList();
+                List<TColumn> columnsDesc = Lists.newArrayList();
+                List<Integer> columnSortKeyUids = Lists.newArrayList();
+
+                for (Column column : indexMeta.getSchema()) {
+                    TColumn tColumn = column.toThrift();
+                    tColumn.setColumn_name(
+                            column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX, tColumn.column_name));
+                    column.setIndexFlag(tColumn, olapTable.getIndexes(), olapTable.getBfColumns());
+                    columnsDesc.add(tColumn);
+                }
+                if (indexMeta.getSortKeyUniqueIds() != null) {
+                    columnSortKeyUids.addAll(indexMeta.getSortKeyUniqueIds());
+                }
+                TOlapTableColumnParam columnParam = new TOlapTableColumnParam(columnsDesc, columnSortKeyUids,
+                                            indexMeta.getShortKeyColumnCount());
+
+                UpdateSchemaTask task = new UpdateSchemaTask(null, backendId, db.getId(), olapTable.getId(),
+                            indexId, tablets, indexMeta.getSchemaId(), indexMeta.getSchemaVersion(),
+                            columnParam);
+                updateSchemaBatchTask.addTask(task);
+
+            } finally {
+                locker.unLockDatabase(db, LockType.READ);
+            }
+        }
+        // send agent batch task
+        if (updateSchemaBatchTask.getTaskNum() > 0) {
+            for (AgentTask task : updateSchemaBatchTask.getAllTasks()) {
+                AgentTaskQueue.addTask(task);
+            }
+            AgentTaskExecutor.submit(updateSchemaBatchTask);
+            LOG.info("send update schema task to BE");
+        } else {
+            LOG.info("no tablet schema need to update");
+        }
+
     }
 
     private static void handleSetTabletBinlogConfig(long backendId, Map<Long, TTablet> backendTablets) {

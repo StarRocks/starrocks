@@ -28,6 +28,7 @@
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/schema_change.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/metadata_util.h"
 #include "storage/replication_txn_manager.h"
 #include "storage/snapshot_manager.h"
 #include "storage/tablet_manager.h"
@@ -532,6 +533,85 @@ void run_compaction_task(const std::shared_ptr<CompactionTaskRequest>& agent_tas
     finish_task_request.__set_task_type(agent_task_req->task_type);
     finish_task_request.__set_signature(agent_task_req->signature);
     finish_task_request.__set_task_status(task_status);
+
+    finish_task(finish_task_request);
+    remove_task_info(agent_task_req->task_type, agent_task_req->signature);
+}
+
+void run_update_schema_task(const std::shared_ptr<UpdateSchemaTaskRequest>& agent_task_req, ExecEnv* exec_env) {
+    const TUpdateSchemaReq& update_schema_req = agent_task_req->task_req;
+    TStatusCode::type status_code = TStatusCode::OK;
+    std::vector<std::string> error_msgs;
+    TStatus task_status;
+
+    int64_t schema_id = update_schema_req.schema_id;
+    int64_t schema_version = update_schema_req.schema_version;
+    TOlapTableColumnParam tcolumn_param = update_schema_req.column_param;
+
+    POlapTableColumnParam pcolumn_param;
+    pcolumn_param.set_short_key_column_count(tcolumn_param.short_key_column_count);
+    for (auto uid : tcolumn_param.sort_key_uid) {
+        pcolumn_param.add_sort_key_uid(uid);
+    }
+    Status st;
+    for (auto& tcolumn : tcolumn_param.columns) {
+        uint32_t col_unique_id = tcolumn.col_unique_id;
+        ColumnPB* column = pcolumn_param.add_columns_desc();
+        st = t_column_to_pb_column(col_unique_id, tcolumn, column);
+        if (!st.ok()) {
+            break;
+        }
+    }
+
+    LOG(INFO) << "update schema task";
+    TFinishTaskRequest finish_task_request;
+    auto& error_tablet_ids = finish_task_request.error_tablet_ids;
+    if (!st.ok()) {
+        status_code = TStatusCode::RUNTIME_ERROR;
+        std::string msg = strings::Substitute("update schema fail because convert column fail: $0", st.to_string());
+        LOG(WARNING) << msg;
+        error_msgs.emplace_back(msg);
+        for (auto tablet_id : update_schema_req.tablet_ids) {
+            error_tablet_ids.push_back(tablet_id);
+        }
+    } else {
+        for (auto tablet_id : update_schema_req.tablet_ids) {
+            LOG(INFO) << "update tablet:" << tablet_id << " schema";
+            TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
+            auto ori_tablet_schema = tablet->tablet_schema();
+            LOG(INFO) << "tablet:" << tablet_id << " ori_schema version:" << ori_tablet_schema->schema_version()
+                      << " new version:" << schema_version;
+            if (schema_version <= ori_tablet_schema->schema_version()) {
+                continue;
+            }
+            TabletSchemaSPtr new_schema = std::make_shared<TabletSchema>();
+            new_schema->copy_from(ori_tablet_schema);
+            st = new_schema->build_current_tablet_schema(schema_id, schema_version, pcolumn_param, ori_tablet_schema);
+            if (!st.ok()) {
+                status_code = TStatusCode::RUNTIME_ERROR;
+                std::string msg =
+                        strings::Substitute("update schema fail because build tablet schema fail: $0", st.to_string());
+                LOG(WARNING) << msg;
+                error_msgs.emplace_back(msg);
+                error_tablet_ids.push_back(tablet_id);
+            }
+            tablet->update_max_version_schema(new_schema);
+            LOG(INFO) << "update tablet:" << tablet_id << " schema version from " << ori_tablet_schema->schema_version()
+                      << " to " << schema_version;
+        }
+    }
+
+    LOG(INFO) << "finish update schema task";
+    task_status.__set_status_code(status_code);
+    task_status.__set_error_msgs(error_msgs);
+
+    finish_task_request.__set_backend(BackendOptions::get_localBackend());
+    finish_task_request.__set_task_type(agent_task_req->task_type);
+    finish_task_request.__set_signature(agent_task_req->signature);
+    finish_task_request.__set_task_status(task_status);
+    if (!error_tablet_ids.empty()) {
+        finish_task_request.__isset.error_tablet_ids = true;
+    }
 
     finish_task(finish_task_request);
     remove_task_info(agent_task_req->task_type, agent_task_req->signature);
