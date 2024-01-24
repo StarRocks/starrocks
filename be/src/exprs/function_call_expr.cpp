@@ -21,6 +21,7 @@
 #include "exprs/anyval_util.h"
 #include "exprs/builtin_functions.h"
 #include "exprs/expr_context.h"
+#include "exprs/like_predicate.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/user_function_cache.h"
@@ -179,10 +180,16 @@ bool VectorizedFunctionCallExpr::ngram_bloom_filter(starrocks::ExprContext* cont
                                                     size_t gram_num) {
     FunctionContext* fn_ctx = context->fn_context(_fn_context_index);
     std::vector<Slice>& ngram_set = fn_ctx->get_ngram_set();
-    const auto& target_col = fn_ctx->get_constant_column(1);
-    Slice target = ColumnHelper::get_const_value<TYPE_VARCHAR>(target_col);
 
     if (UNLIKELY(ngram_set.size() == 0)) {
+        Slice target;
+        if (_fn_desc->name == "like" || _fn_desc->name == "regex") {
+        } else {
+            // checked in support_ngram_bloom_filter(), so it 's safe to get const column's value
+            const auto& target_col = fn_ctx->get_constant_column(1);
+            target = ColumnHelper::get_const_value<TYPE_VARCHAR>(target_col);
+        }
+
         std::vector<size_t> index;
         size_t slice_gram_num = get_utf8_index(target, &index);
         ngram_set.reserve(slice_gram_num - gram_num + 1);
@@ -205,6 +212,16 @@ bool VectorizedFunctionCallExpr::ngram_bloom_filter(starrocks::ExprContext* cont
     }
     // if neither ngram in target hit bf, this page has nothing to do with target,so filter it!
     return false;
+}
+
+bool VectorizedFunctionCallExpr::support_ngram_bloom_filter(ExprContext* context) const {
+    FunctionContext* fn_ctx = context->fn_context(_fn_context_index);
+    // if second argument is not const, don't support
+    if (!fn_ctx->is_notnull_constant_column(1)) {
+        return false;
+    }
+
+    return _fn_desc->name == "regex" || _fn_desc->name == "like" || _fn_desc->name == "ngram_search";
 }
 
 } // namespace starrocks

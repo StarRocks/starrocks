@@ -129,14 +129,14 @@ public class InvertedIndexParams {
 
     public enum NgramBfIndexParamsKey implements ParamsKey {
         /**
-         * Specific index parser
+         * gram num, if gram num is 4, "apple" -> ["appl","pple"]
          */
         GRAM_NUM(String.valueOf(FeConstants.DEFAULT_GRAM_NUM), true),
 
         /**
-         * Whether to omit term frequency and term position when indexing
+         * bloom filter's false positive possibility
          */
-        FPP(String.valueOf(FeConstants.DEFAULT_BLOOM_FILTER_FPP));
+        FPP(String.valueOf(FeConstants.DEFAULT_BLOOM_FILTER_FPP), true);
 
         private final String defaultValue;
         private boolean needDefault = false;
@@ -144,10 +144,6 @@ public class InvertedIndexParams {
         NgramBfIndexParamsKey(String defaultValue, boolean needDefault) {
             this.defaultValue = defaultValue;
             this.needDefault = needDefault;
-        }
-
-        NgramBfIndexParamsKey(String defaultValue) {
-            this.defaultValue = defaultValue;
         }
 
         @Override

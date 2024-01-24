@@ -787,17 +787,17 @@ bool Expr::should_compile() const {
     return true;
 }
 
-bool Expr::support_ngram_bloom_filter() const {
+bool Expr::support_ngram_bloom_filter(ExprContext* context) const {
     bool support = false;
     for (auto& child : _children) {
-        if (child->support_ngram_bloom_filter()) {
+        if (child->support_ngram_bloom_filter(context)) {
             return true;
         }
     }
     return support;
 }
 
-bool Expr::ngram_bloom_filter(starrocks::ExprContext* context, const BloomFilter* bf, size_t gram_num) {
+bool Expr::ngram_bloom_filter(ExprContext* context, const BloomFilter* bf, size_t gram_num) {
     bool no_need_to_filt = true;
     for (auto& child : _children) {
         if (!child->ngram_bloom_filter(context, bf, gram_num)) {

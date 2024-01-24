@@ -247,10 +247,10 @@ public:
     // Establishes whether the current expression should undergo compilation.
     bool should_compile() const;
 
-    virtual bool support_ngram_bloom_filter() const;
+    virtual bool support_ngram_bloom_filter(ExprContext* context) const;
 
     // Return false to filter out a data page.
-    virtual bool ngram_bloom_filter(starrocks::ExprContext* context, const BloomFilter* bf, size_t gram_num);
+    virtual bool ngram_bloom_filter(ExprContext* context, const BloomFilter* bf, size_t gram_num);
 #if BE_TEST
     void set_type(TypeDescriptor t) { _type = t; }
 #endif
@@ -336,6 +336,7 @@ protected:
     int _fn_context_index;
 
     std::once_flag _constant_column_evaluate_once{};
+    // set if this expr is constant, used to avoid redundant computation
     StatusOr<ColumnPtr> _constant_column = Status::OK();
 
     /// Simple debug string that provides no expr subclass-specific information

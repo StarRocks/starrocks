@@ -190,6 +190,10 @@ bool ExprContext::evaluate_ngram_bloom_filter(const BloomFilter* bf, size_t gram
     return _root->ngram_bloom_filter(this, bf, gram_num);
 }
 
+bool ExprContext::support_ngram_bloom_filter() const {
+    return _root->support_ngram_bloom_filter(this);
+}
+
 bool ExprContext::error_if_overflow() const {
     return _runtime_state != nullptr && _runtime_state->error_if_overflow();
 }

@@ -219,6 +219,7 @@ private:
     bool _is_distinct = false;
     ssize_t group_concat_max_len = 1024;
 
+    // used for ngram bloom filter to speed up some function
     std::vector<Slice> ngram_set;
 };
 

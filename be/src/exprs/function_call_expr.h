@@ -32,11 +32,9 @@ public:
 
     const FunctionDescriptor* get_function_desc() { return _fn_desc; }
 
-    bool support_ngram_bloom_filter() const override {
-        return _fn_desc->name == "regex" || _fn_desc->name == "like" || _fn_desc->name == "ngram_search";
-    }
-    
-    bool ngram_bloom_filter(starrocks::ExprContext* context, const BloomFilter* bf, size_t gram_num) override;
+
+    bool support_ngram_bloom_filter(ExprContext* context) const override;
+    bool ngram_bloom_filter(ExprContext* context, const BloomFilter* bf, size_t gram_num) override;
 
 protected:
     [[nodiscard]] Status prepare(RuntimeState* state, ExprContext* context) override;
