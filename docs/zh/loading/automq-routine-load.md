@@ -11,8 +11,8 @@ AutoMQ Kafka [内核开源](https://github.com/AutoMQ/automq-for-kafka)并且100
 
 ### 准备 StarRocks 以及测试数据
 
-请确保自己已经准备好了可用的 StarRocks 集群。本文为了方便演示过程，参考 [使用 Docker 部署 StarRocks](https://docs.starrocks.io/zh/docs/3.0/quick_start/deploy_with_docker/) 在一台 Linux 机器上安装了作为 Demo 的 StarRocks 集群。
-创建库和主键模型的测试表:
+请确保自己已经准备好了可用的 StarRocks 集群。本文为了方便演示过程，参考 [使用 Docker 部署 StarRocks](../quick_start/deploy_with_docker.md) 在一台 Linux 机器上安装了作为 Demo 的 StarRocks 集群。
+创建库和主键表的测试表:
 
 ```sql
 create database automq_db;
@@ -114,7 +114,7 @@ FROM KAFKA
 如果需要指定源数据和目标表之间列的映射和转换关系，则可以配置 COLUMNS 和 jsonpaths 参数。
 COLUMNS 中的列名对应**目标表**的列名，列的顺序对应**源数据**中的列顺序。jsonpaths 参数用于提取 JSON 数据中需要的字段数据，就像新生成的 CSV 数据一样。
 然后 COLUMNS 参数对 jsonpaths 中的字段**按顺序**进行临时命名。
-更多数据转换的说明，请参见[导入时实现数据转换](https://docs.starrocks.io/zh/docs/3.0/loading/Etl_in_loading/)。
+更多数据转换的说明，请参见[导入时实现数据转换](./Etl_in_loading.md)。
 > 注意：如果每行一个 JSON 对象中 key 的名称和数量（顺序不需要对应）都能对应目标表中列，则无需配置 COLUMNS 。
 
 ## 验证数据导入

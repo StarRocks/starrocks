@@ -1063,6 +1063,10 @@ void TabletUpdatesTest::test_writeread(bool enable_persistent_index) {
     ASSERT_EQ(N, read_tablet(_tablet, 3));
     ASSERT_EQ(N, read_tablet(_tablet, 2));
     ASSERT_TRUE(read_with_cancel(_tablet, 4).is_cancelled());
+
+    // get tablet info
+    TTabletInfo tablet_info;
+    _tablet->updates()->get_tablet_info_extra(&tablet_info);
 }
 
 TEST_F(TabletUpdatesTest, writeread) {
