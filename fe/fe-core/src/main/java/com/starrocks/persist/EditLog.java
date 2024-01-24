@@ -485,7 +485,7 @@ public class EditLog {
                     globalStateMgr.getLocalMetastore().replayDeleteReplica(info);
                     break;
                 }
-                case OperationType.OP_BATCH_DELETE_REPLICA_BATCH: {
+                case OperationType.OP_BATCH_DELETE_REPLICA : {
                     BatchDeleteReplicaInfo info = (BatchDeleteReplicaInfo) journal.getData();
                     globalStateMgr.getLocalMetastore().replayBatchDeleteReplica(info);
                     break;
@@ -1192,7 +1192,7 @@ public class EditLog {
             }
         } catch (Exception e) {
             JournalInconsistentException exception =
-                    new JournalInconsistentException("failed to load journal type " + opCode);
+                    new JournalInconsistentException(opCode, "failed to load journal type " + opCode);
             exception.initCause(e);
             throw exception;
         }
@@ -1523,7 +1523,7 @@ public class EditLog {
     }
 
     public void logBatchDeleteReplica(BatchDeleteReplicaInfo info) {
-        logEdit(OperationType.OP_BATCH_DELETE_REPLICA_BATCH, info);
+        logEdit(OperationType.OP_BATCH_DELETE_REPLICA, info);
     }
 
     public void logTimestamp(Timestamp stamp) {

@@ -160,7 +160,8 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     bthread::Mutex response_mtx;
     scoped_refptr<Trace> trace_gurad = scoped_refptr<Trace>(new Trace());
     Trace* trace = trace_gurad.get();
-    TRACE_TO(trace, "got request. txn_id=$0 new_version=$1 #tablets=$2", request->txn_ids(0), request->new_version(),
+    TRACE_TO(trace, "got request. txn_ids=$0 base_version=$1 new_version=$2 #tablets=$3",
+             JoinInts(request->txn_ids(), ","), request->base_version(), request->new_version(),
              request->tablet_ids_size());
 
     Status::OK().to_protobuf(response->mutable_status());
@@ -179,9 +180,11 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
             auto new_version = request->new_version();
             auto txns = std::span<const int64_t>(request->txn_ids().data(), request->txn_ids_size());
             auto commit_time = request->commit_time();
-            g_publish_tablet_version_queuing_latency << (run_ts - start_ts);
+            auto queuing_latency = run_ts - start_ts;
+            g_publish_tablet_version_queuing_latency << queuing_latency;
 
             TRACE_COUNTER_INCREMENT("tablet_id", tablet_id);
+            TRACE_COUNTER_INCREMENT("queuing_latency_us", queuing_latency);
 
             StatusOr<lake::TabletMetadataPtr> res;
             if (std::chrono::system_clock::now() < timeout_deadline) {
@@ -199,10 +202,10 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                 g_publish_version_failed_tasks << 1;
                 if (res.status().is_resource_busy()) {
                     VLOG(2) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
-                            << " txn_id=" << txns[0] << " version=" << new_version;
+                            << " txn_ids=" << JoinInts(txns, ",") << " version=" << new_version;
                 } else {
                     LOG(WARNING) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
-                                 << " txn_id=" << txns[0] << " version=" << new_version;
+                                 << " txn_ids=" << JoinInts(txns, ",") << " version=" << new_version;
                 }
                 std::lock_guard l(response_mtx);
                 response->add_failed_tablets(tablet_id);
@@ -216,7 +219,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
         if (!st.ok()) {
             g_publish_version_failed_tasks << 1;
             LOG(WARNING) << "Fail to submit publish version task: " << st << ". tablet_id=" << tablet_id
-                         << " txn_id=" << request->txn_ids()[0];
+                         << " txn_ids=" << JoinInts(request->txn_ids(), ",");
             std::lock_guard l(response_mtx);
             response->add_failed_tablets(tablet_id);
             st.to_protobuf(response->mutable_status());
@@ -228,10 +231,12 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     auto cost = butil::gettimeofday_us() - start_ts;
     auto is_slow = cost >= config::lake_publish_version_slow_log_ms * 1000;
     if (config::lake_enable_publish_version_trace_log && is_slow) {
-        LOG(INFO) << "Published txn " << request->txn_ids(0) << ". cost=" << cost << "us\n" << trace->DumpToString();
+        LOG(INFO) << "Published txns=" << JoinInts(request->txn_ids(), ",") << ". cost=" << cost << "us\n"
+                  << trace->DumpToString();
     } else if (is_slow) {
-        LOG(INFO) << "Published txn " << request->txn_ids(0) << ". #tablets=" << request->tablet_ids_size()
-                  << " cost=" << cost << "us, trace: " << trace->MetricsAsJSON();
+        LOG(INFO) << "Published txns=" << JoinInts(request->txn_ids(), ",")
+                  << ". tablets=" << JoinInts(request->tablet_ids(), ",") << " cost=" << cost
+                  << "us, trace: " << trace->MetricsAsJSON();
     }
     TEST_SYNC_POINT("LakeServiceImpl::publish_version:return");
 }

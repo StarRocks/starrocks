@@ -37,6 +37,7 @@ package com.starrocks.catalog;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.HashBasedTable;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -48,6 +49,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.system.Backend;
@@ -78,7 +80,7 @@ import java.util.stream.Collectors;
  * Checkpoint thread is no need to modify this inverted index, because this inverted index will not be written
  * into image, all metadata are in globalStateMgr, and the inverted index will be rebuilt when FE restart.
  */
-public class TabletInvertedIndex {
+public class TabletInvertedIndex implements MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(TabletInvertedIndex.class);
 
     public static final int NOT_EXIST_VALUE = -1;
@@ -133,12 +135,12 @@ public class TabletInvertedIndex {
                              Map<Long, Long> transactionsToCommitTime,
                              ListMultimap<Long, Long> transactionsToClear,
                              ListMultimap<Long, Long> tabletRecoveryMap,
-                             Set<Pair<Long, Integer>> tabletWithoutPartitionId) {
+                             Set<Long> tabletWithoutPartitionId) {
 
         for (TTablet backendTablet : backendTablets.values()) {
             for (TTabletInfo tabletInfo : backendTablet.tablet_infos) {
                 if (!tabletInfo.isSetPartition_id() || tabletInfo.getPartition_id() < 1) {
-                    tabletWithoutPartitionId.add(new Pair<>(tabletInfo.getTablet_id(), tabletInfo.getSchema_hash()));
+                    tabletWithoutPartitionId.add(tabletInfo.getTablet_id());
                 }
             }
         }
@@ -872,6 +874,11 @@ public class TabletInvertedIndex {
         } finally {
             writeUnlock();
         }
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("TabletMeta", (long) tabletMetaMap.size());
     }
 }
 

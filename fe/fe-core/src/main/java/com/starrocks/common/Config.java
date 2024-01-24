@@ -553,12 +553,13 @@ public class Config extends ConfigBase {
 
     /**
      * If true, FE will reset bdbje replication group(that is, to remove all electable nodes' info)
-     * and is supposed to start as Leader.
-     * If all the electable nodes can not start, we can copy the metadata
-     * to another node and set this config to true to try to restart the FE.
+     * and is supposed to start as Leader. After reset, this node will be the only member in the cluster,
+     * and the others node should be rejoin to this cluster by `Alter system add/drop follower/observer 'xxx'`;
+     * Use this configuration only when the leader cannot be successfully elected
+     * (Because most of the follower data has been damaged).
      */
     @ConfField
-    public static String metadata_failure_recovery = "false";
+    public static String bdbje_reset_election_group = "false";
 
     /**
      * If the bdb data is corrupted, and you want to start the cluster only with image, set this param to true
@@ -1198,6 +1199,18 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long dynamic_partition_check_interval_seconds = 600;
+
+    /**
+     * If set to true, memory tracker feature will open
+     */
+    @ConfField(mutable = true)
+    public static boolean memory_tracker_enable = true;
+
+    /**
+     * Decide how often to track the memory usage of the FE process
+     */
+    @ConfField(mutable = true)
+    public static long memory_tracker_interval_seconds = 60;
 
     /**
      * If batch creation of partitions is allowed to create half of the partitions, it is easy to generate holes.
@@ -2293,6 +2306,9 @@ public class Config extends ConfigBase {
     // ***********************************************************
 
     @ConfField(mutable = true)
+    public static boolean enable_experimental_rowstore = false;
+
+    @ConfField(mutable = true)
     public static boolean enable_experimental_mv = true;
 
     /**
@@ -2466,6 +2482,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean enable_sync_publish = true;
+
     /**
      * Normally FE will quit when replaying a bad journal. This configuration provides a bypass mechanism.
      * If this was set to a positive value, FE will skip the corresponding bad journals before it quits.
@@ -2473,6 +2490,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static String metadata_journal_skip_bad_journal_ids = "";
+
+    /**
+     * Set this configuration to true to ignore specific operation (with IgnorableOnReplayFailed annotation) replay failures.
+     */
+    @ConfField
+    public static boolean metadata_journal_ignore_replay_failure = false;
 
     /**
      * Number of profile infos reserved by `ProfileManager` for recently executed query.
@@ -2640,6 +2663,10 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean enable_fast_schema_evolution = true;
+
+    // This configuration will be removed after the shared data mode supports fast schema evolution
+    @ConfField(mutable = true)
+    public static boolean experimental_enable_fast_schema_evolution_in_shared_data = false;
 
     @ConfField(mutable = false)
     public static int pipe_listener_interval_millis = 1000;
@@ -2816,4 +2843,14 @@ public class Config extends ConfigBase {
     // limit for the number of host disconnections in the last {black_host_history_sec} seconds
     @ConfField(mutable = true)
     public static long black_host_connect_failures_within_time = 5;
+
+
+    @ConfField(mutable = false)
+    public static int jdbc_connection_pool_size = 8;
+
+    @ConfField(mutable = false)
+    public static int jdbc_minimum_idle_connections = 1;
+
+    @ConfField(mutable = false)
+    public static int jdbc_connection_idle_timeout_ms = 600000;
 }

@@ -70,7 +70,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 #### ignore_unknown_log_id
 
-- 含义：是否忽略未知的 logID。当 FE 回滚到低版本时，可能存在低版本 BE 无法识别的 logID。<br />如果为 TRUE，则 FE 会忽略这些 logID；否则 FE 会退出。
+- 含义：是否忽略未知的 logID。当 FE 回滚到低版本时，可能存在低版本 FE 无法识别的 logID。<br />如果为 TRUE，则 FE 会忽略这些 logID；否则 FE 会退出。
 - 默认值：FALSE
 
 #### ignore_materialized_view_error
@@ -1004,7 +1004,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 含义：FE 节点上 MySQL 服务器的端口。
 - 默认值：9030
 
-#### mysql_service_nio_enabled  
+#### mysql_service_nio_enabled
 
 - 含义：是否开启 MySQL 服务器的异步 I/O 选项。
 - 默认值：TRUE
@@ -1061,9 +1061,14 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 含义：Heartbeat Manager 中存储心跳任务的阻塞队列大小。
 - 默认值：1024
 
-#### metadata_failure_recovery
+#### bdbje_reset_election_group
 
-- 含义：是否强制重置 FE 的元数据。请谨慎使用该配置项。
+- 含义：是否重置 BDBJE 复制组。如果设置为 `TRUE`，FE 将重置 BDBJE 复制组（即删除所有 FE 节点的信息）并以 Leader 身份启动。重置后，该 FE 将成为集群中唯一的成员，其他 FE 节点通过 `ALTER SYSTEM ADD/DROP FOLLOWER/OBSERVER 'xxx'` 重新加入该集群。仅当无法成功选举出 leader FE 时（因为大部分 follower FE 数据已损坏）才使用此配置。该参数用来替代 `metadata_failure_recovery`。
+- 默认值：FALSE
+
+#### metadata_journal_ignore_replay_failure
+
+- 含义：是否忽略回放失败的日志。设置为 `TRUE` 表示忽略回放失败的日志，但是对于会损坏集群数据的失败，此配置并不生效。
 - 默认值：FALSE
 
 #### edit_log_port
@@ -1099,7 +1104,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 含义：允许回滚的最大事务数。
 - 默认值：100
 
-#### bdbje_replica_ack_timeout_second  
+#### bdbje_replica_ack_timeout_second
 
 - 含义：FE 所在 StarRocks 集群中，元数据从 Leader FE 写入到多个 Follower FE 时，Leader FE 等待足够多的 Follower FE 发送 ACK 消息的超时时间。当写入的元数据较多时，可能返回 ACK 的时间较长，进而导致等待超时。如果超时，会导致写元数据失败，FE 进程退出，此时可以适当地调大该参数取值。
 - 单位：秒
@@ -1144,7 +1149,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 - 含义：导入作业的轮询间隔。
 - 单位：秒。
-- 默认值：5  
+- 默认值：5
 
 #### transaction_clean_interval_second
 
@@ -1241,7 +1246,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 #### aws_s3_region
 
-- 含义：需访问的 S3 存储空间的地区，如 `us-west-2`。  
+- 含义：需访问的 S3 存储空间的地区，如 `us-west-2`。
 
 #### aws_s3_endpoint
 
@@ -1360,3 +1365,19 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 - 含义：是否开启定期收集指标 (Metrics) 的功能。取值范围：`TRUE` 和 `FALSE`。`TRUE` 表示开该功能。`FALSE`表示关闭该功能。
 - 默认值：TRUE
+
+#### jdbc_connection_pool_size
+
+- 含义：访问JDBC Catalog, JDBC Connection Pool容量上限
+- 默认值：8
+
+#### jdbc_minimum_idle_connections
+
+- 含义：访问JDBC Catalog, JDBC Connection Pool中处于idle状态的最低数量
+- 默认值：1
+
+#### jdbc_connection_idle_timeout_ms
+
+- 含义：访问JDBC Catalog, 超过这个时间的连接被认为是idle状态
+- 单位：毫秒
+- 默认值：600000

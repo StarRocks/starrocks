@@ -23,11 +23,32 @@ PROPERTIES (
 );
 -- result:
 -- !result
+CREATE TABLE array_agg_test (
+pk bigint not null ,
+d_1   DECIMAL(26, 2),
+d_2   DECIMAL64(4, 3),
+d_3   DECIMAL128(25, 19),
+d_4   DECIMAL32(8, 5),
+d_5   DECIMAL(16, 3),
+d_6   DECIMAL128(18, 6)
+) ENGINE=OLAP
+DUPLICATE KEY(`pk`)
+DISTRIBUTED BY HASH(`pk`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false"
+);
+-- result:
+-- !result
 insert into array_test values
 (1, ['a', 'b', 'c'], [1.0, 2.0, 3.0, 4.0, 10.0], [1.0, 2.0, 3.0, 4.0, 10.0, 1.1, 2.1, 3.2, 4.3, -1, -10, 100], [4.0, 10.0, 1.1, 2.1, 3.2, 4.3, -1, -10, 100, 1.0, 2.0, 3.0], [4.0, 10.0, 1.1, -10, 100, 1.0, 2.0, 3.0, 2.1, 3.2, 4.3, -1], [4.0, 2.1, 3.2, 10.0, 1.1, -10, 100, -1, 1.0, 2.0, 3.0, 4.3], [4.0, 2.1, 3.2, 10.0, 2.0, 3.0, 1.1, -1, -10, 100, 1.0, 4.3], [4.0, 2.1, 3.0, 1.1, 4.3, 3.2, -10, 100, 1.0, 10.0, -1, 2.0], [4.0, 2.1, 100, 1.0, 4.3, 3.2, 10.0, 2.0, 3.0, 1.1, -1, -10], [[1, 2, 3, 4], [5, 2, 6, 4], [100, -1, 92, 8], [66, 4, 32, -10]], [['1', '2', '3', '4'], ['-1', 'a', '-100', '100'], ['a', 'b', 'c']], [[['1'],['2'],['3']], [['6'],['5'],['4']], [['-1', '-2'],['-2', '10'],['100','23']]], [[[1],[2],[3]], [[6],[5],[4]], [[-1, -2],[-2, 10],[100,23]]]),
 (2, ['-1', '10', '1', '100', '2'], NULL, [10.0, 20.0, 30.0, 4.0, 100.0, 10.1, 2.1, 30.2, 40.3, -1, -10, 100], [40.0, 100.0, 01.1, 2.1, 30.2, 40.3, -1, -100, 1000, 1.0, 2.0, 3.0], [40.0, 100.0, 01.1, -10, 1000, 10.0, 2.0, 30.0, 20.1, 3.2, 4.3, -1], NULL, NULL, [40.0, 20.1, 30.0, 10.1, 40.30, 30.20, -100, 1000, 1.0, 100.0, -10, 2.0], [40.0, 20.1, 1000, 10.0, 40.30, 30.20, 100.0, 20.0, 3.0, 10.1, -10, -10], NULL, NULL, [[['10'],['20'],['30']], [['60'],['5'],['4']], [['-100', '-2'],['-20', '10'],['100','23']]], [[[10],[20],[30]], [[60],[50],[4]], [[-1, -2],[-2, 100],[100,23]]]),
 (4, ['a', NULL, 'c', 'e', 'd'], [1.0, 2.0, 3.0, 4.0, 10.0], [1.0, 2.0, 3.0, 4.0, 10.0, NULL, 1.1, 2.1, 3.2, NULL, 4.3, -1, -10, 100], [4.0, 10.0, 1.1, 2.1,NULL, 3.2, 4.3, -1, -10, 100, 1.0, 2.0, 3.0], [4.0, 10.0, 1.1, -10, 100, 1.0, 2.0, 3.0, 2.1, 3.2, 4.3, -1], [4.0, 2.1, 3.2, 10.0, 1.1, -10, 100, -1, 1.0, 2.0, 3.0, 4.3], [4.0, 2.1, 3.2, 10.0, 2.0, 3.0, 1.1, -1, -10, 100, 1.0, 4.3], [4.0, 2.1, 3.0, 1.1, 4.3, 3.2, -10, 100, 1.0, 10.0, -1, 2.0], [4.0, 2.1, 100, NULL, 1.0, 4.3, 3.2, 10.0, 2.0, 3.0, 1.1, -1, -10], [[1, 2, 3, NULL, 4], [5, 2, 6, 4], NULL, [100, -1, 92, 8], [66, 4, 32, -10]], [['1', '2', '3', '4'], ['-1', 'a', '-100', '100'], ['a', 'b', 'c']], [[['1'],['2'],['3']], [['6'],['5'],['4']], [['-1', '-2'],NULL,['-2', '10'],['100','23']]], [[[1],NULL,[2],[3]], [[6],[5],[4]], NULL, [[-1, -2],[-2, 10],[100,23]]]),
 (3, NULL, [1.0, 2.0, 3.0, 4.0, 10.0], NULL, [40.0, 10.0, 1.1, 2.1, 3.2, 4.3, -10, -10, 100, 10.0, 20.0, 3.0], [4.0, 10.0, 1.1, -10, 100, 1.0, 20.0, 3.0, 2.1, 3.2, 4.3, -1], [40.0, 20.1, 3.2, 10.0, 10.1, -10, 100, -1, 10.0, 2.0, 30.0, 4.3], [4.0, 2.1, 3.2, 10.0, 20.0, 3.0, 1.1, -10, -100, 100, 10.0, 4.3], NULL, NULL, [[1, 2, 30, 4], [50, 2, 6, 4], [100, -10, 92, 8], [66, 40, 32, -100]], [['1', '20', '3', '4'], ['-1', 'a00', '-100', '100'], ['a', 'b0', 'c']], NULL, NULL);
+-- result:
+-- !result
+insert into array_agg_test values
+(1, 4.0, 0, 1.1, 2.1, 3.2, 4.3);
 -- result:
 -- !result
 select array_length(s_1) from array_test order by pk;
@@ -731,6 +752,86 @@ select array_agg(aad_1) from array_test where pk = 1;
 select array_agg(NULL) from array_test where pk = 1;
 -- result:
 [null]
+-- !result
+select array_distinct(array_agg(s_1)) from array_test where pk = 1;
+-- result:
+[["a","b","c"]]
+-- !result
+select array_distinct(array_agg(i_1)) from array_test where pk = 1;
+-- result:
+[[1,2,3,4,10]]
+-- !result
+select array_distinct(array_agg(f_1)) from array_test where pk = 1;
+-- result:
+[[1,2,3,4,10,1.1,2.1,3.2,4.3,-1,-10,100]]
+-- !result
+select array_distinct(array_agg(d_1)) from array_test where pk = 1;
+-- result:
+[[4.00,10.00,1.10,2.10,3.20,4.30,-1.00,-10.00,100.00,1.00,2.00,3.00]]
+-- !result
+select array_distinct(array_agg(d_2)) from array_test where pk = 1;
+-- result:
+[[4.000,10.000,1.100,-10.000,100.000,1.000,2.000,3.000,2.100,3.200,4.300,-1.000]]
+-- !result
+select array_distinct(array_agg(d_3)) from array_test where pk = 1;
+-- result:
+[[4.0000000000000000000,2.1000000000000000000,3.2000000000000000000,10.0000000000000000000,1.1000000000000000000,-10.0000000000000000000,100.0000000000000000000,-1.0000000000000000000,1.0000000000000000000,2.0000000000000000000,3.0000000000000000000,4.3000000000000000000]]
+-- !result
+select array_distinct(array_agg(d_4)) from array_test where pk = 1;
+-- result:
+[[4.00000,2.10000,3.20000,10.00000,2.00000,3.00000,1.10000,-1.00000,-10.00000,100.00000,1.00000,4.30000]]
+-- !result
+select array_distinct(array_agg(d_5)) from array_test where pk = 1;
+-- result:
+[[4.000,2.100,3.000,1.100,4.300,3.200,-10.000,100.000,1.000,10.000,-1.000,2.000]]
+-- !result
+select array_distinct(array_agg(d_6)) from array_test where pk = 1;
+-- result:
+[[4.000000,2.100000,100.000000,1.000000,4.300000,3.200000,10.000000,2.000000,3.000000,1.100000,-1.000000,-10.000000]]
+-- !result
+select array_distinct(array_agg(ai_1)) from array_test where pk = 1;
+-- result:
+[[[1,2,3,4],[5,2,6,4],[100,-1,92,8],[66,4,32,-10]]]
+-- !result
+select array_distinct(array_agg(as_1)) from array_test where pk = 1;
+-- result:
+[[["1","2","3","4"],["-1","a","-100","100"],["a","b","c"]]]
+-- !result
+select array_distinct(array_agg(aas_1)) from array_test where pk = 1;
+-- result:
+[[[["1"],["2"],["3"]],[["6"],["5"],["4"]],[["-1","-2"],["-2","10"],["100","23"]]]]
+-- !result
+select array_distinct(array_agg(aad_1)) from array_test where pk = 1;
+-- result:
+[[[[1.00],[2.00],[3.00]],[[6.00],[5.00],[4.00]],[[-1.00,-2.00],[-2.00,10.00],[100.00,23.00]]]]
+-- !result
+select array_distinct(array_agg(NULL)) from array_test where pk = 1;
+-- result:
+[null]
+-- !result
+select array_distinct(array_agg(d_1)) from array_agg_test where pk = 1;
+-- result:
+[4.00]
+-- !result
+select array_distinct(array_agg(d_2)) from array_agg_test where pk = 1;
+-- result:
+[0.000]
+-- !result
+select array_distinct(array_agg(d_3)) from array_agg_test where pk = 1;
+-- result:
+[1.1000000000000000000]
+-- !result
+select array_distinct(array_agg(d_4)) from array_agg_test where pk = 1;
+-- result:
+[2.10000]
+-- !result
+select array_distinct(array_agg(d_5)) from array_agg_test where pk = 1;
+-- result:
+[3.200]
+-- !result
+select array_distinct(array_agg(d_6)) from array_agg_test where pk = 1;
+-- result:
+[4.300000]
 -- !result
 select array_agg(s_1 order by pk) from array_test;
 -- result:
