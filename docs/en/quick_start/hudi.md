@@ -2,7 +2,7 @@
 displayed_sidebar: "English"
 sidebar_position: 4
 description: Data Lakehouse with Apache Hudi
-toc_max_heading_level: 2
+toc_max_heading_level: 3
 ---
 import DataLakeIntro from '../assets/commonMarkdown/datalakeIntro.md'
 import Clients from '../assets/quick-start/_clientsCompose.mdx'
@@ -124,7 +124,7 @@ Use Java and Maven to build Hudi:
   mvn clean package -Pintegration-tests -DskipTests -Dscala-2.11 -Dspark2.4
   ```
 
-## Add StarRocks to the demo
+## Add StarRocks
 
 The demo is deployed using a Docker compose file. Add StarRocks to the compose file for your architecture (mac AArch64 or Intel) by editing the file matching your architecture in `./docker/compose/`:
 
@@ -151,7 +151,7 @@ Add the `starrocks` service to the compose file below the existing line `service
 
 
 
-### Bringing up Demo Cluster
+## Bringing up Demo Cluster
 
 The next step is to run the Docker compose script and setup configs for bringing up the cluster. These files are in the [Hudi repository](https://github.com/apache/hudi) which you should already have locally on your machine from the previous steps. 
 
@@ -643,7 +643,7 @@ Expected output:
 ```
 
 
-##### Merge-on-read queries
+#### Merge-on-read queries
 
 Lets run similar queries against M-O-R table. Lets look at both 
 ReadOptimized and Snapshot(realtime data) queries supported by M-O-R table
@@ -725,6 +725,169 @@ Expected output:
 exit
 ```
 
+### Step 4 (b): Run StarRocks Queries
+
+```sql
+docker exec -it starrocks \
+mysql -P 9030 -h 127.0.0.1 -u root --prompt="StarRocks > "
+```
+
+```sql
+CREATE EXTERNAL CATALOG hudi_catalog_hms PROPERTIES (
+  "type" = "hudi",
+  "hive.metastore.uris" = "thrift://hivemetastore:9083"
+);
+```
+
+```sql
+SET CATALOG hudi_catalog_hms;
+```
+
+```sql
+USE default;
+```
+
+```sql
+SHOW TABLES;
+```
+
+```plaintext
++--------------------+
+| Tables_in_default  |
++--------------------+
+| stock_ticks_cow    |
+| stock_ticks_mor_ro |
+| stock_ticks_mor_rt |
++--------------------+
+3 rows in set (0.02 sec)
+```
+
+```sql
+REFRESH EXTERNAL TABLE stock_ticks_cow;
+
+REFRESH EXTERNAL TABLE stock_ticks_mor_ro;
+
+REFRESH EXTERNAL TABLE stock_ticks_mor_rt;
+```
+
+```sql
+SELECT count(*) FROM stock_ticks_cow;
+```
+```plaintext
++----------+
+| count(*) |
++----------+
+|      197 |
++----------+
+1 row in set (1.46 sec)
+```
+
+```sql
+SELECT symbol, max(ts)
+FROM stock_ticks_cow
+GROUP BY symbol HAVING symbol = 'GOOG';
+```
+
+```plaintext
++--------+---------------------+
+| symbol | max(ts)             |
++--------+---------------------+
+| GOOG   | 2018-08-31 10:29:00 |
++--------+---------------------+
+1 row in set (0.15 sec)
+```
+
+```sql
+SELECT "_hoodie_commit_time", symbol, ts, volume, open, close
+FROM stock_ticks_cow
+WHERE symbol = 'GOOG';
+```
+
+```plaintext
++-----------------------+--------+---------------------+--------+-----------+----------+
+| '_hoodie_commit_time' | symbol | ts                  | volume | open      | close    |
++-----------------------+--------+---------------------+--------+-----------+----------+
+| _hoodie_commit_time   | GOOG   | 2018-08-31 09:59:00 |   6330 |    1230.5 |  1230.02 |
+| _hoodie_commit_time   | GOOG   | 2018-08-31 10:29:00 |   3391 | 1230.1899 | 1230.085 |
++-----------------------+--------+---------------------+--------+-----------+----------+
+2 rows in set (0.17 sec)
+```
+
+```sql
+SELECT symbol, max(ts)
+FROM stock_ticks_mor_ro
+GROUP BY symbol HAVING symbol = 'GOOG';
+```
+
+```plaintext
++--------+---------------------+
+| symbol | max(ts)             |
++--------+---------------------+
+| GOOG   | 2018-08-31 10:29:00 |
++--------+---------------------+
+1 row in set (0.11 sec)
+```
+
+```sql
+SELECT "_hoodie_commit_time", symbol, ts, volume, open, close
+FROM stock_ticks_mor_ro
+WHERE symbol = 'GOOG';
+```
+```plaintext
++-----------------------+--------+---------------------+--------+-----------+----------+
+| '_hoodie_commit_time' | symbol | ts                  | volume | open      | close    |
++-----------------------+--------+---------------------+--------+-----------+----------+
+| _hoodie_commit_time   | GOOG   | 2018-08-31 09:59:00 |   6330 |    1230.5 |  1230.02 |
+| _hoodie_commit_time   | GOOG   | 2018-08-31 10:29:00 |   3391 | 1230.1899 | 1230.085 |
++-----------------------+--------+---------------------+--------+-----------+----------+
+2 rows in set (0.10 sec)
+```
+
+```sql
+SELECT symbol, max(ts)
+FROM stock_ticks_mor_ro
+GROUP BY symbol HAVING symbol = 'GOOG';
+```
+
+```plaintext
++--------+---------------------+
+| symbol | max(ts)             |
++--------+---------------------+
+| GOOG   | 2018-08-31 10:29:00 |
++--------+---------------------+
+1 row in set (0.18 sec)
+```
+
+```sql
+SELECT "_hoodie_commit_time", symbol, ts, volume, open, close
+FROM stock_ticks_mor_ro
+WHERE symbol = 'GOOG';
+```
+
+```plaintext
++-----------------------+--------+---------------------+--------+-----------+----------+
+| '_hoodie_commit_time' | symbol | ts                  | volume | open      | close    |
++-----------------------+--------+---------------------+--------+-----------+----------+
+| _hoodie_commit_time   | GOOG   | 2018-08-31 09:59:00 |   6330 |    1230.5 |  1230.02 |
+| _hoodie_commit_time   | GOOG   | 2018-08-31 10:29:00 |   3391 | 1230.1899 | 1230.085 |
++-----------------------+--------+---------------------+--------+-----------+----------+
+2 rows in set (0.08 sec)
+```
+
+```sql
+SELECT "_hoodie_commit_time", symbol, ts, volume, open, close
+FROM stock_ticks_mor_ro WHERE  symbol = 'GOOG';
+```
+
+```plaintext
++-----------------------+--------+---------------------+--------+-----------+----------+
+| '_hoodie_commit_time' | symbol | ts                  | volume | open      | close    |
++-----------------------+--------+---------------------+--------+-----------+----------+
+| _hoodie_commit_time   | GOOG   | 2018-08-31 09:59:00 |   6330 |    1230.5 |  1230.02 |
+| _hoodie_commit_time   | GOOG   | 2018-08-31 10:29:00 |   3391 | 1230.1899 | 1230.085 |
++-----------------------+--------+---------------------+--------+-----------+----------+
+2 rows in set (0.07 sec)
+```
 ### Step 5: Upload second batch to Kafka and run Hudi Streamer to ingest
 
 Upload the second batch of data and ingest this batch using Hudi Streamer. As this batch does not bring in any new
@@ -1057,165 +1220,3 @@ No rows affected (0.013 seconds)
 exit
 ```
 
-## Queries in StarRocks
-```sql
-docker exec -it starrocks \
-mysql -P 9030 -h 127.0.0.1 -u root --prompt="StarRocks > "
-```
-
-```sql
-CREATE EXTERNAL CATALOG hudi_catalog_hms PROPERTIES (
-  "type" = "hudi",
-  "hive.metastore.uris" = "thrift://hivemetastore:9083"
-);
-```
-
-```sql
-SET CATALOG hudi_catalog_hms;
-```
-
-```sql
-USE default;
-```
-
-```sql
-SHOW TABLES;
-```
-
-```plaintext
-+--------------------+
-| Tables_in_default  |
-+--------------------+
-| stock_ticks_cow    |
-| stock_ticks_mor_ro |
-| stock_ticks_mor_rt |
-+--------------------+
-3 rows in set (0.02 sec)
-```
-
-```sql
-REFRESH EXTERNAL TABLE stock_ticks_cow;
-
-REFRESH EXTERNAL TABLE stock_ticks_mor_ro;
-
-REFRESH EXTERNAL TABLE stock_ticks_mor_rt;
-```
-
-```sql
-SELECT count(*) FROM stock_ticks_cow;
-```
-```plaintext
-+----------+
-| count(*) |
-+----------+
-|      197 |
-+----------+
-1 row in set (1.46 sec)
-```
-
-```sql
-SELECT symbol, max(ts)
-FROM stock_ticks_cow
-GROUP BY symbol HAVING symbol = 'GOOG';
-```
-
-```plaintext
-+--------+---------------------+
-| symbol | max(ts)             |
-+--------+---------------------+
-| GOOG   | 2018-08-31 10:29:00 |
-+--------+---------------------+
-1 row in set (0.15 sec)
-```
-
-```sql
-SELECT "_hoodie_commit_time", symbol, ts, volume, open, close
-FROM stock_ticks_cow
-WHERE symbol = 'GOOG';
-```
-
-```plaintext
-+-----------------------+--------+---------------------+--------+-----------+----------+
-| '_hoodie_commit_time' | symbol | ts                  | volume | open      | close    |
-+-----------------------+--------+---------------------+--------+-----------+----------+
-| _hoodie_commit_time   | GOOG   | 2018-08-31 09:59:00 |   6330 |    1230.5 |  1230.02 |
-| _hoodie_commit_time   | GOOG   | 2018-08-31 10:29:00 |   3391 | 1230.1899 | 1230.085 |
-+-----------------------+--------+---------------------+--------+-----------+----------+
-2 rows in set (0.17 sec)
-```
-
-```sql
-SELECT symbol, max(ts)
-FROM stock_ticks_mor_ro
-GROUP BY symbol HAVING symbol = 'GOOG';
-```
-
-```plaintext
-+--------+---------------------+
-| symbol | max(ts)             |
-+--------+---------------------+
-| GOOG   | 2018-08-31 10:29:00 |
-+--------+---------------------+
-1 row in set (0.11 sec)
-```
-
-```sql
-SELECT "_hoodie_commit_time", symbol, ts, volume, open, close
-FROM stock_ticks_mor_ro
-WHERE symbol = 'GOOG';
-```
-```plaintext
-+-----------------------+--------+---------------------+--------+-----------+----------+
-| '_hoodie_commit_time' | symbol | ts                  | volume | open      | close    |
-+-----------------------+--------+---------------------+--------+-----------+----------+
-| _hoodie_commit_time   | GOOG   | 2018-08-31 09:59:00 |   6330 |    1230.5 |  1230.02 |
-| _hoodie_commit_time   | GOOG   | 2018-08-31 10:29:00 |   3391 | 1230.1899 | 1230.085 |
-+-----------------------+--------+---------------------+--------+-----------+----------+
-2 rows in set (0.10 sec)
-```
-
-```sql
-SELECT symbol, max(ts)
-FROM stock_ticks_mor_ro
-GROUP BY symbol HAVING symbol = 'GOOG';
-```
-
-```plaintext
-+--------+---------------------+
-| symbol | max(ts)             |
-+--------+---------------------+
-| GOOG   | 2018-08-31 10:29:00 |
-+--------+---------------------+
-1 row in set (0.18 sec)
-```
-
-```sql
-SELECT "_hoodie_commit_time", symbol, ts, volume, open, close
-FROM stock_ticks_mor_ro
-WHERE symbol = 'GOOG';
-```
-
-```plaintext
-+-----------------------+--------+---------------------+--------+-----------+----------+
-| '_hoodie_commit_time' | symbol | ts                  | volume | open      | close    |
-+-----------------------+--------+---------------------+--------+-----------+----------+
-| _hoodie_commit_time   | GOOG   | 2018-08-31 09:59:00 |   6330 |    1230.5 |  1230.02 |
-| _hoodie_commit_time   | GOOG   | 2018-08-31 10:29:00 |   3391 | 1230.1899 | 1230.085 |
-+-----------------------+--------+---------------------+--------+-----------+----------+
-2 rows in set (0.08 sec)
-```
-
-```sql
-SELECT "_hoodie_commit_time", symbol, ts, volume, open, close
-FROM stock_ticks_mor_ro WHERE  symbol = 'GOOG';
-```
-
-```plaintext
-+-----------------------+--------+---------------------+--------+-----------+----------+
-| '_hoodie_commit_time' | symbol | ts                  | volume | open      | close    |
-+-----------------------+--------+---------------------+--------+-----------+----------+
-| _hoodie_commit_time   | GOOG   | 2018-08-31 09:59:00 |   6330 |    1230.5 |  1230.02 |
-| _hoodie_commit_time   | GOOG   | 2018-08-31 10:29:00 |   3391 | 1230.1899 | 1230.085 |
-+-----------------------+--------+---------------------+--------+-----------+----------+
-2 rows in set (0.07 sec)
-```
