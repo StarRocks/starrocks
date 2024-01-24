@@ -714,7 +714,7 @@ The system calculates the number of Compaction tasks based on the number of tabl
 
 ##### lake_autovacuum_partition_naptime_seconds
 
-- **Unit**: Seconds
+- **Unit**: Second
 - **Default**: 180
 - **Description**: The minimum interval between AutoVacuum operations on the same partition.
 - **Introduced in**: v3.1.0
@@ -1566,20 +1566,92 @@ BE dynamic parameters are as follows.
 - **Default:** 1 second
 - **Description:** The time interval of thread polling for a Cumulative Compaction.
 
+#### min_cumulative_compaction_num_singleton_deltas
+
+- **Default:** 5
+- **Description:** The minimum number of segments to trigger Cumulative Compaction.
+
+#### max_cumulative_compaction_num_singleton_deltas
+
+- **Default:** 1000
+- **Description:** The maximum number of segments that can be merged in a single Cumulative Compaction. You can reduce this value if OOM occurs during compaction.
+
+#### max_compaction_candidate_num
+
+- **Default:** 40960
+- **Description:** The maximum number of candidate tablets for compaction. If the value is too large, it will cause high memory usage and high CPU load.
+
 #### update_compaction_check_interval_seconds
 
-- **Default:** 60 seconds
-- **Description:** The time interval at which to check the Update Compaction of the Primary Key table.
+- **Default:** 60
+- **Unit:** Second
+- **Description:** The time interval at which to check compaction for Primary Key tables.
+
+#### update_compaction_num_threads_per_disk
+
+- **Default:** 1
+- **Description:** The number of Compaction threads per disk for Primary Key tables.
+
+#### update_compaction_per_tablet_min_interval_seconds
+
+- **Default:** 120
+- **Description:** The minimum time interval at which compaction is triggered for each tablet in a Primary Key table.
+
+#### max_update_compaction_num_singleton_deltas
+
+- **Default:** 1000
+- **Description:** The maximum number of rowsets that can be merged in a single Compaction for Primary Key tables.
+
+#### update_compaction_size_threshold
+
+- **Default:** 268435456
+- **Unit:** Byte
+- **Description:** The Compaction Score of Primary Key tables is calculated based on the file size, which is different from other table types. This parameter can be used to make the Compaction Score of Primary Key tables similar to that of other table types, making it easier for users to understand.
+
+#### update_compaction_result_bytes
+
+- **Default:** 1073741824
+- **Unit:** Byte
+- **Description:** The maximum result size of a single compaction for Primary Key tables.
+
+#### update_compaction_delvec_file_io_amp_ratio
+
+- **Default:** 2
+- **Description:** Used to control the priority of compaction for rowsets that contain Delvec files in Primary Key tables. The larger the value, the higher the priority.
+
+#### repair_compaction_interval_seconds
+
+- **Default:** 600
+- **Unit:** Second
+- **Description:** The time interval to poll Repair Compaction threads.
+
+#### update_compaction_result_bytes
+
+- **Default:** 1073741824
+- **Unit:** Byte
+- **Description:** The maximum result size of a single compaction for Primary Key tables.
+
+#### update_compaction_delvec_file_io_amp_ratio
+
+- **Default:** 2
+- **Description:** Used to control the priority of compaction for rowsets that contain Delvec files in Primary Key tables. The larger the value, the higher the priority.
+
+#### repair_compaction_interval_seconds
+
+- **Default:** 600
+- **Unit:** Second
+- **Description:** The time interval to poll Repair Compaction threads.
 
 #### min_compaction_failure_interval_sec
 
-- **Default:** 120 seconds
-- **Description:** The minimum time interval that a Tablet Compaction can be scheduled since the last compaction failure.
+- **Default:** 120
+- **Unit:** Second
+- **Description:** The minimum time interval at which a tablet compaction can be scheduled since the previous compaction failure.
 
 #### max_compaction_concurrency
 
 - **Default:** -1
-- **Description:** The maximum concurrency of compactions (both Base Compaction and Cumulative Compaction). The value -1 indicates that no limit is imposed on the concurrency.
+- **Description:** The maximum concurrency of compactions (including both Base Compaction and Cumulative Compaction). The value `-1` indicates that no limit is imposed on the concurrency.
 
 #### periodic_counter_update_period_ms
 
@@ -1588,27 +1660,32 @@ BE dynamic parameters are as follows.
 
 #### load_error_log_reserve_hours
 
-- **Default:** 48 hours
+- **Default:** 48
+- **Unit:** Hour
 - **Description:** The time for which data loading logs are reserved.
 
 #### streaming_load_max_mb
 
-- **Default:** 10,240 MB
+- **Default:** 102400
+- **Unit:** MB
 - **Description:** The maximum size of a file that can be streamed into StarRocks.
 
 #### streaming_load_max_batch_size_mb
 
-- **Default:** 100 MB
+- **Default:** 100
+- **Unit:** MB
 - **Description:** The maximum size of a JSON file that can be streamed into StarRocks.
 
 #### memory_maintenance_sleep_time_s
 
-- **Default:** 10 seconds
+- **Default:** 10
+- **Unit:** Second
 - **Description:** The time interval at which ColumnPool GC is triggered. StarRocks executes GC periodically and returns the released memory to the operating system.
 
 #### write_buffer_size
 
-- **Default:** 104,857,600 Bytes
+- **Default:** 104857600
+- **Unit:** Byte
 - **Description:** The buffer size of MemTable in the memory. This configuration item is the threshold to trigger a flush.
 
 #### tablet_stat_cache_update_interval_second
@@ -1716,6 +1793,11 @@ BE dynamic parameters are as follows.
 - **Default:** 5 (Multiple of Data Size Between Contiguous Levels in Size-tiered Compaction)
 - **Description:** The multiple of data size between two contiguous levels in the Size-tiered Compaction strategy.
 
+#### size_tiered_level_multiple_dupkey
+
+- **Default:** 10
+- **Description:** In the Size-tiered Compaction policy, the multiple of the data amount difference between two adjacent levels for Duplicate Key tables.
+
 #### size_tiered_min_level_size
 
 - **Default:** 131,072 Bytes
@@ -1725,6 +1807,12 @@ BE dynamic parameters are as follows.
 
 - **Default:** 20%
 - **Description:** The PageCache size. It can be specified as size, for example, `20G`, `20,480M`, `20,971,520K`, or `21,474,836,480B`. It can also be specified as the ratio (percentage) to the memory size, for example, `20%`. It takes effect only when `disable_storage_page_cache` is set to `false`.
+
+#### compaction_memory_limit_per_worker
+
+- **Default**: 2147483648 (2 GB)
+- **Unit**: Byte
+- **Description**: The maximum memory usage per compaction thread.
 
 #### internal_service_async_thread_num
 
@@ -2057,6 +2145,27 @@ BE static parameters are as follows.
 - **Unit**: Second
 - **Description**: The time threshold for each compaction. If a compaction takes more time than the time threshold, StarRocks prints the corresponding trace.
 
+#### cumulative_compaction_num_threads_per_disk
+
+- **Default**: 1
+- **Description**: The number of Cumulative Compaction threads per disk.
+
+#### vertical_compaction_max_columns_per_group
+
+- **Default**: 5
+- **Description**: The maximum number of columns per group of Vertical Compactions.
+
+#### enable_check_string_lengths
+
+- **Default**: true
+- **Description**: Whether to check the data length during loading to solve compaction failures caused by out-of-bound VARCHAR data.
+
+#### max_row_source_mask_memory_bytes
+
+- **Default**: 209715200
+- **Unit**: Byte
+- **Description**: The maximum memory size of the row source mask buffer. When the buffer is larger than this value, data will be persisted to a temporary file on the disk. This value should be less than the `compaction_mem_limit` parameter.
+
 #### be_http_port
 
 - **Default**: 8040
@@ -2186,13 +2295,13 @@ BE static parameters are as follows.
 #### block_cache_mem_size
 
 - **Default**: 2147483648
-- **Unit**: Bytes
+- **Unit**: Byte
 - **Description**: The maximum amount of data that can be cached in memory. Unit: bytes. The default value is 2147483648, which is 2 GB. We recommend that you set the value of this parameter to at least 20 GB. If StarRocks reads a large amount of data from disks after Data Cache is enabled, consider increasing the value.
 
 #### block_cache_disk_size
 
 - **Default**: 0
-- **Unit**: Bytes
+- **Unit**: Byte
 - **Description**: The maximum amount of data that can be cached on a single disk. For example, if you configure two disk paths for the block_cache_disk_path parameter and set the value of the block_cache_disk_size parameter as 21474836480 (20 GB), a maximum of 40 GB data can be cached on these two disks. The default value is 0, which indicates that only memory is used to cache data. Unit: bytes.
 
 #### jdbc_connection_pool_size
