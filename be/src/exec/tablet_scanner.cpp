@@ -27,6 +27,7 @@
 #include "storage/projection_iterator.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
+#include "util/runtime_profile.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
@@ -399,6 +400,21 @@ void TabletScanner::update_counter() {
         RuntimeProfile::Counter* c2 = ADD_COUNTER(_parent->_scan_profile, "DeleteFilterRows", TUnit::UNIT);
         COUNTER_UPDATE(c1, _reader->stats().del_filter_ns);
         COUNTER_UPDATE(c2, _reader->stats().rows_del_filtered);
+    }
+    if (_reader->stats().flat_json_hits.size() > 0) {
+        auto path_profile = _parent->_scan_profile->create_child("AccessPathHits");
+
+        for (auto& [k, v] : _reader->stats().flat_json_hits) {
+            RuntimeProfile::Counter* path_counter = ADD_COUNTER(path_profile, k, TUnit::UNIT);
+            COUNTER_SET(path_counter, v);
+        }
+    }
+    if (_reader->stats().dynamic_json_hits.size() > 0) {
+        auto path_profile = _parent->_scan_profile->create_child("AccessPathUnhits");
+        for (auto& [k, v] : _reader->stats().dynamic_json_hits) {
+            RuntimeProfile::Counter* path_counter = ADD_COUNTER(path_profile, k, TUnit::UNIT);
+            COUNTER_SET(path_counter, v);
+        }
     }
     _has_update_counter = true;
 }

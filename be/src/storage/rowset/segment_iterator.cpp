@@ -956,6 +956,7 @@ inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowids, size
         _opts.stats->blocks_load += 1;
         SCOPED_RAW_TIMER(&_opts.stats->block_fetch_ns);
         RETURN_IF_ERROR(_context->read_columns(chunk, range));
+        chunk->check_or_die();
     }
 
     if (rowids != nullptr) {
