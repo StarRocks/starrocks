@@ -100,15 +100,13 @@ StatusOr<JITScalarFunction> JITEngine::compile_scalar_function(ExprContext* cont
     std::string error;
     llvm::raw_string_ostream errs(error);
     if (llvm::verifyModule(*module, &errs)) {
-        return Status::JitCompileError(
-                fmt::format("Failed to generate scalar function IR, verify failed: {}", errs.str()));
+        return Status::JitCompileError(fmt::format("Failed to generate scalar function IR, errors: {}", errs.str()));
     }
 
     // Optimize module.
     instance->optimize_module(module.get());
     if (llvm::verifyModule(*module, &errs)) {
-        return Status::JitCompileError(
-                fmt::format("Failed to optimize scalar function IR, verify failed: {}", errs.str()));
+        return Status::JitCompileError(fmt::format("Failed to optimize scalar function IR, errors: {}", errs.str()));
     }
 
     // Compile module, return function pointer (maybe nullptr).
@@ -230,7 +228,7 @@ void* JITEngine::lookup_function(const std::string& expr_name, bool mast_exist) 
         if (!addr) {
             handleAllErrors(addr.takeError(), [&](const llvm::ErrorInfoBase& EIB) { error_message = EIB.message(); });
         }
-        LOG(ERROR) << "Failed to find jit function: " << error_message;
+        VLOG_ROW << "Failed to find jit function: " << error_message;
         return nullptr;
     }
     _resource_ref_count_map[expr_name].fetch_add(1);

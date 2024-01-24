@@ -331,7 +331,6 @@ TEST_F(VectorizedCastExprTest, numericJITCast) {
     numeric_cast_with_jit<TYPE_TINYINT, TYPE_SMALLINT>(&runtime_state, expr_node);
     numeric_cast_with_jit<TYPE_TINYINT, TYPE_INT>(&runtime_state, expr_node);
     numeric_cast_with_jit<TYPE_TINYINT, TYPE_BIGINT>(&runtime_state, expr_node);
-    // numeric_cast_with_jit<TYPE_TINYINT, TYPE_LARGEINT>(&runtime_state, expr_node);
     numeric_cast_with_jit<TYPE_TINYINT, TYPE_FLOAT>(&runtime_state, expr_node);
     numeric_cast_with_jit<TYPE_TINYINT, TYPE_DOUBLE>(&runtime_state, expr_node);
 
@@ -339,7 +338,6 @@ TEST_F(VectorizedCastExprTest, numericJITCast) {
     numeric_cast_with_jit<TYPE_SMALLINT, TYPE_SMALLINT>(&runtime_state, expr_node);
     numeric_cast_with_jit<TYPE_SMALLINT, TYPE_INT>(&runtime_state, expr_node);
     numeric_cast_with_jit<TYPE_SMALLINT, TYPE_BIGINT>(&runtime_state, expr_node);
-    // numeric_cast_with_jit<TYPE_SMALLINT, TYPE_LARGEINT>(&runtime_state, expr_node);
     numeric_cast_with_jit<TYPE_SMALLINT, TYPE_FLOAT>(&runtime_state, expr_node);
     numeric_cast_with_jit<TYPE_SMALLINT, TYPE_DOUBLE>(&runtime_state, expr_node);
 
@@ -347,7 +345,6 @@ TEST_F(VectorizedCastExprTest, numericJITCast) {
     numeric_cast_with_jit<TYPE_INT, TYPE_SMALLINT>(&runtime_state, expr_node);
     numeric_cast_with_jit<TYPE_INT, TYPE_INT>(&runtime_state, expr_node);
     numeric_cast_with_jit<TYPE_INT, TYPE_BIGINT>(&runtime_state, expr_node);
-    // numeric_cast_with_jit<TYPE_INT, TYPE_LARGEINT>(&runtime_state, expr_node);
     numeric_cast_with_jit<TYPE_INT, TYPE_FLOAT>(&runtime_state, expr_node);
     numeric_cast_with_jit<TYPE_INT, TYPE_DOUBLE>(&runtime_state, expr_node);
 
@@ -355,23 +352,13 @@ TEST_F(VectorizedCastExprTest, numericJITCast) {
     numeric_cast_with_jit<TYPE_BIGINT, TYPE_SMALLINT>(&runtime_state, expr_node);
     numeric_cast_with_jit<TYPE_BIGINT, TYPE_INT>(&runtime_state, expr_node);
     numeric_cast_with_jit<TYPE_BIGINT, TYPE_BIGINT>(&runtime_state, expr_node);
-    // numeric_cast_with_jit<TYPE_BIGINT, TYPE_LARGEINT>(&runtime_state, expr_node);
     numeric_cast_with_jit<TYPE_BIGINT, TYPE_FLOAT>(&runtime_state, expr_node);
     numeric_cast_with_jit<TYPE_BIGINT, TYPE_DOUBLE>(&runtime_state, expr_node);
-
-    // numeric_cast_with_jit<TYPE_LARGEINT, TYPE_TINYINT>(&runtime_state, expr_node);
-    // numeric_cast_with_jit<TYPE_LARGEINT, TYPE_SMALLINT>(&runtime_state, expr_node);
-    // numeric_cast_with_jit<TYPE_LARGEINT, TYPE_INT>(&runtime_state, expr_node);
-    // numeric_cast_with_jit<TYPE_LARGEINT, TYPE_BIGINT>(&runtime_state, expr_node);
-    // numeric_cast_with_jit<TYPE_LARGEINT, TYPE_LARGEINT>(&runtime_state, expr_node);
-    // numeric_cast_with_jit<TYPE_LARGEINT, TYPE_FLOAT>(&runtime_state, expr_node);
-    // numeric_cast_with_jit<TYPE_LARGEINT, TYPE_DOUBLE>(&runtime_state, expr_node);
 
     numeric_cast_with_jit<TYPE_FLOAT, TYPE_TINYINT>(&runtime_state, expr_node);
     numeric_cast_with_jit<TYPE_FLOAT, TYPE_SMALLINT>(&runtime_state, expr_node);
     numeric_cast_with_jit<TYPE_FLOAT, TYPE_INT>(&runtime_state, expr_node);
     numeric_cast_with_jit<TYPE_FLOAT, TYPE_BIGINT>(&runtime_state, expr_node);
-    // numeric_cast_with_jit<TYPE_FLOAT, TYPE_LARGEINT>(&runtime_state, expr_node);
     numeric_cast_with_jit<TYPE_FLOAT, TYPE_FLOAT>(&runtime_state, expr_node);
     numeric_cast_with_jit<TYPE_FLOAT, TYPE_DOUBLE>(&runtime_state, expr_node);
 
@@ -379,7 +366,6 @@ TEST_F(VectorizedCastExprTest, numericJITCast) {
     numeric_cast_with_jit<TYPE_DOUBLE, TYPE_SMALLINT>(&runtime_state, expr_node);
     numeric_cast_with_jit<TYPE_DOUBLE, TYPE_INT>(&runtime_state, expr_node);
     numeric_cast_with_jit<TYPE_DOUBLE, TYPE_BIGINT>(&runtime_state, expr_node);
-    // numeric_cast_with_jit<TYPE_DOUBLE, TYPE_LARGEINT>(&runtime_state, expr_node);
     numeric_cast_with_jit<TYPE_DOUBLE, TYPE_FLOAT>(&runtime_state, expr_node);
     numeric_cast_with_jit<TYPE_DOUBLE, TYPE_DOUBLE>(&runtime_state, expr_node);
 }
