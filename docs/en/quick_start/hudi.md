@@ -137,7 +137,12 @@ Add the `starrocks` service to the compose file below the existing line `service
   starrocks:
     image: starrocks/allin1-ubuntu:latest
     hostname: starrocks-fe
-    container_name: allin1-ubuntu
+    container_name: starrocks
+    healthcheck:
+      test: 'mysql -u root -h starrocks-fe -P 9030 -e "show backends\G" |grep "Alive: true"'
+      interval: 10s
+      timeout: 5s
+      retries: 3
     ports:
       - 8030:8030
       - 8040:8040
@@ -279,75 +284,78 @@ At this point, the Docker cluster will be up and running. The demo cluster bring
 With many containers running, `docker ps` output is easier to read if you pipe it to `jq`:
 
 ```bash
-docker ps --format json | jq '{Image: .Image, State: .State, Status: .Status}'
+docker ps --format json | jq '{Name: .Names, State: .State, Status: .Status}'
 ```
 
-```
+```json
 {
-  "Image": "apachehudi/hudi-hadoop_2.8.4-hive_2.3.3-sparkadhoc_2.4.4:linux-arm64-0.10.1",
+  "Name": "adhoc-1",
   "State": "running",
-  "Status": "Up 5 minutes"
+  "Status": "Up 47 seconds"
 }
 {
-  "Image": "apachehudi/hudi-hadoop_2.8.4-hive_2.3.3-sparkworker_2.4.4:linux-arm64-0.10.1",
+  "Name": "spark-worker-1",
   "State": "running",
-  "Status": "Up 5 minutes"
+  "Status": "Up 47 seconds"
 }
 {
-  "Image": "apachehudi/hudi-hadoop_2.8.4-hive_2.3.3-sparkadhoc_2.4.4:linux-arm64-0.10.1",
+  "Name": "adhoc-2",
   "State": "running",
-  "Status": "Up 5 minutes"
+  "Status": "Up 47 seconds"
 }
 {
-  "Image": "apachehudi/hudi-hadoop_2.8.4-hive_2.3.3-sparkmaster_2.4.4:linux-arm64-0.10.1",
+  "Name": "sparkmaster",
   "State": "running",
-  "Status": "Up 5 minutes"
+  "Status": "Up 47 seconds"
 }
 {
-  "Image": "apachehudi/hudi-hadoop_2.8.4-hive_2.3.3:linux-arm64-0.10.1",
+  "Name": "hiveserver",
   "State": "running",
-  "Status": "Up 5 minutes"
+  "Status": "Up 47 seconds"
 }
 {
-  "Image": "apachehudi/hudi-hadoop_2.8.4-datanode:linux-arm64-0.10.1",
+  "Name": "datanode1",
   "State": "running",
-  "Status": "Up 5 minutes (healthy)"
+  "Status": "Up 47 seconds (healthy)"
 }
 {
-  "Image": "apachehudi/hudi-hadoop_2.8.4-history:latest",
+  "Name": "hivemetastore",
   "State": "running",
-  "Status": "Up 5 minutes (healthy)"
+  "Status": "Up 48 seconds (healthy)"
 }
 {
-  "Image": "apachehudi/hudi-hadoop_2.8.4-hive_2.3.3:linux-arm64-0.10.1",
+  "Name": "historyserver",
   "State": "running",
-  "Status": "Up 5 minutes (healthy)"
+  "Status": "Up 48 seconds (healthy)"
 }
 {
-  "Image": "apachehudi/hudi-hadoop_2.8.4-namenode:linux-arm64-0.10.1",
+  "Name": "namenode",
   "State": "running",
-  "Status": "Up 5 minutes (healthy)"
+  "Status": "Up 48 seconds (healthy)"
 }
 {
-  "Image": "menorah84/hive-metastore-postgresql:2.3.0",
+  "Name": "starrocks",
   "State": "running",
-  "Status": "Up 5 minutes"
+  "Status": "Up 48 seconds (healthy)"
 }
 {
-  "Image": "arm64v8/zookeeper:3.4.12",
+  "Name": "hive-metastore-postgresql",
   "State": "running",
-  "Status": "Up 5 minutes"
+  "Status": "Up 48 seconds"
 }
 {
-  "Image": "wurstmeister/kafka:2.12-2.0.1",
+  "Name": "zookeeper",
   "State": "running",
-  "Status": "Up 5 minutes"
+  "Status": "Up 48 seconds"
+}
+{
+  "Name": "kafkabroker",
+  "State": "running",
+  "Status": "Up 48 seconds"
 }
 ```
 
 :::
-
-NOTE: ADD StarRocks to the docker ps output >>>>>>
 
 ## Demo
 
@@ -358,6 +366,10 @@ The first batch contains stocker tracker data for some stock symbols during the 
 (9:30 a.m to 10:30 a.m). The second batch contains tracker data for next 30 mins (10:30 - 11 a.m). Hudi will
 be used to ingest these batches to a table which will contain the latest stock tracker data at hour level granularity.
 The batches are windowed intentionally so that the second batch contains updates to some of the rows in the first batch.
+
+### Step 0 : Switch to the hudi directory
+
+The commands for the demo need to be run from the `hudi/` directory, if you are in the `hudi/docker/` directory cd up one directory.
 
 ### Step 1 : Publish the first batch to Kafka
 
@@ -421,7 +433,7 @@ automatically initializes the tables in the file-system if they do not exist yet
 
 #### Populate tables in HDFS
 
-1. Open a shell in the `adhoc-2` container
+1. Open a shell in the `adhoc-2` container:
 
   ```bash
   docker exec -it adhoc-2 /bin/bash
@@ -455,15 +467,15 @@ spark-submit \
   --disable-compaction
 ```
 
-:::info
-During setup (look at `setup_demo.sh`), the configuration needed for Hudi Streamer is uploaded to HDFS. The configs contain Kafa connectivity settings and the Avro schema to be used for ingestion, along with key and partitioning fields.
-:::
-
 4. Exit the shell
 
 ```bash
 exit
 ```
+
+:::info
+During setup (look at `setup_demo.sh`), the configuration needed for Hudi Streamer is uploaded to HDFS. The configs contain Kafa connectivity settings and the Avro schema to be used for ingestion, along with key and partitioning fields.
+:::
 
 5. You can use the HDFS web-browser to look at the tables, open
 [http://namenode:50070/explorer.html#/user/hive/warehouse/stock_ticks_cow](http://namenode:50070/explorer.html#/user/hive/warehouse/stock_ticks_cow) and explore the new partition folder created in the table along with a "commit" / "deltacommit" file under `.hoodie` which signals a successful commit.<br/><br/>
@@ -474,12 +486,16 @@ There will be a similar setup when you browse the MOR table
 ### Step 3: Sync with Hive
 
 At this step, the tables are available in HDFS. We need to sync with Hive to create new Hive tables and add partitions
-inorder to run Hive queries against those tables.
+to run Hive queries against those tables.
+
+1. Open a shell in the `adhoc-2` container:
 
 ```bash
 docker exec -it adhoc-2 /bin/bash
+```
 
-# This command takes in HiveServer URL and COW Hudi table location in HDFS and sync the HDFS state to Hive
+2. This command takes in HiveServer URL and COW Hudi table location in HDFS and syncs the HDFS state to Hive:
+```bash
 /var/hoodie/ws/hudi-sync/hudi-hive-sync/run_sync_tool.sh \
   --jdbc-url jdbc:hive2://hiveserver:10000 \
   --user hive \
@@ -489,11 +505,19 @@ docker exec -it adhoc-2 /bin/bash
   --database default \
   --table stock_ticks_cow \
   --partition-value-extractor org.apache.hudi.hive.SlashEncodedDayPartitionValueExtractor
+```
+
+Expected output:
+
+```plaintext
 .....
 2020-01-25 19:51:28,953 INFO  [main] hive.HiveSyncTool (HiveSyncTool.java:syncHoodieTable(129)) - Sync complete for stock_ticks_cow
 .....
+```
 
-# Now run hive-sync for the second data-set in HDFS using Merge-On-Read (MOR table type)
+3. Now run hive-sync for the second data-set in HDFS using Merge-On-Read (MOR table type)
+
+```bash
 /var/hoodie/ws/hudi-sync/hudi-hive-sync/run_sync_tool.sh \
   --jdbc-url jdbc:hive2://hiveserver:10000 \
   --user hive \
@@ -503,20 +527,25 @@ docker exec -it adhoc-2 /bin/bash
   --database default \
   --table stock_ticks_mor \
   --partition-value-extractor org.apache.hudi.hive.SlashEncodedDayPartitionValueExtractor
+```
+
+Expected output:
+
+```plaintext
 ...
 2020-01-25 19:51:51,066 INFO  [main] hive.HiveSyncTool (HiveSyncTool.java:syncHoodieTable(129)) - Sync complete for stock_ticks_mor_ro
 ...
 2020-01-25 19:51:51,569 INFO  [main] hive.HiveSyncTool (HiveSyncTool.java:syncHoodieTable(129)) - Sync complete for stock_ticks_mor_rt
 ....
+```
 
+4. Exit the shell:
+
+```bash
 exit
 ```
-After executing the above command, you will notice
 
-1. A hive table named `stock_ticks_cow` created which supports Snapshot and Incremental queries on Copy On Write table.
-2. Two new tables `stock_ticks_mor_rt` and `stock_ticks_mor_ro` created for the Merge On Read table. The former
-supports Snapshot and Incremental queries (providing near-real time data) while the later supports ReadOptimized queries. `http://namenode:50070/explorer.html#/user/hive/warehouse/stock_ticks_mor`
-
+There are now Hive tables available. These will be queried using Hive queries and StarRocks queries in the next steps.
 
 ### Step 4 (a): Run Hive Queries
 
@@ -524,11 +553,167 @@ Run a hive query to find the latest timestamp ingested for stock symbol 'GOOG'. 
 (for both COW and MOR _rt table) and read-optimized queries (for MOR _ro table) give the same value "10:29 a.m" as Hudi create a
 parquet file for the first batch of data.
 
+1. Open a shell in the `adhoc-2` container:
+
 ```bash
 docker exec -it adhoc-2 /bin/bash
+```
+
+2. Start the Beeline client
+
+```bash
 beeline -u jdbc:hive2://hiveserver:10000 \
   --hiveconf hive.input.format=org.apache.hadoop.hive.ql.io.HiveInputFormat \
   --hiveconf hive.stats.autogather=false
+```
+
+:::tip
+The rest of the steps will be run in the Beeline client at the `0: jdbc:hive2://hiveserver:10000>` prompt.
+:::
+
+3. Show tables
+
+```bash
+show tables;
+```
+
+Expected output:
+```plaintext
++---------------------+--+
+|      tab_name       |
++---------------------+--+
+| stock_ticks_cow     |
+| stock_ticks_mor_ro  |
+| stock_ticks_mor_rt  |
++---------------------+--+
+3 rows selected (0.203 seconds)
+```
+
+
+4. show part
+
+```bash
+show partitions stock_ticks_mor_rt;
+```
+
+Expected output:
+```plaintext
++----------------+--+
+|   partition    |
++----------------+--+
+| dt=2018-08-31  |
++----------------+--+
+1 row selected (0.2 seconds)
+```
+
+
+5. copy on write table
+
+```bash
+select symbol, max(ts) from stock_ticks_cow group by symbol HAVING symbol = 'GOOG';
+```
+
+Expected output:
+```plaintext
++---------+----------------------+--+
+| symbol  |         _c1          |
++---------+----------------------+--+
+| GOOG    | 2018-08-31 10:29:00  |
++---------+----------------------+--+
+```
+
+
+6. projection
+
+```bash
+select `_hoodie_commit_time`, symbol, ts, volume, open, close  from stock_ticks_cow where  symbol = 'GOOG';
+```
+
+Expected output:
+```plaintext
++----------------------+---------+----------------------+---------+------------+-----------+--+
+| _hoodie_commit_time  | symbol  |          ts          | volume  |    open    |   close   |
++----------------------+---------+----------------------+---------+------------+-----------+--+
+| 20240124213322801    | GOOG    | 2018-08-31 09:59:00  | 6330    | 1230.5     | 1230.02   |
+| 20240124213322801    | GOOG    | 2018-08-31 10:29:00  | 3391    | 1230.1899  | 1230.085  |
++----------------------+---------+----------------------+---------+------------+-----------+--+
+```
+
+
+##### merge on read queries
+
+Lets run similar queries against M-O-R table. Lets look at both 
+ReadOptimized and Snapshot(realtime data) queries supported by M-O-R table
+
+1. select symbol, max(ts) from stock_ticks_mor_ro group by symbol HAVING symbol = 'GOOG';
+
+```bash
+select symbol, max(ts) from stock_ticks_mor_ro group by symbol HAVING symbol = 'GOOG';
+```
+
+Expected output:
+```plaintext
+WARNING: Hive-on-MR is deprecated in Hive 2 and may not be available in the future versions. Consider using a different execution engine (i.e. spark, tez) or using Hive 1.X releases.
++---------+----------------------+--+
+| symbol  |         _c1          |
++---------+----------------------+--+
+| GOOG    | 2018-08-31 10:29:00  |
++---------+----------------------+--+
+```
+
+
+2. select symbol, max(ts) from stock_ticks_mor_rt group by symbol HAVING symbol = 'GOOG';
+
+```bash
+select symbol, max(ts) from stock_ticks_mor_rt group by symbol HAVING symbol = 'GOOG';
+```
+
+Expected output:
+```plaintext
+WARNING: Hive-on-MR is deprecated in Hive 2 and may not be available in the future versions. Consider using a different execution engine (i.e. spark, tez) or using Hive 1.X releases.
++---------+----------------------+--+
+| symbol  |         _c1          |
++---------+----------------------+--+
+| GOOG    | 2018-08-31 10:29:00  |
++---------+----------------------+--+
+1 row selected (1.805 seconds)
+```
+
+
+3. select `_hoodie_commit_time`, symbol, ts, volume, open, close  from stock_ticks_mor_ro where  symbol = 'GOOG';
+
+```bash
+select `_hoodie_commit_time`, symbol, ts, volume, open, close  from stock_ticks_mor_ro where  symbol = 'GOOG';
+```
+
+Expected output:
+```plaintext
++----------------------+---------+----------------------+---------+------------+-----------+--+
+| _hoodie_commit_time  | symbol  |          ts          | volume  |    open    |   close   |
++----------------------+---------+----------------------+---------+------------+-----------+--+
+| 20240124213736817    | GOOG    | 2018-08-31 09:59:00  | 6330    | 1230.5     | 1230.02   |
+| 20240124213736817    | GOOG    | 2018-08-31 10:29:00  | 3391    | 1230.1899  | 1230.085  |
++----------------------+---------+----------------------+---------+------------+-----------+--+
+2 rows selected (0.321 seconds)
+```
+
+
+4. select `_hoodie_commit_time`, symbol, ts, volume, open, close  from stock_ticks_mor_rt where  symbol = 'GOOG';
+
+```bash
+select `_hoodie_commit_time`, symbol, ts, volume, open, close  from stock_ticks_mor_rt where  symbol = 'GOOG';
+```
+
+Expected output:
+```plaintext
++----------------------+---------+----------------------+---------+------------+-----------+--+
+| _hoodie_commit_time  | symbol  |          ts          | volume  |    open    |   close   |
++----------------------+---------+----------------------+---------+------------+-----------+--+
+| 20240124213736817    | GOOG    | 2018-08-31 09:59:00  | 6330    | 1230.5     | 1230.02   |
+| 20240124213736817    | GOOG    | 2018-08-31 10:29:00  | 3391    | 1230.1899  | 1230.085  |
++----------------------+---------+----------------------+---------+------------+-----------+--+
+2 rows selected (0.452 seconds)
+```
 
 # List Tables
 0: jdbc:hive2://hiveserver:10000> show tables;
@@ -578,9 +763,6 @@ Now, run a projection query:
 # Merge-On-Read Queries:
 ==========================
 
-Lets run similar queries against M-O-R table. Lets look at both 
-ReadOptimized and Snapshot(realtime data) queries supported by M-O-R table
-
 # Run ReadOptimized Query. Notice that the latest timestamp is 10:29
 0: jdbc:hive2://hiveserver:10000> select symbol, max(ts) from stock_ticks_mor_ro group by symbol HAVING symbol = 'GOOG';
 WARNING: Hive-on-MR is deprecated in Hive 2 and may not be available in the future versions. Consider using a different execution engine (i.e. spark, tez) or using Hive 1.X releases.
@@ -621,7 +803,11 @@ WARNING: Hive-on-MR is deprecated in Hive 2 and may not be available in the futu
 | 20180924222155       | GOOG    | 2018-08-31 09:59:00  | 6330    | 1230.5     | 1230.02   |
 | 20180924222155       | GOOG    | 2018-08-31 10:29:00  | 3391    | 1230.1899  | 1230.085  |
 +----------------------+---------+----------------------+---------+------------+-----------+--+
+```
 
+4. Exit the shell:
+
+```bash
 exit
 ```
 
@@ -1702,7 +1888,7 @@ cd docker
 ```
 ## Queries in StarRocks
 ```sql
-docker exec -it allin1-ubuntu \
+docker exec -it starrocks \
 mysql -P 9030 -h 127.0.0.1 -u root --prompt="StarRocks > "
 ```
 
