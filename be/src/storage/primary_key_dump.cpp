@@ -47,6 +47,11 @@ PrimaryKeyDump::PrimaryKeyDump(const std::string& dump_filepath) {
     _partial_pindex_kvs = std::make_unique<PartialKVsPB>();
 }
 
+Status PrimaryKeyDump::dump_file_exist() {
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_dump_filepath));
+    return fs->path_exists(_dump_filepath);
+}
+
 Status PrimaryKeyDump::init_dump_file() {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_dump_filepath));
     WritableFileOptions wblock_opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};

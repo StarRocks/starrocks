@@ -751,7 +751,10 @@ void TabletUpdatesTest::test_pk_dump(size_t rowset_cnt) {
     {
         // dump primary key tablet
         PrimaryKeyDump dump(_tablet.get());
+        ASSERT_TRUE(dump.dump_filepath().length() > 0);
+        ASSERT_FALSE(dump.dump_file_exist().ok());
         ASSERT_TRUE(dump.dump().ok());
+        ASSERT_TRUE(dump.dump_file_exist().ok());
     }
     const std::string dump_filepath =
             _tablet->schema_hash_path() + "/" + std::to_string(_tablet->tablet_id()) + ".pkdump";
