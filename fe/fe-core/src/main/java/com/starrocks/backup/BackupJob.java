@@ -63,9 +63,9 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.fs.HdfsUtil;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
@@ -97,6 +97,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import static com.starrocks.scheduler.MVActiveChecker.MV_BACKUP_INACTIVE_REASON;
 
 public class BackupJob extends AbstractJob {
     private static final Logger LOG = LogManager.getLogger(BackupJob.class);
@@ -516,8 +518,8 @@ public class BackupJob extends AbstractJob {
                 }
                 if (copiedTbl.isMaterializedView()) {
                     MaterializedView copiedMv = (MaterializedView) copiedTbl;
-                    copiedMv.setInactiveAndReason(String.format("Set the materialized view %s inactive in backup and " +
-                            "active it in restore if possible", copiedMv.getName()));
+                    copiedMv.setInactiveAndReason(String.format("Set the materialized view %s inactive in backup " +
+                            "because %s", copiedMv.getName(), MV_BACKUP_INACTIVE_REASON));
                 }
                 copiedTables.add(copiedTbl);
             }
@@ -619,7 +621,7 @@ public class BackupJob extends AbstractJob {
                     HdfsUtil.getTProperties(repo.getLocation(), brokerDesc, hdfsProperties);
                 } catch (UserException e) {
                     status = new Status(ErrCode.COMMON_ERROR, "Get properties from " + repo.getLocation() + " error.");
-                    return;    
+                    return;
                 }
             }
 

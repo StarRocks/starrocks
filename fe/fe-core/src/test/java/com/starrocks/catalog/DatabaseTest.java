@@ -37,11 +37,12 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.thrift.TStorageType;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -69,6 +70,9 @@ public class DatabaseTest {
     @Mocked
     private EditLog editLog;
 
+    @Mocked
+    NodeMgr nodeMgr;
+
     @Before
     public void setup() {
         db = new Database(dbId, "dbTest");
@@ -89,9 +93,9 @@ public class DatabaseTest {
                 minTimes = 0;
                 result = globalStateMgr;
 
-                globalStateMgr.getClusterId();
+                globalStateMgr.getNodeMgr();
                 minTimes = 0;
-                result = 1;
+                result = nodeMgr;
             }
         };
     }

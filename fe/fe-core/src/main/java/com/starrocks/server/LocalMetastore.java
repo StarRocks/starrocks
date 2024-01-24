@@ -127,6 +127,8 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.CountingLatch;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -135,8 +137,6 @@ import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.load.pipe.PipeManager;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.AddPartitionsInfoV2;
 import com.starrocks.persist.AddSubPartitionsInfoV2;
 import com.starrocks.persist.AutoIncrementInfo;
@@ -331,7 +331,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         // create inverted index
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (Database db : this.fullNameToDb.values()) {
             long dbId = db.getId();
             for (Table table : db.getTables()) {
@@ -515,7 +515,7 @@ public class LocalMetastore implements ConnectorMetadata {
             if (!isForceDrop) {
                 recycleBin.recycleDatabase(db, tableNames);
             } else {
-                stateMgr.onEraseDatabase(db.getId());
+                stateMgr.getLocalMetastore().onEraseDatabase(db.getId());
             }
             db.setExist(false);
 
@@ -571,7 +571,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 if (!isForceDrop) {
                     recycleBin.recycleDatabase(db, tableNames);
                 } else {
-                    stateMgr.onEraseDatabase(db.getId());
+                    stateMgr.getLocalMetastore().onEraseDatabase(db.getId());
                 }
                 db.setExist(false);
             } finally {
@@ -845,7 +845,7 @@ public class LocalMetastore implements ConnectorMetadata {
         // only internal table should check quota and cluster capacity
         if (!stmt.isExternal()) {
             // check cluster capacity
-            GlobalStateMgr.getCurrentSystemInfo().checkClusterCapacity();
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkClusterCapacity();
             // check db quota
             db.checkQuota();
         }
@@ -1131,10 +1131,10 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     private List<Pair<Partition, PartitionDesc>> createPartitionMap(Database db, OlapTable copiedTable,
-                                                             List<PartitionDesc> partitionDescs,
-                                                             HashMap<String, Set<Long>> partitionNameToTabletSet,
-                                                             Set<Long> tabletIdSetForAll,
-                                                             Set<String> existPartitionNameSet)
+                                                                    List<PartitionDesc> partitionDescs,
+                                                                    HashMap<String, Set<Long>> partitionNameToTabletSet,
+                                                                    Set<Long> tabletIdSetForAll,
+                                                                    Set<String> existPartitionNameSet)
             throws DdlException {
         List<Pair<Partition, PartitionDesc>> partitionList = Lists.newArrayList();
         for (PartitionDesc partitionDesc : partitionDescs) {
@@ -1183,6 +1183,11 @@ public class LocalMetastore implements ConnectorMetadata {
                     break;
                 }
             }
+        }
+
+        if (olapTable.getDefaultDistributionInfo().getType() !=
+                copiedTable.getDefaultDistributionInfo().getType()) {
+            metaChanged = true;
         }
 
         if (metaChanged) {
@@ -1353,7 +1358,7 @@ public class LocalMetastore implements ConnectorMetadata {
             for (Long tabletId : existPartitionTabletSet) {
                 // createPartitionWithIndices create duplicate tablet that if not exists scenario
                 // so here need to clean up those created tablets which partition already exists from invert index
-                GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablet(tabletId);
             }
         }
     }
@@ -1361,7 +1366,7 @@ public class LocalMetastore implements ConnectorMetadata {
     private void cleanTabletIdSetForAll(Set<Long> tabletIdSetForAll) {
         // Cleanup of shards for LakeTable is taken care by ShardDeleter
         for (Long tabletId : tabletIdSetForAll) {
-            GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
+            GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablet(tabletId);
         }
     }
 
@@ -1506,7 +1511,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
             if (!isCheckpointThread()) {
                 // add to inverted index
-                TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+                TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
                 for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                     long indexId = index.getId();
                     int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
@@ -1554,7 +1559,7 @@ public class LocalMetastore implements ConnectorMetadata {
             }
             if (!isCheckpointThread()) {
                 // add to inverted index
-                TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+                TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
                 for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                     long indexId = index.getId();
                     int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
@@ -1697,7 +1702,7 @@ public class LocalMetastore implements ConnectorMetadata {
         Long id = GlobalStateMgr.getCurrentState().getNextId();
         long shardGroupId = 0;
         if (olapTable.isCloudNativeTableOrMaterializedView()) {
-            shardGroupId = GlobalStateMgr.getCurrentStarOSAgent().
+            shardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().
                     createShardGroup(db.getId(), olapTable.getId(), id);
         }
 
@@ -1800,7 +1805,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
             if (!isCheckpointThread()) {
                 // add to inverted index
-                TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+                TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
                 for (MaterializedIndex index : physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                     long indexId = index.getId();
                     int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
@@ -1844,7 +1849,7 @@ public class LocalMetastore implements ConnectorMetadata {
         // create shard group
         long shardGroupId = 0;
         if (table.isCloudNativeTableOrMaterializedView()) {
-            shardGroupId = GlobalStateMgr.getCurrentStarOSAgent().
+            shardGroupId = GlobalStateMgr.getCurrentState().getStarOSAgent().
                     createShardGroup(db.getId(), table.getId(), partitionId);
         }
 
@@ -1887,9 +1892,9 @@ public class LocalMetastore implements ConnectorMetadata {
         if (partitions.isEmpty()) {
             return;
         }
-        int numAliveBackends = GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber();
+        int numAliveBackends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAliveBackendNumber();
         if (RunMode.isSharedDataMode()) {
-            numAliveBackends += GlobalStateMgr.getCurrentSystemInfo().getAliveComputeNodeNumber();
+            numAliveBackends += GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAliveComputeNodeNumber();
         }
         if (numAliveBackends == 0) {
             if (RunMode.isSharedDataMode()) {
@@ -2049,7 +2054,7 @@ public class LocalMetastore implements ConnectorMetadata {
             if (table.isCloudNativeTableOrMaterializedView()) {
                 long primaryComputeNodeId = -1;
                 try {
-                    Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+                    Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
                     primaryComputeNodeId = ((LakeTablet) tablet).
                             getPrimaryComputeNodeId(warehouse.getAnyAvailableCluster().getWorkerGroupId());
                 } catch (UserException e) {
@@ -2167,7 +2172,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 for (Map.Entry<Long, Long> mark : firstThree) {
                     sb.append(mark.getValue()); // TabletId
                     sb.append('(');
-                    Backend backend = stateMgr.getClusterInfo().getBackend(mark.getKey());
+                    Backend backend = stateMgr.getNodeMgr().getClusterInfo().getBackend(mark.getKey());
                     sb.append(backend != null ? backend.getHost() : "N/A");
                     sb.append(") ");
                 }
@@ -2332,7 +2337,7 @@ public class LocalMetastore implements ConnectorMetadata {
         if (!isCheckpointThread()) {
             // add to inverted index
             if (table.isOlapOrCloudNativeTable() || table.isMaterializedView()) {
-                TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+                TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
                 OlapTable olapTable = (OlapTable) table;
                 long dbId = db.getId();
                 long tableId = table.getId();
@@ -2533,7 +2538,7 @@ public class LocalMetastore implements ConnectorMetadata {
     private List<Long> chosenBackendIdBySeq(int replicationNum, TStorageMedium storageMedium)
             throws DdlException {
         List<Long> chosenBackendIds =
-                GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIdsByStorageMedium(replicationNum,
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().seqChooseBackendIdsByStorageMedium(replicationNum,
                         true, true, storageMedium);
         if (CollectionUtils.isEmpty(chosenBackendIds)) {
             throw new DdlException(
@@ -2548,7 +2553,7 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     private List<Long> chosenBackendIdBySeq(int replicationNum) throws DdlException {
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         List<Long> chosenBackendIds = systemInfoService.seqChooseBackendIds(replicationNum, true, true);
         if (!CollectionUtils.isEmpty(chosenBackendIds)) {
             return chosenBackendIds;
@@ -2765,7 +2770,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
     public void replayBatchDeleteReplica(BatchDeleteReplicaInfo info) {
         for (long tabletId : info.getTablets()) {
-            TabletMeta meta = GlobalStateMgr.getCurrentInvertedIndex().getTabletMeta(tabletId);
+            TabletMeta meta = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(tabletId);
             if (meta == null) {
                 continue;
             }
@@ -4708,7 +4713,7 @@ public class LocalMetastore implements ConnectorMetadata {
             // Use real GlobalStateMgr instance to avoid InfoSchemaDb id continuously increment
             // when checkpoint thread load image.
             if (getFullNameToDb().containsKey(dbName)) {
-                db = (InfoSchemaDb) GlobalStateMgr.getCurrentState().getFullNameToDb().get(dbName);
+                db = (InfoSchemaDb) GlobalStateMgr.getCurrentState().getLocalMetastore().getFullNameToDb().get(dbName);
             } else {
                 db = new InfoSchemaDb();
             }
@@ -4739,7 +4744,7 @@ public class LocalMetastore implements ConnectorMetadata {
     // TODO [meta-format-change] deprecated
     public void initDefaultCluster() {
         final List<Long> backendList = Lists.newArrayList();
-        final List<Backend> defaultClusterBackends = GlobalStateMgr.getCurrentSystemInfo().getBackends();
+        final List<Backend> defaultClusterBackends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends();
         for (Backend backend : defaultClusterBackends) {
             backendList.add(backend.getId());
         }
@@ -4785,7 +4790,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
     public void replayUpdateClusterAndBackends(BackendIdsUpdateInfo info) {
         for (long id : info.getBackendList()) {
-            final Backend backend = stateMgr.getClusterInfo().getBackend(id);
+            final Backend backend = stateMgr.getNodeMgr().getClusterInfo().getBackend(id);
             backend.setDecommissioned(false);
             backend.setBackendState(Backend.BackendState.free);
         }
@@ -4932,6 +4937,10 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
             }
 
+            if (olapTable.getDefaultDistributionInfo().getType() != copiedTbl.getDefaultDistributionInfo().getType()) {
+                metaChanged = true;
+            }
+
             if (metaChanged) {
                 throw new DdlException("Table[" + copiedTbl.getName() + "]'s meta has been changed. try again.");
             }
@@ -4981,7 +4990,7 @@ public class LocalMetastore implements ConnectorMetadata {
         // create partition failed, remove all newly created tablets.
         // For lakeTable, shards cleanup is taken care in ShardDeleter.
         for (Long tabletId : tabletIdSet) {
-            GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
+            GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablet(tabletId);
         }
     }
 
@@ -5007,7 +5016,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
         // remove the tablets in old partitions
         for (Tablet tablet : oldTablets) {
-            TabletInvertedIndex index = GlobalStateMgr.getCurrentInvertedIndex();
+            TabletInvertedIndex index = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
             index.deleteTablet(tablet.getId());
             // Ensure that only the leader records truncate information.
             // TODO(yangzaorang): the information will be lost when failover occurs. The probability of this case
@@ -5029,7 +5038,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
             if (!GlobalStateMgr.isCheckpointThread()) {
                 // add tablet to inverted index
-                TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+                TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
                 for (Partition partition : info.getPartitions()) {
                     long partitionId = partition.getId();
                     TStorageMedium medium = olapTable.getPartitionInfo().getDataProperty(
@@ -5207,7 +5216,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 olapTable.replacePartition(replaceTempPartitionLog.getPartitions().get(0),
                         replaceTempPartitionLog.getTempPartitions().get(0));
                 return;
-            } 
+            }
             olapTable.replaceTempPartitions(replaceTempPartitionLog.getPartitions(),
                     replaceTempPartitionLog.getTempPartitions(),
                     replaceTempPartitionLog.isStrictRange(),
@@ -5288,7 +5297,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
     public void onErasePartition(Partition partition) {
         // remove tablet in inverted index
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
             for (Tablet tablet : index.getTablets()) {
                 long tabletId = tablet.getId();
@@ -5407,7 +5416,7 @@ public class LocalMetastore implements ConnectorMetadata {
         } catch (Exception e) {
             // create partition failed, remove all newly created tablets
             for (Long tabletId : tabletIdSet) {
-                GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablet(tabletId);
             }
             LOG.warn("create partitions from partitions failed.", e);
             throw new RuntimeException("create partitions failed: " + e.getMessage(), e);

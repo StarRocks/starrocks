@@ -62,7 +62,7 @@ public class CreateLakeTableTest {
 
     private static void createTable(String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt);
     }
 
     private void checkLakeTable(String dbName, String tableName) {
@@ -80,7 +80,7 @@ public class CreateLakeTableTest {
 
     private String getDefaultStorageVolumeFullPath() {
         StorageVolume sv = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getDefaultStorageVolume();
-        StarOSAgent starOSAgent = GlobalStateMgr.getCurrentStarOSAgent();
+        StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
         FileStoreInfo fsInfo = sv.toFileStoreInfo();
         String serviceId = "";
         try {

@@ -418,15 +418,15 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy) {
     ASSERT_EQ(kChunkSize * 3, read(version));
     ASSIGN_OR_ABORT(auto tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create(_tablet_mgr.get(), tablet_metadata));
-    config::max_update_compaction_num_singleton_deltas = 1000;
+    config::lake_pk_compaction_max_input_rowsets = 1000;
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
     EXPECT_EQ(3, input_rowsets.size());
 
-    config::max_update_compaction_num_singleton_deltas = 2;
+    config::lake_pk_compaction_max_input_rowsets = 2;
     ASSIGN_OR_ABORT(auto input_rowsets2, compaction_policy->pick_rowsets());
     EXPECT_EQ(2, input_rowsets2.size());
 
-    config::max_update_compaction_num_singleton_deltas = 1;
+    config::lake_pk_compaction_max_input_rowsets = 1;
     ASSIGN_OR_ABORT(auto input_rowsets3, compaction_policy->pick_rowsets());
     EXPECT_EQ(1, input_rowsets3.size());
 }
@@ -484,7 +484,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy2) {
     }
     ASSERT_EQ(kChunkSize * 6, read(version));
 
-    config::max_update_compaction_num_singleton_deltas = 4;
+    config::lake_pk_compaction_max_input_rowsets = 4;
     ASSIGN_OR_ABORT(auto tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create(_tablet_mgr.get(), tablet_metadata));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
@@ -559,7 +559,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy3) {
     config::write_buffer_size = old_size;
     ASSERT_EQ(kChunkSize * 6, read(version));
 
-    config::max_update_compaction_num_singleton_deltas = 4;
+    config::lake_pk_compaction_max_input_rowsets = 4;
     ASSIGN_OR_ABORT(auto tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create(_tablet_mgr.get(), tablet_metadata));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
@@ -612,21 +612,21 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_score_by_policy) {
     ASSIGN_OR_ABORT(auto tablet_meta, _tablet_mgr->get_tablet_metadata(tablet_id, version));
 
     ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create(_tablet_mgr.get(), tablet_meta));
-    config::max_update_compaction_num_singleton_deltas = 1000;
+    config::lake_pk_compaction_max_input_rowsets = 1000;
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
     EXPECT_EQ(3, input_rowsets.size());
     EXPECT_EQ(3, compaction_score(_tablet_mgr.get(), tablet_meta));
 
-    config::max_update_compaction_num_singleton_deltas = 2;
+    config::lake_pk_compaction_max_input_rowsets = 2;
     ASSIGN_OR_ABORT(auto input_rowsets2, compaction_policy->pick_rowsets());
     EXPECT_EQ(2, input_rowsets2.size());
-    EXPECT_EQ(2, compaction_score(_tablet_mgr.get(), tablet_meta));
+    EXPECT_EQ(3, compaction_score(_tablet_mgr.get(), tablet_meta));
 
-    config::max_update_compaction_num_singleton_deltas = 1;
+    config::lake_pk_compaction_max_input_rowsets = 1;
     ASSIGN_OR_ABORT(auto input_rowsets3, compaction_policy->pick_rowsets());
     EXPECT_EQ(1, input_rowsets3.size());
-    EXPECT_EQ(1, compaction_score(_tablet_mgr.get(), tablet_meta));
-    config::max_update_compaction_num_singleton_deltas = 1000;
+    EXPECT_EQ(3, compaction_score(_tablet_mgr.get(), tablet_meta));
+    config::lake_pk_compaction_max_input_rowsets = 1000;
 }
 
 TEST_P(LakePrimaryKeyCompactionTest, test_compaction_sorted) {
@@ -854,6 +854,68 @@ TEST_P(LakePrimaryKeyCompactionTest, test_abort_txn) {
 
     ASSERT_TRUE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
     SyncPoint::GetInstance()->DisableProcessing();
+}
+
+TEST_P(LakePrimaryKeyCompactionTest, test_multi_output_seg) {
+    // Prepare data for writing
+    std::vector<Chunk> chunks;
+    for (int i = 0; i < 3; i++) {
+        chunks.push_back(generate_data(kChunkSize, i));
+    }
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    for (int i = 0; i < 3; i++) {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_index_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish());
+        delta_writer->close();
+        // Publish version
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    ASSERT_EQ(kChunkSize * 3, read(version));
+
+    auto txn_id = next_id();
+    // make sure compact can generate more than one segment in output rowset
+    config::max_segment_file_size = 50;
+    config::vector_chunk_size = 10;
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(_tablet_metadata->id(), version, txn_id));
+    check_task(task);
+    CompactionTask::Progress progress;
+    ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
+    EXPECT_EQ(100, progress.value());
+    EXPECT_FALSE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
+    ASSERT_OK(publish_single_version(_tablet_metadata->id(), version + 1, txn_id).status());
+    EXPECT_TRUE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
+    config::max_segment_file_size = 1073741824;
+    config::vector_chunk_size = 4096;
+    version++;
+    ASSERT_EQ(kChunkSize * 3, read(version));
+    if (GetParam().enable_persistent_index) {
+        check_local_persistent_index_meta(tablet_id, version);
+    }
+
+    ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
+    EXPECT_EQ(3, new_tablet_metadata->compaction_inputs_size());
+    EXPECT_FALSE(new_tablet_metadata->has_prev_garbage_version());
+    EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 0);
+    // make sure compact can generate more than one segment in output rowset
+    EXPECT_TRUE(new_tablet_metadata->rowsets(0).segments_size() > 1);
 }
 
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyCompactionTest, LakePrimaryKeyCompactionTest,

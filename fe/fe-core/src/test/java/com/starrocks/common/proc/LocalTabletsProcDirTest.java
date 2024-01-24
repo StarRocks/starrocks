@@ -62,7 +62,7 @@ public class LocalTabletsProcDirTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 result = systemInfoService;
                 systemInfoService.getIdToBackend();
                 result = ImmutableMap.copyOf(idToBackend);

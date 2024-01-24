@@ -37,7 +37,6 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.Pair;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.DataCacheInfo;
@@ -50,6 +49,7 @@ import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.task.UpdateTabletMetaInfoTask;
@@ -138,7 +138,7 @@ public class LakeTableAlterMetaJobTest {
         KeysType keysType = KeysType.DUP_KEYS;
         db = new Database(dbId, "db0");
 
-        Database oldDb = GlobalStateMgr.getCurrentState().getIdToDb().putIfAbsent(db.getId(), db);
+        Database oldDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().putIfAbsent(db.getId(), db);
         Assert.assertNull(oldDb);
 
         Column c0 = new Column("c0", Type.INT, true, AggregateType.NONE, false, null, null);
@@ -377,16 +377,21 @@ public class LakeTableAlterMetaJobTest {
 
     @Test
     public void testUpdateTabletMetaInfoTaskToThrift() throws AlterCancelException {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
         long backend = 1L;
         long txnId = 1L;
-        Set<Pair<Long, Integer>> tableIdWithSchemaHash = new HashSet<>();
-        Pair<Long, Integer> item = new Pair<>(1L, 1);
-        tableIdWithSchemaHash.add(item);
-        MarkedCountDownLatch<Long, Set<Pair<Long, Integer>>> latch = new MarkedCountDownLatch<>(1);
-
-        UpdateTabletMetaInfoTask updateTabletMetaInfoTask = new UpdateTabletMetaInfoTask(backend, tableIdWithSchemaHash,
-                true, latch, TTabletMetaType.ENABLE_PERSISTENT_INDEX, TTabletType.TABLET_TYPE_LAKE, txnId);
-        TUpdateTabletMetaInfoReq result = updateTabletMetaInfoTask.toThrift();
+        Set<Long> tabletSet = new HashSet<>();
+        tabletSet.add(1L);
+        MarkedCountDownLatch<Long, Set<Long>> latch = new MarkedCountDownLatch<>(1);
+        UpdateTabletMetaInfoTask task = UpdateTabletMetaInfoTask.updateEnablePersistentIndex(backend, tabletSet, true);
+        task.setLatch(latch);
+        task.setTxnId(txnId);
+        TUpdateTabletMetaInfoReq result = task.toThrift();
         Assert.assertEquals(result.txn_id, txnId);
         Assert.assertEquals(result.tablet_type, TTabletType.TABLET_TYPE_LAKE);
     }

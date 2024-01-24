@@ -48,11 +48,16 @@ public:
     }
 
     void TearDown() override {
-        (void)StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet_id, kDeleteFiles);
-        (void)StorageEngine::instance()->tablet_manager()->drop_tablet(_src_tablet_id, kDeleteFiles);
-        (void)StorageEngine::instance()->tablet_manager()->delete_shutdown_tablet(_tablet_id);
-        (void)StorageEngine::instance()->tablet_manager()->delete_shutdown_tablet(_src_tablet_id);
-        (void)fs::remove_all(config::storage_root_path);
+        auto status = StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet_id, kDeleteFiles);
+        EXPECT_TRUE(status.ok()) << status;
+        status = StorageEngine::instance()->tablet_manager()->drop_tablet(_src_tablet_id, kDeleteFiles);
+        EXPECT_TRUE(status.ok()) << status;
+        status = StorageEngine::instance()->tablet_manager()->delete_shutdown_tablet(_tablet_id);
+        EXPECT_TRUE(status.ok()) << status;
+        status = StorageEngine::instance()->tablet_manager()->delete_shutdown_tablet(_src_tablet_id);
+        EXPECT_TRUE(status.ok()) << status;
+        status = fs::remove_all(config::storage_root_path);
+        EXPECT_TRUE(status.ok() || status.is_not_found()) << status;
     }
 
     TCreateTabletReq get_create_tablet_request(int64_t tablet_id, int schema_hash, int64_t version) {

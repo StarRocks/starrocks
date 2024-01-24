@@ -50,10 +50,10 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.Quantiles;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.proto.DeleteTxnLogRequest;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
@@ -107,7 +107,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
     @Override
     protected void runAfterCatalogReady() {
         try {
-            GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+            GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
             if (Config.lake_enable_batch_publish_version && RunMode.isSharedDataMode()) {
                 // batch publish
                 List<TransactionStateBatch> readyTransactionStatesBatch = globalTransactionMgr.
@@ -126,9 +126,9 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
 
             // TODO: need to refactor after be split into cn + dn
-            List<Long> allBackends = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false);
+            List<Long> allBackends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(false);
             if (RunMode.isSharedDataMode()) {
-                allBackends.addAll(GlobalStateMgr.getCurrentSystemInfo().getComputeNodeIds(false));
+                allBackends.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodeIds(false));
             }
 
             if (allBackends.isEmpty()) {
@@ -279,7 +279,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
     }
 
     private void publishVersionForOlapTable(List<TransactionState> readyTransactionStates) throws UserException {
-        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
 
         // every backend-transaction identified a single task
         AgentBatchTask batchTask = new AgentBatchTask();
@@ -451,7 +451,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
     }
 
     private CompletableFuture<Void> publishLakeTransactionAsync(TransactionState txnState) {
-        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         long txnId = txnState.getTransactionId();
         long dbId = txnState.getDbId();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
@@ -626,7 +626,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
     }
 
     private CompletableFuture<Void> publishLakeTransactionBatchAsync(TransactionStateBatch txnStateBatch) {
-        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         assert txnStateBatch.size() > 1;
         // pick up all tableCommitInfo
         // only one table,if batch has multi transactionState for now,
@@ -635,7 +635,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         long tableId = txnStateBatch.getTableId();
         List<TransactionState> states = txnStateBatch.getTransactionStates();
         // partitionId -> txnIdList
-        Map<Long, List<Long>> dirtyPartitons = new HashMap<>();
+        Map<Long, List<Long>> dirtyPartitions = new HashMap<>();
         // partitionId -> versionList
         Map<Long, List<Long>> partitionVersions = new HashMap<>();
         // partitionId -> transactionState
@@ -647,10 +647,10 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     .getIdToPartitionCommitInfo();
             for (Map.Entry<Long, PartitionCommitInfo> item : partitionCommitInfoMap.entrySet()) {
 
-                if (!dirtyPartitons.containsKey(item.getKey())) {
-                    dirtyPartitons.put(item.getKey(), new ArrayList<>());
+                if (!dirtyPartitions.containsKey(item.getKey())) {
+                    dirtyPartitions.put(item.getKey(), new ArrayList<>());
                 }
-                List<Long> partitionCommitInfo = dirtyPartitons.get(item.getKey());
+                List<Long> partitionCommitInfo = dirtyPartitions.get(item.getKey());
                 partitionCommitInfo.add(state.getTransactionId());
 
                 if (!partitionVersions.containsKey(item.getKey())) {
@@ -685,7 +685,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
         List<CompletableFuture<Boolean>> futureList = new ArrayList<>();
 
-        for (Map.Entry<Long, List<Long>> item : dirtyPartitons.entrySet()) {
+        for (Map.Entry<Long, List<Long>> item : dirtyPartitions.entrySet()) {
             Long partitionId = item.getKey();
 
             CompletableFuture<Boolean> future = CompletableFuture.supplyAsync(() -> {
@@ -718,7 +718,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     }
 
                     // here create the job to drop txnLog, for the visibleVersion has been updated
-                    submitDeleteTxnLogJob(txnStateBatch, dirtyPartitons);
+                    submitDeleteTxnLogJob(txnStateBatch, dirtyPartitions);
                 } catch (UserException e) {
                     throw new RuntimeException(e);
                 }
@@ -880,7 +880,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     }
                     if (materializedView.shouldTriggeredRefreshBy(db.getFullName(), table.getName())) {
                         LOG.info("Trigger auto materialized view refresh because of base table {} has changed, " +
-                                        "db:{}, mv:{}", table.getName(), mvDb.getFullName(), materializedView.getName());
+                                "db:{}, mv:{}", table.getName(), mvDb.getFullName(), materializedView.getName());
                         GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
                                 mvDb.getFullName(), mvDb.getTable(mvId.getId()).getName(), false, null,
                                 Constants.TaskRunPriority.NORMAL.value(), true, false);

@@ -30,12 +30,12 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.Utils;
 import com.starrocks.load.DeleteJob;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.MultiDeleteInfo;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.proto.BinaryPredicatePB;
 import com.starrocks.proto.DeleteDataRequest;
 import com.starrocks.proto.DeleteDataResponse;
@@ -86,7 +86,7 @@ public class LakeDeleteJob extends DeleteJob {
         } catch (Throwable t) {
             LOG.warn("error occurred during delete process", t);
             // if transaction has been begun, need to abort it
-            if (GlobalStateMgr.getCurrentGlobalTransactionMgr()
+            if (GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                     .getTransactionState(db.getId(), getTransactionId()) != null) {
                 cancel(DeleteMgr.CancelType.UNKNOWN, t.getMessage());
             }
@@ -103,7 +103,7 @@ public class LakeDeleteJob extends DeleteJob {
         try {
             List<Future<DeleteDataResponse>> responseList = Lists.newArrayListWithCapacity(
                     beToTablets.size());
-            SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
+            SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
             for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
                 // TODO: need to refactor after be split into cn + dn
                 ComputeNode backend = systemInfoService.getBackendOrComputeNode(entry.getKey());
@@ -194,7 +194,7 @@ public class LakeDeleteJob extends DeleteJob {
             }
         }
 
-        return GlobalStateMgr.getCurrentGlobalTransactionMgr()
+        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                 .commitAndPublishTransaction(db, getTransactionId(), tabletCommitInfos, Collections.emptyList(),
                         timeoutMs);
     }

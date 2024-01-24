@@ -46,6 +46,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -74,7 +75,7 @@ public class ListPartitionInfo extends PartitionInfo {
     public ListPartitionInfo(PartitionType partitionType,
                              List<Column> partitionColumns) {
         super(partitionType);
-        this.partitionColumns = partitionColumns;
+        this.partitionColumns = Objects.requireNonNull(partitionColumns, "partitionColumns is null");
         this.setIsMultiColumnPartition();
 
         this.idToValues = new HashMap<>();

@@ -51,13 +51,13 @@ public class Utils {
     // Returns null if no backend available.
     public static Long chooseBackend(LakeTablet tablet) {
         try {
-            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
             long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
             return tablet.getPrimaryComputeNodeId(workerGroupId);
         } catch (UserException ex) {
             LOG.info("Ignored error {}", ex.getMessage());
             try {
-                return GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendOrComputeId();
+                return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().seqChooseBackendOrComputeId();
             } catch (UserException e) {
                 return null;
             }
@@ -69,7 +69,7 @@ public class Utils {
         if (nodeId == null) {
             return null;
         }
-        return GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
+        return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
     }
 
     // Preconditions: Has required the database's reader lock.

@@ -123,7 +123,7 @@ public class LakeTableSchemaChangeJobTest {
         KeysType keysType = KeysType.DUP_KEYS;
         db = new Database(dbId, "db0");
 
-        Database oldDb = GlobalStateMgr.getCurrentState().getIdToDb().putIfAbsent(db.getId(), db);
+        Database oldDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().putIfAbsent(db.getId(), db);
         Assert.assertNull(oldDb);
 
         Column c0 = new Column("c0", Type.INT, true, AggregateType.NONE, false, null, null);
@@ -194,7 +194,7 @@ public class LakeTableSchemaChangeJobTest {
             }
         };
 
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (Long tabletId : shadowTabletIds) {
             Assert.assertNotNull(invertedIndex.getTabletMeta(tabletId));
         }

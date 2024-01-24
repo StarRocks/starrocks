@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.lake.compaction;
 
 import com.google.gson.annotations.SerializedName;
@@ -74,8 +73,8 @@ public class CompactionMgr {
 
     public void start() {
         if (compactionScheduler == null) {
-            compactionScheduler = new CompactionScheduler(this, GlobalStateMgr.getCurrentSystemInfo(),
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr(), GlobalStateMgr.getCurrentState());
+            compactionScheduler = new CompactionScheduler(this, GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr(), GlobalStateMgr.getCurrentState());
             compactionScheduler.start();
         }
     }
@@ -140,6 +139,11 @@ public class CompactionMgr {
     @Nullable
     public PartitionStatistics getStatistics(PartitionIdentifier identifier) {
         return partitionStatisticsHashMap.get(identifier);
+    }
+
+    public double getMaxCompactionScore() {
+        return partitionStatisticsHashMap.values().stream().mapToDouble(stat -> stat.getCompactionScore().getMax())
+                .max().orElse(0);
     }
 
     void enableCompactionAfter(PartitionIdentifier partition, long delayMs) {

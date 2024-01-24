@@ -63,7 +63,7 @@ public:
             _inited = true;
             return check_meta_version();
         } else {
-            return Status::InternalError("primary key does not support concurrent log applying");
+            return Status::ResourceBusy("primary key does not support concurrent log applying");
         }
     }
 
@@ -284,6 +284,10 @@ private:
                       << ", txn_id: " << txn_id;
         }
 
+        if (op_replication.has_source_schema()) {
+            _metadata->mutable_source_schema()->CopyFrom(op_replication.source_schema());
+        }
+
         return Status::OK();
     }
 
@@ -478,6 +482,10 @@ private:
             LOG(INFO) << "Apply full replication log finish. tablet_id: " << _tablet.id()
                       << ", base_version: " << _metadata->version() << ", new_version: " << _new_version
                       << ", txn_id: " << op_replication.txn_meta().txn_id();
+        }
+
+        if (op_replication.has_source_schema()) {
+            _metadata->mutable_source_schema()->CopyFrom(op_replication.source_schema());
         }
 
         return Status::OK();

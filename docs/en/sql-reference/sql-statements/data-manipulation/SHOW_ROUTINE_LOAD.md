@@ -15,7 +15,7 @@ Shows the execution information of Routine Load jobs.
 ## Syntax
 
 ```SQL
-SHOW [ALL] ROUTINE LOAD FOR [<db_name>.]<job_name>
+SHOW [ALL] ROUTINE LOAD [ FOR [<db_name>.]<job_name> | FROM <db_name> ]
 [ WHERE [ STATE = { "NEED_SCHEDULE" | "RUNNING" | "PAUSED" | "UNSTABLE" | "STOPPED" | "CANCELLED"  } ] ]
 [ ORDER BY field_name [ ASC | DESC ] ]
 [ LIMIT { [offset, ] limit | limit OFFSET offset } ]
@@ -31,8 +31,8 @@ You can add the `\G` option to the statement (such as `SHOW ROUTINE LOAD FOR <jo
 
 | **Parameter**                     | **Required** | **Description**                                              |
 | --------------------------------- | ------------ | ------------------------------------------------------------ |
-| db_name                           | No           | The name of the database to which the load job belongs.      |
-| job_name                          | Yes          | The name of the load job.                                    |
+| db_name                           | No           | The name of the database to which the load job belongs. Note that this parameter is required if the `FROM` clause is used. |
+| job_name                          | No           | The name of the load job. Note that this parameter is required if the `FOR` clause is used.         |
 | ALL                               | No           | Displays all load jobs, including those in the `STOPPED` or  `CANCELLED` states. |
 | STATE                             | No           |  The status of the load job.                                       |
 | ORDER BY field_name [ASC \| DESC] | No           | Sorts the return result in ascending or descending order based on the specified field. The following fields are supported: `Id`, `Name`, `CreateTime`, `PauseTime`, `EndTime`, `TableName`, `State`, and `CurrentTaskNum`.<ul><li>To sort the return result in ascending order, specify `ORDER BY field_name ASC`.</li><li>To sort the return result in descending order, specify `ORDER BY field_name DESC`.</li></ul>If you do not specify the field or the sort order, the return result is sorted in ascending order of `Id` by default. |
@@ -63,7 +63,7 @@ You can add the `\G` option to the statement (such as `SHOW ROUTINE LOAD FOR <jo
 | ErrorLogUrls         | The URL of error logs. You can use the `curl` or `wget` command to  access the URL. |
 | TrackingSQL          | The SQL command that you can directly run to query the error log information recorded in the `information_schema` database. |
 | OtherMsg             | The information about all failed load tasks of the Routine Load job. |
-| LatestSourcePosition | The latest consumer position of messages in partitions of the topic. |
+| LatestSourcePosition | The position of latest message in each partition of the topic, which helps check the latencies of data loading. |
 
 ## Examples
 

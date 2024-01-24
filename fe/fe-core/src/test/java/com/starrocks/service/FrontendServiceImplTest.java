@@ -28,8 +28,8 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.ha.FrontendNodeType;
-import com.starrocks.meta.lock.LockTimeoutException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.GlobalVariable;
@@ -291,9 +291,9 @@ public class FrontendServiceImplTest {
         String dropSQL2 = "drop table if exists site_access_2";
         try {
             DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-            GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
             DropTableStmt dropTableStmt2 = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL2, ctx);
-            GlobalStateMgr.getCurrentState().dropTable(dropTableStmt2);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt2);
         } catch (Exception ex) {
 
         }
@@ -981,7 +981,7 @@ public class FrontendServiceImplTest {
         Table table = db.getTable("site_access_day");
         UUID uuid = UUID.randomUUID();
         TUniqueId requestId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
-        long transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
+        long transactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(db.getId(),
                 Lists.newArrayList(table.getId()), "1jdc689-xd232", requestId,
                 new TxnCoordinator(TxnSourceType.BE, "1.1.1.1"),
                 TransactionState.LoadJobSourceType.BACKEND_STREAMING, -1, 600);

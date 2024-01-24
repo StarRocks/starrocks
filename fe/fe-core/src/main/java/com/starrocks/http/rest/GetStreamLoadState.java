@@ -81,7 +81,7 @@ public class GetStreamLoadState extends RestBaseAction {
             throw new DdlException("unknown database, database=" + dbName);
         }
 
-        String status = GlobalStateMgr.getCurrentGlobalTransactionMgr().getLabelStatus(db.getId(), label).toString();
+        String status = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getLabelStatus(db.getId(), label).toString();
 
         sendResult(request, response, new Result(status));
     }

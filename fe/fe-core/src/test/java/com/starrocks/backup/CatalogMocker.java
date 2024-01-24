@@ -576,7 +576,7 @@ public class CatalogMocker {
                     minTimes = 0;
                     result = new Database();
 
-                    globalStateMgr.getDbNames();
+                    globalStateMgr.getLocalMetastore().listDbNames();
                     minTimes = 0;
                     result = Lists.newArrayList(TEST_DB_NAME);
 

@@ -272,6 +272,17 @@ TEST_F(ColumnConverterTest, Int32Test) {
         }
     }
     {
+        const std::string col_name = "date";
+        {
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATE);
+            check(file_path, col_type, col_name, "[2023-04-25]", expected_rows);
+        }
+        {
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
+            check(file_path, col_type, col_name, "[2023-04-25 00:00:00]", expected_rows);
+        }
+    }
+    {
         const std::string col_name = "decimal32";
         {
             const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL, -1, 9, 2);

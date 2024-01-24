@@ -79,6 +79,9 @@ struct HdfsScanStats {
     int64_t group_min_round_cost = 0;
 
     std::vector<int64_t> orc_stripe_sizes;
+    // io coalesce
+    int64_t orc_stripe_active_lazy_coalesce_together = 0;
+    int64_t orc_stripe_active_lazy_coalesce_seperately = 0;
 
     // Iceberg v2 only!
     int64_t iceberg_delete_file_build_ns = 0;
@@ -144,7 +147,6 @@ struct HdfsScannerParams {
     std::unordered_set<SlotId> slots_in_conjunct;
     // slot used by conjunct_ctxs
     std::unordered_set<SlotId> slots_of_mutli_slot_conjunct;
-    bool eval_conjunct_ctxs = true;
 
     // conjunct ctxs grouped by slot.
     std::unordered_map<SlotId, std::vector<ExprContext*>> conjunct_ctxs_by_slot;

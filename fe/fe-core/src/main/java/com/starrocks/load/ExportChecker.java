@@ -172,7 +172,7 @@ public final class ExportChecker extends FrontendDaemon {
         boolean beHasErr = false;
         String errMsg = "";
         for (Long nodeId : job.getBeStartTimeMap().keySet()) {
-            ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
+            ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
             if (null == node) {
                 // The current implementation, if the be in the job is not found, 
                 // the job will be cancelled

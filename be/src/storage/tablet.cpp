@@ -1639,6 +1639,7 @@ void Tablet::get_basic_info(TabletBasicInfo& info) {
     info.data_dir = data_dir()->path();
     info.shard_id = shard_id();
     info.schema_hash = schema_hash();
+    info.medium_type = data_dir()->storage_medium();
     if (_updates != nullptr) {
         _updates->get_basic_info_extra(info);
     } else {
@@ -1646,6 +1647,7 @@ void Tablet::get_basic_info(TabletBasicInfo& info) {
         info.max_version = _timestamped_version_tracker.get_max_continuous_version();
         info.min_version = _timestamped_version_tracker.get_min_readable_version();
         info.num_rowset = _tablet_meta->version_count();
+        info.num_segment = _tablet_meta->segment_count();
         info.num_row = _tablet_meta->num_rows();
         info.data_size = _tablet_meta->tablet_footprint();
     }

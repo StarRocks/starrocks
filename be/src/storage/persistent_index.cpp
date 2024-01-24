@@ -25,6 +25,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
 #include "storage/persistent_index_tablet_loader.h"
+#include "storage/primary_key_dump.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
@@ -911,6 +912,15 @@ public:
 
     bool dump(phmap::BinaryOutputArchive& ar) override { return _map.dump(ar); }
 
+    Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb) override {
+        for (const auto& each : _map) {
+            RETURN_IF_ERROR(dump->add_pindex_kvs(
+                    std::string_view(reinterpret_cast<const char*>(each.first.data), sizeof(KeyType)),
+                    each.second.get_value(), dump_pb));
+        }
+        return dump->finish_pindex_kvs(dump_pb);
+    }
+
     std::vector<std::vector<KVRef>> get_kv_refs_by_shard(size_t nshard, size_t num_entry,
                                                          bool with_null) const override {
         std::vector<std::vector<KVRef>> ret(nshard);
@@ -1242,6 +1252,15 @@ public:
         // TODO: construct a large buffer and write instead of one by one.
         // TODO: dive in phmap internal detail and implement dump of std::string type inside, use ctrl_&slot_ directly to improve performance
         // return _set.dump(ar);
+    }
+
+    Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb) override {
+        for (const auto& composite_key : _set) {
+            auto value = UNALIGNED_LOAD64(composite_key.data() + composite_key.size() - kIndexValueSize);
+            RETURN_IF_ERROR(dump->add_pindex_kvs(
+                    std::string_view(composite_key.data(), composite_key.size() - kIndexValueSize), value, dump_pb));
+        }
+        return dump->finish_pindex_kvs(dump_pb);
     }
 
     bool load_snapshot(phmap::BinaryInputArchive& ar) override {
@@ -1858,6 +1877,14 @@ bool ShardByLengthMutableIndex::dump(phmap::BinaryOutputArchive& ar_out, std::se
     return true;
 }
 
+Status ShardByLengthMutableIndex::pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb) {
+    for (uint32_t i = 0; i < _shards.size(); ++i) {
+        const auto& shard = _shards[i];
+        RETURN_IF_ERROR(shard->pk_dump(dump, dump_pb));
+    }
+    return Status::OK();
+}
+
 static Status checksum_of_file(RandomAccessFile* file, uint64_t offset, uint32_t size, uint32* checksum) {
     std::string buff;
     raw::stl_string_resize_uninitialized(&buff, size);
@@ -2471,6 +2498,38 @@ Status ImmutableIndex::_get_in_shard_by_page(size_t shard_idx, size_t n, const S
     } else {
         return _get_in_varlen_shard_by_page(shard_idx, n, keys, values, found_keys_info, keys_info_by_page, pages);
     }
+}
+
+Status ImmutableIndex::pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb) {
+    // put all kvs in one shard
+    std::vector<std::vector<KVRef>> kvs_by_shard(1);
+    for (size_t shard_idx = 0; shard_idx < _shards.size(); shard_idx++) {
+        const auto& shard_info = _shards[shard_idx];
+        if (shard_info.size == 0) {
+            // skip empty shard
+            continue;
+        }
+        auto shard = std::make_unique<ImmutableIndexShard>(shard_info.npage);
+        RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset, shard->pages.data(), shard_info.bytes));
+        RETURN_IF_ERROR(shard->decompress_pages(_compression_type, shard_info.npage, shard_info.uncompressed_size,
+                                                shard_info.bytes));
+        if (shard_info.key_size != 0) {
+            RETURN_IF_ERROR(_get_fixlen_kvs_for_shard(kvs_by_shard, shard_idx, 0, &shard));
+        } else {
+            RETURN_IF_ERROR(_get_varlen_kvs_for_shard(kvs_by_shard, shard_idx, 0, &shard));
+        }
+    }
+
+    // read kv from KVRef
+    for (const auto& each : kvs_by_shard) {
+        for (const auto& each_kv : each) {
+            auto value = UNALIGNED_LOAD64(each_kv.kv_pos + each_kv.size - kIndexValueSize);
+            RETURN_IF_ERROR(dump->add_pindex_kvs(
+                    std::string_view(reinterpret_cast<const char*>(each_kv.kv_pos), each_kv.size - kIndexValueSize),
+                    value, dump_pb));
+        }
+    }
+    return dump->finish_pindex_kvs(dump_pb);
 }
 
 Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const Slice* keys, std::vector<KeyInfo>& keys_info,
@@ -3562,7 +3621,8 @@ Status PersistentIndex::get(size_t n, const Slice* keys, IndexValue* values) {
     return _get_from_immutable_index(n, keys, values, not_founds_by_key_size, nullptr);
 }
 
-Status PersistentIndex::_flush_advance_or_append_wal(size_t n, const Slice* keys, const IndexValue* values) {
+Status PersistentIndex::_flush_advance_or_append_wal(size_t n, const Slice* keys, const IndexValue* values,
+                                                     std::vector<size_t>* replace_idxes) {
     bool need_flush_advance = _need_flush_advance();
     _flushed |= need_flush_advance;
 
@@ -3575,7 +3635,11 @@ Status PersistentIndex::_flush_advance_or_append_wal(size_t n, const Slice* keys
     } else if (!_flushed) {
         _dump_snapshot |= _can_dump_directly();
         if (!_dump_snapshot) {
-            RETURN_IF_ERROR(_l0->append_wal(n, keys, values));
+            if (replace_idxes == nullptr) {
+                RETURN_IF_ERROR(_l0->append_wal(n, keys, values));
+            } else {
+                RETURN_IF_ERROR(_l0->append_wal(keys, values, *replace_idxes));
+            }
         }
     }
 
@@ -3662,7 +3726,7 @@ Status PersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* va
     }
 
     RETURN_IF_ERROR(_update_usage_and_size_by_key_length(add_usage_and_size));
-    Status st = _flush_advance_or_append_wal(n, keys, values);
+    Status st = _flush_advance_or_append_wal(n, keys, values, nullptr);
     if (stat != nullptr) {
         stat->flush_or_wal_cost += watch.elapsed_time();
     }
@@ -3701,7 +3765,7 @@ Status PersistentIndex::insert(size_t n, const Slice* keys, const IndexValue* va
     }
     RETURN_IF_ERROR(_update_usage_and_size_by_key_length(add_usage_and_size));
 
-    return _flush_advance_or_append_wal(n, keys, values);
+    return _flush_advance_or_append_wal(n, keys, values, nullptr);
 }
 
 Status PersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_values) {
@@ -3727,7 +3791,7 @@ Status PersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_value
     }
     RETURN_IF_ERROR(_update_usage_and_size_by_key_length(add_usage_and_size));
 
-    return _flush_advance_or_append_wal(n, keys, nullptr);
+    return _flush_advance_or_append_wal(n, keys, nullptr, nullptr);
 }
 
 [[maybe_unused]] Status PersistentIndex::try_replace(size_t n, const Slice* keys, const IndexValue* values,
@@ -3746,11 +3810,7 @@ Status PersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_value
         }
     }
     RETURN_IF_ERROR(_l0->replace(keys, values, replace_idxes));
-    _dump_snapshot |= _can_dump_directly();
-    if (!_dump_snapshot) {
-        RETURN_IF_ERROR(_l0->append_wal(keys, values, replace_idxes));
-    }
-    return Status::OK();
+    return _flush_advance_or_append_wal(n, keys, values, &replace_idxes);
 }
 
 Status PersistentIndex::try_replace(size_t n, const Slice* keys, const IndexValue* values, const uint32_t max_src_rssid,
@@ -3768,11 +3828,7 @@ Status PersistentIndex::try_replace(size_t n, const Slice* keys, const IndexValu
         }
     }
     RETURN_IF_ERROR(_l0->replace(keys, values, replace_idxes));
-    _dump_snapshot |= _can_dump_directly();
-    if (!_dump_snapshot) {
-        RETURN_IF_ERROR(_l0->append_wal(keys, values, replace_idxes));
-    }
-    return Status::OK();
+    return _flush_advance_or_append_wal(n, keys, values, &replace_idxes);
 }
 
 Status PersistentIndex::flush_advance() {
@@ -4733,6 +4789,11 @@ Status PersistentIndex::major_compaction(Tablet* tablet) {
         _major_compaction_running.store(false);
         _cancel_major_compaction = false;
     });
+    // re-use config update_compaction_per_tablet_min_interval_seconds here to control pk index major compaction
+    if (UnixSeconds() - _latest_compaction_time <= config::update_compaction_per_tablet_min_interval_seconds) {
+        return Status::OK();
+    }
+    _latest_compaction_time = UnixSeconds();
     // merge all l2 files
     PersistentIndexMetaPB prev_index_meta;
     RETURN_IF_ERROR(
@@ -5056,6 +5117,25 @@ Status PersistentIndex::_load_by_loader(TabletLoader* loader) {
               << " l0_capacity:" << _l0->capacity() << " #shard: " << (_has_l1 ? _l1_vec[0]->_shards.size() : 0)
               << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " l2_size:" << _l2_file_size()
               << " memory: " << memory_usage() << " time: " << timer.elapsed_time() / 1000000 << "ms";
+    return Status::OK();
+}
+
+Status PersistentIndex::pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb) {
+    for (const auto& l2 : _l2_vec) {
+        PrimaryIndexDumpPB* level = dump_pb->add_primary_index_levels();
+        level->set_filename(l2->filename());
+        RETURN_IF_ERROR(l2->pk_dump(dump, level));
+    }
+    for (const auto& l1 : _l1_vec) {
+        PrimaryIndexDumpPB* level = dump_pb->add_primary_index_levels();
+        level->set_filename(l1->filename());
+        RETURN_IF_ERROR(l1->pk_dump(dump, level));
+    }
+    if (_l0) {
+        PrimaryIndexDumpPB* level = dump_pb->add_primary_index_levels();
+        level->set_filename("persistent index l0");
+        RETURN_IF_ERROR(_l0->pk_dump(dump, level));
+    }
     return Status::OK();
 }
 

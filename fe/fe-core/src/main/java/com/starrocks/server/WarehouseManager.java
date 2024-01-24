@@ -97,7 +97,8 @@ public class WarehouseManager implements Writable {
         ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
         Warehouse warehouse = getDefaultWarehouse();
         warehouse.getAnyAvailableCluster().getComputeNodeIds().forEach(
-                nodeId -> builder.put(nodeId, GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId)));
+                nodeId -> builder.put(nodeId,
+                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId)));
         return builder.build();
     }
 

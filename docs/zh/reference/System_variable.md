@@ -215,9 +215,11 @@ group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该�
 
 用于设置通过 INSERT 语句进行数据导入时，是否开启严格模式 (Strict Mode)。默认为 `true`，即开启严格模式。关于该模式的介绍，可以参阅[严格模式](../loading/load_concept/strict_mode.md)。
 
-### enable_materialized_view_rewrite_for_insert (3.2.2 and later)
+### enable_materialized_view_for_insert
 
-是否允许 StarRocks 改写 INSERT INTO SELECT 语句中的查询。默认为 `false`，即默认关闭该场景下的物化视图查询改写。
+* 含义：是否允许 StarRocks 改写 INSERT INTO SELECT 语句中的查询。
+* 默认值：false，即默认关闭该场景下的物化视图查询改写。
+* 引入版本：v2.5.18, v3.0.9, v3.1.7, v3.2.2
 
 ### enable_materialized_view_union_rewrite（2.5 及以后）
 
@@ -457,7 +459,7 @@ Global runtime filter 开关。Runtime Filter（简称 RF）在运行时对数�
 
 在一个分布式的查询执行计划中，上层节点通常有一个或多个 exchange node 用于接收来自下层节点在不同 BE 上的执行实例的数据。通常 exchange node 数量等于下层节点执行实例数量。
 
-在一些聚合查询场景下，如果底层需要扫描的数据量较大，但聚合之后的数据量很小，则可以尝试修改此变量为一个较小的值，可以降低此类查询的资源开销。如在 DUPLICATE KEY 明细模型上进行聚合查询的场景。
+在一些聚合查询场景下，如果底层需要扫描的数据量较大，但聚合之后的数据量很小，则可以尝试修改此变量为一个较小的值，可以降低此类查询的资源开销。如在 DUPLICATE KEY 明细表上进行聚合查询的场景。
 
 ### parallel_fragment_exec_instance_num
 

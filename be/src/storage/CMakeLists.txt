@@ -49,6 +49,7 @@ add_library(Storage STATIC
     protobuf_file.cpp
     replication_txn_manager.cpp
     replication_utils.cpp
+    segment_stream_converter.cpp
     rowset_update_state.cpp
     rowset_column_update_state.cpp
     update_compaction_state.cpp
@@ -97,6 +98,7 @@ add_library(Storage STATIC
     rowset/ordinal_page_index.cpp
     rowset/page_io.cpp
     rowset/binary_dict_page.cpp
+    rowset/dict_page.cpp
     rowset/binary_prefix_page.cpp
     rowset/segment.cpp
     rowset/segment_writer.cpp
@@ -216,4 +218,5 @@ add_library(Storage STATIC
     lake/lake_persistent_index.cpp
     lake/persistent_index_memtable.cpp
     lake/local_pk_index_manager.cpp
+    primary_key_dump.cpp
     dictionary_cache_manager.cpp)

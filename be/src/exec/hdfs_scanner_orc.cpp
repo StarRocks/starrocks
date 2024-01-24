@@ -318,6 +318,8 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(open_random_access_file());
     auto input_stream = std::make_unique<ORCHdfsFileStream>(_file.get(), _file->get_size().value(),
                                                             _shared_buffered_input_stream.get());
+    input_stream->set_lazy_column_coalesce_counter(_scanner_ctx.lazy_column_coalesce_counter);
+    input_stream->set_app_stats(&_app_stats);
     ORCHdfsFileStream* orc_hdfs_file_stream = input_stream.get();
 
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
@@ -350,9 +352,6 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
 
     // create orc reader for further reading.
     int src_slot_index = 0;
-    // we don't need to eval conjunct ctxs at outside any more
-    // we evaluate conjunct ctxs in `do_get_next`.
-    _scanner_params.eval_conjunct_ctxs = false;
     for (const auto& column : _scanner_ctx.materialized_columns) {
         auto col_name = OrcChunkReader::format_column_name(column.col_name, _scanner_ctx.case_sensitive);
         if (known_column_names.find(col_name) == known_column_names.end()) continue;
@@ -368,6 +367,16 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
             // reserve room for later set in `OrcChunkReader`
             _lazy_load_ctx.active_load_orc_positions.emplace_back(0);
         }
+
+        // put materialized columns' conjunctions into _eval_conjunct_ctxs_by_materialized_slot
+        // for example, partition column's conjunctions will not put into _eval_conjunct_ctxs_by_materialized_slot
+        {
+            auto it = _scanner_params.conjunct_ctxs_by_slot.find(column.slot_id);
+            if (it != _scanner_params.conjunct_ctxs_by_slot.end()) {
+                _eval_conjunct_ctxs_by_materialized_slot.emplace(it->first, it->second);
+            }
+        }
+
         _src_slot_descriptors.emplace_back(column.slot_desc);
         src_slot_index++;
     }
@@ -427,9 +436,20 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         return Status::EndOfFile("");
     }
 
+    ASSIGN_OR_RETURN(const size_t rows_read, _do_get_next(chunk));
+
+    DCHECK_EQ(rows_read, chunk->get()->num_rows());
+
+    _scanner_ctx.append_not_existed_columns_to_chunk(chunk, rows_read);
+    _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, rows_read);
+
+    return Status::OK();
+}
+
+StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
     ChunkPtr& ck = *chunk;
     // this infinite for loop is for retry.
-    for (;;) {
+    while (true) {
         orc::RowReader::ReadPosition position;
         size_t read_num_values = 0;
         bool has_used_dict_filter = false;
@@ -451,11 +471,11 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
             }
         }
 
-        size_t chunk_size = 0;
-        size_t init_chunk_size = 0;
+        size_t rows_read = 0;
+        size_t origin_rows_read = 0;
         if (_orc_reader->get_cvb_size() != 0) {
-            chunk_size = _orc_reader->get_cvb_size();
-            init_chunk_size = chunk_size;
+            rows_read = _orc_reader->get_cvb_size();
+            origin_rows_read = rows_read;
             {
                 StatusOr<ChunkPtr> ret;
                 SCOPED_RAW_TIMER(&_app_stats.column_convert_ns);
@@ -468,52 +488,51 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
                 *chunk = std::move(ret.value());
             }
 
-            // important to add columns before evaluation
-            // because ctxs_by_slot maybe refers to some non-existed slot or partition slot.
-            _scanner_ctx.append_not_existed_columns_to_chunk(chunk, chunk_size);
-            _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, chunk_size);
             // do stats before we filter rows which does not match.
-            _app_stats.raw_rows_read += chunk_size;
-            _chunk_filter.assign(chunk_size, 1);
+            _app_stats.raw_rows_read += rows_read;
+            _chunk_filter.assign(rows_read, 1);
             {
                 SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
-                for (auto& it : _scanner_ctx.conjunct_ctxs_by_slot) {
+                for (auto& it : _eval_conjunct_ctxs_by_materialized_slot) {
                     // do evaluation.
                     if (_orc_row_reader_filter->is_slot_evaluated(it.first)) {
                         continue;
                     }
-                    ASSIGN_OR_RETURN(chunk_size,
+                    ASSIGN_OR_RETURN(rows_read,
                                      ExecNode::eval_conjuncts_into_filter(it.second, ck.get(), &_chunk_filter));
-                    if (chunk_size == 0) {
+                    if (rows_read == 0) {
                         break;
                     }
                 }
-                if (chunk_size != 0) {
-                    ASSIGN_OR_RETURN(chunk_size, ExecNode::eval_conjuncts_into_filter(_scanner_params.conjunct_ctxs,
-                                                                                      ck.get(), &_chunk_filter));
-                }
             }
 
-            if (chunk_size != 0) {
+            if (rows_read != 0) {
                 ColumnHelper::merge_two_filters(row_delete_filter, &_chunk_filter, nullptr);
-                chunk_size = SIMD::count_nonzero(_chunk_filter);
+                rows_read = SIMD::count_nonzero(_chunk_filter);
             }
 
-            if (chunk_size != 0 && chunk_size != ck->num_rows()) {
+            if (rows_read != 0 && rows_read != ck->num_rows()) {
                 ck->filter(_chunk_filter);
             }
         }
-        ck->set_num_rows(chunk_size);
+        ck->set_num_rows(rows_read);
 
         if (!_orc_reader->has_lazy_load_context()) {
-            return Status::OK();
+            return rows_read;
         }
 
         // if has lazy load fields, skip it if chunk_size == 0
-        if (chunk_size == 0) {
-            _app_stats.late_materialize_skip_rows += init_chunk_size;
+        bool require_load_lazy_columns = rows_read > 0;
+        if (require_load_lazy_columns) {
+            // still need to load lazy column
+            _scanner_ctx.lazy_column_coalesce_counter->fetch_add(1, std::memory_order_relaxed);
+        } else {
+            // dont need to load lazy column
+            _scanner_ctx.lazy_column_coalesce_counter->fetch_sub(1, std::memory_order_relaxed);
+            _app_stats.late_materialize_skip_rows += origin_rows_read;
             continue;
         }
+
         {
             SCOPED_RAW_TIMER(&_app_stats.column_read_ns);
             RETURN_IF_ERROR(_orc_reader->lazy_seek_to(position.row_in_stripe));
@@ -530,10 +549,9 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
             Chunk& ret_ck = *(ret.value());
             ck->merge(std::move(ret_ck));
         }
-        return Status::OK();
+        return rows_read;
     }
-    __builtin_unreachable();
-    return Status::OK();
+    return Status::InternalError("Unreachable code");
 }
 
 Status HdfsOrcScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
@@ -585,6 +603,16 @@ void HdfsOrcScanner::do_update_counter(HdfsScanProfile* profile) {
 
     COUNTER_UPDATE(stripe_avg_size_counter, avg_stripe_size);
     COUNTER_UPDATE(stripe_number_counter, _app_stats.orc_stripe_sizes.size());
+
+    RuntimeProfile::Counter* stripe_active_lazy_coalesce_together_counter = root->add_child_counter(
+            "StripeActiveLazyColumnIOCoalesceTogether", TUnit::UNIT,
+            RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM), orcProfileSectionPrefix);
+    RuntimeProfile::Counter* stripe_active_lazy_coalesce_seperately_counter = root->add_child_counter(
+            "StripeActiveLazyColumnIOCoalesceSeperately", TUnit::UNIT,
+            RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM), orcProfileSectionPrefix);
+    COUNTER_UPDATE(stripe_active_lazy_coalesce_together_counter, _app_stats.orc_stripe_active_lazy_coalesce_together);
+    COUNTER_UPDATE(stripe_active_lazy_coalesce_seperately_counter,
+                   _app_stats.orc_stripe_active_lazy_coalesce_seperately);
 }
 
 } // namespace starrocks

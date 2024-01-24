@@ -57,8 +57,8 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.QueryStateException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DeleteStmt;
@@ -165,7 +165,7 @@ public class OlapDeleteJob extends DeleteJob {
                                     TPriority.NORMAL,
                                     TTaskType.REALTIME_PUSH,
                                     getTransactionId(),
-                                    GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator()
+                                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator()
                                             .getNextTransactionId(), columnsDesc);
                             pushTask.setIsSchemaChanging(false);
                             pushTask.setCountDownLatch(countDownLatch);
@@ -187,7 +187,7 @@ public class OlapDeleteJob extends DeleteJob {
         } catch (Throwable t) {
             LOG.warn("error occurred during delete process", t);
             // if transaction has been begun, need to abort it
-            if (GlobalStateMgr.getCurrentGlobalTransactionMgr()
+            if (GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                     .getTransactionState(db.getId(), getTransactionId()) != null) {
                 cancel(DeleteMgr.CancelType.UNKNOWN, t.getMessage());
             }
@@ -368,11 +368,12 @@ public class OlapDeleteJob extends DeleteJob {
         }
 
         // create cancel delete push task for each backends
-        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
+        List<Long> backendIds = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true);
         for (Long backendId : backendIds) {
             PushTask cancelDeleteTask = new PushTask(backendId, TPushType.CANCEL_DELETE, TPriority.HIGH,
                     TTaskType.REALTIME_PUSH, getTransactionId(),
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId());
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator()
+                            .getNextTransactionId());
             AgentTaskQueue.removePushTaskByTransactionId(backendId, getTransactionId(),
                     TPushType.DELETE, TTaskType.REALTIME_PUSH);
             AgentTaskExecutor.submit(new AgentBatchTask(cancelDeleteTask));
@@ -383,9 +384,9 @@ public class OlapDeleteJob extends DeleteJob {
     @Override
     public boolean commitImpl(Database db, long timeoutMs) throws UserException {
         long transactionId = getTransactionId();
-        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         List<TabletCommitInfo> tabletCommitInfos = Lists.newArrayList();
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (TabletDeleteInfo tDeleteInfo : getTabletDeleteInfo()) {
             for (Replica replica : tDeleteInfo.getFinishedReplicas()) {
                 // the inverted index contains rolling up replica

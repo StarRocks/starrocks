@@ -200,31 +200,100 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### min_base_compaction_num_singleton_deltas
 
-- 含义：触发 BaseCompaction 的最小 segment 数。
+- 含义：触发 Base Compaction 的最小 segment 数。
 - 默认值：5
 
 #### max_base_compaction_num_singleton_deltas
 
-- 含义：单次 BaseCompaction 合并的最大 segment 数。
+- 含义：单次 Base Compaction 合并的最大 segment 数。
 - 默认值：100
 
 #### base_compaction_interval_seconds_since_last_operation
 
-- 含义：上一轮 BaseCompaction 距今的间隔，是触发 BaseCompaction 条件之一。
+- 含义：上一轮 Base Compaction 距今的间隔，是触发 Base Compaction 条件之一。
 - 单位：秒
 - 默认值：86400
 
 #### cumulative_compaction_check_interval_seconds
 
-- 含义：CumulativeCompaction 线程轮询的间隔。
+- 含义：Cumulative Compaction 线程轮询的间隔。
 - 单位：秒
 - 默认值：1
 
+#### min_cumulative_compaction_num_singleton_deltas
+
+- 含义：触发 Cumulative Compaction 的最小 segment 数。
+- 默认值：5
+
+#### max_cumulative_compaction_num_singleton_deltas
+
+- 含义：单次 Cumulative Compaction 能合并的最大 segment 数。如果 Compaction 时出现内存不足的情况，可以调小该值。
+- 默认值：1000
+
+#### max_compaction_candidate_num
+
+- 含义：Compaction 候选 tablet 的最大数量。太大会导致内存占用和 CPU 负载高。
+- 默认值：40960
+
 #### update_compaction_check_interval_seconds
 
-- 含义：Primary key 模型 Update compaction 的检查间隔。
+- 含义：主键表 Compaction 的检查间隔。
 - 单位：秒
 - 默认值：60
+
+#### update_compaction_num_threads_per_disk
+
+- 含义：主键表每个磁盘 Compaction 线程的数目。
+- 默认值：1
+
+#### update_compaction_per_tablet_min_interval_seconds
+
+- 含义：主键表每个 tablet 做 Compaction 的最小时间间隔。
+- 默认值：120
+- 单位：秒
+
+#### max_update_compaction_num_singleton_deltas
+
+- 含义：主键表单次 Compaction 合并的最大 Rowset 数。
+- 默认值：1000
+
+#### update_compaction_size_threshold
+
+- 含义：主键表的 Compaction Score 是基于文件大小计算的，与其他表类型的文件数量不同。通过该参数可以使 主键表的 Compaction Score 与其他类型表的相近，便于用户理解。
+- 单位：字节
+- 默认值：268435456
+
+#### update_compaction_result_bytes
+
+- 含义：主键表单次 Compaction 合并的最大结果的大小。
+- 单位：字节
+- 默认值：1073741824
+
+#### update_compaction_delvec_file_io_amp_ratio
+
+- 含义：用于控制主键表包含 Delvec 文件的 Rowset 做 Compaction 的优先级。该值越大优先级越高。
+- 默认值：2
+
+#### repair_compaction_interval_seconds
+
+- 含义：Repair Compaction 线程轮询的间隔。
+- 默认值：600
+- 单位：秒
+
+#### manual_compaction_threads
+
+- 含义：Manual Compaction 线程数量。
+- 默认值：4
+
+#### enable_rowset_verify
+
+- 含义：是否检查 Rowset 的正确性。开启后，会在 Compaction、Schema Change 后检查生成的 Rowset 的正确性。
+- 默认值：false
+
+#### enable_size_tiered_compaction_strategy
+
+- 含义：是否开启 Size-tiered Compaction 策略。
+- 默认值：true
 
 #### min_compaction_failure_interval_sec
 
@@ -237,6 +306,12 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：Counter 统计信息的间隔。
 - 单位：毫秒
 - 默认值：500
+
+#### pindex_major_compaction_limit_per_disk
+
+- 含义：每块盘 Compaction 的最大并发数，用于解决 Compaction 在磁盘之间不均衡导致个别磁盘 I/O 过高的问题。
+- 默认值：1
+- 引入版本：3.0.9
 
 #### load_error_log_reserve_hours  
 
@@ -349,7 +424,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### tablet_max_pending_versions
 
-- 含义：Primary Key 表每个 tablet 上允许已提交 (committed) 但是未 apply 的最大版本数。
+- 含义：主键表每个 tablet 上允许已提交 (committed) 但是未 apply 的最大版本数。
 - 默认值：1000
 
 #### tablet_max_versions
@@ -389,6 +464,11 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：Size-tiered Compaction 策略中，相邻两个 level 之间相差的数据量的倍数。
 - 默认值：5
 
+#### size_tiered_level_multiple_dupkey
+
+- 含义：Size-tiered Compaction 策略中，Duplicate Key 表相邻两个 level 之间相差的数据量的倍数。
+- 默认值：10
+
 #### size_tiered_min_level_size
 
 - 含义：Size-tiered Compaction 策略中，最小 level 的大小，小于此数值的 rowset 会直接触发 compaction。
@@ -415,10 +495,37 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：单个 BE 上与 Kafka 交互的线程池大小。当前 Routine Load FE 与 Kafka 的交互需经由 BE 完成，而每个 BE 上实际执行操作的是一个单独的线程池。当 Routine Load 任务较多时，可能会出现线程池线程繁忙的情况，可以调整该配置。
 - 默认值：10
 
+#### lake_enable_vertical_compaction_fill_data_cache
+
+- 含义：存算分离集群下，是否允许 Compaction 任务在执行时缓存数据到本地磁盘上。
+- 默认值：false
+- 引入版本：v3.1.7、v3.2.3
+
+#### compact_threads
+
+- 含义：并发 Compaction 任务的最大线程数。自 v3.1.7，v3.2.2 起变为动态参数。
+- 默认值：4
+- 引入版本：v3.0.0
+
 #### update_compaction_ratio_threshold
 
-- 含义：存算分离集群下主键模型表单次 Compaction 可以合并的最大数据比例。如果单个 Tablet 过大，建议适当调小该配置项取值。自 v3.1.5 起支持。
+- 含义：存算分离集群下主键表单次 Compaction 可以合并的最大数据比例。如果单个 Tablet 过大，建议适当调小该配置项取值。自 v3.1.5 起支持。
 - 默认值：0.5
+
+#### create_tablet_worker_count
+
+- 含义：创建 Tablet 的线程数。自 v3.1.7 起变为动态参数。
+- 默认值：3
+
+#### number_tablet_writer_threads
+
+- 含义：用于 Stream Load 的线程数。自 v3.1.7 起变为动态参数。
+- 默认值：16
+
+#### pipeline_connector_scan_thread_num_per_cpu
+
+- 含义：BE 节点中每个 CPU 核心分配给 Pipeline Connector 的扫描线程数量。自 v3.1.7 起变为动态参数。
+- 默认值：8
 
 #### max_garbage_sweep_interval
 
@@ -470,6 +577,12 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：bRPC 的 bthreads 线程数量，-1 表示和 CPU 核数一样。
 - 默认值：-1
 
+#### compaction_memory_limit_per_worker
+
+- 含义：单个 Compaction 线程的最大内存使用量。
+- 单位：字节
+- 默认值：2147483648 (2 GB)
+
 #### priority_networks
 
 - 含义：以 CIDR 形式 10.10.10.0/24 指定 BE IP 地址，适用于机器有多个 IP，需要指定优先使用的网络。
@@ -489,11 +602,6 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 - 含义：心跳线程数。
 - 默认值：1
-
-#### create_tablet_worker_count
-
-- 含义：创建 tablet 的线程数。
-- 默认值：3
 
 #### drop_tablet_worker_count
 
@@ -534,6 +642,18 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 - 含义：计算 tablet 的校验和 (checksum)。
 - 默认值：1
+
+#### object_storage_connect_timeout_ms
+
+- 含义：对象存储 Socket 连接的超时时间。
+- 默认值：`-1`，表示使用 SDK 中的默认时间。
+- 引入版本：3.0.9
+
+#### object_storage_request_timeout_ms
+
+- 含义：对象存储 HTTP 连接的超时时间。
+- 默认值：`-1`，表示使用 SDK 中的默认时间。
+- 引入版本：3.0.9
 
 #### sys_log_dir
 
@@ -634,12 +754,12 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### base_compaction_num_threads_per_disk
 
-- 含义：每个磁盘 BaseCompaction 线程的数目。
+- 含义：每个磁盘 Base Compaction 线程的数目。
 - 默认值：1
 
 #### base_cumulative_delta_ratio
 
-- 含义：BaseCompaction 触发条件之一：Cumulative 文件大小达到 Base 文件的比例。
+- 含义：Base Compaction 触发条件之一：Cumulative 文件大小达到 Base 文件的比例。
 - 默认值：0.3
 
 #### compaction_trace_threshold
@@ -647,6 +767,27 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：单次 Compaction 打印 trace 的时间阈值，如果单次 compaction 时间超过该阈值就打印 trace。
 - 单位：秒
 - 默认值：60
+
+#### cumulative_compaction_num_threads_per_disk
+
+- 含义：每个磁盘 Cumulative Compaction 线程的数目。
+- 默认值：1
+
+#### vertical_compaction_max_columns_per_group
+
+- 含义：每组 Vertical Compaction 的最大列数。
+- 默认值：5
+
+#### enable_check_string_lengths
+
+- 含义：是否在导入时进行数据长度检查，以解决 VARCHAR 类型数据越界导致的 Compaction 失败问题。
+- 默认值：true
+
+#### max_row_source_mask_memory_bytes
+
+- 含义：Row source mask buffer 的最大内存占用大小。当 buffer 大于该值时将会持久化到磁盘临时文件中。该值应该小于 `compaction_mem_limit` 参数。
+- 单位：字节
+- 默认值：209715200
 
 #### be_http_port
 
@@ -662,11 +803,6 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 - 含义：小批量导入生成的文件保留的时。
 - 默认值：4
-
-#### number_tablet_writer_threads
-
-- 含义：流式导入的线程数。
-- 默认值：16
 
 #### streaming_load_rpc_max_alive_time_sec
 

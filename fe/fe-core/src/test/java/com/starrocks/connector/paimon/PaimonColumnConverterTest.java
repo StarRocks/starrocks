@@ -29,6 +29,7 @@ import org.apache.paimon.types.DecimalType;
 import org.apache.paimon.types.DoubleType;
 import org.apache.paimon.types.FloatType;
 import org.apache.paimon.types.IntType;
+import org.apache.paimon.types.LocalZonedTimestampType;
 import org.apache.paimon.types.MapType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.SmallIntType;
@@ -143,6 +144,13 @@ public class PaimonColumnConverterTest {
     @Test
     public void testConvertDatetime() {
         TimestampType paimonType = new TimestampType();
+        Type result = ColumnTypeConverter.fromPaimonType(paimonType);
+        Assert.assertEquals(result, Type.DATETIME);
+    }
+
+    @Test
+    public void testConvertLocalZonedDatetime() {
+        LocalZonedTimestampType paimonType = new LocalZonedTimestampType();
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
         Assert.assertEquals(result, Type.DATETIME);
     }

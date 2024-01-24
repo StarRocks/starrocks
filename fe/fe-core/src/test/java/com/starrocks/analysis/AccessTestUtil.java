@@ -55,6 +55,7 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageType;
@@ -112,7 +113,7 @@ public class AccessTestUtil {
         Column column = new Column();
         baseSchema.add(column);
         OlapTable table = new OlapTable(30000, "testTbl", baseSchema,
-                KeysType.AGG_KEYS, new SinglePartitionInfo(), distributionInfo, globalStateMgr.getClusterId(),
+                KeysType.AGG_KEYS, new SinglePartitionInfo(), distributionInfo, globalStateMgr.getNodeMgr().getClusterId(),
                 null);
         table.setIndexMeta(baseIndex.getId(), "testTbl", baseSchema, 0, 1, (short) 1,
                 TStorageType.COLUMN, KeysType.AGG_KEYS);
@@ -247,10 +248,6 @@ public class AccessTestUtil {
                     globalStateMgr.getDb(anyString);
                     minTimes = 0;
                     result = new Database();
-
-                    globalStateMgr.getDbNames();
-                    minTimes = 0;
-                    result = Lists.newArrayList("testDb");
 
                     globalStateMgr.getDb("emptyCluster");
                     minTimes = 0;

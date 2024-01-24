@@ -27,6 +27,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.thrift.TStorageType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -47,6 +48,7 @@ public class AlterTableTest {
         Config.dynamic_partition_enable = true;
         Config.dynamic_partition_check_interval_seconds = 1;
         Config.enable_strict_storage_medium_check = false;
+        Config.enable_experimental_rowstore = true;
         UtFrameUtils.createMinStarRocksCluster();
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -79,7 +81,7 @@ public class AlterTableTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "ALTER TABLE test_alter_bucket_size SET (\"bucket_size\" = \"-1\");";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
     }
 
     @Test
@@ -107,7 +109,7 @@ public class AlterTableTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "ALTER TABLE test_alter_cool_down_ttl SET (\"storage_cooldown_ttl\" = \"3 day\");";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
 
         Table table = GlobalStateMgr.getCurrentState().getDb("test").getTable("test_alter_cool_down_ttl");
         OlapTable olapTable = (OlapTable) table;
@@ -142,7 +144,7 @@ public class AlterTableTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "ALTER TABLE test_alter_cool_down_ttl_2 SET (\"storage_cooldown_ttl\" = \"abc\");";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
     }
 
     @Test
@@ -183,7 +185,7 @@ public class AlterTableTest {
         String sql = "ALTER TABLE test_alter_cool_down_ttl_partition\n" +
                 "MODIFY PARTITION (*) SET(\"storage_cooldown_ttl\" = \"2 day\", \"storage_medium\" = \"SSD\");";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
 
         p20200321 = rangePartitionInfo.getDataProperty(olapTable.getPartition("p20200321").getId());
         p20200322 = rangePartitionInfo.getDataProperty(olapTable.getPartition("p20200322").getId());
@@ -221,7 +223,7 @@ public class AlterTableTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "ALTER TABLE test_partition_live_number SET(\"partition_live_number\" = \"-1\");";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
         Set<Pair<Long, Long>> ttlPartitionInfo = GlobalStateMgr.getCurrentState()
                 .getDynamicPartitionScheduler().getTtlPartitionInfo();
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
@@ -229,7 +231,7 @@ public class AlterTableTest {
         Assert.assertFalse(ttlPartitionInfo.contains(new Pair<>(db.getId(), table.getId())));
         sql = "ALTER TABLE test_partition_live_number SET(\"partition_live_number\" = \"1\");";
         alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
         Assert.assertTrue(ttlPartitionInfo.contains(new Pair<>(db.getId(), table.getId())));
     }
 
@@ -256,10 +258,41 @@ public class AlterTableTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "ALTER TABLE test_partition_storage_medium SET(\"default.storage_medium\" = \"SSD\");";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable olapTable = (OlapTable) db.getTable("test_partition_storage_medium");
         Assert.assertTrue(olapTable.getStorageMedium().equals("SSD"));
+    }
+
+    @Test
+    public void testAlterTableStorageType() throws Exception {
+        starRocksAssert.useDatabase("test").withTable("CREATE TABLE test_storage_type (\n" +
+                "event_day DATE,\n" +
+                "site_id INT DEFAULT '10',\n" +
+                "city_code VARCHAR(100),\n" +
+                "user_name VARCHAR(32) DEFAULT '',\n" +
+                "pv BIGINT DEFAULT '2'\n" +
+                ")\n" +
+                "PRIMARY KEY(event_day, site_id, city_code, user_name)\n" +
+                "DISTRIBUTED BY HASH(event_day, site_id)\n" +
+                "PROPERTIES(\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_type\" = \"column_with_row\"\n" +
+                ");");
+        ConnectContext ctx = starRocksAssert.getCtx();
+
+        String sql1 = "ALTER TABLE test_storage_type SET(\"storage_type\" = \"column\");";
+        AnalysisException e1 =
+                Assert.assertThrows(AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(sql1, ctx));
+        Assert.assertTrue(e1.getMessage().contains("Can't change storage type"));
+        String sql2 = "ALTER TABLE test_storage_type SET(\"storage_type\" = \"column_with_row\");";
+        AnalysisException e2 =
+                Assert.assertThrows(AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(sql2, ctx));
+        Assert.assertTrue(e2.getMessage().contains("Can't change storage type"));
+
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        OlapTable olapTable = (OlapTable) db.getTable("test_storage_type");
+        Assert.assertTrue(olapTable.getStorageType().equals(TStorageType.COLUMN_WITH_ROW));
     }
 
 }

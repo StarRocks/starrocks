@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.QueryStatement;
@@ -30,6 +31,7 @@ public class AnalyzeTestUtil {
     private static String DB_NAME = "test";
 
     public static void init() throws Exception {
+        Config.enable_experimental_rowstore = true;
         // create connect context
         UtFrameUtils.createMinStarRocksCluster();
         connectContext = UtFrameUtils.createDefaultCtx();
