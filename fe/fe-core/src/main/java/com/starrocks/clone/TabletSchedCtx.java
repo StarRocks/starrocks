@@ -1243,7 +1243,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         Locker locker = new Locker();
         try {
             locker.lockDatabase(db, LockType.READ);
-            Table table = db.getTable(tabletId);
+            Table table = db.getTable(tblId);
             if (table == null) {
                 return true;
             } else {
