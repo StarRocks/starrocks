@@ -563,7 +563,6 @@ void run_update_schema_task(const std::shared_ptr<UpdateSchemaTaskRequest>& agen
         }
     }
 
-    LOG(INFO) << "update schema task";
     TFinishTaskRequest finish_task_request;
     auto& error_tablet_ids = finish_task_request.error_tablet_ids;
     if (!st.ok()) {
@@ -576,11 +575,11 @@ void run_update_schema_task(const std::shared_ptr<UpdateSchemaTaskRequest>& agen
         }
     } else {
         for (auto tablet_id : update_schema_req.tablet_ids) {
-            LOG(INFO) << "update tablet:" << tablet_id << " schema";
             TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
+            if (tablet == nullptr) {
+                continue;
+            }
             auto ori_tablet_schema = tablet->tablet_schema();
-            LOG(INFO) << "tablet:" << tablet_id << " ori_schema version:" << ori_tablet_schema->schema_version()
-                      << " new version:" << schema_version;
             if (schema_version <= ori_tablet_schema->schema_version()) {
                 continue;
             }
@@ -596,12 +595,11 @@ void run_update_schema_task(const std::shared_ptr<UpdateSchemaTaskRequest>& agen
                 error_tablet_ids.push_back(tablet_id);
             }
             tablet->update_max_version_schema(new_schema);
-            LOG(INFO) << "update tablet:" << tablet_id << " schema version from " << ori_tablet_schema->schema_version()
-                      << " to " << schema_version;
+            VLOG(1) << "update tablet:" << tablet_id << " schema version from " << ori_tablet_schema->schema_version()
+                    << " to " << schema_version;
         }
     }
 
-    LOG(INFO) << "finish update schema task";
     task_status.__set_status_code(status_code);
     task_status.__set_error_msgs(error_msgs);
 

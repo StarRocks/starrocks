@@ -199,8 +199,8 @@ void AgentServer::Impl::init_or_die() {
         BUILD_DYNAMIC_TASK_THREAD_POOL("manual_compaction", 0, 1, std::numeric_limits<int>::max(),
                                        _thread_pool_compaction);
 
-        BUILD_DYNAMIC_TASK_THREAD_POOL("update_schema", 0, 1, std::numeric_limits<int>::max(),
-                                       _thread_pool_update_schema);
+        BUILD_DYNAMIC_TASK_THREAD_POOL("update_schema", 0, config::update_schema_worker_count,
+                                       std::numeric_limits<int>::max(), _thread_pool_update_schema);
 
         BUILD_DYNAMIC_TASK_THREAD_POOL("upload", 0, config::upload_worker_count, std::numeric_limits<int>::max(),
                                        _thread_pool_upload);

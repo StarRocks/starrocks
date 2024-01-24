@@ -1493,7 +1493,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         Table<Long, Long, List<Long>> tableToIndexTabletMap = HashBasedTable.create();
         Map<Long, Long> tableToDb = Maps.newHashMap();
 
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         // split tablets by db, table and index
         for (TTablet backendTablet : backendTablets.values()) {
             for (TTabletInfo tabletInfo : backendTablet.tablet_infos) {
@@ -1506,9 +1506,9 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                     continue;
                 }
 
-                long dbId = tabletMeta != null ? tabletMeta.getDbId() : TabletInvertedIndex.NOT_EXIST_VALUE;
-                long tableId = tabletMeta != null ? tabletMeta.getTableId() : TabletInvertedIndex.NOT_EXIST_VALUE;
-                long indexId = tabletMeta != null ? tabletMeta.getIndexId() : TabletInvertedIndex.NOT_EXIST_VALUE;
+                long dbId = tabletMeta.getDbId();
+                long tableId = tabletMeta.getTableId();
+                long indexId = tabletMeta.getIndexId();
 
                 Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
                 if (db == null) {
@@ -1600,9 +1600,6 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 AgentTaskQueue.addTask(task);
             }
             AgentTaskExecutor.submit(updateSchemaBatchTask);
-            LOG.info("send update schema task to BE");
-        } else {
-            LOG.info("no tablet schema need to update");
         }
 
     }
