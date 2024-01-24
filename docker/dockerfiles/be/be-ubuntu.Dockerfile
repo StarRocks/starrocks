@@ -26,6 +26,7 @@ RUN rm -f /release/be_artifacts/be/lib/starrocks_be.debuginfo
 
 FROM ubuntu:22.04
 ARG STARROCKS_ROOT=/opt/starrocks
+ENV STARROCKS_ROOT=${STARROCKS_ROOT}
 
 RUN apt-get update -y && apt-get install -y --no-install-recommends \
         binutils-dev default-jdk python2 mysql-client curl vim tree net-tools less tzdata linux-tools-common linux-tools-generic && \
