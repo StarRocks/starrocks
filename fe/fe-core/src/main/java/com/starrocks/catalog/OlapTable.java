@@ -2770,6 +2770,11 @@ public class OlapTable extends Table {
         return tableProperty.getForeignKeyConstraints();
     }
 
+    /**
+     * Return Whether MaterializedView has foreignKey constraints or not. MV's constraints come from table properties
+     * and is different from normal table.
+     */
+    @Override
     public boolean hasForeignKeyConstraints() {
         return tableProperty != null && tableProperty.getForeignKeyConstraints() != null &&
                 !tableProperty.getForeignKeyConstraints().isEmpty();
