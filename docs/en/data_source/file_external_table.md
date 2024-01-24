@@ -9,7 +9,10 @@ File external table is a special type of external table. It allows you to direct
 This feature is supported from StarRocks v2.5.
 
 :::note
-The File external feature was designed to help with importing data into StarRocks NOT to perform queries against external systems as a normal operation.   Although you can query and use functions like JOIN, it is not performant.   A more performant solution would be to import the data into StarRocks. 
+
+- From v3.1 onwards, StarRocks supports directly loading data from files on cloud storage using the [INSERT](../loading/InsertInto.md#insert-data-directly-from-files-in-an-external-source-using-files) command and the [FILES](../sql-reference/sql-functions/table-functions/files.md) function, thereby you do not need to create an external catalog or file external table first. Besides, FILES() can automatically infer the table schema of the files, greatly simplifying the process of data loading.
+- The File External Table feature was designed to help with loading data into StarRocks, NOT to perform efficient queries against external systems as a normal operation. A more performant solution would be to load the data into StarRocks.
+
 :::
 
 ## Limits

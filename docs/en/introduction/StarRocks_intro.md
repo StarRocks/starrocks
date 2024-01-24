@@ -10,7 +10,11 @@ StarRocks is a next-gen, high-performance analytical data warehouse that enables
 
 StarRocks is also compatible with MySQL protocols and can be easily connected using MySQL clients and popular BI tools. StarRocks is highly scalable, available, and easy to maintain. It is widely adopted in the industry, powering a variety of OLAP scenarios, such as real-time analytics, ad-hoc queries, data lake analytics and more.
 
+<<<<<<< HEAD
 Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5zxqr0k-U5lrTVlgypRIV8RbnCIAzg) for live support, discussion, or latest community news. You can also follow us on [LinkedIn](https://www.linkedin.com/company/starrocks) to get first-hand updates on new features, events, and sharing.
+=======
+Join our [web forum](https://forum.starrocks.io/) for asking general questions. Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5zxqr0k-U5lrTVlgypRIV8RbnCIAzg) for chat. For community news, read the [StarRocks.io Blog](https://www.starrocks.io/blog). You can also follow us on [LinkedIn](https://www.linkedin.com/company/starrocks) to get first-hand updates on new features, events, and sharing.
+>>>>>>> 4fd6f37261 ([Doc] add a note to recommend insert+files over file external table (#39872))
 
 ---
 
@@ -19,4 +23,3 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 <FeatureList language="English" />
 
 ---
-
