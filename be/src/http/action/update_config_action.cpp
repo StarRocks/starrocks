@@ -130,6 +130,12 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                     config::update_memory_limit_percent);
 #endif
         });
+        _config_callback.emplace("dictionary_cache_refresh_threadpool_size", [&]() {
+            if (_exec_env->dictionary_cache_pool() != nullptr) {
+                (void)_exec_env->dictionary_cache_pool()->update_max_threads(
+                        config::dictionary_cache_refresh_threadpool_size);
+            }
+        });
         _config_callback.emplace("transaction_publish_version_worker_count", [&]() {
             auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::PUBLISH_VERSION);
             (void)thread_pool->update_max_threads(
