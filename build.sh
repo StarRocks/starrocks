@@ -43,6 +43,10 @@ if [ -z $BUILD_TYPE ]; then
     export BUILD_TYPE=Release
 fi
 
+if [ -z $KEEP_SYMBOL ]; then
+    export KEEP_SYMBOL=false
+fi
+
 cd $STARROCKS_HOME
 if [ -z $STARROCKS_VERSION ]; then
     tag_name=$(git describe --tags --exact-match 2>/dev/null)
@@ -260,6 +264,7 @@ fi
 echo "Get params:
     BUILD_BE            -- $BUILD_BE
     BE_CMAKE_TYPE       -- $BUILD_TYPE
+    KEEP_SYMBOL         -- $KEEP_SYMBOL
     BUILD_FE            -- $BUILD_FE
     BUILD_SPARK_DPP     -- $BUILD_SPARK_DPP
     BUILD_HIVE_UDF      -- $BUILD_HIVE_UDF
@@ -490,7 +495,10 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/bin/jeprof ${STARROCKS_OUTPUT}/be/bin
     # format $BUILD_TYPE to lower case
     ibuildtype=`echo ${BUILD_TYPE} | tr 'A-Z' 'a-z'`
-    if [ "${ibuildtype}" == "release" ] ; then
+    # format KEEP_SYMBOL to lower case
+    ikeepsymbol=`echo ${KEEP_SYMBOL} | tr 'A-Z' 'a-z'`
+    # only when BUILD_TYPE=release AND KEEP_SYMBOL=false, the binary is stripped
+    if [ "${ibuildtype}" == "release" ] && [ "${ikeepsymbol}" == "false" ] ; then
         pushd ${STARROCKS_OUTPUT}/be/lib/ &>/dev/null
         BE_BIN=starrocks_be
         BE_BIN_DEBUGINFO=starrocks_be.debuginfo
