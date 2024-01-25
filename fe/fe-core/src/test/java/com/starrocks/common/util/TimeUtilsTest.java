@@ -250,18 +250,4 @@ public class TimeUtilsTest {
             Assert.fail(e.getMessage());
         }
     }
-
-    @Test
-    public void testGetMilliseconds() {
-        Assert.assertEquals(0, TimeUtils.getMilliseconds("0ms"));
-        Assert.assertEquals(0, TimeUtils.getMilliseconds("0s"));
-        Assert.assertEquals(0, TimeUtils.getMilliseconds("0m"));
-        Assert.assertEquals(1011, TimeUtils.getMilliseconds("1011ms"));
-        Assert.assertEquals(1011, TimeUtils.getMilliseconds("1011.222ms"));
-        Assert.assertEquals(1011000, TimeUtils.getMilliseconds("1011s"));
-        Assert.assertEquals(1011222, TimeUtils.getMilliseconds("1011.222s"));
-        Assert.assertEquals(1011222, TimeUtils.getMilliseconds("1011.222333s"));
-        Assert.assertEquals(60000, TimeUtils.getMilliseconds("1m"));
-        Assert.assertEquals(90000, TimeUtils.getMilliseconds("1.5m"));
-    }
 }

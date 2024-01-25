@@ -48,7 +48,7 @@ Runtime Query Profile has the same format and content as regular Query Profile. 
 | Session Variable | enable_profile | true/false | false | Whether to enable Query Profile. `true` means to enable this feature. |
 | Session Variable | pipeline_profile_level | 1/2 | 1 | Set the level of Query Profile. `1` indicates merging the metrics of the Query Profile; `2` indicates retaining the original structure of the Query Profile. If this item is set as `2`, all visualization analysis tools will no longer be applicable, therefore, it is generally not recommended to change this value. |
 | Session Variable | runtime_profile_report_interval | Positive integer | 10 | The report interval of Runtime Query Profile. Unit: second. |
-| Session Variable | big_query_profile_threshold | String | `0s` | If the execution time of a big query excceds this value, Query Profile is automatically enbaled for this query. Setting this item to `0s` indicates this feature is disabled. Its value can be represented by a floating-point number followed by a unit, where the units can be `ms`, `s`, `m`. |
+| Session Variable | big_query_profile_threshold | String | `0s` | If the execution time of a big query excceds this value, Query Profile is automatically enbaled for this query. Setting this item to `0s` indicates this feature is disabled. Its value can be represented by a integral number followed by a unit, where the units can be `ms`, `s`, `m`. |
 | FE Dynamic Configuration Item | enable_statistics_collect_profile | true/false | false | Whether to enable Query Profile for statistics collection-related queries. `true` means to enable this feature. |
 
 ### Obtain Query Profile via Web UI

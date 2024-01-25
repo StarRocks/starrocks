@@ -48,7 +48,7 @@ Runtime Query Profile 与普通 Query Profile 格式和内容均相同。您可�
 | Session 变量 | enable_profile | true/false | false |是否启用 Query Profile 功能。`true` 表示启用。 |
 | Session 变量 | pipeline_profile_level | 1/2 | 1 | 设置 Query Profile 的级别。`1` 表示会对 Profile 进行合并展示；`2` 表示保留原始的 Profile，如果选用这一级别，那么所有可视化的分析工具将不再起作用，因此通常不建议修改该参数。 |
 | Session 变量 | runtime_profile_report_interval | 正整数 | 10 | 设置 Runtime Query Profile 上报的时间间隔，单位秒。 |
-| Session 变量 | big_query_profile_threshold | 字符串 | `0s` | 设置长查询自动开启 Query Profile 的阈值，`0s` 表示关闭该功能。浮点数结合时间单位表示启用，可以用单位包括：`ms`、`s`、`m`。 |
+| Session 变量 | big_query_profile_threshold | 字符串 | `0s` | 设置长查询自动开启 Query Profile 的阈值，`0s` 表示关闭该功能。整数结合时间单位表示启用，可以用单位包括：`ms`、`s`、`m`。 |
 | FE 动态配置项 | enable_statistics_collect_profile | true/false | false | 是否启用统计信息采集相关查询的 Query Profile。`true` 表示启用。 |
 
 ## 获取 Query Profile

@@ -233,58 +233,45 @@ public class TimeValue implements Comparable<TimeValue> {
         }
     }
 
-    public static TimeValue parseTimeValue(String sValue, String settingName) throws Exception {
-        Objects.requireNonNull(settingName);
+    public static TimeValue parseTimeValue(String sValue) {
         Objects.requireNonNull(sValue);
-        return parseTimeValue(sValue, null, settingName);
+        return parseTimeValue(sValue, null);
     }
 
-    public static TimeValue parseTimeValue(String sValue, TimeValue defaultValue, String settingName)
-            throws Exception {
-        settingName = Objects.requireNonNull(settingName);
+    public static TimeValue parseTimeValue(String sValue, TimeValue defaultValue) {
         if (sValue == null) {
             return defaultValue;
         }
         final String normalized = sValue.toLowerCase(Locale.ROOT).trim();
         if (normalized.endsWith("nanos")) {
-            return new TimeValue(parse(sValue, normalized, "nanos"), TimeUnit.NANOSECONDS);
+            return new TimeValue(parse(normalized, "nanos"), TimeUnit.NANOSECONDS);
         } else if (normalized.endsWith("micros")) {
-            return new TimeValue(parse(sValue, normalized, "micros"), TimeUnit.MICROSECONDS);
+            return new TimeValue(parse(normalized, "micros"), TimeUnit.MICROSECONDS);
         } else if (normalized.endsWith("ms")) {
-            return new TimeValue(parse(sValue, normalized, "ms"), TimeUnit.MILLISECONDS);
+            return new TimeValue(parse(normalized, "ms"), TimeUnit.MILLISECONDS);
         } else if (normalized.endsWith("s")) {
-            return new TimeValue(parse(sValue, normalized, "s"), TimeUnit.SECONDS);
+            return new TimeValue(parse(normalized, "s"), TimeUnit.SECONDS);
         } else if (sValue.endsWith("m")) {
             // parsing minutes should be case-sensitive as 'M' means "months", not "minutes"; this is the only special case.
-            return new TimeValue(parse(sValue, normalized, "m"), TimeUnit.MINUTES);
+            return new TimeValue(parse(normalized, "m"), TimeUnit.MINUTES);
         } else if (normalized.endsWith("h")) {
-            return new TimeValue(parse(sValue, normalized, "h"), TimeUnit.HOURS);
+            return new TimeValue(parse(normalized, "h"), TimeUnit.HOURS);
         } else if (normalized.endsWith("d")) {
-            return new TimeValue(parse(sValue, normalized, "d"), TimeUnit.DAYS);
+            return new TimeValue(parse(normalized, "d"), TimeUnit.DAYS);
         } else if (normalized.matches("-0*1")) {
             return TimeValue.MINUS_ONE;
         } else if (normalized.matches("0+")) {
             return TimeValue.ZERO;
         } else {
             // Missing units:
-            throw new Exception(
+            throw new IllegalArgumentException(
                     "failed to parse setting [{}] with value [{}] as a time value: unit is missing or unrecognized");
         }
     }
 
-    private static long parse(final String initialInput, final String normalized, final String suffix) {
+    private static long parse(final String normalized, final String suffix) {
         final String s = normalized.substring(0, normalized.length() - suffix.length()).trim();
-        try {
-            return Long.parseLong(s);
-        } catch (final NumberFormatException e) {
-            try {
-                @SuppressWarnings("unused")
-                final double ignored = Double.parseDouble(s);
-                throw new NumberFormatException("failed to parse, fractional time values are not supported");
-            } catch (final NumberFormatException ignored) {
-                throw new NumberFormatException("failed to parse");
-            }
-        }
+        return Long.parseLong(s);
     }
 
     private static final long C0 = 1L;
