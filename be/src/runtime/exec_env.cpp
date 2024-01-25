@@ -448,7 +448,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     RETURN_IF_ERROR(
             ThreadPoolBuilder("load_rowset_pool")
                     .set_min_threads(0)
-                    .set_max_threads(connector_num_io_threads)
+                    .set_max_threads(config::load_segment_thread_pool_num_max)
                     .set_max_queue_size(config::load_segment_thread_pool_queue_size)
                     .set_idle_timeout(MonoDelta::FromMilliseconds(config::streaming_load_thread_pool_idle_time_ms))
                     .build(&load_rowset_pool));
@@ -457,7 +457,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     RETURN_IF_ERROR(
             ThreadPoolBuilder("load_segment_pool")
                     .set_min_threads(0)
-                    .set_max_threads(connector_num_io_threads)
+                    .set_max_threads(config::load_segment_thread_pool_num_max)
                     .set_max_queue_size(config::load_segment_thread_pool_queue_size)
                     .set_idle_timeout(MonoDelta::FromMilliseconds(config::streaming_load_thread_pool_idle_time_ms))
                     .build(&load_segment_pool));
