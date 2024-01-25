@@ -576,6 +576,24 @@ void ScanOperator::set_query_ctx(const QueryContextPtr& query_ctx) {
     _query_ctx = query_ctx;
 }
 
+void ScanOperator::append_morsels(std::vector<MorselPtr>&& morsels) {
+    query_cache::TicketChecker* ticket_checker = _ticket_checker.get();
+
+    if (ticket_checker != nullptr) {
+        int64_t cached_owner_id = -1;
+        for (const MorselPtr& morsel : morsels) {
+            if (!morsel->has_owner_id()) continue;
+            int64_t owner_id = morsel->owner_id();
+            if (owner_id != cached_owner_id) {
+                cached_owner_id = owner_id;
+                ticket_checker->more_tickets(cached_owner_id);
+            }
+        }
+    }
+
+    _morsel_queue->append_morsels(std::move(morsels));
+}
+
 // ========== ScanOperatorFactory ==========
 
 ScanOperatorFactory::ScanOperatorFactory(int32_t id, ScanNode* scan_node)

@@ -813,19 +813,26 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
     }
     _ck_acc.reset();
 
+    // before returning eof, we can check if this chunk source generates splits.
     {
         std::vector<ScanSplitContextPtr> split_tasks;
         _data_source->get_split_tasks(&split_tasks);
         if (split_tasks.size() != 0) {
             std::vector<MorselPtr> split_morsels;
             ScanMorsel* current_morsel = down_cast<ScanMorsel*>(_morsel.get());
+
+            if (current_morsel->is_last_split()) {
+                split_tasks.back()->set_last_split(true);
+            }
+
             for (auto& t : split_tasks) {
                 std::unique_ptr<ScanMorsel> m = std::make_unique<ScanMorsel>(current_morsel->get_plan_node_id(),
                                                                              *current_morsel->get_scan_range());
                 m->set_split_context(std::move(t));
                 split_morsels.emplace_back(std::move(m));
             }
-            scan_op->morsel_queue()->append_morsels(std::move(split_morsels));
+
+            scan_op->append_morsels(std::move(split_morsels));
         }
     }
 

@@ -315,6 +315,7 @@ public:
     virtual Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) = 0;
     virtual void do_update_counter(HdfsScanProfile* profile);
     virtual bool is_jni_scanner() { return false; }
+    virtual void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) {}
 
 protected:
     Status open_random_access_file();

@@ -91,6 +91,7 @@ public:
     virtual bool is_running_all_io_tasks() const;
 
     virtual int64_t get_scan_table_id() const { return -1; }
+    void append_morsels(std::vector<MorselPtr>&& morsels);
 
 protected:
     static constexpr size_t kIOTaskBatchSize = 64;
