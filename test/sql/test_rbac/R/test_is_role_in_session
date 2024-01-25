@@ -68,3 +68,6 @@ select is_role_in_session("r3");
 execute as root with no revert;
 -- result:
 -- !result
+drop user u1;
+-- result:
+-- !result
