@@ -64,7 +64,8 @@ enum TResultSinkType {
     FILE,
     STATISTIC,
     VARIABLE,
-    HTTP_PROTOCAL
+    HTTP_PROTOCAL,
+    METADATA_ICEBERG // TODO(stephen): how to pass version? add another column or use flag?
 }
 
 enum TResultSinkFormatType {

@@ -22,6 +22,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.StarRocksIcebergTableScan;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableScan;
@@ -35,6 +36,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 
 import static com.starrocks.connector.PartitionUtil.convertIcebergPartitionToPartitionName;
+import static org.apache.iceberg.StarRocksIcebergTableScan.newTableScanContext;
 
 public interface IcebergCatalog {
 
@@ -78,7 +80,7 @@ public interface IcebergCatalog {
         }
     }
 
-    default List<String> listPartitionNames(String dbName, String tableName, ExecutorService executorService) {
+    default List<String> listPartitionNames(String dbName, String tableName, long snapshotId, ExecutorService executorService) {
         org.apache.iceberg.Table icebergTable = getTable(dbName, tableName);
         List<String> partitionNames = Lists.newArrayList();
 
@@ -101,6 +103,14 @@ public interface IcebergCatalog {
         }
 
         return partitionNames;
+    }
+
+    default StarRocksIcebergTableScan getTableScan(Table table, StarRocksIcebergTableScanContext scanContext) {
+        return new StarRocksIcebergTableScan(
+                table,
+                table.schema(),
+                newTableScanContext(table),
+                scanContext);
     }
 
     default void deleteUncommittedDataFiles(List<String> fileLocations) {

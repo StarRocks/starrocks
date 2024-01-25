@@ -26,6 +26,12 @@
             <artifactId>hadoop-common</artifactId>
             <version>3.3.6</version>
         </dependency>
+
+        <dependency>
+            <groupId>org.apache.iceberg</groupId>
+            <artifactId>iceberg-core</artifactId>
+            <version>1.5.0</version>
+        </dependency>
     </dependencies>
 
     <build>

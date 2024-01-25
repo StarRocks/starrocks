@@ -62,6 +62,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.connector.metadata.iceberg.LogicalIcebergMetadataTable;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.planner.AggregationNode;
 import com.starrocks.planner.AnalyticEvalNode;
@@ -83,6 +84,7 @@ import com.starrocks.planner.FragmentNormalizer;
 import com.starrocks.planner.HashJoinNode;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.HudiScanNode;
+import com.starrocks.planner.IcebergMetadataScanNode;
 import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.IntersectNode;
 import com.starrocks.planner.JDBCScanNode;
@@ -155,6 +157,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperat
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHudiScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergMetadataScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
@@ -214,6 +217,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
+import static com.starrocks.sql.optimizer.operator.scalar.ScalarOperator.isColumnEqualConstant;
 
 /**
  * PlanFragmentBuilder used to transform physical operator to exec plan fragment
@@ -1271,6 +1275,72 @@ public class PlanFragmentBuilder {
 
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), odpsScanNode, DataPartition.RANDOM);
+            context.getFragments().add(fragment);
+            return fragment;
+        }
+
+        @Override
+        public PlanFragment visitPhysicalIcebergMetadataScan(OptExpression optExpression, ExecPlan context) {
+            PhysicalIcebergMetadataScanOperator node = (PhysicalIcebergMetadataScanOperator) optExpression.getOp();
+
+            LogicalIcebergMetadataTable table = (LogicalIcebergMetadataTable) node.getTable();
+            context.getDescTbl().addReferencedTable(table);
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+            tupleDescriptor.setTable(table);
+
+            Column phCol = table.getPlaceHolderColumns().get(0);
+            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
+                if (entry.getValue().getName().equalsIgnoreCase(phCol.getName())) {
+                    continue;
+                }
+                SlotDescriptor slotDescriptor =
+                        context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
+                slotDescriptor.setColumn(entry.getValue());
+                slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
+                slotDescriptor.setIsMaterialized(true);
+                slotDescriptor.setIsOutputColumn(node.getOutputColumns().contains(entry.getKey()));
+                if (slotDescriptor.getOriginType().isComplexType()) {
+                    slotDescriptor.setOriginType(entry.getKey().getType());
+                    slotDescriptor.setType(entry.getKey().getType());
+                }
+                context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
+            }
+
+            IcebergMetadataScanNode metadataScanNode =
+                    new IcebergMetadataScanNode(context.getNextNodeId(), tupleDescriptor,
+                            "IcebergMetadataScanNode", node.getTemporalClause());
+            try {
+                ScalarOperatorToExpr.FormatterContext formatterContext =
+                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+                List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
+
+                ColumnRefOperator placeHolderOp = new ColumnRefOperator(
+                        phCol.getUniqueId(), phCol.getType(), phCol.getName(), phCol.isAllowNull());
+                String icebergPredicate = "";
+                for (ScalarOperator predicate : predicates) {
+                    if (isColumnEqualConstant(predicate) && predicate.getChild(0).equivalent(placeHolderOp)) {
+                        icebergPredicate = ((ConstantOperator) predicate.getChild(1)).getVarchar();
+                    } else {
+                        metadataScanNode.getConjuncts()
+                                .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
+                    }
+                }
+
+                metadataScanNode.preProcessIcebergPredicate(icebergPredicate);
+                metadataScanNode.setupScanRangeLocations();
+
+            } catch (Exception e) {
+                LOG.warn("Iceberg metadata scan node get scan range locations failed" + e);
+                throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
+            }
+
+            metadataScanNode.setLimit(node.getLimit());
+
+            tupleDescriptor.computeMemLayout();
+            context.getScanNodes().add(metadataScanNode);
+
+            PlanFragment fragment =
+                    new PlanFragment(context.getNextFragmentId(), metadataScanNode, DataPartition.RANDOM);
             context.getFragments().add(fragment);
             return fragment;
         }

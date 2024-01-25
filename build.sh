@@ -506,6 +506,9 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/java-extensions/odps-reader/target/odps-reader-lib ${STARROCKS_OUTPUT}/be/lib/
         cp -r -p ${STARROCKS_HOME}/java-extensions/odps-reader/target/starrocks-odps-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
         cp -r -p ${STARROCKS_HOME}/java-extensions/odps-reader/target/starrocks-odps-reader.jar ${STARROCKS_OUTPUT}/be/lib/odps-reader-lib
+        cp -r -p ${STARROCKS_HOME}/java-extensions/iceberg-metadata-reader/target/iceberg-reader-lib ${STARROCKS_OUTPUT}/be/lib/
+        cp -r -p ${STARROCKS_HOME}/java-extensions/iceberg-metadata-reader/target/starrocks-iceberg-metadata-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
+        cp -r -p ${STARROCKS_HOME}/java-extensions/iceberg-metadata-reader/target/starrocks-iceberg-metadata-reader.jar ${STARROCKS_OUTPUT}/be/lib/iceberg-reader-lib
         cp -r -p ${STARROCKS_HOME}/java-extensions/paimon-reader/target/paimon-reader-lib ${STARROCKS_OUTPUT}/be/lib/
         cp -r -p ${STARROCKS_HOME}/java-extensions/paimon-reader/target/starrocks-paimon-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
         cp -r -p ${STARROCKS_HOME}/java-extensions/paimon-reader/target/starrocks-paimon-reader.jar ${STARROCKS_OUTPUT}/be/lib/paimon-reader-lib

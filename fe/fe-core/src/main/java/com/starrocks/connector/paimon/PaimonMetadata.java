@@ -107,7 +107,7 @@ public class PaimonMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName) {
+    public List<String> listPartitionNames(String databaseName, String tableName, long snapshotId) {
         Identifier identifier = new Identifier(databaseName, tableName);
         org.apache.paimon.table.Table paimonTable;
         try {
@@ -356,7 +356,7 @@ public class PaimonMetadata implements ConnectorMetadata {
         } catch (OutOfRangeException e) {
             // If paimon clear its snapshot, return all latest partitions.
             partitionToSnapshotId.clear();
-            List<String> parts = listPartitionNames(paimonTable.getDbName(), paimonTable.getTableName());
+            List<String> parts = listPartitionNames(paimonTable.getDbName(), paimonTable.getTableName(), -1);
             parts.forEach(part -> partitionToSnapshotId.put(part, latestSnapshotId));
             LOG.warn("Paimon snapshot id {} has been out of date, return all latest partitions with latest id {}.",
                     mvSnapshotId, latestSnapshotId);

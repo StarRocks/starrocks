@@ -132,6 +132,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PROFILE = "enable_profile";
 
     public static final String ENABLE_LOAD_PROFILE = "enable_load_profile";
+    public static final String ENABLE_METADATA_PROFILE = "enable_metadata_profile";
     public static final String PROFILING = "profiling";
     public static final String SQL_MODE = "sql_mode";
     /**
@@ -393,6 +394,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_READ_ICEBERG_PUFFIN_NDV = "enable_read_iceberg_puffin_ndv";
 
     public static final String ENABLE_ICEBERG_COLUMN_STATISTICS = "enable_iceberg_column_statistics";
+
+    public static final String PLAN_MODE = "plan_mode";
 
     public static final String ENABLE_HIVE_COLUMN_STATS = "enable_hive_column_stats";
 
@@ -837,6 +840,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // if true, will generate profile when load finished
     @VariableMgr.VarAttr(name = ENABLE_LOAD_PROFILE)
     private boolean enableLoadProfile = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_METADATA_PROFILE)
+    private boolean enableMetadataProfile = false;
 
     // Default sqlMode is ONLY_FULL_GROUP_BY
     @VariableMgr.VarAttr(name = SQL_MODE_STORAGE_NAME, alias = SQL_MODE, show = SQL_MODE)
@@ -1850,13 +1856,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     @VarAttr(name = ENABLE_PRUNE_ICEBERG_MANIFEST)
-    private boolean enablePruneIcebergManifest = true;
+    private boolean enablePruneIcebergManifest = false;
 
     @VarAttr(name = ENABLE_READ_ICEBERG_PUFFIN_NDV)
     private boolean enableReadIcebergPuffinNdv = true;
 
     @VarAttr(name = ENABLE_ICEBERG_COLUMN_STATISTICS)
     private boolean enableIcebergColumnStatistics = false;
+
+    @VarAttr(name = PLAN_MODE)
+    private String planMode = "local";
 
     @VarAttr(name = SKEW_JOIN_RAND_RANGE, flag = VariableMgr.INVISIBLE)
     private int skewJoinRandRange = 1000;
@@ -1945,6 +1954,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableIcebergColumnStatistics(boolean enableIcebergColumnStatistics) {
         this.enableIcebergColumnStatistics = enableIcebergColumnStatistics;
+    }
+
+    public String getPlanMode() {
+        return planMode;
+    }
+
+    public void setPlanMode(String planMode) {
+        this.planMode = planMode;
     }
 
     public boolean isCboPredicateSubfieldPath() {
@@ -2184,6 +2201,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableLoadProfile(boolean enableLoadProfile) {
         this.enableLoadProfile = enableLoadProfile;
+    }
+
+    public boolean isEnableMetadataProfile() {
+        return enableMetadataProfile;
+    }
+
+    public void setEnableMetadataProfile(boolean enableMetadataProfile) {
+        this.enableMetadataProfile = enableMetadataProfile;
     }
 
     public boolean isEnableBigQueryProfile() {

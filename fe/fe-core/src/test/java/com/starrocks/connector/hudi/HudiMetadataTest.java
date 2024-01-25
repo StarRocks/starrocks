@@ -117,7 +117,7 @@ public class HudiMetadataTest {
 
     @Test
     public void testGetPartitionKeys() {
-        Assert.assertEquals(Lists.newArrayList("col1"), hudiMetadata.listPartitionNames("db1", "tbl1"));
+        Assert.assertEquals(Lists.newArrayList("col1"), hudiMetadata.listPartitionNames("db1", "tbl1", -1));
     }
 
     @Test

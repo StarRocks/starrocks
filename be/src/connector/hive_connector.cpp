@@ -24,6 +24,7 @@
 #include "exec/hdfs_scanner_text.h"
 #include "exec/jni_scanner.h"
 #include "exprs/expr.h"
+#include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::connector {
@@ -725,6 +726,26 @@ HdfsScanner* HiveDataSource::_create_odps_jni_scanner(const FSOptions& options) 
     return scanner;
 }
 
+HdfsScanner* HiveDataSource::_create_iceberg_metadata_jni_scanner(const FSOptions& options) {
+    const auto& scan_range = _scan_range;
+
+    const auto* hdfs_table = dynamic_cast<const IcebergMetadataTableDescriptor*>(_hive_table);
+    std::map<std::string, std::string> jni_scanner_params;
+
+    jni_scanner_params["required_fields"] = hdfs_table->get_hive_column_names();
+    jni_scanner_params["metadata_column_types"] = hdfs_table->get_hive_column_types();
+    jni_scanner_params["serialized_predicate"] = _provider->_hdfs_scan_node.serialized_predicate;
+
+    jni_scanner_params["serialized_table"] = _provider->_hdfs_scan_node.serialized_table;
+    jni_scanner_params["split_info"] = scan_range.serialized_manifest_file;
+    jni_scanner_params["load_column_stats"] = _provider->_hdfs_scan_node.load_column_stats ? "true" : "false";
+
+    const std::string scanner_factory_class = "com/starrocks/connector/iceberg/IcebergMetadataScannerFactory";
+
+    HdfsScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, jni_scanner_params));
+    return scanner;
+}
+
 Status HiveDataSource::_init_scanner(RuntimeState* state) {
     SCOPED_TIMER(_profile.open_file_timer);
 
@@ -819,6 +840,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     if (scan_range.__isset.use_odps_jni_reader) {
         use_odps_jni_reader = scan_range.use_odps_jni_reader;
     }
+    bool use_iceberg_jni_metadata_reader = false;
+    if (scan_range.__isset.use_iceberg_jni_metadata_reader) {
+        use_iceberg_jni_metadata_reader = scan_range.use_iceberg_jni_metadata_reader;
+    }
 
     if (_use_partition_column_value_only) {
         DCHECK(_can_use_any_column);
@@ -829,6 +854,8 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         scanner = _create_hudi_jni_scanner(fsOptions);
     } else if (use_odps_jni_reader) {
         scanner = _create_odps_jni_scanner(fsOptions);
+    } else if (use_iceberg_jni_metadata_reader) {
+        scanner = _create_iceberg_metadata_jni_scanner(fsOptions);
     } else if (format == THdfsFileFormat::PARQUET) {
         scanner = _pool.add(new HdfsParquetScanner());
     } else if (format == THdfsFileFormat::ORC) {

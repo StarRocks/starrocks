@@ -213,6 +213,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Queue;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
@@ -223,6 +224,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 // Do one COM_QUERY process.
@@ -853,7 +855,7 @@ public class StmtExecutor {
         leaderOpExecutor.execute();
     }
 
-    private boolean tryProcessProfileAsync(ExecPlan plan, int retryIndex) {
+    public boolean tryProcessProfileAsync(ExecPlan plan, int retryIndex) {
         if (coord == null) {
             return false;
         }
@@ -2337,12 +2339,14 @@ public class StmtExecutor {
 
             coord.exec();
             RowBatch batch;
-            do {
-                batch = coord.getNext();
-                if (batch.getBatch() != null) {
-                    sqlResult.add(batch.getBatch());
-                }
-            } while (!batch.isEos());
+            try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.getRowBatch")) {
+                do {
+                    batch = coord.getNext();
+                    if (batch.getBatch() != null) {
+                        sqlResult.add(batch.getBatch());
+                    }
+                } while (!batch.isEos());
+            }
         } catch (Exception e) {
             LOG.warn(e);
             coord.getExecStatus().setInternalErrorStatus(e.getMessage());
@@ -2350,6 +2354,42 @@ public class StmtExecutor {
             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
         }
         return Pair.create(sqlResult, coord.getExecStatus());
+    }
+
+    public void executeStmtWithResultQueue(ConnectContext context, ExecPlan plan, Queue<TResultBatch> sqlResult) {
+        try {
+            UUID uuid = context.getQueryId();
+            context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
+            coord = getCoordinatorFactory().createQueryScheduler(
+                    context, plan.getFragments(), plan.getScanNodes(), plan.getDescTbl().toThrift());
+            QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
+
+            coord.exec();
+            RowBatch batch;
+            long start = System.currentTimeMillis();
+            do {
+                batch = coord.getNext();
+                if (batch.getBatch() != null) {
+                    sqlResult.add(batch.getBatch());
+                }
+            } while (!batch.isEos());
+            LOG.error("================fetch result: {}", System.currentTimeMillis() - start);
+            context.getState().setEof();
+        } catch (Exception e) {
+            LOG.error("Failed to execute metadata collection job", e);
+            if (coord.getExecStatus().ok()) {
+                context.getState().setError(e.getMessage());
+            }
+            coord.getExecStatus().setInternalErrorStatus(e.getMessage());
+        } finally {
+            if (context.isProfileEnabled()) {
+                tryProcessProfileAsync(plan, 0);
+                QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(), System.currentTimeMillis() +
+                        context.getSessionVariable().getProfileTimeout() * 1000L);
+            } else {
+                QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+            }
+        }
     }
 
     public List<ByteBuffer> getProxyResultBuffer() {

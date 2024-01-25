@@ -109,7 +109,7 @@ public class OdpsMetadataTest extends MockedBase {
 
     @Test
     public void testListPartitionNames() {
-        List<String> partitionNames = odpsMetadata.listPartitionNames("project", "tableName");
+        List<String> partitionNames = odpsMetadata.listPartitionNames("project", "tableName", -1);
         Assert.assertEquals(Collections.singletonList("p1=a/p2=b"), partitionNames);
     }
 
@@ -127,7 +127,7 @@ public class OdpsMetadataTest extends MockedBase {
     @Test
     public void testGetPartitions() {
         Table table = odpsMetadata.getTable("db", "tbl");
-        List<String> partitionNames = odpsMetadata.listPartitionNames("db", "tbl");
+        List<String> partitionNames = odpsMetadata.listPartitionNames("db", "tbl", -1);
         List<PartitionInfo> partitions = odpsMetadata.getPartitions(table, partitionNames);
         Assert.assertEquals(1, partitions.size());
         PartitionInfo partitionInfo = partitions.get(0);

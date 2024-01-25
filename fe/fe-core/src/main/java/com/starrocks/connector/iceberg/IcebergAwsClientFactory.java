@@ -70,6 +70,7 @@ import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_AW
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE;
 
 public class IcebergAwsClientFactory implements AwsClientFactory {
+    private static final long serialVersionUID = 1234567899L;
     private static final Logger LOG = LogManager.getLogger(IcebergAwsClientFactory.class);
     public static final String HTTPS_SCHEME = "https://";
 

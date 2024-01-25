@@ -52,9 +52,9 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
-import static com.starrocks.connector.iceberg.IcebergConnector.HIVE_METASTORE_TIMEOUT;
-import static com.starrocks.connector.iceberg.IcebergConnector.HIVE_METASTORE_URIS;
-import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_METASTORE_URIS;
+import static com.starrocks.connector.iceberg.IcebergConfig.HIVE_METASTORE_TIMEOUT;
+import static com.starrocks.connector.iceberg.IcebergConfig.HIVE_METASTORE_URIS;
+import static com.starrocks.connector.iceberg.IcebergConfig.ICEBERG_METASTORE_URIS;
 import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
 import static org.apache.hadoop.hive.conf.HiveConf.ConfVars.METASTOREWAREHOUSE;
 

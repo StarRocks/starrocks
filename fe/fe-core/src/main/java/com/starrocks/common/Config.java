@@ -1812,6 +1812,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long statistic_collect_query_timeout = 3600; // 1h
 
+    @ConfField(mutable = true)
+    public static long metadata_collect_query_timeout = 60; // 60s
+
     @ConfField
     public static long statistic_cache_columns = 100000;
 
@@ -2098,7 +2101,7 @@ public class Config extends ConfigBase {
      * size of iceberg worker pool
      */
     @ConfField(mutable = true)
-    public static long iceberg_worker_num_threads = Runtime.getRuntime().availableProcessors();
+    public static int iceberg_worker_num_threads = Runtime.getRuntime().availableProcessors();
 
     /**
      * size of iceberg table refresh pool

@@ -28,6 +28,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
+import com.starrocks.connector.metadata.TableMetaMetadata;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
@@ -65,13 +66,15 @@ import static java.util.Objects.requireNonNull;
 public class CatalogConnectorMetadata implements ConnectorMetadata {
     private final ConnectorMetadata normal;
     private final ConnectorMetadata informationSchema;
+    private final ConnectorMetadata metadata;
 
-    public CatalogConnectorMetadata(ConnectorMetadata normal, ConnectorMetadata informationSchema) {
+    public CatalogConnectorMetadata(ConnectorMetadata normal, ConnectorMetadata informationSchema, ConnectorMetadata metadata) {
         requireNonNull(normal, "metadata is null");
         requireNonNull(informationSchema, "infoSchemaDb is null");
         checkArgument(informationSchema instanceof InformationSchemaMetadata);
         this.normal = normal;
         this.informationSchema = informationSchema;
+        this.metadata = metadata;
     }
 
     private ConnectorMetadata metadataOfDb(String dBName) {
@@ -79,6 +82,13 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
             return informationSchema;
         }
         return normal;
+    }
+
+    private ConnectorMetadata metadataOfTable(String tableName) {
+        if (TableMetaMetadata.isMetadataTable(tableName)) {
+            return metadata;
+        }
+        return null;
     }
 
     @Override
@@ -101,8 +111,8 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName) {
-        return normal.listPartitionNames(databaseName, tableName);
+    public List<String> listPartitionNames(String databaseName, String tableName, long snapshotId) {
+        return normal.listPartitionNames(databaseName, tableName, snapshotId);
     }
 
     @Override
@@ -113,7 +123,11 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
 
     @Override
     public Table getTable(String dbName, String tblName) {
-        ConnectorMetadata metadata = metadataOfDb(dbName);
+        ConnectorMetadata metadata = metadataOfTable(tblName);
+        if (metadata == null) {
+            metadata = metadataOfDb(dbName);
+        }
+
         return metadata.getTable(dbName, tblName);
     }
 
@@ -137,6 +151,12 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     @Override
     public boolean prepareMetadata(MetaPreparationItem item, Tracers tracers) {
         return normal.prepareMetadata(item, tracers);
+    }
+
+    @Override
+    public SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName,
+                                                      long snapshotId, String serializedPredicate) {
+        return normal.getSerializedMetaSpec(dbName, tableName, snapshotId, serializedPredicate);
     }
 
     @Override

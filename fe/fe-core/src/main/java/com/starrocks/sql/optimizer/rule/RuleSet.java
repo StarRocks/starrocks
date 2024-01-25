@@ -38,6 +38,7 @@ import com.starrocks.sql.optimizer.rule.implementation.JDBCScanImplementationRul
 import com.starrocks.sql.optimizer.rule.implementation.LimitImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.MergeJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.MetaScanImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.MetadataScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.MysqlScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.NestLoopJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.OdpsScanImplementationRule;
@@ -173,6 +174,7 @@ public class RuleSet {
             new DeltaLakeScanImplementationRule(),
             new PaimonScanImplementationRule(),
             new OdpsScanImplementationRule(),
+            new MetadataScanImplementationRule(),
             new SchemaScanImplementationRule(),
             new MysqlScanImplementationRule(),
             new EsScanImplementationRule(),
@@ -271,6 +273,7 @@ public class RuleSet {
                 PruneHDFSScanColumnRule.TABLE_FUNCTION_TABLE_SCAN,
                 PruneHDFSScanColumnRule.PAIMON_SCAN,
                 PruneHDFSScanColumnRule.ODPS_SCAN,
+                PruneHDFSScanColumnRule.METADATA_SCAN,
                 PruneScanColumnRule.JDBC_SCAN,
                 PruneScanColumnRule.BINLOG_SCAN,
                 new PruneProjectColumnsRule(),
@@ -300,6 +303,7 @@ public class RuleSet {
                 PushDownPredicateScanRule.DELTALAKE_SCAN,
                 PushDownPredicateScanRule.FILE_SCAN,
                 PushDownPredicateScanRule.PAIMON_SCAN,
+                PushDownPredicateScanRule.METADATA_SCAN,
                 PushDownPredicateScanRule.SCHEMA_SCAN,
                 PushDownPredicateScanRule.ES_SCAN,
                 PushDownPredicateScanRule.META_SCAN,

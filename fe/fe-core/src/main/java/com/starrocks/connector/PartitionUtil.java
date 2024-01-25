@@ -807,6 +807,13 @@ public class PartitionUtil {
         thread.start();
     }
 
+    public static <T> void executeInNewThread(String threadName, Runnable runnable) {
+        Thread thread = new Thread(runnable);
+        thread.setName(threadName);
+        thread.setDaemon(true);
+        thread.start();
+    }
+
     public static RangePartitionDiff getPartitionDiff(Expr partitionExpr, Column partitionColumn,
                                                       Map<String, Range<PartitionKey>> basePartitionMap,
                                                       Map<String, Range<PartitionKey>> mvPartitionMap,

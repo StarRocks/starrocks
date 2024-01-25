@@ -91,9 +91,10 @@ public interface ConnectorMetadata {
      *
      * @param databaseName the name of the database
      * @param tableName the name of the table
+     * @param snapshotId table snapshot id, default value is -1
      * @return a list of partition names
      */
-    default List<String> listPartitionNames(String databaseName, String tableName) {
+    default List<String> listPartitionNames(String databaseName, String tableName, long snapshotId) {
         return Lists.newArrayList();
     }
 
@@ -155,6 +156,11 @@ public interface ConnectorMetadata {
                                                     long snapshotId, ScalarOperator predicate,
                                                     List<String> fieldNames, long limit) {
         return Lists.newArrayList();
+    }
+
+    default SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName,
+                                                      long snapshotId, String serializedPredicate) {
+        return null;
     }
 
     default List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {

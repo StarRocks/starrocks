@@ -194,7 +194,7 @@ public class PaimonMetadataTest {
                 result = splits;
             }
         };
-        List<String> result = metadata.listPartitionNames("db1", "tbl1");
+        List<String> result = metadata.listPartitionNames("db1", "tbl1", -1);
         Assert.assertEquals(2, result.size());
         List<String> expections = Lists.newArrayList("dt=1975-06-24/hr=4444", "dt=1978-03-20/hr=5555");
         Assertions.assertThat(result).hasSameElementsAs(expections);

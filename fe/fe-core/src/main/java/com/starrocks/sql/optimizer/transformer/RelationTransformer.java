@@ -41,6 +41,8 @@ import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.elasticsearch.EsTablePartitions;
+import com.starrocks.connector.metadata.MetadataTable;
+import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -97,6 +99,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFileScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergMetadataScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJDBCScanOperator;
@@ -574,6 +577,18 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
         } else if (Table.TableType.ODPS.equals(node.getTable().getType())) {
             scanOperator = new LogicalOdpsScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                     columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
+        } else if (Table.TableType.METADATA.equals(node.getTable().getType())) {
+            MetadataTable metadataTable = (MetadataTable) node.getTable();
+            if (metadataTable.getMetadataTableType() == MetadataTableType.LOGICAL_ICEBERG_METADATA) {
+                scanOperator = new LogicalIcebergMetadataScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
+                        columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
+                if (node.getTemporalClause() != null) {
+                    ((LogicalIcebergMetadataScanOperator) scanOperator).setTemporalClause(node.getTemporalClause());
+                }
+            } else {
+                throw new StarRocksPlannerException("Not support metadata table type: " + metadataTable.getMetadataTableType(),
+                        ErrorType.UNSUPPORTED);
+            }
         } else if (Table.TableType.SCHEMA.equals(node.getTable().getType())) {
             scanOperator =
                     new LogicalSchemaScanOperator(node.getTable(),

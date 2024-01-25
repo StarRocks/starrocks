@@ -2882,7 +2882,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         mockedJDBCMetadata.initPartitions();
 
         // get base table partitions
-        List<String> baseParNames = mockedJDBCMetadata.listPartitionNames("partitioned_db0", "tbl1");
+        List<String> baseParNames = mockedJDBCMetadata.listPartitionNames("partitioned_db0", "tbl1", -1);
         Assert.assertEquals(4, baseParNames.size());
 
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");

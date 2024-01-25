@@ -90,6 +90,7 @@ struct TResultBatch {
   
   // For mark statistic data version
   10: optional i32 statistic_version
+
 }
 
 struct TGlobalDict {
@@ -126,4 +127,24 @@ struct TStatisticData {
 struct TVariableData {
     1: optional bool isNull
     2: optional binary result
+}
+
+struct TIcebergMetadata {
+    1: optional i32 content
+    2: optional string file_path
+    3: optional string file_format
+    4: optional i32 spec_id
+    5: optional binary partition_data
+    6: optional i64 record_count
+    7: optional i64 file_size_in_bytes
+    8: optional list<i64> split_offsets
+    9: optional i32 sort_id
+    10: optional list<i32> equality_ids
+    11: optional i64 file_sequence_number
+    12: optional i64 data_sequence_number
+    13: optional binary column_stats;
+}
+
+struct TMetadataEntry {
+    1: optional TIcebergMetadata iceberg_metadata;
 }

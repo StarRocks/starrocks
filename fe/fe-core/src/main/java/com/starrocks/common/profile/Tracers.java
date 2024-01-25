@@ -150,6 +150,10 @@ public class Tracers {
         return tracers.tracer(module, Mode.TIMER).watchScope(name);
     }
 
+    public static synchronized Timer watchScope(Tracers tracers, Module module, String name) {
+        return tracers.tracer(module, Mode.TIMER).watchScope(name);
+    }
+
     public static void log(Module module, String log) {
         Tracers tracers = THREAD_LOCAL.get();
         tracers.tracer(module, Mode.LOGS).log(log);

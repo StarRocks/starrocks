@@ -48,7 +48,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
-import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CUSTOM_PROPERTIES_PREFIX;
+import static com.starrocks.connector.iceberg.IcebergConfig.ICEBERG_CUSTOM_PROPERTIES_PREFIX;
 import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
 import static org.apache.iceberg.CatalogProperties.WAREHOUSE_LOCATION;
 
@@ -75,7 +75,8 @@ public class IcebergHadoopCatalog implements IcebergCatalog {
         copiedProperties.put(AwsProperties.CLIENT_FACTORY, IcebergAwsClientFactory.class.getName());
 
         if (!copiedProperties.containsKey(WAREHOUSE_LOCATION)) {
-            throw new IllegalArgumentException(String.format("Iceberg hadoop catalog must set warehouse location (\"%s\" = \"s3://path/to/warehouse\").",
+            throw new IllegalArgumentException(String.format("Iceberg hadoop catalog must set warehouse" +
+                            " location (\"%s\" = \"s3://path/to/warehouse\").",
                     ICEBERG_CUSTOM_PROPERTIES_PREFIX + WAREHOUSE_LOCATION));
         }
 

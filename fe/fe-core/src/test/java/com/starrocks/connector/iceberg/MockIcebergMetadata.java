@@ -425,7 +425,7 @@ public class MockIcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String dbName, String tableName) {
+    public List<String> listPartitionNames(String dbName, String tableName, long snapshotId) {
         readLock();
         try {
             return MOCK_TABLE_MAP.get(dbName).get(tableName).partitionNames;

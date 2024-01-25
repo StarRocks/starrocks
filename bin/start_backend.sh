@@ -85,7 +85,6 @@ fi
 export ASAN_OPTIONS="abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1:detect_stack_use_after_return=1"
 export LSAN_OPTIONS=suppressions=${STARROCKS_HOME}/conf/asan_suppressions.conf
 
-
 # ================== jvm section =======================
 if [ -e $STARROCKS_HOME/conf/hadoop_env.sh ]; then
     source $STARROCKS_HOME/conf/hadoop_env.sh

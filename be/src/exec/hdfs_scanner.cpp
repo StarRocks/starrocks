@@ -161,6 +161,7 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     RETURN_IF_CANCELLED(_runtime_state);
     RETURN_IF_ERROR(_runtime_state->check_mem_limit("get chunk from scanner"));
     Status status = do_get_next(runtime_state, chunk);
+
     if (status.ok()) {
         if (!_scanner_params.conjunct_ctxs.empty()) {
             SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
