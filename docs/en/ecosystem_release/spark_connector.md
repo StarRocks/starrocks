@@ -28,7 +28,7 @@ displayed_sidebar: "English"
 | 1.1.1           | 3.2, 3.3, or 3.4 | 2.5 and later | 8    | 2.12  |
 | 1.1.0           | 3.2, 3.3, or 3.4 | 2.5 and later | 8    | 2.12  |
 
-## **Release note**
+## Release note
 
 ### 1.1
 
