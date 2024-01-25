@@ -98,10 +98,17 @@ public:
             sink_io_buffer->_process_chunk(iter);
             (*iter).reset();
         }
+        std::cout << "BEFORE malloc" << std::endl;
+        if (sink_io_buffer->_num_pending_chunks <= 0) {
+            sleep(config::sleep_lxh_s);
+        }
+        char* ptr = (char*) malloc(4 * 1024 * 1024);
+        ptr[100] = 0;
+        std::cout << "END malloc" << std::endl;
         return 0;
     }
 
-protected:
+public:
     virtual void _process_chunk(bthread::TaskIterator<ChunkPtr>& iter) = 0;
 
     std::unique_ptr<bthread::ExecutionQueueId<ChunkPtr>> _exec_queue_id;

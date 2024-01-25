@@ -72,15 +72,31 @@ void ExportSinkIOBuffer::close(RuntimeState* state) {
 }
 
 void ExportSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
+    sleep(5);
+    std::cout << "NUM_PENDING: " << _num_pending_chunks;
     --_num_pending_chunks;
     if (_is_finished) {
         return;
+    }
+
+    if (_num_pending_chunks <= 0) {
+        while (!_is_cancelled) {
+            sleep(1);
+        }
+        //std::cout << "BEFORE sleep: " << (int)_is_cancelled << ":" << (int)_is_finished << ":"
+        //          << (int)_num_pending_chunks << std::endl;
+        //sleep(config::sleep_lxh_s);
+        std::cout << "END sleep: " << (int)_is_cancelled << ":" << (int)_is_finished << ":" << (int)_num_pending_chunks
+                  << std::endl;
     }
 
     if (_is_cancelled && !_is_finished) {
         if (_num_pending_chunks == 0) {
             close(_state);
         }
+        std::cout << "LXH C 1" << std::endl;
+        sleep(config::sleep_lxh_s);
+        std::cout << "LXH C 2" << std::endl;
         return;
     }
 
@@ -103,6 +119,7 @@ void ExportSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
         _fragment_ctx->cancel(status);
         return;
     }
+
 }
 
 Status ExportSinkIOBuffer::_open_file_writer() {
@@ -164,7 +181,10 @@ Status ExportSinkOperator::prepare(RuntimeState* state) {
 }
 
 void ExportSinkOperator::close(RuntimeState* state) {
+    std::cout << "before close ExportSinkOpertor" << std::endl;
     Operator::close(state);
+
+    std::cout << "after close ExportSinkOpertor" << std::endl;
 }
 
 bool ExportSinkOperator::need_input() const {
@@ -176,25 +196,40 @@ bool ExportSinkOperator::is_finished() const {
 }
 
 Status ExportSinkOperator::set_finishing(RuntimeState* state) {
+    std::cout << "SET FINISH 1" << std::endl;
     if (_num_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+        std::cout << "SET FINISH 2" << std::endl;
         _is_audit_report_done = false;
         auto* executor = state->fragment_ctx()->enable_resource_group() ? state->exec_env()->wg_driver_executor()
                                                                         : state->exec_env()->driver_executor();
         executor->report_audit_statistics(state->query_ctx(), state->fragment_ctx(), &_is_audit_report_done);
+        std::cout << "SET FINISH 3" << std::endl;
     }
-    return _export_sink_buffer->set_finishing();
+    std::cout << "SET FINISH 4" << std::endl;
+    Status st = _export_sink_buffer->set_finishing();
+    std::cout << "SET FINISH 5" << std::endl;
+    return st;
 }
 
 bool ExportSinkOperator::pending_finish() const {
+    //std::cout << "pending finish 1" << std::endl;
     // audit report not finish, we need check until finish
     if (!_is_audit_report_done) {
+    //    std::cout << "pending finish 2" << std::endl;
         return true;
     }
-    return !_export_sink_buffer->is_finished();
+    //std::cout << "pending finish 3" << std::endl;
+    bool ret = !_export_sink_buffer->is_finished();
+    if (!ret) {
+        std::cout << "pending finish 4: " << (int)(ret) << std::endl;
+    }
+    return ret;
 }
 
 Status ExportSinkOperator::set_cancelled(RuntimeState* state) {
+    std::cout << "before cancel export operator" << std::endl;
     _export_sink_buffer->cancel_one_sinker();
+    std::cout << "end cancel export operator" << std::endl;
     return Status::OK();
 }
 
@@ -203,7 +238,10 @@ StatusOr<vectorized::ChunkPtr> ExportSinkOperator::pull_chunk(RuntimeState* stat
 }
 
 Status ExportSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
-    return _export_sink_buffer->append_chunk(state, chunk);
+    std::cout << "BEFORE push chunk" << std::endl;
+    Status st = _export_sink_buffer->append_chunk(state, chunk);
+    std::cout << "AFTER push chunk" << std::endl;
+    return st;
 }
 
 Status ExportSinkOperatorFactory::prepare(RuntimeState* state) {

@@ -86,6 +86,11 @@ MemTracker::~MemTracker() {
     if (parent()) {
         unregister_from_parent();
     }
+
+    _consumption = nullptr;
+    for (size_t i = 0; i < _all_trackers.size(); i++) {
+        _all_trackers[i] = nullptr;
+    }
 }
 
 Status MemTracker::check_mem_limit(const std::string& msg) const {

@@ -29,6 +29,8 @@ QueryContext::QueryContext()
           _num_active_fragments(0),
           _wg_running_query_token_ptr(nullptr) {
     _sub_plan_query_statistics_recvr = std::make_shared<QueryStatisticsRecvr>();
+
+    std::cout << "query context start" << std::endl;
 }
 
 QueryContext::~QueryContext() {
@@ -52,6 +54,8 @@ QueryContext::~QueryContext() {
         }
         _exec_env->runtime_filter_cache()->remove(_query_id);
     }
+
+    std::cout << "query context end" << std::endl;
 }
 
 FragmentContextManager* QueryContext::fragment_mgr() {
