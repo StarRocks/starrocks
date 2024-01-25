@@ -1487,8 +1487,8 @@ TEST_P(PersistentIndexTest, test_build_from_tablet_flush) {
     auto manager = StorageEngine::instance()->update_manager();
     manager->mem_tracker()->set_limit(-1);
     // flush l1
-    config::l0_max_mem_usage = 1000000;
-    build_persistent_index_from_tablet(1000000);
+    config::l0_max_mem_usage = 100000;
+    build_persistent_index_from_tablet(100000);
     config::l0_max_mem_usage = 104857600;
 }
 
@@ -1496,8 +1496,8 @@ TEST_P(PersistentIndexTest, test_build_from_tablet_flush_advance) {
     auto manager = StorageEngine::instance()->update_manager();
     manager->mem_tracker()->set_limit(-1);
     // flush one tmp l1
-    config::l0_max_mem_usage = 18874368;
-    build_persistent_index_from_tablet(1000000);
+    config::l0_max_mem_usage = 50000;
+    build_persistent_index_from_tablet(100000);
     config::l0_max_mem_usage = 104857600;
 }
 
