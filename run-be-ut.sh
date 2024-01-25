@@ -197,6 +197,7 @@ export CLASSPATH=$STARROCKS_HOME/conf:$HADOOP_CLASSPATH:$CLASSPATH
 # ===========================================================
 
 export STARROCKS_TEST_BINARY_DIR=${STARROCKS_TEST_BINARY_DIR}/test
+export ASAN_OPTIONS="abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1:detect_stack_use_after_return=1"
 
 if [ $WITH_AWS = "OFF" ]; then
     TEST_NAME="$TEST_NAME*:-*S3*"
