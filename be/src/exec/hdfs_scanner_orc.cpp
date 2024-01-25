@@ -86,7 +86,7 @@ bool OrcRowReaderFilter::filterOnOpeningStripe(uint64_t stripeIndex,
     _current_stripe_index = stripeIndex;
     uint64_t offset = stripeInformation->offset();
 
-    const auto* scan_range = _scanner_ctx->scan_range;
+    const auto* scan_range = _scanner_ctx.scan_range;
     size_t scan_start = scan_range->offset;
     size_t scan_end = scan_range->length + scan_start;
     if (offset >= scan_start && offset < scan_end) {
