@@ -880,4 +880,5 @@ void DynamicMorselQueue::append_morsels(std::vector<MorselPtr>&& morsels) {
         _queue.emplace_back(std::move(morsel));
     }
 }
+
 } // namespace starrocks::pipeline
