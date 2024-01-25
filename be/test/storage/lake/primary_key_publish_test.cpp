@@ -77,6 +77,17 @@ public:
             c1->set_aggregation("REPLACE");
         }
 
+        _slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+        _slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
+        _slots.emplace_back(2, "__op", TypeDescriptor{LogicalType::TYPE_INT});
+        _slot_pointers.emplace_back(&_slots[0]);
+        _slot_pointers.emplace_back(&_slots[1]);
+        _slot_pointers.emplace_back(&_slots[2]);
+
+        _slot_cid_map.emplace(0, 0);
+        _slot_cid_map.emplace(1, 1);
+        _slot_cid_map.emplace(2, 2);
+
         _tablet_schema = TabletSchema::create(*schema);
         _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
     }
@@ -95,9 +106,10 @@ public:
         (void)fs::remove_all(kTestGroupPath);
     }
 
-    ChunkPtr gen_data(int64_t chunk_size, int shift, bool random_shuffle) {
+    ChunkPtr gen_data(int64_t chunk_size, int shift, bool random_shuffle, bool upsert) {
         std::vector<int> v0(chunk_size);
         std::vector<int> v1(chunk_size);
+        std::vector<uint8_t> v2(chunk_size);
         for (int i = 0; i < chunk_size; i++) {
             v0[i] = i + shift * chunk_size;
         }
@@ -108,16 +120,22 @@ public:
         for (int i = 0; i < chunk_size; i++) {
             v1[i] = v0[i] * 3;
         }
+        for (int i = 0; i < chunk_size; i++) {
+            v2[i] = upsert ? TOpType::UPSERT : TOpType::DELETE;
+        }
 
         auto c0 = Int32Column::create();
         auto c1 = Int32Column::create();
+        auto c2 = Int8Column::create();
         c0->append_numbers(v0.data(), v0.size() * sizeof(int));
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
-        return std::make_shared<Chunk>(Columns{c0, c1}, _schema);
+        c2->append_numbers(v2.data(), v2.size() * sizeof(uint8_t));
+        return std::make_shared<Chunk>(Columns{c0, c1, c2}, _slot_cid_map);
     }
 
-    std::pair<ChunkPtr, std::vector<uint32_t>> gen_data_and_index(int64_t chunk_size, int shift, bool random_shuffle) {
-        auto chunk = gen_data(chunk_size, shift, random_shuffle);
+    std::pair<ChunkPtr, std::vector<uint32_t>> gen_data_and_index(int64_t chunk_size, int shift, bool random_shuffle,
+                                                                  bool upsert) {
+        auto chunk = gen_data(chunk_size, shift, random_shuffle, upsert);
         auto indexes = std::vector<uint32_t>(chunk->num_rows());
         for (uint32_t i = 0, n = chunk->num_rows(); i < n; i++) {
             indexes[i] = i;
@@ -156,6 +174,9 @@ protected:
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
     int64_t _partition_id = next_id();
+    std::vector<SlotDescriptor> _slots;
+    std::vector<SlotDescriptor*> _slot_pointers;
+    Chunk::SlotHashMap _slot_cid_map;
 };
 
 TEST_P(LakePrimaryKeyPublishTest, test_write_read_success) {
@@ -217,7 +238,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_read_success) {
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_write_multitime_check_result) {
-    auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true);
+    auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
@@ -253,7 +274,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_multitime_check_result) {
 TEST_P(LakePrimaryKeyPublishTest, test_write_fail_retry) {
     std::vector<ChunkPtr> chunks;
     for (int i = 0; i < 5; i++) {
-        chunks.emplace_back(gen_data(kChunkSize, i, true));
+        chunks.emplace_back(gen_data(kChunkSize, i, true, true));
     }
     auto indexes = std::vector<uint32_t>(kChunkSize);
     for (int i = 0; i < kChunkSize; i++) {
@@ -349,7 +370,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_fail_retry) {
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_publish_multi_times) {
-    auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true);
+    auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
     auto txns = std::vector<int64_t>();
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
@@ -392,7 +413,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_multi_times) {
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_publish_concurrent) {
-    auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true);
+    auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
@@ -431,7 +452,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_concurrent) {
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_resolve_conflict) {
-    auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true);
+    auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
@@ -497,8 +518,8 @@ TEST_P(LakePrimaryKeyPublishTest, test_resolve_conflict) {
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_write_read_success_multiple_tablet) {
-    auto [chunk0, indexes_1] = gen_data_and_index(kChunkSize * 1, 0, false);
-    auto [chunk1, indexes_2] = gen_data_and_index(kChunkSize * 2, 1, false);
+    auto [chunk0, indexes_1] = gen_data_and_index(kChunkSize * 1, 0, false, true);
+    auto [chunk1, indexes_2] = gen_data_and_index(kChunkSize * 2, 1, false, true);
 
     auto tablet_id_1 = _tablet_metadata->id();
     auto tablet_id_2 = next_id();
@@ -534,6 +555,8 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_read_success_multiple_tablet) {
     }
     auto chunk2 = read(tablet_id_1, version);
     auto chunk3 = read(tablet_id_2, version);
+    chunk0->remove_column_by_index(2);
+    chunk1->remove_column_by_index(2);
     assert_chunk_equals(*chunk0, *chunk2);
     assert_chunk_equals(*chunk1, *chunk3);
     if (GetParam().enable_persistent_index) {
@@ -549,7 +572,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_largedata) {
     int64_t old_config = config::l0_max_mem_usage;
     config::l0_max_mem_usage = 1024;
     for (int i = 0; i < N; i++) {
-        auto [chunk0, indexes] = gen_data_and_index(kChunkSize, i, true);
+        auto [chunk0, indexes] = gen_data_and_index(kChunkSize, i, true, true);
         int64_t txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
                                                    .set_tablet_manager(_tablet_mgr.get())
@@ -582,7 +605,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_largedata) {
 
 TEST_P(LakePrimaryKeyPublishTest, test_recover) {
     config::enable_primary_key_recover = true;
-    auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true);
+    auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
@@ -631,7 +654,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_rebuild_persistent_index) {
         // only test persistent index
         return;
     }
-    auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true);
+    auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
     for (int i = 0; i < 3; i++) {
@@ -678,7 +701,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_abort_txn) {
     auto tablet_id = _tablet_metadata->id();
     auto txn_id = next_id();
     std::thread t1([&]() {
-        auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true);
+        auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
         auto tablet_id = _tablet_metadata->id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
                                                    .set_tablet_manager(_tablet_mgr.get())
@@ -708,6 +731,66 @@ TEST_P(LakePrimaryKeyPublishTest, test_abort_txn) {
     t2.join();
     ASSERT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
     SyncPoint::GetInstance()->DisableProcessing();
+}
+
+TEST_P(LakePrimaryKeyPublishTest, test_batch_publish) {
+    auto [chunk0, indexes0] = gen_data_and_index(kChunkSize, 0, true, true);
+    auto [chunk1, indexes1] = gen_data_and_index(kChunkSize, 0, false, false);
+    auto base_version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    std::vector<int64_t> txn_ids;
+    auto txn_id = next_id();
+    txn_ids.emplace_back(txn_id);
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_index_id(_tablet_schema->id())
+                                               .set_slot_descriptors(&_slot_pointers)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    ASSERT_OK(delta_writer->write(*chunk0, indexes0.data(), indexes0.size()));
+    ASSERT_OK(delta_writer->finish());
+    delta_writer->close();
+
+    txn_id = next_id();
+    txn_ids.emplace_back(txn_id);
+    ASSIGN_OR_ABORT(delta_writer, DeltaWriterBuilder()
+                                          .set_tablet_manager(_tablet_mgr.get())
+                                          .set_tablet_id(tablet_id)
+                                          .set_txn_id(txn_id)
+                                          .set_partition_id(_partition_id)
+                                          .set_mem_tracker(_mem_tracker.get())
+                                          .set_index_id(_tablet_schema->id())
+                                          .set_slot_descriptors(&_slot_pointers)
+                                          .build());
+    ASSERT_OK(delta_writer->open());
+    ASSERT_OK(delta_writer->write(*chunk1, indexes1.data(), indexes1.size()));
+    ASSERT_OK(delta_writer->finish());
+    delta_writer->close();
+
+    auto new_version = base_version + 2;
+    ASSERT_OK(batch_publish(tablet_id, base_version, new_version, txn_ids).status());
+
+    ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, new_version));
+    EXPECT_EQ(new_tablet_metadata->rowsets_size(), 2);
+    EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 1);
+    EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 12);
+    EXPECT_EQ(new_tablet_metadata->rowsets(1).num_dels(), 0);
+    EXPECT_EQ(0, read_rows(tablet_id, new_version));
+    _tablet_mgr->prune_metacache();
+    _update_mgr->remove_primary_index_cache(tablet_id);
+
+    // publish again
+    ASSERT_OK(batch_publish(tablet_id, base_version, new_version, txn_ids).status());
+    ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, new_version));
+    EXPECT_EQ(new_tablet_metadata->rowsets_size(), 2);
+    EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 1);
+    EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 12);
+    EXPECT_EQ(new_tablet_metadata->rowsets(1).num_dels(), 0);
+    EXPECT_EQ(0, read_rows(tablet_id, new_version));
 }
 
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyPublishTest, LakePrimaryKeyPublishTest,
