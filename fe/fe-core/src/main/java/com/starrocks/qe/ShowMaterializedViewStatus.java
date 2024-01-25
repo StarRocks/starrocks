@@ -215,6 +215,8 @@ public class ShowMaterializedViewStatus {
         private boolean isReplay = false;
         @SerializedName("priority")
         private int priority = Constants.TaskRunPriority.LOWEST.value();
+        @SerializedName("lastTaskRunState")
+        private Constants.TaskRunState lastTaskRunState = Constants.TaskRunState.PENDING;
 
         public boolean isManual() {
             return isManual;
@@ -254,6 +256,14 @@ public class ShowMaterializedViewStatus {
 
         public void setQueryIds(List<String> queryIds) {
             this.queryIds = queryIds;
+        }
+
+        public Constants.TaskRunState getLastTaskRunState() {
+            return lastTaskRunState;
+        }
+
+        public void setLastTaskRunState(Constants.TaskRunState lastTaskRunState) {
+            this.lastTaskRunState = lastTaskRunState;
         }
     }
 
@@ -375,6 +385,7 @@ public class ShowMaterializedViewStatus {
         List<String> queryIds = applyTaskRunStatusWith(x -> x.getQueryId());
         // queryIds
         extraMessage.setQueryIds(queryIds);
+        extraMessage.setLastTaskRunState(lastTaskRunStatus.getState());
         MVTaskRunExtraMessage firstTaskRunExtraMessage = firstTaskRunStatus.getMvTaskRunExtraMessage();
         if (firstTaskRunExtraMessage != null && firstTaskRunExtraMessage.getExecuteOption() != null) {
             ExecuteOption executeOption = firstTaskRunExtraMessage.getExecuteOption();

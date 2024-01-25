@@ -29,4 +29,12 @@ public class TaskTest {
         Assert.assertEquals(Constants.TaskState.UNKNOWN, task.getState());
         Assert.assertEquals(Constants.TaskType.MANUAL, task.getType());
     }
+
+    @Test
+    public void testTaskRunState() {
+        Assert.assertFalse(Constants.isFinishState(Constants.TaskRunState.PENDING));
+        Assert.assertFalse(Constants.isFinishState(Constants.TaskRunState.RUNNING));
+        Assert.assertTrue(Constants.isFinishState(Constants.TaskRunState.FAILED));
+        Assert.assertTrue(Constants.isFinishState(Constants.TaskRunState.SUCCESS));
+    }
 }
