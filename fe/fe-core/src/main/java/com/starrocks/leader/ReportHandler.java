@@ -101,7 +101,6 @@ import com.starrocks.task.StorageMediaMigrationTask;
 import com.starrocks.task.TabletMetadataUpdateAgentTask;
 import com.starrocks.task.TabletMetadataUpdateAgentTaskFactory;
 import com.starrocks.task.UpdateSchemaTask;
-import com.starrocks.task.UpdateTabletMetaInfoTask;
 import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TDataCacheMetrics;

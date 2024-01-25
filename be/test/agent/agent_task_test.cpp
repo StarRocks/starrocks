@@ -197,7 +197,7 @@ TEST_F(AgentTaskTest, test_update_schema) {
     // create column param
     TOlapTableColumnParam column_param;
     column_param.__set_short_key_column_count(1);
-    auto & columns = column_param.columns;
+    auto& columns = column_param.columns;
     //auto& sort_key_uid = column_param.sort_key_uid;
     //sort_key_uid.push_back(0);
     TColumnType col_type;
