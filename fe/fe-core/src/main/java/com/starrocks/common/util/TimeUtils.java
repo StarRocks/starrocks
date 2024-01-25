@@ -90,6 +90,9 @@ public class TimeUtils {
                     + "((0?[1-9])|([1-2][0-9])|(30)))|(0?2[\\-\\/\\s]?((0?[1-9])|(1[0-9])|(2[0-8]))))))"
                     + "(\\s(((0?[0-9])|([1][0-9])|([2][0-3]))\\:([0-5]?[0-9])((\\s)|(\\:([0-5]?[0-9])))))?$");
 
+    private static final Pattern TIME_DURATION_PATTERN =
+            Pattern.compile("(\\d+(\\.\\d+)?)(ms|s|m|h|d|w|y)");
+
     private static final Pattern TIMEZONE_OFFSET_FORMAT_REG = Pattern.compile("^[+-]{0,1}\\d{1,2}\\:\\d{2}$");
 
     public static Date MIN_DATE = null;
@@ -356,5 +359,27 @@ public class TimeUtils {
             timezone = VariableMgr.getDefaultSessionVariable().getTimeZone();
         }
         return timezone;
+    }
+
+    public static long getMilliseconds(String time) {
+        Matcher matcher = TIME_DURATION_PATTERN.matcher(time);
+        if (!matcher.matches()) {
+            return 0;
+        }
+        String numberStr = matcher.group(1);
+        String unitStr = matcher.group(3);
+
+        double number = Double.parseDouble(numberStr);
+
+        switch (unitStr) {
+            case "ms":
+                return (long) number;
+            case "s":
+                return (long) (number * 1000);
+            case "m":
+                return (long) (number * 60 * 1000);
+            default:
+                return 0;
+        }
     }
 }
