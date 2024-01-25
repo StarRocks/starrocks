@@ -700,6 +700,27 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
     return best_tablet;
 }
 
+Status TabletManager::generate_pk_dump_in_error_state() {
+    std::vector<TabletAndScore> pick_tablets;
+    // 1. pick primary key tablet
+    std::vector<TabletSharedPtr> tablet_ptr_list;
+    for (const auto& tablets_shard : _tablets_shards) {
+        std::shared_lock rlock(tablets_shard.lock);
+        for (const auto& [tablet_id, tablet_ptr] : tablets_shard.tablet_map) {
+            if (tablet_ptr->keys_type() != PRIMARY_KEYS) {
+                continue;
+            }
+
+            tablet_ptr_list.push_back(tablet_ptr);
+        }
+    }
+    // 2. generate pk dump if need
+    for (const auto& tablet_ptr : tablet_ptr_list) {
+        RETURN_IF_ERROR(tablet_ptr->updates()->generate_pk_dump());
+    }
+    return Status::OK();
+}
+
 // pick tablets to do primary index compaction
 std::vector<TabletAndScore> TabletManager::pick_tablets_to_do_pk_index_major_compaction() {
     std::vector<TabletAndScore> pick_tablets;

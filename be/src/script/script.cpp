@@ -349,7 +349,7 @@ public:
         return exec_whitelist(strings::Substitute("ls -al $0", tablet->schema_hash_path()));
     }
 
-    static std::string print_primary_key_dump(int64_t tablet_id) {
+    static std::string pk_dump(int64_t tablet_id) {
         auto tablet = get_tablet(tablet_id);
         if (!tablet) {
             return "tablet not found";
@@ -521,7 +521,7 @@ public:
             REG_STATIC_METHOD(StorageEngineRef, submit_manual_compaction_task_for_partition);
             REG_STATIC_METHOD(StorageEngineRef, submit_manual_compaction_task_for_tablet);
             REG_STATIC_METHOD(StorageEngineRef, get_manual_compaction_status);
-            REG_STATIC_METHOD(StorageEngineRef, print_primary_key_dump);
+            REG_STATIC_METHOD(StorageEngineRef, pk_dump);
             REG_STATIC_METHOD(StorageEngineRef, ls_tablet_dir);
         }
     }
