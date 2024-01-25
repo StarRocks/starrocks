@@ -21,9 +21,6 @@ STDDEV(expr)
 
 ## 返回值说明
 
-<<<<<<< HEAD
-返回值为数值类型。
-=======
 返回值为 DOUBLE 类型。计算公式如下，其中 `n` 为该表的行数：
 
 ![image](../../../assets/stddevpop_formula.png)
@@ -31,8 +28,6 @@ STDDEV(expr)
 <!--$$
 \sigma = \sqrt{\frac{1}{N} \sum_{i=1}^{N} (x_i - \bar{x})^2}
 $$ -->
-
->>>>>>> a7506bfac5 ([Doc] update stddev_samp/pop (#39985))
 
 ## 示例
 
