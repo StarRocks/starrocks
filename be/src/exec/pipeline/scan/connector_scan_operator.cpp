@@ -670,20 +670,6 @@ void ConnectorChunkSource::close(RuntimeState* state) {
         VLOG_OPERATOR << build_debug_string();
     }
 
-    std::vector<pipeline::ScanSplitContextPtr> split_tasks;
-    _data_source->get_split_tasks(&split_tasks);
-    if (split_tasks.size() != 0) {
-        std::vector<MorselPtr> split_morsels;
-        ScanMorsel* current_morsel = (ScanMorsel*)_morsel.get();
-        for (auto& t : split_tasks) {
-            std::unique_ptr<ScanMorsel> m =
-                    std::make_unique<ScanMorsel>(current_morsel->get_plan_node_id(), *current_morsel->get_scan_range());
-            m->set_split_context(std::move(t));
-            split_morsels.emplace_back(std::move(m));
-        }
-        // todo(yan): add back to morsel queue.
-    }
-
     {
         connector::DataSource::Profile profile;
         profile.mem_alloc_failed_count = _mem_alloc_failed_count;

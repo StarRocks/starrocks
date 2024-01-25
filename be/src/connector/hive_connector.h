@@ -77,8 +77,6 @@ public:
     int64_t estimated_mem_usage() const override;
     bool can_estimate_mem_usage() const override { return true; }
 
-    void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) override;
-
 private:
     const HiveDataSourceProvider* _provider;
     const THdfsScanRange _scan_range;

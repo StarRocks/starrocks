@@ -938,9 +938,4 @@ void HiveDataSourceProvider::default_data_source_mem_bytes(int64_t* min_value, i
     *min_value = *max_value = size;
 }
 
-void HiveDataSource::get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) {
-    if (_scanner == nullptr) return;
-    // _scanner->get_split_tasks(split_tasks);
-}
-
 } // namespace starrocks::connector
