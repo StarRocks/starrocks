@@ -184,6 +184,7 @@ public class CatalogMgr {
             if (stmt.getAlterClause() instanceof ModifyTablePropertiesClause) {
                 Map<String, String> properties = ((ModifyTablePropertiesClause) stmt.getAlterClause()).getProperties();
                 String serviceName = properties.get("ranger.plugin.hive.service.name");
+
                 if (serviceName.isEmpty()) {
                     if (Config.access_control.equals("ranger")) {
                         Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
@@ -248,7 +249,7 @@ public class CatalogMgr {
             throw new DdlException("Missing properties 'type'");
         }
 
-        // skip unsupport connector type
+        // skip unsupported connector type
         if (!ConnectorType.isSupport(type)) {
             LOG.error("Replay catalog [{}] encounter unknown catalog type [{}], ignore it", catalogName, type);
             return;
@@ -307,6 +308,7 @@ public class CatalogMgr {
 
         writeLock();
         try {
+            Authorizer.getInstance().removeAccessControl(catalogName);
             catalogs.remove(catalogName);
         } finally {
             writeUnLock();
