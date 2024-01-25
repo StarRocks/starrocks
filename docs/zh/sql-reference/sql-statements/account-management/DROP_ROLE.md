@@ -11,7 +11,7 @@ displayed_sidebar: "Chinese"
 :::tip
 
 - 只有拥有 `user_admin` 角色的用户才可以删除角色。
-- StarRocks 系统预置角色不可以删除。
+- [StarRocks 系统预置角色](../../../administration/privilege_overview.md#系统预置角色)不可以删除。
 
 :::
 
@@ -27,7 +27,7 @@ DROP ROLE <role_name>
 
 ## 示例
 
-删除角色`analyst`。
+删除角色 `analyst`。
 
 ```SQL
   DROP ROLE analyst;

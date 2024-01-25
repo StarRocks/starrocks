@@ -10,7 +10,7 @@ displayed_sidebar: "Chinese"
 
 :::tip
 
-只有拥有 `user_admin` 角色的用户才可以删除角色。
+只有拥有 `user_admin` 角色的用户才可以删除用户。
 
 :::
 
@@ -27,7 +27,7 @@ user_identity:user@'host'
 
 ## 示例
 
-删除用户 jack@'192.%'。
+删除用户 `jack@'192.%'`。
 
 ```sql
 DROP USER 'jack'@'192.%';

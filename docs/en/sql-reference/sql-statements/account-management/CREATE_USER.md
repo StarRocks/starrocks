@@ -4,9 +4,13 @@ displayed_sidebar: "English"
 
 # CREATE USER
 
+import UserManagementPriv from '../assets/commonMarkdown/userManagementPriv.md'
+
 ## Description
 
 Creates a StarRocks user. In StarRocks, a "user_identity" uniquely identifies a user.
+
+<UserManagementPriv />
 
 ### Syntax
 
