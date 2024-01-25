@@ -24,11 +24,9 @@ STDDEV_SAMP(expr)
 
 ![image](../../../assets/stddevsamp_formula.png)
 
-$$
+<!--$$
 s = \sqrt{\frac{1}{n-1} \sum_{i=1}^{n} (x_i - \bar{x})^2}
-$$
-
-<!-- -->
+$$ -->
 
 ## 示例
 
