@@ -192,9 +192,9 @@ if [ ${RUN_CN} -eq 1 ]; then
 fi
 
 # enable DD profile
-if [ ${ENABLE_BE_PROFILE} == "true" ] && [ -f "${STARROCKS_ROOT}/datadog/ddprof" ]; then
-    chmod 755 ${STARROCKS_ROOT}/datadog/ddprof
-    START_BE_CMD="${STARROCKS_ROOT}/datadog/ddprof -l debug ${START_BE_CMD}"
+if [ ${DD_PROFILING_ENABLED} == "true" ] && [ -f "${STARROCKS_HOME}/datadog/ddprof" ]; then
+    chmod 755 ${STARROCKS_HOME}/datadog/ddprof
+    START_BE_CMD="${STARROCKS_HOME}/datadog/ddprof -l debug ${START_BE_CMD}"
 fi
 
 if [ ${RUN_LOG_CONSOLE} -eq 1 ] ; then
