@@ -93,7 +93,8 @@ public class SplitScanORToUnionRule extends TransformationRule {
                 scan.getColRefToColumnMetaMap());
         Statistics statistics = builder.setOutputRowCount(totalRowCount).build();
 
-        if (statistics.getComputeSize() <= context.getSessionVariable().getScanOrToUnionThreshold()) {
+        if (!isForceRewrite() &&
+                statistics.getComputeSize() <= context.getSessionVariable().getScanOrToUnionThreshold()) {
             return Lists.newArrayList();
         }
 
@@ -102,7 +103,7 @@ public class SplitScanORToUnionRule extends TransformationRule {
         List<ColumnFilter> columnFilters = selectivityEvaluator.evaluate();
 
         // already has a predicate can use index and late materialized to filter a large part of rows
-        if (columnFilters.get(0).getSelectRatio() < HIGH_SELECTIVITY) {
+        if (!isForceRewrite() && columnFilters.get(0).getSelectRatio() < HIGH_SELECTIVITY) {
             return Lists.newArrayList();
         }
 
@@ -142,7 +143,7 @@ public class SplitScanORToUnionRule extends TransformationRule {
         }
 
         int idx = -1;
-        double min  = NON_SELECTIVITY;
+        double min  = isForceRewrite() ? NON_SELECTIVITY + 1 : NON_SELECTIVITY;
 
         int childrenOfUnion = ConnectContext.get().getSessionVariable().getScanOrToUnionLimit();
 
@@ -213,7 +214,14 @@ public class SplitScanORToUnionRule extends TransformationRule {
     private boolean canBenefitFromSplit(double existSelectRatio, double splitMaxSelectRatio) {
         SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
         int childrenNumOfUnion = sessionVariable.getScanOrToUnionLimit();
+        if (isForceRewrite()) {
+            return true;
+        }
         existSelectRatio = Math.min(existSelectRatio, sessionVariable.getSelectRatioThreshold());
         return splitMaxSelectRatio < existSelectRatio / childrenNumOfUnion;
+    }
+
+    private boolean isForceRewrite() {
+        return ConnectContext.get().getSessionVariable().getSelectRatioThreshold() < 0;
     }
 }
