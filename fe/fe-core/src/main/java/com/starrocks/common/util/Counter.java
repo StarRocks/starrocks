@@ -69,11 +69,13 @@ public class Counter {
     }
 
     public boolean isSum() {
-        return Objects.equals(strategy.aggregate_type, TCounterAggregateType.SUM);
+        return Objects.equals(strategy.aggregate_type, TCounterAggregateType.SUM) ||
+                Objects.equals(strategy.aggregate_type, TCounterAggregateType.AVG_SUM);
     }
 
     public boolean isAvg() {
-        return Objects.equals(strategy.aggregate_type, TCounterAggregateType.AVG);
+        return Objects.equals(strategy.aggregate_type, TCounterAggregateType.AVG)
+                || Objects.equals(strategy.aggregate_type, TCounterAggregateType.SUM_AVG);
     }
 
     public boolean isSkipMerge() {
@@ -91,7 +93,12 @@ public class Counter {
 
     public Counter(TUnit type, TCounterStrategy strategy, long value) {
         this.type = type.getValue();
+<<<<<<< HEAD
         if (strategy == null || strategy.aggregate_type == null || strategy.merge_type == null) {
+=======
+        if (strategy == null || strategy.aggregate_type == null || strategy.merge_type == null ||
+                strategy.min_max_type == null) {
+>>>>>>> 4878c636e8 ([Enhancement] Refine statistical method for operator memory usage analysis (#39761))
             this.strategy = Counter.createStrategy(type);
         } else {
             this.strategy = strategy;
