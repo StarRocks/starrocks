@@ -133,8 +133,11 @@ public class PlanTestNoneDBBase {
             StringBuilder sb = new StringBuilder();
             sb.append(first);
             sb.append(LOGICAL_PLAN_PREDICATE_PREFIX + "[");
-            String sorted = Arrays.stream(predicates.split(" AND ")).sorted().collect(Collectors.joining(" AND "));
-            sorted = Arrays.stream(sorted.split(" OR ")).sorted().collect(Collectors.joining(" OR "));
+            // FIXME: This is only used for normalize not for the final result.
+            String sorted = Arrays.stream(predicates.split(" AND "))
+                    .map(p -> Arrays.stream(p.split(" OR ")).sorted().collect(Collectors.joining(" OR ")))
+                    .sorted()
+                    .collect(Collectors.joining(" AND "));
             sb.append(sorted);
             sb.append("])");
             return sb.toString();
