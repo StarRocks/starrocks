@@ -27,7 +27,7 @@ import static com.starrocks.sql.optimizer.operator.OperatorType.COLLECTION_ELEME
 
 public class CollectionElementOperator extends ScalarOperator {
     protected List<ScalarOperator> arguments = Lists.newArrayList();
-    private boolean isCheckOutOfBounds = false;
+    private final boolean isCheckOutOfBounds;
 
     public CollectionElementOperator(Type type, ScalarOperator arrayOperator, ScalarOperator subscriptOperator,
                                      boolean isCheckOutOfBounds) {

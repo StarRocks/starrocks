@@ -44,7 +44,7 @@ import com.starrocks.thrift.TExprNodeType;
 public class CollectionElementExpr extends Expr {
 
     // For trino and presto, access out of bound in map/array, it will throw error msg
-    private boolean checkIsOutOfBounds = false;
+    private final boolean checkIsOutOfBounds;
 
     public CollectionElementExpr(Expr expr, Expr subscript, boolean checkIsOutOfBounds) {
         super(NodePosition.ZERO);
