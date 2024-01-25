@@ -46,7 +46,7 @@ public:
     //  - 0 <= |rowset_index| && |rowset_index| < tablet_metadata->rowsets_size()
     explicit Rowset(TabletManager* tablet_mgr, TabletMetadataPtr tablet_metadata, int rowset_index);
 
-    ~Rowset();
+    virtual ~Rowset();
 
     DISALLOW_COPY_AND_MOVE(Rowset);
 

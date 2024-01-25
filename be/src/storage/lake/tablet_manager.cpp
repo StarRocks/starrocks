@@ -407,7 +407,7 @@ StatusOr<int64_t> TabletManager::get_tablet_num_rows(int64_t tablet_id, int64_t*
             *version_hint = metadata->version();
         }
         for (const auto& rowset : metadata->rowsets()) {
-            num_rows += rowset.data_size();
+            num_rows += rowset.num_rows();
         }
         VLOG(2) << "get tablet " << tablet_id << " num_rows from version : " << metadata->version()
                 << ", num_rows: " << num_rows;
