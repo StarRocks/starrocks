@@ -50,7 +50,7 @@ public class ProcWarehousesTest extends StarRocksHttpTestCase {
 
     @Override
     public void doSetUp() {
-        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentWarehouseMgr();
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         warehouseManager.initDefaultWarehouse();
     }
 

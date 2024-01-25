@@ -268,14 +268,14 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
 
     static List<ComputeNode> getAllAliveNodes() {
         List<ComputeNode> nodes = new ArrayList<>();
-        nodes.addAll(GlobalStateMgr.getCurrentSystemInfo().getAvailableComputeNodes());
-        nodes.addAll(GlobalStateMgr.getCurrentSystemInfo().getAvailableBackends());
+        nodes.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAvailableComputeNodes());
+        nodes.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAvailableBackends());
         return nodes;
     }
 
     @Nullable
     static ComputeNode getAliveNode(Long nodeId) {
-        return GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
+        return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
     }
 
     static boolean enableIngestSlowdown() {

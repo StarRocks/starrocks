@@ -80,6 +80,7 @@ add_library(Storage STATIC
     rowset/bitshuffle_page.cpp
     rowset/bitshuffle_wrapper.cpp
     rowset/column_iterator.cpp
+    rowset/json_column_iterator.cpp
     rowset/column_reader.cpp
     rowset/column_writer.cpp
     rowset/column_decoder.cpp
@@ -98,6 +99,7 @@ add_library(Storage STATIC
     rowset/ordinal_page_index.cpp
     rowset/page_io.cpp
     rowset/binary_dict_page.cpp
+    rowset/dict_page.cpp
     rowset/binary_prefix_page.cpp
     rowset/segment.cpp
     rowset/segment_writer.cpp

@@ -418,7 +418,7 @@ public class StatementPlanner {
                     "Unsupported dml statement " + stmt.getClass().getSimpleName());
         }
 
-        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         TransactionState.LoadJobSourceType sourceType = TransactionState.LoadJobSourceType.INSERT_STREAMING;
         long txnId = -1L;
         if (targetTable instanceof ExternalOlapTable) {

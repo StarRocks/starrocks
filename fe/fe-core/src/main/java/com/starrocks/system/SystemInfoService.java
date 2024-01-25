@@ -320,7 +320,7 @@ public class SystemInfoService implements GsonPostProcessable {
             // only need to remove worker after be reported its staretPort
             if (starletPort != 0) {
                 String workerAddr = dropComputeNode.getHost() + ":" + starletPort;
-                GlobalStateMgr.getCurrentStarOSAgent().removeWorker(workerAddr);
+                GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(workerAddr);
             }
         }
 
@@ -358,8 +358,9 @@ public class SystemInfoService implements GsonPostProcessable {
 
     private void checkUnforce(Backend droppedBackend) {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        List<Long> tabletIds = GlobalStateMgr.getCurrentInvertedIndex().getTabletIdsByBackendId(droppedBackend.getId());
-        List<Long> dbs = globalStateMgr.getDbIds();
+        List<Long> tabletIds =
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(droppedBackend.getId());
+        List<Long> dbs = globalStateMgr.getLocalMetastore().getDbIds();
 
         dbs.stream().map(globalStateMgr::getDb).forEach(db -> {
             Locker locker = new Locker();
@@ -428,7 +429,7 @@ public class SystemInfoService implements GsonPostProcessable {
             // only need to remove worker after be reported its staretPort
             if (starletPort != 0) {
                 String workerAddr = droppedBackend.getHost() + ":" + starletPort;
-                GlobalStateMgr.getCurrentStarOSAgent().removeWorker(workerAddr);
+                GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(workerAddr);
             }
         }
 
@@ -674,11 +675,12 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public static TNetworkAddress toBrpcHost(TNetworkAddress host) throws Exception {
-        ComputeNode computeNode = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(
+        ComputeNode computeNode = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendWithBePort(
                 host.getHostname(), host.getPort());
         if (computeNode == null) {
             computeNode =
-                    GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host.getHostname(), host.getPort());
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                            .getComputeNodeWithBePort(host.getHostname(), host.getPort());
             if (computeNode == null) {
                 throw new UserException(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
             }
@@ -756,7 +758,6 @@ public class SystemInfoService implements GsonPostProcessable {
     public int getTotalComputeNodeNumber() {
         return idToComputeNodeRef.size();
     }
-
 
     public int getAliveComputeNodeNumber() {
         return getComputeNodeIds(true).size();
@@ -1206,7 +1207,7 @@ public class SystemInfoService implements GsonPostProcessable {
                 return;
             }
             String workerAddr = cn.getHost() + ":" + starletPort;
-            GlobalStateMgr.getCurrentStarOSAgent().removeWorkerFromMap(workerAddr);
+            GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorkerFromMap(workerAddr);
         }
     }
 
@@ -1233,7 +1234,7 @@ public class SystemInfoService implements GsonPostProcessable {
                 return;
             }
             String workerAddr = backend.getHost() + ":" + starletPort;
-            GlobalStateMgr.getCurrentStarOSAgent().removeWorkerFromMap(workerAddr);
+            GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorkerFromMap(workerAddr);
         }
     }
 

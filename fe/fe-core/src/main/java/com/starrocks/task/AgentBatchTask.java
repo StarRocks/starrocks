@@ -174,9 +174,9 @@ public class AgentBatchTask implements Runnable {
             TNetworkAddress address = null;
             boolean ok = false;
             try {
-                ComputeNode computeNode = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+                ComputeNode computeNode = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(backendId);
                 if (RunMode.isSharedDataMode() && computeNode == null) {
-                    computeNode = GlobalStateMgr.getCurrentSystemInfo().getComputeNode(backendId);
+                    computeNode = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNode(backendId);
                 }
 
                 if (computeNode == null || !computeNode.isAlive()) {
@@ -354,8 +354,8 @@ public class AgentBatchTask implements Runnable {
                 return tAgentTaskRequest;
             }
             case UPDATE_TABLET_META_INFO: {
-                UpdateTabletMetaInfoTask updateTabletMetaInfoTask = (UpdateTabletMetaInfoTask) task;
-                TUpdateTabletMetaInfoReq request = updateTabletMetaInfoTask.toThrift();
+                TabletMetadataUpdateAgentTask tabletMetadataUpdateAgentTask = (TabletMetadataUpdateAgentTask) task;
+                TUpdateTabletMetaInfoReq request = tabletMetadataUpdateAgentTask.toThrift();
                 if (LOG.isDebugEnabled()) {
                     LOG.debug(request.toString());
                 }

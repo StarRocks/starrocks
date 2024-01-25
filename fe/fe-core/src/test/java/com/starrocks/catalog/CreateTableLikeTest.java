@@ -77,7 +77,7 @@ public class CreateTableLikeTest {
     private static void createTableLike(String sql) throws Exception {
         CreateTableLikeStmt createTableLikeStmt =
                 (CreateTableLikeStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().createTableLike(createTableLikeStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableLikeStmt.getCreateTableStmt());
     }
 
     private static void checkTableEqual(Table newTable, Table existedTable) {

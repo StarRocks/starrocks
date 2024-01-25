@@ -54,7 +54,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
         backend4.setAlive(true);
         backend4.setHttpPort(TEST_HTTP_PORT);
         backend4.setDisks(new ImmutableMap.Builder<String, DiskInfo>().put("1", new DiskInfo("")).build());
-        GlobalStateMgr.getCurrentSystemInfo().addBackend(backend4);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend4);
         new MockUp<GlobalStateMgr>() {
             @Mock
             boolean isLeader() {
@@ -68,7 +68,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
      */
     @AfterClass
     public static void close() {
-        GlobalStateMgr.getCurrentSystemInfo().dropBackend(new Backend(1234, "localhost", HTTP_PORT));
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropBackend(new Backend(1234, "localhost", HTTP_PORT));
         beServer.shutDown();
     }
 

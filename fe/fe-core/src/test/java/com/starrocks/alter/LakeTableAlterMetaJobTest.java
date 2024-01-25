@@ -52,7 +52,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
-import com.starrocks.task.UpdateTabletMetaInfoTask;
+import com.starrocks.task.TabletMetadataUpdateAgentTask;
+import com.starrocks.task.TabletMetadataUpdateAgentTaskFactory;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletMetaType;
@@ -138,7 +139,7 @@ public class LakeTableAlterMetaJobTest {
         KeysType keysType = KeysType.DUP_KEYS;
         db = new Database(dbId, "db0");
 
-        Database oldDb = GlobalStateMgr.getCurrentState().getIdToDb().putIfAbsent(db.getId(), db);
+        Database oldDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().putIfAbsent(db.getId(), db);
         Assert.assertNull(oldDb);
 
         Column c0 = new Column("c0", Type.INT, true, AggregateType.NONE, false, null, null);
@@ -388,7 +389,8 @@ public class LakeTableAlterMetaJobTest {
         Set<Long> tabletSet = new HashSet<>();
         tabletSet.add(1L);
         MarkedCountDownLatch<Long, Set<Long>> latch = new MarkedCountDownLatch<>(1);
-        UpdateTabletMetaInfoTask task = UpdateTabletMetaInfoTask.updateEnablePersistentIndex(backend, tabletSet, true);
+        TabletMetadataUpdateAgentTask task = TabletMetadataUpdateAgentTaskFactory.createEnablePersistentIndexUpdateTask(
+                backend, tabletSet, true);
         task.setLatch(latch);
         task.setTxnId(txnId);
         TUpdateTabletMetaInfoReq result = task.toThrift();

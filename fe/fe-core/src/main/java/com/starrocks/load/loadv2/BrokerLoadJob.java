@@ -127,7 +127,7 @@ public class BrokerLoadJob extends BulkLoadJob {
     public void beginTxn()
             throws LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException, DuplicatedRequestException {
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
-        transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr()
+        transactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                 .beginTransaction(dbId, Lists.newArrayList(fileGroupAggInfo.getAllTableIds()), label, null,
                         new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                         TransactionState.LoadJobSourceType.BATCH_LOAD_JOB, id,
@@ -317,7 +317,7 @@ public class BrokerLoadJob extends BulkLoadJob {
 
                 // save all related tables and rollups in transaction state
                 TransactionState txnState =
-                        GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionState(dbId, transactionId);
+                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(dbId, transactionId);
                 if (txnState == null) {
                     throw new UserException("txn does not exist: " + transactionId);
                 }
@@ -475,7 +475,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                     .add("msg", "Load job try to commit txn")
                     .build());
             // Update the write duration before committing the transaction.
-            GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+            GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
             TransactionState transactionState = transactionMgr.getTransactionState(dbId, transactionId);
             if (transactionState != null) {
                 transactionState.setWriteDurationMs(writeDurationMs);

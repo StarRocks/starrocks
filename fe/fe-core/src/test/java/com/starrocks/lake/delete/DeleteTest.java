@@ -154,10 +154,10 @@ public class DeleteTest {
                 globalStateMgr.getDb(anyString);
                 result = db;
 
-                GlobalStateMgr.getCurrentGlobalTransactionMgr();
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
                 result = globalTransactionMgr;
 
-                GlobalStateMgr.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 result = systemInfoService;
 
                 systemInfoService.getBackendOrComputeNode(anyLong);
@@ -316,7 +316,7 @@ public class DeleteTest {
                 globalStateMgr.getDb(anyString);
                 result = db;
 
-                GlobalStateMgr.getCurrentGlobalTransactionMgr();
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
                 result = globalTransactionMgr;
 
             }

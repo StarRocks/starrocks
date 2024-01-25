@@ -41,7 +41,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
-import com.starrocks.task.UpdateTabletMetaInfoTask;
+import com.starrocks.task.TabletMetadataUpdateAgentTask;
 import com.starrocks.thrift.TTaskType;
 import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
@@ -67,7 +67,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     private Map<Long, Long> commitVersionMap = new HashMap<>();
 
     public LakeTableAlterMetaJobBase(long jobId, JobType jobType, long dbId, long tableId,
-                                                  String tableName, long timeoutMs) {
+                                     String tableName, long timeoutMs) {
         super(jobId, jobType, dbId, tableId, tableName, timeoutMs);
     }
 
@@ -95,8 +95,8 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         }
 
         if (this.watershedTxnId == -1) {
-            this.watershedTxnId =
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
+            this.watershedTxnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                    .getTransactionIDGenerator().getNextTransactionId();
             GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
         }
 
@@ -111,7 +111,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         this.jobState = JobState.RUNNING;
     }
 
-    protected abstract UpdateTabletMetaInfoTask createTask(long backendId, Set<Long> tablets);
+    protected abstract TabletMetadataUpdateAgentTask createTask(long backendId, Set<Long> tablets);
 
     protected abstract void updateCatalog(Database db, LakeTable table);
 
@@ -296,7 +296,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         AgentBatchTask batchTask = new AgentBatchTask();
         for (Map.Entry<Long, Set<Long>> kv : beIdToTabletSet.entrySet()) {
             countDownLatch.addMark(kv.getKey(), kv.getValue());
-            UpdateTabletMetaInfoTask task = createTask(kv.getKey(), kv.getValue());
+            TabletMetadataUpdateAgentTask task = createTask(kv.getKey(), kv.getValue());
             Preconditions.checkState(task != null, "task is null");
             task.setLatch(countDownLatch);
             task.setTxnId(watershedTxnId);

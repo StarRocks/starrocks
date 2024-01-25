@@ -263,12 +263,12 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
 
     @VisibleForTesting
     public static long getNextTransactionId() {
-        return GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
+        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
     }
 
     @VisibleForTesting
     public static long peekNextTransactionId() {
-        return GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().peekNextTransactionId();
+        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().peekNextTransactionId();
     }
 
     @Override
@@ -558,7 +558,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         for (MaterializedIndex droppedIndex : droppedIndexes) {
             List<Long> shards = droppedIndex.getTablets().stream().map(Tablet::getId).collect(Collectors.toList());
             // TODO: what if unusedShards deletion is partially successful?
-            StarMgrMetaSyncer.dropTabletAndDeleteShard(shards, GlobalStateMgr.getCurrentStarOSAgent());
+            StarMgrMetaSyncer.dropTabletAndDeleteShard(shards, GlobalStateMgr.getCurrentState().getStarOSAgent());
         }
 
         // since we use same shard group to do schema change, must clear old shard before
@@ -570,7 +570,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                 LOG.info("database or table been dropped before updating colocation info, schema change job {}", jobId);
             } else {
                 try {
-                    GlobalStateMgr.getCurrentColocateIndex().updateLakeTableColocationInfo(table, true, null);
+                    GlobalStateMgr.getCurrentState().getColocateTableIndex().updateLakeTableColocationInfo(table, true, null);
                 } catch (DdlException e) {
                     // log an error if update colocation info failed, schema change already succeeded
                     LOG.error("table {} update colocation info failed after schema change, {}.", tableId, e.getMessage());
@@ -767,7 +767,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     }
 
     void addTabletToTabletInvertedIndex(@NotNull LakeTable table) {
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (Table.Cell<Long, Long, MaterializedIndex> cell : physicalPartitionIndexMap.cellSet()) {
             Long partitionId = cell.getRowKey();
             PhysicalPartition physicalPartition = table.getPhysicalPartition(partitionId);
@@ -797,7 +797,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             table.deleteIndexInfo(shadowIndexName);
         }
         // Delete tablet from TabletInvertedIndex
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
             for (MaterializedIndex shadowIdx : physicalPartitionIndexMap.row(partitionId).values()) {
                 for (Tablet tablet : shadowIdx.getTablets()) {
@@ -811,7 +811,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     @NotNull
     List<MaterializedIndex> visualiseShadowIndex(@NotNull LakeTable table) {
         List<MaterializedIndex> droppedIndexes = new ArrayList<>();
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
 
         for (Column column : table.getColumns()) {
             if (Type.VARCHAR.equals(column.getType())) {
@@ -1002,7 +1002,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     // Check whether transactions of the given database which txnId is less than 'watershedTxnId' are finished.
     @VisibleForTesting
     public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) throws AnalysisException {
-        GlobalTransactionMgr globalTxnMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+        GlobalTransactionMgr globalTxnMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         return globalTxnMgr.isPreviousTransactionsFinished(txnId, dbId, Lists.newArrayList(tableId));
     }
 

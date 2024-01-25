@@ -256,7 +256,7 @@ public class ConsistencyChecker extends FrontendDaemon {
         List<Long> chosenTablets = Lists.newArrayList();
 
         // sort dbs
-        List<Long> dbIds = globalStateMgr.getDbIds();
+        List<Long> dbIds = globalStateMgr.getLocalMetastore().getDbIds();
         if (dbIds.isEmpty()) {
             return chosenTablets;
         }

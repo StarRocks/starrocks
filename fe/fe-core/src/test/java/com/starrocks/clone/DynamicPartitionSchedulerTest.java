@@ -16,7 +16,9 @@ package com.starrocks.clone;
 
 import com.google.common.collect.Range;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -30,6 +32,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.Map;
 
 public class DynamicPartitionSchedulerTest {
@@ -116,7 +119,7 @@ public class DynamicPartitionSchedulerTest {
         CreateMaterializedViewStatement createMaterializedViewStatement =
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         try {
-            GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStatement);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createMaterializedViewStatement);
             Assert.fail();
         } catch (Exception ex) {
             Assert.assertTrue(ex.getMessage().contains("Illegal Partition TTL Number"));
@@ -209,6 +212,49 @@ public class DynamicPartitionSchedulerTest {
         Assert.assertTrue(rangePartitionMap.containsKey("p20230329"));
         Assert.assertTrue(rangePartitionMap.containsKey("p20230330"));
         Assert.assertTrue(rangePartitionMap.containsKey("p99991230"));
+    }
+
+    @Test
+    public void testRandomDynamicPartitionShouldMatchConfig() throws Exception {
+        new MockUp<LocalDateTime>() {
+            @Mock
+            public LocalDateTime now() {
+                return  LocalDateTime.of(2023, 3, 30, 1, 1, 1);
+            }
+        };
+
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test_random_bucket (\n" +
+                        "    uid String,\n" +
+                        "    tdbank_imp_date Date\n" +
+                        ") ENGINE=OLAP \n" +
+                        "DUPLICATE KEY(`uid`) \n" +
+                        "PARTITION BY RANGE(`tdbank_imp_date`) ()\n" +
+                        "DISTRIBUTED BY RANDOM BUCKETS 1\n" +
+                        "PROPERTIES (\n" +
+                        "     \"replication_num\" = \"1\", \n" +
+                        "     \"dynamic_partition.enable\" = \"true\", \n" +
+                        "     \"dynamic_partition.time_unit\" = \"DAY\", \n" +
+                        "     \"dynamic_partition.time_zone\" = \"Asia/Shanghai\", \n" +
+                        "     \"dynamic_partition.start\" = \"-180\", \n" +
+                        "     \"dynamic_partition.end\" = \"3\", \n" +
+                        "     \"dynamic_partition.prefix\" = \"p\", \n" +
+                        "     \"dynamic_partition.buckets\" = \"4\", \n" +
+                        "     \"dynamic_partition.history_partition_num\" = \"0\",\n" +
+                        "     \"compression\" = \"LZ4\" );");
+
+        DynamicPartitionScheduler dynamicPartitionScheduler = GlobalStateMgr.getCurrentState()
+                .getDynamicPartitionScheduler();
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        OlapTable tbl = (OlapTable) db.getTable("test_random_bucket");
+        dynamicPartitionScheduler.registerTtlPartitionTable(db.getId(), tbl.getId());
+        dynamicPartitionScheduler.runOnceForTest();
+
+        Collection<Partition> partitions = tbl.getPartitions();
+        for (Partition partition : partitions) {
+            DistributionInfo distributionInfo = partition.getDistributionInfo();
+            Assert.assertEquals(4, distributionInfo.getBucketNum());
+        }
     }
 
 }

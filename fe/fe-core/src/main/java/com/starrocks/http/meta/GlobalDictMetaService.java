@@ -94,7 +94,7 @@ public class GlobalDictMetaService {
 
                 boolean isEnable = "true".equalsIgnoreCase(request.getSingleParameter(ENABLE).trim());
 
-                GlobalStateMgr.getCurrentState()
+                GlobalStateMgr.getCurrentState().getLocalMetastore()
                         .setHasForbitGlobalDict(dbName, tableName, isEnable);
                 response.appendContent(new RestBaseResult("apply success").toJson());
             } else {

@@ -1093,7 +1093,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("colocate1");
         OlapTable t2 = (OlapTable) globalStateMgr.getDb("test").getTable("colocate2");
 
-        StatisticStorage ss = globalStateMgr.getCurrentStatisticStorage();
+        StatisticStorage ss = globalStateMgr.getCurrentState().getStatisticStorage();
         new Expectations(ss) {
             {
                 ss.getColumnStatistic((Table) any, "k1");
@@ -1124,7 +1124,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
 
-        StatisticStorage ss = globalStateMgr.getCurrentStatisticStorage();
+        StatisticStorage ss = globalStateMgr.getCurrentState().getStatisticStorage();
         new Expectations(ss) {
             {
                 ss.getColumnStatistic(t0, "v1");
@@ -1199,7 +1199,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     public void testToDateToDays() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("test_all_type");
-        StatisticStorage ss = GlobalStateMgr.getCurrentStatisticStorage();
+        StatisticStorage ss = GlobalStateMgr.getCurrentState().getStatisticStorage();
         new Expectations(ss) {
             {
                 ss.getColumnStatistic(t0, "id_datetime");
@@ -1223,7 +1223,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
 
-        StatisticStorage ss = GlobalStateMgr.getCurrentStatisticStorage();
+        StatisticStorage ss = GlobalStateMgr.getCurrentState().getStatisticStorage();
         new Expectations(ss) {
             {
                 ss.getColumnStatistic(t0, "v1");

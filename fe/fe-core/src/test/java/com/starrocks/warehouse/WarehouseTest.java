@@ -37,7 +37,7 @@ public class WarehouseTest {
 
     @Test
     public void testNormal() throws DdlException {
-        WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentWarehouseMgr();
+        WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         Assert.assertTrue(warehouseMgr.warehouseExists(WarehouseManager.DEFAULT_WAREHOUSE_NAME));
     }
 }

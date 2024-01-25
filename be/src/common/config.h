@@ -303,6 +303,10 @@ CONF_mBool(enable_lazy_delta_column_compaction, "true");
 CONF_mInt32(update_compaction_check_interval_seconds, "10");
 CONF_mInt32(update_compaction_num_threads_per_disk, "1");
 CONF_mInt32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
+// using this config to adjust chunk size used in compaction for row store
+// if this value is 0, auto chunk size calculation algorithm will be used
+// set this value to none zero if auto algorithm isn't working well
+CONF_mInt32(update_compaction_chunk_size_for_row_store, "0");
 CONF_mInt64(max_update_compaction_num_singleton_deltas, "1000");
 CONF_mInt64(update_compaction_size_threshold, "268435456");
 CONF_mInt64(update_compaction_result_bytes, "1073741824");
@@ -378,6 +382,17 @@ CONF_Int32(be_exit_after_disk_write_hang_second, "60");
 // turn off dictionary dictionary encoding. This only will detect first chunk
 // set to 1 means always use dictionary encoding
 CONF_Double(dictionary_encoding_ratio, "0.7");
+
+// Some data types use dictionary encoding, and this configuration is used to control
+// the size of dictionary pages. If you want a higher compression ratio, please increase
+// this configuration item, but be aware that excessively large values may lead to
+// performance degradation.
+CONF_Int32(dictionary_page_size, "1048576");
+
+// Just like dictionary_encoding_ratio, dictionary_encoding_ratio_for_non_string_column is used for
+// no-string column.
+CONF_Double(dictionary_encoding_ratio_for_non_string_column, "0");
+
 // The minimum chunk size for dictionary encoding speculation
 CONF_Int32(dictionary_speculate_min_chunk_size, "10000");
 
@@ -1169,5 +1184,8 @@ CONF_mInt32(desc_hint_split_range, "10");
 CONF_mInt64(lake_local_pk_index_unused_threshold_seconds, "86400"); // 1 day
 
 CONF_mBool(lake_enable_vertical_compaction_fill_data_cache, "false");
+
+CONF_mInt32(dictionary_cache_refresh_timeout_ms, "60000"); // 1 min
+CONF_mInt32(dictionary_cache_refresh_threadpool_size, "8");
 
 } // namespace starrocks::config

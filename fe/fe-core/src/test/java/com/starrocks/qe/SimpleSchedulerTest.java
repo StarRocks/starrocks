@@ -315,7 +315,7 @@ public class SimpleSchedulerTest {
         SimpleScheduler.addToBlocklist(10003L);
         new Expectations() {
             {
-                globalStateMgr.getCurrentSystemInfo();
+                globalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 result = systemInfoService;
                 times = 2;
 
@@ -466,7 +466,7 @@ public class SimpleSchedulerTest {
         HostBlacklist blacklist = new HostBlacklist();
         new Expectations() {
             {
-                globalStateMgr.getCurrentSystemInfo();
+                globalStateMgr.getNodeMgr().getClusterInfo();
                 result = systemInfoService;
 
                 // backend 10001 will be removed
@@ -524,7 +524,7 @@ public class SimpleSchedulerTest {
         HostBlacklist blacklist = new HostBlacklist();
         new Expectations() {
             {
-                globalStateMgr.getCurrentSystemInfo();
+                globalStateMgr.getNodeMgr().getClusterInfo();
                 result = systemInfoService;
 
                 // backend 10003, which is not available

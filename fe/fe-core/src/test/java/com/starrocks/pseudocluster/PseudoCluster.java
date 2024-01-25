@@ -169,7 +169,7 @@ public class PseudoCluster {
         }
 
         @Override
-        public FilePathInfo allocateFilePath(long tableId) throws DdlException {
+        public FilePathInfo allocateFilePath(long dbId, long tableId) throws DdlException {
             FilePathInfo.Builder builder = FilePathInfo.newBuilder();
             FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
 
@@ -450,13 +450,13 @@ public class PseudoCluster {
                     cluster.frontend.getFrontendService());
             cluster.backends.put(backend.getHost(), backend);
             cluster.backendIdToHost.put(beId, backend.getHost());
-            GlobalStateMgr.getCurrentSystemInfo().addBackend(backend.be);
-            GlobalStateMgr.getCurrentStarOSAgent()
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend.be);
+            GlobalStateMgr.getCurrentState().getStarOSAgent()
                     .addWorker(beId, String.format("%s:%d", backend.getHost(), backendPortStart - 1), 0);
             LOG.info("add PseudoBackend {} {}", beId, host);
         }
         int retry = 0;
-        while (GlobalStateMgr.getCurrentSystemInfo().getBackend(10001).getBePort() == -1 &&
+        while (GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(10001).getBePort() == -1 &&
                 retry++ < 600) {
             Thread.sleep(100);
         }
@@ -475,14 +475,14 @@ public class PseudoCluster {
                     this.frontend.getFrontendService());
             this.backends.put(backend.getHost(), backend);
             this.backendIdToHost.put(beId, backend.getHost());
-            GlobalStateMgr.getCurrentSystemInfo().addBackend(backend.be);
-            GlobalStateMgr.getCurrentStarOSAgent()
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend.be);
+            GlobalStateMgr.getCurrentState().getStarOSAgent()
                     .addWorker(beId, String.format("%s:%d", backend.getHost(), backendPortStart - 1), 0);
             LOG.info("add PseudoBackend {} {}", beId, host);
             beIds.add(beId);
         }
         int retry = 0;
-        while (GlobalStateMgr.getCurrentSystemInfo().getBackend(beIds.get(0)).getBePort() == -1 &&
+        while (GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(beIds.get(0)).getBePort() == -1 &&
                 retry++ < 600) {
             try {
                 Thread.sleep(100);
@@ -597,7 +597,7 @@ public class PseudoCluster {
     public static void main(String[] args) throws Exception {
         PseudoCluster.getOrCreate("pseudo_cluster", false, 9030, 4);
         for (int i = 0; i < 4; i++) {
-            System.out.println(GlobalStateMgr.getCurrentSystemInfo().getBackend(10001 + i).getBePort());
+            System.out.println(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(10001 + i).getBePort());
         }
         while (true) {
             Thread.sleep(1000);

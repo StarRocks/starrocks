@@ -193,7 +193,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
         // add callback before txn created, because callback will be performed on replay without txn begin
         // register txn state listener
         if (!loadJob.isCompleted()) {
-            GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(loadJob);
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().addCallback(loadJob);
         }
     }
 
@@ -294,7 +294,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
         }
         job.unprotectReadEndOperation(operation, true);
 
-        GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().removeCallback(job.id);
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(job.id);
 
         LOG.info(new LogBuilder(LogKey.LOAD_JOB, operation.getId())
                 .add("operation", operation)
@@ -397,7 +397,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
         }
 
         insertJobs.forEach(job -> {
-            TransactionState state = GlobalStateMgr.getCurrentGlobalTransactionMgr().getLabelTransactionState(
+            TransactionState state = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getLabelTransactionState(
                     job.getDbId(), job.getLabel());
             if (state == null || state.getTransactionStatus() == TransactionStatus.UNKNOWN) {
                 try {
@@ -792,7 +792,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
         // The commit and visible txn will callback the unfinished load job.
         // Otherwise, the load job always does not be completed while the txn is visible.
         if (!loadJob.isCompleted()) {
-            GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(loadJob);
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().addCallback(loadJob);
         }
     }
 

@@ -240,6 +240,7 @@ set(EXEC_FILES
         ./storage/rowset/block_bloom_filter_test.cpp
         ./storage/rowset/bloom_filter_index_reader_writer_test.cpp
         ./storage/rowset/column_reader_writer_test.cpp
+        ./storage/rowset/dict_page_test.cpp
         ./storage/rowset/encoding_info_test.cpp
         ./storage/rowset/frame_of_reference_page_test.cpp
         ./storage/rowset/map_column_rw_test.cpp

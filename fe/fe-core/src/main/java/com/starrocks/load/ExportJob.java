@@ -332,7 +332,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
         }
 
         long maxBytesPerBe = Config.export_max_bytes_per_be_per_task;
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         List<TScanRangeLocations> copyTabletLocations = Lists.newArrayList(tabletLocations);
         int taskIdx = 0;
         while (!copyTabletLocations.isEmpty()) {
@@ -753,12 +753,12 @@ public class ExportJob implements Writable, GsonPostProcessable {
             String host = address.getHostname();
             int port = address.getPort();
 
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, port);
+            Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendWithBePort(host, port);
             if (backend == null) {
                 continue;
             }
             long backendId = backend.getId();
-            if (!GlobalStateMgr.getCurrentSystemInfo().checkBackendAvailable(backendId)) {
+            if (!GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkBackendAvailable(backendId)) {
                 continue;
             }
 
@@ -785,8 +785,9 @@ public class ExportJob implements Writable, GsonPostProcessable {
                 TNetworkAddress address = location.getServer();
                 String host = address.getHostname();
                 int port = address.getPort();
-                ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNodeWithBePort(host, port);
-                if (!GlobalStateMgr.getCurrentSystemInfo().checkNodeAvailable(node)) {
+                ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                        .getBackendOrComputeNodeWithBePort(host, port);
+                if (!GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkNodeAvailable(node)) {
                     continue;
                 }
                 try {

@@ -272,7 +272,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
     private static ImmutableMap<Long, ComputeNode> buildComputeNodeInfo(SystemInfoService systemInfoService,
                                                                         int numUsedComputeNodes) {
         if (RunMode.isSharedDataMode()) {
-            return GlobalStateMgr.getCurrentWarehouseMgr().getComputeNodesFromWarehouse();
+            return GlobalStateMgr.getCurrentState().getWarehouseMgr().getComputeNodesFromWarehouse();
         }
 
         ImmutableMap<Long, ComputeNode> idToComputeNode

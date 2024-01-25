@@ -262,9 +262,10 @@ public class ColocateTableIndex implements Writable {
                     LakeTable ltbl = (LakeTable) tbl;
                     List<Long> shardGroupIds = ltbl.getShardGroupIds();
                     if (!groupAlreadyExist) {
-                        GlobalStateMgr.getCurrentStarOSAgent().createMetaGroup(groupId.grpId, shardGroupIds);
+                        GlobalStateMgr.getCurrentState().getStarOSAgent().createMetaGroup(groupId.grpId, shardGroupIds);
                     } else {
-                        GlobalStateMgr.getCurrentStarOSAgent().updateMetaGroup(groupId.grpId, shardGroupIds, true /* isJoin */);
+                        GlobalStateMgr.getCurrentState().getStarOSAgent()
+                                .updateMetaGroup(groupId.grpId, shardGroupIds, true /* isJoin */);
                     }
                 }
                 lakeGroups.add(groupId);
@@ -340,7 +341,7 @@ public class ColocateTableIndex implements Writable {
                 LakeTable ltbl = (LakeTable) tbl;
                 List<Long> shardGroupIds = ltbl.getShardGroupIds();
                 try {
-                    GlobalStateMgr.getCurrentStarOSAgent().updateMetaGroup(groupId.grpId, shardGroupIds,
+                    GlobalStateMgr.getCurrentState().getStarOSAgent().updateMetaGroup(groupId.grpId, shardGroupIds,
                             false /* isJoin */);
                 } catch (DdlException e) {
                     LOG.error(e.getMessage());
@@ -376,7 +377,7 @@ public class ColocateTableIndex implements Writable {
         readLock();
         try {
             if (lakeGroups.contains(groupId)) {
-                return !GlobalStateMgr.getCurrentStarOSAgent().queryMetaGroupStable(groupId.grpId);
+                return !GlobalStateMgr.getCurrentState().getStarOSAgent().queryMetaGroupStable(groupId.grpId);
             } else {
                 return unstableGroups.contains(groupId);
             }
@@ -671,7 +672,6 @@ public class ColocateTableIndex implements Writable {
         return Optional.of(table.getName());
     }
 
-
     /**
      * After the user executes `DROP TABLE`, we only throw tables into the recycle bin instead of deleting them
      * immediately. As a side effect, the table that stores in ColocateTableIndex may not be visible to users. We need
@@ -801,7 +801,7 @@ public class ColocateTableIndex implements Writable {
     }
 
     public long loadColocateTableIndex(DataInputStream dis, long checksum) throws IOException {
-        GlobalStateMgr.getCurrentColocateIndex().readFields(dis);
+        GlobalStateMgr.getCurrentState().getColocateTableIndex().readFields(dis);
         // clean up if dbId or tableId not found, this is actually a bug
         cleanupInvalidDbOrTable(GlobalStateMgr.getCurrentState());
         constructLakeGroups(GlobalStateMgr.getCurrentState());
@@ -1022,12 +1022,12 @@ public class ColocateTableIndex implements Writable {
         for (Map.Entry<Long, GroupId> entry : table2Group.entrySet()) {
             long dbId = entry.getValue().dbId;
             long tableId = entry.getKey();
-            Database database = globalStateMgr.getDbIncludeRecycleBin(dbId);
+            Database database = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
             if (database == null) {
                 LOG.warn("cannot find db {}, will remove invalid table {} from group {}",
                         dbId, tableId, entry.getValue());
             } else {
-                Table table = globalStateMgr.getTableIncludeRecycleBin(database, tableId);
+                Table table = globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(database, tableId);
                 if (table != null) {
                     // this is a valid table/database, do nothing
                     continue;
@@ -1063,7 +1063,7 @@ public class ColocateTableIndex implements Writable {
             List<Long> shardGroupIds = ltbl.getShardGroupIds();
             LOG.info("update meta group id {}, table {}, shard groups: {}, join: {}",
                     groupId.grpId, olapTable.getId(), shardGroupIds, isJoin);
-            GlobalStateMgr.getCurrentStarOSAgent().updateMetaGroup(groupId.grpId, shardGroupIds, isJoin);
+            GlobalStateMgr.getCurrentState().getStarOSAgent().updateMetaGroup(groupId.grpId, shardGroupIds, isJoin);
         } finally {
             writeUnlock();
         }
@@ -1078,8 +1078,8 @@ public class ColocateTableIndex implements Writable {
             long dbId = entry.getValue().dbId;
             long tableId = entry.getKey();
             // database and table should be valid if reach here
-            Database database = globalStateMgr.getDbIncludeRecycleBin(dbId);
-            Table table = globalStateMgr.getTableIncludeRecycleBin(database, tableId);
+            Database database = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
+            Table table = globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(database, tableId);
             if (table.isCloudNativeTable()) {
                 lakeGroups.add(entry.getValue());
             }

@@ -312,7 +312,7 @@ public class SchemaScanNode extends ScanNode {
     }
 
     public void computeFeNodes() {
-        for (Frontend fe : GlobalStateMgr.getCurrentState().getFrontends(null /* all */)) {
+        for (Frontend fe : GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null /* all */)) {
             if (!fe.isAlive()) {
                 continue;
             }
@@ -328,7 +328,7 @@ public class SchemaScanNode extends ScanNode {
     }
 
     public void computeBeScanRanges() {
-        for (Backend be : GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().values()) {
+        for (Backend be : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend().values()) {
             // if user specifies BE id, we try to scan all BEs(including bad BE)
             // if user doesn't specify BE id, we only scan live BEs
             if ((be.isAlive() && beId == null) || (beId != null && beId.equals(be.getId()))) {
