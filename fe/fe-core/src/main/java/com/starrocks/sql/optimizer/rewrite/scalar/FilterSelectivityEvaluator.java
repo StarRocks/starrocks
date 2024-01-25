@@ -143,6 +143,7 @@ public class FilterSelectivityEvaluator {
             } else if (left.isColumnRef() && right.isConstant()) {
                 selectRatio = estimateColumnToExprSelectRatio(columnStatistic, predicate);
             } else {
+                // TODO need to process left child is an expr contains only one col?
                 selectRatio = NON_SELECTIVITY;
             }
             return new ColumnFilter(selectRatio, column, predicate);
