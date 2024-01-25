@@ -39,7 +39,16 @@ Status OlapScanPrepareOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
 
     RETURN_IF_ERROR(_ctx->prepare(state));
+<<<<<<< HEAD
     RETURN_IF_ERROR(_ctx->capture_tablet_rowsets(_morsel_queue->olap_scan_ranges()));
+=======
+
+    auto* capture_tablet_rowsets_timer = ADD_TIMER(_unique_metrics, "CaptureTabletRowsetsTime");
+    {
+        SCOPED_TIMER(capture_tablet_rowsets_timer);
+        RETURN_IF_ERROR(_ctx->capture_tablet_rowsets(_morsel_queue->prepare_olap_scan_ranges()));
+    }
+>>>>>>> 3530742b20 ([Enhancement] refactor morsel queue and add `DynamicMorselQueue` (#38850))
 
     return Status::OK();
 }
