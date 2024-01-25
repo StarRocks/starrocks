@@ -96,13 +96,8 @@
         "loading/Flink_cdc_load",
         "loading/Flink-connector-starrocks",
         "loading/Load_to_Primary_Key_tables",
-<<<<<<< HEAD
-        "loading/Etl_in_loading"
-=======
         "loading/Etl_in_loading",
-        "loading/loading_tools",
         "loading/load_concept/strict_mode"
->>>>>>> 19c292ed47 ([Doc] move strict mode into parent dir (#39950))
       ]
     },
     {
@@ -715,13 +710,8 @@
         "loading/Flink_cdc_load",
         "loading/Flink-connector-starrocks",
         "loading/Load_to_Primary_Key_tables",
-<<<<<<< HEAD
-        "loading/Etl_in_loading"
-=======
         "loading/Etl_in_loading",
-        "loading/loading_tools",
         "loading/load_concept/strict_mode"
->>>>>>> 19c292ed47 ([Doc] move strict mode into parent dir (#39950))
       ]
     },
     {
