@@ -47,11 +47,13 @@ We recommend you customize roles to manage privileges and users. The following e
    GRANT USAGE ON CATALOG hive_catalog TO ROLE read_catalog_only;
    -- Switch to the corresponding catalog.
    SET CATALOG hive_catalog;
-   -- Grant the privileges to query all tables and all views in all databases.
+   -- Grant the privileges to query all tables and all views in the external catalog.
    GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE read_catalog_only;
    ```
 
-   Note: You can query only Hive table views (since v3.1).
+   :::tip
+   For views in external catalogs, you can query only Hive table views (since v3.1).
+   :::
 
 #### Grant write-only privileges on a specific external catalog
 
