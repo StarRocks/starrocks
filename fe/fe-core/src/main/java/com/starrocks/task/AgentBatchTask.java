@@ -354,8 +354,8 @@ public class AgentBatchTask implements Runnable {
                 return tAgentTaskRequest;
             }
             case UPDATE_TABLET_META_INFO: {
-                UpdateTabletMetaInfoTask updateTabletMetaInfoTask = (UpdateTabletMetaInfoTask) task;
-                TUpdateTabletMetaInfoReq request = updateTabletMetaInfoTask.toThrift();
+                TabletMetadataUpdateAgentTask tabletMetadataUpdateAgentTask = (TabletMetadataUpdateAgentTask) task;
+                TUpdateTabletMetaInfoReq request = tabletMetadataUpdateAgentTask.toThrift();
                 if (LOG.isDebugEnabled()) {
                     LOG.debug(request.toString());
                 }

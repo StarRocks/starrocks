@@ -96,7 +96,8 @@ import com.starrocks.task.DropReplicaTask;
 import com.starrocks.task.LeaderTask;
 import com.starrocks.task.PublishVersionTask;
 import com.starrocks.task.StorageMediaMigrationTask;
-import com.starrocks.task.UpdateTabletMetaInfoTask;
+import com.starrocks.task.TabletMetadataUpdateAgentTask;
+import com.starrocks.task.TabletMetadataUpdateAgentTaskFactory;
 import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TDataCacheMetrics;
 import com.starrocks.thrift.TDisk;
@@ -1305,7 +1306,8 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             return;
         }
         AgentBatchTask batchTask = new AgentBatchTask();
-        UpdateTabletMetaInfoTask task = UpdateTabletMetaInfoTask.updatePartitionId(backendId, tabletWithoutPartitionId);
+        TabletMetadataUpdateAgentTask task = TabletMetadataUpdateAgentTaskFactory
+                .createPartitionIdUpdateTask(backendId, tabletWithoutPartitionId);
         batchTask.addTask(task);
         AgentTaskExecutor.submit(batchTask);
     }
@@ -1357,7 +1359,8 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         if (!tabletToInMemory.isEmpty()) {
             LOG.info("find [{}] tablet(s) which need to be set with in-memory state", tabletToInMemory.size());
             AgentBatchTask batchTask = new AgentBatchTask();
-            UpdateTabletMetaInfoTask task = UpdateTabletMetaInfoTask.updateIsInMemory(backendId, tabletToInMemory);
+            TabletMetadataUpdateAgentTask
+                    task = TabletMetadataUpdateAgentTaskFactory.createIsInMemoryUpdateTask(backendId, tabletToInMemory);
             batchTask.addTask(task);
             AgentTaskExecutor.submit(batchTask);
         }
@@ -1411,8 +1414,8 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             LOG.info("find [{}] tablet(s) which need to be set with persistent index enabled",
                     tabletToEnablePersistentIndex.size());
             AgentBatchTask batchTask = new AgentBatchTask();
-            UpdateTabletMetaInfoTask task = UpdateTabletMetaInfoTask.updateEnablePersistentIndex(backendId,
-                    tabletToEnablePersistentIndex);
+            TabletMetadataUpdateAgentTask task = TabletMetadataUpdateAgentTaskFactory
+                    .createEnablePersistentIndexUpdateTask(backendId, tabletToEnablePersistentIndex);
             batchTask.addTask(task);
             if (FeConstants.runningUnitTest) {
                 AgentTaskExecutor.submit(batchTask);
@@ -1464,8 +1467,8 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             LOG.info("find [{}] tablet(s) which need to be set primary index cache expire sec",
                     tabletToPrimaryCacheExpireSec.size());
             AgentBatchTask batchTask = new AgentBatchTask();
-            UpdateTabletMetaInfoTask task = UpdateTabletMetaInfoTask.updatePrimaryIndexCacheExpireTime(backendId,
-                    tabletToPrimaryCacheExpireSec);
+            TabletMetadataUpdateAgentTask task = TabletMetadataUpdateAgentTaskFactory
+                    .createPrimaryIndexCacheExpireTimeUpdateTask(backendId, tabletToPrimaryCacheExpireSec);
             batchTask.addTask(task);
             if (!FeConstants.runningUnitTest) {
                 AgentTaskExecutor.submit(batchTask);
@@ -1534,7 +1537,8 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         LOG.debug("find [{}] tablets need set binlog config ", tabletToBinlogConfig.size());
         if (!tabletToBinlogConfig.isEmpty()) {
             AgentBatchTask batchTask = new AgentBatchTask();
-            UpdateTabletMetaInfoTask task = UpdateTabletMetaInfoTask.updateBinlogConfig(backendId, tabletToBinlogConfig);
+            TabletMetadataUpdateAgentTask task = TabletMetadataUpdateAgentTaskFactory.createBinlogConfigUpdateTask(
+                    backendId, tabletToBinlogConfig);
             batchTask.addTask(task);
             AgentTaskExecutor.submit(batchTask);
         }
