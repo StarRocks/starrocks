@@ -254,7 +254,11 @@ public class SetStmtAnalyzer {
         }
         // big_query_profile_threshold
         if (variable.equalsIgnoreCase(SessionVariable.BIG_QUERY_PROFILE_THRESHOLD)) {
-            TimeValue.parseTimeValue(resolvedExpression.getStringValue());
+            String timeStr = resolvedExpression.getStringValue();
+            TimeValue timeValue = TimeValue.parseTimeValue(timeStr, null);
+            if (timeValue == null) {
+                throw new SemanticException(String.format("failed to parse time value %s", timeStr));
+            }
         }
 
         var.setResolvedExpression(resolvedExpression);

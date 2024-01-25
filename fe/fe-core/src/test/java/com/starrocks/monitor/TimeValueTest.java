@@ -19,12 +19,13 @@ import org.junit.Test;
 
 public class TimeValueTest {
     @Test
-    public void testGetMilliseconds() throws Exception {
+    public void testGetMilliseconds() {
         Assert.assertEquals(0, TimeValue.parseTimeValue("0ms").getMillis());
         Assert.assertEquals(0, TimeValue.parseTimeValue("0s").getMillis());
         Assert.assertEquals(0, TimeValue.parseTimeValue("0m").getMillis());
         Assert.assertEquals(1011, TimeValue.parseTimeValue("1011ms").getMillis());
         Assert.assertEquals(1011000, TimeValue.parseTimeValue("1011s").getMillis());
         Assert.assertEquals(60000, TimeValue.parseTimeValue("1m").getMillis());
+        Assert.assertEquals(600000, TimeValue.parseTimeValue("10m").getMillis());
     }
 }

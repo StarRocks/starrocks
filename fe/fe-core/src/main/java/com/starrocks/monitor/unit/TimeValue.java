@@ -235,7 +235,7 @@ public class TimeValue implements Comparable<TimeValue> {
 
     public static TimeValue parseTimeValue(String sValue) {
         Objects.requireNonNull(sValue);
-        return parseTimeValue(sValue, null);
+        return parseTimeValue(sValue, TimeValue.ZERO);
     }
 
     public static TimeValue parseTimeValue(String sValue, TimeValue defaultValue) {
@@ -243,29 +243,31 @@ public class TimeValue implements Comparable<TimeValue> {
             return defaultValue;
         }
         final String normalized = sValue.toLowerCase(Locale.ROOT).trim();
-        if (normalized.endsWith("nanos")) {
-            return new TimeValue(parse(normalized, "nanos"), TimeUnit.NANOSECONDS);
-        } else if (normalized.endsWith("micros")) {
-            return new TimeValue(parse(normalized, "micros"), TimeUnit.MICROSECONDS);
-        } else if (normalized.endsWith("ms")) {
-            return new TimeValue(parse(normalized, "ms"), TimeUnit.MILLISECONDS);
-        } else if (normalized.endsWith("s")) {
-            return new TimeValue(parse(normalized, "s"), TimeUnit.SECONDS);
-        } else if (sValue.endsWith("m")) {
-            // parsing minutes should be case-sensitive as 'M' means "months", not "minutes"; this is the only special case.
-            return new TimeValue(parse(normalized, "m"), TimeUnit.MINUTES);
-        } else if (normalized.endsWith("h")) {
-            return new TimeValue(parse(normalized, "h"), TimeUnit.HOURS);
-        } else if (normalized.endsWith("d")) {
-            return new TimeValue(parse(normalized, "d"), TimeUnit.DAYS);
-        } else if (normalized.matches("-0*1")) {
-            return TimeValue.MINUS_ONE;
-        } else if (normalized.matches("0+")) {
-            return TimeValue.ZERO;
-        } else {
-            // Missing units:
-            throw new IllegalArgumentException(
-                    "failed to parse setting [{}] with value [{}] as a time value: unit is missing or unrecognized");
+        try {
+            if (normalized.endsWith("nanos")) {
+                return new TimeValue(parse(normalized, "nanos"), TimeUnit.NANOSECONDS);
+            } else if (normalized.endsWith("micros")) {
+                return new TimeValue(parse(normalized, "micros"), TimeUnit.MICROSECONDS);
+            } else if (normalized.endsWith("ms")) {
+                return new TimeValue(parse(normalized, "ms"), TimeUnit.MILLISECONDS);
+            } else if (normalized.endsWith("s")) {
+                return new TimeValue(parse(normalized, "s"), TimeUnit.SECONDS);
+            } else if (sValue.endsWith("m")) {
+                // parsing minutes should be case-sensitive as 'M' means "months", not "minutes"; this is the only special case.
+                return new TimeValue(parse(normalized, "m"), TimeUnit.MINUTES);
+            } else if (normalized.endsWith("h")) {
+                return new TimeValue(parse(normalized, "h"), TimeUnit.HOURS);
+            } else if (normalized.endsWith("d")) {
+                return new TimeValue(parse(normalized, "d"), TimeUnit.DAYS);
+            } else if (normalized.matches("-0*1")) {
+                return TimeValue.MINUS_ONE;
+            } else if (normalized.matches("0+")) {
+                return TimeValue.ZERO;
+            } else {
+                return defaultValue;
+            }
+        } catch (Exception e) {
+            return defaultValue;
         }
     }
 
