@@ -493,13 +493,11 @@ StatusOr<ColumnPtr> JsonFunctions::json_query(FunctionContext* context, const Co
 template <LogicalType ResultType>
 static Status _convert_json_slice(const vpack::Slice& slice, ColumnBuilder<ResultType>& result) {
     try {
-        if (slice.isNone()) {
+        if (slice.isNone() || slice.isNull()) {
             result.append_null();
         } else if constexpr (ResultType == TYPE_JSON) {
             JsonValue value(slice);
             result.append(std::move(value));
-        } else if (slice.isNull()) {
-            result.append_null();
         } else if constexpr (ResultType == TYPE_VARCHAR || ResultType == TYPE_CHAR) {
             if (LIKELY(slice.isType(vpack::ValueType::String))) {
                 vpack::ValueLength len;

@@ -56,3 +56,7 @@ select JSON_LENGTH(j1, "$.key2"), JSON_LENGTH(j1, "$.key3"), JSON_LENGTH(j1, "$.
 None	None	None
 None	None	None
 -- !result
+select json_object('"1"')->"1";
+-- result:
+None
+-- !result

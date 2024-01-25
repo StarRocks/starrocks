@@ -33,3 +33,4 @@ select JSON_EXISTS(j1, "$.key2"), JSON_EXISTS(j1, "$.key2.key3") from js1 order 
 
 select JSON_LENGTH(j1, "$.key2"), JSON_LENGTH(j1, "$.key3"), JSON_LENGTH(j1, "$.key4") from js1 order by v1 limit 2;
 
+select json_object('"1"')->"1";
