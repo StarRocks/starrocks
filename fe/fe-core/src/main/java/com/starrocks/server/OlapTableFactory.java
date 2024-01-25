@@ -214,7 +214,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                     throw new DdlException(String.format("Storage volume %s not exists", volume));
                 }
                 String storageVolumeId = svm.getStorageVolumeIdOfTable(tableId);
-                metastore.setLakeStorageInfo(table, storageVolumeId, properties);
+                metastore.setLakeStorageInfo(db, table, storageVolumeId, properties);
                 useFastSchemaEvolution = false;
             } else {
                 table = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);

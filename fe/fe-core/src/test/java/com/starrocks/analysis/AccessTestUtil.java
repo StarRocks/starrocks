@@ -55,7 +55,6 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageType;
@@ -221,43 +220,39 @@ public class AccessTestUtil {
     }
 
     public static GlobalStateMgr fetchBlockCatalog() {
-        try {
-            GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
+        GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
 
-            Auth auth = fetchBlockAccess();
-            Database db = mockDb("testDb");
+        Auth auth = fetchBlockAccess();
+        Database db = mockDb("testDb");
 
-            new Expectations(globalStateMgr) {
-                {
-                    globalStateMgr.getAuth();
-                    minTimes = 0;
-                    result = auth;
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getAuth();
+                minTimes = 0;
+                result = auth;
 
-                    globalStateMgr.changeCatalogDb((ConnectContext) any, anyString);
-                    minTimes = 0;
-                    result = new DdlException("failed");
+                //globalStateMgr.changeCatalogDb((ConnectContext) any, anyString);
+                //minTimes = 0;
+                //result = new DdlException("failed");
 
-                    globalStateMgr.getDb("testDb");
-                    minTimes = 0;
-                    result = db;
+                globalStateMgr.getDb("testDb");
+                minTimes = 0;
+                result = db;
 
-                    globalStateMgr.getDb("emptyDb");
-                    minTimes = 0;
-                    result = null;
+                globalStateMgr.getDb("emptyDb");
+                minTimes = 0;
+                result = null;
 
-                    globalStateMgr.getDb(anyString);
-                    minTimes = 0;
-                    result = new Database();
+                globalStateMgr.getDb(anyString);
+                minTimes = 0;
+                result = new Database();
 
-                    globalStateMgr.getDb("emptyCluster");
-                    minTimes = 0;
-                    result = null;
-                }
-            };
-            return globalStateMgr;
-        } catch (DdlException e) {
-            return null;
-        }
+                globalStateMgr.getDb("emptyCluster");
+                minTimes = 0;
+                result = null;
+            }
+        };
+        return globalStateMgr;
     }
 
     public static Analyzer fetchAdminAnalyzer() {
