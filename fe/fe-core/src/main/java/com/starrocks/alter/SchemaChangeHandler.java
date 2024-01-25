@@ -107,7 +107,8 @@ import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.ClearAlterTask;
-import com.starrocks.task.UpdateTabletMetaInfoTask;
+import com.starrocks.task.TabletMetadataUpdateAgentTask;
+import com.starrocks.task.TabletMetadataUpdateAgentTaskFactory;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.thrift.TWriteQuorumType;
@@ -2040,8 +2041,8 @@ public class SchemaChangeHandler extends AlterHandler {
         AgentBatchTask batchTask = new AgentBatchTask();
         for (Map.Entry<Long, Set<Long>> kv : beIdToTabletId.entrySet()) {
             countDownLatch.addMark(kv.getKey(), kv.getValue());
-            UpdateTabletMetaInfoTask task = UpdateTabletMetaInfoTask.updateBinlogConfig(kv.getKey(), kv.getValue(),
-                    binlogConfig);
+            TabletMetadataUpdateAgentTask task = TabletMetadataUpdateAgentTaskFactory.createBinlogConfigUpdateTask(
+                    kv.getKey(), kv.getValue(), binlogConfig);
             task.setLatch(countDownLatch);
             batchTask.addTask(task);
         }
@@ -2127,8 +2128,8 @@ public class SchemaChangeHandler extends AlterHandler {
             countDownLatch.addMark(kv.getKey(), kv.getValue());
             long backendId = kv.getKey();
             Set<Long> tablets = kv.getValue();
-            UpdateTabletMetaInfoTask task = UpdateTabletMetaInfoTask.updateBooleanProperty(backendId, tablets,
-                    metaValue, metaType);
+            TabletMetadataUpdateAgentTask task = TabletMetadataUpdateAgentTaskFactory
+                    .createGenericBooleanPropertyUpdateTask(backendId, tablets, metaValue, metaType);
             Preconditions.checkState(task != null, "task is null");
             task.setLatch(countDownLatch);
             batchTask.addTask(task);
