@@ -132,6 +132,13 @@ StorageEngine::StorageEngine(const EngineOptions& options)
 }
 
 StorageEngine::~StorageEngine() {
+<<<<<<< HEAD
+=======
+    // tablet manager need to destruct before set storage engine instance to nullptr because tablet may access storage
+    // engine instance during their destruction.
+    _update_manager.reset();
+    _tablet_manager.reset();
+>>>>>>> 08036d8a90 ([Enhancement] Delete pindex file when disable pindex (#39312))
 #ifdef BE_TEST
     if (_s_instance == this) {
         _s_instance = _p_instance;

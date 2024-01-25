@@ -4840,4 +4840,23 @@ Status PersistentIndex::pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* 
     return Status::OK();
 }
 
+Status PersistentIndex::delete_pindex_files() {
+    std::string dir = _path;
+    auto cb = [&](std::string_view name) -> bool {
+        std::string prefix = "index.";
+        std::string full(name);
+        if (full.length() >= prefix.length() && full.compare(0, prefix.length(), prefix) == 0) {
+            std::string path = dir + "/" + full;
+            VLOG(1) << "delete index file " << path;
+            Status st = FileSystem::Default()->delete_file(path);
+            if (!st.ok()) {
+                LOG(WARNING) << "delete index file: " << path << ", failed, status: " << st.to_string();
+                return false;
+            }
+        }
+        return true;
+    };
+    return FileSystem::Default()->iterate_dir(_path, cb);
+}
+
 } // namespace starrocks
