@@ -33,6 +33,7 @@ Returns a value of the ARRAY type, optionally sorted by `col0`.
 - The order of the elements in an array is random, which means it may be different from the order of the values in the column if no ORDER BY columns or no sorted by order by columns are specified.
 - The data type of the elements in the returned array is the same as the data type of the values in the column.
 - Returns `NULL` if the input is empty and without group-by columns.
+- ARRAY_AGG_DISTINCT() is an alias to ARRAY_AGG(DISTINCT).
 
 ## Examples
 
