@@ -192,15 +192,7 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
     return Status::OK();
 }
 
-<<<<<<< HEAD
 void HdfsScanner::close(RuntimeState* runtime_state) noexcept {
-    DCHECK(!has_pending_token());
-=======
-void HdfsScanner::close() noexcept {
-    if (!_runtime_state) {
-        return;
-    }
->>>>>>> 0022cf226c ([Refactor] hdfs scanner only handle a scan range (#39983))
     bool expect = false;
     if (!_closed.compare_exchange_strong(expect, true)) return;
     update_counter();
@@ -209,23 +201,6 @@ void HdfsScanner::close() noexcept {
     _mor_processor->close(_runtime_state);
 }
 
-<<<<<<< HEAD
-void HdfsScanner::finalize() {
-    if (_runtime_state != nullptr) {
-        close(_runtime_state);
-    }
-}
-
-void HdfsScanner::enter_pending_queue() {
-    _pending_queue_sw.start();
-}
-
-uint64_t HdfsScanner::exit_pending_queue() {
-    return _pending_queue_sw.reset();
-}
-
-=======
->>>>>>> 0022cf226c ([Refactor] hdfs scanner only handle a scan range (#39983))
 Status HdfsScanner::open_random_access_file() {
     CHECK(_file == nullptr) << "File has already been opened";
     ASSIGN_OR_RETURN(std::unique_ptr<RandomAccessFile> raw_file,

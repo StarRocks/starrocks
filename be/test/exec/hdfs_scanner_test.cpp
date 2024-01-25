@@ -1669,39 +1669,16 @@ TEST_F(HdfsScannerTest, TestCSVSmall) {
         // read two scan range ranges and # of records = 2
         int records = 0;
 
-<<<<<<< HEAD
         status = scanner->init(_runtime_state, *param);
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
 
         status = scanner->open(_runtime_state);
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
-=======
-        auto read_range = [&](int start, int end) {
-            auto* range0 = _create_scan_range(small_file, start, end);
-            auto* tuple_desc = _create_tuple_desc(csv_descs);
-            auto* param = _create_param(small_file, range0, tuple_desc);
-            build_hive_column_names(param, tuple_desc);
-            auto scanner = std::make_shared<HdfsTextScanner>();
 
-            status = scanner->init(_runtime_state, *param);
-            ASSERT_TRUE(status.ok()) << status.message();
->>>>>>> 0022cf226c ([Refactor] hdfs scanner only handle a scan range (#39983))
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.message();
 
-            status = scanner->open(_runtime_state);
-            ASSERT_TRUE(status.ok()) << status.message();
-
-<<<<<<< HEAD
         scanner->close(_runtime_state);
-=======
-            READ_SCANNER_RETURN_ROWS(scanner, records);
-
-            scanner->close();
-        };
-
-        read_range(0, offset);
-        read_range(offset, 0);
-        ASSERT_EQ(records, 2);
->>>>>>> 0022cf226c ([Refactor] hdfs scanner only handle a scan range (#39983))
     }
 }
 

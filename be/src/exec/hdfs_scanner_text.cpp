@@ -337,18 +337,10 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
     }
 
     // no compressed file, splittable.
-<<<<<<< HEAD
-    const THdfsScanRange* scan_range = _scanner_params.scan_ranges[_current_range_index];
-    if (_current_range_index == 0) {
+    {
         _reader = std::make_unique<HdfsScannerCSVReader>(_file.get(), _record_delimiter, _field_delimiter,
                                                          scan_range->file_length);
-    }
-    {
-=======
-    {
-        _reader = std::make_unique<HdfsScannerCSVReader>(_file.get(), _line_delimiter, _need_probe_line_delimiter,
-                                                         _field_delimiter, scan_range->file_length);
->>>>>>> 0022cf226c ([Refactor] hdfs scanner only handle a scan range (#39983))
+
         auto* reader = down_cast<HdfsScannerCSVReader*>(_reader.get());
 
         // if reading start of file, skipping UTF-8 BOM
