@@ -87,6 +87,113 @@ static void tear_down() {
     config::storage_root_path = k_default_storage_root_path;
 }
 
+<<<<<<< HEAD
+=======
+void set_scalar_type(TColumn* tcolumn, TPrimitiveType::type type) {
+    TScalarType scalar_type;
+    scalar_type.__set_type(type);
+
+    tcolumn->type_desc.types.resize(1);
+    tcolumn->type_desc.types.back().__set_type(TTypeNodeType::SCALAR);
+    tcolumn->type_desc.types.back().__set_scalar_type(scalar_type);
+    tcolumn->__isset.type_desc = true;
+}
+
+void set_decimal_type(TColumn* tcolumn, TPrimitiveType::type type, int precision, int scale) {
+    TScalarType scalar_type;
+    scalar_type.__set_type(type);
+    scalar_type.__set_precision(precision);
+    scalar_type.__set_scale(scale);
+
+    tcolumn->type_desc.types.resize(1);
+    tcolumn->type_desc.types.back().__set_type(TTypeNodeType::SCALAR);
+    tcolumn->type_desc.types.back().__set_scalar_type(scalar_type);
+    tcolumn->__isset.type_desc = true;
+}
+
+void set_varchar_type(TColumn* tcolumn, TPrimitiveType::type type, int length) {
+    TScalarType scalar_type;
+    scalar_type.__set_type(type);
+    scalar_type.__set_len(length);
+
+    tcolumn->type_desc.types.resize(1);
+    tcolumn->type_desc.types.back().__set_type(TTypeNodeType::SCALAR);
+    tcolumn->type_desc.types.back().__set_scalar_type(scalar_type);
+    tcolumn->__isset.type_desc = true;
+}
+
+void set_key_columns(TCreateTabletReq* request) {
+    TColumn k1;
+    k1.column_name = "k1";
+    k1.__set_is_key(true);
+    set_scalar_type(&k1, TPrimitiveType::TINYINT);
+    request->tablet_schema.columns.push_back(k1);
+
+    TColumn k2;
+    k2.column_name = "k2";
+    k2.__set_is_key(true);
+    set_scalar_type(&k2, TPrimitiveType::SMALLINT);
+    request->tablet_schema.columns.push_back(k2);
+
+    TColumn k3;
+    k3.column_name = "k3";
+    k3.__set_is_key(true);
+    set_scalar_type(&k3, TPrimitiveType::INT);
+    request->tablet_schema.columns.push_back(k3);
+
+    TColumn k4;
+    k4.column_name = "k4";
+    k4.__set_is_key(true);
+    set_scalar_type(&k4, TPrimitiveType::BIGINT);
+    request->tablet_schema.columns.push_back(k4);
+
+    TColumn k5;
+    k5.column_name = "k5";
+    k5.__set_is_key(true);
+    set_scalar_type(&k5, TPrimitiveType::LARGEINT);
+    request->tablet_schema.columns.push_back(k5);
+
+    TColumn k9;
+    k9.column_name = "k9";
+    k9.__set_is_key(true);
+    k9.column_type.type = TPrimitiveType::DECIMALV2;
+    k9.column_type.__set_precision(6);
+    k9.column_type.__set_scale(3);
+    set_decimal_type(&k9, TPrimitiveType::DECIMALV2, 6, 3);
+    request->tablet_schema.columns.push_back(k9);
+
+    TColumn k10;
+    k10.column_name = "k10";
+    k10.__set_is_key(true);
+    set_scalar_type(&k10, TPrimitiveType::DATE);
+    request->tablet_schema.columns.push_back(k10);
+
+    TColumn k11;
+    k11.column_name = "k11";
+    k11.__set_is_key(true);
+    set_scalar_type(&k11, TPrimitiveType::DATETIME);
+    request->tablet_schema.columns.push_back(k11);
+
+    TColumn k12;
+    k12.column_name = "k12";
+    k12.__set_is_key(true);
+    set_varchar_type(&k12, TPrimitiveType::CHAR, 64);
+    request->tablet_schema.columns.push_back(k12);
+
+    TColumn k13;
+    k13.column_name = "k13";
+    k13.__set_is_key(true);
+    set_varchar_type(&k13, TPrimitiveType::CHAR, 64);
+    request->tablet_schema.columns.push_back(k13);
+
+    TColumn k14;
+    k14.column_name = "k14";
+    k14.__set_is_key(true);
+    set_varchar_type(&k14, TPrimitiveType::VARCHAR, 64);
+    request->tablet_schema.columns.push_back(k14);
+}
+
+>>>>>>> e3d5ab006c ([BugFix] Not ignore the leading space when parse delete predicate value (#39797))
 void set_default_create_tablet_request(TCreateTabletReq* request) {
     request->tablet_id = random();
     request->__set_version(1);
@@ -339,23 +446,73 @@ TEST_F(TestDeleteConditionHandler, StoreCondSucceed) {
     condition.condition_values.emplace_back("3");
     conditions.push_back(condition);
 
+    condition.column_name = "k14";
+    condition.condition_op = "=";
+    condition.condition_values.clear();
+    condition.condition_values.emplace_back(" a");
+    conditions.push_back(condition);
+
     DeletePredicatePB del_pred;
     success_res = _delete_condition_handler.generate_delete_predicate(tablet->tablet_schema(), conditions, &del_pred);
     ASSERT_EQ(true, success_res.ok());
 
     // Verify that the filter criteria stored in the header are correct
-    ASSERT_EQ(size_t(6), del_pred.sub_predicates_size());
+    ASSERT_EQ(size_t(7), del_pred.sub_predicates_size());
     EXPECT_STREQ("k1=1", del_pred.sub_predicates(0).c_str());
     EXPECT_STREQ("k2>>3", del_pred.sub_predicates(1).c_str());
     EXPECT_STREQ("k3<=5", del_pred.sub_predicates(2).c_str());
     EXPECT_STREQ("k4 IS NULL", del_pred.sub_predicates(3).c_str());
     EXPECT_STREQ("k5=7", del_pred.sub_predicates(4).c_str());
     EXPECT_STREQ("k12!=9", del_pred.sub_predicates(5).c_str());
+    EXPECT_STREQ("k14= a", del_pred.sub_predicates(6).c_str());
 
     ASSERT_EQ(size_t(1), del_pred.in_predicates_size());
     ASSERT_FALSE(del_pred.in_predicates(0).is_not_in());
     EXPECT_STREQ("k13", del_pred.in_predicates(0).column_name().c_str());
     ASSERT_EQ(std::size_t(2), del_pred.in_predicates(0).values().size());
+
+    // Test parse_condition
+    condition.condition_values.clear();
+    ASSERT_TRUE(DeleteHandler::parse_condition(del_pred.sub_predicates(0), &condition));
+    EXPECT_STREQ("k1", condition.column_name.c_str());
+    EXPECT_STREQ("=", condition.condition_op.c_str());
+    EXPECT_STREQ("1", condition.condition_values[0].c_str());
+
+    condition.condition_values.clear();
+    ASSERT_TRUE(DeleteHandler::parse_condition(del_pred.sub_predicates(1), &condition));
+    EXPECT_STREQ("k2", condition.column_name.c_str());
+    EXPECT_STREQ(">>", condition.condition_op.c_str());
+    EXPECT_STREQ("3", condition.condition_values[0].c_str());
+
+    condition.condition_values.clear();
+    ASSERT_TRUE(DeleteHandler::parse_condition(del_pred.sub_predicates(2), &condition));
+    EXPECT_STREQ("k3", condition.column_name.c_str());
+    EXPECT_STREQ("<=", condition.condition_op.c_str());
+    EXPECT_STREQ("5", condition.condition_values[0].c_str());
+
+    condition.condition_values.clear();
+    ASSERT_TRUE(DeleteHandler::parse_condition(del_pred.sub_predicates(3), &condition));
+    EXPECT_STREQ("k4", condition.column_name.c_str());
+    EXPECT_STREQ("IS", condition.condition_op.c_str());
+    EXPECT_STREQ("NULL", condition.condition_values[0].c_str());
+
+    condition.condition_values.clear();
+    ASSERT_TRUE(DeleteHandler::parse_condition(del_pred.sub_predicates(4), &condition));
+    EXPECT_STREQ("k5", condition.column_name.c_str());
+    EXPECT_STREQ("=", condition.condition_op.c_str());
+    EXPECT_STREQ("7", condition.condition_values[0].c_str());
+
+    condition.condition_values.clear();
+    ASSERT_TRUE(DeleteHandler::parse_condition(del_pred.sub_predicates(5), &condition));
+    EXPECT_STREQ("k12", condition.column_name.c_str());
+    EXPECT_STREQ("!=", condition.condition_op.c_str());
+    EXPECT_STREQ("9", condition.condition_values[0].c_str());
+
+    condition.condition_values.clear();
+    ASSERT_TRUE(DeleteHandler::parse_condition(del_pred.sub_predicates(6), &condition));
+    EXPECT_STREQ("k14", condition.column_name.c_str());
+    EXPECT_STREQ("=", condition.condition_op.c_str());
+    EXPECT_STREQ(" a", condition.condition_values[0].c_str());
 }
 
 // empty string
