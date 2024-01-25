@@ -852,7 +852,7 @@ public class CreateTableTest {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
 
         // add label to backend
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         System.out.println(systemInfoService.getBackends());
         List<Long> backendIds = systemInfoService.getBackendIds();
         Backend backend = systemInfoService.getBackend(backendIds.get(0));
@@ -998,8 +998,8 @@ public class CreateTableTest {
         }
 
         // clean: remove backend 12005
-        backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(12005);
-        GlobalStateMgr.getCurrentSystemInfo().dropBackend(backend);
+        backend = systemInfoService.getBackend(12005);
+        systemInfoService.dropBackend(backend);
     }
 
     /**
@@ -1008,7 +1008,7 @@ public class CreateTableTest {
     @Test
     public void testCreateTableLocationPropPersist() throws Exception {
         // add label to backend
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         System.out.println(systemInfoService.getBackends());
         List<Long> backendIds = systemInfoService.getBackendIds();
         Backend backend = systemInfoService.getBackend(backendIds.get(0));

@@ -139,7 +139,7 @@ public class AlterSystemStmtAnalyzerTest {
 
     @Test
     public void testShowBackendLocation() throws Exception {
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         System.out.println(systemInfoService.getBackends());
         List<Long> backendIds = systemInfoService.getBackendIds();
         Backend backend = systemInfoService.getBackend(backendIds.get(0));

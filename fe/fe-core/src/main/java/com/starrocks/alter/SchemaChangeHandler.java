@@ -1535,7 +1535,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
                     return null;
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
-                    GlobalStateMgr.getCurrentState().alterTableProperties(db, olapTable, properties);
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
                     return null;
                 }
             }

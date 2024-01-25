@@ -119,7 +119,8 @@ public class CreateTableWithLocationTest {
         PseudoCluster cluster = PseudoCluster.getInstance();
         Set<Long> backendIds = Sets.newHashSet();
         for (PseudoBackend pseudoBackend : cluster.getBackends()) {
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(pseudoBackend.getId());
+            Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr()
+                    .getClusterInfo().getBackend(pseudoBackend.getId());
             if (!backend.getLocation().isEmpty()) {
                 backendIds.add(backend.getId());
             }
@@ -131,7 +132,8 @@ public class CreateTableWithLocationTest {
         PseudoCluster cluster = PseudoCluster.getInstance();
         Set<Long> backendIds = Sets.newHashSet();
         for (PseudoBackend pseudoBackend : cluster.getBackends()) {
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(pseudoBackend.getId());
+            Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr()
+                    .getClusterInfo().getBackend(pseudoBackend.getId());
             if (backend.getLocation().containsKey(locationKey)) {
                 backendIds.add(backend.getId());
             }
@@ -143,7 +145,8 @@ public class CreateTableWithLocationTest {
         PseudoCluster cluster = PseudoCluster.getInstance();
         Set<Long> backendIds = Sets.newHashSet();
         for (PseudoBackend pseudoBackend : cluster.getBackends()) {
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(pseudoBackend.getId());
+            Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr()
+                    .getClusterInfo().getBackend(pseudoBackend.getId());
             if (backend.getLocation().containsKey(locationKey) &&
                     Objects.equals(backend.getLocation().get(locationKey), locationVal)) {
                 backendIds.add(backend.getId());
@@ -156,7 +159,8 @@ public class CreateTableWithLocationTest {
         PseudoCluster cluster = PseudoCluster.getInstance();
         Set<Long> backendIds = Sets.newHashSet();
         for (PseudoBackend pseudoBackend : cluster.getBackends()) {
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(pseudoBackend.getId());
+            Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr()
+                    .getClusterInfo().getBackend(pseudoBackend.getId());
             if (backend.getLocation().isEmpty()) {
                 backendIds.add(backend.getId());
             }

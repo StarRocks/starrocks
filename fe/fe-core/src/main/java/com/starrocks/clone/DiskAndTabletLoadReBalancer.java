@@ -706,12 +706,12 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
     private OlapTable getOlapTableById(long dbId, long tblId) {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        Database db = globalStateMgr.getDbIncludeRecycleBin(dbId);
+        Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
         if (db == null) {
             return null;
         }
 
-        return (OlapTable) globalStateMgr.getTableIncludeRecycleBin(db, tblId);
+        return (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tblId);
     }
 
     private void balanceBackendDisk(TStorageMedium medium, double avgUsedPercent,
@@ -1279,7 +1279,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         }
 
         List<List<Long>> locBackendIdList = new ArrayList<>();
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         List<ComputeNode> availableBackends = Lists.newArrayList();
         availableBackends.addAll(systemInfoService.getAvailableBackends());
         int locBackendWithDiffHostLocNum = NodeSelector.getLocationMatchedBackendIdList(
@@ -1306,7 +1306,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
         // Get all the location of replicas of this tablet.
         Set<Pair<String, String>> replicasLocKVs = new HashSet<>();
-        for (Replica replica : GlobalStateMgr.getCurrentInvertedIndex().getReplicasByTabletId(tabletId)) {
+        for (Replica replica : GlobalStateMgr.getCurrentState().getTabletInvertedIndex()
+                .getReplicasByTabletId(tabletId)) {
             Backend backend = systemInfoService.getBackend(replica.getBackendId());
             if (backend == null) {
                 continue;
@@ -1333,7 +1334,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                                                   long partitionId,
                                                   long tabletId) {
         short replicationFactor =
-                GlobalStateMgr.getCurrentState()
+                GlobalStateMgr.getCurrentState().getLocalMetastore()
                         .getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(), partitionId);
         if (replicationFactor == (short) -1) {
             return true;
@@ -1532,7 +1533,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         // Won't hold the db lock, meta change will cause this clone task failed, this is acceptable.
         Partition partition = globalStateMgr.getLocalMetastore()
-            .getPartitionIncludeRecycleBin(olapTable, tabletMeta.getPartitionId());
+                .getPartitionIncludeRecycleBin(olapTable, tabletMeta.getPartitionId());
         if (partition == null) {
             return true;
         }
@@ -1547,14 +1548,16 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             return true;
         }
 
-        short replicaNum =
-                globalStateMgr.getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(), partition.getId());
+        short replicaNum = globalStateMgr.getLocalMetastore()
+                .getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(), partition.getId());
         if (replicaNum == (short) -1) {
             return true;
         }
 
         Pair<LocalTablet.TabletHealthStatus, TabletSchedCtx.Priority> statusPair =
-                TabletChecker.getTabletHealthStatusWithPriority(tablet, GlobalStateMgr.getCurrentSystemInfo(),
+                TabletChecker.getTabletHealthStatusWithPriority(
+                        tablet,
+                        globalStateMgr.getNodeMgr().getClusterInfo(),
                         partition.getVisibleVersion(),
                         replicaNum,
                         aliveBeIds,
@@ -1651,9 +1654,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                             continue;
                         }
 
-                        DataProperty dataProperty =
-                                globalStateMgr.getLocalMetastore().getDataPropertyIncludeRecycleBin(olapTbl.getPartitionInfo(),
-                                        partition.getId());
+                        DataProperty dataProperty = globalStateMgr.getLocalMetastore()
+                                .getDataPropertyIncludeRecycleBin(olapTbl.getPartitionInfo(), partition.getId());
                         if (dataProperty == null) {
                             continue;
                         }
@@ -1663,7 +1665,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                         }
 
                         int replicationFactor = globalStateMgr.getLocalMetastore()
-                            .getReplicationNumIncludeRecycleBin(olapTbl.getPartitionInfo(), partition.getId());
+                                .getReplicationNumIncludeRecycleBin(olapTbl.getPartitionInfo(), partition.getId());
                         int replicaNum = partition.getDistributionInfo().getBucketNum() * replicationFactor;
                         // replicaNum may be negative, cause getReplicationNumIncludeRecycleBin can return -1
                         if (replicaNum < 0) {

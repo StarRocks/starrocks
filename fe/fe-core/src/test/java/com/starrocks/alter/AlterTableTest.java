@@ -312,7 +312,7 @@ public class AlterTableTest {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
 
         // add label to backend
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         System.out.println(systemInfoService.getBackends());
         List<Long> backendIds = systemInfoService.getBackendIds();
         Backend backend = systemInfoService.getBackend(backendIds.get(0));
@@ -385,7 +385,7 @@ public class AlterTableTest {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
 
         // add label to backend
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         System.out.println(systemInfoService.getBackends());
         List<Long> backendIds = systemInfoService.getBackendIds();
         Backend backend = systemInfoService.getBackend(backendIds.get(0));
@@ -425,7 +425,7 @@ public class AlterTableTest {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
 
         // add label to backend
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         System.out.println(systemInfoService.getBackends());
         List<Long> backendIds = systemInfoService.getBackendIds();
         Backend backend = systemInfoService.getBackend(backendIds.get(0));

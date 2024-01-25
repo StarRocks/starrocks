@@ -419,10 +419,11 @@ public class TabletChecker extends FrontendDaemon {
                         continue;
                     }
 
+                    SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                     Pair<TabletHealthStatus, TabletSchedCtx.Priority> statusWithPrio =
                             TabletChecker.getTabletHealthStatusWithPriority(
                                     localTablet,
-                                    GlobalStateMgr.getCurrentSystemInfo(),
+                                    systemInfoService,
                                     physicalPartition.getVisibleVersion(),
                                     replicaNum,
                                     aliveBeIdsInCluster,
@@ -560,9 +561,10 @@ public class TabletChecker extends FrontendDaemon {
     private boolean preCheckEnoughLocationMatchedBackends(Multimap<String, String> requiredLocation, int replicaNum) {
         List<List<Long>> locBackendIdList = new ArrayList<>();
         List<ComputeNode> availableBackends = Lists.newArrayList();
-        availableBackends.addAll(GlobalStateMgr.getCurrentSystemInfo().getAvailableBackends());
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        availableBackends.addAll(systemInfoService.getAvailableBackends());
         return NodeSelector.getLocationMatchedBackendIdList(locBackendIdList, availableBackends,
-                requiredLocation, GlobalStateMgr.getCurrentSystemInfo()) >= replicaNum;
+                requiredLocation, systemInfoService) >= replicaNum;
     }
 
     /*
@@ -804,7 +806,8 @@ public class TabletChecker extends FrontendDaemon {
     }
 
     public static boolean isLocationMatch(long backendId, Multimap<String, String> requiredLocation) {
-        return isLocationMatch(backendId, requiredLocation, GlobalStateMgr.getCurrentSystemInfo());
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        return isLocationMatch(backendId, requiredLocation, systemInfoService);
     }
 
     public static boolean isLocationMatch(String backendLocKey,
@@ -1145,7 +1148,8 @@ public class TabletChecker extends FrontendDaemon {
                 return TabletHealthStatus.VERSION_INCOMPLETE;
             }
 
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
+            SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            Backend backend = systemInfoService.getBackend(replica.getBackendId());
             if (backend != null && !backend.isDiskDecommissioned(replica.getPathHash())) {
                 diskStableCnt++;
             }

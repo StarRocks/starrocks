@@ -152,7 +152,8 @@ public class LocationLabeledTableBalanceTest {
                 stringBuffer.append("tablet ").append(tablet.getId()).append(": ");
                 for (Replica replica : tablet.getAllReplicas()) {
                     stringBuffer.append(replica.getBackendId()).append(" ")
-                            .append(GlobalStateMgr.getCurrentSystemInfo().getBackend(
+                            .append(GlobalStateMgr.getCurrentState().getNodeMgr()
+                                    .getClusterInfo().getBackend(
                                     replica.getBackendId()).getLocation()).append(", ");
                 }
                 System.out.println(stringBuffer);
@@ -210,7 +211,8 @@ public class LocationLabeledTableBalanceTest {
         PseudoCluster cluster = PseudoCluster.getInstance();
         Set<Long> backendIds = Sets.newHashSet();
         for (PseudoBackend pseudoBackend : cluster.getBackends()) {
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(pseudoBackend.getId());
+            Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr()
+                    .getClusterInfo().getBackend(pseudoBackend.getId());
             if (backend.getLocation().containsKey(locationKey) &&
                     Objects.equals(backend.getLocation().get(locationKey), locationVal)) {
                 backendIds.add(backend.getId());

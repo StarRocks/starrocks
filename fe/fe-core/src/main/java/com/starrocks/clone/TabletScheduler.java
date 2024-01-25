@@ -76,6 +76,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.NodeSelector;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -1138,9 +1139,10 @@ public class TabletScheduler extends FrontendDaemon {
     private boolean deleteLocationMismatchReplica(TabletSchedCtx tabletCtx, boolean force) throws SchedException {
         List<List<Long>> locBackendIdList = new ArrayList<>();
         List<ComputeNode> availableBackends = Lists.newArrayList();
-        availableBackends.addAll(GlobalStateMgr.getCurrentSystemInfo().getAvailableBackends());
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        availableBackends.addAll(systemInfoService.getAvailableBackends());
         if (NodeSelector.getLocationMatchedBackendIdList(locBackendIdList, availableBackends,
-                tabletCtx.getRequiredLocation(), GlobalStateMgr.getCurrentSystemInfo()) < tabletCtx.getReplicaNum()) {
+                tabletCtx.getRequiredLocation(), systemInfoService) < tabletCtx.getReplicaNum()) {
             // If the current backends cannot match location requirement of the tablet,
             // won't delete location mismatched replica.
             return false;
@@ -1600,7 +1602,8 @@ public class TabletScheduler extends FrontendDaemon {
     private boolean isDestLocationMismatch(long destBackendId, TabletSchedCtx tabletSchedCtx) {
         Multimap<String, String> requiredLocation = tabletSchedCtx.getRequiredLocation();
 
-        Backend destBackend = GlobalStateMgr.getCurrentSystemInfo().getBackend(destBackendId);
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        Backend destBackend = systemInfoService.getBackend(destBackendId);
         if (destBackend == null) {
             return true;
         }
@@ -1613,7 +1616,7 @@ public class TabletScheduler extends FrontendDaemon {
         // Get locations set of current location matched replicas.
         Set<Pair<String, String>> locationMatchedReplicas = Sets.newHashSet();
         for (Replica replica : tabletSchedCtx.getReplicas()) {
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
+            Backend backend = systemInfoService.getBackend(replica.getBackendId());
             if (backend == null
                     || !backend.isAvailable()
                     || replica.isBad()

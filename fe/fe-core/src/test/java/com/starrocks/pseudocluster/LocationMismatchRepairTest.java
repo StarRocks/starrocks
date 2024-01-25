@@ -93,7 +93,8 @@ public class LocationMismatchRepairTest {
         PseudoCluster cluster = PseudoCluster.getInstance();
         Set<Long> backendIds = Sets.newHashSet();
         for (PseudoBackend pseudoBackend : cluster.getBackends()) {
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(pseudoBackend.getId());
+            Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr()
+                    .getClusterInfo().getBackend(pseudoBackend.getId());
             if (backend.getLocation().containsKey(locationKey) &&
                     Objects.equals(backend.getLocation().get(locationKey), locationVal)) {
                 backendIds.add(backend.getId());
@@ -109,7 +110,8 @@ public class LocationMismatchRepairTest {
                 stringBuffer.append("tablet ").append(tablet.getId()).append(": ");
                 for (Replica replica : tablet.getAllReplicas()) {
                     stringBuffer.append(replica.getBackendId()).append(" ")
-                            .append(GlobalStateMgr.getCurrentSystemInfo().getBackend(
+                            .append(GlobalStateMgr.getCurrentState().getNodeMgr()
+                                    .getClusterInfo().getBackend(
                             replica.getBackendId()).getLocation()).append(", ");
                 }
                 System.out.println(stringBuffer);
@@ -118,7 +120,7 @@ public class LocationMismatchRepairTest {
     }
 
     private Set<Long> getTabletReplicasBackendIds(long tabletId) {
-        TabletInvertedIndex tabletInvertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex tabletInvertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         List<Replica> replicas = tabletInvertedIndex.getReplicasByTabletId(tabletId);
         Set<Long> replicaBackendIds = new HashSet<>();
         replicas.forEach(replica -> replicaBackendIds.add(replica.getBackendId()));
@@ -204,7 +206,8 @@ public class LocationMismatchRepairTest {
             // check replicas scattered on 3 different racks after repair
             Set<Pair<String, String>> racks = new HashSet<>();
             for (long backendId : intersection) {
-                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+                Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr()
+                        .getClusterInfo().getBackend(backendId);
                 racks.add(backend.getSingleLevelLocationKV());
             }
             Assert.assertEquals(3, racks.size());
@@ -273,7 +276,8 @@ public class LocationMismatchRepairTest {
             // check replicas scattered on 3 different racks after decommission
             Set<Pair<String, String>> racks = new HashSet<>();
             for (long backendId : intersection) {
-                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+                Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr()
+                        .getClusterInfo().getBackend(backendId);
                 racks.add(backend.getSingleLevelLocationKV());
             }
             Assert.assertEquals(3, racks.size());

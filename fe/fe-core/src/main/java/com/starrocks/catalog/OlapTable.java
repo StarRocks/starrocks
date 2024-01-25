@@ -813,7 +813,7 @@ public class OlapTable extends Table {
             index.addTablet(newTablet, null /* tablet meta */, false/* update inverted index */);
 
             // replicas
-            List<Long> beIds = List<Long> beIds = GlobalStateMgr.getCurrentState().getNodeMgr()
+            List<Long> beIds = GlobalStateMgr.getCurrentState().getNodeMgr()
                     .getClusterInfo().getNodeSelector().seqChooseBackendIds(replicationNum, true, true, getLocation());
             if (CollectionUtils.isEmpty(beIds)) {
                 return new Status(ErrCode.COMMON_ERROR, "failed to find "

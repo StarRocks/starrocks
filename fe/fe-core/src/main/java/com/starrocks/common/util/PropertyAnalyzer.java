@@ -857,7 +857,8 @@ public class PropertyAnalyzer {
 
         if (!locationMap.keySet().contains("*")) {
             // check location label associated with any backend or not
-            List<Backend> backends = GlobalStateMgr.getCurrentSystemInfo().getBackends();
+            SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            List<Backend> backends = systemInfoService.getBackends();
             for (String key : locationMap.keySet()) {
                 Collection<String> values = locationMap.get(key);
                 for (String value : values) {
@@ -919,7 +920,7 @@ public class PropertyAnalyzer {
                 // won't set default location prop for colocate table
                 return null;
             }
-            SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
+            SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
             long numOfBackendsWithLocationLabel =
                     systemInfoService.getBackends().stream()
                             .filter(backend -> !backend.getLocation().isEmpty()).count();
