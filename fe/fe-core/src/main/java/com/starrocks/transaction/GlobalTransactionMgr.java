@@ -265,7 +265,7 @@ public class GlobalTransactionMgr {
 
         LOG.debug("try to pre commit transaction: {}", transactionId);
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
-        dbTransactionMgr.prepareTransaction(transactionId, tabletCommitInfos, tabletFailInfos, txnCommitAttachment);
+        dbTransactionMgr.prepareTransaction(transactionId, tabletCommitInfos, tabletFailInfos, txnCommitAttachment, true);
     }
 
     public void commitPreparedTransaction(long dbId, long transactionId, long timeoutMillis)
@@ -447,7 +447,7 @@ public class GlobalTransactionMgr {
                                  TxnCommitAttachment txnCommitAttachment)
             throws UserException {
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
-        dbTransactionMgr.abortTransaction(transactionId, reason, txnCommitAttachment, failedTablets);
+        dbTransactionMgr.abortTransaction(transactionId, true, reason, txnCommitAttachment, failedTablets);
     }
 
     // for http cancel stream load api
