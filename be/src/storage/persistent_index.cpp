@@ -4695,4 +4695,211 @@ void PersistentIndex::reset_cancel_major_compaction() {
     }
 }
 
+<<<<<<< HEAD
+=======
+Status PersistentIndex::_load_by_loader(TabletLoader* loader) {
+    starrocks::Schema pkey_schema = loader->generate_pkey_schema();
+    DataDir* data_dir = loader->data_dir();
+    TTabletId tablet_id = loader->tablet_id();
+    ASSIGN_OR_RETURN(EditVersion applied_version, loader->applied_version());
+    loader->setting();
+
+    MonotonicStopWatch timer;
+    timer.start();
+
+    PersistentIndexMetaPB index_meta;
+    Status status = TabletMetaManager::get_persistent_index_meta(data_dir, tablet_id, &index_meta);
+    if (!status.ok() && !status.is_not_found()) {
+        return Status::InternalError("get tablet persistent index meta failed");
+    }
+
+    // There are three conditions
+    // First is we do not find PersistentIndexMetaPB in TabletMeta, it maybe the first time to
+    // enable persistent index
+    // Second is we find PersistentIndexMetaPB in TabletMeta, but it's version is behind applied_version
+    // in TabletMeta. It could be happened as below:
+    //    1. Enable persistent index and apply rowset, applied_version is 1-0
+    //    2. Restart be and disable persistent index, applied_version is update to 2-0
+    //    3. Restart be and enable persistent index
+    // In this case, we don't have all rowset data in persistent index files, so we also need to rebuild it
+    // The last is we find PersistentIndexMetaPB and it's version is equal to latest applied version. In this case,
+    // we can load from index file directly
+    if (status.ok()) {
+        // all applied rowsets has save in existing persistent index meta
+        // so we can load persistent index according to PersistentIndexMetaPB
+        EditVersion version = index_meta.version();
+        if (version == applied_version) {
+            if (_need_rebuild_index(index_meta)) {
+                LOG(WARNING) << "we need to rebuild persistent index, tablet id: " << tablet_id;
+                status = Status::InternalError("rebuild persistent index");
+            } else {
+                status = load(index_meta);
+            }
+            if (status.ok()) {
+                LOG(INFO) << "load persistent index tablet:" << tablet_id << " version:" << version.to_string()
+                          << " size: " << _size << " l0_size: " << (_l0 ? _l0->size() : 0)
+                          << " l0_capacity:" << (_l0 ? _l0->capacity() : 0)
+                          << " #shard: " << (_has_l1 ? _l1_vec[0]->_shards.size() : 0)
+                          << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " l2_size:" << _l2_file_size()
+                          << " memory: " << memory_usage() << " status: " << status.to_string()
+                          << " time:" << timer.elapsed_time() / 1000000 << "ms";
+                return status;
+            } else {
+                LOG(WARNING) << "load persistent index failed, tablet: " << tablet_id << ", status: " << status;
+                if (index_meta.has_l0_meta()) {
+                    EditVersion l0_version = index_meta.l0_meta().snapshot().version();
+                    std::string l0_file_name =
+                            strings::Substitute("index.l0.$0.$1", l0_version.major_number(), l0_version.minor_number());
+                    Status st = FileSystem::Default()->delete_file(l0_file_name);
+                    LOG(WARNING) << "delete error l0 index file: " << l0_file_name << ", status: " << st;
+                }
+                if (index_meta.has_l1_version()) {
+                    EditVersion l1_version = index_meta.l1_version();
+                    std::string l1_file_name =
+                            strings::Substitute("index.l1.$0.$1", l1_version.major_number(), l1_version.minor_number());
+                    Status st = FileSystem::Default()->delete_file(l1_file_name);
+                    LOG(WARNING) << "delete error l1 index file: " << l1_file_name << ", status: " << st;
+                }
+                if (index_meta.l2_versions_size() > 0) {
+                    DCHECK(index_meta.l2_versions_size() == index_meta.l2_version_merged_size());
+                    for (int i = 0; i < index_meta.l2_versions_size(); i++) {
+                        EditVersion l2_version = index_meta.l2_versions(i);
+                        std::string l2_file_name = strings::Substitute(
+                                "index.l2.$0.$1$2", l2_version.major_number(), l2_version.minor_number(),
+                                index_meta.l2_version_merged(i) ? MergeSuffix : "");
+                        Status st = FileSystem::Default()->delete_file(l2_file_name);
+                        LOG(WARNING) << "delete error l2 index file: " << l2_file_name << ", status: " << st;
+                    }
+                }
+            }
+        }
+    }
+
+    size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
+
+    // Init PersistentIndex
+    _key_size = fix_size;
+    _size = 0;
+    _version = applied_version;
+    auto st = ShardByLengthMutableIndex::create(_key_size, _path);
+    if (!st.ok()) {
+        LOG(WARNING) << "Build persistent index failed because initialization failed: " << st.status().to_string();
+        return st.status();
+    }
+    _l0 = std::move(st).value();
+    ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_path));
+    // set _dump_snapshot to true
+    // In this case, only do flush or dump snapshot, set _dump_snapshot to avoid append wal
+    _dump_snapshot = true;
+
+    // clear l1
+    {
+        std::unique_lock wrlock(_lock);
+        _l1_vec.clear();
+        _usage_and_size_by_key_length.clear();
+        _l1_merged_num.clear();
+    }
+    _has_l1 = false;
+    for (const auto& [key_size, shard_info] : _l0->_shard_info_by_key_size) {
+        auto [l0_shard_offset, l0_shard_size] = shard_info;
+        const auto l0_kv_pairs_size = std::accumulate(std::next(_l0->_shards.begin(), l0_shard_offset),
+                                                      std::next(_l0->_shards.begin(), l0_shard_offset + l0_shard_size),
+                                                      0LL, [](size_t s, const auto& e) { return s + e->size(); });
+        const auto l0_kv_pairs_usage = std::accumulate(std::next(_l0->_shards.begin(), l0_shard_offset),
+                                                       std::next(_l0->_shards.begin(), l0_shard_offset + l0_shard_size),
+                                                       0LL, [](size_t s, const auto& e) { return s + e->usage(); });
+        if (auto [_, inserted] =
+                    _usage_and_size_by_key_length.insert({key_size, {l0_kv_pairs_usage, l0_kv_pairs_size}});
+            !inserted) {
+            std::string msg = strings::Substitute(
+                    "load persistent index from tablet failed, insert usage and size by key size failed, key_size: $0",
+                    key_size);
+            LOG(WARNING) << msg;
+            return Status::InternalError(msg);
+        }
+    }
+    // clear l2
+    {
+        std::unique_lock wrlock(_lock);
+        _l2_vec.clear();
+        _l2_versions.clear();
+    }
+
+    // Init PersistentIndexMetaPB
+    //   1. reset |version| |key_size|
+    //   2. delete WALs because maybe PersistentIndexMetaPB has expired wals
+    //   3. reset SnapshotMeta
+    //   4. write all data into new tmp _l0 index file (tmp file will be delete in _build_commit())
+    index_meta.clear_l0_meta();
+    index_meta.clear_l1_version();
+    index_meta.clear_l2_versions();
+    index_meta.clear_l2_version_merged();
+    index_meta.set_key_size(_key_size);
+    index_meta.set_size(0);
+    index_meta.set_format_version(PERSISTENT_INDEX_VERSION_4);
+    applied_version.to_pb(index_meta.mutable_version());
+    MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
+    l0_meta->clear_wals();
+    IndexSnapshotMetaPB* snapshot = l0_meta->mutable_snapshot();
+    applied_version.to_pb(snapshot->mutable_version());
+    PagePointerPB* data = snapshot->mutable_data();
+    data->set_offset(0);
+    data->set_size(0);
+
+    std::unique_ptr<Column> pk_column;
+    if (pkey_schema.num_fields() > 1) {
+        if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
+            CHECK(false) << "create column for primary key encoder failed";
+        }
+    }
+    RETURN_IF_ERROR(_insert_rowsets(loader, pkey_schema, std::move(pk_column)));
+    RETURN_IF_ERROR(_build_commit(loader, index_meta));
+    LOG(INFO) << "build persistent index finish tablet: " << loader->tablet_id() << " version:" << applied_version
+              << " #rowset:" << loader->rowset_num() << " #segment:" << loader->total_segments()
+              << " data_size:" << loader->total_data_size() << " size: " << _size << " l0_size: " << _l0->size()
+              << " l0_capacity:" << _l0->capacity() << " #shard: " << (_has_l1 ? _l1_vec[0]->_shards.size() : 0)
+              << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " l2_size:" << _l2_file_size()
+              << " memory: " << memory_usage() << " time: " << timer.elapsed_time() / 1000000 << "ms";
+    return Status::OK();
+}
+
+Status PersistentIndex::pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb) {
+    for (const auto& l2 : _l2_vec) {
+        PrimaryIndexDumpPB* level = dump_pb->add_primary_index_levels();
+        level->set_filename(l2->filename());
+        RETURN_IF_ERROR(l2->pk_dump(dump, level));
+    }
+    for (const auto& l1 : _l1_vec) {
+        PrimaryIndexDumpPB* level = dump_pb->add_primary_index_levels();
+        level->set_filename(l1->filename());
+        RETURN_IF_ERROR(l1->pk_dump(dump, level));
+    }
+    if (_l0) {
+        PrimaryIndexDumpPB* level = dump_pb->add_primary_index_levels();
+        level->set_filename("persistent index l0");
+        RETURN_IF_ERROR(_l0->pk_dump(dump, level));
+    }
+    return Status::OK();
+}
+
+Status PersistentIndex::delete_pindex_files() {
+    std::string dir = _path;
+    auto cb = [&](std::string_view name) -> bool {
+        std::string prefix = "index.";
+        std::string full(name);
+        if (full.length() >= prefix.length() && full.compare(0, prefix.length(), prefix) == 0) {
+            std::string path = dir + "/" + full;
+            VLOG(1) << "delete index file " << path;
+            Status st = FileSystem::Default()->delete_file(path);
+            if (!st.ok()) {
+                LOG(WARNING) << "delete index file: " << path << ", failed, status: " << st.to_string();
+                return false;
+            }
+        }
+        return true;
+    };
+    return FileSystem::Default()->iterate_dir(_path, cb);
+}
+
+>>>>>>> 08036d8a90 ([Enhancement] Delete pindex file when disable pindex (#39312))
 } // namespace starrocks

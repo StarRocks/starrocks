@@ -26,6 +26,7 @@
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/tablet.h"
+#include "storage/tablet_manager.h"
 #include "storage/tablet_reader.h"
 #include "storage/tablet_updates.h"
 #include "util/stack_util.h"
@@ -920,6 +921,16 @@ PrimaryIndex::~PrimaryIndex() {
         } else {
             LOG(INFO) << "primary index released table:" << _table_id << " tablet:" << _tablet_id
                       << " memory: " << memory_usage();
+        }
+    }
+
+    TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id);
+    if (tablet != nullptr) {
+        if (_persistent_index != nullptr && !tablet->get_enable_persistent_index()) {
+            auto st = _persistent_index->delete_pindex_files();
+            if (!st.ok()) {
+                LOG(ERROR) << "tablet:" << tablet->tablet_id() << " clear pindex failed:" << st;
+            }
         }
     }
 }
