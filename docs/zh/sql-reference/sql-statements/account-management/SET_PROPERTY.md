@@ -11,7 +11,7 @@ displayed_sidebar: "Chinese"
 :::tip
 
 - 这里的属性是指用户 (user) 的属性，而非用户标识 (user_identity) 的属性。例如，如果通过 CREATE USER 语句创建了 `'jack'@'%'` 和 `'jack'@'192.%'`，那么使用 SET PROPERTY 语句设置的是 `jack` 这个用户的属性，而不是 `'jack'@'%'` 或 `'jack'@'192.%'` 的属性。
-- 只有拥有 `user_admin` 角色的用户才有权限执行此操作。
+- 只有拥有 `user_admin` 角色的用户才可以执行此操作。
 
 :::
 

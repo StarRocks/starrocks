@@ -11,7 +11,7 @@ displayed_sidebar: "Chinese"
 :::tip
 
 - 普通用户可以将自身拥有的授权中带有 WITH GRANT OPTION 关键字的权限从其他用户或角色处收回。关于 WITH GRANT OPTION，参见 [GRANT](GRANT.md)。
-- 只有拥有 `user_admin` 角色的用户才有权限收回其他用户的权限。
+- 只有拥有 `user_admin` 角色的用户才可以收回其他用户的权限。
 
 :::
 
