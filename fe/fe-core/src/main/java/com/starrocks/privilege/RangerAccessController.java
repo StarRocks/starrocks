@@ -56,9 +56,9 @@ public abstract class RangerAccessController extends ExternalAccessController {
                 LOG.info("Load system property java.security.krb5.conf with path : " + krb5);
                 System.setProperty("java.security.krb5.conf", krb5);
             }
+
             Configuration hadoopConf = new Configuration();
             hadoopConf.set("hadoop.security.authorization", "true");
-            hadoopConf.set("hadoop.security.auth_to_local", "DEFAULT");
             hadoopConf.set("hadoop.security.authentication", "kerberos");
             UserGroupInformation.setConfiguration(hadoopConf);
 
@@ -81,10 +81,11 @@ public abstract class RangerAccessController extends ExternalAccessController {
         rangerPluginContext.setBoolean("ranger.plugin." + serviceType + ".policy.rest.client.cookie.enabled", false);
 
         rangerPlugin = new RangerBasePlugin(rangerPluginContext);
+
         rangerPlugin.init(); // this will initialize policy engine and policy refresher
         rangerPlugin.setResultProcessor(new RangerDefaultAuditHandler());
 
-        rangerPlugin.cleanup();
+        LOG.info("Start Ranger plugin ({} - {}) success", serviceType, serviceName);
     }
 
     @Override
@@ -96,7 +97,7 @@ public abstract class RangerAccessController extends ExternalAccessController {
                     context.getCurrentUserIdentity(), PrivilegeType.SELECT.name().toLowerCase(ENGLISH));
 
             RangerAccessResult result = rangerPlugin.evalDataMaskPolicies(request, null);
-            if (result.isMaskEnabled()) {
+            if (result != null && result.isMaskEnabled()) {
                 String maskType = result.getMaskType();
                 RangerServiceDef.RangerDataMaskTypeDef maskTypeDef = result.getMaskTypeDef();
                 String transformer = null;
