@@ -185,11 +185,10 @@ FROM <data_source>
 - PLAIN
 - SCRAM-SHA-256 和 SCRAM-SHA-512
 - OAUTHBEARER
-- GSSAPI (Kerberos)
 
 示例：
 
-- 访问 Kafka 时，使用安全协议 SSL
+访问 Kafka 时，使用安全协议 SSL
 
     ```sql
     "property.security.protocol" = "ssl", -- 指定安全协议为 SSL
@@ -199,39 +198,6 @@ FROM <data_source>
     "property.ssl.key.location" = "FILE:client.key", -- Client 的 private key 的位置
     "property.ssl.key.password" = "abcdefg" -- Client 的 private key 的密码
     ```
-
-- 访问 Kafka 时，使用 SASL_PLAINTEXT 安全协议和 SASL/PLAIN 认证机制
-
-    ```sql
-    "property.security.protocol" = "SASL_PLAINTEXT", -- 指定安全协议为 SASL_PLAINTEXT
-    "property.sasl.mechanism" = "PLAIN", -- 指定 SASL 认证机制为 PLAIN
-    "property.sasl.username" = "admin", -- SASL 的用户名
-    "property.sasl.password" = "admin" -- SASL 的密码
-    ```
-
-- 访问 Kafka 时，使用 SASL_PLAINTEXT 安全协议和 SASL/GSSAPI (Kerberos) 认证机制
-
-  ```sql
-  "property.security.protocol" = "SASL_PLAINTEXT", -- 指定安全协议为 SASL_PLAINTEXT
-  "property.sasl.mechanism" = "GSSAPI", -- 指定 SASL 认证机制为 GSSAPI, 默认是 GSSAPI
-  "property.sasl.kerberos.service.name" = "kafka", -- 指定 broker service name，默认是 Kafka
-  "property.sasl.kerberos.keytab" = "/home/starrocks/starrocks.keytab", -- 指定 client keytab 的位置
-  "property.sasl.kerberos.principal" = "starrocks@YOUR.COM" -- 指定 kerberos principal
-  ```
-
-  :::note
-
-  - 自 StarRocks 3.1.4 版本起，支持 SASL/GSSAPI (Kerberos) 认证。
-  - 需要在 BE 机器上安装 SASL 相关模块。
-
-    ```bash
-    # Debian/Ubuntu:
-    sudo apt-get install libsasl2-modules-gssapi-mit libsasl2-dev
-    # CentOS/Redhat:
-    sudo yum install cyrus-sasl-gssapi cyrus-sasl-devel
-    ```
-
-  :::
 
 ### FE 和 BE 配置项
 
