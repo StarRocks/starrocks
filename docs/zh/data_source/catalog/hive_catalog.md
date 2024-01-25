@@ -871,13 +871,11 @@ INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM hive_table
 
 ## 赋予 Hive 表和视图的权限
 
-您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 来赋予角色某个 Hive Catalog 内所有表或视图的查询权限。
+您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 来赋予角色某个 Hive Catalog 内所有表或视图的查询权限。命令如下：
 
-- 赋予角色某个 Hive Catalog 内所有表和视图的查询权限：
-
-  ```SQL
-  GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE <role_name>
-  ```
+```SQL
+GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE <role_name>
+```
 
 例如，通过如下命令创建角色 `hive_role_table`，切换至 Hive Catalog `hive_catalog`，然后把 `hive_catalog` 内所有表和视图的查询权限都赋予 `hive_role_table`：
 
@@ -888,11 +886,8 @@ CREATE ROLE hive_role_table;
 -- 切换到数据目录 hive_catalog。
 SET CATALOG hive_catalog;
 
--- 把 hive_catalog 内所有表的查询权限赋予 hive_role_table。
+-- 把 hive_catalog 内所有表和视图的查询权限赋予 hive_role_table。
 GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE hive_role_table;
-
--- 把 hive_catalog 内所有视图的查询权限赋予 hive_role_table。
-GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE hive_role_table;
 ```
 
 ## 创建 Hive 数据库
