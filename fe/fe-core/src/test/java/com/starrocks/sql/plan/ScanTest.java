@@ -558,5 +558,7 @@ public class ScanTest extends PlanTestBase {
                         "AND (date_trunc('month', 9: id_date) < '2031-02-01')))) " +
                         "OR ((date_trunc('year', 9: id_date) >= '2012-01-01') " +
                         "AND (date_trunc('year', 9: id_date) < '2031-01-01'))");
+
+        connectContext.getSessionVariable().setCboChangeScanPredicateWithDate(false);
     }
 }
