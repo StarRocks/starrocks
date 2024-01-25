@@ -17,21 +17,25 @@ package com.starrocks.sql.optimizer.rewrite;
 import com.starrocks.catalog.Type;
 import com.starrocks.leader.ReportHandler;
 import com.starrocks.memory.MemoryUsageTracker;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import org.junit.Assert;
 import org.junit.Test;
 
 public class MetaFunctionsTest {
 
+    static {
+        MemoryUsageTracker.registerMemoryTracker("Report", new ReportHandler());
+    }
+
     @Test
     public void testInspectMemory() {
-        MemoryUsageTracker.registerMemoryTracker("Report", new ReportHandler());
-        try {
-            MetaFunctions.inspectMemory(new ConstantOperator("abc", Type.VARCHAR));
-            Assert.fail();
-        } catch (Exception ex) {
-        }
         MetaFunctions.inspectMemory(new ConstantOperator("report", Type.VARCHAR));
+    }
+
+    @Test(expected = SemanticException.class)
+    public void testInspectMemoryFailed() {
+        MetaFunctions.inspectMemory(new ConstantOperator("abc", Type.VARCHAR));
     }
 
     @Test
