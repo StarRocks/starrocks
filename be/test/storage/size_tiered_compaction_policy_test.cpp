@@ -1039,18 +1039,16 @@ TEST_F(SizeTieredCompactionPolicyTest, test_backtrace_delete_compaction) {
     TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
     create_tablet_meta(tablet_meta.get());
 
-    write_new_version(tablet_meta, 4);
-    write_new_version(tablet_meta, 4);
     write_new_version(tablet_meta, 3);
     write_new_version(tablet_meta, 2);
-    write_delete_version(tablet_meta, 4);
+    write_delete_version(tablet_meta, 2);
 
     TabletSharedPtr tablet =
             Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
     tablet->init();
     init_compaction_context(tablet);
 
-    ASSERT_EQ(5, tablet->version_count());
+    ASSERT_EQ(3, tablet->version_count());
 
     {
         auto res = compact(tablet);
@@ -1061,7 +1059,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_backtrace_delete_compaction) {
         tablet->list_versions(&versions);
         ASSERT_EQ(1, versions.size());
         ASSERT_EQ(0, versions[0].first);
-        ASSERT_EQ(4, versions[0].second);
+        ASSERT_EQ(2, versions[0].second);
     }
 }
 
