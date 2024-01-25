@@ -198,7 +198,8 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         return builder.toString();
     }
 
-
+    // only iceberg table support partition transform
+    // now only support identity/year/month/day/hour transform
     boolean isSupportedPartitionTransform(String partitionColumn) {
         // only iceberg table support partition transform
         if (!table.isIcebergTable()) {

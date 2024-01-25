@@ -292,6 +292,7 @@ public class IcebergPartitionUtils {
         if (transform == IcebergPartitionTransform.IDENTITY) {
             return StatisticUtils.quoting(partitionColumn) + " = '" + partitionValue + "'";
         } else {
+            // transform is year, month, day, hour
             Type partitiopnColumnType = table.getColumn(partitionColumn).getType();
             Preconditions.checkState(partitiopnColumnType.isDateType(),
                     "Partition column %s type must be date or datetime", partitionColumn);
