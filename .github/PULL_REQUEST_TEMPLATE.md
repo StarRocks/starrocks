@@ -26,6 +26,7 @@ If yes, please specify the type of change:
 - [ ] Policy changes: use new policy to replace old one, functionality automatically enabled
 - [ ] Feature removed
 - [ ] Miscellaneous: upgrade & downgrade compatibility, etc.
+- [ ] Others
 
 ## Checklist:
 
