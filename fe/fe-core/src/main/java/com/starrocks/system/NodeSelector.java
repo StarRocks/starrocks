@@ -181,8 +181,7 @@ public class NodeSelector {
      * Choose nodes(currently only backend supported) matching the location requirement.
      * This is a **best-effort** choosing, if the location requirement cannot be met, for example,
      * user has specified 3-replica table and "rack:*" as location property, but we only have
-     * 2 different rack tags, the creation won't fail, and the replicas will scatter on the 2 racks
-     * as much as possible.
+     * 2 different rack tags, the creation won't fail.
      */
     private List<Long> chooseNodesMatchLocReq(int nodeNum, Multimap<String, String> locReq,
                                               final List<ComputeNode> srcNodes) {
