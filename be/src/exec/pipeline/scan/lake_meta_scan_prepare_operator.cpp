@@ -29,7 +29,7 @@ LakeMetaScanPrepareOperator::LakeMetaScanPrepareOperator(OperatorFactory* factor
           _scan_node(scan_node) {}
 
 Status LakeMetaScanPrepareOperator::_prepare_scan_context(RuntimeState* state) {
-    auto meta_scan_ranges = _morsel_queue->olap_scan_ranges();
+    auto meta_scan_ranges = _morsel_queue->prepare_olap_scan_ranges();
     for (auto& scan_range : meta_scan_ranges) {
         MetaScannerParams params;
         params.scan_range = scan_range;
