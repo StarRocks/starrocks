@@ -347,6 +347,37 @@ public class PrivilegeCheckerTest {
         }
     }
 
+    private static void verifyGrantRevokeFail(String sql, String grantSql, String revokeSql,
+                                              String expectError1st, String expectError2nd) throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        ctxToRoot();
+        StatementBase statement = verify(sql, expectError1st, ctx);
+
+        ctxToRoot();
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantSql, ctx), ctx);
+
+        ctxToTestUser();
+        try {
+            Authorizer.check(statement, starRocksAssert.getCtx());
+            Assert.fail();
+        } catch (Exception e) {
+            System.out.println(e.getMessage() + ", sql: " + sql);
+            Assert.assertTrue(e.getMessage().contains(expectError2nd));
+        }
+
+        ctxToRoot();
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx), ctx);
+
+        ctxToTestUser();
+        try {
+            Authorizer.check(statement, starRocksAssert.getCtx());
+            Assert.fail();
+        } catch (Exception e) {
+            System.out.println(e.getMessage() + ", sql: " + sql);
+            Assert.assertTrue(e.getMessage().contains(expectError1st));
+        }
+    }
+
     private static void verifyMultiGrantRevoke(String sql, List<String> grantSqls, List<String> revokeSqls,
                                                String expectError) throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
@@ -895,91 +926,115 @@ public class PrivilegeCheckerTest {
                 " k4 int) ENGINE=OLAP PRIMARY KEY(`k1`) distributed by hash(k1) " +
                 "buckets 3 properties('replication_num' = '1');";
         starRocksAssert.withTable(createTblStmtStr4);
-        Config.setMutableConfig("enable_column_level_auth_check", "true");
+        Config.setMutableConfig("authorization_enable_column_level_privilege", "true");
         // select
-        verify("select * from db1.tbl1",
+        verifyGrantRevoke(
+                "select * from db1.tbl1",
+                "grant select on db1.tbl1 to test",
+                "revoke select on db1.tbl1 from test",
                 "Access denied; you need (at least one of) the SELECT privilege(s) on" +
-                        " COLUMN tbl1.* for this operation", starRocksAssert.getCtx());
-        verify("select count(*) from db1.tbl1",
+                        " COLUMN tbl1.* for this operation");
+        verifyGrantRevoke("select count(*) from db1.tbl1",
+                "grant select on db1.tbl1 to test",
+                "revoke select on db1.tbl1 from test",
                 "Access denied; you need (at least one of) the SELECT privilege(s) on" +
-                        " COLUMN tbl1.* for this operation", starRocksAssert.getCtx());
-        verify("select k3,k4 from db1.tbl1", "Access denied; you need (at least one of) the SELECT " +
-                "privilege(s) on COLUMN tbl1.k3,k4 for this operation", starRocksAssert.getCtx());
-        verify("select v11 from (select k1 as v11 from db2.tbl1) t1",
+                        " COLUMN tbl1.* for this operation");
+        verifyGrantRevoke("select k3,k4 from db1.tbl1",
+                "grant select on db1.tbl1 to test",
+                "revoke select on db1.tbl1 from test",
+                "Access denied; you need (at least one of) the SELECT " +
+                "privilege(s) on COLUMN tbl1.k3,k4 for this operation");
+        verifyGrantRevoke("select v11 from (select k1 as v11 from db2.tbl1) t1",
+                "grant select on db2.tbl1 to test",
+                "revoke select on db2.tbl1 from test",
                 "Access denied; you need (at least one of) the SELECT privilege(s) on" +
-                        " COLUMN tbl1.k1 for this operation", starRocksAssert.getCtx());
+                        " COLUMN tbl1.k1 for this operation");
 
         // insert
         ConnectContext ctx = starRocksAssert.getCtx();
-        verify("insert into db2.tbl1 (k1, k2) select k1,k2 from db1.tbl2",
+        // table level insert branch
+        verifyGrantRevokeFail("insert into db2.tbl1 (k1, k2) select k1,k2 from db1.tbl2 union all" +
+                        " select k1,k2 from db2.tbl1",
+                "grant insert on db2.tbl1 to test", "revoke insert on db2.tbl1 from test",
+                "Access denied; you need (at least one of) the INSERT privilege(s) on COLUMN tbl1.k1,k2 for this operation",
+                "Access denied; you need (at least one of) the SELECT privilege(s) on COLUMN tbl2.k1,k2 for this operation");
+        verifyGrantRevoke("insert into db2.tbl1 (k1, k2) select k1,k2 from db2.tbl1",
+                "grant insert on db2.tbl1 to test",
+                "revoke insert on db2.tbl1 from test",
                 "Access denied; you need (at least one of) the INSERT privilege(s) on" +
-                        " COLUMN tbl1.k1,k2 for this operation", ctx);
+                        " COLUMN tbl1.k1,k2 for this operation");
+        // column level insert branch
         try (MockedStatic<Authorizer> authorizerMockedStatic = Mockito.mockStatic(Authorizer.class)) {
             authorizerMockedStatic.when(() -> Authorizer.check(Mockito.any(), Mockito.any())).thenCallRealMethod();
             authorizerMockedStatic.when(() -> Authorizer.getInstance()).thenCallRealMethod();
+            authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(), Mockito.any(), Mockito.any(),
+                    Mockito.any())).thenCallRealMethod();
+            authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(), Mockito.any(), Mockito.any(),
+                    Mockito.any(), Mockito.any())).thenCallRealMethod();
+            authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(), Mockito.any(), Mockito.any(),
+                    Mockito.any(), Mockito.any(), Mockito.any())).thenCallRealMethod();
             authorizerMockedStatic.when(() -> Authorizer.checkColumnsAction(Mockito.any(), Mockito.any(),
                     Mockito.any(), Mockito.any(), eq(PrivilegeType.SELECT))).thenCallRealMethod();
-            verify("insert into db2.tbl1 (k1, k2) select k1,k2 from db1.tbl2",
+            verify("insert into db2.tbl1 (k1, k2) select k1,k2 from db1.tbl2 union all select k1,k2 from db2.tbl1",
                     "Access denied; you need (at least one of) the SELECT privilege(s) on" +
                             " COLUMN tbl2.k1,k2 for this operation", ctx);
-            verifySuccess("insert into db2.tbl1 (k1, k2) select k1,k2 from db2.tbl1", ctx);
-        }
-        verify("insert overwrite db2.tbl1 select * from db1.tbl2",
-                "Access denied; you need (at least one of) the INSERT privilege(s) on" +
-                        " COLUMN tbl1.* for this operation", ctx);
-        try (MockedStatic<Authorizer> authorizerMockedStatic = Mockito.mockStatic(Authorizer.class)) {
-            authorizerMockedStatic.when(() -> Authorizer.check(Mockito.any(), Mockito.any())).thenCallRealMethod();
-            authorizerMockedStatic.when(() -> Authorizer.getInstance()).thenCallRealMethod();
-            authorizerMockedStatic.when(() -> Authorizer.checkColumnsAction(Mockito.any(), Mockito.any(),
-                    Mockito.any(), Mockito.any(), eq(PrivilegeType.SELECT))).thenCallRealMethod();
-            verify("insert overwrite db2.tbl1 select * from db1.tbl2",
+            verify("insert into db2.tbl1 select * from db1.tbl2 union all select k1,k2,k3,k4 from db2.tbl1",
                     "Access denied; you need (at least one of) the SELECT privilege(s) on" +
                             " COLUMN tbl2.* for this operation", ctx);
-            verifySuccess("insert overwrite db2.tbl1 select k1,k2,k3,k4 from db2.tbl1", ctx);
+            verify("insert into db2.tbl1 select k1,k2,k3,k4 from db1.tbl2",
+                    "Access denied; you need (at least one of) the SELECT privilege(s) on" +
+                            " COLUMN tbl2.k1,k2,k3,k4 for this operation", ctx);
+            verifySuccess("insert into db2.tbl1 (k1, k2) select k1,k2 from db2.tbl1", ctx);
         }
 
         // update
-        verify("update db3.tprimary set k2 = '1' where k1 = '2'",
-                "Access denied; you need (at least one of) the UPDATE privilege(s) on" +
-                        " COLUMN tprimary.k2 for this operation", ctx);
+        // table level update branch
+        verifyGrantRevokeFail("update db3.tprimary set k2 = '2' where k2 = (select k2 from db2.tbl1 where k1='1')",
+                "grant update on db3.tprimary to test", "revoke update on db3.tprimary from test",
+                "Access denied; you need (at least one of) the UPDATE privilege(s) on COLUMN tprimary.k2 for this operation",
+                "Access denied; you need (at least one of) the SELECT privilege(s) on COLUMN tbl1.k1,k2 for this operation");
+        verifyGrantRevoke("update db3.tprimary set k2 = '2' where k2 = '1'",
+                "grant update on db3.tprimary to test", "revoke update on db3.tprimary from test",
+                "Access denied; you need (at least one of) the UPDATE privilege(s) on COLUMN tprimary.k2 for this operation");
+        // column level update branch
         try (MockedStatic<Authorizer> authorizerMockedStatic = Mockito.mockStatic(Authorizer.class)) {
             authorizerMockedStatic.when(() -> Authorizer.check(Mockito.any(), Mockito.any())).thenCallRealMethod();
             authorizerMockedStatic.when(() -> Authorizer.getInstance()).thenCallRealMethod();
+            authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(), Mockito.any(), Mockito.any(),
+                    Mockito.any())).thenCallRealMethod();
+            authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(), Mockito.any(), Mockito.any(),
+                    Mockito.any(), Mockito.any())).thenCallRealMethod();
+            authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(), Mockito.any(), Mockito.any(),
+                    Mockito.any(), Mockito.any(), Mockito.any())).thenCallRealMethod();
             authorizerMockedStatic.when(() -> Authorizer.checkColumnsAction(Mockito.any(), Mockito.any(),
                     Mockito.any(), Mockito.any(), eq(PrivilegeType.SELECT))).thenCallRealMethod();
-            verify("update db3.tprimary set k2 = '1' where k1 = '2'",
+            verify("update db3.tprimary set k2 = '2' where k2 = (select k2 from db2.tbl1 where k1='1')",
                     "Access denied; you need (at least one of) the SELECT privilege(s) on" +
-                            " COLUMN tprimary.k1 for this operation", ctx);
-            verifySuccess("update db3.tprimary set k2 = '1' where k2 = '2'", ctx);
-            verifySuccess("update db3.tprimary set k2 = '1'", ctx);
-            verify("update db3.tprimary set k2 = k3 where k4 < (select avg(k4) from db3.tprimary)",
+                            " COLUMN tbl1.k1,k2 for this operation", ctx);
+            verifySuccess("update db3.tprimary set k2 = '2' where k2 = '1'", ctx);
+            verifySuccess("update db3.tprimary set k2 = '2'", ctx);
+            verify("update db3.tprimary set k2 = k3 where k2 < (select avg(k4) from db3.tprimary)",
                     "Access denied; you need (at least one of) the SELECT privilege(s) on" +
                             " COLUMN tprimary.k3,k4 for this operation", ctx);
         }
 
         // delete
-        verify("delete from db1.tbl1 where k1='1'",
-                "Access denied; you need (at least one of) the DELETE privilege(s) on" +
-                        " TABLE tbl1 for this operation", ctx);
-        try (MockedStatic<Authorizer> authorizerMockedStatic = Mockito.mockStatic(Authorizer.class)) {
-            authorizerMockedStatic.when(() -> Authorizer.check(Mockito.any(), Mockito.any())).thenCallRealMethod();
-            authorizerMockedStatic.when(() -> Authorizer.getInstance()).thenCallRealMethod();
-            authorizerMockedStatic.when(() -> Authorizer.checkColumnsAction(Mockito.any(), Mockito.any(),
-                    Mockito.any(), Mockito.any(), eq(PrivilegeType.SELECT))).thenCallRealMethod();
-            verifySuccess("delete from db1.tbl1 where k1='1'", ctx);
-            verify("delete from db3.tprimary where k1 in (select k1 from db2.tbl1 where k2='3')",
-                    "Access denied; you need (at least one of) the SELECT privilege(s) on" +
-                            " COLUMN tbl1.k1,k2 for this operation", ctx);
-            verify("delete from db3.tprimary where exists (select k1 from db2.tbl1 " +
-                            "where db3.tprimary.k1=db2.tbl1.k1 and k2='3')",
-                    "Access denied; you need (at least one of) the SELECT privilege(s) on" +
-                            " COLUMN tbl1.k1,k2 for this operation", ctx);
-            verify("with cte as (select k1 from db2.tbl1 where k2='3') delete from db3.tprimary" +
-                            " using cte where db3.tprimary.k1=cte.k1",
-                    "Access denied; you need (at least one of) the SELECT privilege(s) on" +
-                            " COLUMN tbl1.k1,k2 for this operation", ctx);
-        }
-        Config.setMutableConfig("enable_column_level_auth_check", "false");
+        verifyGrantRevokeFail("delete from db3.tprimary where k1 in (select k1 from db2.tbl1 where k2='3')",
+                "grant delete on db3.tprimary to test", "revoke delete on db3.tprimary from test",
+                "Access denied; you need (at least one of) the DELETE privilege(s) on TABLE tprimary for this operation",
+                "Access denied; you need (at least one of) the SELECT privilege(s) on COLUMN tbl1.k1,k2 for this operation");
+        verifyGrantRevoke("delete from db3.tprimary where k1 = '1'",
+                "grant delete on db3.tprimary to test", "revoke delete on db3.tprimary from test",
+                "Access denied; you need (at least one of) the DELETE privilege(s) on TABLE tprimary for this operation");
+        verifyGrantRevokeFail("delete from db3.tprimary where exists (select k1 from db2.tbl1 where db3.tprimary.k1=db2.tbl1.k1 and k2='3')",
+                "grant delete on db3.tprimary to test", "revoke delete on db3.tprimary from test",
+                "Access denied; you need (at least one of) the DELETE privilege(s) on TABLE tprimary for this operation",
+                "Access denied; you need (at least one of) the SELECT privilege(s) on COLUMN tbl1.k1,k2 for this operation");
+        verifyGrantRevokeFail("with cte as (select k1 from db2.tbl1 where k2='3') delete from db3.tprimary using cte where db3.tprimary.k1=cte.k1",
+                "grant delete on db3.tprimary to test", "revoke delete on db3.tprimary from test",
+                "Access denied; you need (at least one of) the DELETE privilege(s) on TABLE tprimary for this operation",
+                "Access denied; you need (at least one of) the SELECT privilege(s) on COLUMN tbl1.k1,k2 for this operation");
+        Config.setMutableConfig("authorization_enable_column_level_privilege", "false");
         starRocksAssert.dropTable("db3.tprimary");
     }
 
