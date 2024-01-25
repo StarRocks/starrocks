@@ -87,7 +87,7 @@ Example:
 
 ## Simulate a query for Profile Analysis Using EXPLAIN ANALYZE
 
-StarRocs provides the [EXPLAIN ANALYZE](../sql-reference/sql-statements/Administration/EXPLAIN_ANALYZE.md) statement, allowing you to simulate and analyze the profile of a query directly. The syntax is as follows:
+StarRocks provides the [EXPLAIN ANALYZE](../sql-reference/sql-statements/Administration/EXPLAIN_ANALYZE.md) statement, allowing you to simulate and analyze the profile of a query directly. The syntax is as follows:
 
 ```SQL
 EXPLAIN ANALYZE <sql_statement>
