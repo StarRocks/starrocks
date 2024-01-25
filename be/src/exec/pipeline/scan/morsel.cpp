@@ -860,6 +860,10 @@ StatusOr<MorselPtr> DynamicMorselQueue::try_get() {
     _size -= 1;
     MorselPtr ret = std::move(_queue.front());
     _queue.pop_front();
+    if (_ticket_checker != nullptr && ret->has_owner_id() && !ret->is_ticket_checker_entered()) {
+        ret->set_ticket_checker_entered(true);
+        _ticket_checker->enter(ret->owner_id(), ret->is_last_split());
+    }
     return std::move(ret);
 }
 
@@ -872,18 +876,6 @@ void DynamicMorselQueue::unget(MorselPtr&& morsel) {
 void DynamicMorselQueue::append_morsels(std::vector<MorselPtr>&& morsels) {
     std::lock_guard<std::mutex> _l(_mutex);
     _size += morsels.size();
-
-    if (_ticket_checker != nullptr) {
-        // we have to guarantee each owner_id has at least one `is_last_split = true`.
-        // and we can also set all morsels `is_last_split = true`
-        // because ticket checker has a counter to see if all morsels are consumed.
-        for (MorselPtr& morsel : morsels) {
-            if (morsel->has_owner_id()) {
-                _ticket_checker->enter(morsel->owner_id(), true);
-            }
-        }
-    }
-
     for (MorselPtr& morsel : morsels) {
         _queue.emplace_back(std::move(morsel));
     }
