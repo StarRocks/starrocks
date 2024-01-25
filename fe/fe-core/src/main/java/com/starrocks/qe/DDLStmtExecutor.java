@@ -256,6 +256,9 @@ public class DDLStmtExecutor {
         public ShowResultSet visitCreateTableStatement(CreateTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getMetadataMgr().createTable(stmt);
+                if (stmt.isTemporary()) {
+                    context.addTempTable(stmt.getDbTbl());
+                }
             });
             return null;
         }

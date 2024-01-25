@@ -38,6 +38,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
@@ -62,6 +63,7 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
@@ -165,6 +167,7 @@ public class ConnectContext {
     protected Map<String, SystemVariable> modifiedSessionVariables = new HashMap<>();
     // user define variable in this session
     protected HashMap<String, UserVariable> userVariables;
+    protected HashSet<TableName> tempTables = Sets.newHashSet();
     // Scheduler this connection belongs to
     protected ConnectScheduler connectScheduler;
     // Executor
@@ -419,6 +422,22 @@ public class ConnectContext {
 
     public UserVariable getUserVariables(String variable) {
         return userVariables.get(variable);
+    }
+
+    public void addTempTable(TableName tableName) {
+        tempTables.add(tableName);
+        LOG.info("add temp table " + tableName + " session:" + connectionId);
+    }
+
+    public void cleanTempTables() {
+        for (TableName tableName : tempTables) {
+            try {
+                LOG.info("drop temp table " + tableName + " session:" + connectionId);
+                getGlobalStateMgr().getMetadataMgr().dropTable(new DropTableStmt(true, tableName, true));
+            } catch (Exception e) {
+                LOG.warn("drop temp table " + tableName + " failed session:" + connectionId, e);
+            }
+        }
     }
 
     public void resetSessionVariable() {

@@ -51,6 +51,30 @@ public class PseudoClusterTest {
     }
 
     @Test
+    public void testCreateTempTable() throws Exception {
+        Connection connection = PseudoCluster.getInstance().getQueryConnection();
+        Statement stmt = connection.createStatement();
+        try {
+            stmt.execute("create database test_temp_table");
+            stmt.execute("use test_temp_table");
+            try {
+                stmt.execute("create temporary table if not exists tmp1 (k int, v int)");
+                Assert.fail("should throw exception");
+            } catch (Exception e) {
+                Assert.assertTrue(e.getMessage().contains("Temporary table does not support `IF NOT EXISTS`"));
+            }
+            stmt.execute("create temporary table test(pk bigint NOT NULL,v0 string not null, v1 int not null ) " +
+                    "primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 3 " +
+                    "PROPERTIES(\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\")");
+            Assert.assertFalse(stmt.execute("insert into test values (1,\"1\", 1), (2,\"2\",2), (3,\"3\",3)"));
+            stmt.execute("select * from test");
+        } finally {
+            stmt.close();
+            connection.close();
+        }
+    }
+
+    @Test
     public void testCreateTabletAndInsert() throws Exception {
         Connection connection = PseudoCluster.getInstance().getQueryConnection();
         Statement stmt = connection.createStatement();

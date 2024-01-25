@@ -682,7 +682,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             columnDefs = getColumnDefs(context.columnDesc());
         }
 
-        return new CreateTableStmt(
+        CreateTableStmt st = new CreateTableStmt(
                 context.IF() != null,
                 context.EXTERNAL() != null,
                 tableName,
@@ -703,6 +703,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 context.orderByDesc() == null ? null :
                         visit(context.orderByDesc().identifierList().identifier(), Identifier.class)
                                 .stream().map(Identifier::getValue).collect(toList()));
+        if (context.TEMPORARY() != null) {
+            if (st.isSetIfNotExists()) {
+                throw new SemanticException("Temporary table does not support `IF NOT EXISTS`");
+            }
+            st.setIsTemporary(true);
+        }
+        return st;
     }
 
     private PartitionDesc getPartitionDesc(StarRocksParser.PartitionDescContext context, List<ColumnDef> columnDefs) {

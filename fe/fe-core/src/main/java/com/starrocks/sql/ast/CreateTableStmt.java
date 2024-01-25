@@ -34,6 +34,7 @@ import java.util.Map;
 public class CreateTableStmt extends DdlStmt {
     private boolean ifNotExists;
     private boolean isExternal;
+    private boolean isTemporary;
     private TableName tableName;
     private List<ColumnDef> columnDefs;
     private List<IndexDef> indexDefs;
@@ -172,6 +173,13 @@ public class CreateTableStmt extends DdlStmt {
 
     public boolean isExternal() {
         return isExternal;
+    }
+
+    public void setIsTemporary(boolean isTemporary) {
+        this.isTemporary = isTemporary;
+    }
+    public boolean isTemporary() {
+        return isTemporary;
     }
 
     public TableName getDbTbl() {
