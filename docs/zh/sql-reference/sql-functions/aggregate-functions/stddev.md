@@ -39,3 +39,7 @@ mysql> SELECT stddev(lo_quantity), stddev_pop(lo_quantity) from lineorder;
 |   14.43100708360797 |       14.43100708360797 |
 +---------------------+-------------------------+
 ```
+
+## 相关函数
+
+[stddev_samp](./stddev_samp.md)

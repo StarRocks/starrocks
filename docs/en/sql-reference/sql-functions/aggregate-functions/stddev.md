@@ -36,6 +36,10 @@ mysql> SELECT stddev(lo_quantity), stddev_pop(lo_quantity) from lineorder;
 +---------------------+-------------------------+
 ```
 
+## See also
+
+[stddev_samp](./stddev_samp.md)
+
 ## keyword
 
 STDDEV,STDDEV_POP,POP

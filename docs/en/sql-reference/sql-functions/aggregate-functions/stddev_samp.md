@@ -37,6 +37,10 @@ group by datetime;
 +--------------------------+
 ```
 
+## See also
+
+[stddev](./stddev.md)
+
 ## keyword
 
 STDDEV_SAMP,STDDEV,SAMP
