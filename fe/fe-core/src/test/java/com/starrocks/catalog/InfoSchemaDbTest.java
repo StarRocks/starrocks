@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.sys.GrantsTo;
 import com.starrocks.common.AnalysisException;
@@ -72,8 +73,6 @@ public class InfoSchemaDbTest {
         globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
         globalStateMgr.getAuthorizationMgr().initBuiltinRolesAndUsers();
 
-        authorizationManager = globalStateMgr.getAuthorizationMgr();
-
         starRocksAssert.withDatabase("db");
         String createTblStmtStr = "(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
                 + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
@@ -82,6 +81,8 @@ public class InfoSchemaDbTest {
         starRocksAssert.withMaterializedView(
                 "create materialized view db.mv distributed by hash(k4) buckets 10 REFRESH ASYNC as select * from db.tbl");
 
+        GlobalStateMgr.getCurrentState().setAuthenticationMgr(new AuthenticationMgr());
+        GlobalStateMgr.getCurrentState().setAuthorizationMgr(new AuthorizationMgr(GlobalStateMgr.getCurrentState(), null));
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create user test_user", ctx);
         globalStateMgr.getAuthenticationMgr().createUser(createUserStmt);
@@ -92,6 +93,8 @@ public class InfoSchemaDbTest {
         CreateRoleStmt createRoleStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create role test_role", ctx);
         globalStateMgr.getAuthorizationMgr().createRole(createRoleStmt);
+
+        authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
     }
 
     @Test
