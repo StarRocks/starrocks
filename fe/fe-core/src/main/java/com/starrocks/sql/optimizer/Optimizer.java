@@ -39,6 +39,7 @@ import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
 import com.starrocks.sql.optimizer.rule.transformation.ApplyExceptionRule;
 import com.starrocks.sql.optimizer.rule.transformation.ArrayDistinctAfterAggRule;
+import com.starrocks.sql.optimizer.rule.transformation.ChangeDatePredicateRule;
 import com.starrocks.sql.optimizer.rule.transformation.ConvertToEqualForNullRule;
 import com.starrocks.sql.optimizer.rule.transformation.DeriveRangeJoinPredicateRule;
 import com.starrocks.sql.optimizer.rule.transformation.ForceCTEReuseRule;
@@ -459,6 +460,8 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.INTERSECT_REWRITE);
         ruleRewriteIterative(tree, rootTaskContext, new RemoveAggregationFromAggTable());
 
+        // rewrite before SplitScanORToUnionRule
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new ChangeDatePredicateRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, SplitScanORToUnionRule.getInstance());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownTopNBelowUnionRule());
 
@@ -479,7 +482,6 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, new GroupByCountDistinctRewriteRule());
 
         ruleRewriteOnlyOnce(tree, rootTaskContext, new DeriveRangeJoinPredicateRule());
-
         return tree.getInputs().get(0);
     }
 
