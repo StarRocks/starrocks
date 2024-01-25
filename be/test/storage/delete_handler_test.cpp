@@ -87,113 +87,6 @@ static void tear_down() {
     config::storage_root_path = k_default_storage_root_path;
 }
 
-<<<<<<< HEAD
-=======
-void set_scalar_type(TColumn* tcolumn, TPrimitiveType::type type) {
-    TScalarType scalar_type;
-    scalar_type.__set_type(type);
-
-    tcolumn->type_desc.types.resize(1);
-    tcolumn->type_desc.types.back().__set_type(TTypeNodeType::SCALAR);
-    tcolumn->type_desc.types.back().__set_scalar_type(scalar_type);
-    tcolumn->__isset.type_desc = true;
-}
-
-void set_decimal_type(TColumn* tcolumn, TPrimitiveType::type type, int precision, int scale) {
-    TScalarType scalar_type;
-    scalar_type.__set_type(type);
-    scalar_type.__set_precision(precision);
-    scalar_type.__set_scale(scale);
-
-    tcolumn->type_desc.types.resize(1);
-    tcolumn->type_desc.types.back().__set_type(TTypeNodeType::SCALAR);
-    tcolumn->type_desc.types.back().__set_scalar_type(scalar_type);
-    tcolumn->__isset.type_desc = true;
-}
-
-void set_varchar_type(TColumn* tcolumn, TPrimitiveType::type type, int length) {
-    TScalarType scalar_type;
-    scalar_type.__set_type(type);
-    scalar_type.__set_len(length);
-
-    tcolumn->type_desc.types.resize(1);
-    tcolumn->type_desc.types.back().__set_type(TTypeNodeType::SCALAR);
-    tcolumn->type_desc.types.back().__set_scalar_type(scalar_type);
-    tcolumn->__isset.type_desc = true;
-}
-
-void set_key_columns(TCreateTabletReq* request) {
-    TColumn k1;
-    k1.column_name = "k1";
-    k1.__set_is_key(true);
-    set_scalar_type(&k1, TPrimitiveType::TINYINT);
-    request->tablet_schema.columns.push_back(k1);
-
-    TColumn k2;
-    k2.column_name = "k2";
-    k2.__set_is_key(true);
-    set_scalar_type(&k2, TPrimitiveType::SMALLINT);
-    request->tablet_schema.columns.push_back(k2);
-
-    TColumn k3;
-    k3.column_name = "k3";
-    k3.__set_is_key(true);
-    set_scalar_type(&k3, TPrimitiveType::INT);
-    request->tablet_schema.columns.push_back(k3);
-
-    TColumn k4;
-    k4.column_name = "k4";
-    k4.__set_is_key(true);
-    set_scalar_type(&k4, TPrimitiveType::BIGINT);
-    request->tablet_schema.columns.push_back(k4);
-
-    TColumn k5;
-    k5.column_name = "k5";
-    k5.__set_is_key(true);
-    set_scalar_type(&k5, TPrimitiveType::LARGEINT);
-    request->tablet_schema.columns.push_back(k5);
-
-    TColumn k9;
-    k9.column_name = "k9";
-    k9.__set_is_key(true);
-    k9.column_type.type = TPrimitiveType::DECIMALV2;
-    k9.column_type.__set_precision(6);
-    k9.column_type.__set_scale(3);
-    set_decimal_type(&k9, TPrimitiveType::DECIMALV2, 6, 3);
-    request->tablet_schema.columns.push_back(k9);
-
-    TColumn k10;
-    k10.column_name = "k10";
-    k10.__set_is_key(true);
-    set_scalar_type(&k10, TPrimitiveType::DATE);
-    request->tablet_schema.columns.push_back(k10);
-
-    TColumn k11;
-    k11.column_name = "k11";
-    k11.__set_is_key(true);
-    set_scalar_type(&k11, TPrimitiveType::DATETIME);
-    request->tablet_schema.columns.push_back(k11);
-
-    TColumn k12;
-    k12.column_name = "k12";
-    k12.__set_is_key(true);
-    set_varchar_type(&k12, TPrimitiveType::CHAR, 64);
-    request->tablet_schema.columns.push_back(k12);
-
-    TColumn k13;
-    k13.column_name = "k13";
-    k13.__set_is_key(true);
-    set_varchar_type(&k13, TPrimitiveType::CHAR, 64);
-    request->tablet_schema.columns.push_back(k13);
-
-    TColumn k14;
-    k14.column_name = "k14";
-    k14.__set_is_key(true);
-    set_varchar_type(&k14, TPrimitiveType::VARCHAR, 64);
-    request->tablet_schema.columns.push_back(k14);
-}
-
->>>>>>> e3d5ab006c ([BugFix] Not ignore the leading space when parse delete predicate value (#39797))
 void set_default_create_tablet_request(TCreateTabletReq* request) {
     request->tablet_id = random();
     request->__set_version(1);
@@ -266,6 +159,13 @@ void set_default_create_tablet_request(TCreateTabletReq* request) {
     k13.column_type.__set_len(64);
     k13.column_type.type = TPrimitiveType::VARCHAR;
     request->tablet_schema.columns.push_back(k13);
+
+    TColumn k14;
+    k14.column_name = "k14";
+    k14.__set_is_key(true);
+    k14.column_type.__set_len(64);
+    k14.column_type.type = TPrimitiveType::VARCHAR;
+    request->tablet_schema.columns.push_back(k14);
 
     TColumn v;
     v.column_name = "v";
@@ -346,6 +246,13 @@ void set_create_duplicate_tablet_request(TCreateTabletReq* request) {
     k13.column_type.__set_len(64);
     k13.column_type.type = TPrimitiveType::VARCHAR;
     request->tablet_schema.columns.push_back(k13);
+
+    TColumn k14;
+    k14.column_name = "k14";
+    k14.__set_is_key(true);
+    k14.column_type.__set_len(64);
+    k14.column_type.type = TPrimitiveType::VARCHAR;
+    request->tablet_schema.columns.push_back(k14);
 
     TColumn v;
     v.column_name = "v";
