@@ -109,7 +109,8 @@ public class MvRewritePreprocessor {
         return logicalTree;
     }
 
-    class MvWithPlanContext {
+    @VisibleForTesting
+    public class MvWithPlanContext {
         private final MaterializedView mv;
         private final MvPlanContext mvPlanContext;
         public MvWithPlanContext(MaterializedView mv, MvPlanContext mvPlanContext) {
@@ -573,7 +574,8 @@ public class MvRewritePreprocessor {
         return chooseBestRelatedMVsByCorrelations(queryTables, validMVs, queryOptExpression, maxRelatedMVsLimit);
     }
 
-    private Set<MvWithPlanContext> getMvWithPlanContext(Set<MaterializedView> validMVs) {
+    @VisibleForTesting
+    public Set<MvWithPlanContext> getMvWithPlanContext(Set<MaterializedView> validMVs) {
         // filter mvs which are active and have valid plans
         Set<MvWithPlanContext> mvWithPlanContexts = Sets.newHashSet();
         for (MaterializedView mv : validMVs) {
