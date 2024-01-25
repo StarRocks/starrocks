@@ -26,8 +26,12 @@ STDDEV(expr)
 ![image](../../../assets/stddevpop_formula.png)
 
 <!--$$
-\sigma = \sqrt{\frac{1}{N} \sum_{i=1}^{N} (x_i - \mu)^2}
+\sigma = \sqrt{\frac{1}{N} \sum_{i=1}^{N} (x_i - \bar{x})^2}
 $$ -->
+
+$$
+\sigma = \sqrt{\frac{1}{N} \sum_{i=1}^{N} (x_i - \bar{x})^2}
+$$
 
 ## 示例
 
