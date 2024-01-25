@@ -112,7 +112,7 @@ HdfsScannerParams* HdfsScannerTest::_create_param(const std::string& file, THdfs
     param->fs = FileSystem::Default();
     param->path = file;
     param->file_size = range->file_length;
-    param->scan_ranges.emplace_back(range);
+    param->scan_range = range;
     param->tuple_desc = tuple_desc;
     std::vector<int> materialize_index_in_chunk;
     std::vector<int> partition_index_in_chunk;
@@ -1664,25 +1664,44 @@ TEST_F(HdfsScannerTest, TestCSVSmall) {
         READ_SCANNER_ROWS(scanner, 2);
         scanner->close(_runtime_state);
     }
-    for (int offset = 10; offset < 20; offset++) {
-        auto* range0 = _create_scan_range(small_file, 0, offset);
-        // at '\n'
-        auto* range1 = _create_scan_range(small_file, offset, 0);
-        auto* tuple_desc = _create_tuple_desc(csv_descs);
-        auto* param = _create_param(small_file, range0, tuple_desc);
-        param->scan_ranges.emplace_back(range1);
-        build_hive_column_names(param, tuple_desc);
-        auto scanner = std::make_shared<HdfsTextScanner>();
 
+    for (int offset = 10; offset < 20; offset++) {
+        // read two scan range ranges and # of records = 2
+        int records = 0;
+
+<<<<<<< HEAD
         status = scanner->init(_runtime_state, *param);
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
 
         status = scanner->open(_runtime_state);
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
+=======
+        auto read_range = [&](int start, int end) {
+            auto* range0 = _create_scan_range(small_file, start, end);
+            auto* tuple_desc = _create_tuple_desc(csv_descs);
+            auto* param = _create_param(small_file, range0, tuple_desc);
+            build_hive_column_names(param, tuple_desc);
+            auto scanner = std::make_shared<HdfsTextScanner>();
 
-        READ_SCANNER_ROWS(scanner, 2);
+            status = scanner->init(_runtime_state, *param);
+            ASSERT_TRUE(status.ok()) << status.message();
+>>>>>>> 0022cf226c ([Refactor] hdfs scanner only handle a scan range (#39983))
 
+            status = scanner->open(_runtime_state);
+            ASSERT_TRUE(status.ok()) << status.message();
+
+<<<<<<< HEAD
         scanner->close(_runtime_state);
+=======
+            READ_SCANNER_RETURN_ROWS(scanner, records);
+
+            scanner->close();
+        };
+
+        read_range(0, offset);
+        read_range(offset, 0);
+        ASSERT_EQ(records, 2);
+>>>>>>> 0022cf226c ([Refactor] hdfs scanner only handle a scan range (#39983))
     }
 }
 
@@ -1947,7 +1966,7 @@ TEST_F(HdfsScannerTest, TestCSVWithBlankDelimiter) {
     {
         auto* range = _create_scan_range(small_file, 0, 0);
         range->text_file_desc.field_delim = "";
-        param->scan_ranges[0] = range;
+        param->scan_range = range;
         auto scanner = std::make_shared<HdfsTextScanner>();
         auto status = scanner->init(_runtime_state, *param);
         EXPECT_FALSE(status.ok());
@@ -1955,7 +1974,7 @@ TEST_F(HdfsScannerTest, TestCSVWithBlankDelimiter) {
     {
         auto* range = _create_scan_range(small_file, 0, 0);
         range->text_file_desc.collection_delim = "";
-        param->scan_ranges[0] = range;
+        param->scan_range = range;
         auto scanner = std::make_shared<HdfsTextScanner>();
         auto status = scanner->init(_runtime_state, *param);
         EXPECT_FALSE(status.ok());
@@ -1963,7 +1982,7 @@ TEST_F(HdfsScannerTest, TestCSVWithBlankDelimiter) {
     {
         auto* range = _create_scan_range(small_file, 0, 0);
         range->text_file_desc.mapkey_delim = "";
-        param->scan_ranges[0] = range;
+        param->scan_range = range;
         auto scanner = std::make_shared<HdfsTextScanner>();
         auto status = scanner->init(_runtime_state, *param);
         EXPECT_FALSE(status.ok());
@@ -1971,7 +1990,7 @@ TEST_F(HdfsScannerTest, TestCSVWithBlankDelimiter) {
     {
         auto* range = _create_scan_range(small_file, 0, 0);
         range->text_file_desc.line_delim = "";
-        param->scan_ranges[0] = range;
+        param->scan_range = range;
         auto scanner = std::make_shared<HdfsTextScanner>();
         auto status = scanner->init(_runtime_state, *param);
         EXPECT_FALSE(status.ok());
