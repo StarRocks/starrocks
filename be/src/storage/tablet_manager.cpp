@@ -803,16 +803,21 @@ Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_
         LOG(WARNING) << "Fail to create table, tablet path not exists, path=" << tablet->schema_hash_path();
         return Status::NotFound("tablet path not exists");
     }
-    if (Status st = tablet->init(); !st.ok()) {
-        LOG(WARNING) << "Fail to init tablet " << tablet->full_name() << ": " << st;
-        return Status::InternalError("tablet init failed: " + st.to_string());
-    }
+    Status init_st = tablet->init();
     if (tablet->tablet_state() == TABLET_SHUTDOWN) {
-        LOG(INFO) << "Loaded shutdown tablet " << tablet_id;
+        if (init_st.ok()) {
+            LOG(INFO) << "Loaded shutdown tablet " << tablet_id;
+        } else {
+            LOG(WARNING) << "Loaded shutdown tablet " << tablet_id << " with ignored failure: " << init_st.to_string();
+        }
         std::unique_lock shutdown_tablets_wlock(_shutdown_tablets_lock);
         DroppedTabletInfo info{.tablet = tablet, .flag = kMoveFilesToTrash};
         _shutdown_tablets.emplace(tablet->tablet_id(), std::move(info));
         return Status::NotFound("tablet state is shutdown");
+    }
+    if (!init_st.ok()) {
+        LOG(WARNING) << "Fail to init tablet " << tablet->full_name() << ": " << init_st.message();
+        return Status::InternalError("tablet init failed: " + init_st.to_string());
     }
     // NOTE: We do not check tablet's initial version here, because if BE restarts when
     // one tablet is doing schema-change, we may meet empty tablet.
