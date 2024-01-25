@@ -211,6 +211,9 @@ public class TaskRunManager {
             TaskRun runningTaskRun = runningTaskRunMap.get(taskId);
             if (runningTaskRun == null) {
                 Queue<TaskRun> taskRunQueue = pendingTaskRunMap.get(taskId);
+                if (taskRunQueue == null) {
+                    continue;
+                }
                 if (taskRunQueue.size() == 0) {
                     pendingIterator.remove();
                 } else {
