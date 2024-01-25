@@ -21,7 +21,17 @@ STDDEV(expr)
 
 ## 返回值说明
 
-返回值为 DOUBLE 类型。
+返回值为 DOUBLE 类型。计算公式如下，其中 `n` 为该表的行数：
+
+
+$$
+\sigma = \sqrt{\frac{1}{N} \sum_{i=1}^{N} (x_i - \mu)^2}
+$$
+
+
+<!--$$
+\sigma = \sqrt{\frac{1}{N} \sum_{i=1}^{N} (x_i - \mu)^2}
+$$ -->
 
 ## 示例
 
