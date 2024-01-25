@@ -342,7 +342,7 @@ public:
 
     Status primary_index_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb);
 
-    Status generate_pk_dump();
+    Status generate_pk_dump_if_in_error_state();
 
 private:
     friend class Tablet;
