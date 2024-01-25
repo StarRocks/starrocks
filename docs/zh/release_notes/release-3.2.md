@@ -241,7 +241,6 @@ displayed_sidebar: "Chinese"
   - 静态参数 `tc_max_total_thread_cache_bytes`
 - 默认值修改：
   - `disable_column_pool` 默认值从 `false` 变为 `true`。
-  - `txn_commit_rpc_timeout_ms` 默认值从 `20000` 变为 `60000`。
   - `thrift_port` 默认值从 `9060` 变为 `0`。
   - `enable_load_colocate_mv` 默认值从 `false` 变为 `true`。
   - `enable_pindex_minor_compaction` 默认值从 `false` 变为 `true`。
