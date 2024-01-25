@@ -463,16 +463,6 @@ public class RestoreJobMaterializedViewTest {
     @Test
     @Order(3)
     public void testMVRestore_TestMVWithBaseTable1() {
-        new Expectations() {
-            {
-                globalStateMgr.getCurrentState().getCatalogMgr().catalogExists("default_catalog");
-                result = true;
-
-                globalStateMgr.getCurrentState().getMetadataMgr().getDb("default_catalog", DB_NAME);
-                minTimes = 0;
-                result = db;
-            }
-        };
         // gen BackupJobInfo
         RestoreJob job = createRestoreJob(ImmutableList.of(TABLE_NAME, MATERIALIZED_VIEW_NAME));
         // backup & restore
@@ -483,16 +473,6 @@ public class RestoreJobMaterializedViewTest {
     @Test
     @Order(4)
     public void testMVRestore_TestMVWithBaseTable2() {
-        new Expectations() {
-            {
-                globalStateMgr.getCurrentState().getCatalogMgr().catalogExists("default_catalog");
-                result = true;
-
-                globalStateMgr.getCurrentState().getMetadataMgr().getDb("default_catalog", DB_NAME);
-                minTimes = 0;
-                result = db;
-            }
-        };
         // gen BackupJobInfo
         RestoreJob job = createRestoreJob(ImmutableList.of(MATERIALIZED_VIEW_NAME, TABLE_NAME));
         // backup & restore
@@ -503,16 +483,6 @@ public class RestoreJobMaterializedViewTest {
     @Test
     @Order(5)
     public void testMVRestore_TestMVWithBaseTable3() {
-        new Expectations() {
-            {
-                globalStateMgr.getCurrentState().getCatalogMgr().catalogExists("default_catalog");
-                result = true;
-
-                globalStateMgr.getCurrentState().getMetadataMgr().getDb("default_catalog", DB_NAME);
-                minTimes = 0;
-                result = db;
-            }
-        };
         // gen BackupJobInfo
         RestoreJob job1 = createRestoreJob(ImmutableList.of(TABLE_NAME));
         // backup & restore
