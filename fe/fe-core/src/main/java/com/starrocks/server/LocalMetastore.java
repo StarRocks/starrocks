@@ -85,6 +85,7 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvJoinFilter;
+import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -187,6 +188,7 @@ import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
@@ -236,6 +238,7 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.common.SyncPartitionUtils;
+import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.Backend;
@@ -3257,6 +3260,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
         boolean isNonPartitioned = partitionInfo.getType() == PartitionType.UNPARTITIONED;
         DataProperty dataProperty = analyzeMVDataProperties(db, materializedView, properties, isNonPartitioned);
+        analyzeMvEligibleForQueryRewrite(materializedView);
 
         try {
             Set<Long> tabletIdSet = new HashSet<>();
@@ -3307,8 +3311,7 @@ public class LocalMetastore implements ConnectorMetadata {
         DynamicPartitionUtil.registerOrRemovePartitionTTLTable(db.getId(), materializedView);
     }
 
-    private long getRandomStart(IntervalLiteral interval,
-                                long randomizeStart) throws DdlException {
+    private long getRandomStart(IntervalLiteral interval, long randomizeStart) throws DdlException {
         if (interval == null || randomizeStart == -1) {
             return 0;
         }
@@ -3321,6 +3324,15 @@ public class LocalMetastore implements ConnectorMetadata {
         long intervalSeconds = TimeUtils.convertTimeUnitValueToSecond(period, timeUnit);
         long randomInterval = randomizeStart == 0 ? Math.min(300, intervalSeconds / 2) : randomizeStart;
         return ThreadLocalRandom.current().nextLong(randomInterval);
+    }
+
+    private void analyzeMvEligibleForQueryRewrite(MaterializedView mv) {
+        if (mv.getTableProperty().getMvQueryRewriteSwitch() == TableProperty.MVQueryRewriteSwitch.TRUE) {
+            MvPlanContext ctx = new MaterializedViewOptimizer().optimize(mv, ConnectContext.get());
+            if (!ctx.isValidMvPlan()) {
+                throw new SemanticException("The MV is not eligible for query rewrite: " + ctx.getInvalidReason());
+            }
+        }
     }
 
     private DataProperty analyzeMVDataProperties(Database db,
@@ -3497,6 +3509,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 String str = properties.get(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE);
                 TableProperty.MVQueryRewriteSwitch value = TableProperty.analyzeQueryRewriteSwitch(str);
                 materializedView.getTableProperty().setMvQueryRewriteSwitch(value);
+                properties.remove(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE);
             }
 
             // lake storage info

@@ -4388,4 +4388,63 @@ public class CreateMaterializedViewTest {
                 "AS\n" +
                 "SELECT id,name,str_to_map(CONCAT_WS(':',id,name),';',':') as mapvalue FROM sr_ods_test_table");
     }
+
+    @Test
+    public void testEnableQueryRewrite() throws Exception {
+        // default
+        starRocksAssert.withMaterializedView("create materialized view mv_invalid " +
+                "refresh async " +
+                "as select * from t1 limit 10");
+        starRocksAssert.dropMaterializedView("mv_invalid");
+
+        // disable
+        starRocksAssert.withMaterializedView("create materialized view mv_invalid " +
+                "refresh async " +
+                "properties('enable_query_rewrite' = 'false') " +
+                "as select * from t1 limit 10");
+        starRocksAssert.dropMaterializedView("mv_invalid");
+
+        // enable
+        starRocksAssert.withMaterializedView("create materialized view mv_invalid " +
+                "refresh async " +
+                "properties('enable_query_rewrite' = 'true') " +
+                "as select * from t1");
+        starRocksAssert.dropMaterializedView("mv_invalid");
+
+        // invalid operators
+        {
+            Exception e = Assert.assertThrows(SemanticException.class,
+                    () -> starRocksAssert.withMaterializedView("create materialized view mv_invalid " +
+                            "refresh async " +
+                            "properties('enable_query_rewrite' = 'true') " +
+                            "as select * from t1 limit 10"));
+            Assert.assertEquals("Getting analyzing error. Detail message: " +
+                    "The MV is not eligible for query rewrite: MV contains other operators besides " +
+                    "AGGREGATION/JOIN/SELECT/PROJECTION: LOGICAL_LIMIT.", e.getMessage());
+
+        }
+        {
+            Exception e = Assert.assertThrows(SemanticException.class,
+                    () -> starRocksAssert.withMaterializedView("create materialized view mv_invalid " +
+                            "refresh async " +
+                            "properties('enable_query_rewrite' = 'true') " +
+                            "as select row_number() over (partition by c_1_9) from t1"));
+            Assert.assertEquals("Getting analyzing error. Detail message: " +
+                    "The MV is not eligible for query rewrite: MV contains other operators besides " +
+                    "AGGREGATION/JOIN/SELECT/PROJECTION: LOGICAL_WINDOW.", e.getMessage());
+        }
+
+        // invalid structure
+        {
+            Exception e = Assert.assertThrows(SemanticException.class,
+                    () -> starRocksAssert.withMaterializedView("create materialized view mv_invalid " +
+                            "refresh async " +
+                            "properties('enable_query_rewrite' = 'true') " +
+                            "as select t1.c_1_9, r.cnt from t1 join" +
+                            " (select c_1_9, count(*) as cnt from t1 group by c_1_9) r " +
+                            " on t1.c_1_9 = r.c_1_9"));
+            Assert.assertEquals("Getting analyzing error. Detail message: " +
+                    "The MV is not eligible for query rewrite: MV is not SPJG structure.", e.getMessage());
+        }
+    }
 }

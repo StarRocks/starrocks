@@ -117,8 +117,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
      */
     public enum MVQueryRewriteSwitch {
         DEFAULT,    // default, no check but eligible for query rewrite
-        ENABLE,     // enabled, check the semantic and is eligible for query rewrite
-        DISABLE;    // disabled
+        TRUE,       // enabled, check the semantic and is eligible for query rewrite
+        FALSE,      // disabled
+        ;
 
         public static MVQueryRewriteSwitch defaultValue() {
             return DEFAULT;
@@ -757,7 +758,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public void setMvQueryRewriteSwitch(MVQueryRewriteSwitch value) {
-        this.mvQueryRewriteSwitch = value);
+        this.mvQueryRewriteSwitch = value;
     }
 
     public MVQueryRewriteSwitch getMvQueryRewriteSwitch() {
