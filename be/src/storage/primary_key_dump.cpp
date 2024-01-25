@@ -37,7 +37,7 @@ namespace starrocks {
 
 PrimaryKeyDump::PrimaryKeyDump(Tablet* tablet) {
     _tablet = tablet;
-    _dump_filepath = tablet->schema_hash_path() + "/" + std::to_string(_tablet->tablet_id()) + ".pkdump";
+    _dump_filepath = tablet->data_dir()->get_tmp_path() + "/" + std::to_string(_tablet->tablet_id()) + ".pkdump";
     _partial_pindex_kvs = std::make_unique<PartialKVsPB>();
 }
 
@@ -45,6 +45,11 @@ PrimaryKeyDump::PrimaryKeyDump(Tablet* tablet) {
 PrimaryKeyDump::PrimaryKeyDump(const std::string& dump_filepath) {
     _dump_filepath = dump_filepath;
     _partial_pindex_kvs = std::make_unique<PartialKVsPB>();
+}
+
+Status PrimaryKeyDump::dump_file_exist() {
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_dump_filepath));
+    return fs->path_exists(_dump_filepath);
 }
 
 Status PrimaryKeyDump::init_dump_file() {
