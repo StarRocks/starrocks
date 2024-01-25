@@ -78,6 +78,21 @@ public class ChangeDatePredicateRule extends TransformationRule {
                 resultPredicates.add(p);
                 continue;
             }
+            ColumnRefOperator child0 = (ColumnRefOperator) binaryPredicate.getChild(0);
+            if (!child0.getType().isDate() || !child0.getType().isDatetime()) {
+                resultPredicates.add(p);
+                continue;
+            }
+
+            if (!(binaryPredicate.getChild(1) instanceof ConstantOperator)) {
+                resultPredicates.add(p);
+                continue;
+            }
+            ConstantOperator child1 = (ConstantOperator) binaryPredicate.getChild(1);
+            if (!child1.getType().isDate() || !child1.getType().isDatetime()) {
+                resultPredicates.add(p);
+                continue;
+            }
 
             ColumnRefOperator columnRefOperator = (ColumnRefOperator) binaryPredicate.getChild(0);
 
@@ -161,7 +176,8 @@ public class ChangeDatePredicateRule extends TransformationRule {
             // 2.Selecting remaining months
             // wrap with data_trunct
             CallOperator monthOfDate =
-                    ScalarOperatorUtil.buildDateTrunc(Arrays.asList(ConstantOperator.createVarchar("month"), curColumn));
+                    ScalarOperatorUtil.buildDateTrunc(
+                            Arrays.asList(ConstantOperator.createVarchar("month"), curColumn));
             BinaryPredicateOperator leftMonthBeginPredicate = BinaryPredicateOperator.ge(monthOfDate, leftMonthBegin);
             BinaryPredicateOperator leftMonthEndPredicate = BinaryPredicateOperator.lt(monthOfDate, yearBegin);
 
