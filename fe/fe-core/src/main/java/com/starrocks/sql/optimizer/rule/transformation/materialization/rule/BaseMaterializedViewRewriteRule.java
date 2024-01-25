@@ -43,6 +43,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.Materiali
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 
 import java.util.List;
 import java.util.Set;
@@ -95,8 +96,9 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         try {
             return doTransform(queryExpression, context);
         } catch (Exception e) {
+            String errMsg = ExceptionUtils.getMessage(e);
             // for mv rewrite rules, do not disturb query when exception.
-            logMVRewrite(context, this, "mv rewrite exception, exception message:{}", e.toString());
+            logMVRewrite(context, this, "mv rewrite exception, exception message:{}", errMsg);
             return Lists.newArrayList();
         }
     }

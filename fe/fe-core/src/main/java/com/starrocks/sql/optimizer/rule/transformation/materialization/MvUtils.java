@@ -367,28 +367,30 @@ public class MvUtils {
      * NOTE: This method requires `root` must be Aggregate op to check whether MV is satisfiable quickly.
      */
     public static boolean isLogicalSPJG(OptExpression root, int level) {
-        // Aggregate nested with aggregate is not supported yet.
-        // eg:
-        // create view v1 as
-        // select count(distinct cnt)
-        // from
-        //   (
-        //      select c_city, count(*) as cnt
-        //      from customer
-        //      group by c_city
-        //    ) t;
-        if (root == null || level > 0) {
+        if (root == null) {
             return false;
         }
         Operator operator = root.getOp();
         if (!(operator instanceof LogicalAggregationOperator)) {
-            return isLogicalSPJ(root);
+            return level == 0 ? false : isLogicalSPJ(root);
         } else {
             LogicalAggregationOperator agg = (LogicalAggregationOperator) operator;
             if (agg.getType() != AggType.GLOBAL) {
                 return false;
             }
-
+            // Aggregate nested with aggregate is not supported yet.
+            // eg:
+            // create view v1 as
+            // select count(distinct cnt)
+            // from
+            //   (
+            //      select c_city, count(*) as cnt
+            //      from customer
+            //      group by c_city
+            //    ) t
+            if (level > 0) {
+                return false;
+            }
             OptExpression child = root.inputAt(0);
             return isLogicalSPJG(child, level + 1);
         }
