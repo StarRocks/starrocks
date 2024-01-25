@@ -18,6 +18,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "exec/pipeline/scan/morsel.h"
 #include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -75,6 +76,7 @@ public:
     void update_has_any_predicate();
     // Called frequently, don't do heavy work
     virtual const std::string get_custom_coredump_msg() const { return ""; }
+    virtual void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) {}
 
     struct Profile {
         int mem_alloc_failed_count;
