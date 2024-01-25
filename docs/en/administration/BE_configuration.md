@@ -326,6 +326,12 @@ BE dynamic parameters are as follows.
 - **Default:** 5,000 ms
 - **Description:** The timeout for a thrift RPC.
 
+#### txn_commit_rpc_timeout_ms
+
+- **Default:** 60,000
+- **Description:** The timeout for a transaction commit RPC. Since v3.1.0, this parameter is deprecated.
+- **Unit:** ms
+
 #### max_consumer_num_per_group
 
 - **Default:** 3 (Maximum Number of Consumers in a Consumer Group of Routine Load)
