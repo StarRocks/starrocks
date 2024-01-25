@@ -18,7 +18,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TTabletMetaInfo;
