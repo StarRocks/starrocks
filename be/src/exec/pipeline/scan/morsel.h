@@ -499,7 +499,7 @@ public:
         _size = _num_morsels = _queue.size();
     }
     ~DynamicMorselQueue() override = default;
-    bool empty() const override { return _size == 0; }
+    bool empty() const override { return _size.load(std::memory_order_relaxed) == 0; }
     StatusOr<MorselPtr> try_get() override;
     void unget(MorselPtr&& morsel) override;
     std::string name() const override { return "dynamic_morsel_queue"; }
@@ -511,7 +511,7 @@ public:
     Type type() const override { return DYNAMIC; }
 
 private:
-    size_t _size = 0;
+    std::atomic<int64_t> _size = 0;
     std::deque<MorselPtr> _queue;
     std::mutex _mutex;
     query_cache::TicketCheckerPtr _ticket_checker;
