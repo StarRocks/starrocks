@@ -42,6 +42,7 @@ import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.epack.privilege.NativeAccessControllerEPack;
+import com.starrocks.epack.privilege.RangerStarRocksAccessControllerEPack;
 import com.starrocks.persist.AlterCatalogLog;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.gson.GsonUtils;
@@ -51,7 +52,6 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.privilege.ranger.hive.RangerHiveAccessController;
-import com.starrocks.privilege.ranger.starrocks.RangerStarRocksAccessController;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
@@ -127,7 +127,7 @@ public class CatalogMgr {
             String serviceName = properties.get("ranger.plugin.hive.service.name");
             if (serviceName == null || serviceName.isEmpty()) {
                 if (Config.access_control.equals("ranger")) {
-                    Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
+                    Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessControllerEPack());
                 } else {
                     Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessControllerEPack());
                 }
@@ -185,7 +185,7 @@ public class CatalogMgr {
                 String serviceName = properties.get("ranger.plugin.hive.service.name");
                 if (serviceName.isEmpty()) {
                     if (Config.access_control.equals("ranger")) {
-                        Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
+                        Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessControllerEPack());
                     } else {
                         Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessControllerEPack());
                     }
@@ -275,7 +275,7 @@ public class CatalogMgr {
         String serviceName = properties.get("ranger.plugin.hive.service.name");
         if (serviceName == null || serviceName.isEmpty()) {
             if (Config.access_control.equals("ranger")) {
-                Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
+                Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessControllerEPack());
             } else {
                 Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessControllerEPack());
             }
@@ -320,7 +320,7 @@ public class CatalogMgr {
             String serviceName = properties.get("ranger.plugin.hive.service.name");
             if (serviceName.isEmpty()) {
                 if (Config.access_control.equals("ranger")) {
-                    Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
+                    Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessControllerEPack());
                 } else {
                     Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessControllerEPack());
                 }

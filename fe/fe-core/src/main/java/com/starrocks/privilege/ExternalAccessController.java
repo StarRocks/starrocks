@@ -13,7 +13,5 @@
 // limitations under the License.
 package com.starrocks.privilege;
 
-import com.starrocks.epack.privilege.AccessControllerEPack;
-
-public abstract class ExternalAccessController implements AccessControllerEPack {
+public abstract class ExternalAccessController implements AccessController {
 }

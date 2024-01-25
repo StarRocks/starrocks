@@ -26,6 +26,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.epack.privilege.AccessControllerEPack;
 import com.starrocks.epack.privilege.NativeAccessControllerEPack;
+import com.starrocks.epack.privilege.RangerStarRocksAccessControllerEPack;
 import com.starrocks.epack.sql.analyzer.AuthorizerStmtVisitorEPack;
 import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.privilege.AccessControlProvider;
@@ -33,7 +34,6 @@ import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivilegeType;
-import com.starrocks.privilege.ranger.starrocks.RangerStarRocksAccessController;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -52,7 +52,7 @@ public class Authorizer {
 
     static {
         if (Config.access_control.equals("ranger")) {
-            INSTANCE = new AccessControlProvider(new AuthorizerStmtVisitor(), new RangerStarRocksAccessController());
+            INSTANCE = new AccessControlProvider(new AuthorizerStmtVisitor(), new RangerStarRocksAccessControllerEPack());
         } else {
             INSTANCE = new AccessControlProvider(new AuthorizerStmtVisitorEPack(), new NativeAccessControllerEPack());
         }
