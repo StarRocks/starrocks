@@ -984,4 +984,21 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         plan = getVerboseExplain(sql);
         assertNotContains(plan, "ColumnAccessPath");
     }
+
+    @Test
+    public void testSubfieldPathLose() throws Exception {
+        String sql = "select v1 from pc0 where a1[1] NOT IN (select t0.v1 from t0 where false)";
+        String plan = getVerboseExplain(sql);
+
+        assertContains(plan, "  RESULT SINK\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  output columns:\n" +
+                "  |  1 <-> [1: v1, BIGINT, true]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     table: pc0, rollup: pc0");
+        assertNotContains(plan, "ColumnAccessPath");
+    }
 }
