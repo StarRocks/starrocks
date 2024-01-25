@@ -35,9 +35,13 @@
 #include "gutil/strings/substitute.h"
 
 namespace starrocks {
+
 struct QueryCacheTest : public ::testing::Test {
     RuntimeState state;
+    std::unique_ptr<pipeline::QueryContext> query_ctx = std::make_unique<pipeline::QueryContext>();
     query_cache::CacheManagerPtr cache_mgr = std::make_shared<query_cache::CacheManager>(10240);
+
+    void SetUp() override { state.set_query_ctx(query_ctx.get()); }
 };
 
 TEST_F(QueryCacheTest, testLaneArbiter) {

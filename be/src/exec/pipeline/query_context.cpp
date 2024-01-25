@@ -151,6 +151,17 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
     });
 }
 
+MemTracker* QueryContext::operator_mem_tracker(int32_t plan_node_id) {
+    std::lock_guard<std::mutex> l(_operator_mem_trackers_lock);
+    auto it = _operator_mem_trackers.find(plan_node_id);
+    if (it != _operator_mem_trackers.end()) {
+        return it->second.get();
+    }
+    auto mem_tracker = std::make_shared<MemTracker>();
+    _operator_mem_trackers[plan_node_id] = mem_tracker;
+    return mem_tracker.get();
+}
+
 Status QueryContext::init_query_once(workgroup::WorkGroup* wg, bool enable_group_level_query_queue) {
     Status st = Status::OK();
     if (wg != nullptr) {

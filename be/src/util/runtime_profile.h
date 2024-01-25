@@ -180,8 +180,14 @@ public:
 
         const TCounterStrategy& strategy() const { return _strategy; }
 
-        bool is_sum() const { return _strategy.aggregate_type == TCounterAggregateType::SUM; }
-        bool is_avg() const { return _strategy.aggregate_type == TCounterAggregateType::AVG; }
+        bool is_sum() const {
+            return _strategy.aggregate_type == TCounterAggregateType::SUM ||
+                   _strategy.aggregate_type == TCounterAggregateType::SUM_AVG;
+        }
+        bool is_avg() const {
+            return _strategy.aggregate_type == TCounterAggregateType::AVG ||
+                   _strategy.aggregate_type == TCounterAggregateType::AVG_SUM;
+        }
 
         bool skip_merge() const {
             return _strategy.merge_type == TCounterMergeType::SKIP_ALL ||

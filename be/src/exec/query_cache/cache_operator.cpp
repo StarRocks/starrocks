@@ -164,7 +164,7 @@ static inline Chunks remap_chunks(const Chunks& chunks, const SlotRemapping& slo
 }
 Status CacheOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
-    _push_chunk_num_counter = ADD_COUNTER(_common_metrics, "PushChunkNum", TUnit::UNIT);
+    _push_chunk_num_counter = ADD_COUNTER(_unique_metrics, "PushChunkNum", TUnit::UNIT);
     _cache_probe_timer = ADD_TIMER(_unique_metrics, "CacheProbeTime");
     _cache_probe_chunks_counter = ADD_COUNTER(_unique_metrics, "CacheProbeChunkNum", TUnit::UNIT);
     _cache_probe_tablets_counter = ADD_COUNTER(_unique_metrics, "CacheProbeTabletNum", TUnit::UNIT);
