@@ -49,7 +49,6 @@ We recommend you customize roles to manage privileges and users. The following e
    SET CATALOG hive_catalog;
    -- Grant the privileges to query all tables and all views in all databases.
    GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE read_catalog_only;
-   GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE read_catalog_only;
    ```
 
    Note: You can query only Hive table views (since v3.1).
