@@ -53,6 +53,6 @@ COPY --from=broker-builder /build/starrocks/fs_brokers/apache_hdfs_broker/output
 
 # Get ddprof for BE profiling
 RUN wget https://github.com/DataDog/ddprof/releases/download/v0.15.3/ddprof-0.15.3-amd64-linux.tar.xz -O ddprof-amd64-linux.tar.xz && \
-    tar xvf ddprof-amd64-linux.tar.xz && mv ddprof/bin/ddprof /release/be_artifacts/datadog/ \
+    tar xvf ddprof-amd64-linux.tar.xz && mkdir -p /release/be_artifacts/datadog/ && mv ddprof/bin/ddprof /release/be_artifacts/datadog/
 
 WORKDIR /release
