@@ -1009,6 +1009,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         // test partition column type is timestamp with time zone
         String oldTimeZone = connectContext.getSessionVariable().getTimeZone();
         connectContext.getSessionVariable().setTimeZone("America/New_York");
+        connectContext.setThreadLocalInfo();
 
         table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("iceberg0", "partitioned_transforms_db",
                 "t0_year_tz");
