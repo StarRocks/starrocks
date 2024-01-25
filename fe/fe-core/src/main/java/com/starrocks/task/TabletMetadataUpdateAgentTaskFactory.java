@@ -20,10 +20,6 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/task/UpdateTabletMetaInfoTask.java
-import com.starrocks.common.Status;
-=======
->>>>>>> f143064c9b ([Refactor] Using factory pattern to create tablet metadata update tasks (#39899)):fe/fe-core/src/main/java/com/starrocks/task/TabletMetadataUpdateAgentTaskFactory.java
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TTabletMetaInfo;
 import com.starrocks.thrift.TTabletMetaType;
