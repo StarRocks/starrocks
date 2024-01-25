@@ -29,7 +29,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.Version;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.system.BackendCoreStat;
 import org.apache.commons.collections4.CollectionUtils;
@@ -113,7 +113,7 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         for (Pair<String, com.starrocks.catalog.Table> entry : tableMetaPairs) {
             String tableName = entry.first + "." + entry.second.getName();
             List<String> createTableStmt = Lists.newArrayList();
-            GlobalStateMgr.getDdlStmt(entry.second, createTableStmt, null, null, false, true /* hide password */);
+            AstToStringBuilder.getDdlStmt(entry.second, createTableStmt, null, null, false, true /* hide password */);
             tableMetaData.addProperty(tableName, createTableStmt.get(0));
         }
         dumpJson.add("table_meta", tableMetaData);

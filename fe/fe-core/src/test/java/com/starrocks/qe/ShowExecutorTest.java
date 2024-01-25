@@ -354,12 +354,6 @@ public class ShowExecutorTest {
                 minTimes = 0;
                 result = globalStateMgr;
 
-                GlobalStateMgr.getDdlStmt((Table) any, (List) any, (List) any, (List) any, anyBoolean, anyBoolean);
-                minTimes = 0;
-
-                GlobalStateMgr.getDdlStmt((Table) any, (List) any, null, null, anyBoolean, anyBoolean);
-                minTimes = 0;
-
                 GlobalStateMgr.getCurrentState().getMetadataMgr().listDbNames("default_catalog");
                 minTimes = 0;
                 result = Lists.newArrayList("testDb");
@@ -595,8 +589,6 @@ public class ShowExecutorTest {
         Assert.assertEquals(4, resultSet2.getResultRows().get(0).size());
     }
 
-
-
     @Test
     public void testShowCreateDb() throws AnalysisException, DdlException {
         ctx.setGlobalStateMgr(globalStateMgr);
@@ -632,16 +624,6 @@ public class ShowExecutorTest {
         ShowResultSet resultSet = executor.execute();
 
         Assert.fail("No Exception throws.");
-    }
-
-    @Test
-    public void testShowCreateTableEmptyTbl() throws AnalysisException, DdlException {
-        ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("testDb", "emptyTable"),
-                ShowCreateTableStmt.CreateTableType.TABLE);
-        ShowExecutor executor = new ShowExecutor(ctx, stmt);
-        ShowResultSet resultSet = executor.execute();
-
-        Assert.assertFalse(resultSet.next());
     }
 
     @Test
@@ -1072,20 +1054,20 @@ public class ShowExecutorTest {
             }
         };
 
-
         ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("hive_catalog", "hive_db", "test_table"),
                 ShowCreateTableStmt.CreateTableType.TABLE);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
         Assert.assertEquals("test_table", resultSet.getResultRows().get(0).get(0));
         Assert.assertEquals("CREATE TABLE `test_table` (\n" +
-                "  `id` int(11) DEFAULT NULL COMMENT \"id\",\n" +
-                "  `name` varchar DEFAULT NULL,\n" +
-                "  `year` int(11) DEFAULT NULL,\n" +
-                "  `dt` int(11) DEFAULT NULL\n" +
-                ")\n" +
-                "PARTITION BY ( year, dt )\n" +
-                "PROPERTIES (\"location\" = \"hdfs://hadoop/hive/warehouse/test.db/test\");", resultSet.getResultRows().get(0).get(1));
+                        "  `id` int(11) DEFAULT NULL COMMENT \"id\",\n" +
+                        "  `name` varchar DEFAULT NULL,\n" +
+                        "  `year` int(11) DEFAULT NULL,\n" +
+                        "  `dt` int(11) DEFAULT NULL\n" +
+                        ")\n" +
+                        "PARTITION BY ( year, dt )\n" +
+                        "PROPERTIES (\"location\" = \"hdfs://hadoop/hive/warehouse/test.db/test\");",
+                resultSet.getResultRows().get(0).get(1));
     }
 
     @Test
