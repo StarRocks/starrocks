@@ -81,6 +81,7 @@ Status TabletSinkSender::_send_chunk_by_node(Chunk* chunk, IndexChannel* channel
 
     DCHECK(_index_id_to_tablet_be_map.find(channel->index_id()) != _index_id_to_tablet_be_map.end());
     auto& tablet_to_be = _index_id_to_tablet_be_map.find(channel->index_id())->second;
+    size_t i = 0;
     for (auto& it : channel->_node_channels) {
         NodeChannel* node = it.second.get();
         if (channel->is_failed_channel(node)) {
@@ -115,6 +116,9 @@ Status TabletSinkSender::_send_chunk_by_node(Chunk* chunk, IndexChannel* channel
         }
 
         auto st = node->add_chunk(chunk, _tablet_ids, _node_select_idx, 0, _node_select_idx.size());
+        if (i++ % 2 == 1) {
+            st = Status::MemoryLimitExceeded("mock memory limit");
+        }
 
         if (!st.ok()) {
             LOG(WARNING) << node->name() << ", tablet add chunk failed, " << node->print_load_info()
