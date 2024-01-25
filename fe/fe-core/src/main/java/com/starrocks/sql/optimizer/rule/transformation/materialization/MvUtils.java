@@ -332,16 +332,17 @@ public class MvUtils {
         return isLogicalSPJG(root);
     }
 
-    public static String getInvalidReason(OptExpression expr) {
+    public static String getInvalidReason(OptExpression expr, boolean inlineView) {
         List<Operator> operators = collectOperators(expr);
+        String viewRewriteHint = inlineView ? "no view rewrite" : "view rewrite";
         if (operators.stream().anyMatch(op -> !isLogicalSPJGOperator(op))) {
             String nonSPJGOperators =
                     operators.stream().filter(x -> !isLogicalSPJGOperator(x))
                             .map(Operator::toString)
                             .collect(Collectors.joining(","));
-            return "MV contains non-SPJG operators: " + nonSPJGOperators;
+            return String.format("MV contains non-SPJG operators(%s): %s", viewRewriteHint, nonSPJGOperators);
         }
-        return "MV is not SPJG structure";
+        return String.format("MV is not SPJG structure(%s)", viewRewriteHint);
     }
 
     private static List<Operator> collectOperators(OptExpression expr) {
@@ -366,24 +367,31 @@ public class MvUtils {
      * NOTE: This method requires `root` must be Aggregate op to check whether MV is satisfiable quickly.
      */
     public static boolean isLogicalSPJG(OptExpression root, int level) {
-        if (root == null) {
+        // Aggregate nested with aggregate is not supported yet.
+        // eg:
+        // create view v1 as
+        // select count(distinct cnt)
+        // from
+        //   (
+        //      select c_city, count(*) as cnt
+        //      from customer
+        //      group by c_city
+        //    ) t;
+        if (root == null || level > 0) {
             return false;
         }
         Operator operator = root.getOp();
         if (!(operator instanceof LogicalAggregationOperator)) {
-            if (level == 0) {
+            return isLogicalSPJ(root);
+        } else {
+            LogicalAggregationOperator agg = (LogicalAggregationOperator) operator;
+            if (agg.getType() != AggType.GLOBAL) {
                 return false;
-            } else {
-                return isLogicalSPJ(root);
             }
-        }
-        LogicalAggregationOperator agg = (LogicalAggregationOperator) operator;
-        if (agg.getType() != AggType.GLOBAL) {
-            return false;
-        }
 
-        OptExpression child = root.inputAt(0);
-        return isLogicalSPJG(child, level + 1);
+            OptExpression child = root.inputAt(0);
+            return isLogicalSPJG(child, level + 1);
+        }
     }
 
     /**
@@ -1668,8 +1676,9 @@ public class MvUtils {
         }
     }
 
-    public static OptExpression replaceLogicalViewScanOperator(
-            OptExpression queryExpression, List<LogicalViewScanOperator> viewScans) {
+    public static OptExpression replaceLogicalViewScanOperator(OptExpression queryExpression,
+                                                               QueryMaterializationContext queryMaterializationContext) {
+        List<LogicalViewScanOperator> viewScans = queryMaterializationContext.getViewScans();
         if (viewScans == null) {
             return queryExpression;
         }
