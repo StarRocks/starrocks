@@ -412,6 +412,8 @@ if [ ! -f $PATCHED_MARK ] && [ $AWS_SDK_CPP_SOURCE = "aws-sdk-cpp-1.10.36" ]; th
         bash ./prefetch_crt_dependency.sh
         touch prefetch_crt_dep_ok
     fi
+    # Fix InstanceProfile deadlock, refer to https://github.com/aws/aws-sdk-cpp/issues/2251
+    patch -p1 < $TP_PATCH_DIR/aws-sdk-cpp-1.10.36-instance-profile-deadlock.patch   
     touch $PATCHED_MARK
     echo "Finished patching $AWS_SDK_CPP_SOURCE"
 else
