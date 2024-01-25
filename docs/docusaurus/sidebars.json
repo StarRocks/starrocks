@@ -167,7 +167,11 @@
               "label": "Usage",
               "link": {"type": "doc", "id": "using_starrocks/usage/intro"},
               "items": [
-                "using_starrocks/usage/create"
+                "using_starrocks/usage/create",
+                "using_starrocks/usage/alter",
+                "using_starrocks/usage/drop",
+                "using_starrocks/usage/show",
+                "using_starrocks/troubleshooting_asynchronous_materialized_views"
               ]
             }
           ]
@@ -905,7 +909,11 @@
               "label": "Usage",
               "link": {"type": "doc", "id": "using_starrocks/usage/intro"},
               "items": [
-                "using_starrocks/usage/create"
+                "using_starrocks/usage/create",
+                "using_starrocks/usage/alter",
+                "using_starrocks/usage/drop",
+                "using_starrocks/usage/show",
+                "using_starrocks/troubleshooting_asynchronous_materialized_views"
               ]
             }
           ]
