@@ -72,6 +72,7 @@ import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
+import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.statistic.StatsConstants;
 import org.apache.logging.log4j.LogManager;
@@ -274,9 +275,8 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                     }
                     distributionDesc = new HashDistributionDesc(dynamicPartitionProperty.getBuckets(),
                             distColumnNames);
-                } else {
-                    RandomDistributionInfo randomDistributionInfo = (RandomDistributionInfo) distributionInfo;
-                    distributionDesc = randomDistributionInfo.toDistributionDesc();
+                } else if (distributionInfo instanceof  RandomDistributionInfo) {
+                    distributionDesc = new RandomDistributionDesc(dynamicPartitionProperty.getBuckets());
                 }
 
                 // add partition according to partition desc and distribution desc
