@@ -24,19 +24,6 @@
 
 namespace starrocks::lake {
 
-<<<<<<< HEAD
-=======
-LakeLocalPersistentIndex::~LakeLocalPersistentIndex() {
-    if (!_enable_persistent_index) {
-        auto st = LocalPkIndexManager::clear_persistent_index(_tablet_id);
-        if (!st.ok()) {
-            LOG(WARNING) << "bad LakeLocalPersistentIndex released tablet: " << _tablet_id
-                         << ", status code: " << st.code();
-        }
-    }
-}
-
->>>>>>> 85f5de1862 (address review comments)
 // TODO refactor load from lake tablet, use same path with load from local tablet.
 Status LakeLocalPersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
                                                        int64_t base_version, const MetaFileBuilder* builder) {
