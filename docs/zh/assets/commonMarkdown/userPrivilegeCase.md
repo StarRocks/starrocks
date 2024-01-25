@@ -47,7 +47,7 @@
    GRANT USAGE ON CATALOG hive_catalog TO ROLE read_catalog_only;
    -- 切换到对应数据目录。
    SET CATALOG hive_catalog;
-   -- 赋予角色所有表的查询权限。注意当前仅支持查询 Hive 表的视图 (自 3.1 版本起)。
+   -- 赋予角色所有表和视图的查询权限。注意当前仅支持查询 Hive 表的视图 (自 3.1 版本起)。
    GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE read_catalog_only;
    ```
 
