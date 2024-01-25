@@ -201,6 +201,12 @@ void HdfsScanner::close(RuntimeState* runtime_state) noexcept {
     _mor_processor->close(_runtime_state);
 }
 
+void HdfsScanner::finalize() {
+    if (_runtime_state != nullptr) {
+        close(_runtime_state);
+    }
+}
+
 Status HdfsScanner::open_random_access_file() {
     CHECK(_file == nullptr) << "File has already been opened";
     ASSIGN_OR_RETURN(std::unique_ptr<RandomAccessFile> raw_file,
