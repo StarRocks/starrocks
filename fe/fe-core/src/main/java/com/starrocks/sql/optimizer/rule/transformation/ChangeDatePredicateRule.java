@@ -79,7 +79,7 @@ public class ChangeDatePredicateRule extends TransformationRule {
                 continue;
             }
             ColumnRefOperator child0 = (ColumnRefOperator) binaryPredicate.getChild(0);
-            if (!child0.getType().isDate() || !child0.getType().isDatetime()) {
+            if (!child0.getType().isDate() && !child0.getType().isDatetime()) {
                 resultPredicates.add(p);
                 continue;
             }
@@ -89,7 +89,7 @@ public class ChangeDatePredicateRule extends TransformationRule {
                 continue;
             }
             ConstantOperator child1 = (ConstantOperator) binaryPredicate.getChild(1);
-            if (!child1.getType().isDate() || !child1.getType().isDatetime()) {
+            if (!child1.getType().isDate() && !child1.getType().isDatetime()) {
                 resultPredicates.add(p);
                 continue;
             }
