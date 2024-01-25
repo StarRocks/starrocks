@@ -155,20 +155,23 @@ Status ReplicationTxnManager::init(const std::vector<starrocks::DataDir*>& data_
 
 Status ReplicationTxnManager::remote_snapshot(const TRemoteSnapshotRequest& request, std::string* src_snapshot_path,
                                               bool* incremental_snapshot) {
+    if (StorageEngine::instance()->bg_worker_stopped()) {
+        return Status::InternalError("Process is going to quit. The remote snapshot will stop");
+    }
+
     ASSIGN_OR_RETURN(auto tablet, prepare_txn(request.transaction_id, request.partition_id, request.tablet_id));
 
     ReplicationTxnMetaPB txn_meta_pb;
     Status status = load_tablet_txn_meta(request.transaction_id, request.tablet_id, txn_meta_pb);
-    if (status.ok()) {
-        if (txn_meta_pb.txn_state() >= ReplicationTxnStatePB::TXN_SNAPSHOTED &&
-            txn_meta_pb.snapshot_version() == request.src_visible_version) {
-            LOG(INFO) << "Tablet " << request.tablet_id << " already made remote snapshot"
-                      << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
-                      << ", src_tablet_id: " << request.src_tablet_id
-                      << ", visible_version: " << request.visible_version
-                      << ", snapshot_version: " << request.src_visible_version;
-            return Status::OK();
-        }
+    RETURN_IF_ERROR(status);
+
+    if (txn_meta_pb.txn_state() >= ReplicationTxnStatePB::TXN_SNAPSHOTED &&
+        txn_meta_pb.snapshot_version() == request.src_visible_version) {
+        LOG(INFO) << "Tablet " << request.tablet_id << " already made remote snapshot"
+                  << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
+                  << ", src_tablet_id: " << request.src_tablet_id << ", visible_version: " << request.visible_version
+                  << ", snapshot_version: " << request.src_visible_version;
+        return Status::OK();
     }
 
     std::vector<Version> missed_versions;
@@ -235,20 +238,23 @@ Status ReplicationTxnManager::remote_snapshot(const TRemoteSnapshotRequest& requ
 }
 
 Status ReplicationTxnManager::replicate_snapshot(const TReplicateSnapshotRequest& request) {
-    ASSIGN_OR_RETURN(auto tablet, get_tablet(request.tablet_id));
+    if (StorageEngine::instance()->bg_worker_stopped()) {
+        return Status::InternalError("Process is going to quit. The replicate snapshot will stop");
+    }
+
+    ASSIGN_OR_RETURN(auto tablet, prepare_txn(request.transaction_id, request.partition_id, request.tablet_id));
 
     ReplicationTxnMetaPB txn_meta_pb;
     Status status = load_tablet_txn_meta(request.transaction_id, request.tablet_id, txn_meta_pb);
-    if (status.ok()) {
-        if (txn_meta_pb.txn_state() >= ReplicationTxnStatePB::TXN_REPLICATED &&
-            txn_meta_pb.snapshot_version() == request.src_visible_version) {
-            LOG(INFO) << "Tablet " << request.tablet_id << " already replicated remote snapshot"
-                      << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
-                      << ", src_tablet_id: " << request.src_tablet_id
-                      << ", visible_version: " << request.visible_version
-                      << ", snapshot_version: " << request.src_visible_version;
-            return Status::OK();
-        }
+    RETURN_IF_ERROR(status);
+
+    if (txn_meta_pb.txn_state() >= ReplicationTxnStatePB::TXN_REPLICATED &&
+        txn_meta_pb.snapshot_version() == request.src_visible_version) {
+        LOG(INFO) << "Tablet " << request.tablet_id << " already replicated remote snapshot"
+                  << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
+                  << ", src_tablet_id: " << request.src_tablet_id << ", visible_version: " << request.visible_version
+                  << ", snapshot_version: " << request.src_visible_version;
+        return Status::OK();
     }
 
     std::string tablet_snapshot_dir_path = get_tablet_snapshot_dir_path(tablet->data_dir(), request.transaction_id,
@@ -288,7 +294,7 @@ Status ReplicationTxnManager::replicate_snapshot(const TReplicateSnapshotRequest
 }
 
 void ReplicationTxnManager::get_txn_related_tablets(const TTransactionId transaction_id, TPartitionId partition_id,
-                                                    std::vector<TTabletId>* tablet_ids) {
+                                                    std::vector<TTabletId>* tablet_ids) const {
     std::shared_lock guard(_mutex);
     auto transaction_iter = _transaction_map.find(transaction_id);
     if (transaction_iter == _transaction_map.end()) {
@@ -308,7 +314,8 @@ void ReplicationTxnManager::get_txn_related_tablets(const TTransactionId transac
     }
 }
 
-void ReplicationTxnManager::get_tablet_related_txns(TTabletId tablet_id, std::set<TTransactionId>* transaction_ids) {
+void ReplicationTxnManager::get_tablet_related_txns(TTabletId tablet_id,
+                                                    std::set<TTransactionId>* transaction_ids) const {
     std::shared_lock guard(_mutex);
     auto tablet_iter = _tablet_map.find(tablet_id);
     if (tablet_iter == _tablet_map.end()) {
@@ -320,8 +327,17 @@ void ReplicationTxnManager::get_tablet_related_txns(TTabletId tablet_id, std::se
     }
 }
 
+bool ReplicationTxnManager::has_txn(TTransactionId transaction_id) const {
+    std::shared_lock guard(_mutex);
+    return _transaction_map.find(transaction_id) != _transaction_map.end();
+}
+
 Status ReplicationTxnManager::publish_txn(TTransactionId transaction_id, TPartitionId partition_id,
                                           const TabletSharedPtr& tablet, int64_t version) {
+    if (StorageEngine::instance()->bg_worker_stopped()) {
+        return Status::InternalError("Process is going to quit. The publish snapshot will stop");
+    }
+
     ReplicationTxnMetaPB txn_meta_pb;
     RETURN_IF_ERROR(load_tablet_txn_meta(transaction_id, tablet->tablet_id(), txn_meta_pb));
     if (txn_meta_pb.txn_state() == ReplicationTxnStatePB::TXN_PUBLISHED) {
@@ -488,6 +504,14 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
 
     auto file_converters = [&](const std::string& file_name,
                                uint64_t file_size) -> StatusOr<std::unique_ptr<FileStreamConverter>> {
+        if (!has_txn(request.transaction_id)) {
+            LOG(WARNING) << "Transaction is aborted, txn_id: " << request.transaction_id
+                         << ", tablet_id: " << request.tablet_id << ", src_tablet_id: " << request.src_tablet_id
+                         << ", visible_version: " << request.visible_version
+                         << ", snapshot_version: " << request.src_visible_version;
+            return Status::InternalError("Transaction is aborted");
+        }
+
         WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
         ASSIGN_OR_RETURN(auto output_file, fs::new_writable_file(opts, tablet_snapshot_dir_path + file_name));
 
