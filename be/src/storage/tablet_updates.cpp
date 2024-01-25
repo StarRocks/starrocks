@@ -4035,11 +4035,7 @@ void TabletUpdates::get_basic_info_extra(TabletBasicInfo& info) {
         // Ignore error status here, because we don't to break up get basic info because of get pk index disk usage failure.
         // So just print error log and keep going.
         LOG(ERROR) << "get persistent index disk usage fail, tablet_id: " << _tablet.tablet_id()
-<<<<<<< HEAD
-                   << ", error: " << st.get_error_msg();
-=======
                    << ", error: " << size_st.status();
->>>>>>> 05871159c2 ([BugFix] fix asan stack-use-after-scope (#40026))
     } else {
         info.index_disk_usage = (*size_st).pindex_size;
     }
