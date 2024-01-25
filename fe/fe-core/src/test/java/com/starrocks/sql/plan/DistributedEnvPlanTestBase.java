@@ -26,6 +26,9 @@ public class DistributedEnvPlanTestBase extends PlanTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
+        UtFrameUtils.addMockBackend(10002);
+        UtFrameUtils.addMockBackend(10003);
+
         starRocksAssert.withTable("CREATE TABLE `lineorder_new_l` (\n" +
                 "  `LO_ORDERKEY` int(11) NOT NULL COMMENT \"\",\n" +
                 "  `LO_ORDERDATE` date NOT NULL COMMENT \"\",\n" +
@@ -140,9 +143,6 @@ public class DistributedEnvPlanTestBase extends PlanTestBase {
 
         OlapTable datesN = (OlapTable) globalStateMgr.getDb("test").getTable("dates_n");
         setTableStatistics(datesN, 2556);
-
-        UtFrameUtils.addMockBackend(10002);
-        UtFrameUtils.addMockBackend(10003);
     }
 
     @AfterClass
