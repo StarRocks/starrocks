@@ -54,8 +54,6 @@ private:
     friend class HdfsOrcScanner;
     std::unordered_map<SlotId, FilterPtr> _dict_filter_eval_cache;
     bool _can_do_filter_on_orc_cvb{true}; // cvb: column vector batch.
-    uint64_t scan_range_begin = 0;
-    uint64_t scan_range_end = 0;
     OrcChunkReader* _reader;
     int64_t _writer_tzoffset_in_seconds;
 };
@@ -81,18 +79,17 @@ OrcRowReaderFilter::OrcRowReaderFilter(const HdfsScannerContext& scanner_ctx, Or
             VLOG_FILE << "OrcRowReaderFilter: min_max_ctx = " << ctx->root()->debug_string();
         }
     }
-    if (scanner_ctx.scan_range != nullptr) {
-        const auto* r = scanner_ctx.scan_range;
-        scan_range_begin = r->offset;
-        scan_range_end = r->offset + r->length;
-    }
 }
 
 bool OrcRowReaderFilter::filterOnOpeningStripe(uint64_t stripeIndex,
                                                const orc::proto::StripeInformation* stripeInformation) {
     _current_stripe_index = stripeIndex;
     uint64_t offset = stripeInformation->offset();
-    if (offset >= scan_range_begin && offset < scan_range_end) {
+
+    const auto* scan_range = _scanner_ctx->scan_range;
+    size_t scan_start = scan_range->offset;
+    size_t scan_end = scan_range->length + scan_start;
+    if (offset >= scan_start && offset < scan_end) {
         return false;
     }
     return true;
