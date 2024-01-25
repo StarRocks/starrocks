@@ -245,7 +245,6 @@ To be updated.
   - Static parameter `tc_max_total_thread_cache_byte`
 - Default value modifications:
   - The default value of `disable_column_pool` is changed from `false` to `true`.
-  - The default value of `txn_commit_rpc_timeout_ms` is changed from `20000` to `60000`.
   - The default value of `thrift_port` is changed from `9060` to `0`.
   - The default value of `enable_load_colocate_mv` is changed from `false` to `true`.
   - The default value of `enable_pindex_minor_compaction` is changed from `false` to `true`.
