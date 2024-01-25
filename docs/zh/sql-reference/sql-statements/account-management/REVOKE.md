@@ -8,10 +8,12 @@ displayed_sidebar: "Chinese"
 
 从用户或角色中撤销指定的权限或角色。有关 StarRocks 支持的权限项，参见 [权限项](../../../administration/privilege_item.md)。
 
-> **注意**
->
-> - 普通用户可以将自身拥有的授权中带有 WITH GRANT OPTION 关键字的权限从其他用户或角色处收回。关于 WITH GRANT OPTION，参见 [GRANT](GRANT.md)。
-> - 只有拥有 `user_admin` 角色的用户才可以收回其他用户的权限。
+:::tip
+
+- 普通用户可以将自身拥有的授权中带有 WITH GRANT OPTION 关键字的权限从其他用户或角色处收回。关于 WITH GRANT OPTION，参见 [GRANT](GRANT.md)。
+- 只有拥有 `user_admin` 角色的用户才有权限收回其他用户的权限。
+
+:::
 
 ## 语法
 

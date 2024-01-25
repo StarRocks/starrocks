@@ -11,7 +11,7 @@ displayed_sidebar: "Chinese"
 
 > **注意**
 >
-> 当前用户可以查询自己的 property。但只有拥有 `user_admin` 角色的用户才可以查看其他用户的 property。
+> 当前用户可以查询自己的 property。但只有拥有 `user_admin` 角色的用户才有权限查看其他用户的 property。
 
 ## 语法
 

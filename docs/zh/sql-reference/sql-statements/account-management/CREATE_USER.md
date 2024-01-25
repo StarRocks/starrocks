@@ -4,13 +4,13 @@ displayed_sidebar: "Chinese"
 
 # CREATE USER
 
+import UserManagementPriv from '../assets/commonMarkdown/userManagementPriv.md'
+
 ## 功能
 
 创建 StarRocks 用户。
 
-> **注意**
->
-> 只有拥有 `user_admin` 角色的用户才可以执行该操作。
+<UserManagementPriv />
 
 ## 语法
 

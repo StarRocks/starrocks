@@ -10,11 +10,13 @@ SET PASSWORD 命令可以用于修改一个用户的登录密码。
 
 您也可以使用 [ALTER USER](ALTER_USER.md) 来修改用户密码。
 
-> **注意**
->
-> - 任何用户都可以重置自己的密码。
-> - 只有 `user_admin` 角色才可以修改其他用户的密码。
-> - root 用户的密码仅 root 用户自身可以重置。具体信息，参见 [管理用户权限 - 重置丢失的 root 密码](../../../administration/User_privilege.md#修改用户)。
+:::tip
+
+- 任何用户都可以重置自己的密码。
+- 只有 `user_admin` 角色才可以修改其他用户的密码。
+- root 用户的密码仅 root 用户自身可以重置。具体信息，参见 [管理用户权限 - 重置丢失的 root 密码](../../../administration/User_privilege.md#修改用户)。
+
+:::
 
 ## 语法
 
