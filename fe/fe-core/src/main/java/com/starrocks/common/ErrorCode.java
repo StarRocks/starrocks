@@ -319,7 +319,13 @@ public enum ErrorCode {
     /**
      * 5300 - 5399: Lock and Transaction
      */
-    ERR_LOCK_ERROR(5300, new byte[] {'5', '5', 'P', '0', '3'}, "Attempt to acquire lock fail : %s");
+    ERR_LOCK_ERROR(5300, new byte[] {'5', '5', 'P', '0', '3'}, "Attempt to acquire lock fail : %s"),
+
+    /**
+     * 5400 - 5499: DDL operation failure
+     */
+    ERR_LOC_AWARE_UNSUPPORTED_FOR_COLOCATE_TBL(5400, new byte[] {'4', '2', '0', '0', '0'},
+            "table '%s' has location property and cannot be colocated");
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {
         this.code = code;

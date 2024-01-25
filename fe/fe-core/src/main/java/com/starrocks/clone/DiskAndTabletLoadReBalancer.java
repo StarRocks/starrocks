@@ -1323,6 +1323,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 //   1. src backend matched, and dest backend has the same location with src backend
                 //   2. src backend matched, and dest backend has different loc with src and other replicas' location
                 //   3. src backend unmatched, dest backend matched and has different loc with other replicas' location
+                // The latter 2 cases can be merged into one check condition: `!replicasLocKVs.contains(destBackendLocKV)`.
                 !(destBackendLocMatched &&
                         (Objects.equals(srcBackendLocKV, destBackendLocKV) ||
                                 !replicasLocKVs.contains(destBackendLocKV)));

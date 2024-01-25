@@ -1475,7 +1475,8 @@ public class SchemaChangeHandler extends AlterHandler {
                 // so just return after finished handling.
                 if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
                     if (olapTable.getLocation() != null) {
-                        throw new DdlException("table has location property and cannot be colocated");
+                        ErrorReport.reportDdlException(
+                                ErrorCode.ERR_LOC_AWARE_UNSUPPORTED_FOR_COLOCATE_TBL, olapTable.getName());
                     }
                     String colocateGroup = properties.get(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH);
                     GlobalStateMgr.getCurrentState().getColocateTableIndex()
