@@ -330,6 +330,8 @@ public:
 
     Status primary_index_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb);
 
+    Status generate_pk_dump();
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;

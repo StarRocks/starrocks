@@ -1146,4 +1146,8 @@ CONF_mBool(lake_enable_vertical_compaction_fill_data_cache, "false");
 // it may be evicted if the disk is full
 CONF_mInt64(lake_local_pk_index_unused_threshold_seconds, "86400"); // 1 day
 
+// Allowable intervals for continuous generation of pk dumps
+// Disable when pk_dump_interval_seconds <= 0
+CONF_mInt64(pk_dump_interval_seconds, "3600"); // 1 hour
+
 } // namespace starrocks::config
