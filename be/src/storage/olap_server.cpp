@@ -98,15 +98,9 @@ Status StorageEngine::start_bg_threads() {
     _disk_stat_monitor_thread = std::thread([this] { _disk_stat_monitor_thread_callback(nullptr); });
     Thread::set_thread_name(_disk_stat_monitor_thread, "disk_monitor");
 
-<<<<<<< HEAD
-=======
-    _pk_index_major_compaction_thread = std::thread([this] { _pk_index_major_compaction_thread_callback(nullptr); });
-    Thread::set_thread_name(_pk_index_major_compaction_thread, "pk_index_compaction_scheduler");
-
     _pk_dump_thread = std::thread([this] { _pk_dump_thread_callback(nullptr); });
     Thread::set_thread_name(_pk_dump_thread, "pk_dump");
 
->>>>>>> 5ca3bec2b1 ([Enhancement] auto generate pk dump when tablet in error state (#39887))
 #ifdef USE_STAROS
     _local_pk_index_shared_data_gc_evict_thread =
             std::thread([this] { _local_pk_index_shared_data_gc_evict_thread_callback(nullptr); });
