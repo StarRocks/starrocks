@@ -748,16 +748,16 @@ TEST_F(TabletUpdatesTest, remove_expired_versions_with_persistent_index) {
 
 void TabletUpdatesTest::test_pk_dump(size_t rowset_cnt) {
     PrimaryKeyDumpPB dump_pb;
+    std::string dump_filepath;
     {
         // dump primary key tablet
         PrimaryKeyDump dump(_tablet.get());
+        dump_filepath = dump.dump_filepath();
         ASSERT_TRUE(dump.dump_filepath().length() > 0);
         ASSERT_FALSE(dump.dump_file_exist().ok());
         ASSERT_TRUE(dump.dump().ok());
         ASSERT_TRUE(dump.dump_file_exist().ok());
     }
-    const std::string dump_filepath =
-            _tablet->schema_hash_path() + "/" + std::to_string(_tablet->tablet_id()) + ".pkdump";
     {
         // read primary index dump
         starrocks::PrimaryKeyDumpPB dump_pb;
