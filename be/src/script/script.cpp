@@ -301,7 +301,19 @@ public:
         return StorageEngine::instance()->get_manual_compaction_status();
     }
 
+<<<<<<< HEAD
     static std::string print_primary_key_dump(int64_t tablet_id) {
+=======
+    static std::string ls_tablet_dir(int64_t tablet_id) {
+        auto tablet = get_tablet(tablet_id);
+        if (!tablet) {
+            return "tablet not found";
+        }
+        return exec_whitelist(strings::Substitute("ls -al $0", tablet->schema_hash_path()));
+    }
+
+    static std::string pk_dump(int64_t tablet_id) {
+>>>>>>> 5ca3bec2b1 ([Enhancement] auto generate pk dump when tablet in error state (#39887))
         auto tablet = get_tablet(tablet_id);
         if (!tablet) {
             return "tablet not found";
@@ -470,7 +482,12 @@ public:
             REG_STATIC_METHOD(StorageEngineRef, submit_manual_compaction_task_for_partition);
             REG_STATIC_METHOD(StorageEngineRef, submit_manual_compaction_task_for_tablet);
             REG_STATIC_METHOD(StorageEngineRef, get_manual_compaction_status);
+<<<<<<< HEAD
             REG_STATIC_METHOD(StorageEngineRef, print_primary_key_dump);
+=======
+            REG_STATIC_METHOD(StorageEngineRef, pk_dump);
+            REG_STATIC_METHOD(StorageEngineRef, ls_tablet_dir);
+>>>>>>> 5ca3bec2b1 ([Enhancement] auto generate pk dump when tablet in error state (#39887))
         }
     }
 };
