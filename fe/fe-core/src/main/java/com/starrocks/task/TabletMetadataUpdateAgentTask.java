@@ -35,8 +35,8 @@
 package com.starrocks.task;
 
 
+import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Status;
-import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.server.RunMode;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTabletMetaInfo;
