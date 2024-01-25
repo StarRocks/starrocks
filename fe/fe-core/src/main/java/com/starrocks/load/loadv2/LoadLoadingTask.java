@@ -278,7 +278,8 @@ public class LoadLoadingTask extends LoadTask {
         }
 
         if (database.getTable(table.getId()) == null) {
-            throw new LoadException(String.format("table: %s-%d has been dropped", table.getName(), table.getId()));
+            throw new LoadException(String.format("table: %s-%d has been dropped from db: %s-%d",
+                    table.getName(), table.getId(), db.getFullName(), db.getId()));
         }
     }
 
