@@ -145,9 +145,9 @@ SELECT /*+ SET_VAR
 
 用于指定在查询执行过程中，各个节点传输的单个数据包的行数。默认一个数据包的行数为 1024 行，即源端节点每产生 1024 行数据后，打包发给目的节点。较大的行数，会在扫描大数据量场景下提升查询的吞吐率，但可能会在小查询场景下增加查询延迟。同时，也会增加查询的内存开销。建议设置范围 1024 至 4096。
 
-### big_query_profile_second_threshold （3.1 及以后）
+### big_query_profile_threshold （3.1 及以后）
 
-当会话变量 `enable_profile` 设置为 `false` 且查询时间超过 `big_query_profile_second_threshold` 设定的阈值时，则会生成 Profile。
+当会话变量 `enable_profile` 设置为 `false` 且查询时间超过 `big_query_profile_threshold` 设定的阈值时，则会生成 Profile。
 
 ### cbo_decimal_cast_string_strict （2.5.14 及以后）
 
