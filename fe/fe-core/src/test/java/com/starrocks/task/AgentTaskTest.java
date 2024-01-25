@@ -94,11 +94,11 @@ public class AgentTaskTest {
     private AgentTask createReplicaTask;
     private AgentTask dropTask;
     private AgentTask cloneTask;
-    private UpdateTabletMetaInfoTask modifyEnablePersistentIndexTask1;
-    private UpdateTabletMetaInfoTask modifyEnablePersistentIndexTask2;
-    private UpdateTabletMetaInfoTask modifyInMemoryTask;
-    private UpdateTabletMetaInfoTask modifyPrimaryIndexCacheExpireSecTask1;
-    private UpdateTabletMetaInfoTask modifyPrimaryIndexCacheExpireSecTask2;
+    private TabletMetadataUpdateAgentTask modifyEnablePersistentIndexTask1;
+    private TabletMetadataUpdateAgentTask modifyEnablePersistentIndexTask2;
+    private TabletMetadataUpdateAgentTask modifyInMemoryTask;
+    private TabletMetadataUpdateAgentTask modifyPrimaryIndexCacheExpireSecTask1;
+    private TabletMetadataUpdateAgentTask modifyPrimaryIndexCacheExpireSecTask2;
 
     @Before
     public void setUp() throws AnalysisException {
@@ -138,24 +138,26 @@ public class AgentTaskTest {
         List<Pair<Long, Boolean>> tabletToMeta = Lists.newArrayList();
         tabletToMeta.add(new Pair<>(tabletId1, true));
         tabletToMeta.add(new Pair<>(tabletId2, false));
-        modifyEnablePersistentIndexTask1 = UpdateTabletMetaInfoTask.updateEnablePersistentIndex(backendId1, tabletToMeta);
+        modifyEnablePersistentIndexTask1 = TabletMetadataUpdateAgentTaskFactory.createEnablePersistentIndexUpdateTask(
+                backendId1, tabletToMeta);
 
         // for schema change
         MarkedCountDownLatch<Long, Set<Long>> countDownLatch = new MarkedCountDownLatch<>(1);
         Set<Long> tabletSet = new HashSet();
         tabletSet.add(tabletId1);
         countDownLatch.addMark(backendId1, tabletSet);
-        modifyEnablePersistentIndexTask2 = UpdateTabletMetaInfoTask.updateEnablePersistentIndex(backendId1, tabletSet, true);
+        modifyEnablePersistentIndexTask2 = TabletMetadataUpdateAgentTaskFactory.createEnablePersistentIndexUpdateTask(
+                backendId1, tabletSet, true);
         modifyEnablePersistentIndexTask2.setLatch(countDownLatch);
-        modifyInMemoryTask = UpdateTabletMetaInfoTask.updateIsInMemory(backendId1, tabletToMeta);
+        modifyInMemoryTask = TabletMetadataUpdateAgentTaskFactory.createIsInMemoryUpdateTask(backendId1, tabletToMeta);
 
         List<Pair<Long, Integer>> tabletToMeta2 = Lists.newArrayList();
         tabletToMeta2.add(new Pair<>(tabletId1, 7200));
-        modifyPrimaryIndexCacheExpireSecTask1 = UpdateTabletMetaInfoTask.updatePrimaryIndexCacheExpireTime(backendId1,
-                tabletToMeta2);
+        modifyPrimaryIndexCacheExpireSecTask1 = TabletMetadataUpdateAgentTaskFactory
+                .createPrimaryIndexCacheExpireTimeUpdateTask(backendId1, tabletToMeta2);
         MarkedCountDownLatch<Long, Set<Long>> countDownLatch2 = new MarkedCountDownLatch<>(1);
-        modifyPrimaryIndexCacheExpireSecTask2 = UpdateTabletMetaInfoTask.updatePrimaryIndexCacheExpireTime(backendId1,
-                tabletSet, 1);
+        modifyPrimaryIndexCacheExpireSecTask2 = TabletMetadataUpdateAgentTaskFactory
+                .createPrimaryIndexCacheExpireTimeUpdateTask(backendId1, tabletSet, 1);
         modifyPrimaryIndexCacheExpireSecTask2.setLatch(countDownLatch2);
     }
 
