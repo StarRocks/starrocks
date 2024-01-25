@@ -168,7 +168,7 @@ public class CreateLakeTableTest {
     public void testCreateLakeTable(@Mocked StarOSAgent agent) throws UserException {
         new Expectations(agent) {
             {
-                agent.allocateFilePath(anyString, anyLong);
+                agent.allocateFilePath(anyString, anyLong, anyLong);
                 result = getPathInfo();
                 agent.createShardGroup(anyLong, anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentState().getNextId();
@@ -209,6 +209,7 @@ public class CreateLakeTableTest {
                         "properties('replication_num' = '1');"));
         checkLakeTable("lake_test", "multi_partition_unique_key");
 
+        Database db = GlobalStateMgr.getCurrentState().getDb("lake_test");
         LakeTable table = getLakeTable("lake_test", "multi_partition_unique_key");
         Assert.assertEquals(getPathInfo(), table.getDefaultFilePathInfo());
         Assert.assertEquals(getPathInfo().getFullPath() + "/100",
@@ -219,7 +220,7 @@ public class CreateLakeTableTest {
     public void testCreateLakeTableWithStorageCache(@Mocked StarOSAgent agent) throws UserException {
         new Expectations() {
             {
-                agent.allocateFilePath(anyString, anyLong);
+                agent.allocateFilePath(anyString, anyLong, anyLong);
                 result = getPathInfo();
                 agent.createShardGroup(anyLong, anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentState().getNextId();
@@ -315,7 +316,7 @@ public class CreateLakeTableTest {
     public void testCreateLakeTableEnablePersistentIndex(@Mocked StarOSAgent agent) throws Exception {
         new Expectations() {
             {
-                agent.allocateFilePath(anyString, anyLong);
+                agent.allocateFilePath(anyString, anyLong, anyLong);
                 result = getPathInfo();
                 agent.createShardGroup(anyLong, anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentState().getNextId();
@@ -391,7 +392,7 @@ public class CreateLakeTableTest {
     public void testExplainRowCount(@Mocked StarOSAgent agent) throws Exception {
         new Expectations(agent) {
             {
-                agent.allocateFilePath(anyString, anyLong);
+                agent.allocateFilePath(anyString, anyLong, anyLong);
                 result = getPathInfo();
                 agent.createShardGroup(anyLong, anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentState().getNextId();
@@ -436,7 +437,7 @@ public class CreateLakeTableTest {
     public void testCreateLakeTableListPartition(@Mocked StarOSAgent agent) throws UserException {
         new Expectations() {
             {
-                agent.allocateFilePath(anyString, anyLong);
+                agent.allocateFilePath(anyString, anyLong, anyLong);
                 result = getPathInfo();
                 agent.createShardGroup(anyLong, anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentState().getNextId();
