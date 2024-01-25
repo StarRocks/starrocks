@@ -591,7 +591,7 @@ Status parquet::Int32ToDateTimeConverter::convert(const ColumnPtr& src, Column* 
         if (!src_null_data[i]) {
             int64_t day = src_data[i];
             TimestampValue ep;
-            ep.from_unix_second(day * 24 * 60 * 60, 0);
+            ep.from_unix_second(day * 24 * 60 * 60);
             dst_data[i].set_timestamp(ep.timestamp());
         }
     }
