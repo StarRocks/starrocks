@@ -140,10 +140,9 @@ public class FilterSelectivityEvaluator {
             if (left.isColumnRef() && right.isConstantRef()) {
                 selectRatio =
                         estimateColToConstSelectRatio(column, columnStatistic, predicate, (ConstantOperator) right);
-            } else if (left.isColumnRef()) {
+            } else if (left.isColumnRef() && right.isConstant()) {
                 selectRatio = estimateColumnToExprSelectRatio(columnStatistic, predicate);
             } else {
-                // TODO need to process left child is an expr contains only one col?
                 selectRatio = NON_SELECTIVITY;
             }
             return new ColumnFilter(selectRatio, column, predicate);
@@ -193,9 +192,15 @@ public class FilterSelectivityEvaluator {
                 case AND:
                     ColumnFilter leftChild = predicate.getChild(0).accept(this, null);
                     ColumnFilter rightChild = predicate.getChild(1).accept(this, null);
-                    // choose the child with smaller selectRation
-                    return leftChild.compareTo(rightChild) < 0 ? new ColumnFilter(leftChild.selectRatio, predicate) :
-                            new ColumnFilter(rightChild.selectRatio, predicate);
+                    double selectRatio;
+                    if (leftChild.getSelectRatio() < 1 && rightChild.getSelectRatio() < 1) {
+                        selectRatio = leftChild.selectRatio * rightChild.selectRatio;
+                    } else if (leftChild.compareTo(rightChild) < 0) {
+                        selectRatio = leftChild.selectRatio;
+                    } else {
+                        selectRatio = rightChild.selectRatio;
+                    }
+                    return new ColumnFilter(selectRatio, predicate);
 
                 default:
                     return new ColumnFilter(NON_SELECTIVITY, predicate);
