@@ -46,9 +46,9 @@ For example, the download URL for kube-starrocks chart v1.8.6 is:
 
 **Improvements**
 
-- **[Helm Chart]** The operator will not create PersistentVolumeClaim (PVC) for log storage when you set `logStorageSize` to `0`.  [#398](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/398)
-- **[Operator]** The operator can detect the values of`mountPath` and `name` in `storageVolumes` are duplicated. An error is returned when duplicate values exist. [#388](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/388)
-- **[Operator]** The number of FE nodes can not be scaled down to 1. [#394](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/394)
+- **[Helm Chart]** The operator will not create PersistentVolumeClaim (PVC) for log storage when `logStorageSize` is set to `0`.  [#398](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/398)
+- **[Operator]** The operator can detect whether the values of `mountPath` and `name` in `storageVolumes` are duplicated. An error is returned when duplicate values exist. [#388](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/388)
+- **[Operator]** The number of FE nodes cannot be scaled down to 1. [#394](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/394)
 - **[Operator]** The values of the `feEnvVars`, `beEnvVars` and `cnEnvVars` fields in multiple values YAML files can be merged. [#396](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/396)
 - **[Operator]** Add `spec.containers.securityContext.capabilities` in the StarRocksCluster CRD to customize the Linux capabilities of containers. [#404](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/404)
 
@@ -58,9 +58,7 @@ Fixed the following issues:
 
 - **[Operator]** The `annotations` field in `service` can be updated. [#402](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/402) [#399](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/399)
 - **[Operator]** The modification of statefulset and deployment is patched instead of updated. It solves the problem that upgrading CN will cause all CN pods to be terminated and restarted when CN and HPA are enabled. [#397](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/397)
-- **[Operator]** The modification of service object is patched instead of updated. It avoids the operator to overwrite the modification, for example, when a Kubernetes Cloud provider is used and the service object is modified by that Kubernetes Cloud provider. [#387](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/387)
-- **[Operator]** Considered Cn Replicas when calculating component hash [#392](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/392)
-- **[Helm Chart]** The typo in `storageSpec` in [starrockscluster.yaml](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/helm-charts/charts/kube-starrocks/charts/starrocks/templates/starrockscluster.yaml) is correctified. [#385](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/385)
+- **[Operator]** The modification of service object is patched instead of updated. It prevents the operator from overwriting the modification, for example, when a Kubernetes Cloud provider is used and the service object is modified by that Kubernetes Cloud provider. [#387](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/387)
 
 #### 1.9.0
 
@@ -70,7 +68,7 @@ Fixed the following issues:
 
 **Enhancements**
 
-- Add the `status.``reason` field in StarRocksCluster CRD. When the apply operation of a subcontroller fails during cluster deployment, you can execute `kubectl get starrockscluster <name_of_the_starrocks_cluster_object> -oyaml`,  and view error logs shown in `status.reason` field in the returned result. [#359](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/359)
+- Add the `status.reason` field in StarRocksCluster CRD. When the apply operation of a subcontroller fails during cluster deployment, you can execute `kubectl get starrockscluster <name_of_the_starrocks_cluster_object> -oyaml`, and view error logs shown in `status.reason` field in the returned result. [#359](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/359)
 - An empty directory can be mounted in the `storageVolumes` field. [#324](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/324)
 
 **Bug Fixes**
@@ -188,7 +186,7 @@ Fixed the following issue:
 
   - To upgrade the Helm Chart, you need to perform the following:
 
-    1. Use the **values migration tool** to adjust the format of the previous **values.yaml** file to the new format. The values migration tool for different operating systems can be downloaded from the [Assets](https://github.com/StarRocks/starrocks-kubernetes-operator/releases/tag/v1.8.0) section.  You can get help information of this tool by running the `migrate-chart-value --help` command. [#206](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/206)
+    1. Use the **values migration tool** to adjust the format of the previous **values.yaml** file to the new format. The values migration tool for different operating systems can be downloaded from the [Assets](https://github.com/StarRocks/starrocks-kubernetes-operator/releases/tag/v1.8.0) section. You can get help information of this tool by running the `migrate-chart-value --help` command. [#206](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/206)
 
        ```Bash
        migrate-chart-value --input values.yaml --target-version v1.8.0 --output ./values-v1.8.0.yaml

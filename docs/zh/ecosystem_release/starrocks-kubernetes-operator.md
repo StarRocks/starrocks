@@ -48,9 +48,9 @@ StarRocks 提供的 Operator 用于在 Kubernetes 环境中部署 StarRocks 集�
 **功能改进**
 
 - **[Helm Chart]** 当 `logStorageSize` 设置为 `0` 时，operator 不会为 log storage 创建 PersistentVolumeClaim（PVC）。[#398](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/398)
-- **[Operator]** operator 会检查 `storageVolumes` 中 `mountPath` 和 `name` 的值是否重复时。如果存在重复的值，则会返回报错提示。[#388](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/388)
+- **[Operator]** operator 会检查 `storageVolumes` 中 `mountPath` 和 `name` 的值是否重复。如果存在重复的值，则会返回报错提示。[#388](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/388)
 - **[Operator]** FE 节点的数量不能缩减到 1。[#394](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/394)
-- **[Operator]**  支持 merge 多个 values yaml 文件中定义`feEnvVars`、`beEnvVars` 和 `cnEnvVars` 的值。[#396](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/396)
+- **[Operator]** 支持 merge 多个 values yaml 文件中定义`feEnvVars`、`beEnvVars` 和 `cnEnvVars` 的值。[#396](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/396)
 - **[Operator]** 在 StarRocksCluster CRD 中添加了 `spec.containers.securityContext.capabilities`，以自定义容器的 Linux 权限。[#404](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/404)
 
 **缺陷修复**
@@ -59,8 +59,7 @@ StarRocks 提供的 Operator 用于在 Kubernetes 环境中部署 StarRocks 集�
 
 - **[Operator]** 支持更新 `service` 中的 `annotations` 字段。[#402](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/402) [#399](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/399)
 - **[Operator]** 使用 patch 而不是 update 的方式来修改 statefulset 和 deployment。这可以解决启用 CN + HPA 时升级 CN 会导致所有 CN pods 被终止并重新启动的问题。[#397](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/397)
-- **[Operator]**  使用 patch 而不是 update 的方式来修改 service object。这样可以避免 operator 覆盖写入对  service object 的修改，例如，在使用 Kubernetes 云提供商时， 该 Kubernetes 云提供商修改了 service object。[#387](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/387)
-- **[Helm Chart]** 已更正  [starrockscluster.yaml](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/helm-charts/charts/kube-starrocks/charts/starrocks/templates/starrockscluster.yaml) 中 storageSpec 中的拼写错误。 #385
+- **[Operator]** 使用 patch 而不是 update 的方式来修改 service object。这样可以避免 operator 覆盖写入对  service object 的修改，例如，在使用 Kubernetes 云提供商时，该 Kubernetes 云提供商修改了 service object。[#387](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/387)
 
 #### 1.9.0
 
@@ -70,7 +69,7 @@ StarRocks 提供的 Operator 用于在 Kubernetes 环境中部署 StarRocks 集�
 
 **功能改进**
 
-- 在 StarRocksCluster CRD 中的  中添加了 `status.reason` 字段。如果在部署集群过程中 subcontroller 的 apply 操作失败时，您可以执行 `kubectl get starrockscluster <name_of_the_starrocks_cluster_object> -oyaml`, 在返回结果中查看 `status.reason` 字段显示的错误日志。[#359](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/359)
+- 在 StarRocksCluster CRD 中添加了 `status.reason` 字段。如果在部署集群过程中 subcontroller 的 apply 操作失败时，您可以执行 `kubectl get starrockscluster <name_of_the_starrocks_cluster_object> -oyaml`, 在返回结果中查看 `status.reason` 字段显示的错误日志。[#359](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/359)
 - 在 storageVolumes 字段中可以挂载一个空目录。 [#324](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/324)
 
 **缺陷修复**
