@@ -3491,6 +3491,14 @@ public class LocalMetastore implements ConnectorMetadata {
                 colocateTableIndex.addTableToGroup(db, materializedView, colocateGroup,
                         materializedView.isCloudNativeMaterializedView());
             }
+
+            // enable_query_rewrite
+            if (properties.containsKey(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE)) {
+                String str = properties.get(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE);
+                TableProperty.MVQueryRewriteSwitch value = TableProperty.analyzeQueryRewriteSwitch(str);
+                materializedView.getTableProperty().setMvQueryRewriteSwitch(value);
+            }
+
             // lake storage info
             if (materializedView.isCloudNativeMaterializedView()) {
                 String volume = "";
