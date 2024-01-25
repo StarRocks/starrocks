@@ -178,7 +178,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
                 String partitionColumnName = partitionColumnNames.get(i);
                 String partitionValue = partitionValues.get(i);
                 if (partitionValue.equals(nullValue)) {
-                    partitionPredicate.add(StatisticUtils.quoting(partitionColumnName) + " IS NULL");
+                    partitionPredicate.add(StatisticUtils.quoting() + " IS NULL");
                 } else {
                     partitionPredicate.add(StatisticUtils.quoting(partitionColumnName) + " = '" + partitionValue + "'");
                 }

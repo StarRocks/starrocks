@@ -360,6 +360,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_ICEBERG_COLUMN_STATISTICS = "enable_iceberg_column_statistics";
 
+    public static final String PLAN_MODE = "plan_mode";
+
     public static final String ENABLE_HIVE_COLUMN_STATS = "enable_hive_column_stats";
 
     public static final String ENABLE_WRITE_HIVE_EXTERNAL_TABLE = "enable_write_hive_external_table";
@@ -1639,13 +1641,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     @VarAttr(name = ENABLE_PRUNE_ICEBERG_MANIFEST)
-    private boolean enablePruneIcebergManifest = true;
+    private boolean enablePruneIcebergManifest = false;
 
     @VarAttr(name = ENABLE_READ_ICEBERG_PUFFIN_NDV)
     private boolean enableReadIcebergPuffinNdv = true;
 
     @VarAttr(name = ENABLE_ICEBERG_COLUMN_STATISTICS)
     private boolean enableIcebergColumnStatistics = false;
+
+    @VarAttr(name = PLAN_MODE)
+    private String planMode = "local";
 
     @VarAttr(name = SKEW_JOIN_RAND_RANGE, flag = VariableMgr.INVISIBLE)
     private int skewJoinRandRange = 1000;
@@ -1698,6 +1703,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableIcebergColumnStatistics(boolean enableIcebergColumnStatistics) {
         this.enableIcebergColumnStatistics = enableIcebergColumnStatistics;
+    }
+
+    public String getPlanMode() {
+        return planMode;
+    }
+
+    public void setPlanMode(String planMode) {
+        this.planMode = planMode;
     }
 
     public boolean isCboPredicateSubfieldPath() {

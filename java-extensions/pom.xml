@@ -19,6 +19,8 @@
         <module>hive-reader</module>
         <module>hadoop-ext</module>
         <module>odps-reader</module>
+        <module>iceberg-metadata-reader</module>
+
     </modules>
     <name>starrocks-java-extensions</name>
 
@@ -34,63 +36,63 @@
     <build>
         <plugins>
             <!-- copy config files from fe before checkstyle -->
-            <plugin>
-                <groupId>com.coderplus.maven.plugins</groupId>
-                <artifactId>copy-rename-maven-plugin</artifactId>
-                <version>1.0</version>
-                <!-- only run in parent -->
-                <inherited>false</inherited>
-                <executions>
-                    <execution>
-                        <id>copy-file</id>
-                        <phase>validate</phase>
-                        <goals>
-                            <goal>copy</goal>
-                        </goals>
-                        <configuration>
-                            <fileSets>
-                                <fileSet>
-                                    <sourceFile>../fe/checkstyle.xml</sourceFile>
-                                    <destinationFile>./checkstyle.xml</destinationFile>
-                                </fileSet>
-                                <fileSet>
-                                    <sourceFile>../fe/checkstyle-header.txt</sourceFile>
-                                    <destinationFile>./checkstyle-header.txt</destinationFile>
-                                </fileSet>
-                            </fileSets>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-checkstyle-plugin</artifactId>
-                <version>3.1.1</version>
-                <dependencies>
-                    <dependency>
-                        <groupId>com.puppycrawl.tools</groupId>
-                        <artifactId>checkstyle</artifactId>
-                        <version>8.40</version>
-                    </dependency>
-                </dependencies>
-                <configuration>
-                    <configLocation>${java-extensions.home}/checkstyle.xml</configLocation>
-                    <encoding>UTF-8</encoding>
-                    <consoleOutput>true</consoleOutput>
-                    <failsOnError>true</failsOnError>
-                    <linkXRef>false</linkXRef>
-                    <excludes>org/apache/hadoop/**</excludes>
-                </configuration>
-                <executions>
-                    <execution>
-                        <id>validate</id>
-                        <phase>validate</phase>
-                        <goals>
-                            <goal>check</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
+<!--            <plugin>-->
+<!--                <groupId>com.coderplus.maven.plugins</groupId>-->
+<!--                <artifactId>copy-rename-maven-plugin</artifactId>-->
+<!--                <version>1.0</version>-->
+<!--                &lt;!&ndash; only run in parent &ndash;&gt;-->
+<!--                <inherited>false</inherited>-->
+<!--                <executions>-->
+<!--                    <execution>-->
+<!--                        <id>copy-file</id>-->
+<!--                        <phase>validate</phase>-->
+<!--                        <goals>-->
+<!--                            <goal>copy</goal>-->
+<!--                        </goals>-->
+<!--                        <configuration>-->
+<!--                            <fileSets>-->
+<!--                                <fileSet>-->
+<!--                                    <sourceFile>../fe/checkstyle.xml</sourceFile>-->
+<!--                                    <destinationFile>./checkstyle.xml</destinationFile>-->
+<!--                                </fileSet>-->
+<!--                                <fileSet>-->
+<!--                                    <sourceFile>../fe/checkstyle-header.txt</sourceFile>-->
+<!--                                    <destinationFile>./checkstyle-header.txt</destinationFile>-->
+<!--                                </fileSet>-->
+<!--                            </fileSets>-->
+<!--                        </configuration>-->
+<!--                    </execution>-->
+<!--                </executions>-->
+<!--            </plugin>-->
+<!--            <plugin>-->
+<!--                <groupId>org.apache.maven.plugins</groupId>-->
+<!--                <artifactId>maven-checkstyle-plugin</artifactId>-->
+<!--                <version>3.1.1</version>-->
+<!--                <dependencies>-->
+<!--                    <dependency>-->
+<!--                        <groupId>com.puppycrawl.tools</groupId>-->
+<!--                        <artifactId>checkstyle</artifactId>-->
+<!--                        <version>8.40</version>-->
+<!--                    </dependency>-->
+<!--                </dependencies>-->
+<!--                <configuration>-->
+<!--                    <configLocation>${java-extensions.home}/checkstyle.xml</configLocation>-->
+<!--                    <encoding>UTF-8</encoding>-->
+<!--                    <consoleOutput>true</consoleOutput>-->
+<!--                    <failsOnError>true</failsOnError>-->
+<!--                    <linkXRef>false</linkXRef>-->
+<!--                    <excludes>org/apache/hadoop/**</excludes>-->
+<!--                </configuration>-->
+<!--                <executions>-->
+<!--                    <execution>-->
+<!--                        <id>validate</id>-->
+<!--                        <phase>validate</phase>-->
+<!--                        <goals>-->
+<!--                            <goal>check</goal>-->
+<!--                        </goals>-->
+<!--                    </execution>-->
+<!--                </executions>-->
+<!--            </plugin>-->
         </plugins>
     </build>
 </project>

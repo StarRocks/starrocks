@@ -217,6 +217,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
+
 // Do one COM_QUERY process.
 // first: Parse receive byte array to statement struct.
 // second: Do handle function for statement.
@@ -2267,12 +2269,14 @@ public class StmtExecutor {
 
             coord.exec();
             RowBatch batch;
-            do {
-                batch = coord.getNext();
-                if (batch.getBatch() != null) {
-                    sqlResult.add(batch.getBatch());
-                }
-            } while (!batch.isEos());
+            try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.getRowBatch")) {
+                do {
+                    batch = coord.getNext();
+                    if (batch.getBatch() != null) {
+                        sqlResult.add(batch.getBatch());
+                    }
+                } while (!batch.isEos());
+            }
         } catch (Exception e) {
             LOG.warn(e);
             coord.getExecStatus().setInternalErrorStatus(e.getMessage());
@@ -2280,6 +2284,23 @@ public class StmtExecutor {
             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
         }
         return Pair.create(sqlResult, coord.getExecStatus());
+    }
+
+    public void runMetadataStmt(ConnectContext context, ExecPlan plan) {
+        List<TResultBatch> sqlResult = Lists.newArrayList();
+        try {
+            UUID uuid = context.getQueryId();
+            context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
+
+            coord = getCoordinatorFactory().createQueryScheduler(
+                    context, plan.getFragments(), plan.getScanNodes(), plan.getDescTbl().toThrift());
+            QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
+
+            coord.exec();
+        } catch (Exception e) {
+            LOG.warn(e);
+            coord.getExecStatus().setInternalErrorStatus(e.getMessage());
+        }
     }
 
     public List<ByteBuffer> getProxyResultBuffer() {

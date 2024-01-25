@@ -205,7 +205,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         partitionNames.remove(icebergTableName);
     }
 
-    static class IcebergTableName {
+    public static class IcebergTableName {
         private final String dbName;
         private final String tableName;
 
