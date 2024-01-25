@@ -165,14 +165,9 @@
             {
               "type": "category",
               "label": "Usage",
-              "link": {"type": "doc", "id": "cover_pages/mv_usage"},
-              "items": [ 
-                "sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW",
-                "sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW",
-                "sql-reference/sql-statements/data-definition/DROP_MATERIALIZED_VIEW",
-                "sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW",
-                "reference/information_schema/materialized_views",
-                "using_starrocks/troubleshooting_asynchronous_materialized_views"
+              "link": {"type": "doc", "id": "using_starrocks/usage/intro"},
+              "items": [
+                "using_starrocks/usage/create"
               ]
             }
           ]
@@ -919,14 +914,9 @@
             {
               "type": "category",
               "label": "Usage",
-              "link": {"type": "doc", "id": "cover_pages/mv_usage"},
-              "items": [ 
-                "sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW",
-                "sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW",
-                "sql-reference/sql-statements/data-definition/DROP_MATERIALIZED_VIEW",
-                "sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW",
-                "reference/information_schema/materialized_views",
-                "using_starrocks/troubleshooting_asynchronous_materialized_views"
+              "link": {"type": "doc", "id": "using_starrocks/usage/intro"},
+              "items": [
+                "using_starrocks/usage/create"
               ]
             }
           ]
