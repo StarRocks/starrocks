@@ -179,9 +179,13 @@ public:
         SCOPED_TIMER(_scan_timer);
         RETURN_IF_ERROR(_data_source->open(state));
         _opened = true;
+        connector_scan_node_open_limit.fetch_add(1, std::memory_order_relaxed);
         return Status::OK();
     }
-    void close(RuntimeState* state) { _data_source->close(state); }
+    void close(RuntimeState* state) {
+        _data_source->close(state);
+        connector_scan_node_open_limit.fetch_sub(1, std::memory_order_relaxed);
+    }
     Status get_next(RuntimeState* state, ChunkPtr* chunk) {
         SCOPED_TIMER(_scan_timer);
         RETURN_IF_ERROR(_data_source->get_next(state, chunk));

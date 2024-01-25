@@ -150,7 +150,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructAddSubfield) {
 
     ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
-    ctx->scan_ranges.emplace_back(_create_scan_range(add_struct_subfield_file_path));
+    ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
     Status status = file_reader->init(ctx);
@@ -218,7 +218,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructDropSubfield) {
 
     ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
-    ctx->scan_ranges.emplace_back(_create_scan_range(add_struct_subfield_file_path));
+    ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
     Status status = file_reader->init(ctx);
@@ -286,7 +286,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructReorderSubfield) {
 
     ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
-    ctx->scan_ranges.emplace_back(_create_scan_range(add_struct_subfield_file_path));
+    ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
     Status status = file_reader->init(ctx);
@@ -368,7 +368,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructRenameSubfield) {
 
     ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
-    ctx->scan_ranges.emplace_back(_create_scan_range(add_struct_subfield_file_path));
+    ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
     Status status = file_reader->init(ctx);
@@ -419,7 +419,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestAddColumn) {
 
     ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
-    ctx->scan_ranges.emplace_back(_create_scan_range(add_struct_subfield_file_path));
+    ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
     Status status = file_reader->init(ctx);
@@ -463,7 +463,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestDropColumn) {
 
     ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
-    ctx->scan_ranges.emplace_back(_create_scan_range(add_struct_subfield_file_path));
+    ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
     Status status = file_reader->init(ctx);
@@ -507,7 +507,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestRenameColumn) {
 
     ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
-    ctx->scan_ranges.emplace_back(_create_scan_range(add_struct_subfield_file_path));
+    ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
     Status status = file_reader->init(ctx);
@@ -567,7 +567,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestReorderColumn) {
 
     ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
-    ctx->scan_ranges.emplace_back(_create_scan_range(add_struct_subfield_file_path));
+    ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
     Status status = file_reader->init(ctx);
@@ -622,7 +622,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestWidenColumnType) {
 
     ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
-    ctx->scan_ranges.emplace_back(_create_scan_range(add_struct_subfield_file_path));
+    ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
     Status status = file_reader->init(ctx);
@@ -680,7 +680,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestWithoutFieldId) {
 
     ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
-    ctx->scan_ranges.emplace_back(_create_scan_range(add_struct_subfield_file_path));
+    ctx->scan_range = (_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
     Status status = file_reader->init(ctx);

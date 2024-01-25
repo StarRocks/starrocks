@@ -60,7 +60,7 @@ protected:
         ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs.data());
         Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
         ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
-        ctx->scan_ranges.emplace_back(_create_scan_range(_file_path, file_size));
+        ctx->scan_range = (_create_scan_range(_file_path, file_size));
         ctx->timezone = "Asia/Shanghai";
         ctx->stats = &g_hdfs_scan_stats;
 

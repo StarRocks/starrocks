@@ -189,7 +189,7 @@ char* HdfsScannerCSVReader::_find_line_delimiter(starrocks::CSVBuffer& buffer, s
 }
 
 Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
-    TTextFileDesc text_file_desc = _scanner_params.scan_ranges[0]->text_file_desc;
+    TTextFileDesc text_file_desc = _scanner_params.scan_range->text_file_desc;
 
     // _field_delimiter and _line_delimiter should use std::string,
     // because the CSVReader is using std::string type as delimiter.
@@ -323,15 +323,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
         CSVReader::Record record{};
         Status status = down_cast<HdfsScannerCSVReader*>(_reader.get())->next_record(&record);
         if (status.is_end_of_file()) {
-            if (_current_range_index == _scanner_params.scan_ranges.size() - 1) {
-                break;
-            }
-            // End of file status indicate:
-            // 1. read end of file
-            // 2. should stop scan
-            _current_range_index++;
-            RETURN_IF_ERROR(_create_or_reinit_reader());
-            continue;
+            break;
         } else if (!status.ok()) {
             LOG(WARNING) << strings::Substitute("Parse csv file $0 failed: $1", _file->filename(), status.message());
             return status;
@@ -402,21 +394,14 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
 }
 
 Status HdfsTextScanner::_create_or_reinit_reader() {
+    const THdfsScanRange* scan_range = _scanner_params.scan_range;
+
     if (_compression_type != NO_COMPRESSION) {
         // Since we can not parse compressed file in pieces, we only handle scan range whose offset == 0.
-        size_t index = 0;
-        for (; index < _scanner_params.scan_ranges.size(); index++) {
-            const THdfsScanRange* scan_range = _scanner_params.scan_ranges[index];
-            if (scan_range->offset == 0) {
-                break;
-            }
-        }
-        if (index == _scanner_params.scan_ranges.size()) {
+        if (scan_range->offset != 0) {
             _no_data = true;
             return Status::OK();
         }
-        // set current range index to the last one, so next time we reach EOF.
-        _current_range_index = _scanner_params.scan_ranges.size() - 1;
         // we don't know real stream size in adavance, so we set a very large stream size
         auto file_size = static_cast<size_t>(-1);
         _reader = std::make_unique<HdfsScannerCSVReader>(_file.get(), _line_delimiter, _need_probe_line_delimiter,
@@ -425,12 +410,9 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
     }
 
     // no compressed file, splittable.
-    const THdfsScanRange* scan_range = _scanner_params.scan_ranges[_current_range_index];
-    if (_current_range_index == 0) {
+    {
         _reader = std::make_unique<HdfsScannerCSVReader>(_file.get(), _line_delimiter, _need_probe_line_delimiter,
                                                          _field_delimiter, scan_range->file_length);
-    }
-    {
         auto* reader = down_cast<HdfsScannerCSVReader*>(_reader.get());
 
         // if reading start of file, skipping UTF-8 BOM
