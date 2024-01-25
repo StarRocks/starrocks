@@ -1,0 +1,35 @@
+-- name: test_flat_not_object_json_load @system
+
+CREATE TABLE `js1` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` int(11) NULL COMMENT "",
+  `j1` json NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`v1`) BUCKETS 10 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"fast_schema_evolution" = "true",
+"compression" = "LZ4"
+);
+
+
+insert into js1 values(1,1, parse_json('[{"s1": 4}, {"s2": 5}]'));
+insert into js1 values(2,1, parse_json('"a"'));
+insert into js1 values(3,1, parse_json('1'));
+insert into js1 values(4,1, parse_json('2020-12-12'));
+insert into js1 values(5,1, parse_json('1.000000'));
+insert into js1 values(6,1, parse_json(''));
+insert into js1 values(6,1, parse_json(null));
+insert into js1 values(6,1, parse_json(TRUE));
+
+select get_json_string(j1, "$.key2"), get_json_double(j1, "$.key3"), get_json_string(j1, "$.key4") from js1 order by v1 limit 2;
+
+select JSON_EXISTS(j1, "$.key2"), JSON_EXISTS(j1, "$.key2.key3") from js1 order by v1 limit 2;
+
+select JSON_LENGTH(j1, "$.key2"), JSON_LENGTH(j1, "$.key3"), JSON_LENGTH(j1, "$.key4") from js1 order by v1 limit 2;
+
