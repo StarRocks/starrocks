@@ -149,6 +149,8 @@ SELECT /*+ SET_VAR
 
 当会话变量 `enable_profile` 设置为 `false` 且查询时间超过 `big_query_profile_threshold` 设定的阈值时，则会生成 Profile。
 
+注意：在版本 v3.1.5 至 v3.1.7 以及 v3.2.0 至 v3.2.2 中，我们引入了 `big_query_profile_second_threshold` 参数，用于设定大型查询的阈值。而在 v3.1.8、v3.2.3 及后续版本中，此参数被 `big_query_profile_threshold` 替代，以便提供更加灵活的配置选项。
+
 ### cbo_decimal_cast_string_strict （2.5.14 及以后）
 
 用于优化器控制 DECIMAL 类型转为 STRING 类型的行为。取值为 `true` 时，使用 v2.5.x及之后版本的处理逻辑，执行严格转换（按 Scale 截断补 `0`）；取值为 `false`时，保留 v2.5.x 之前版本的处理逻辑（按有效数字处理）。默认值是 `true`。
