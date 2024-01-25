@@ -188,7 +188,7 @@ FROM <data_source>
 
 示例：
 
-访问 Kafka 时，使用安全协议 SSL
+- 访问 Kafka 时，使用安全协议 SSL
 
     ```sql
     "property.security.protocol" = "ssl", -- 指定安全协议为 SSL
@@ -197,6 +197,15 @@ FROM <data_source>
     "property.ssl.certificate.location" = "FILE:client.pem", -- Client 的 public key 的位置
     "property.ssl.key.location" = "FILE:client.key", -- Client 的 private key 的位置
     "property.ssl.key.password" = "abcdefg" -- Client 的 private key 的密码
+    ```
+
+- 访问 Kafka 时，使用 SASL_PLAINTEXT 安全协议和 SASL/PLAIN 认证机制
+
+    ```sql
+    "property.security.protocol" = "SASL_PLAINTEXT", -- 指定安全协议为 SASL_PLAINTEXT
+    "property.sasl.mechanism" = "PLAIN", -- 指定 SASL 认证机制为 PLAIN
+    "property.sasl.username" = "admin", -- SASL 的用户名
+    "property.sasl.password" = "admin" -- SASL 的密码
     ```
 
 ### FE 和 BE 配置项
