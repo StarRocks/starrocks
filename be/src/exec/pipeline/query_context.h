@@ -138,6 +138,8 @@ public:
                           int64_t spill_mem_limit = -1, workgroup::WorkGroup* wg = nullptr);
     std::shared_ptr<MemTracker> mem_tracker() { return _mem_tracker; }
 
+    MemTracker* operator_mem_tracker(int32_t plan_node_id);
+
     Status init_query_once(workgroup::WorkGroup* wg, bool enable_group_level_query_queue);
     /// Release the workgroup token only once to avoid double-free.
     /// This method should only be invoked while the QueryContext is still valid,
@@ -225,6 +227,12 @@ private:
     int64_t _runtime_profile_report_interval_ns = std::numeric_limits<int64_t>::max();
     TPipelineProfileLevel::type _profile_level;
     std::shared_ptr<MemTracker> _mem_tracker;
+<<<<<<< HEAD
+=======
+    std::shared_ptr<MemTracker> _connector_scan_mem_tracker;
+    std::mutex _operator_mem_trackers_lock;
+    std::unordered_map<int32_t, std::shared_ptr<MemTracker>> _operator_mem_trackers;
+>>>>>>> 4878c636e8 ([Enhancement] Refine statistical method for operator memory usage analysis (#39761))
     ObjectPool _object_pool;
     DescriptorTbl* _desc_tbl = nullptr;
     std::once_flag _query_trace_init_flag;
