@@ -103,8 +103,6 @@ public:
         return _builder.finalize(_max_txn_id);
     }
 
-    std::shared_ptr<std::vector<std::string>> trash_files() override { return _builder.trash_files(); }
-
 private:
     bool need_recover(const Status& st) { return _builder.recover_flag() != RecoverFlag::OK; }
     bool need_re_publish(const Status& st) { return _builder.recover_flag() == RecoverFlag::RECOVER_WITH_PUBLISH; }
@@ -329,8 +327,6 @@ public:
         _metadata->set_version(_new_version);
         return _tablet.put_metadata(_metadata);
     }
-
-    std::shared_ptr<std::vector<std::string>> trash_files() override { return nullptr; }
 
 private:
     Status apply_write_log(const TxnLogPB_OpWrite& op_write) {
