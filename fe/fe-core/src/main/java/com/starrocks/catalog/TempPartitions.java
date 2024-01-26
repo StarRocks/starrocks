@@ -59,7 +59,7 @@ import java.util.Set;
 // to make an overwrite load.
 public class TempPartitions implements Writable, GsonPostProcessable {
     @SerializedName(value = "idToPartition")
-    private Map<Long, Partition> idToPartition = Maps.newHashMap();
+    private Map<Long, Partition> idToPartition = Maps.newConcurrentMap();
     private Map<String, Partition> nameToPartition = Maps.newHashMap();
     @Deprecated
     // the range info of temp partitions has been moved to "partitionInfo" in OlapTable.

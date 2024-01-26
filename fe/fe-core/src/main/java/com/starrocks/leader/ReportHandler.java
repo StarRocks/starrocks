@@ -1334,23 +1334,20 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 if (db == null) {
                     continue;
                 }
-                Locker locker = new Locker();
-                locker.lockDatabase(db, LockType.READ);
-                try {
-                    OlapTable olapTable = (OlapTable) db.getTable(tableId);
-                    if (olapTable == null) {
-                        continue;
-                    }
-                    Partition partition = olapTable.getPartition(partitionId);
-                    if (partition == null) {
-                        continue;
-                    }
-                    boolean feIsInMemory = olapTable.getPartitionInfo().getIsInMemory(partitionId);
-                    if (beIsInMemory != feIsInMemory) {
-                        tabletToInMemory.add(new Pair<>(tabletId, feIsInMemory));
-                    }
-                } finally {
-                    locker.unLockDatabase(db, LockType.READ);
+                OlapTable olapTable = (OlapTable) db.getTable(tableId);
+                if (olapTable == null) {
+                    continue;
+                }
+                Partition partition = olapTable.getPartition(partitionId);
+                if (partition == null) {
+                    continue;
+                }
+                Boolean feIsInMemory = olapTable.getPartitionInfo().getIsInMemory(partitionId);
+                if (feIsInMemory == null) {
+                    continue;
+                }
+                if (beIsInMemory != feIsInMemory) {
+                    tabletToInMemory.add(new Pair<>(tabletId, feIsInMemory));
                 }
             }
         }
@@ -1393,19 +1390,16 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 if (db == null) {
                     continue;
                 }
-                Locker locker = new Locker();
-                locker.lockDatabase(db, LockType.READ);
-                try {
-                    OlapTable olapTable = (OlapTable) db.getTable(tableId);
-                    if (olapTable == null) {
-                        continue;
-                    }
-                    boolean feEnablePersistentIndex = olapTable.enablePersistentIndex();
-                    if (beEnablePersistentIndex != feEnablePersistentIndex) {
-                        tabletToEnablePersistentIndex.add(new Pair<>(tabletId, feEnablePersistentIndex));
-                    }
-                } finally {
-                    locker.unLockDatabase(db, LockType.READ);
+                OlapTable olapTable = (OlapTable) db.getTable(tableId);
+                if (olapTable == null) {
+                    continue;
+                }
+                Boolean feEnablePersistentIndex = olapTable.enablePersistentIndex();
+                if (feEnablePersistentIndex == null) {
+                    continue;
+                }
+                if (beEnablePersistentIndex != feEnablePersistentIndex) {
+                    tabletToEnablePersistentIndex.add(new Pair<>(tabletId, feEnablePersistentIndex));
                 }
             }
         }

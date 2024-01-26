@@ -190,7 +190,7 @@ public class OlapTable extends Table {
     protected PartitionInfo partitionInfo;
 
     @SerializedName(value = "idToPartition")
-    protected Map<Long, Partition> idToPartition = new HashMap<>();
+    protected Map<Long, Partition> idToPartition = Maps.newConcurrentMap();
     protected Map<String, Partition> nameToPartition = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
 
     protected Map<Long, Long> physicalPartitionIdToPartitionId = new HashMap<>();
