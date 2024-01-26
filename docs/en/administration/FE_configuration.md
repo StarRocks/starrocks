@@ -315,6 +315,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Threshold to determine whether a table in an external data source (Hive, Iceberg, Hudi) is a small table during automatic collection. If the table has rows less than this value, the table is considered a small table.
 - Introduced in: v3.2
 
+#### enable_statistic_collect_on_first_load
+
+- Unit: -
+- Default: true
+- Description: Whether to automatically collect statistics when data is loaded into a table for the first time. If a table has multiple partitions, any data loading into an empty partition of this table will trigger automatic statistics collection on this partition. If new tables are frequently created and data is frequently loaded, the memory and CPU overhead will increase.
+- Introduced in: v3.1
+
 #### enable_local_replica_selection
 
 - Unit: -
