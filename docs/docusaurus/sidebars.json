@@ -149,23 +149,13 @@
             {
               "type": "category",
               "label": "Usage",
-<<<<<<< HEAD
-              "link": {"type": "doc", "id": "cover_pages/mv_usage"},
-              "items": [ 
-                "sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW",
-                "sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW",
-                "sql-reference/sql-statements/data-definition/DROP_MATERIALIZED_VIEW",
-                "sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW",
-                { "type": "link", "label": "Information schema",  "href": "/docs/administration/information_schema#materialized_views" },
-=======
               "link": {"type": "doc", "id": "using_starrocks/usage/intro"},
               "items": [
                 "using_starrocks/usage/create",
                 "using_starrocks/usage/alter",
                 "using_starrocks/usage/drop",
                 "using_starrocks/usage/show",
-                "using_starrocks/usage/information_schema-materialized_views",
->>>>>>> c8e88109c8 ([Doc] Fix mv usage loop (#40041))
+                { "type": "link", "label": "Information schema",  "href": "/docs/administration/information_schema#materialized_views" },
                 "using_starrocks/troubleshooting_asynchronous_materialized_views"
               ]
             }
@@ -194,10 +184,8 @@
       "label": "Integrations",
       "link": {"type": "doc", "id": "integrations/integrations"},
       "items": [
-<<<<<<< HEAD
         "integrations/authenticate_to_aws_resources",
         "integrations/other_integrations/intro"
-=======
         {
           "type": "category",
           "label": "Cloud Authentication",
@@ -650,11 +638,6 @@
             "faq/Exporting_faq"
           ]
         },
-<<<<<<< HEAD
-=======
-        "faq/privilege",
-        "faq/datalake",
->>>>>>> c8e88109c8 ([Doc] Fix mv usage loop (#40041))
         "faq/Sql_faq",
         "faq/Dump_query",
         "faq/Others"
@@ -827,23 +810,13 @@
             {
               "type": "category",
               "label": "Usage",
-<<<<<<< HEAD
-              "link": {"type": "doc", "id": "cover_pages/mv_usage"},
-              "items": [ 
-                "sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW",
-                "sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW",
-                "sql-reference/sql-statements/data-definition/DROP_MATERIALIZED_VIEW",
-                "sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW",
-                { "type": "link", "label": "Information schema",  "href": "/docs/administration/information_schema#materialized_views" },
-=======
               "link": {"type": "doc", "id": "using_starrocks/usage/intro"},
               "items": [
                 "using_starrocks/usage/create",
                 "using_starrocks/usage/alter",
                 "using_starrocks/usage/drop",
                 "using_starrocks/usage/show",
-                "using_starrocks/usage/information_schema-materialized_views",
->>>>>>> c8e88109c8 ([Doc] Fix mv usage loop (#40041))
+                { "type": "link", "label": "Information schema",  "href": "/docs/administration/information_schema#materialized_views" },    
                 "using_starrocks/troubleshooting_asynchronous_materialized_views"
               ]
             }
@@ -872,10 +845,8 @@
       "label": "外部系统集成",
       "link": {"type": "doc", "id": "integrations/integrations"},
       "items": [
-<<<<<<< HEAD
         "integrations/authenticate_to_aws_resources",
         "integrations/other_integrations/intro"
-=======
         {
           "type": "category",
           "label": "CSP 认证鉴权",
@@ -1329,11 +1300,6 @@
             "faq/Exporting_faq"
           ]
         },
-<<<<<<< HEAD
-=======
-        "faq/privilege",
-        "faq/datalake",
->>>>>>> c8e88109c8 ([Doc] Fix mv usage loop (#40041))
         "faq/Sql_faq",
         "faq/Dump_query",
         "faq/Others"
