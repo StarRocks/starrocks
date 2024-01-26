@@ -279,12 +279,14 @@ Status OlapChunkSource::_init_column_access_paths(Schema* schema) {
         auto& root = path->path();
         int32_t index = _tablet->field_index_with_max_version(root);
         auto field = schema->get_field_by_name(root);
-        if (index >= 0) {
+        if (index >= 0 && field != nullptr) {
             auto res = path->convert_by_index(field.get(), index);
             // read whole data, doesn't effect query
             if (res.ok()) {
                 _column_access_paths.emplace_back(std::move(res.value()));
             }
+        } else {
+            LOG(WARNING) << "failed to find column in schema: " << root;
         }
     }
     _params.column_access_paths = &_column_access_paths;
