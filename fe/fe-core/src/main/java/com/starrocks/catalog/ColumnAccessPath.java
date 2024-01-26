@@ -72,6 +72,10 @@ public class ColumnAccessPath {
         return type;
     }
 
+    public String getPath() {
+        return path;
+    }
+
     public boolean onlyRoot() {
         return type == TAccessPathType.ROOT && children.isEmpty();
     }
