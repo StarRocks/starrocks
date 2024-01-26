@@ -8,11 +8,11 @@ displayed_sidebar: "Chinese"
 
 Bitmap 索引是一种使用 bitmap 的特殊数据库索引。bitmap 即为一个 bit 数组，一个 bit 的取值有两种：0 或 1。每一个 bit 对应数据表中的一行，并根据该行的取值情况来决定 bit 的取值是 0 还是 1。
 
-Bitmap 索引能够提高指定列的查询效率。如果一个查询条件命中前缀索引列，StarRocks 即可使用[前缀索引](../table_design/Sort_key.md)提高查询效率，快速返回查询结果。但是前缀索引的长度有限，如果想要提高一个非前缀索引列的查询效率，即可以为这一列创建 Bitmap 索引。
+Bitmap 索引能够提高指定列的查询效率。如果一个查询条件命中前缀索引列，StarRocks 即可使用[前缀索引](./indexes_overview.md#前缀索引)提高查询效率，快速返回查询结果。但是前缀索引的长度有限，如果想要提高一个非前缀索引列的查询效率，即可以为这一列创建 Bitmap 索引。
 
 ## 优势
 
-- 如列基数较低，值大量重复，例如 ENUM 类型的列，使用 Bitmap 索引能够减少查询的响应时间。如列基数较高，推荐使用 [Bloom filter 索引](../using_starrocks/Bloomfilter_index.md)。
+- 如列基数较低，值大量重复，例如 ENUM 类型的列，使用 Bitmap 索引能够减少查询的响应时间。如列基数较高，推荐使用 [Bloom filter 索引](./Bloomfilter_index.md)。
 - Bitmap 索引所占的存储空间通常只有索引数据的一小部分，与其他索引技术相比，更节省存储空间。
 - 支持为多个列创建 Bitmap 索引，提高多列查询的效率，具体参见[多列查询](#多列查询)。
 
@@ -21,7 +21,7 @@ Bitmap 索引能够提高指定列的查询效率。如果一个查询条件命�
 - Bitmap 索引适用于可使用等值条件 (`=`) 查询或 [NOT] IN 范围查询的列。
 - 主键表和明细表中所有列都可以创建 Bitmap 索引；聚合表和更新表中，只有维度列（即 Key 列）支持创建 bitmap 索引。
 - 不支持为 FLOAT、DOUBLE、BOOLEAN 和 DECIMAL 类型的列创建 Bitmap 索引。
-- 如要了解一个查询是否命中了 Bitmap 索引，可查看该查询的 Profile 中的 `BitmapIndexFilterRows` 字段。关于如何查看 Profile，参见[分析查询](../administration/Query_planning.md#查看分析-profile)。
+- 如要了解一个查询是否命中了 Bitmap 索引，可查看该查询的 Profile 中的 `BitmapIndexFilterRows` 字段。关于如何查看 Profile，参见[分析查询](../../administration/Query_planning.md#查看分析-profile)。
 
 ## 创建索引
 
@@ -51,9 +51,9 @@ Bitmap 索引能够提高指定列的查询效率。如果一个查询条件命�
     | COMMENT     | 否       | 索引备注。                                                   |
 
     您可以指定多条 `INDEX index_name (column_name) [USING BITMAP] [COMMENT '']` 命令同时为多个列创建 bitmap 索引，且多条命令之间用逗号（,）隔开。
-    关于建表的其他参数说明，参见 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)。
+    关于建表的其他参数说明，参见 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)。
 
-- 建表后使用 CREATE INDEX 创建 Bitmap 索引。详细参数说明和示例，参见 [CREATE INDEX](../sql-reference/sql-statements/data-definition/CREATE_INDEX.md)。
+- 建表后使用 CREATE INDEX 创建 Bitmap 索引。详细参数说明和示例，参见 [CREATE INDEX](../../sql-reference/sql-statements/data-definition/CREATE_INDEX.md)。
 
     ```SQL
     CREATE INDEX index_name ON table_name (column_name) [USING BITMAP] [COMMENT ''];
@@ -61,7 +61,7 @@ Bitmap 索引能够提高指定列的查询效率。如果一个查询条件命�
 
 ## 创建进度
 
-创建 Bitmap 索引为**异步**过程，执行索引创建语句后可通过 [SHOW ALTER TABLE](../sql-reference/sql-statements/data-manipulation/SHOW_ALTER.md) 命令查看索引创建进度，当返回值中 `State` 字段显示为 `FINISHED` 时，即为创建成功。
+创建 Bitmap 索引为**异步**过程，执行索引创建语句后可通过 [SHOW ALTER TABLE](../../sql-reference/sql-statements/data-manipulation/SHOW_ALTER.md) 命令查看索引创建进度，当返回值中 `State` 字段显示为 `FINISHED` 时，即为创建成功。
 
 ```SQL
 SHOW ALTER TABLE COLUMN [FROM db_name];
@@ -71,7 +71,7 @@ SHOW ALTER TABLE COLUMN [FROM db_name];
 
 ## 查看索引
 
-查看指定表的所有 Bitmap 索引。详细参数和返回结果说明，参见 [SHOW INDEX](../sql-reference/sql-statements/Administration/SHOW_INDEX.md)。
+查看指定表的所有 Bitmap 索引。详细参数和返回结果说明，参见 [SHOW INDEX](../../sql-reference/sql-statements/Administration/SHOW_INDEX.md)。
 
 ```SQL
 SHOW { INDEX[ES] | KEY[S] } FROM [db_name.]table_name [FROM db_name];
@@ -83,7 +83,7 @@ SHOW { INDEX[ES] | KEY[S] } FROM [db_name.]table_name [FROM db_name];
 
 ## 删除索引
 
-删除指定表的 Bitmap 索引。详细参数说明和示例，参见 [DROP INDEX](../sql-reference/sql-statements/data-definition/DROP_INDEX.md)。
+删除指定表的 Bitmap 索引。详细参数说明和示例，参见 [DROP INDEX](../../sql-reference/sql-statements/data-definition/DROP_INDEX.md)。
 
 ```SQL
 DROP INDEX index_name ON [db_name.]table_name;
@@ -110,7 +110,7 @@ CREATE INDEX index1 ON employee (Gender) USING BITMAP COMMENT 'index1';
 
 如上语句执行后，bitmap 索引生成的过程如下：
 
-![figure](../assets/3.6.1-2.png)
+![figure](../../assets/3.6.1-2.png)
 
 1. 构建字典：StarRocks 根据 `Gender` 列的取值构建一个字典，将 `female` 和 `male` 分别映射为 INT 类型的编码值：`0` 和 `1`。
 2. 生成 bitmap：StarRocks 根据字典的编码值生成 bitmap。因为 `female` 出现在前三行，所以 `female` 的 bitmap 是 `1110`；`male` 出现在第 4 行，所以 `male` 的 bitmap 是 `0001`。
@@ -141,7 +141,7 @@ SELECT * FROM employee WHERE Gender = male;
 
 如上两个语句执行后，Bitmap 索引生成的过程如下：
 
-![figure](../assets/3.6.1-3.png)
+![figure](../../assets/3.6.1-3.png)
 
 StarRocks 会为 `Gender` 和 `Income_level` 列分别构建一个字典，然后再根据字典生成 bitmap。
 
