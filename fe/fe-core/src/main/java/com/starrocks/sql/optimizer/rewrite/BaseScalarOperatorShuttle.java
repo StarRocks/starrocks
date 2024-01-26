@@ -61,8 +61,11 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
                 .put(ConstantOperator.class, (op, childOps) -> op)
                 .put(ColumnRefOperator.class, (op, childOps) -> op)
                 .put(ArrayOperator.class, (op, childOps) -> new ArrayOperator(op.getType(), op.isNullable(), childOps))
-                .put(CollectionElementOperator.class, (op, childOps) -> new CollectionElementOperator(op.getType(),
-                        childOps.get(0), childOps.get(1)))
+                .put(CollectionElementOperator.class, (op, childOps) -> {
+                    CollectionElementOperator collectionElementOperator = (CollectionElementOperator) op;
+                    return new CollectionElementOperator(op.getType(),
+                            childOps.get(0), childOps.get(1), collectionElementOperator.isCheckOutOfBounds());
+                })
                 .put(ArraySliceOperator.class, (op, childOps) -> new ArraySliceOperator(op.getType(), childOps))
                 .put(CallOperator.class, (op, childOps) -> {
                     CallOperator call = (CallOperator) op;

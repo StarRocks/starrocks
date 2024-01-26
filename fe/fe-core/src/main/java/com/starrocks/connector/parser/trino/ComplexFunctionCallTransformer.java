@@ -83,7 +83,7 @@ public class ComplexFunctionCallTransformer {
             if (args.length != 2) {
                 throw new SemanticException("element_at function must have 2 arguments");
             }
-            return new CollectionElementExpr(args[0], args[1]);
+            return new CollectionElementExpr(args[0], args[1], false);
         } else if (functionName.equalsIgnoreCase("regexp_extract")) {
             // regexp_extract(string, pattern) -> regexp_extract(str, pattern, 0)
             FunctionCallExpr regexpExtractFunc = new FunctionCallExpr("regexp_extract",
