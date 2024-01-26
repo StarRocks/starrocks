@@ -191,6 +191,11 @@ if [ ${RUN_CN} -eq 1 ]; then
     LOG_FILE=${LOG_DIR}/cn.out
 fi
 
+if [ ${ENABLE_DD_PROFILE} == "true" ]; then
+    chmod 755 ${STARROCKS_HOME}/lib/ddprof
+    START_BE_CMD="${STARROCKS_HOME}/lib/ddprof ${START_BE_CMD}"
+fi
+
 if [ ${RUN_LOG_CONSOLE} -eq 1 ] ; then
     # force glog output to console (stderr)
     export GLOG_logtostderr=1

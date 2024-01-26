@@ -51,4 +51,10 @@ COPY --from=fe-builder /build/starrocks/output /release/fe_artifacts
 COPY --from=be-builder /build/starrocks/output /release/be_artifacts
 COPY --from=broker-builder /build/starrocks/fs_brokers/apache_hdfs_broker/output /release/broker_artifacts
 
+
+# Get ddprof
+RUN wget https://github.com/DataDog/ddprof/releases/download/v0.14.1/ddprof-0.14.1-amd64-linux.tar.xz -O ddprof-amd64-linux.tar.xz && \
+    tar xvf ddprof-amd64-linux.tar.xz && \
+    mv ddprof/bin/ddprof /release/be_artifacts/be/lib/
+
 WORKDIR /release
