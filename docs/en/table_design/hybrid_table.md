@@ -167,6 +167,6 @@ EXECUTE select_by_id_stmt USING @id2;
 - The short circuiting for queries is currently only suitable for queries that happen after scheduled batch data loading. Because mutual exclusion of indexes may be incurred when the short circuiting for queries happens at the apply stage of the data writing process, data writing may block short circuiting for queries, affecting the response time of point queries during data writing.
 - Hybrid row-column storage may significantly increase storage consumption. This is because data is stored in both row and column formats, and the data compression ratio of row storage may not be as high as that of column storage.
 - Hybrid row-column storage can increase the time and resource consumption during data loading.
-- The tables with hybrid row-column storage can be a viable solution for online services, but the performance of this type of table may not compete with mature OLTP databases. Note that  this type of table can not well support high-concurrency data updates (insert, update, delete operations).
+- The tables with hybrid row-column storage can be a viable solution for online services, but the performance of this type of table may not compete with mature OLTP databases. Note that this type of table can not well support high-concurrency data updates (insert, update, delete operations).
 - The tables with hybrid row-column storage do not support features that rely on columnar storage, such as partial updates in column mode.
 - The tables with hybrid row-column storage must be Primary Key tables.
