@@ -14,8 +14,13 @@
 
 #pragma once
 
+#include <gtest/gtest.h>
+
+#include <random>
+
 #include "column/chunk.h"
 #include "exprs/array_expr.h"
+#include "exprs/jit/jit_expr.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -23,6 +28,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 class ExprsTestHelper {
@@ -197,6 +203,69 @@ public:
             }
         }
         return column;
+    }
+
+    static void verify_with_jit(ColumnPtr ptr, Expr* expr, RuntimeState* runtime_state,
+                                const std::function<void(ColumnPtr const&)>& test_func, bool need_jit = true) {
+        // Verify the original result.
+        test_func(ptr);
+
+        if (!need_jit) {
+            return;
+        }
+        auto jit_engine = JITEngine::get_instance();
+        if (!jit_engine->support_jit()) {
+            return;
+        }
+
+        ObjectPool pool;
+        auto* jit_expr = JITExpr::create(&pool, expr);
+
+        ExprContext exprContext(jit_expr);
+        std::vector<ExprContext*> expr_ctxs = {&exprContext};
+
+        ASSERT_OK(Expr::prepare(expr_ctxs, runtime_state));
+        ASSERT_OK(Expr::open(expr_ctxs, runtime_state));
+        ASSERT_TRUE(jit_expr->is_jit_compiled());
+
+        Chunk chunk;
+        chunk.append_column(ptr, 0);
+        ptr = jit_expr->evaluate(&exprContext, &chunk);
+        // Verify the result after JIT.
+        test_func(ptr);
+
+        Expr::close(expr_ctxs, runtime_state);
+    }
+
+    static void verify_result_with_jit(const ColumnPtr& ptr, Expr* expr, RuntimeState* runtime_state) {
+        auto jit_engine = JITEngine::get_instance();
+        if (!jit_engine->support_jit()) {
+            return;
+        }
+
+        ObjectPool pool;
+        auto* jit_expr = JITExpr::create(&pool, expr);
+        ExprContext exprContext(jit_expr);
+        std::vector<ExprContext*> expr_ctxs = {&exprContext};
+
+        ASSERT_OK(Expr::prepare(expr_ctxs, runtime_state));
+        ASSERT_OK(Expr::open(expr_ctxs, runtime_state));
+        ASSERT_TRUE(jit_expr->is_jit_compiled());
+
+        Chunk chunk;
+        chunk.append_column(ptr, 0);
+        auto jit_ptr = jit_expr->evaluate(&exprContext, &chunk);
+
+        ASSERT_TRUE(jit_ptr->is_constant() == ptr->is_constant());
+
+        // ASSERT_TRUE(jit_ptr->is_nullable() == ptr->is_nullable());
+        ASSERT_TRUE(jit_ptr->size() == ptr->size());
+        for (int i = 0; i < jit_ptr->size(); ++i) {
+            ASSERT_TRUE(jit_ptr->is_null(i) == ptr->is_null(i));
+            ASSERT_TRUE(jit_ptr->equals(i, *ptr, i));
+        }
+
+        Expr::close(expr_ctxs, runtime_state);
     }
 };
 

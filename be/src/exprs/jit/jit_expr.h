@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <string>
+
 #include "common/global_types.h"
 #include "common/object_pool.h"
 #include "common/status.h"
@@ -37,6 +39,8 @@ public:
 
     Expr* clone(ObjectPool* pool) const override { return JITExpr::create(pool, _expr); }
 
+    bool is_jit_compiled() { return _jit_function != nullptr && !_jit_expr_name.empty(); }
+
 protected:
     /**
      * @brief Prepare the expression, including:
@@ -56,6 +60,7 @@ private:
     Expr* _expr;
     bool _is_prepared = false;
     JITScalarFunction _jit_function = nullptr;
+    std::string _jit_expr_name;
 };
 
 } // namespace starrocks

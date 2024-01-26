@@ -109,7 +109,7 @@ Status JITFunction::generate_scalar_function_ir(ExprContext* context, llvm::Modu
     auto* loop = llvm::BasicBlock::Create(b.getContext(), "loop", func);
     // If rows_count == 0, jump to end.
     // Pseudo code: if (rows_count == 0) goto end;
-    b.CreateCondBr(b.CreateICmpEQ(rows_count_arg, llvm::ConstantInt::get(size_type, 0)), end, loop);
+    b.CreateCondBr(b.CreateICmpEQ(rows_count_arg, llvm::ConstantInt::get(size_type, 0, true)), end, loop);
 
     b.SetInsertPoint(loop);
 
