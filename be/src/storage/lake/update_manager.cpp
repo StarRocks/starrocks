@@ -45,7 +45,7 @@ UpdateManager::UpdateManager(LocationProvider* location_provider, MemTracker* me
             std::make_unique<MemTracker>(preload_mem_limit, "lake_rowset_update_state", mem_tracker);
     _index_cache_mem_tracker = std::make_unique<MemTracker>(-1, "lake_index_cache", mem_tracker);
     _compaction_state_mem_tracker =
-            std::make_unique<MemTracker>(preload_mem_limit, "compaction_state_cache", mem_tracker);
+            std::make_unique<MemTracker>(preload_mem_limit, "lake_compaction_state", mem_tracker);
     _index_cache.set_mem_tracker(_index_cache_mem_tracker.get());
     _update_state_cache.set_mem_tracker(_update_state_mem_tracker.get());
 

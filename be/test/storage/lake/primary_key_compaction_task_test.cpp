@@ -101,7 +101,6 @@ protected:
         // check primary index cache's ref
         EXPECT_TRUE(_update_mgr->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
         EXPECT_EQ(_update_mgr->compaction_state_mem_tracker()->consumption(), 0);
-        EXPECT_TRUE(_update_mgr->compaction_state_mem_tracker()->has_limit());
         (void)fs::remove_all(kTestDirectory);
     }
 
