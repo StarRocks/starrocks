@@ -16,6 +16,7 @@ package com.starrocks.statistic;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateType;
@@ -62,6 +63,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.StringJoiner;
@@ -72,6 +74,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
+import static com.starrocks.statistic.StatsConstants.AnalyzeType.SAMPLE;
 
 public class StatisticUtils {
     private static final Logger LOG = LogManager.getLogger(StatisticUtils.class);
@@ -115,7 +118,7 @@ public class StatisticUtils {
             loadRows = ((StreamLoadTxnCommitAttachment) attachment).getNumRowsNormal();
         }
         if (loadRows != null && loadRows > Config.statistic_sample_collect_rows) {
-            return StatsConstants.AnalyzeType.SAMPLE;
+            return SAMPLE;
         }
         return StatsConstants.AnalyzeType.FULL;
     }
@@ -154,9 +157,13 @@ public class StatisticUtils {
         }
 
         StatsConstants.AnalyzeType analyzeType = parseAnalyzeType(txnState, table);
+        Map<String, String> properties = Maps.newHashMap();
+        if (SAMPLE == analyzeType) {
+            properties = StatsConstants.buildInitStatsProp();
+        }
         AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
                 db.getId(), table.getId(), null, analyzeType,
-                StatsConstants.ScheduleType.ONCE, StatsConstants.buildInitStatsProp(), LocalDateTime.now());
+                StatsConstants.ScheduleType.ONCE, properties, LocalDateTime.now());
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
         GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
 
