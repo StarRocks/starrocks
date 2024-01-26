@@ -21,6 +21,7 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.common.QueryDebugOptions;
+import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
@@ -28,6 +29,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.Predicate
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -35,6 +37,12 @@ import java.util.Set;
  */
 public class QueryMaterializationContext {
     protected static final Logger LOG = LogManager.getLogger(QueryMaterializationContext.class);
+
+    // used by view based mv rewrite
+    // query's logical plan with view
+    private OptExpression logicalTreeWithView;
+    // collect LogicalViewScanOperators
+    private List<LogicalViewScanOperator> viewScans;
 
     // `mvQueryContextCache` is designed for a common cache which is used during the query's rewrite lifecycle, so can be
     // managed in a more unified mode. In the current situation, it's used in two ways:
@@ -88,6 +96,22 @@ public class QueryMaterializationContext {
                     .rewrite(predicate.clone(), ScalarOperatorRewriter.MV_SCALAR_REWRITE_RULES);
             return rewritten;
         });
+    }
+
+    public OptExpression getLogicalTreeWithView() {
+        return logicalTreeWithView;
+    }
+
+    public void setLogicalTreeWithView(OptExpression logicalTreeWithView) {
+        this.logicalTreeWithView = logicalTreeWithView;
+    }
+
+    public void setViewScans(List<LogicalViewScanOperator> viewScans) {
+        this.viewScans = viewScans;
+    }
+
+    public List<LogicalViewScanOperator> getViewScans() {
+        return viewScans;
     }
 
     // Invalidate all caches by hand to avoid memory allocation after query optimization.

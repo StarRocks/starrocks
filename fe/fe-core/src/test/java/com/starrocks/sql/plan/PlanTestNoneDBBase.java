@@ -35,6 +35,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TExplainLevel;
@@ -132,8 +133,11 @@ public class PlanTestNoneDBBase {
             StringBuilder sb = new StringBuilder();
             sb.append(first);
             sb.append(LOGICAL_PLAN_PREDICATE_PREFIX + "[");
-            String sorted = Arrays.stream(predicates.split(" AND ")).sorted().collect(Collectors.joining(" AND "));
-            sorted = Arrays.stream(sorted.split(" OR ")).sorted().collect(Collectors.joining(" OR "));
+            // FIXME: This is only used for normalize not for the final result.
+            String sorted = Arrays.stream(predicates.split(" AND "))
+                    .map(p -> Arrays.stream(p.split(" OR ")).sorted().collect(Collectors.joining(" OR ")))
+                    .sorted()
+                    .collect(Collectors.joining(" AND "));
             sb.append(sorted);
             sb.append("])");
             return sb.toString();
@@ -498,9 +502,11 @@ public class PlanTestNoneDBBase {
                                      boolean hasScheduler, StringBuilder schedulerString,
                                      boolean isEnumerate, int planCount, StringBuilder planEnumerate,
                                      boolean isDebug, BufferedWriter debugWriter) throws Exception {
-        Pair<String, ExecPlan> pair = null;
+        Pair<String, Pair<ExecPlan, String>> pair = null;
+        QueryDebugOptions debugOptions = connectContext.getSessionVariable().getQueryDebugOptions();
+        String logModule = debugOptions.isEnableQueryTraceLog() ? "MV" : "";
         try {
-            pair = UtFrameUtils.getPlanAndFragment(connectContext, sql.toString());
+            pair = UtFrameUtils.getFragmentPlanWithTrace(connectContext, sql.toString(), logModule);
         } catch (Exception ex) {
             if (!exceptString.toString().isEmpty()) {
                 Assert.assertEquals(exceptString.toString(), ex.getMessage());
@@ -515,18 +521,22 @@ public class PlanTestNoneDBBase {
             String dumpStr = null;
             String actualSchedulerPlan = null;
 
+            ExecPlan execPlan = pair.second.first;
+            if (debugOptions.isEnableQueryTraceLog()) {
+                System.out.println(pair.second.second);
+            }
             if (hasResult && !isDebug) {
                 checkWithIgnoreTabletList(result.toString().trim(), pair.first.trim());
             }
             if (hasFragment) {
-                fra = pair.second.getExplainString(TExplainLevel.NORMAL);
+                fra = execPlan.getExplainString(TExplainLevel.NORMAL);
                 if (!isDebug) {
                     fra = format(fra);
                     checkWithIgnoreTabletList(fragment.toString().trim(), fra.trim());
                 }
             }
             if (hasFragmentStatistics) {
-                statistic = format(pair.second.getExplainString(TExplainLevel.COSTS));
+                statistic = format(execPlan.getExplainString(TExplainLevel.COSTS));
                 if (!isDebug) {
                     checkWithIgnoreTabletList(fragmentStatistics.toString().trim(), statistic.trim());
                 }
@@ -561,7 +571,7 @@ public class PlanTestNoneDBBase {
                         actualSchedulerPlan);
             }
             if (isEnumerate) {
-                Assert.assertEquals("plan count mismatch", planCount, pair.second.getPlanCount());
+                Assert.assertEquals("plan count mismatch", planCount, execPlan.getPlanCount());
                 checkWithIgnoreTabletList(planEnumerate.toString().trim(), pair.first.trim());
                 connectContext.getSessionVariable().setUseNthExecPlan(0);
             }
