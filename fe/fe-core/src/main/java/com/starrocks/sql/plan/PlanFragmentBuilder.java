@@ -677,7 +677,7 @@ public class PlanFragmentBuilder {
                     .collect(Collectors.toSet());
             if (scan.getPredicate() == null) {
                 // remove path which has pruned
-                return scan.getColumnAccessPaths().stream().filter(p -> !checkNames.contains(p.getPath()))
+                return scan.getColumnAccessPaths().stream().filter(p -> checkNames.contains(p.getPath()))
                         .collect(Collectors.toList());
             }
 
