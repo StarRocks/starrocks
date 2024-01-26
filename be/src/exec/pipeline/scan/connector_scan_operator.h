@@ -124,6 +124,7 @@ private:
     bool _enable_adaptive_io_tasks = true;
     std::mutex _buffered_morsels_mutex;
     std::vector<MorselPtr> _buffered_morsels;
+    std::atomic<int64_t> _buffered_morsels_size = 0;
 };
 
 class ConnectorChunkSource : public ChunkSource {

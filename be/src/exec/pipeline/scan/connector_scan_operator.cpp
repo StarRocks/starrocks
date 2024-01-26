@@ -584,14 +584,23 @@ void ConnectorScanOperator::append_morsels(std::vector<MorselPtr>&& morsels) {
     std::lock_guard<std::mutex> L(_buffered_morsels_mutex);
     _buffered_morsels.insert(_buffered_morsels.end(), std::make_move_iterator(morsels.begin()),
                              std::make_move_iterator(morsels.end()));
+    _buffered_morsels_size += morsels.size();
 }
 
 void ConnectorScanOperator::begin_pickup_morsels() {
-    // TODO(yan): optimzie if when there is no buffered morsels.
+    if (_buffered_morsels_size.load(std::memory_order_relaxed) == 0) {
+        return;
+    }
+
     std::vector<MorselPtr> morsels;
     {
         std::lock_guard<std::mutex> L(_buffered_morsels_mutex);
         morsels.swap(_buffered_morsels);
+        _buffered_morsels_size = 0;
+    }
+
+    if (morsels.size() == 0) {
+        return;
     }
 
     query_cache::TicketChecker* ticket_checker = _ticket_checker.get();
@@ -865,7 +874,6 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
             scan_op->append_morsels(std::move(split_morsels));
         }
     }
-
     return Status::EndOfFile("");
 }
 
