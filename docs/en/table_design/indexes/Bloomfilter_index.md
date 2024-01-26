@@ -2,7 +2,7 @@
 displayed_sidebar: "English"
 ---
 
-# Bloom filter indexing
+# Bloom filter indexes
 
 This topic describes how to create and modify bloom filter indexes, along with how they works.
 

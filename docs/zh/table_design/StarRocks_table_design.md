@@ -119,11 +119,11 @@ StarRocks 提供两种分桶方式：
 
 除了基本的数据类型，如数值、日期和字符串类型，StarRocks 还支持复杂的半结构化数据类型，包括 ARRAY、JSON、MAP、STRUCT。
 
-### 索引
+### [索引](./indexes/indexes_overview.md)
 
 索引是一种特殊的数据结构，相当于数据的目录。查询条件命中索引列时，StarRocks 能够快速定位到满足条件的数据的位置。
 
-StarRocks 内置一级索引，是根据组成排序键的列的前缀组成的前缀索引。也支持用户手动创建二级索引，以提高查询效率，包括 Bitmap 和 Bloom Filter 索引。
+StarRocks 提供内置索引，包括前缀索引，Ordinal 索引和ZoneMap 索引。也支持用户手动创建索引，以提高查询效率，包括 Bitmap 和 Bloom Filter 索引。
 
 ### 约束
 

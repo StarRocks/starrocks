@@ -2,7 +2,7 @@
 displayed_sidebar: "English"
 ---
 
-# Bitmap indexing
+# Bitmap indexes
 
 This topic describes how to create and manage a bitmap index, along with usage cases.
 
@@ -10,11 +10,18 @@ A bitmap index is a special database index that uses bitmaps, which are an array
 
 A bitmap index can help improve the query performance on a given column. If a query hits a sort key column, StarRocks efficiently returns the query result by using the [prefix index](./indexes_overview.md#prefix-indexes). However, the prefix index entry for a data block cannot exceed 36 bytes in length. If you want to improve the query performance on a column, which is not used as a sort key, you can create a bitmap index for the column.
 
+Bitmap indexes are generally suitable for columns with high cardinality. Bitmap indexes are a good choice when  Bitmap indexes can exhibit high selectivity, and its filtering effect (number of data rows filtered by the Bitmap index/total number of data rows) is lower than one in ten thousand.
+
+To evaluate the acceleration performance of Bitmap indexes in StarRocks, queries are performed on a 100 GB SSB dataset in StarRocks. The test results are as follows:
+
+-  when bitmap indexes are added on high-cardinality columns (in this dataset, a noticeable performance improvement can be observed when the cardinality reaches the magnitude of 100,000).
+- Query performance can be significantly improved no matter the Bitmap index is added on a high-cardinality column or high-cardinality columns combination.
+- In scenarios with low cardinality, using Bitmap indexing basically does not provide performance improvement and may even lead to performance degradation.
+
 ## Benefits
 
 You can benefit from bitmap indexes in the following aspects:
 
-- Reduce response time when the column has low cardinality, such as the columns of the ENUM type. If the number of distinct values in a column is relatively high, we recommend that you use a bloom filter index to improve query speed. For more information, see [Bloom filter indexing](./Bloomfilter_index.md).
 - Use less storage space compared to other indexing techniques. Bitmap indexes typically take up only a fraction of the size of the indexed data in a table.
 - Combine multiple bitmap indexes together to fire queries on multiple columns. For more information, see [Query multiple columns](#query-multiple-columns).
 

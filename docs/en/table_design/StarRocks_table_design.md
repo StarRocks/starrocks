@@ -114,15 +114,15 @@ StarRocks provides two bucketing methods:
 - Hash bucketing: Data is distributed into buckets based on the hash values of the bucketing key. You can select columns frequently used as condition columns in queries as bucketing columns, which helps improve query efficiency.
 - Random bucketing: Data is randomly distributed to buckets. This bucketing method is more simple and ease to use.
 
-### [Data types](../sql-reference/sql-statements/data-types/data-type-list.md)
+### [Data types](../sql-referenc  e/sql-statements/data-types/data-type-list.md)
 
 In addition to basic data types such as NUMERIC, DATE, and STRING, StarRocks supports complex semi-structured data types, including ARRAY, JSON, MAP, and STRUCT.
 
-### Index
+### [Index](./indexes/indexes_overview.md)
 
 An index is a special data structure and is used as a pointer to data in a table. When the conditional columns in queries are indexed columns, StarRocks can swiftly locate the data that meets the conditions.
 
-StarRocks provides a built-in primary index, which is a prefix index composed of the prefixes of the table's sort key columns. StarRocks also allows you to create secondary indexes, including Bitmap and Bloom Filter indexes, to further enhance query efficiency.
+StarRocks provides built-in indexes, including Prefix indexes. StarRocks also allows users to create indexes, including Bitmap indexes and Bloom Filter indexes, to further enhance query efficiency.
 
 
 ### Constraints
