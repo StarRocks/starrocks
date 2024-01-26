@@ -26,8 +26,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 
-import java.util.List;
-
 import static com.starrocks.catalog.Function.CompareMode.IS_IDENTICAL;
 import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
 import static com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter.DEFAULT_TYPE_CAST_RULE;
@@ -87,21 +85,5 @@ public class ScalarOperatorUtil {
                 new CallOperator(
                         FunctionSet.MULTI_DISTINCT_SUM, multiDistinctSum.getReturnType(),
                         oldFunctionCall.getChildren(), multiDistinctSum), DEFAULT_TYPE_CAST_RULE);
-    }
-
-    public static CallOperator buildDateTrunc(List<ScalarOperator> arguments) {
-        ScalarOperator arg1 = arguments.get(1);
-        Type type;
-        if (arg1.getType().isDatetime()) {
-            type = Type.DATETIME;
-        } else {
-            type = Type.DATE;
-        }
-
-        Function searchDesc = new Function(new FunctionName(FunctionSet.DATE_TRUNC),
-                new Type[] {Type.VARCHAR, type}, type, false);
-        Function fn = GlobalStateMgr.getCurrentState().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
-        CallOperator result = new CallOperator(FunctionSet.DATE_TRUNC, type, arguments, fn);
-        return result;
     }
 }

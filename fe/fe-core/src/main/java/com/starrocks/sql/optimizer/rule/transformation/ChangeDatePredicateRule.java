@@ -17,6 +17,11 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BinaryType;
+import com.starrocks.analysis.FunctionName;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.Type;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -28,7 +33,6 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import org.apache.logging.log4j.LogManager;
@@ -41,18 +45,45 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
+import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
+
+// For query like select sum() from xxx where  k1 >= "2022-01-02" and "2024-05-06" >= k1 group by xxx
+// we can create mv in year/month/day dimension to pre-agg result
+// this rule automatically change k1 >= "2022-01-02" and "2024-05-06" >= k1  into format like below:
+// (((1: k1 >= '2022-01-02') AND (1: k1 < '2022-02-01'))
+// OR ((1: k1 >= '2024-05-01') AND (1: k1 <= '2024-05-06')))
+// OR (((date_trunc('month', 1: k1) >= '2022-02-01') AND (date_trunc('month', 1: k1) < '2023-01-01'))
+// OR ((date_trunc('month', 1: k1) >= '2024-01-01') AND (date_trunc('month', 1: k1) < '2024-05-01'))))
+// OR ((date_trunc('year', 1: k1) >= '2023-01-01') AND (date_trunc('year', 1: k1) < '2024-01-01'))
+// and another rule "SplitScanORToUnionRule" can rewrite OR to Union, which can be rewritten by mv to speed up query
 public class ChangeDatePredicateRule extends TransformationRule {
 
     private static final Logger LOG = LogManager.getLogger(ChangeDatePredicateRule.class);
 
     public ChangeDatePredicateRule() {
-        super(RuleType.TF_CHANGE_PREDICATE_WITH_DATE, Pattern.create(OperatorType.LOGICAL_OLAP_SCAN));
+        super(RuleType.TF_SPLIT_PREDICATE_WITH_DATE, Pattern.create(OperatorType.LOGICAL_OLAP_SCAN));
+    }
+
+    private static CallOperator buildDateTrunc(List<ScalarOperator> arguments) {
+        ScalarOperator arg1 = arguments.get(1);
+        Type type;
+        if (arg1.getType().isDatetime()) {
+            type = Type.DATETIME;
+        } else {
+            type = Type.DATE;
+        }
+
+        Function searchDesc = new Function(new FunctionName(FunctionSet.DATE_TRUNC),
+                new Type[] {Type.VARCHAR, type}, type, false);
+        Function fn = GlobalStateMgr.getCurrentState().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
+        CallOperator result = new CallOperator(FunctionSet.DATE_TRUNC, type, arguments, fn);
+        return result;
     }
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalOlapScanOperator scan = (LogicalOlapScanOperator) input.getOp();
-        return context.getSessionVariable().isCboChangeScanPredicateWithDate() && scan.getPredicate() != null;
+        return context.getSessionVariable().isCboSplitScanPredicateWithDate() && scan.getPredicate() != null;
     }
 
     @Override
@@ -176,7 +207,7 @@ public class ChangeDatePredicateRule extends TransformationRule {
             // 2.Selecting remaining months
             // wrap with data_trunct
             CallOperator monthOfDate =
-                    ScalarOperatorUtil.buildDateTrunc(
+                    buildDateTrunc(
                             Arrays.asList(ConstantOperator.createVarchar("month"), curColumn));
             BinaryPredicateOperator leftMonthBeginPredicate = BinaryPredicateOperator.ge(monthOfDate, leftMonthBegin);
             BinaryPredicateOperator leftMonthEndPredicate = BinaryPredicateOperator.lt(monthOfDate, yearBegin);
@@ -191,7 +222,7 @@ public class ChangeDatePredicateRule extends TransformationRule {
 
             // 3.Selecting remaining years
             CallOperator yearOfDate =
-                    ScalarOperatorUtil.buildDateTrunc(Arrays.asList(ConstantOperator.createVarchar("year"), curColumn));
+                    buildDateTrunc(Arrays.asList(ConstantOperator.createVarchar("year"), curColumn));
 
             BinaryPredicateOperator yearBeginPredicate = BinaryPredicateOperator.ge(yearOfDate, yearBegin);
             BinaryPredicateOperator yearEndPredicate = BinaryPredicateOperator.lt(yearOfDate, rightMonthBegin);

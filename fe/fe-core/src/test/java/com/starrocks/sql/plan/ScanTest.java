@@ -532,7 +532,7 @@ public class ScanTest extends PlanTestBase {
 
     @Test
     public void testChangeDatePredicat() throws Exception {
-        connectContext.getSessionVariable().setCboChangeScanPredicateWithDate(true);
+        connectContext.getSessionVariable().setCboSplitScanPredicateWithDate(true);
         String sql = "select * from test_all_type where  id_datetime >= '2011-03-05 00:00:00'\n" +
                 "        and  id_datetime <= '2031-02-13 00:00:00';";
         String plan = getFragmentPlan(sql);
@@ -559,6 +559,6 @@ public class ScanTest extends PlanTestBase {
                         "OR ((date_trunc('year', 9: id_date) >= '2012-01-01') " +
                         "AND (date_trunc('year', 9: id_date) < '2031-01-01'))");
 
-        connectContext.getSessionVariable().setCboChangeScanPredicateWithDate(false);
+        connectContext.getSessionVariable().setCboSplitScanPredicateWithDate(false);
     }
 }
