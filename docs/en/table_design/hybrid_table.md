@@ -10,34 +10,37 @@ As an OLAP database, StarRocks originally stores data in the columnar storage, w
 
 | **Storage format**         | **Storage method**                                           | **Scenarios**                                                |
 | -------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| Hybrid row-column storage | Data is stored in both row-by-row and column-by-column fashions. Simply put, a table that uses hybrid row-column storage contains an additional, hidden binary-type column `__row`. When data is written to the table, all values from the value columns of a row are encoded and written to the `__row` column (as shown below). As the data is stored in both row-by-row and column-by-column fashions, additional storage costs are incurred. ![img](../assets/table_design/hybrid_table.png) | <ul><li>Suitable for scenarios such as primary key-based point queries and partial column updates, because this storage method can help greatly reduce random IO and read-write amplification in these scenarios.</li><ul><li>Point queries, which are primary key-based simple queries that scan and return small amounts of data.</li><li>Queries against most or all of the fields from tables that consist of a small number of fields.</li><li>Partial column updates.</li><li>Prepared statements can be run on tables that use hybrid row-column storage, which can enhance query performance by saving the overhead of parsing SQL statements, and also prevent SQL injection attacks.</li></ul><li>Also suitable for complex data analysis.</li></ul>|
-| Column-oriented            | Data is stored in a column-by-column fashion ![img](../assets/table_design/hybrid_table.png) | <ul><li>Complex or ad-hoc queries on massive data. </li><li>Tables (such as wide tables) consist of many fields. Queries involve only a few columns. </li></ul>|
+| Hybrid row-column storage | Data is stored in both row-by-row and column-by-column fashions. Simply put, a table that uses hybrid row-column storage contains an additional, hidden binary-type column `__row`. When data is written to the table, all values from the value columns of a row are encoded and written to the `__row` column (as shown below). As the data is stored in both row-by-row and column-by-column fashions, additional storage costs are incurred. ![img](../assets/table_design/hybrid_table.png) | Suitable for use cases of both rowstore and columnstore storage xxx, but incurs additional storage costs.<ul><li>Use case of rowstore:</li><ul><li>High-concurrency point queries based on primary keys.</li><li>Queries against most fields from tables that consist of a small number of fields.</li><li>Partial column updates (more specifically, multiple columns and a small number of data rows need to be updated)</li></ul><li>Use case of columnstore: Complex data analysis.</li></ul>
+|
+| Column-oriented            | Data is stored in a column-by-column fashion ![img](../assets/table_design/hybrid_table.png) | Complex data analysis. <ul><li>Complex queries and analyses on massive datasets, such as aggregate analysis and multi-table join queries.</li><li>Tables consist of many fields (such as wide tables).  Queries involve only a few columns. </li></ul>|
 
 ## Basic usages  
 
 ### Create a table that uses hybrid row-column storage
 
-Specify `"STORE_TYPE" = "column_with_row"` in the `PROPERTIES` at table creation.
+1. The row-column hybrid feature is disabled by default. You can enable this feature by setting the FE dynamic parameter [`enable_experimental_rowstore`](../administration/FE_configuration.md#enable_experimental_rowstore) to `true`. 
 
-:::note
+2. Specify `"STORE_TYPE" = "column_with_row"` in the `PROPERTIES` at table creation.
 
-- The table must be a Primary Key table.
-- The length of the `__row` column cannot exceed 1 MB.
-- Columns cannot be of data types like ARRAY, MAP, and STRUCT.
+   :::note
 
-:::
+   - The table must be a Primary Key table.
+   - The length of the `__row` column cannot exceed 1 MB.
+   - Columns cannot be of data types like ARRAY, MAP, and STRUCT.
 
-```SQL
-CREATE TABLE users (
-  id bigint not null,
-  country string,
-  city string,
-  revenue bigint
-)
-PRIMARY KEY (id)
-DISTRIBUTED by HASH (id)
-PROPERTIES ("store_type" = "column_with_row");
-```
+   :::
+
+   ```SQL
+   CREATE TABLE users (
+   id bigint not null,
+   country string,
+   city string,
+   revenue bigint
+   )
+   PRIMARY KEY (id)
+   DISTRIBUTED by HASH (id)
+   PROPERTIES ("store_type" = "column_with_row");
+   ```
 
 ### Insert, delete, and update data
 
@@ -160,6 +163,6 @@ EXECUTE select_by_id_stmt USING @id2;
 - The short circuiting for queries is currently only suitable for queries that happen after scheduled batch data loading. Because mutual exclusion of indexes may be incurred when the short circuiting for queries happens at the apply stage of the data writing process, data writing may block short circuiting for queries, affecting the response time of point queries during data writing.
 - Hybrid row-column storage may significantly increase storage consumption. This is because data is stored in both row and column formats, and the data compression ratio of row storage may not be as high as that of column storage.
 - Hybrid row-column storage can increase the time and resource consumption during data loading.
-- The tables with hybrid row-column storage can be a viable solution for online services, but the performance of this type of table may not compete with mature OLTP databases.
+- The tables with hybrid row-column storage can be a viable solution for online services, but the performance of this type of table may not compete with mature OLTP databases. Note that  this type of table can not well support high-concurrency data updates (insert, update, delete operations).
 - The tables with hybrid row-column storage do not support features that rely on columnar storage, such as partial updates in column mode.
 - The tables with hybrid row-column storage must be Primary Key tables.

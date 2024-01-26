@@ -507,6 +507,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 默认值：TRUE
 - 引入版本：2.5.6
 
+#### enable_experimental_rowstore
+
+- 含义：是否开启行存混存特性（公测中）。设置为 `true` 表示开启，并且建表时在 `PROPERTIES` 中配置 `"STORE_TYPE" = "column_with_row"`，则可以实现数据同时按行和按列存储，可以在优化高并发点查和数据部分更新同时，也能保证列式存储的高效分析能力。更多使用说明，参见[行列混存表](../table_design/hybrid_table.md)。
+- 默认值：FALSE
+- 引入版本：3.2.x
+
 #### storage_usage_soft_limit_percent
 
 - 含义：如果 BE 存储目录空间使用率超过该值且剩余空间小于 `storage_usage_soft_limit_reserve_bytes`，则不能继续往该路径 clone tablet。
