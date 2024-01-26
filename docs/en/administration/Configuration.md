@@ -312,6 +312,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Default: 3
 - Description: The maximum number of manual collection tasks that can run in parallel. The value defaults to 3, which means you can run a maximum of three manual collection tasks in parallel. If the value is exceeded, incoming tasks will be in the PENDING state, waiting to be scheduled.
 
+#### enable_statistic_collect_on_first_load
+
+- Unit: -
+- Default: true
+- Description: Whether to automatically collect statistics when data is loaded into a table for the first time. If a table has multiple partitions, any data loading into an empty partition of this table will trigger automatic statistics collection on this partition. If new tables are frequently created and data is frequently loaded, the memory and CPU overhead will increase.
+- Introduced in: v3.1
+
 ##### enable_local_replica_selection
 
 - Unit: -
