@@ -136,7 +136,7 @@ CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]<mv_name>
 -- refresh_moment
     [IMMEDIATE | DEFERRED]
 -- refresh_scheme
-    [ASYNC [START (<start_time>)] [EVERY (INTERVAL <refresh_interval>)] | MANUAL]
+    [ASYNC | ASYNC [START (<start_time>)] EVERY (INTERVAL <refresh_interval>) | MANUAL]
 ]
 -- partition_expression
 [PARTITION BY 
