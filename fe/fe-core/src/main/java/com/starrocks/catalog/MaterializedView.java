@@ -57,7 +57,9 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
@@ -77,6 +79,7 @@ import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -811,6 +814,40 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     public static MaterializedView read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, MaterializedView.class);
+    }
+
+    @Override
+    public void onDrop(Database db, boolean force, boolean replay) {
+        super.onDrop(db, force, replay);
+
+        // 1. Remove from plan cache
+        MvId mvId = new MvId(db.getId(), getId());
+        CachingMvPlanContextBuilder.getInstance().invalidateFromCache(this);
+
+        // 2. Remove from base tables
+        List<BaseTableInfo> baseTableInfos = getBaseTableInfos();
+        for (BaseTableInfo baseTableInfo : ListUtils.emptyIfNull(baseTableInfos)) {
+            Table baseTable = baseTableInfo.getTable();
+            if (baseTable != null) {
+                baseTable.removeRelatedMaterializedView(mvId);
+                if (!baseTable.isNativeTableOrMaterializedView()) {
+                    // remove relatedMaterializedViews for connector table
+                    GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().
+                            removeConnectorTableInfo(baseTableInfo.getCatalogName(),
+                                    baseTableInfo.getDbName(),
+                                    baseTableInfo.getTableIdentifier(),
+                                    ConnectorTableInfo.builder().setRelatedMaterializedViews(
+                                            Sets.newHashSet(mvId)).build());
+                }
+            }
+        }
+
+        // 3. Remove relevant tasks
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        Task refreshTask = taskManager.getTask(TaskBuilder.getMvTaskName(getId()));
+        if (refreshTask != null) {
+            taskManager.dropTasks(Lists.newArrayList(refreshTask.getId()), replay);
+        }
     }
 
     @Override
