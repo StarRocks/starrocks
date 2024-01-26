@@ -20,13 +20,13 @@ SET enable_profile = true;
 
 ```SQL
 -- 30 seconds
-SET global big_query_profile_threshold = 30s;
+SET global big_query_profile_threshold = '30s';
 
 -- 500 milliseconds
-SET global big_query_profile_threshold = 500ms;
+SET global big_query_profile_threshold = '500ms';
 
 -- 60 minutes
-SET global big_query_profile_threshold = 60m;
+SET global big_query_profile_threshold = '60m';
 ```
 
 ### 启用 Runtime Query Profile
