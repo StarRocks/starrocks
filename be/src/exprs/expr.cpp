@@ -213,6 +213,7 @@ Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext*
                    << apache::thrift::ThriftDebugString(texpr);
         return status;
     }
+
     return status;
 }
 
@@ -739,19 +740,13 @@ void Expr::get_jit_exprs(std::vector<Expr*>& exprs) {
 // This method searches from top to bottom for compilable expressions.
 // Once a compilable expression is found, it skips over its compilable subexpressions and continues the search downwards.
 Status Expr::replace_compilable_exprs(Expr** expr, ObjectPool* pool) {
-    std::vector<Expr*> next_exprs;
     if ((*expr)->should_compile()) {
         // If the current expression is compilable, we will replace it with a JITExpr.
         // This expression and its compilable subexpressions will be compiled into a single function.
         *expr = JITExpr::create(pool, *expr);
-        // Skip over the compilable subexpressions.
-        (*expr)->get_uncompilable_exprs(next_exprs);
-    } else {
-        // Search for compilable expressions in the subexpressions.
-        next_exprs = _children;
     }
 
-    for (auto& child : next_exprs) {
+    for (auto& child : (*expr)->_children) {
         RETURN_IF_ERROR(child->replace_compilable_exprs(&child, pool));
     }
     return Status::OK();

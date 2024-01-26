@@ -1,0 +1,129 @@
+-- name: test_jit_cast
+DROP TABLE IF EXISTS `jit_cast`;
+CREATE TABLE jit_cast (
+	k1 BIGINT, 
+	k2 BIGINT, 
+	v1 BIGINT REPLACE, 
+	v2 TINYINT REPLACE, 
+	v3 SMALLINT REPLACE, 
+	v4 INT REPLACE,
+	v5 BIGINT REPLACE,
+	v6 LARGEINT REPLACE,
+	v7 DECIMAL REPLACE,
+	v8 DOUBLE REPLACE,
+	v9 FLOAT REPLACE,
+	v10 BOOLEAN REPLACE
+) 
+ENGINE = olap 
+AGGREGATE KEY(k1, k2) 
+DISTRIBUTED BY HASH(k1) BUCKETS 10 
+PROPERTIES ( 
+	"replication_num" = "1"
+);
+
+INSERT INTO jit_cast (k1, k2, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10) VALUES
+(0, 9223372036854775807, -9223372036854775808, -128, 32767, -2147483648, 2147483647, 0, 0, -32768.1234, 32767.547, TRUE),
+(100, -9223372036854775808, 9223372036854775807, -100, 200, -200, 0, 10000, -10000, 5000, -5000, FALSE),
+(0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, TRUE),
+(0, 123, 0, 0,  0, NULL, 0, 0, 0, 0, 0, NULL),
+(-1000, 1000, 500, -100, 250, -250, 125, -125, 100000, -100000, 50000, FALSE),
+(100, -200, 300, -125, 500, -600, 700, -800, 900, -1000, 1100, TRUE),
+(-56789, 56789, 12345, -12, 67890, -67890, 0, 11111, -11111, 9999, -9999, FALSE),
+(373987, 167858970, 12346987023, 255, -0, 76189, NULL, 11111, -11111, 9999, -9999, FALSE),
+(1, -1, 2, -2, 3, -3, 4,  -4, 5,  -5, 6, TRUE),
+(32767, -32768, 2147483647,  -21, 9223372036854775807, -1234412, 100, -100, 200, -200, 0, FALSE),
+(124, -9372, 66729,  -21, 9223372036854775807, -629, 6321, NULL, 125, -200, 0, FALSE),
+(9999999, -9999999, 8888888, -88, 7777777, -7777777, 6666666, -6666666, 5555555, -5555555, 4444444, TRUE),
+(0,  1, -131, 12, 1234, 134,  -12, 17345, 63456,  341,  14, FALSE),
+(2147483647, -2147483648, 32767, -129,  100, -100, 200, -200, 0, 1, -1, TRUE),
+(-1,  1, -2, 2, -3, 3, -4, 4, -5, 5, -6, FALSE),
+(-74357,  14321, -2, 2, -3, 3, -4, 4, -5, 5.1234, NULL, FALSE),
+(9223372036854775807, -9223372036854775808, 2147483647, -128, 32767, -32768, 100, -100, 200, -200, 0, TRUE),
+(1000, -1000, 500, -99,  250, -250, 125, -125, 100000, -100000, 50000, FALSE),
+(200,  -400, 600, 82, 1000, -1200, 1400, -1600, 1800, -2000, 2200, TRUE),
+(-123456, 123456, 78901, -79, 234567, -234567, 0, 54321, -54321, 67890, -67890, FALSE),
+(7, -14, 21, -28, 35, -42, 49, -56, 63, -70,  77, TRUE),
+(9876543, -9876543, -13579246,  124, 2468642, -2468642, 86420964, -86420964, 11111, -11111, 99999, FALSE),
+(1234,  -645,  9223372036854775807, 512, 1, 2, 3, 0, -1, -2,  -3, TRUE),
+(144,  -112344,  123441234, -12, -1, -1, -1, -1, -1,  -1, -1, TRUE),
+(2134,  -123,  -1, -1, -1, -2147483648, -1, -1, -1,  -1, -1, FALSE),
+(829,  -6723,  -1, -1, -1, -2147483648, -9223372036854775808, -1, -1,  -1, -1, TRUE),
+(215,  -12,  0, 0, 0, 322, 0, 14, 0, 1234, 0, TRUE),
+(12,  -732,  233, 23, 0, 0, 234, 0, 0, 0, 0, TRUE),
+(754,  -14,  9223372036854775807, 1234, 0, 0, 0, 0, 0,  0, 0, FALSE);
+
+set enable_jit = true;
+
+-- +
+SELECT k1 + k2 + v2 as result FROM jit_cast ORDER BY result;
+SELECT k1 + v2 + 12 as result FROM jit_cast ORDER BY result;
+SELECT k1 + 8 + k2 + v2 + v3 + 62436 + 12.124 as result FROM jit_cast ORDER BY result;
+SELECT k1 + k2 + v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9 + v10 as result FROM jit_cast ORDER BY result;
+SELECT k1 + k2 + v1 + v2 + v3 + v4 + v5 + v6 + v8 + v9 + v10 + 6127.1234 as result FROM jit_cast ORDER BY result;
+SELECT v1 + v3 + v5 as result FROM jit_cast ORDER BY result;
+SELECT v1 + v2 + v3 + v4 + v5 + v6 as result FROM jit_cast ORDER BY result;
+SELECT k1 + v2 + v4 + v6 + v7 as result FROM jit_cast ORDER BY result;
+SELECT v2 + v3 + v6 + v7 as result FROM jit_cast ORDER BY result;
+SELECT v1 + v4 + v5 + v6 + 68232 as result FROM jit_cast ORDER BY result;
+-- -
+SELECT k1 - k2 + v1 as result FROM jit_cast ORDER BY result;
+SELECT k1 + v2 - 12.123 as result FROM jit_cast ORDER BY result;
+SELECT k1 + v3 + v4 - 12 as result FROM jit_cast ORDER BY result;
+SELECT k1 - k2 + v1 - v2 + v3 + v4 + v5 - v6 + v7 + v8 - v9 + v10 as result FROM jit_cast ORDER BY result;
+SELECT k1 + k2 - v1 + v2 - v3 - 978342 + v4 + v5 - v6 + v8 + v9 - v10 as result FROM jit_cast ORDER BY result;
+SELECT v1 - v3 + v5 + v6 - v9 as result FROM jit_cast ORDER BY result;
+SELECT v1 + v2 - v3 + v4 + v5 - v6 as result FROM jit_cast ORDER BY result;
+SELECT k1 + k2 - v7 + v9 as result FROM jit_cast ORDER BY result;
+SELECT k1 + k2 + 1235 - v7 + v9 - 742 as result FROM jit_cast ORDER BY result;
+-- *
+SELECT k1 * k2 * v1 as result FROM jit_cast ORDER BY result;
+SELECT k1 * k2 * v1 * 62.124 as result FROM jit_cast ORDER BY result;
+SELECT k1 * k2 - v1 * v2 * v3 + v4 + v5 * v6 + v7 * v8 - v9 as result FROM jit_cast ORDER BY result;
+SELECT k1 * k2 - 7334 - v1 * v2 * v3 + v4 * 732 + v5 * v6 * 821 + v7 - 132 as result FROM jit_cast ORDER BY result;
+SELECT k1 * k2 - 12.124 - v1 * v2 - v3 + v4 * 74 + v5 * v6 * 472 * v8 - v9 - 7790237 as result FROM jit_cast ORDER BY result;
+SELECT v1 - v3 * v5 * v7 - v9 as result FROM jit_cast ORDER BY result;
+SELECT v1 * v2 - v3 * v4 * v5 - v6 as result FROM jit_cast ORDER BY result;
+SELECT v1 + v2 * 568.585656 - v3 * v4 * v5 - v6 + 622 as result FROM jit_cast ORDER BY result;
+SELECT k1 * v4 - v5 + v6 as result FROM jit_cast ORDER BY result;
+-- /
+SELECT k1 / k2 DIV v1 as result FROM jit_cast ORDER BY result;
+SELECT v6 / v4 DIV v3 / v10 as result FROM jit_cast ORDER BY result;
+SELECT v4 / v4 / v9 / v3 / v1 DIV v2 / v8 / v10 / v5 as result FROM jit_cast ORDER BY result;
+SELECT v10 / v4 DIV -1 / v6 / 0 as result FROM jit_cast ORDER BY result;
+SELECT v2 / v8 / v4 / -1.0 / v9 as result FROM jit_cast ORDER BY result;
+SELECT v6 / v10 / v9 / v1 / v8 as result FROM jit_cast ORDER BY result;
+SELECT v5 / v7 / v2 as result FROM jit_cast ORDER BY result;
+SELECT v10 DIV v6 / v3 as result FROM jit_cast ORDER BY result;
+-- %
+SELECT k1 * k2 % v1 as result FROM jit_cast ORDER BY result;
+SELECT (v6 * v4 % v3 - 727899017) % v10 as result FROM jit_cast ORDER BY result;
+SELECT ((v4 % v9 + 729) % v3 + 113) % v1 % v2 % v8 % v10 % v5 as result FROM jit_cast ORDER BY result;
+SELECT v10 % v4 % -1 % v6 % 0 as result FROM jit_cast ORDER BY result;
+SELECT v2 % v8 * v4 % -1.0 * v9 as result FROM jit_cast ORDER BY result;
+SELECT (v6 % v10 + 729) % (v9 % v1 + 192.13) % v8 as result FROM jit_cast ORDER BY result;
+SELECT v5 * v7 % v2 as result FROM jit_cast ORDER BY result;
+SELECT v10 * v6 % v3 as result FROM jit_cast ORDER BY result;
+-- mix
+SELECT v1 + v2 + v3 * 124 - 854 as result FROM jit_cast ORDER BY result;
+SELECT v1 + v2 + v3 / 124 - 854 as result FROM jit_cast ORDER BY result;
+SELECT v1 - 123.123 - v2 + v3 * 2 as result FROM jit_cast ORDER BY result;
+SELECT v1 * v2 + v3 + 0 + v4 - v6 * 0 + v10 as result FROM jit_cast ORDER BY result;
+SELECT v1 * v2 DIV v3 + 142 + v4 - v6 * 0 + v10 as result FROM jit_cast ORDER BY result;
+SELECT (v1 + v2) * v3 - 1124 as result FROM jit_cast ORDER BY result;
+SELECT (v1 + v2) * v3 % 1124 as result FROM jit_cast ORDER BY result;
+SELECT (v3 + v5 + v6) / v8 % 643.122 as result FROM jit_cast ORDER BY result;
+SELECT (v1 * v4) - (v3 + 0) - (v5 * 0) as result FROM jit_cast ORDER BY result;
+SELECT (v2 + v4) + (v5 - 4732) * v3 + 7673099837 as result FROM jit_cast ORDER BY result;
+SELECT (v3 + v4) DIV (v6 - 123) * v3 + 213 as result FROM jit_cast ORDER BY result;
+SELECT v2 + v3 * v4 as result FROM jit_cast ORDER BY result;
+SELECT v3 + v5 / v6 as result FROM jit_cast ORDER BY result;
+SELECT (v8 * v9 + v1) * (k1 - v2) as result FROM jit_cast ORDER BY result;
+SELECT (v8 + v9 * v1) DIV (k1 - v2) as result FROM jit_cast ORDER BY result;
+SELECT v4 + v10 - v1 * v8 + v3 as result FROM jit_cast ORDER BY result;
+SELECT v4 + v10 - v1 % v8 + v3 * v2 as result FROM jit_cast ORDER BY result;
+SELECT (v2 - v5 * v1) * (v7 + v5 - v3) as result FROM jit_cast ORDER BY result;
+SELECT (v3 - v2 * v1) / (v6 - v5 + v3) as result FROM jit_cast ORDER BY result;
+SELECT (k1 * k2 + v1) * v2 + v3 * v4 - v5 + 142 as result FROM jit_cast ORDER BY result;
+SELECT (v1 + v2) * (v3 + v4) * (v5 + v6) * (v7 + v8) % (v9 + v10) as result FROM jit_cast ORDER BY result;
+
+DROP TABLE IF EXISTS `jit_cast`;

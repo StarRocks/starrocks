@@ -489,16 +489,13 @@ void FileReader::_prepare_read_columns() {
 
 bool FileReader::_select_row_group(const tparquet::RowGroup& row_group) {
     size_t row_group_start = _get_row_group_start_offset(row_group);
+    const auto* scan_range = _scanner_ctx->scan_range;
+    size_t scan_start = scan_range->offset;
+    size_t scan_end = scan_range->length + scan_start;
 
-    for (auto* scan_range : _scanner_ctx->scan_ranges) {
-        size_t scan_start = scan_range->offset;
-        size_t scan_end = scan_range->length + scan_start;
-
-        if (row_group_start >= scan_start && row_group_start < scan_end) {
-            return true;
-        }
+    if (row_group_start >= scan_start && row_group_start < scan_end) {
+        return true;
     }
-
     return false;
 }
 
