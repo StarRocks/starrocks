@@ -1,8 +1,6 @@
 #include "exec/pipeline/table_function_operator.h"
 
-#include <utility>
-
-#include "gen_cpp/RuntimeProfile_types.h"
+#include "exec/pipeline/query_context.h"
 #include "gtest/gtest.h"
 
 namespace starrocks::pipeline {
@@ -15,6 +13,7 @@ protected:
 
 private:
     RuntimeState _runtime_state;
+    std::unique_ptr<QueryContext> _query_ctx = std::make_unique<QueryContext>();
     ObjectPool _object_pool;
     DescriptorTbl* _desc_tbl = nullptr;
     TPlanNode _tnode;
@@ -81,6 +80,8 @@ private:
 };
 
 void TableFunctionOperatorTest::SetUp() {
+    _runtime_state.set_query_ctx(_query_ctx.get());
+
     TTableDescriptor t_table_desc;
     t_table_desc.id = 0;
     t_table_desc.tableType = TTableType::OLAP_TABLE;
