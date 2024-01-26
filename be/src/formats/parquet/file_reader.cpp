@@ -540,7 +540,7 @@ Status FileReader::_init_group_readers() {
             StatusOr<bool> st = _filter_group(_file_metadata->t_metadata().row_groups[i]);
             if (!st.ok()) return st.status();
             if (st.value()) {
-                LOG(INFO) << "row group " << i << " of file has been filtered by min/max conjunct";
+                DLOG(INFO) << "row group " << i << " of file has been filtered by min/max conjunct";
                 continue;
             }
 
