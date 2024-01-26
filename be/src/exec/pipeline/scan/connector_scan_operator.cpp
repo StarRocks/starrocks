@@ -580,6 +580,36 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
     return io_tasks;
 }
 
+void ConnectorScanOperator::append_morsels(std::vector<MorselPtr>&& morsels) {
+    std::lock_guard<std::mutex> L(_buffered_morsels_mutex);
+    _buffered_morsels.insert(_buffered_morsels.end(), std::make_move_iterator(morsels.begin()),
+                             std::make_move_iterator(morsels.end()));
+}
+
+void ConnectorScanOperator::begin_pickup_morsels() {
+    // TODO(yan): optimzie if when there is no buffered morsels.
+    std::vector<MorselPtr> morsels;
+    {
+        std::lock_guard<std::mutex> L(_buffered_morsels_mutex);
+        morsels.swap(_buffered_morsels);
+    }
+
+    query_cache::TicketChecker* ticket_checker = _ticket_checker.get();
+    if (ticket_checker != nullptr) {
+        int64_t cached_owner_id = -1;
+        for (const MorselPtr& morsel : morsels) {
+            if (!morsel->has_owner_id()) continue;
+            int64_t owner_id = morsel->owner_id();
+            if (owner_id != cached_owner_id) {
+                cached_owner_id = owner_id;
+                ticket_checker->more_tickets(cached_owner_id);
+            }
+        }
+    }
+
+    _morsel_queue->append_morsels(std::move(morsels));
+}
+
 // ==================== ConnectorChunkSource ====================
 ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
                                            ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer)
@@ -630,7 +660,7 @@ void ConnectorChunkSource::close(RuntimeState* state) {
     if (_closed) return;
 
     ConnectorScanOperator* scan_op = down_cast<ConnectorScanOperator*>(_scan_op);
-    if (scan_op->_enable_adaptive_io_tasks) {
+    if (scan_op->enable_adaptive_io_tasks()) {
         MemTracker* mem_tracker = state->query_ctx()->connector_scan_mem_tracker();
         mem_tracker->release(_request_mem_tracker_bytes);
 
@@ -685,7 +715,7 @@ Status ConnectorChunkSource::_open_data_source(RuntimeState* state, bool* mem_al
     }
 
     ConnectorScanOperator* scan_op = down_cast<ConnectorScanOperator*>(_scan_op);
-    if (scan_op->_enable_adaptive_io_tasks) {
+    if (scan_op->enable_adaptive_io_tasks()) {
         [[maybe_unused]] auto build_debug_string = [&](const std::string action) {
             std::stringstream ss;
             ss << "try_mem_tracker. query_id = " << print_id(state->query_id())
@@ -742,7 +772,7 @@ Status ConnectorChunkSource::_open_data_source(RuntimeState* state, bool* mem_al
 
 Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
     ConnectorScanOperator* scan_op = down_cast<ConnectorScanOperator*>(_scan_op);
-    ConnectorScanOperatorAdaptiveProcessor& P = *(scan_op->_adaptive_processor);
+    ConnectorScanOperatorAdaptiveProcessor& P = *(scan_op->adaptive_processor());
 
     DeferOp defer_op([&]() { P.last_chunk_souce_finish_timestamp = GetCurrentTimeMicros(); });
 

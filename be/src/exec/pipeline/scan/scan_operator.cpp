@@ -320,6 +320,7 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
 
     size = std::min(size, total_cnt);
     // pick up new chunk source.
+    begin_pickup_morsels();
     ASSIGN_OR_RETURN(auto morsel_ready, _morsel_queue->ready_for_next());
     if (size > 0 && morsel_ready) {
         for (int i = 0; i < size; i++) {
@@ -574,24 +575,6 @@ void ScanOperator::_merge_chunk_source_profiles(RuntimeState* state) {
 
 void ScanOperator::set_query_ctx(const QueryContextPtr& query_ctx) {
     _query_ctx = query_ctx;
-}
-
-void ScanOperator::append_morsels(std::vector<MorselPtr>&& morsels) {
-    query_cache::TicketChecker* ticket_checker = _ticket_checker.get();
-
-    if (ticket_checker != nullptr) {
-        int64_t cached_owner_id = -1;
-        for (const MorselPtr& morsel : morsels) {
-            if (!morsel->has_owner_id()) continue;
-            int64_t owner_id = morsel->owner_id();
-            if (owner_id != cached_owner_id) {
-                cached_owner_id = owner_id;
-                ticket_checker->more_tickets(cached_owner_id);
-            }
-        }
-    }
-
-    _morsel_queue->append_morsels(std::move(morsels));
 }
 
 // ========== ScanOperatorFactory ==========
