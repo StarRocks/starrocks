@@ -431,7 +431,6 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
 
     DCHECK_EQ(rows_read, chunk->get()->num_rows());
 
-    _scanner_ctx.append_not_existed_columns_to_chunk(chunk, rows_read);
     _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, rows_read);
 
     return Status::OK();
@@ -479,6 +478,9 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
                 *chunk = std::move(ret.value());
             }
 
+            // we need to append none existed column before do eval, just for count(*) optimization
+            _scanner_ctx.append_not_existed_columns_to_chunk(chunk, rows_read);
+
             // do stats before we filter rows which does not match.
             _app_stats.raw_rows_read += rows_read;
             _chunk_filter.assign(rows_read, 1);
@@ -506,7 +508,6 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
                 ck->filter(_chunk_filter);
             }
         }
-        ck->set_num_rows(rows_read);
 
         if (!_orc_reader->has_lazy_load_context()) {
             return rows_read;
