@@ -253,7 +253,7 @@ Description: Cumulative memory deallocated by the Operator.
 
 ##### OperatorPeakMemoryUsage
 
-Description: Peak memory usage of the Operator. This metric is meaningful for certain materialization operators, such as aggregation, sorting, Join, etc. It is not relevant for operators like Project because memory is allocated by the current operator and released by subsequent operators, making peak memory equivalent to cumulative allocated memory for the current operator.
+Description: Peak memory usage by the Operator across all compute nodes. This metric is meaningful for certain materialization operators, such as aggregation, sorting, Join, etc. It is not relevant for operators like Project because memory is allocated by the current operator and released by subsequent operators, making peak memory equivalent to cumulative allocated memory for the current operator. In versions earlier than v3.1.8 and v3.2.3, this metric represents the peak memory usage by the Operator across all *PipelineDrivers*.
 
 ##### PrepareTime
 

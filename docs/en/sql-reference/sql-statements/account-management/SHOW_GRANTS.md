@@ -10,7 +10,9 @@ Displays all the privileges that have been granted to a user or role.
 
 For more information about roles and privileges, see [Overview of privileges](../../../administration/privilege_overview.md).
 
-> NOTE: All the roles and users can view the privileges granted to them or the roles assigned to them. However, only the `user_admin` role can view the privileges of a specific user or role.
+:::tip
+All roles and users can view the privileges granted to them or the roles assigned to them. Only users with the `user_admin` role can view the privileges of a specified user or role.
+:::
 
 ## Syntax
 

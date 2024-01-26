@@ -3389,7 +3389,10 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* stat) 
             }
         }
     }
-    _dump_snapshot |= !_flushed && _l0->file_size() - _l0->memory_usage() > config::l0_max_file_size;
+    // l0_max_file_size: the maximum data size for WAL
+    // l0_max_mem_usage: the maximum data size for snapshot
+    // So the max l0 file size should less than l0_max_file_size + l0_max_mem_usage
+    _dump_snapshot |= !_flushed && _l0->file_size() > config::l0_max_mem_usage + config::l0_max_file_size;
     // for case1 and case2
     if (do_minor_compaction) {
         // clear _l0 and reload l1 and l2s
@@ -5137,6 +5140,25 @@ Status PersistentIndex::pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* 
         RETURN_IF_ERROR(_l0->pk_dump(dump, level));
     }
     return Status::OK();
+}
+
+Status PersistentIndex::delete_pindex_files() {
+    std::string dir = _path;
+    auto cb = [&](std::string_view name) -> bool {
+        std::string prefix = "index.";
+        std::string full(name);
+        if (full.length() >= prefix.length() && full.compare(0, prefix.length(), prefix) == 0) {
+            std::string path = dir + "/" + full;
+            VLOG(1) << "delete index file " << path;
+            Status st = FileSystem::Default()->delete_file(path);
+            if (!st.ok()) {
+                LOG(WARNING) << "delete index file: " << path << ", failed, status: " << st.to_string();
+                return false;
+            }
+        }
+        return true;
+    };
+    return FileSystem::Default()->iterate_dir(_path, cb);
 }
 
 } // namespace starrocks

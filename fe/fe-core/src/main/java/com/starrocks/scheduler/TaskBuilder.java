@@ -171,8 +171,7 @@ public class TaskBuilder {
         String mvId = String.valueOf(materializedView.getId());
         previousTaskProperties.put(PartitionBasedMvRefreshProcessor.MV_ID, mvId);
         task.setProperties(previousTaskProperties);
-        task.setDefinition(
-                "insert overwrite " + materializedView.getName() + " " + materializedView.getViewDefineSql());
+        task.setDefinition(materializedView.getTaskDefinition());
         task.setPostRun(getAnalyzeMVStmt(materializedView.getName()));
         task.setExpireTime(0L);
         handleSpecialTaskProperties(task);

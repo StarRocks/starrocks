@@ -102,7 +102,7 @@ import com.starrocks.task.PushTask;
 import com.starrocks.task.RemoteSnapshotTask;
 import com.starrocks.task.ReplicateSnapshotTask;
 import com.starrocks.task.SnapshotTask;
-import com.starrocks.task.UpdateTabletMetaInfoTask;
+import com.starrocks.task.TabletMetadataUpdateAgentTask;
 import com.starrocks.task.UploadTask;
 import com.starrocks.thrift.TAbortRemoteTxnRequest;
 import com.starrocks.thrift.TAbortRemoteTxnResponse;
@@ -418,7 +418,7 @@ public class LeaderImpl {
         // because in this function, the only problem that cause failure is meta missing.
         // and if meta is missing, we no longer need to resend this task
         try {
-            UpdateTabletMetaInfoTask tabletTask = (UpdateTabletMetaInfoTask) task;
+            TabletMetadataUpdateAgentTask tabletTask = (TabletMetadataUpdateAgentTask) task;
             if (request.getTask_status().getStatus_code() != TStatusCode.OK) {
                 tabletTask.countDownToZero(
                         task.getBackendId() + ": " + request.getTask_status().getError_msgs().toString());
