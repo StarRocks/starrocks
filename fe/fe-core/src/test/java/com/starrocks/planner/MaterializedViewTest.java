@@ -4534,4 +4534,28 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             starRocksAssert.dropTable("test_sr_table_join");
         }
     }
+
+    @Test
+    public void testStrColumnCountDistinctToBitmap() {
+        String mv = "select user_id, time, bitmap_union(to_bitmap(tag_id)), " +
+                "bitmap_union(to_bitmap(tag_id + 1)), " +
+                "bitmap_union(to_bitmap(tag_id + 2)), " +
+                "bitmap_union(to_bitmap(tag_id + 3)) from user_tags group by user_id, time;";
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
+        testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x " +
+                "from user_tags group by user_id;");
+        // FIXME: MV Rewrite should take care cte reuse node later.
+        connectContext.getSessionVariable().setCboCteReuse(false);
+        testRewriteOK(mv, "select user_id, count(distinct tag_id), " +
+                " count(distinct tag_id + 1), count(distinct tag_id + 2)," +
+                " count(distinct tag_id + 3)  from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, count(distinct tag_id), " +
+                " count(distinct tag_id + 1), count(distinct tag_id + 2)," +
+                " count(distinct tag_id + 3)  from user_tags group by user_id, time;");
+        testRewriteOK(mv, "select count(distinct tag_id), " +
+                " count(distinct tag_id + 1), count(distinct tag_id + 2)," +
+                " count(distinct tag_id + 3)  from user_tags;");
+        connectContext.getSessionVariable().setCboCteReuse(true);
+    }
 }
