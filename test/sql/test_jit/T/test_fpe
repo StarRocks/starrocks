@@ -1,0 +1,57 @@
+-- name: test_jit_fpe
+DROP TABLE IF EXISTS `jit_fpe`;
+CREATE TABLE jit_fpe (
+	k1 BIGINT, 
+	v1 INT REPLACE, 
+	v2 BIGINT REPLACE, 
+	v3 INT REPLACE, 
+	v4 BIGINT REPLACE,
+	v5 DOUBLE REPLACE
+) 
+ENGINE = olap 
+AGGREGATE KEY(k1) 
+DISTRIBUTED BY HASH(k1) BUCKETS 10 
+PROPERTIES ( "replication_num" = "1" ) 
+;
+
+INSERT INTO jit_fpe 
+(k1, v1, v2, v3, v4, v5) VALUES
+(1, -2147483648, -9223372036854775808, -1, -1, -1),
+(2, -2147483648, -9223372036854775808, -2, -2, -2),
+(3, -2147483648, -9223372036854775808, 1, 1, 1),
+(4, -2147483648, -9223372036854775808, 0, 0, 0),
+(5, -2147483648, -9223372036854775808, -0, -0, -0),
+(6, -2147483648, -9223372036854775808, 612, 7623634, 23648.1234);
+
+set enable_jit = true;
+
+-- DIV
+SELECT v1 DIV v3 + 233 as result FROM jit_fpe ORDER BY result;
+SELECT v1 DIV v3 + v3 as result FROM jit_fpe ORDER BY result;
+SELECT v1 DIV v3 + k1 as result FROM jit_fpe ORDER BY result;
+SELECT v1 DIV v4 + 123 as result FROM jit_fpe ORDER BY result;
+SELECT v1 DIV v4 + k1 as result FROM jit_fpe ORDER BY result;
+SELECT v1 DIV v5 + k1 as result FROM jit_fpe ORDER BY result;
+SELECT v2 DIV v3 + 313 as result FROM jit_fpe ORDER BY result;
+SELECT v2 DIV v3 + v3 as result FROM jit_fpe ORDER BY result;
+SELECT v2 DIV v3 + k1 as result FROM jit_fpe ORDER BY result;
+SELECT v2 DIV v4 + 6720 as result FROM jit_fpe ORDER BY result;
+SELECT v2 DIV v4 + k1 as result FROM jit_fpe ORDER BY result;
+SELECT v2 DIV v5 + k1 as result FROM jit_fpe ORDER BY result;
+SELECT v2 DIV v5 + 2892.193 as result FROM jit_fpe ORDER BY result;
+-- MOD
+SELECT v1 % v3 + 233 as result FROM jit_fpe ORDER BY result;
+SELECT v1 % v3 + v3 as result FROM jit_fpe ORDER BY result;
+SELECT v1 % v3 + k1 as result FROM jit_fpe ORDER BY result;
+SELECT v1 % v4 + 123 as result FROM jit_fpe ORDER BY result;
+SELECT v1 % v4 + k1 as result FROM jit_fpe ORDER BY result;
+SELECT v1 % v5 + k1 as result FROM jit_fpe ORDER BY result;
+SELECT v2 % v3 + 313 as result FROM jit_fpe ORDER BY result;
+SELECT v2 % v3 + v3 as result FROM jit_fpe ORDER BY result;
+SELECT v2 % v3 + k1 as result FROM jit_fpe ORDER BY result;
+SELECT v2 % v4 + 6720 as result FROM jit_fpe ORDER BY result;
+SELECT v2 % v4 + k1 as result FROM jit_fpe ORDER BY result;
+SELECT v2 % v5 + k1 as result FROM jit_fpe ORDER BY result;
+SELECT v2 % v5 + 2892.193 as result FROM jit_fpe ORDER BY result;
+
+DROP TABLE IF EXISTS `jit_fpe`;

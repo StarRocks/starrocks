@@ -1,0 +1,269 @@
+-- name: test_jit_fpe
+DROP TABLE IF EXISTS `jit_fpe`;
+-- result:
+-- !result
+CREATE TABLE jit_fpe (
+	k1 BIGINT, 
+	v1 INT REPLACE, 
+	v2 BIGINT REPLACE, 
+	v3 INT REPLACE, 
+	v4 BIGINT REPLACE,
+	v5 DOUBLE REPLACE
+) 
+ENGINE = olap 
+AGGREGATE KEY(k1) 
+DISTRIBUTED BY HASH(k1) BUCKETS 10 
+PROPERTIES ( "replication_num" = "1" ) 
+;
+-- result:
+-- !result
+INSERT INTO jit_fpe 
+(k1, v1, v2, v3, v4, v5) VALUES
+(1, -2147483648, -9223372036854775808, -1, -1, -1),
+(2, -2147483648, -9223372036854775808, -2, -2, -2),
+(3, -2147483648, -9223372036854775808, 1, 1, 1),
+(4, -2147483648, -9223372036854775808, 0, 0, 0),
+(5, -2147483648, -9223372036854775808, -0, -0, -0),
+(6, -2147483648, -9223372036854775808, 612, 7623634, 23648.1234);
+-- result:
+-- !result
+set enable_jit = true;
+-- result:
+-- !result
+SELECT v1 DIV v3 + 233 as result FROM jit_fpe ORDER BY result;
+-- result:
+None
+None
+-2147483415
+-2147483415
+-3508727
+1073742057
+-- !result
+SELECT v1 DIV v3 + v3 as result FROM jit_fpe ORDER BY result;
+-- result:
+None
+None
+-2147483649
+-2147483647
+-3508348
+1073741822
+-- !result
+SELECT v1 DIV v3 + k1 as result FROM jit_fpe ORDER BY result;
+-- result:
+None
+None
+-2147483647
+-2147483645
+-3508954
+1073741826
+-- !result
+SELECT v1 DIV v4 + 123 as result FROM jit_fpe ORDER BY result;
+-- result:
+None
+None
+-2147483525
+-158
+1073741947
+2147483771
+-- !result
+SELECT v1 DIV v4 + k1 as result FROM jit_fpe ORDER BY result;
+-- result:
+None
+None
+-2147483645
+-275
+1073741826
+2147483649
+-- !result
+SELECT v1 DIV v5 + k1 as result FROM jit_fpe ORDER BY result;
+-- result:
+None
+None
+-2147483645
+-90804
+1073741826
+2147483649
+-- !result
+SELECT v2 DIV v3 + 313 as result FROM jit_fpe ORDER BY result;
+-- result:
+None
+None
+-9223372036854775495
+-9223372036854775495
+-15070869341265660
+4611686018427388217
+-- !result
+SELECT v2 DIV v3 + v3 as result FROM jit_fpe ORDER BY result;
+-- result:
+None
+None
+-9223372036854775807
+-15070869341265361
+4611686018427387902
+9223372036854775807
+-- !result
+SELECT v2 DIV v3 + k1 as result FROM jit_fpe ORDER BY result;
+-- result:
+None
+None
+-9223372036854775807
+-9223372036854775805
+-15070869341265967
+4611686018427387906
+-- !result
+SELECT v2 DIV v4 + 6720 as result FROM jit_fpe ORDER BY result;
+-- result:
+None
+None
+-9223372036854769088
+-9223372036854769088
+-1209839295226
+4611686018427394624
+-- !result
+SELECT v2 DIV v4 + k1 as result FROM jit_fpe ORDER BY result;
+-- result:
+None
+None
+-9223372036854775807
+-9223372036854775805
+-1209839301940
+4611686018427387906
+-- !result
+SELECT v2 DIV v5 + k1 as result FROM jit_fpe ORDER BY result;
+-- result:
+None
+None
+-9223372036854775807
+-9223372036854775805
+-390027572600415
+4611686018427387906
+-- !result
+SELECT v2 DIV v5 + 2892.193 as result FROM jit_fpe ORDER BY result;
+-- result:
+None
+None
+-9223372036854772915.807
+-9223372036854772915.807
+-390027572597528.807
+4611686018427390796.193
+-- !result
+SELECT v1 % v3 + 233 as result FROM jit_fpe ORDER BY result;
+-- result:
+None
+None
+105
+233
+233
+233
+-- !result
+SELECT v1 % v3 + v3 as result FROM jit_fpe ORDER BY result;
+-- result:
+None
+None
+-2
+-1
+1
+484
+-- !result
+SELECT v1 % v3 + k1 as result FROM jit_fpe ORDER BY result;
+-- result:
+None
+None
+-122
+1
+2
+3
+-- !result
+SELECT v1 % v4 + 123 as result FROM jit_fpe ORDER BY result;
+-- result:
+None
+None
+-5242371
+123
+123
+123
+-- !result
+SELECT v1 % v4 + k1 as result FROM jit_fpe ORDER BY result;
+-- result:
+None
+None
+-5242488
+1
+2
+3
+-- !result
+SELECT v1 % v5 + k1 as result FROM jit_fpe ORDER BY result;
+-- result:
+None
+None
+-21204.169399963528
+1.0
+2.0
+3.0
+-- !result
+SELECT v2 % v3 + 313 as result FROM jit_fpe ORDER BY result;
+-- result:
+None
+None
+-19
+313
+313
+313
+-- !result
+SELECT v2 % v3 + v3 as result FROM jit_fpe ORDER BY result;
+-- result:
+None
+None
+-2
+-1
+1
+280
+-- !result
+SELECT v2 % v3 + k1 as result FROM jit_fpe ORDER BY result;
+-- result:
+None
+None
+-326
+1
+2
+3
+-- !result
+SELECT v2 % v4 + 6720 as result FROM jit_fpe ORDER BY result;
+-- result:
+None
+None
+-2977324
+6720
+6720
+6720
+-- !result
+SELECT v2 % v4 + k1 as result FROM jit_fpe ORDER BY result;
+-- result:
+None
+None
+-2984038
+1
+2
+3
+-- !result
+SELECT v2 % v5 + k1 as result FROM jit_fpe ORDER BY result;
+-- result:
+None
+None
+-4367.71912783528
+1.0
+2.0
+3.0
+-- !result
+SELECT v2 % v5 + 2892.193 as result FROM jit_fpe ORDER BY result;
+-- result:
+None
+None
+-1481.52612783528
+2892.193
+2892.193
+2892.193
+-- !result
+DROP TABLE IF EXISTS `jit_fpe`;
+-- result:
+-- !result
