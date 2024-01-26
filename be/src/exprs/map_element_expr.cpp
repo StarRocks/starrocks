@@ -14,6 +14,8 @@
 
 #include "exprs/map_element_expr.h"
 
+#include <gutil/strings/substitute.h>
+
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
@@ -30,7 +32,9 @@ namespace starrocks {
 
 class MapElementExpr final : public Expr {
 public:
-    explicit MapElementExpr(const TExprNode& node) : Expr(node) {}
+    explicit MapElementExpr(const TExprNode& node, const bool check_is_out_of_bounds) : Expr(node) {
+        _check_is_out_of_bounds = check_is_out_of_bounds;
+    }
 
     MapElementExpr(const MapElementExpr& m) = default;
     MapElementExpr(MapElementExpr&& m) noexcept = default;
@@ -97,6 +101,10 @@ public:
                 }
             }
             if (!has_equal) {
+                if (_check_is_out_of_bounds) {
+                    return Status::InvalidArgument(
+                            strings::Substitute("Key not present in map: $0", key_column->debug_item(key_idx)));
+                }
                 res->append_nulls(1);
             }
         }
@@ -114,11 +122,18 @@ public:
     }
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new MapElementExpr(*this)); }
+
+private:
+    bool _check_is_out_of_bounds = false;
 };
 
 Expr* MapElementExprFactory::from_thrift(const TExprNode& node) {
     DCHECK_EQ(TExprNodeType::MAP_ELEMENT_EXPR, node.node_type);
-    return new MapElementExpr(node);
+    bool check_is_out_of_bounds = false;
+    if (node.__isset.check_is_out_of_bounds) {
+        check_is_out_of_bounds = node.check_is_out_of_bounds;
+    }
+    return new MapElementExpr(node, check_is_out_of_bounds);
 }
 
 } // namespace starrocks

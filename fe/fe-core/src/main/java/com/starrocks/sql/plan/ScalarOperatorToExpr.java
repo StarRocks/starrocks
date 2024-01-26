@@ -198,7 +198,7 @@ public class ScalarOperatorToExpr {
         public Expr visitCollectionElement(CollectionElementOperator node, FormatterContext context) {
             CollectionElementExpr expr =
                     new CollectionElementExpr(node.getType(), buildExpr.build(node.getChild(0), context),
-                            buildExpr.build(node.getChild(1), context));
+                            buildExpr.build(node.getChild(1), context), node.isCheckOutOfBounds());
             hackTypeNull(expr);
             return expr;
         }

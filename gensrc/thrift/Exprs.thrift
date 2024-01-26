@@ -235,6 +235,9 @@ struct TExprNode {
   31: optional TBinaryLiteral binary_literal;
   32: optional bool copy_flag;
 
+  // used for CollectionElementAt
+  35: optional bool check_is_out_of_bounds
+
   // For vector query engine
   50: optional bool use_vectorized  // Deprecated
   51: optional bool has_nullable_child
