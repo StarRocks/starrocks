@@ -8,7 +8,7 @@ toc_max_heading_level: 5
 索引有助于快速定位到满足查询条件的数据。具体来说，如果表中基于一些列构建了索引，那么查询时如果能用上这些索引，就不需要扫描全表，只需要读取部分数据，就能快速定位到满足条件的数据的位置，从而提高查询效率。StarRocks 提供了丰富的索引类型，主要分为以下两类：
 
 - StarRocks 自动创建的索引，称为内置索引，包括前缀索引、Ordinal 索引、ZoneMap 索引。
-- StarRocks 同时也支持用户手动创建索引，包括 Bitmap 索引和 Bloomfilter 索引。
+- StarRocks 同时也支持用户手动创建索引，包括 Bitmap 索引和 Bloom filter 索引。
 
 ## 内置索引
 
@@ -145,15 +145,15 @@ ZoneMap 索引存储了每块数据统计信息，统计信息包括 Min 最大�
 
 ## 手动创建的索引
 
-如果查询条件中的列不是前缀字段，您可以为这一列手动创建 Bitmap 索引或者 Bloomfilter 索引来提高查询效率。 
+如果查询条件中的列不是前缀字段，您可以为这一列手动创建 Bitmap 索引或者 Bloom filter 索引来提高查询效率。 
 
 ### [Bitmap 索引](./Bitmap_index.md)
 
 Bitmap 索引一般适用于高基数列，基于列构建的 Bitmap 索引的选择性高，使用 Bitmap 索引后能筛选出的较少的数据行的场景。
 
-### [Bloomfilter 索引](./Bloomfilter_index.md)
+### [Bloom filter 索引](./Bloomfilter_index.md)
 
-Bloomfilter 索引适用于基数较高的列，比如 ID 列，但是存在一定的误判率。
+Bloom filter 索引适用于基数较高的列，比如 ID 列，但是存在一定的误判率。
 
 ## 如何判断索引是否生效
 

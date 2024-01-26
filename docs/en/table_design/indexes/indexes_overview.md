@@ -8,7 +8,7 @@ toc_max_heading_level: 5
 Indexes can help quickly locate data that matches certain query conditions. To be specific, when an index is built on a table based on some of the table's columns, queries that use these columns as query conditions require scanning only on portions of the table data in order to locate the data that meet the conditions. As such, query efficiency is improved. StarRocks provides a variety of index types, mainly divided into the following two categories:
 
 - StarRocks provides built-in indexes which are automatically created by the system, including Prefix indexes, Ordinal indexes, and ZoneMap indexes.
-- StarRocks also allows users to manually create indexes, including Bitmap indexes and Bloomfilter indexes.
+- StarRocks also allows users to manually create indexes, including Bitmap indexes and Bloom filter indexes.
 
 ## Built-in indexes
 
@@ -135,15 +135,15 @@ Each data chunk can be a segment, or a data page of a column. So correspondingly
 
 ## Manually created indexes
 
-If the column in the query condition is not a prefix field, you can manually apply a Bitmap index or Bloomfilter index to this column to improve query efficiency.
+If the column in the query condition is not a prefix field, you can manually apply a Bitmap index or Bloom filter index to this column to improve query efficiency.
 
 ### [Bitmap indexes](./Bitmap_index.md)
 
 Bitmap indexes are generally suitable for columns with high cardinality. Bitmap indexes are a good choice when  Bitmap indexes can exhibit high selectivity, and its filtering effect (number of data rows filtered by the Bitmap index/total number of data rows) is lower than one in ten thousand.
 
-### [Bloomfilter indexes](./Bloomfilter_index.md)
+### [Bloom filter indexes](./Bloomfilter_index.md)
 
-Bloomfilter indexes are suitable for columns with relatively high cardinality, such as ID columns, but they may incur a certain rate of misjudgment.
+Bloom filter indexes are suitable for columns with relatively high cardinality, such as ID columns, but they may incur a certain rate of misjudgment.
 
 ## How to verify whether an index accelerates queries
 
