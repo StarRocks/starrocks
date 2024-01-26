@@ -325,7 +325,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
                     ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tblName);
                     return;
                 }
-                if (!tbl.isOlapTableOrMaterializedView()) {
+                if (!tbl.isNativeTableOrMaterializedView()) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_NOT_OLAP_TABLE, tblName);
                 }
 

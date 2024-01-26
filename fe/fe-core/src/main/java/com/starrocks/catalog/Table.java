@@ -306,6 +306,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return isOlapView() || isHiveView();
     }
 
+    /**
+     * {@code NativeTable} includes {@code OlapTable} and {@code CloudNative}. <b>OlapTable</b> only refers tables that
+     * are created in the integrated storage-compute environment.
+     */
     public boolean isOlapTableOrMaterializedView() {
         return isOlapTable() || isOlapMaterializedView();
     }
