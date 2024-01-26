@@ -6,24 +6,60 @@ displayed_sidebar: "English"
 
 ## Description
 
-This statement is used to view the user's properties
+Views the properties of a user. Currently, only the maximum number of connections can be viewed using this command.
 
-Syntax:
+:::tip
+The current user can view its own property. Only users with the `user_admin` role can view the property of other users.
 
-```sql
-SHOW PROPERTY [FOR user] [LIKE key]
+:::
+
+## Syntax
+
+```SQL
+SHOW PROPERTY [FOR 'user_name'] [LIKE 'max_user_connections']
 ```
+
+## Parameters
+
+| **Parameter**              | **Required** | **Description**                                    |
+| -------------------- | -------- | ----------------------------------------- |
+| user_name            | No       | The user name. If not specified, the property of the current user is viewed. |
+| max_user_connections | No       | The maximum number of connections for a user.      |
 
 ## Examples
 
-1. View the properties of jack user
+Example 1: View the maximum number of connections for the current user.
 
-    ```sql
-    SHOW PROPERTY FOR 'jack'
-    ```
+```Plain
+SHOW PROPERTY;
 
-2. View the properties related to the cluster imported by Jack user
++----------------------+-------+
+| Key                  | Value |
++----------------------+-------+
+| max_user_connections | 10000 |
++----------------------+-------+
+```
 
-    ```sql
-    SHOW PROPERTY FOR 'jack' LIKE '%load_cluster%'
-    ```
+Example 2: View the maximum number of connections for user `jack`.
+
+```SQL
+SHOW PROPERTY FOR 'jack';
+```
+
+Or
+
+```SQL
+SHOW PROPERTY FOR 'jack' LIKE 'max_user_connections';
+```
+
+```Plain
++----------------------+-------+
+| Key                  | Value |
++----------------------+-------+
+| max_user_connections | 100   |
++----------------------+-------+
+```
+
+## See also
+
+[SET PROPERTY](./SET_PROPERTY.md): Sets the maximum number of connections for a user.

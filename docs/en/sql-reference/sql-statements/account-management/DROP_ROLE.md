@@ -6,15 +6,20 @@ displayed_sidebar: "English"
 
 ## Description
 
-This statement allows users to delete a role.
+Drops a role. If a role has been granted to a user, the user still has the privileges associated with this role even after the role is dropped.
+
+:::tip
+
+- Only users with the `user_admin` role can drop a role.
+- [StarRocks system-defined roles](../../../administration/privilege_overview.md#system-defined-roles) cannot be dropped.
+
+:::
 
 ## Syntax
 
 ```sql
 DROP ROLE <role_name>
 ```
-
- Deleting a role does not affect permissions of users who previously belonged to this role. It only decouples the role from the user without changing permissions that user has already obtained from the role.
 
 ## Examples
 

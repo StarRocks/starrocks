@@ -4,13 +4,15 @@ displayed_sidebar: "Chinese"
 
 # SHOW ROLES
 
+import UserManagementPriv from '../../../assets/commonMarkdown/userManagementPriv.md'
+
 ## 功能
 
 查看当前系统中的所有角色。如果要查看角色的权限信息，可以使用 `SHOW GRANTS FOR ROLE <role_name>;`，具体参见 [SHOW GRANTS](SHOW_GRANTS.md)。
 
 该命令从 3.0 版本开始支持。
 
-> 说明：只有 `user_admin` 角色有权限执行该语句。
+<UserManagementPriv />
 
 ## 语法
 

@@ -8,7 +8,9 @@ displayed_sidebar: "English"
 
 Modifies user information, such as password, authentication method, or default roles.
 
-> Individual users can use this command to modify information for themselves. `user_admin` can use this command to modify information for other users.
+:::tip
+Common users can use this command to modify information for themselves. Only users with the `user_admin` role can modify information for other users.
+:::
 
 ## Syntax
 

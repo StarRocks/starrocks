@@ -6,7 +6,11 @@ displayed_sidebar: "English"
 
 ## Description
 
-Displays the authentication information of the current user or all users in the current cluster. Each user has privilege to view their authentication information. Only users with the global `GRANT` privilege and the `user_admin role` can view the authentication information of all users or the authentication information of specified users.
+Displays the authentication information of the current user or all users in the current cluster.
+
+:::tip
+All users have the privilege to view their own authentication information. Only users with the `user_admin` role can view the authentication information of all users or the authentication information of specified users.
+:::
 
 ## Syntax
 
