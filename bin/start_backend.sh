@@ -192,7 +192,7 @@ if [ ${RUN_CN} -eq 1 ]; then
 fi
 
 # enable DD profile
-if [ ${DD_PROFILING_ENABLED} == "true" ] && [ -f "${STARROCKS_HOME}/datadog/ddprof" ]; then
+if [ ${ENABLE_DATADOG_PROFILE} == "true" ] && [ -f "${STARROCKS_HOME}/datadog/ddprof" ]; then
     START_BE_CMD="${STARROCKS_HOME}/datadog/ddprof -l debug ${START_BE_CMD}"
 fi
 
