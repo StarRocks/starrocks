@@ -1663,6 +1663,8 @@ Status OlapTableSink::try_close(RuntimeState* state) {
                     err_st = st;
                     this->mark_as_failed(ch);
                 }
+            } else {
+                ch->cancel(Status::Cancelled("channel failed"));
             }
             if (this->has_intolerable_failure()) {
                 intolerable_failure = true;
@@ -1683,6 +1685,8 @@ Status OlapTableSink::try_close(RuntimeState* state) {
                                     err_st = st;
                                     index_channel->mark_as_failed(ch);
                                 }
+                            } else {
+                                ch->cancel(Status::Cancelled("channel failed"));
                             }
                             if (index_channel->has_intolerable_failure()) {
                                 intolerable_failure = true;
@@ -1715,6 +1719,8 @@ Status OlapTableSink::try_close(RuntimeState* state) {
                                     err_st = st;
                                     index_channel->mark_as_failed(ch);
                                 }
+                            } else {
+                                ch->cancel(Status::Cancelled("channel failed"));
                             }
                             if (index_channel->has_intolerable_failure()) {
                                 intolerable_failure = true;
@@ -1732,6 +1738,8 @@ Status OlapTableSink::try_close(RuntimeState* state) {
                             err_st = st;
                             index_channel->mark_as_failed(ch);
                         }
+                    } else {
+                        ch->cancel(Status::Cancelled("channel failed"));
                     }
                     if (index_channel->has_intolerable_failure()) {
                         intolerable_failure = true;

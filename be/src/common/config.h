@@ -1029,6 +1029,7 @@ CONF_Bool(block_cache_direct_io_enable, "false");
 CONF_Bool(block_cache_block_buffer_enable, "true");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
+// max wal file size in l0
 CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
 CONF_mInt64(l0_min_mem_usage, "2097152");   // 2MB
 CONF_mInt64(l0_max_mem_usage, "104857600"); // 100MB
@@ -1145,5 +1146,9 @@ CONF_mBool(lake_enable_vertical_compaction_fill_data_cache, "false");
 // If the local pk index file is older than this threshold
 // it may be evicted if the disk is full
 CONF_mInt64(lake_local_pk_index_unused_threshold_seconds, "86400"); // 1 day
+
+// Allowable intervals for continuous generation of pk dumps
+// Disable when pk_dump_interval_seconds <= 0
+CONF_mInt64(pk_dump_interval_seconds, "3600"); // 1 hour
 
 } // namespace starrocks::config

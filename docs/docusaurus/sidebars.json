@@ -102,12 +102,7 @@
         "loading/Flink-connector-starrocks",
         "loading/Load_to_Primary_Key_tables",
         "loading/Etl_in_loading",
-        {
-          "type": "category",
-          "label": "Concepts",
-          "link": {"type": "doc", "id": "loading/load_concept/strict_mode"},
-          "items": [ "loading/load_concept/strict_mode" ]
-        }
+        "loading/load_concept/strict_mode"
       ]
     },
     {
@@ -743,7 +738,8 @@
         "loading/Flink_cdc_load",
         "loading/Flink-connector-starrocks",
         "loading/Load_to_Primary_Key_tables",
-        "loading/Etl_in_loading"
+        "loading/Etl_in_loading",
+        "loading/load_concept/strict_mode"
       ]
     },
     {
