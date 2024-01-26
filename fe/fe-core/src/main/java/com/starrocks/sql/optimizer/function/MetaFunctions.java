@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.optimizer.rewrite;
+package com.starrocks.sql.optimizer.function;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonNull;
@@ -42,6 +42,7 @@ import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.rewrite.ConstantFunction;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.collections4.SetUtils;
 import org.apache.commons.lang3.tuple.Pair;

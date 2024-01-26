@@ -18,6 +18,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.leader.ReportHandler;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.optimizer.function.MetaFunctions;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import org.junit.Assert;
 import org.junit.Test;
