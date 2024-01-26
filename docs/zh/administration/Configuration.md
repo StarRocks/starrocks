@@ -284,7 +284,23 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 含义：手动采集任务的最大并发数，默认为 3，即最多可以有 3 个手动采集任务同时运行。超出的任务处于 PENDING 状态，等待调度。
 - 默认值：3
 
+<<<<<<< HEAD:docs/zh/administration/Configuration.md
 ##### enable_local_replica_selection
+=======
+#### statistic_auto_collect_small_table_rows
+
+- 含义：自动收集中，用于判断外部数据源下的表 (Hive, Iceberg, Hudi) 是否为小表的行数门限。
+- 默认值：10000000
+- 引入版本：v3.2
+
+#### enable_statistic_collect_on_first_load
+
+- 含义：当空表第一次导入数据时，是否自动触发统计信息采集。如果一张表包含多个分区，只要是某个空的分区第一次导入数据，都会触发该分区的统计信息采集。如果系统频繁创建新表并且导入数据，会存在一定内存和 CPU 开销。
+- 默认值：true
+- 引入版本：v3.1
+
+#### enable_local_replica_selection
+>>>>>>> b7dcc1960a ([Doc] Add statistics para enable_statistic_collect_on_first_load (#40068)):docs/zh/administration/FE_configuration.md
 
 - 含义：是否选择本地副本进行查询。本地副本可以减少数据传输的网络时延。<br />如果设置为 true，优化器优先选择与当前 FE 相同 IP 的 BE 节点上的 tablet 副本。设置为 false 表示选择可选择本地或非本地副本进行查询。
 - 默认值：FALSE
