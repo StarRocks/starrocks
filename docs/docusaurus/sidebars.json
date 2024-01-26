@@ -70,12 +70,6 @@
       "label": "Data Loading",
       "link": {"type": "doc", "id": "loading/Loading_intro"},
       "items": [
-        {
-          "type": "category",
-          "label": "Concepts",
-          "link": {"type": "doc", "id": "loading/load_concept/strict_mode"},
-          "items": ["loading/load_concept/strict_mode"]
-        },
         "loading/StreamLoad",
         "loading/BrokerLoad",
         {
@@ -633,12 +627,6 @@
       "label": "导入数据",
       "link": {"type": "doc", "id": "loading/Loading_intro"},
       "items": [
-        {
-          "type": "category",
-          "label": "概念介绍",
-          "link": {"type": "doc", "id": "loading/load_concept/strict_mode"},
-          "items": ["loading/load_concept/strict_mode"]
-        },
         "loading/StreamLoad",
         "loading/BrokerLoad",
         {
