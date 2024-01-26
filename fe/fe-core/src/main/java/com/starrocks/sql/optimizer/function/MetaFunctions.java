@@ -60,7 +60,7 @@ import static com.starrocks.catalog.PrimitiveType.VARCHAR;
  */
 public class MetaFunctions {
 
-    private static Table inspectExternalTable(TableName tableName) {
+    public static Table inspectExternalTable(TableName tableName) {
         Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName)
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName));
         ConnectContext connectContext = ConnectContext.get();
@@ -77,7 +77,7 @@ public class MetaFunctions {
         return table;
     }
 
-    private static Pair<Database, Table> inspectTable(TableName tableName) {
+    public static Pair<Database, Table> inspectTable(TableName tableName) {
         Database db = GlobalStateMgr.getCurrentState().mayGetDb(tableName.getDb())
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR, tableName.getDb()));
         Table table = db.tryGetTable(tableName.getTbl())
