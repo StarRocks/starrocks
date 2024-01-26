@@ -171,6 +171,7 @@
                 "using_starrocks/usage/alter",
                 "using_starrocks/usage/drop",
                 "using_starrocks/usage/show",
+                "using_starrocks/usage/information_schema-materialized_views",
                 "using_starrocks/troubleshooting_asynchronous_materialized_views"
               ]
             }
@@ -913,6 +914,7 @@
                 "using_starrocks/usage/alter",
                 "using_starrocks/usage/drop",
                 "using_starrocks/usage/show",
+                "using_starrocks/usage/information_schema-materialized_views",
                 "using_starrocks/troubleshooting_asynchronous_materialized_views"
               ]
             }
