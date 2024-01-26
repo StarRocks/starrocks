@@ -1142,7 +1142,6 @@ public:
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
                                          const std::vector<LLVMDatum>& datums) const override {
         auto* l = datums[0].value;
-        LOG(INFO) << "[JIT] cast generate_ir_impl";
         if constexpr (FromType == TYPE_JSON || ToType == TYPE_JSON) {
             return Status::NotSupported("JIT casting does not support JSON");
         } else if constexpr (lt_is_decimal<FromType> || lt_is_decimal<ToType>) {

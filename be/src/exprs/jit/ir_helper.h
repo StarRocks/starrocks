@@ -38,13 +38,9 @@ struct LLVMDatum {
  * @brief The LLVMDatum struct is utilized to store the column's values and nullity flags within LLVM IR.
  */
 struct LLVMColumn {
-    llvm::Value* is_constant = nullptr; ///< Indicates whether the column is constant.
     llvm::Value* values = nullptr;      ///< Represents the actual values of the column.
-    llvm::Type* value_type = nullptr;   ///< Represents the type of the column's values.
-    llvm::Value* nullable =
-            nullptr; ///< Indicates whether the column can be null. If the column is non-nullable, calculating the null flag becomes unnecessary.
-                     // The null flags is a bitset, so the type is i8*.
     llvm::Value* null_flags = nullptr; ///< Represents the nullity status of the column.
+    llvm::Type* value_type = nullptr;   ///< Represents the type of the column's values.
 };
 
 class IRHelper {

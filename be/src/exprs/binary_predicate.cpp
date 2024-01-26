@@ -110,9 +110,11 @@ public:
         ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
         return VectorizedStrictBinaryFunction<OP>::template evaluate<Type, TYPE_BOOLEAN>(l, r);
     }
-
+#if 0
     bool is_compilable() const override { return IRHelper::support_jit(Type); }
-
+#else
+    bool is_compilable() const override { return false; }
+#endif
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
                                          const std::vector<LLVMDatum>& datums) const override {
         if constexpr (lt_is_decimal<Type>) {

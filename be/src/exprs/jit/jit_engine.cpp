@@ -282,7 +282,7 @@ Status JITEngine::remove_module(const std::string& expr_name) {
         DCHECK(false);
         return Status::RuntimeError("Remove a non-existing jit module");
     }
-    if (_resource_ref_count_map[expr_name].fetch_sub(1) > 1) {
+    if (_resource_ref_count_map[expr_name].fetch_sub(1) > 0) { // TODO => 1
         return Status::OK();
     }
     auto it = _resource_tracker_map.find(expr_name);

@@ -71,11 +71,15 @@ public:
     }
 
     bool is_compilable() const override {
+#if 1
         if (_has_case_expr) {
             return IRHelper::support_jit(WhenType) && IRHelper::support_jit(ResultType);
         } else {
             return IRHelper::support_jit(ResultType);
         }
+#else
+        return false;
+#endif
     }
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
@@ -176,7 +180,6 @@ public:
                 }
 
                 b.CreateBr(join);
-
                 b.SetInsertPoint(join);
                 result.value = b.CreateLoad(IRHelper::logical_to_ir_type(b, ResultType).value(), res);
                 result.null_flag = b.CreateLoad(b.getInt8Ty(), res_null); // need delete origin null?
@@ -190,7 +193,7 @@ public:
 
     std::string debug_string() const override {
         std::stringstream out;
-        auto expr_debug_string = Expr::debug_string();
+        auto expr_debug_string = "none"; //Expr::debug_string();
         out << "VectorizedCaseWhenExpr ( ";
         for (auto i = 0; i < _children.size(); i++) {
             if (i == 0) {
