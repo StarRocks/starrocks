@@ -60,13 +60,7 @@ Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32
 }
 
 Status Operator::prepare(RuntimeState* state) {
-<<<<<<< HEAD
-    _mem_tracker = std::make_shared<MemTracker>(_common_metrics.get(), std::make_tuple(true, true, true), "Operator",
-                                                -1, _name, nullptr);
-=======
-    FAIL_POINT_TRIGGER_RETURN_ERROR(random_error);
     _mem_tracker = state->query_ctx()->operator_mem_tracker(_plan_node_id);
->>>>>>> 4878c636e8 ([Enhancement] Refine statistical method for operator memory usage analysis (#39761))
     _total_timer = ADD_TIMER(_common_metrics, "OperatorTotalTime");
     _push_timer = ADD_TIMER(_common_metrics, "PushTotalTime");
     _pull_timer = ADD_TIMER(_common_metrics, "PullTotalTime");
