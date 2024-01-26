@@ -52,10 +52,12 @@ public:
     void dec_size(int64_t value) { _current_size -= value; }
 
     int64_t get_max_size() const { return _max_size; }
+    void set_cloud_conf(std::shared_ptr<TCloudConfiguration> cloud_conf) { _cloud_conf = std::move(cloud_conf); }
 
 private:
     std::string _dir;
     std::shared_ptr<FileSystem> _fs;
+    std::shared_ptr<TCloudConfiguration> _cloud_conf;
     int64_t _max_size;
     std::atomic<int64_t> _current_size = 0;
 };
@@ -72,14 +74,12 @@ struct AcquireDirOptions {
 class DirManager {
 public:
     DirManager() = default;
-#ifdef BE_TEST
     DirManager(const std::vector<DirPtr>& dirs) : _dirs(dirs) {}
-#endif
     ~DirManager() = default;
 
     Status init(const std::string& spill_dirs);
 
-    StatusOr<Dir*> acquire_writable_dir(const AcquireDirOptions& opts);
+    StatusOr<DirPtr> acquire_writable_dir(const AcquireDirOptions& opts);
 
 private:
     bool is_same_disk(const std::string& path1, const std::string& path2) {

@@ -180,7 +180,8 @@ pipeline::OpFactories AggregateBlockingNode::_decompose_to_pipeline(pipeline::Op
     using namespace pipeline;
 
     auto workgroup = context->fragment_context()->workgroup();
-    auto executor = std::make_shared<spill::IOTaskExecutor>(ExecEnv::GetInstance()->scan_executor(), workgroup);
+    auto executor = std::make_shared<spill::IOTaskExecutor>(
+            ExecEnv::GetInstance()->scan_executor(), ExecEnv::GetInstance()->connector_scan_executor(), workgroup);
     auto degree_of_parallelism = context->source_operator(ops_with_sink)->degree_of_parallelism();
     auto spill_channel_factory =
             std::make_shared<SpillProcessChannelFactory>(degree_of_parallelism, std::move(executor));

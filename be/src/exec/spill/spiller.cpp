@@ -50,12 +50,26 @@ SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile, std::atomic_in
     append_data_timer = ADD_CHILD_TIMER(profile, "AppendDataTime", parent);
     spill_rows = ADD_CHILD_COUNTER(profile, "RowsSpilled", TUnit::UNIT, parent);
     flush_timer = ADD_CHILD_TIMER(profile, "FlushTime", parent);
+
     write_io_timer = ADD_CHILD_TIMER(profile, "WriteIOTime", parent);
+    local_write_io_timer = ADD_CHILD_TIMER(profile, "LocalWriteIOTime", "WriteIOTime");
+    remote_write_io_timer = ADD_CHILD_TIMER(profile, "RemoteWriteIOTime", "WriteIOTime");
+
     restore_rows = ADD_CHILD_COUNTER(profile, "RowsRestored", TUnit::UNIT, parent);
     restore_from_buffer_timer = ADD_CHILD_TIMER(profile, "RestoreTime", parent);
+
     read_io_timer = ADD_CHILD_TIMER(profile, "ReadIOTime", parent);
-    flush_bytes = ADD_CHILD_COUNTER(profile, "BytesFlushToDisk", TUnit::BYTES, parent);
-    restore_bytes = ADD_CHILD_COUNTER(profile, "BytesRestoreFromDisk", TUnit::BYTES, parent);
+    local_read_io_timer = ADD_CHILD_TIMER(profile, "LocalReadIOTime", "ReadIOTime");
+    remote_read_io_timer = ADD_CHILD_TIMER(profile, "RemoteReadIOTime", "ReadIOTime");
+
+    flush_bytes = ADD_CHILD_COUNTER(profile, "BytesFlush", TUnit::BYTES, parent);
+    local_flush_bytes = ADD_CHILD_COUNTER(profile, "BytesFlushToLocalDisk", TUnit::BYTES, "BytesFlush");
+    remote_flush_bytes = ADD_CHILD_COUNTER(profile, "BytesFlushToRemoteStorage", TUnit::BYTES, "BytesFlush");
+
+    restore_bytes = ADD_CHILD_COUNTER(profile, "BytesRestore", TUnit::BYTES, parent);
+    local_restore_bytes = ADD_CHILD_COUNTER(profile, "BytesRestoreFromLocalDisk", TUnit::BYTES, "BytesRestore");
+    remote_restore_bytes = ADD_CHILD_COUNTER(profile, "BytesRestoreFromRemoteStorage", TUnit::BYTES, "BytesRestore");
+
     serialize_timer = ADD_CHILD_TIMER(profile, "SerializeTime", parent);
     deserialize_timer = ADD_CHILD_TIMER(profile, "DeserializeTime", parent);
     mem_table_peak_memory_usage = profile->AddHighWaterMarkCounter(
@@ -74,6 +88,9 @@ SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile, std::atomic_in
                                              RuntimeProfile::Counter::create_strategy(TUnit::BYTES), parent);
 
     block_count = ADD_CHILD_COUNTER(profile, "BlockCount", TUnit::UNIT, parent);
+    local_block_count = ADD_CHILD_COUNTER(profile, "LocalBlockCount", TUnit::UNIT, "BlockCount");
+    remote_block_count = ADD_CHILD_COUNTER(profile, "RemoteBlockCount", TUnit::UNIT, "BlockCount");
+
     flush_io_task_count = ADD_CHILD_COUNTER(profile, "FlushIOTaskCount", TUnit::UNIT, parent);
     peak_flush_io_task_count = profile->AddHighWaterMarkCounter(
             "PeakFlushIOTaskCount", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT), parent);
@@ -88,6 +105,7 @@ SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile, std::atomic_in
 
 Status Spiller::prepare(RuntimeState* state) {
     _chunk_builder.chunk_schema() = std::make_shared<SpilledChunkBuildSchema>();
+    DCHECK(_opts.wg != nullptr) << "workgroup must be set";
 
     ASSIGN_OR_RETURN(_serde, Serde::create_serde(this));
 

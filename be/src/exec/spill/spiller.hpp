@@ -158,6 +158,8 @@ Status RawSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, Mem
         //
         if (!yield_ctx.task_context_data.has_value()) {
             yield_ctx.task_context_data = std::make_shared<FlushContext>();
+            // @TODO how to avoid yield
+            // @TODO seq read, record last executor used
         }
         auto defer = CancelableDefer([&]() {
             {
@@ -186,8 +188,15 @@ Status RawSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, Mem
 
         return Status::OK();
     };
+    auto yield_func = [&](workgroup::ScanTask&& task) {
+        // auto ctx = std::any_cast<SpillIOTaskContextPtr>(task.get_work_context().task_context_data);
+        executor.force_submit(std::move(task));
+    };
+    // @TODO set yield ctx first?
+    auto io_task = workgroup::ScanTask(_spiller->options().wg.get(), std::move(task), std::move(yield_func));
+    RETURN_IF_ERROR(executor.submit(std::move(io_task)));
     // submit io task
-    RETURN_IF_ERROR(executor.submit(std::move(task)));
+    // RETURN_IF_ERROR(executor.submit(std::move(task)));
     COUNTER_UPDATE(_spiller->metrics().flush_io_task_count, 1);
     COUNTER_SET(_spiller->metrics().peak_flush_io_task_count, _running_flush_tasks);
     return Status::OK();
@@ -196,7 +205,8 @@ Status RawSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, Mem
 template <class TaskExecutor, class MemGuard>
 StatusOr<ChunkPtr> SpillerReader::restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
     SCOPED_TIMER(_spiller->metrics().restore_from_buffer_timer);
-    ASSIGN_OR_RETURN(auto chunk, _stream->get_next(_spill_read_ctx));
+    workgroup::YieldContext mock_ctx;
+    ASSIGN_OR_RETURN(auto chunk, _stream->get_next(mock_ctx, _spill_read_ctx));
     RETURN_IF_ERROR(trigger_restore(state, std::forward<TaskExecutor>(executor), std::forward<MemGuard>(guard)));
     _read_rows += chunk->num_rows();
     COUNTER_UPDATE(_spiller->metrics().restore_rows, chunk->num_rows());
@@ -209,7 +219,6 @@ Status SpillerReader::trigger_restore(RuntimeState* state, TaskExecutor&& execut
     if (_stream == nullptr) {
         return Status::OK();
     }
-
     // if all is well and input stream enable prefetch and not eof
     if (!_stream->eof()) {
         // make sure _running_restore_tasks < io_tasks_per_scan_operator to avoid scan overloaded
@@ -228,7 +237,11 @@ Status SpillerReader::trigger_restore(RuntimeState* state, TaskExecutor&& execut
                 });
                 Status res;
                 SerdeContext serd_ctx;
+                if (!yield_ctx.task_context_data.has_value()) {
+                    yield_ctx.task_context_data = std::make_shared<SpillIOTaskContext>();
+                }
 
+                auto ctx = std::any_cast<SpillIOTaskContextPtr>(yield_ctx.task_context_data);
                 yield_ctx.time_spent_ns = 0;
                 yield_ctx.need_yield = false;
 
@@ -246,7 +259,13 @@ Status SpillerReader::trigger_restore(RuntimeState* state, TaskExecutor&& execut
                 _finished_restore_tasks += !res.ok();
             };
         };
-        RETURN_IF_ERROR(executor.submit(std::move(restore_task)));
+        auto yield_func = [&](workgroup::ScanTask&& task) {
+            auto ctx = std::any_cast<SpillIOTaskContextPtr>(task.get_work_context().task_context_data);
+            executor.force_submit(std::move(task));
+        };
+        auto io_task =
+                workgroup::ScanTask(_spiller->options().wg.get(), std::move(restore_task), std::move(yield_func));
+        RETURN_IF_ERROR(executor.submit(std::move(io_task)));
         COUNTER_UPDATE(_spiller->metrics().restore_io_task_count, 1);
         COUNTER_SET(_spiller->metrics().peak_flush_io_task_count, _running_restore_tasks);
     }
@@ -337,8 +356,13 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
         }
         return Status::OK();
     };
-
-    RETURN_IF_ERROR(executor.submit(std::move(task)));
+    auto yield_func = [&](workgroup::ScanTask&& task) {
+        // auto ctx = std::any_cast<SpillIOTaskContextPtr>(task.get_work_context().task_context_data);
+        executor.force_submit(std::move(task));
+    };
+    auto io_task = workgroup::ScanTask(_spiller->options().wg.get(), std::move(task), std::move(yield_func));
+    RETURN_IF_ERROR(executor.submit(std::move(io_task)));
+    // RETURN_IF_ERROR(executor.submit(std::move(task)));
     COUNTER_UPDATE(_spiller->metrics().flush_io_task_count, 1);
     COUNTER_SET(_spiller->metrics().peak_flush_io_task_count, _running_flush_tasks);
 

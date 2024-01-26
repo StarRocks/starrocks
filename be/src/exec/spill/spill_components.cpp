@@ -82,11 +82,15 @@ Status RawSpillerWriter::yieldable_flush_task(workgroup::YieldContext& yield_ctx
 
         spill::AcquireBlockOptions opts;
         opts.query_id = state->query_id();
+        opts.fragment_instance_id = state->fragment_instance_id();
         opts.plan_node_id = _spiller->options().plan_node_id;
         opts.name = _spiller->options().name;
         opts.block_size = mem_table->get_serialized_data_size();
 
         ASSIGN_OR_RETURN(auto block, _spiller->block_manager()->acquire_block(opts));
+        auto block_count =
+                block->is_remote() ? _spiller->metrics().remote_block_count : _spiller->metrics().local_block_count;
+        COUNTER_UPDATE(block_count, 1);
         TRACE_SPILL_LOG << fmt::format("allocate block [{}]", block->debug_string());
         flush_ctx->block = block;
     }
@@ -94,7 +98,9 @@ Status RawSpillerWriter::yieldable_flush_task(workgroup::YieldContext& yield_ctx
 
     // flush
     {
-        SCOPED_TIMER(_spiller->metrics().write_io_timer);
+        auto* write_io_timer = block->is_remote() ? _spiller->metrics().remote_write_io_timer
+                                                  : _spiller->metrics().local_write_io_timer;
+        SCOPED_TIMER(write_io_timer);
         do {
             auto st = mem_table->get_next_serialized_data();
             if (st.status().is_end_of_file()) {
@@ -104,8 +110,11 @@ Status RawSpillerWriter::yieldable_flush_task(workgroup::YieldContext& yield_ctx
             RETURN_IF_ERROR(block->append({data}));
             RETURN_OK_IF_NEED_YIELD(yield_ctx.wg, &yield_ctx.need_yield, yield_ctx.time_spent_ns);
         } while (true);
-
+        size_t block_size = block->size();
         RETURN_IF_ERROR(block->flush());
+        auto flush_bytes =
+                block->is_remote() ? _spiller->metrics().remote_flush_bytes : _spiller->metrics().local_flush_bytes;
+        COUNTER_UPDATE(flush_bytes, block_size);
     }
     TRACE_SPILL_LOG << fmt::format("flush block[{}]", block->debug_string());
     RETURN_IF_ERROR(_spiller->block_manager()->release_block(block));
@@ -404,18 +413,29 @@ Status PartitionedSpillerWriter::spill_partition(workgroup::YieldContext& yield_
         }
         spill::AcquireBlockOptions opts;
         opts.query_id = _runtime_state->query_id();
+        opts.fragment_instance_id = _runtime_state->fragment_instance_id();
         opts.plan_node_id = options().plan_node_id;
         opts.name = options().name;
         opts.direct_io = _runtime_state->spill_enable_direct_io();
         opts.block_size = mem_table->get_serialized_data_size();
         ASSIGN_OR_RETURN(auto block, _spiller->block_manager()->acquire_block(opts));
-        COUNTER_UPDATE(_spiller->metrics().block_count, 1);
+        auto block_count =
+                block->is_remote() ? _spiller->metrics().remote_block_count : _spiller->metrics().local_block_count;
+        COUNTER_UPDATE(block_count, 1);
         {
             std::lock_guard<std::mutex> l(_mutex);
             partition->spill_writer->block() = block;
         }
     }
     auto block = partition->spill_writer->block();
+    auto io_ctx = std::any_cast<PartitionedFlushContextPtr>(yield_ctx.task_context_data);
+    if (!(block->is_remote() ^ io_ctx->use_local_io_executor)) {
+        LOG(INFO) << fmt::format("block[{}], use_local[{}], yield", block->debug_string(),
+                                 io_ctx->use_local_io_executor);
+        io_ctx->use_local_io_executor = !block->is_remote();
+        yield_ctx.need_yield = true;
+        return Status::OK();
+    }
 
     partition->bytes += mem_table_mem_usage;
     TRACE_SPILL_LOG << fmt::format("spill partition[{}], mem_table_size[{}] bytes[{}] rows[{}]",
@@ -430,8 +450,14 @@ Status PartitionedSpillerWriter::spill_partition(workgroup::YieldContext& yield_
             }
             auto data = res.value();
             RETURN_IF_ERROR(block->append({data}));
+            // @TODO yield ctx
         } while (true);
+
+        size_t block_size = block->size();
         RETURN_IF_ERROR(block->flush());
+        auto flush_bytes =
+                block->is_remote() ? _spiller->metrics().remote_flush_bytes : _spiller->metrics().local_flush_bytes;
+        COUNTER_UPDATE(flush_bytes, block_size);
     }
 
     {

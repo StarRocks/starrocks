@@ -48,7 +48,8 @@ Status SpillableHashJoinProbeOperator::prepare(RuntimeState* state) {
             "SpillProberPeakMemoryUsage", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
     RETURN_IF_ERROR(_probe_spiller->prepare(state));
     auto wg = state->fragment_ctx()->workgroup();
-    _executor = std::make_shared<spill::IOTaskExecutor>(ExecEnv::GetInstance()->scan_executor(), wg);
+    _executor = std::make_shared<spill::IOTaskExecutor>(ExecEnv::GetInstance()->scan_executor(),
+                                                        ExecEnv::GetInstance()->connector_scan_executor(), wg);
     return Status::OK();
 }
 
@@ -298,6 +299,11 @@ Status SpillableHashJoinProbeOperator::_load_all_partition_build_side(RuntimeSta
                     _latch.count_down();
                     yield_ctx.set_finished();
                 });
+                if (!yield_ctx.task_context_data.has_value()) {
+                    yield_ctx.task_context_data = std::make_shared<spill::SpillIOTaskContext>();
+                }
+                yield_ctx.time_spent_ns = 0;
+                yield_ctx.need_yield = false;
                 int yield = false;
                 _update_status(_load_partition_build_side(yield_ctx, state, reader, i, &yield));
                 if (yield) {
@@ -305,7 +311,11 @@ Status SpillableHashJoinProbeOperator::_load_all_partition_build_side(RuntimeSta
                 }
             }
         };
-        RETURN_IF_ERROR(_executor->submit(std::move(task)));
+        auto yield_func = [&](workgroup::ScanTask&& task) { _executor->force_submit(std::move(task)); };
+        auto io_task = workgroup::ScanTask(_join_builder->spiller()->options().wg.get(), std::move(task),
+                                           std::move(yield_func));
+        RETURN_IF_ERROR(_executor->submit(std::move(io_task)));
+        // RETURN_IF_ERROR(_executor->submit(std::move(task)));
     }
     return Status::OK();
 }
@@ -520,6 +530,7 @@ Status SpillableHashJoinProbeOperatorFactory::prepare(RuntimeState* state) {
     _spill_options->name = "hash-join-probe";
     _spill_options->plan_node_id = _plan_node_id;
     _spill_options->encode_level = state->spill_encode_level();
+    _spill_options->wg = state->fragment_ctx()->workgroup();
 
     return Status::OK();
 }

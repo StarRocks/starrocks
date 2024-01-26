@@ -586,7 +586,8 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> CrossJoinNode::_decompos
 
     size_t num_right_partitions = context->source_operator(right_ops)->degree_of_parallelism();
     auto workgroup = context->fragment_context()->workgroup();
-    auto executor = std::make_shared<spill::IOTaskExecutor>(ExecEnv::GetInstance()->scan_executor(), workgroup);
+    auto executor = std::make_shared<spill::IOTaskExecutor>(
+            ExecEnv::GetInstance()->scan_executor(), ExecEnv::GetInstance()->connector_scan_executor(), workgroup);
     auto spill_process_factory_ptr =
             std::make_shared<SpillProcessChannelFactory>(num_right_partitions, std::move(executor));
     context_params.spill_process_factory_ptr = spill_process_factory_ptr;

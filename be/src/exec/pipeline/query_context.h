@@ -162,6 +162,7 @@ public:
 
     MemTracker* operator_mem_tracker(int32_t plan_node_id);
 
+    Status init_spill_manager(const TQueryOptions& query_options);
     Status init_query_once(workgroup::WorkGroup* wg, bool enable_group_level_query_queue);
     /// Release the workgroup token only once to avoid double-free.
     /// This method should only be invoked while the QueryContext is still valid,
@@ -263,6 +264,7 @@ private:
 
     std::once_flag _init_query_once;
     int64_t _query_begin_time = 0;
+    std::once_flag _init_spill_manager_once;
     std::atomic<int64_t> _total_cpu_cost_ns = 0;
     std::atomic<int64_t> _total_scan_rows_num = 0;
     std::atomic<int64_t> _total_scan_bytes = 0;

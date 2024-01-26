@@ -27,7 +27,11 @@
 namespace starrocks::spill {
 class QuerySpillManager {
 public:
-    QuerySpillManager(const TUniqueId& uid) : _uid(uid) { _block_manager = std::make_unique<LogBlockManager>(uid); }
+    QuerySpillManager(const TUniqueId& uid) : _uid(uid) {
+        // _block_manager = std::make_unique<LogBlockManager>(uid);
+    }
+
+    Status init_block_manager(const TQueryOptions& query_options);
 
     void increase_spilling_operators() { _spilling_operators++; }
     void decrease_spilling_operators() { _spilling_operators--; }
@@ -42,6 +46,7 @@ public:
 private:
     TUniqueId _uid;
     std::unique_ptr<BlockManager> _block_manager;
+    std::unique_ptr<DirManager> _remote_dir_manager;
     std::atomic_size_t _spilling_operators = 0;
     size_t _spillable_operators = 0;
 };

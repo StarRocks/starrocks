@@ -58,16 +58,24 @@ public:
     RuntimeProfile::Counter* flush_timer = nullptr;
     // disk io time during flush
     RuntimeProfile::Counter* write_io_timer = nullptr;
+    RuntimeProfile::Counter* local_write_io_timer = nullptr;
+    RuntimeProfile::Counter* remote_write_io_timer = nullptr;
     // time spent to restore data from Spiller, which includes the time to try to get data from buffer and drive the next prefetch
     RuntimeProfile::Counter* restore_from_buffer_timer = nullptr;
     // disk io time during restore
     RuntimeProfile::Counter* read_io_timer = nullptr;
+    RuntimeProfile::Counter* local_read_io_timer = nullptr;
+    RuntimeProfile::Counter* remote_read_io_timer = nullptr;
     // the number of rows restored from Spiller
     RuntimeProfile::Counter* restore_rows = nullptr;
     // data bytes flushed to disk
     RuntimeProfile::Counter* flush_bytes = nullptr;
+    RuntimeProfile::Counter* local_flush_bytes = nullptr;
+    RuntimeProfile::Counter* remote_flush_bytes = nullptr;
     // data bytes restored from disk
     RuntimeProfile::Counter* restore_bytes = nullptr;
+    RuntimeProfile::Counter* local_restore_bytes = nullptr;
+    RuntimeProfile::Counter* remote_restore_bytes = nullptr;
     // time spent to serialize data before flush it to disk
     RuntimeProfile::Counter* serialize_timer = nullptr;
     // time spent to deserialize data after read it from disk
@@ -94,6 +102,8 @@ public:
 
     // the number of blocks created
     RuntimeProfile::Counter* block_count = nullptr;
+    RuntimeProfile::Counter* local_block_count = nullptr;
+    RuntimeProfile::Counter* remote_block_count = nullptr;
     // flush/restore task count
     RuntimeProfile::Counter* flush_io_task_count = nullptr;
     RuntimeProfile::HighWaterMarkCounter* peak_flush_io_task_count = nullptr;

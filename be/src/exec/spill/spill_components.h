@@ -179,7 +179,7 @@ public:
     Status yieldable_flush_task(workgroup::YieldContext& ctx, RuntimeState* state, const MemTablePtr& mem_table);
 
 public:
-    struct FlushContext {
+    struct FlushContext : public SpillIOTaskContext {
         BlockPtr block;
     };
     using FlushContextPtr = std::shared_ptr<FlushContext>;
@@ -298,7 +298,7 @@ public:
     int64_t mem_consumption() const { return _mem_tracker->consumption(); }
 
 public:
-    struct PartitionedFlushContext {
+    struct PartitionedFlushContext : public SpillIOTaskContext {
         // used in spill stage
         struct SpillStageContext {
             size_t processing_idx{};

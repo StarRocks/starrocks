@@ -53,6 +53,7 @@ struct YieldContext {
         task_context_data.reset();
     }
 
+    // @TODO
     std::any task_context_data;
     size_t yield_point{};
     size_t total_yield_point_cnt{};
@@ -66,11 +67,16 @@ struct YieldContext {
 struct ScanTask {
 public:
     using WorkFunction = std::function<void(YieldContext&)>;
+    using YieldFunction = std::function<void(ScanTask&&)>;
 
     ScanTask() : ScanTask(nullptr, nullptr) {}
     explicit ScanTask(WorkFunction work_function) : workgroup(nullptr), work_function(std::move(work_function)) {}
     ScanTask(WorkGroup* workgroup, WorkFunction work_function)
             : workgroup(workgroup), work_function(std::move(work_function)) {}
+    ScanTask(WorkGroup* workgroup, WorkFunction work_function, YieldFunction yield_function)
+            : workgroup(workgroup),
+              work_function(std::move(work_function)),
+              yield_function(std::move(yield_function)) {}
     ~ScanTask() = default;
 
     DISALLOW_COPY(ScanTask);
@@ -88,10 +94,20 @@ public:
 
     bool is_finished() const { return work_context.is_finished(); }
 
+    bool has_yield_function() const { return yield_function != nullptr; }
+
+    void execute_yield_function() {
+        DCHECK(yield_function != nullptr) << "yield function must be set";
+        yield_function(std::move(*this));
+    }
+
+    const YieldContext& get_work_context() const { return work_context; }
+
 public:
     WorkGroup* workgroup;
     YieldContext work_context;
     WorkFunction work_function;
+    YieldFunction yield_function;
     int priority = 0;
     std::shared_ptr<ScanTaskGroup> task_group = nullptr;
     RuntimeProfile::HighWaterMarkCounter* peak_scan_task_queue_size_counter = nullptr;

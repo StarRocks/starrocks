@@ -46,6 +46,7 @@ include "Data.thrift"
 include "RuntimeProfile.thrift"
 include "WorkGroup.thrift"
 include "RuntimeFilter.thrift"
+include "CloudConfiguration.thrift"
 
 // constants for function version
 enum TFunctionVersion {
@@ -266,6 +267,11 @@ struct TQueryOptions {
   115: optional TTimeUnit big_query_profile_threshold_unit = TTimeUnit.SECOND;
   
   116: optional string sql_dialect;
+
+  117: optional bool enable_spill_to_remote_storage;
+  118: optional list<string> spill_remote_storage_paths;
+  119: optional CloudConfiguration.TCloudConfiguration spill_remote_storage_conf;
+  120: optional bool disable_spill_to_local_disk;
 }
 
 

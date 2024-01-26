@@ -35,10 +35,11 @@
 namespace starrocks::spill {
 class LogBlockContainer {
 public:
-    LogBlockContainer(Dir* dir, const TUniqueId& query_id, int32_t plan_node_id, std::string plan_node_name,
-                      uint64_t id, bool direct_io)
+    LogBlockContainer(DirPtr dir, const TUniqueId& query_id, const TUniqueId& fragment_instance_id,
+                      int32_t plan_node_id, std::string plan_node_name, uint64_t id, bool direct_io)
             : _dir(dir),
               _query_id(query_id),
+              _fragment_instance_id(fragment_instance_id),
               _plan_node_id(plan_node_id),
               _plan_node_name(std::move(plan_node_name)),
               _id(id),
@@ -56,7 +57,7 @@ public:
 
     Status close();
 
-    Dir* dir() const { return _dir; }
+    Dir* dir() const { return _dir.get(); }
     int32_t plan_node_id() const { return _plan_node_id; }
     std::string plan_node_name() const { return _plan_node_name; }
 
@@ -65,7 +66,8 @@ public:
         return _writable_file->size();
     }
     std::string path() const {
-        return fmt::format("{}/{}/{}-{}-{}", _dir->dir(), print_id(_query_id), _plan_node_name, _plan_node_id, _id);
+        return fmt::format("{}/{}/{}-{}-{}-{}", _dir->dir(), print_id(_query_id), print_id(_fragment_instance_id),
+                           _plan_node_name, _plan_node_id, _id);
     }
     std::string parent_path() const { return fmt::format("{}/{}", _dir->dir(), print_id(_query_id)); }
     uint64_t id() const { return _id; }
@@ -76,12 +78,14 @@ public:
 
     StatusOr<std::unique_ptr<io::InputStreamWrapper>> get_readable(size_t offset, size_t length);
 
-    static StatusOr<LogBlockContainerPtr> create(Dir* dir, TUniqueId query_id, int32_t plan_node_id,
-                                                 const std::string& plan_node_name, uint64_t id, bool enable_direct_io);
+    static StatusOr<LogBlockContainerPtr> create(DirPtr dir, TUniqueId query_id, TUniqueId fragment_instance_id,
+                                                 int32_t plan_node_id, const std::string& plan_node_name, uint64_t id,
+                                                 bool enable_direct_io);
 
 private:
-    Dir* _dir;
+    DirPtr _dir;
     TUniqueId _query_id;
+    TUniqueId _fragment_instance_id;
     int32_t _plan_node_id;
     std::string _plan_node_name;
     uint64_t _id;
@@ -134,25 +138,27 @@ StatusOr<std::unique_ptr<io::InputStreamWrapper>> LogBlockContainer::get_readabl
     return f;
 }
 
-StatusOr<LogBlockContainerPtr> LogBlockContainer::create(Dir* dir, TUniqueId query_id, int32_t plan_node_id,
-                                                         const std::string& plan_node_name, uint64_t id,
-                                                         bool direct_io) {
-    auto container = std::make_shared<LogBlockContainer>(dir, query_id, plan_node_id, plan_node_name, id, direct_io);
+StatusOr<LogBlockContainerPtr> LogBlockContainer::create(DirPtr dir, TUniqueId query_id, TUniqueId fragment_instance_id,
+                                                         int32_t plan_node_id, const std::string& plan_node_name,
+                                                         uint64_t id, bool direct_io) {
+    auto container = std::make_shared<LogBlockContainer>(dir, query_id, fragment_instance_id, plan_node_id,
+                                                         plan_node_name, id, direct_io);
     RETURN_IF_ERROR(container->open());
     return container;
 }
 
 class LogBlockReader final : public BlockReader {
 public:
-    LogBlockReader(const Block* block) : _block(block) {}
+    LogBlockReader(const Block* block) : BlockReader(block) {}
     ~LogBlockReader() override = default;
 
     Status read_fully(void* data, int64_t count) override;
 
     std::string debug_string() override { return _block->debug_string(); }
 
+    const Block* block() const override { return _block; }
+
 private:
-    const Block* _block = nullptr;
     std::unique_ptr<io::InputStreamWrapper> _readable;
     size_t _offset = 0;
     size_t _length = 0;
@@ -216,8 +222,8 @@ Status LogBlockReader::read_fully(void* data, int64_t count) {
     _offset += count;
     return Status::OK();
 }
-
-LogBlockManager::LogBlockManager(TUniqueId query_id) : _query_id(std::move(query_id)) {
+LogBlockManager::LogBlockManager(TUniqueId query_id, DirManager* dir_mgr)
+        : _query_id(std::move(query_id)), _dir_mgr(dir_mgr) {
     _max_container_bytes = config::spill_max_log_block_container_bytes > 0 ? config::spill_max_log_block_container_bytes
                                                                            : kDefaultMaxContainerBytes;
 }
@@ -249,7 +255,8 @@ StatusOr<BlockPtr> LogBlockManager::acquire_block(const AcquireBlockOptions& opt
     ASSIGN_OR_RETURN(auto dir, ExecEnv::GetInstance()->spill_dir_mgr()->acquire_writable_dir(acquire_dir_opts));
 #endif
 
-    ASSIGN_OR_RETURN(auto block_container, get_or_create_container(dir, opts.plan_node_id, opts.name, opts.direct_io));
+    ASSIGN_OR_RETURN(auto block_container, get_or_create_container(dir, opts.fragment_instance_id, opts.plan_node_id,
+                                                                   opts.name, opts.direct_io));
     return std::make_shared<LogBlock>(block_container, block_container->size());
 }
 
@@ -279,17 +286,19 @@ Status LogBlockManager::release_block(const BlockPtr& block) {
     return Status::OK();
 }
 
-StatusOr<LogBlockContainerPtr> LogBlockManager::get_or_create_container(Dir* dir, int32_t plan_node_id,
+StatusOr<LogBlockContainerPtr> LogBlockManager::get_or_create_container(DirPtr dir, TUniqueId fragment_instance_id,
+                                                                        int32_t plan_node_id,
                                                                         const std::string& plan_node_name,
                                                                         bool direct_io) {
-    TRACE_SPILL_LOG << "get_or_create_container at dir: " << dir->dir() << ", plan node:" << plan_node_id << ", "
-                    << plan_node_name;
+    TRACE_SPILL_LOG << "get_or_create_container at dir: " << dir->dir()
+                    << ". fragment instance: " << print_id(fragment_instance_id) << ", plan node:" << plan_node_id
+                    << ", " << plan_node_name;
 
     std::lock_guard<std::mutex> l(_mutex);
-    auto iter = _available_containers.find(dir);
+    auto iter = _available_containers.find(dir.get());
     if (iter == _available_containers.end()) {
-        _available_containers.insert({dir, std::make_shared<PlanNodeContainerMap>()});
-        iter = _available_containers.find(dir);
+        _available_containers.insert({dir.get(), std::make_shared<PlanNodeContainerMap>()});
+        iter = _available_containers.find(dir.get());
     }
     auto sub_iter = iter->second->find(plan_node_id);
     if (sub_iter == iter->second->end()) {
@@ -306,8 +315,8 @@ StatusOr<LogBlockContainerPtr> LogBlockManager::get_or_create_container(Dir* dir
     uint64_t id = _next_container_id++;
     std::string container_dir = dir->dir() + "/" + print_id(_query_id);
     RETURN_IF_ERROR(dir->fs()->create_dir_if_missing(container_dir));
-    ASSIGN_OR_RETURN(auto block_container,
-                     LogBlockContainer::create(dir, _query_id, plan_node_id, plan_node_name, id, direct_io));
+    ASSIGN_OR_RETURN(auto block_container, LogBlockContainer::create(dir, _query_id, fragment_instance_id, plan_node_id,
+                                                                     plan_node_name, id, direct_io));
     RETURN_IF_ERROR(block_container->open());
     return block_container;
 }
