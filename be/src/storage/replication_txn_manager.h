@@ -31,9 +31,11 @@ public:
     Status replicate_snapshot(const TReplicateSnapshotRequest& request);
 
     void get_txn_related_tablets(TTransactionId transaction_id, TPartitionId partition_id,
-                                 std::vector<TTabletId>* tablet_ids);
+                                 std::vector<TTabletId>* tablet_ids) const;
 
-    void get_tablet_related_txns(TTabletId tablet_id, std::set<TTransactionId>* transaction_ids);
+    void get_tablet_related_txns(TTabletId tablet_id, std::set<TTransactionId>* transaction_ids) const;
+
+    bool has_txn(TTransactionId transaction_id) const;
 
     Status publish_txn(TTransactionId transaction_id, TPartitionId partition_id, const TabletSharedPtr& tablet,
                        int64_t version);
