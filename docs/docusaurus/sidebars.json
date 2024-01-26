@@ -283,7 +283,6 @@
           "description": "Modeling and transformation with DBT",
           "href": "https://github.com/StarRocks/starrocks/tree/main/contrib/dbt-connector/README.md"
          }
->>>>>>> c8e88109c8 ([Doc] Fix mv usage loop (#40041))
       ]
     },
     {
@@ -945,7 +944,6 @@
           "description": "通过 DBT 实现数据建模与转换",
           "href": "https://github.com/StarRocks/starrocks/tree/main/contrib/dbt-connector/README.md"
          }
->>>>>>> c8e88109c8 ([Doc] Fix mv usage loop (#40041))
       ]
     },
     {
