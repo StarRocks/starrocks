@@ -568,9 +568,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
   - If this parameter is set to `FALSE`, you need to manually specify the number of buckets when you create a table or add a partition. If you do not specify the bucket count when adding a new partition to a table, the new partition inherits the bucket count set at the creation of the table. However, you can also manually specify the number of buckets for the new partition. Starting from version 2.5.7, StarRocks supports setting this parameter.
 
 #### enable_experimental_rowstore
-- **Description:** Whether to enable hybrid row-column storage (this feature is currrently in preview).  If this parameter is set to `TRUE` and `"STORE_TYPE" = "column_with_row"` is configured in the `PROPERTIES` clause at table creation, data in that table is stored in both row-by-row and column-by-column fashions. This help improve performance for high-concurrency point queries and partial data updates，while retaining the efficient analytical capabilities of columnar storage. For detailed user guide, see [Hybrid row-column storage](../table_design/hybrid_table.md).
+- **Description:** Whether to enable hybrid row-column storage (this feature is currrently in preview). If this parameter is set to `TRUE` and `"STORE_TYPE" = "column_with_row"` is configured in the `PROPERTIES` clause at table creation, data in that table is stored in both row-by-row and column-by-column fashions. This feature can improve performance for high-concurrency point queries and partial data updates，while retaining the efficient analytical capabilities of columnar storage. For detailed user guide, see [Hybrid row-column storage](../table_design/hybrid_table.md).
 - **Default**: FALSE
-- **Introduced Version**: 3.2.x
+- **Introduced in**: v3.2.x
 
 #### storage_usage_soft_limit_percent
 

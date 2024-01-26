@@ -2,7 +2,7 @@
 displayed_sidebar: "English"
 ---
 
-# Hybrid row-column storage
+# Hybrid row-column storage (in preview)
 
 As an OLAP database, StarRocks originally stores data in the columnar storage, which can enhance the performance of complex queries, such as aggregate queries. Since v3.2.3, StarRocks also supports storing data in the hybrid row-column storage where data is stored in both row-by-row and column-by-column fashions. This hybrid row-column storage is well suited for various scenario such as primary key-based high-concurrency, low-latency point queries and partial column updates, while delivering efficient analytical capabilities comparable to columnar storage. Additionally, hybrid row-column storage supports [prepared statements](../sql-reference/sql-statements/prepared_statement.md), which enhances query performance and security.
 
@@ -18,7 +18,11 @@ As an OLAP database, StarRocks originally stores data in the columnar storage, w
 
 ### Create a table that uses hybrid row-column storage
 
-1. The row-column hybrid feature is disabled by default. You can enable this feature by setting the FE dynamic parameter [`enable_experimental_rowstore`](../administration/FE_configuration.md#enable_experimental_rowstore) to `true`. 
+1. The hybrid row-column storage is disabled by default. This feature can be enabled by setting the FE dynamic parameter [`enable_experimental_rowstore`](../administration/FE_configuration.md#enable_experimental_rowstore) to `true`. 
+
+   ```sql
+   ADMIN SET FRONTEND CONFIG ("enable_experimental_rowstore" = "true");
+   ```
 
 2. Specify `"STORE_TYPE" = "column_with_row"` in the `PROPERTIES` at table creation.
 
