@@ -3,4 +3,3 @@
 //
 
 #include "rolling_file_writer.h"
-

@@ -14,61 +14,65 @@
 
 #pragma once
 
-#include <future>
-#include <common/status.h>
 #include <column/chunk.h>
-#include <runtime/runtime_state.h>
-#include <boost/thread/future.hpp>
-
+#include <common/status.h>
 #include <fmt/format.h>
+#include <runtime/runtime_state.h>
+
+#include <boost/thread/future.hpp>
+#include <future>
 #include <util/priority_thread_pool.hpp>
 
-#include "rolling_file_writer.h"
 #include "fs/fs.h"
+#include "rolling_file_writer.h"
 
 namespace starrocks::pipeline {
 
-// TODO: comments
+// Location provider provides file location for every output file. The name format depends on if the write is partitioned or not.
 class LocationProvider {
 public:
-    // TODO: handle suffix
-    LocationProvider(std::string base_path, std::string query_id, int be_number, int driver_id, std::string file_suffix) : _base_path(base_path) {
-        _file_name_prefix = fmt::format("{}_{}_{}_{}", query_id, be_number, driver_id);
-        _file_name_suffix = file_suffix;
+    // file_name_prefix = {query_id}_{be_number}_{driver_id}
+    LocationProvider(const std::string& base_path, const std::string& query_id, int be_number, int driver_id,
+                     const std::string& file_suffix)
+            : _base_path(base_path),
+              _file_name_prefix(fmt::format("{}_{}_{}", query_id, be_number, driver_id)),
+              _file_name_suffix(file_suffix) {}
+
+    // location = base_path/partition/{query_id}_{be_number}_{driver_id}_index.file_suffix
+    std::string get(const std::string& partition) {
+        return fmt::format("{}/{}/{}_{}.{}", _base_path, partition, _file_name_prefix, _partition2index[partition]++,
+                           _file_name_suffix);
     }
 
-    std::string get(std::string partition) {
-        return fmt::format("{}/{}/{}_{}.{}", _base_path, partition, _file_name_prefix, _partition2index[partition]++, file_suffix);
-    }
-
-    std::string get() {
-        return fmt::format("{}/{}/{}_{}.{}", _base_path, partition, _file_name_prefix, _partition2index[partition]++, file_suffix);
-    }
+    // location = base_path/{query_id}_{be_number}_{driver_id}_index.file_suffix
+    std::string get() { return fmt::format("{}/{}_{}.{}", _base_path, _file_name_prefix, _index++, _file_name_suffix); }
 
 private:
-    std::string _base_path;
-    std::string _file_name_prefix;
-    std::string _file_name_suffix;
+    const std::string _base_path;
+    const std::string _file_name_prefix;
+    const std::string _file_name_suffix;
+    int _index = 0;
     std::map<std::string, int> _partition2index;
 };
 
 class FileWriterFactory {
 public:
     // TODO: how to handle file options of different formats
-    FileWriterFactory(std::unique_ptr<FileSystem> fs, FileWriter::FileFormat format, std::shared_ptr<FileWriter::FileWriterOptions> options, const std::vector<std::string>& column_names,
-                  const std::vector<ExprContext*>& output_exprs, PriorityThreadPool* executors = nullptr);
+    FileWriterFactory(std::shared_ptr<FileSystem> fs, FileWriter::FileFormat format,
+                      std::shared_ptr<FileWriter::FileWriterOptions> options,
+                      const std::vector<std::string>& column_names, const std::vector<ExprContext*>& output_exprs,
+                      PriorityThreadPool* executors = nullptr);
 
-    StatusOr<std::unique_ptr<FileWriter>> create(std::string path) const;
+    StatusOr<std::shared_ptr<FileWriter>> create(const std::string& path) const;
 
 private:
     std::shared_ptr<FileWriter::FileWriterOptions> _options;
-    std::unique_ptr<FileSystem> _fs;
+    std::shared_ptr<FileSystem> _fs;
     FileWriter::FileFormat _format;
     std::vector<std::string> _column_names;
     std::vector<ExprContext*> _output_exprs;
     PriorityThreadPool* _executors;
 };
-
 
 class ConnectorChunkSink {
 public:
@@ -81,13 +85,14 @@ public:
     virtual ~ConnectorChunkSink() = 0;
     virtual StatusOr<Futures> add(ChunkPtr chunk) = 0;
     virtual Futures finish() = 0;
-    virtual std::function<void(FileWriter::CommitResult)> callbackOnCommitSuccess() = 0; // TODO: rename
+    // virtual std::function<void(FileWriter::CommitResult)> callbackOnCommitSuccess() = 0; // TODO: rename
 };
 
-class FilesChunkSink : public ConnectorChunkSink {
+class FileChunkSink : public ConnectorChunkSink {
 public:
-    FilesChunkSink(const std::vector<std::string>& partition_columns,
-        const std::vector<ExprContext*>& partition_exprs, std::unique_ptr<LocationProvider> location_provider, std::unique_ptr<FileWriterFactory> file_writer_factory, int64_t max_file_size);
+    FileChunkSink(const std::vector<std::string>& partition_columns, const std::vector<ExprContext*>& partition_exprs,
+                  std::unique_ptr<LocationProvider> location_provider,
+                  std::unique_ptr<FileWriterFactory> file_writer_factory, int64_t max_file_size);
 
     StatusOr<Futures> add(ChunkPtr chunk) override;
     Futures finish() override;
@@ -98,7 +103,7 @@ private:
 
     std::unique_ptr<LocationProvider> _location_provider;
     std::unique_ptr<FileWriterFactory> _file_writer_factory;
-    std::map<std::string, std::unique_ptr<FileWriter>> _partition_writers;
+    std::map<std::string, std::shared_ptr<FileWriter>> _partition_writers;
     int64_t _max_file_size;
 
     inline static std::string DEFAULT_PARTITION = "__DEFAULT_PARTITION__";
@@ -106,13 +111,11 @@ private:
 
 class HiveUtils {
 public:
-    static StatusOr<std::string> make_partition_name(const std::vector<std::string>& column_names, const std::vector<ExprContext*>& exprs, ChunkPtr chunk);
+    static StatusOr<std::string> make_partition_name(const std::vector<std::string>& column_names,
+                                                     const std::vector<ExprContext*>& exprs, ChunkPtr chunk);
 
 private:
     static StatusOr<std::string> column_value(const TypeDescriptor& type_desc, const ColumnPtr& column);
 };
 
-}
-
-
-
+} // namespace starrocks::pipeline

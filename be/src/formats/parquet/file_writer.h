@@ -243,16 +243,22 @@ std::future<T> make_completed_future(T&& t) {
 
 class ParquetFileWriter final : public pipeline::FileWriter {
 public:
-    struct ParquetWriterOptions : FileWriterOptions {
-        int64_t dictionary_pagesize = 1024 * 1024; // 1MB
-        int64_t page_size = 1024 * 1024; // 1MB
-        int64_t write_batch_size = 4096;
-        int64_t rowgroup_size = 1 << 27; // 128MB
+    struct FileColumnId {
+        int32_t field_id = -1;
+        std::vector<FileColumnId> children;
     };
 
-    ParquetFileWriter(std::unique_ptr<ParquetOutputStream> output_stream, const std::vector<std::string>& column_names,
-                  const std::vector<ExprContext*>& output_exprs, std::shared_ptr<ParquetWriterOptions> options,
-                  PriorityThreadPool* executors = nullptr);
+    struct ParquetWriterOptions : FileWriterOptions {
+        int64_t dictionary_pagesize = 1024 * 1024; // 1MB
+        int64_t page_size = 1024 * 1024;           // 1MB
+        int64_t write_batch_size = 4096;
+        int64_t rowgroup_size = 1 << 27; // 128MB
+        std::optional<std::vector<FileColumnId>> column_ids;
+    };
+
+    ParquetFileWriter(std::unique_ptr<parquet::ParquetOutputStream> output_stream,
+                      const std::vector<std::string>& column_names, const std::vector<ExprContext*>& output_exprs,
+                      const std::shared_ptr<ParquetWriterOptions>& writer_options, PriorityThreadPool* executors);
 
     ~ParquetFileWriter() override = default;
 
@@ -265,6 +271,15 @@ public:
     std::future<CommitResult> commit() override;
 
 private:
+    static arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> _make_schema(
+            const std::vector<std::string>& file_column_names, const std::vector<TypeDescriptor>& type_descs,
+            const std::vector<FileColumnId>& file_column_ids);
+
+    static arrow::Result<::parquet::schema::NodePtr> _make_schema_node(const std::string& name,
+                                                                       const TypeDescriptor& type_desc,
+                                                                       ::parquet::Repetition::type rep_type,
+                                                                       FileColumnId file_column_id);
+
     static FileMetrics _metrics(const ::parquet::FileMetaData* meta_data);
 
     std::future<Status> _flush_row_group();
@@ -272,7 +287,10 @@ private:
     std::shared_ptr<::parquet::WriterProperties> _properties;
     std::shared_ptr<::parquet::schema::GroupNode> _schema;
 
+    std::vector<std::string> _column_names;
+    std::vector<ExprContext*> _output_exprs;
     std::vector<TypeDescriptor> _type_descs;
+    std::shared_ptr<ParquetWriterOptions> _writer_options;
     std::function<StatusOr<ColumnPtr>(Chunk*, size_t)> _eval_func;
     std::shared_ptr<::parquet::FileMetaData> _file_metadata;
 
@@ -281,6 +299,5 @@ private:
     std::shared_ptr<ParquetOutputStream> _output_stream;
     PriorityThreadPool* _executors;
 };
-
 
 } // namespace starrocks::parquet

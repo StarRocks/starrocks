@@ -20,6 +20,8 @@
 #include "exec/json_scanner.h"
 #include "exec/orc_scanner.h"
 #include "exec/parquet_scanner.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/sink/connector_chunk_sink.h"
 #include "exprs/expr.h"
 
 namespace starrocks::connector {
@@ -27,6 +29,10 @@ namespace starrocks::connector {
 DataSourceProviderPtr FileConnector::create_data_source_provider(ConnectorScanNode* scan_node,
                                                                  const TPlanNode& plan_node) const {
     return std::make_unique<FileDataSourceProvider>(scan_node, plan_node);
+}
+
+std::unique_ptr<ConnectorChunkSinkProvider> FileConnector::create_data_sink_provider() const {
+    return std::make_unique<FileDataSinkProvider>();
 }
 
 // ================================
@@ -196,6 +202,20 @@ void FileDataSource::_update_counter() {
     COUNTER_UPDATE(_scanner_materialize_timer, _counter.materialize_ns);
     COUNTER_UPDATE(_scanner_init_chunk_timer, _counter.init_chunk_ns);
     COUNTER_UPDATE(_scanner_file_reader_timer, _counter.file_read_ns);
+}
+
+std::unique_ptr<pipeline::ConnectorChunkSink> FileDataSinkProvider::create_chunk_sink(
+        std::shared_ptr<ConnectorChunkSinkContext> context, int32_t driver_id) {
+    auto ctx = std::dynamic_pointer_cast<FileChunkSinkContext>(context);
+    auto fs = FileSystem::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)).value();
+    auto file_writer_factory = std::make_unique<pipeline::FileWriterFactory>(
+            std::move(fs), ctx->format, ctx->options, ctx->column_names, ctx->output_exprs, ctx->executor);
+    auto location_provider = std::make_unique<pipeline::LocationProvider>(
+            ctx->path, print_id(ctx->fragment_context->query_id()), ctx->fragment_context->runtime_state()->be_number(),
+            driver_id, "parquet");
+    return std::make_unique<pipeline::FileChunkSink>(ctx->partition_columns, ctx->partition_exprs,
+                                                     std::move(location_provider), std::move(file_writer_factory),
+                                                     ctx->max_file_size);
 }
 
 } // namespace starrocks::connector

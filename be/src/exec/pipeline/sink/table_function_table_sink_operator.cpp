@@ -14,68 +14,13 @@
 
 #include "table_function_table_sink_operator.h"
 
+#include <boost/thread/future.hpp>
+
 #include "formats/parquet/file_writer.h"
 #include "glog/logging.h"
 #include "util/url_coding.h"
 
-#include <boost/thread/future.hpp>
-
 namespace starrocks::pipeline {
-
-// TODO(letian-jiang): optimize
-StatusOr<std::string> column_to_string(const TypeDescriptor& type_desc, const ColumnPtr& column) {
-    auto datum = column->get(0);
-    if (datum.is_null()) {
-        return "null";
-    }
-
-    switch (type_desc.type) {
-    case TYPE_BOOLEAN: {
-        return datum.get_uint8() ? "true" : "false";
-    }
-    case TYPE_TINYINT: {
-        return std::to_string(datum.get_int8());
-    }
-    case TYPE_SMALLINT: {
-        return std::to_string(datum.get_int16());
-    }
-    case TYPE_INT: {
-        return std::to_string(datum.get_int32());
-    }
-    case TYPE_BIGINT: {
-        return std::to_string(datum.get_int64());
-    }
-    case TYPE_DATE: {
-        return datum.get_date().to_string();
-    }
-    case TYPE_DATETIME: {
-        return url_encode(datum.get_timestamp().to_string());
-    }
-    case TYPE_CHAR: {
-        std::string origin_str = datum.get_slice().to_string();
-        if (origin_str.length() < type_desc.len) {
-            origin_str.append(type_desc.len - origin_str.length(), ' ');
-        }
-        return url_encode(origin_str);
-    }
-    case TYPE_VARCHAR: {
-        return url_encode(datum.get_slice().to_string());
-    }
-    default: {
-        return Status::InvalidArgument("unsupported partition column type" + type_desc.debug_string());
-    }
-    }
-}
-
-inline std::string get_partition_location(const string& path, const std::vector<std::string>& names,
-                                          const std::vector<std::string>& values) {
-    std::string partition_location = path;
-    for (size_t i = 0; i < names.size(); i++) {
-        partition_location += names[i] + "=" + values[i] + "/";
-    }
-    partition_location += "data_";
-    return partition_location;
-}
 
 Status TableFunctionTableSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
@@ -91,7 +36,7 @@ void TableFunctionTableSinkOperator::close(RuntimeState* state) {
     Operator::close(state);
 }
 
-template<typename R>
+template <typename R>
 bool is_ready(std::future<R> const& f) {
     return f.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
 }
@@ -142,7 +87,8 @@ Status TableFunctionTableSinkOperator::set_finishing(RuntimeState* state) {
     if (_file_writer != nullptr) {
         _file_writer->commitAsync([&, fragment_ctx = _fragment_ctx, state = state](FileWriter::CommitResult result) {
             if (!result.io_status.ok()) {
-                LOG(WARNING) << "cancel fragment instance " << state->fragment_instance_id() << ": " << result.io_status;
+                LOG(WARNING) << "cancel fragment instance " << state->fragment_instance_id() << ": "
+                             << result.io_status;
                 fragment_ctx->cancel(result.io_status);
                 return;
             }
@@ -167,7 +113,6 @@ StatusOr<ChunkPtr> TableFunctionTableSinkOperator::pull_chunk(RuntimeState* stat
 }
 
 Status TableFunctionTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
-
     auto future_handler = [&](auto&& future) {
         if (is_ready(future)) {
             RETURN_IF_ERROR(future.get());
@@ -179,11 +124,15 @@ Status TableFunctionTableSinkOperator::push_chunk(RuntimeState* state, const Chu
 
     // TODO: file writer factory
     if (_file_writer == nullptr) {
-        string location = _path + "_" + fmt::format("{}_{}_{}_{}.parquet", print_id(state->query_id()), state->be_number(), _driver_sequence, _next_id++);
+        string location = _path + "_" +
+                          fmt::format("{}_{}_{}_{}.parquet", print_id(state->query_id()), state->be_number(),
+                                      _driver_sequence, _next_id++);
         ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(_path, FSOptions(&_cloud_conf)));
         WritableFileOptions options{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
         ASSIGN_OR_RETURN(auto writable_file, fs->new_writable_file(options, location));
-        _file_writer = std::make_unique<parquet::ParquetFileWriter>(std::move(writable_file), ::parquet::default_writer_properties(), _parquet_file_schema, _output_exprs, 1 << 30);
+        _file_writer = std::make_unique<parquet::ParquetFileWriter>(std::move(writable_file),
+                                                                    ::parquet::default_writer_properties(),
+                                                                    _parquet_file_schema, _output_exprs, 1 << 30);
         RETURN_IF_ERROR(_file_writer->init());
     }
 
@@ -192,7 +141,8 @@ Status TableFunctionTableSinkOperator::push_chunk(RuntimeState* state, const Chu
     if (_file_writer->get_written_bytes() > 1 << 30) {
         _file_writer->commitAsync([&, fragment_ctx = _fragment_ctx, state = state](FileWriter::CommitResult result) {
             if (!result.io_status.ok()) {
-                LOG(WARNING) << "cancel fragment instance " << state->fragment_instance_id() << ": " << result.io_status;
+                LOG(WARNING) << "cancel fragment instance " << state->fragment_instance_id() << ": "
+                             << result.io_status;
                 fragment_ctx->cancel(result.io_status);
                 return;
             }
@@ -200,11 +150,15 @@ Status TableFunctionTableSinkOperator::push_chunk(RuntimeState* state, const Chu
             _rollback_actions.push(result.rollback_action);
         });
 
-        string location = _path + "_" + fmt::format("{}_{}_{}_{}.parquet", print_id(state->query_id()), state->be_number(), _driver_sequence, _next_id++);
+        string location = _path + "_" +
+                          fmt::format("{}_{}_{}_{}.parquet", print_id(state->query_id()), state->be_number(),
+                                      _driver_sequence, _next_id++);
         ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(location, FSOptions(&_cloud_conf)));
         WritableFileOptions options{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
         ASSIGN_OR_RETURN(auto writable_file, fs->new_writable_file(options, location));
-        _file_writer = std::make_unique<parquet::ParquetFileWriter>(std::move(writable_file), ::parquet::default_writer_properties(), _parquet_file_schema, _output_exprs, 1 << 30);
+        _file_writer = std::make_unique<parquet::ParquetFileWriter>(std::move(writable_file),
+                                                                    ::parquet::default_writer_properties(),
+                                                                    _parquet_file_schema, _output_exprs, 1 << 30);
         RETURN_IF_ERROR(_file_writer->init());
     }
 
@@ -225,51 +179,22 @@ TableInfo TableFunctionTableSinkOperator::_make_table_info(const string& partiti
 }
 
 TableFunctionTableSinkOperatorFactory::TableFunctionTableSinkOperatorFactory(
-        const int32_t id, const string& path, const string& file_format, const TCompressionType::type& compression_type,
-        const std::vector<ExprContext*>& output_exprs, const std::vector<ExprContext*>& partition_exprs,
-        const std::vector<std::string>& column_names, const std::vector<std::string>& partition_column_names,
-        bool write_single_file, const TCloudConfiguration& cloud_conf, FragmentContext* fragment_ctx)
+        const int32_t id, std::shared_ptr<connector::FileChunkSinkContext> context, FragmentContext* fragment_ctx)
         : OperatorFactory(id, "table_function_table_sink", Operator::s_pseudo_plan_node_id_for_final_sink),
-          _path(path),
-          _file_format(file_format),
-          _compression_type(compression_type),
-          _output_exprs(output_exprs),
-          _partition_exprs(partition_exprs),
-          _column_names(column_names),
-          _partition_column_names(partition_column_names),
-          _write_single_file(write_single_file),
-          _cloud_conf(cloud_conf),
-          _fragment_ctx(fragment_ctx) {}
+          _fragment_context(fragment_ctx) {
+    auto connector = connector::ConnectorManager::default_instance()->get(connector::Connector::FILE);
+    auto sink_provider = connector->create_data_sink_provider();
+    _inner = std::make_unique<ConnectorSinkOperatorFactory>(std::move(sink_provider), context, fragment_ctx);
+}
 
 Status TableFunctionTableSinkOperatorFactory::prepare(RuntimeState* state) {
     LOG(INFO) << "prepare";
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
-
-    RETURN_IF_ERROR(Expr::prepare(_output_exprs, state));
-    RETURN_IF_ERROR(Expr::open(_output_exprs, state));
-
-    RETURN_IF_ERROR(Expr::prepare(_partition_exprs, state));
-    RETURN_IF_ERROR(Expr::open(_partition_exprs, state));
-
-    if (_file_format == "parquet") {
-        auto result = parquet::ParquetBuildHelper::make_schema(
-                _column_names, _output_exprs, std::vector<parquet::FileColumnId>(_output_exprs.size()));
-        if (!result.ok()) {
-            return Status::NotSupported(result.status().message());
-        }
-        _parquet_file_schema = result.ValueOrDie();
-    } else {
-        return Status::InternalError("unsupported file format" + _file_format);
-    }
-
     return Status::OK();
 }
 
 OperatorPtr TableFunctionTableSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
-    return std::make_shared<TableFunctionTableSinkOperator>(
-            this, _id, _plan_node_id, driver_sequence, _path, _file_format, _compression_type, _output_exprs,
-            _partition_exprs, _partition_column_names, _write_single_file, _cloud_conf, _fragment_ctx,
-            _parquet_file_schema);
+    return _inner->create(degree_of_parallelism, driver_sequence);
 }
 
 void TableFunctionTableSinkOperatorFactory::close(RuntimeState* state) {

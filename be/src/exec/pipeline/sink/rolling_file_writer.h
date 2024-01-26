@@ -14,14 +14,15 @@
 
 #pragma once
 
-#include <future>
-#include <common/status.h>
 #include <column/chunk.h>
+#include <common/status.h>
 #include <runtime/runtime_state.h>
+
+#include <future>
 
 namespace starrocks::pipeline {
 
-class FileWriter {
+class FileWriter : public std::enable_shared_from_this<FileWriter> {
 public:
     enum class FileFormat {
         PARQUET,
@@ -35,7 +36,7 @@ public:
     };
 
     struct FileWriterOptions {
-        virtual ~FileWriterOptions();
+        virtual ~FileWriterOptions() = 0;
     };
 
     struct FileMetrics {
@@ -66,8 +67,6 @@ public:
 
 class FileWriterBuilder {
 public:
-
 };
 
 } // namespace starrocks::pipeline
-

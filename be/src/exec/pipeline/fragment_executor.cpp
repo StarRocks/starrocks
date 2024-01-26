@@ -68,6 +68,9 @@
 #include "util/runtime_profile.h"
 #include "util/time.h"
 #include "util/uid_util.h"
+#include "connector/file_connector.h"
+#include "connector/connector.h"
+#include "exec/pipeline/sink/connector_sink_operator.h"
 
 namespace starrocks::pipeline {
 
@@ -1054,11 +1057,23 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         RETURN_IF_ERROR(
                 Expr::create_expr_trees(runtime_state->obj_pool(), output_exprs, &output_expr_ctxs, runtime_state));
 
-        auto op = std::make_shared<TableFunctionTableSinkOperatorFactory>(
-                context->next_operator_id(), target_table.path, target_table.file_format, target_table.compression_type,
-                output_expr_ctxs, partition_expr_ctxs, column_names, partition_column_names,
-                target_table.write_single_file, thrift_sink.table_function_table_sink.cloud_configuration,
-                fragment_ctx);
+        auto ctx = std::make_shared<connector::FileChunkSinkContext>();
+        ctx->path = target_table.path;
+        ctx->cloud_conf = thrift_sink.table_function_table_sink.cloud_configuration;
+        ctx->partition_columns = partition_column_names;
+        ctx->executor = ExecEnv::GetInstance()->pipeline_sink_io_pool();
+        ctx->format = FileWriter::FileFormat::PARQUET;
+        ctx->max_file_size = target_table.write_single_file ? INT64_MAX : 1 << 30;
+        ctx->output_exprs = output_expr_ctxs;
+        ctx->partition_exprs = partition_expr_ctxs;
+
+        // TODO(letian-jiang): handle exprs
+        RETURN_IF_ERROR(Expr::prepare(ctx->output_exprs, runtime_state));
+        RETURN_IF_ERROR(Expr::prepare(ctx->partition_exprs, runtime_state));
+
+        auto connector = connector::ConnectorManager::default_instance()->get(connector::Connector::FILE);
+        auto sink_provider = connector->create_data_sink_provider();
+        auto op = std::make_shared<ConnectorSinkOperatorFactory>(context->next_operator_id(), std::move(sink_provider), ctx, fragment_ctx);
 
         size_t source_dop = fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
         size_t sink_dop = _calc_sink_dop(ExecEnv::GetInstance(), request);

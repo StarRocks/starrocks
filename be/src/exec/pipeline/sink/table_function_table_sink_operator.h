@@ -20,6 +20,9 @@
 #include <utility>
 
 #include "common/logging.h"
+#include "connector/connector.h"
+#include "connector/file_connector.h"
+#include "connector_sink_operator.h"
 #include "exec/parquet_writer.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/operator.h"
@@ -108,13 +111,7 @@ private:
 
 class TableFunctionTableSinkOperatorFactory final : public OperatorFactory {
 public:
-    TableFunctionTableSinkOperatorFactory(const int32_t id, const string& path, const string& file_format,
-                                          const TCompressionType::type& compression_type,
-                                          const std::vector<ExprContext*>& output_exprs,
-                                          const std::vector<ExprContext*>& partition_exprs,
-                                          const std::vector<std::string>& column_names,
-                                          const std::vector<std::string>& partition_column_names,
-                                          bool write_single_file, const TCloudConfiguration& cloud_conf,
+    TableFunctionTableSinkOperatorFactory(const int32_t id, std::shared_ptr<connector::FileChunkSinkContext> context,
                                           FragmentContext* fragment_ctx);
 
     ~TableFunctionTableSinkOperatorFactory() override = default;
@@ -126,18 +123,9 @@ public:
     void close(RuntimeState* state) override;
 
 private:
-    const std::string _path;
-    const std::string _file_format;
-    const TCompressionType::type _compression_type;
-    const std::vector<ExprContext*> _output_exprs;
-    const std::vector<ExprContext*> _partition_exprs;
-    const std::vector<std::string> _column_names;
-    const std::vector<std::string> _partition_column_names;
-    const bool _write_single_file;
-    const TCloudConfiguration _cloud_conf;
-    FragmentContext* _fragment_ctx;
+    std::unique_ptr<ConnectorSinkOperatorFactory> _inner;
 
-    std::shared_ptr<::parquet::schema::GroupNode> _parquet_file_schema;
+    FragmentContext* _fragment_context;
 };
 
 } // namespace starrocks::pipeline
