@@ -25,7 +25,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.privilege.RangerAccessController;
-import com.starrocks.privilege.ranger.hive.RangerHiveResource;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
@@ -429,7 +428,7 @@ public class RangerStarRocksAccessController extends RangerAccessController {
 
     @Override
     public Expr getRowAccessPolicy(ConnectContext context, TableName tableName) {
-        return getRowAccessExpression(RangerHiveResource.builder()
+        return getRowAccessExpression(RangerStarRocksResource.builder()
                 .setCatalog(tableName.getCatalog())
                 .setDatabase(tableName.getDb())
                 .setTable(tableName.getTbl())

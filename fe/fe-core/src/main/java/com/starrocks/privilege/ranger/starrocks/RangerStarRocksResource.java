@@ -16,13 +16,12 @@ package com.starrocks.privilege.ranger.starrocks;
 
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.ranger.RangerAccessResourceBuilder;
-import com.starrocks.privilege.ranger.hive.RangerHiveResource;
 import org.apache.ranger.plugin.policyengine.RangerAccessResourceImpl;
 
 public class RangerStarRocksResource extends RangerAccessResourceImpl {
     static class RangerStarRocksAccessResourceBuilder extends RangerAccessResourceBuilder {
         private RangerStarRocksAccessResourceBuilder() {
-            super(new RangerHiveResource());
+            super(new RangerStarRocksResource());
         }
 
         public String convertToRangerType(ObjectType objectType) {
