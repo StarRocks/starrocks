@@ -10,7 +10,7 @@ Adds an integer expression interval to the date or datetime expression `datetime
 
 The unit for the interval as mentioned must be one of the following:
 
-SECOND, MINUTE, HOUR, DAY, WEEK, MONTH, or YEAR.
+MILLISECOND, SECOND, MINUTE, HOUR, DAY, WEEK, MONTH, or YEAR.
 
 ## Syntax
 
