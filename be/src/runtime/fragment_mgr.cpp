@@ -901,6 +901,11 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
     query_options.query_type = TQueryType::EXTERNAL;
     // For spark sql / flink sql, we dont use page cache.
     query_options.use_page_cache = false;
+<<<<<<< HEAD
+=======
+    query_options.use_column_pool = false;
+    query_options.enable_profile = config::enable_profile_for_external_plan;
+>>>>>>> 24f4ce9dae ([Enhancement] add be config enable_profile_for_external_plan (#40102))
     exec_fragment_params.__set_query_options(query_options);
     VLOG_ROW << "external exec_plan_fragment params is "
              << apache::thrift::ThriftDebugString(exec_fragment_params).c_str();
