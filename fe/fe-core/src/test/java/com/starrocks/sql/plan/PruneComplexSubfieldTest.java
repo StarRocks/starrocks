@@ -817,4 +817,161 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "select * from cte1";
         assertContainsCTEReuse(sql);
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testArrayIndexStruct() throws Exception {
+        String sql = "select ass[1].a, ass[1].b from tt;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "[/ass/INDEX/a, /ass/INDEX/b]");
+    }
+
+    @Test
+    public void testJsonPruneNormal() throws Exception {
+        String sql = "select " +
+                "get_json_int(j1, '$.a.b.c'), " +
+                "get_json_string(j1, '$.\"a.b.c\".e.f.g'), " +
+                "json_query(j1, '$.a1.b1.c1'), " +
+                "json_exists(j1, '$.a2.b2.c2'), " +
+                "json_length(j1, '$.a3.b3[1].c3') " +
+                "from js0;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/j1/\"a.b.c\"/e, /j1/a/b, /j1/a1/b1, /j1/a2/b2, /j1/a3/b3]");
+
+        sql = "select " +
+                "JSON_EXISTS(j1, '$.a.b.c2'), " +
+                "get_json_int(j1, 'asd') " +
+                "from js0;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/j1/a/b, /j1/asd]");
+    }
+
+    @Test
+    public void testJsonPathMerge() throws Exception {
+        String sql = "select " +
+                "get_json_int(j1, '$.a.b.c1'), " +
+                "JSON_EXISTS(j1, '$.a.b.c2'), " +
+                "json_length(j1, '$.a.b2.c1'), " +
+                "json_length(j1, '$.a.b2.c3') " +
+                "from js0;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/j1/a/b, /j1/a/b2]");
+
+        sql = "select " +
+                "get_json_int(j1, '$.a.b[1].c1'), " +
+                "JSON_EXISTS(j1, '$.a.b[2].c2'), " +
+                "JSON_EXISTS(j1, '$.a.b[2:2].c2'), " +
+                "JSON_EXISTS(j1, '$.a.b[*].c2'), " +
+                "JSON_EXISTS(j1, '$.\"a.b[*]\".c2'), " +
+                "JSON_EXISTS(j1, '$.\"a.b[*]\".c2[1]'), " +
+                "JSON_EXISTS(j1, '$.\"a.b[*]\".c2[2].a') " +
+                "from js0;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/j1/\"a.b[*]\"/c2, /j1/a/b]");
+    }
+
+    @Test
+    public void testJsonArrayPat() throws Exception {
+        String sql = "select " +
+                "get_json_int(j1, '$.a[2].b[1].c1'), " +
+                "JSON_EXISTS(j1, '$.a[3].b[2].c2'), " +
+                "JSON_EXISTS(j1, '$.a.b[2:2].c2'), " +
+                "JSON_EXISTS(j1, '$.a.b[*].c2') " +
+                "from js0;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/j1/a]");
+    }
+
+    @Test
+    public void testJsonErrorPath() throws Exception {
+        String sql = "select " +
+                "get_json_int(j1, '$asdfsdf') " +
+                "from js0;";
+        String plan = getVerboseExplain(sql);
+        assertNotContains(plan, "ColumnAccessPath:");
+
+        sql = "select " +
+                "get_json_int(j1, '$.\"a.\"b[*]\"') " +
+                "from js0;";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "ColumnAccessPath:");
+
+        sql = "select " +
+                "get_json_int(j1, '$.a.b.c1'), " +
+                "json_length(j1, '$.*') " +
+                "from js0;";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "ColumnAccessPath:");
+
+        sql = "select " +
+                "get_json_int(j1, '$.a.b.c1'), " +
+                "json_length(j1, '$.*') " +
+                "from js0;";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "ColumnAccessPath:");
+
+        sql = "select " +
+                "json_length(j1, '$.*') " +
+                "from js0;";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "ColumnAccessPath:");
+
+        sql = "select " +
+                "json_length(j1, '$..abbb[3]') " +
+                "from js0;";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "ColumnAccessPath:");
+
+        sql = "select " +
+                "json_length(j1, '$..abbb[3]') " +
+                "from js0;";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "ColumnAccessPath:");
+    }
+
+    @Test
+    public void testJsonPathWithoutRoot() throws Exception {
+        String sql = "select " +
+                "get_json_int(j1, 'asd') " +
+                "from js0;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/j1/asd]");
+
+        sql = "select " +
+                "get_json_int(j1, 'a.b.c.d') " +
+                "from js0;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/j1/a/b]");
+
+        sql = "select " +
+                "get_json_int(j1, '$') " +
+                "from js0;";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "ColumnAccessPath");
+        
+        sql = "select " +
+                "get_json_int(j1, '$.') " +
+                "from js0;";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "ColumnAccessPath");
+    }
+
+    @Test
+    public void testSubfieldPathLose() throws Exception {
+        String sql = "select v1 from pc0 where (a1 is not null) NOT IN (select t0.v1 from t0 where false)";
+        String plan = getVerboseExplain(sql);
+
+        assertContains(plan, "  RESULT SINK\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  output columns:\n" +
+                "  |  1 <-> [1: v1, BIGINT, true]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     table: pc0, rollup: pc0");
+        assertContains(plan, "ColumnAccessPath");
+    }
+>>>>>>> a8438d4a3f ([BugFix] Fix prune subfield error (#40034))
 }

@@ -141,3 +141,9 @@ select s1.s2[1].a, s1.s3[1], s1.s4.f from sc3 where s1.s3[2] = 22;
 -- result:
 1	12	2
 -- !result
+select v1 from sc3 where a1[1] not in (select tt.v1 from sc3 as tt where false);
+-- result:
+2
+1
+3
+-- !result
