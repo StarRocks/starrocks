@@ -19,7 +19,7 @@
 
 #include <utility>
 
-#include "formats/parquet/file_writer.h"
+#include "formats/parquet/parquet_file_writer.h"
 #include "runtime/exec_env.h"
 #include "util/uid_util.h"
 

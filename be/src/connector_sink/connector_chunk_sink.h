@@ -14,19 +14,19 @@
 
 #pragma once
 
-#include <column/chunk.h>
-#include <common/status.h>
 #include <fmt/format.h>
-#include <runtime/runtime_state.h>
 
 #include <boost/thread/future.hpp>
 #include <future>
-#include <util/priority_thread_pool.hpp>
 
+#include "column/chunk.h"
+#include "common/status.h"
+#include "formats/file_writer.h"
 #include "fs/fs.h"
-#include "rolling_file_writer.h"
+#include "runtime/runtime_state.h"
+#include "util/priority_thread_pool.hpp"
 
-namespace starrocks::pipeline {
+namespace starrocks::connector {
 
 // Location provider provides file location for every output file. The name format depends on if the write is partitioned or not.
 class LocationProvider {
@@ -55,55 +55,39 @@ private:
     std::map<std::string, int> _partition2index;
 };
 
-class FileWriterFactory {
-public:
-    // TODO: how to handle file options of different formats
-    FileWriterFactory(std::shared_ptr<FileSystem> fs, FileWriter::FileFormat format,
-                      std::shared_ptr<FileWriter::FileWriterOptions> options,
-                      const std::vector<std::string>& column_names, const std::vector<ExprContext*>& output_exprs,
-                      PriorityThreadPool* executors = nullptr);
-
-    StatusOr<std::shared_ptr<FileWriter>> create(const std::string& path) const;
-
-private:
-    std::shared_ptr<FileWriter::FileWriterOptions> _options;
-    std::shared_ptr<FileSystem> _fs;
-    FileWriter::FileFormat _format;
-    std::vector<std::string> _column_names;
-    std::vector<ExprContext*> _output_exprs;
-    PriorityThreadPool* _executors;
-};
-
 class ConnectorChunkSink {
 public:
     struct Futures {
         std::vector<std::future<Status>> add_chunk_future;
-        std::vector<std::future<FileWriter::CommitResult>> commit_file_future;
-        std::vector<std::unique_ptr<FileWriter>> file_writers;
+        std::vector<std::future<formats::FileWriter::CommitResult>> commit_file_future;
+        // std::vector<std::unique_ptr<FileWriter>> file_writers;
     };
 
-    virtual ~ConnectorChunkSink() = 0;
+    virtual ~ConnectorChunkSink() = default;
     virtual StatusOr<Futures> add(ChunkPtr chunk) = 0;
     virtual Futures finish() = 0;
-    // virtual std::function<void(FileWriter::CommitResult)> callbackOnCommitSuccess() = 0; // TODO: rename
+    // virtual std::function<void(formats::FileWriter::CommitResult)> callback_on_success() = 0;
 };
 
 class FileChunkSink : public ConnectorChunkSink {
 public:
     FileChunkSink(const std::vector<std::string>& partition_columns, const std::vector<ExprContext*>& partition_exprs,
                   std::unique_ptr<LocationProvider> location_provider,
-                  std::unique_ptr<FileWriterFactory> file_writer_factory, int64_t max_file_size);
+                  std::unique_ptr<formats::FileWriterFactory> file_writer_factory, int64_t max_file_size);
+
+    ~FileChunkSink() override = default;
 
     StatusOr<Futures> add(ChunkPtr chunk) override;
     Futures finish() override;
+    // std::function<void(formats::FileWriter::CommitResult)> callback_on_success() override;
 
 private:
     std::vector<ExprContext*> _partition_exprs;
     std::vector<std::string> _partition_column_names;
 
     std::unique_ptr<LocationProvider> _location_provider;
-    std::unique_ptr<FileWriterFactory> _file_writer_factory;
-    std::map<std::string, std::shared_ptr<FileWriter>> _partition_writers;
+    std::unique_ptr<formats::FileWriterFactory> _file_writer_factory;
+    std::map<std::string, std::shared_ptr<formats::FileWriter>> _partition_writers;
     int64_t _max_file_size;
 
     inline static std::string DEFAULT_PARTITION = "__DEFAULT_PARTITION__";
@@ -118,4 +102,4 @@ private:
     static StatusOr<std::string> column_value(const TypeDescriptor& type_desc, const ColumnPtr& column);
 };
 
-} // namespace starrocks::pipeline
+} // namespace starrocks::connector

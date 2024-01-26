@@ -14,15 +14,17 @@
 
 #pragma once
 
-#include <column/chunk.h>
-#include <common/status.h>
-#include <runtime/runtime_state.h>
+#include "column/chunk.h"
+#include "common/status.h"
+#include "runtime/runtime_state.h"
+#include "fs/fs.h"
+#include "util/priority_thread_pool.hpp"
 
 #include <future>
 
-namespace starrocks::pipeline {
+namespace starrocks::formats {
 
-class FileWriter : public std::enable_shared_from_this<FileWriter> {
+class FileWriter {
 public:
     enum class FileFormat {
         PARQUET,
@@ -65,8 +67,23 @@ public:
     virtual std::future<CommitResult> commit() = 0;
 };
 
-class FileWriterBuilder {
+class FileWriterFactory {
 public:
+    // TODO: how to handle file options of different formats
+    FileWriterFactory(std::shared_ptr<FileSystem> fs, FileWriter::FileFormat format,
+                      std::shared_ptr<FileWriter::FileWriterOptions> options,
+                      const std::vector<std::string>& column_names, const std::vector<ExprContext*>& output_exprs,
+                      PriorityThreadPool* executors = nullptr);
+
+    StatusOr<std::shared_ptr<FileWriter>> create(const std::string& path) const;
+
+private:
+    std::shared_ptr<FileWriter::FileWriterOptions> _options;
+    std::shared_ptr<FileSystem> _fs;
+    FileWriter::FileFormat _format;
+    std::vector<std::string> _column_names;
+    std::vector<ExprContext*> _output_exprs;
+    PriorityThreadPool* _executors;
 };
 
-} // namespace starrocks::pipeline
+} // namespace starrocks::formats

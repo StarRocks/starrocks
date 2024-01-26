@@ -14,13 +14,13 @@
 
 #pragma once
 
-#include <formats/parquet/file_writer.h>
+#include <formats/parquet/parquet_file_writer.h>
 
 #include <functional>
 
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
-#include "exec/pipeline/sink/rolling_file_writer.h"
+#include "formats/file_writer.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "formats/orc/utils.h"

@@ -1062,7 +1062,7 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         ctx->cloud_conf = thrift_sink.table_function_table_sink.cloud_configuration;
         ctx->partition_columns = partition_column_names;
         ctx->executor = ExecEnv::GetInstance()->pipeline_sink_io_pool();
-        ctx->format = FileWriter::FileFormat::PARQUET;
+        ctx->format = formats::FileWriter::FileFormat::PARQUET;
         ctx->max_file_size = target_table.write_single_file ? INT64_MAX : 1 << 30;
         ctx->output_exprs = output_expr_ctxs;
         ctx->partition_exprs = partition_expr_ctxs;

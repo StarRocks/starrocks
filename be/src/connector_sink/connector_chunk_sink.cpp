@@ -4,54 +4,18 @@
 
 #include "connector_chunk_sink.h"
 
-#include <fmt/format.h>
-#include <formats/orc/orc_chunk_writer.h>
-#include <formats/parquet/file_writer.h>
-#include <util/url_coding.h>
-
 #include <future>
+#include "util/url_coding.h"
+#include "column/datum.h"
+#include "exprs/expr_context.h"
+#include "exprs/expr.h"
 
-#include "formats/orc/orc_file_writer.h"
-
-namespace starrocks::pipeline {
-
-FileWriterFactory::FileWriterFactory(std::shared_ptr<FileSystem> fs, FileWriter::FileFormat format,
-                                     std::shared_ptr<FileWriter::FileWriterOptions> options,
-                                     const vector<std::string>& column_names, const vector<ExprContext*>& output_exprs,
-                                     PriorityThreadPool* executors)
-        : _options(options),
-          _fs(std::move(fs)),
-          _format(format),
-          _column_names(column_names),
-          _output_exprs(output_exprs),
-          _executors(executors) {}
-
-// TODO: pass rollback action in ctor
-StatusOr<std::shared_ptr<FileWriter>> FileWriterFactory::create(const std::string& path) const {
-    ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(path));
-    switch (_format) {
-    case FileWriter::FileFormat::PARQUET: {
-        auto output_stream = std::make_unique<parquet::ParquetOutputStream>(std::move(file));
-        auto options = std::dynamic_pointer_cast<parquet::ParquetFileWriter::ParquetWriterOptions>(_options);
-        return std::make_shared<parquet::ParquetFileWriter>(std::move(output_stream), _column_names, _output_exprs,
-                                                            options, _executors);
-    }
-    case FileWriter::FileFormat::ORC: {
-        auto output_stream = std::make_unique<OrcOutputStream>(std::move(file));
-        auto options = std::dynamic_pointer_cast<ORCFileWriter::ORCWriterOptions>(_options);
-        return std::make_shared<ORCFileWriter>(std::move(output_stream), _column_names, _output_exprs, options,
-                                               _executors);
-    }
-    default: {
-        return Status::NotSupported("unsupported file format");
-    }
-    }
-}
+namespace starrocks::connector {
 
 FileChunkSink::FileChunkSink(const std::vector<std::string>& partition_columns,
                              const std::vector<ExprContext*>& partition_exprs,
                              std::unique_ptr<LocationProvider> location_provider,
-                             std::unique_ptr<FileWriterFactory> file_writer_factory, int64_t max_file_size)
+                             std::unique_ptr<formats::FileWriterFactory> file_writer_factory, int64_t max_file_size)
         : _partition_exprs(partition_exprs),
           _partition_column_names(partition_columns),
           _location_provider(std::move(location_provider)),
@@ -159,4 +123,4 @@ StatusOr<std::string> HiveUtils::column_value(const TypeDescriptor& type_desc, c
     }
 }
 
-} // namespace starrocks::pipeline
+} // namespace starrocks::connector

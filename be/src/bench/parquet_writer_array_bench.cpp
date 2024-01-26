@@ -22,7 +22,7 @@
 #include "bench.h"
 #include "column/chunk.h"
 #include "common/statusor.h"
-#include "formats/parquet/file_writer.h"
+#include "formats/parquet/parquet_file_writer.h"
 #include "formats/parquet/parquet_test_util/util.h"
 #include "fs/fs.h"
 #include "fs/fs_posix.h"

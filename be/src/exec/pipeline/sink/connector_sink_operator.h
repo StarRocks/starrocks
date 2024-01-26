@@ -21,7 +21,7 @@
 #include <utility>
 
 #include "common/logging.h"
-#include "connector_chunk_sink.h"
+#include "connector_sink/connector_chunk_sink.h"
 #include "exec/parquet_writer.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/operator.h"
@@ -33,7 +33,8 @@ namespace starrocks::pipeline {
 class ConnectorSinkOperator final : public Operator {
 public:
     ConnectorSinkOperator(OperatorFactory* factory, const int32_t id, const int32_t plan_node_id,
-                          const int32_t driver_sequence, std::unique_ptr<ConnectorChunkSink> connector_chunk_sink,
+                          const int32_t driver_sequence,
+                          std::unique_ptr<connector::ConnectorChunkSink> connector_chunk_sink,
                           FragmentContext* fragment_context)
             : Operator(factory, id, "connector_sink_operator", plan_node_id, false, driver_sequence),
               _connector_chunk_sink(std::move(connector_chunk_sink)),
@@ -62,12 +63,12 @@ public:
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
 private:
-    Status _enqueue_futures(ConnectorChunkSink::Futures future);
+    Status _enqueue_futures(connector::ConnectorChunkSink::Futures future);
 
-    std::unique_ptr<ConnectorChunkSink> _connector_chunk_sink;
+    std::unique_ptr<connector::ConnectorChunkSink> _connector_chunk_sink;
 
     mutable std::queue<std::future<Status>> _add_chunk_future_queue;
-    mutable std::queue<std::future<FileWriter::CommitResult>> _commit_file_future_queue;
+    mutable std::queue<std::future<formats::FileWriter::CommitResult>> _commit_file_future_queue;
     mutable std::queue<std::function<void()>> _rollback_actions; // TODO: file system
 
     bool _no_more_input = false;

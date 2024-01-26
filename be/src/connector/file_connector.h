@@ -16,8 +16,8 @@
 
 #include "column/vectorized_fwd.h"
 #include "connector/connector.h"
+#include "connector_sink/connector_chunk_sink.h"
 #include "exec/file_scanner.h"
-#include "exec/pipeline/sink/connector_chunk_sink.h"
 
 namespace starrocks::connector {
 
@@ -98,14 +98,16 @@ private:
 };
 
 struct FileChunkSinkContext : public ConnectorChunkSinkContext {
+    ~FileChunkSinkContext() override = default;
+
     std::string path;
     std::vector<std::string> column_names;
     std::vector<ExprContext*> output_exprs;
     std::vector<std::string> partition_columns;
     std::vector<ExprContext*> partition_exprs;
     int64_t max_file_size;
-    pipeline::FileWriter::FileFormat format;
-    std::shared_ptr<pipeline::FileWriter::FileWriterOptions> options;
+    formats::FileWriter::FileFormat format;
+    std::shared_ptr<formats::FileWriter::FileWriterOptions> options;
     PriorityThreadPool* executor;
     TCloudConfiguration cloud_conf;
     pipeline::FragmentContext* fragment_context;
@@ -115,8 +117,8 @@ class FileDataSinkProvider : public ConnectorChunkSinkProvider {
 public:
     ~FileDataSinkProvider() override = default;
 
-    std::unique_ptr<pipeline::ConnectorChunkSink> create_chunk_sink(std::shared_ptr<ConnectorChunkSinkContext> context,
-                                                                    int32_t driver_id) override;
+    std::unique_ptr<ConnectorChunkSink> create_chunk_sink(std::shared_ptr<ConnectorChunkSinkContext> context,
+                                                          int32_t driver_id) override;
 };
 
 } // namespace starrocks::connector

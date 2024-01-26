@@ -64,7 +64,7 @@ add_library(Formats STATIC
         parquet/meta_helper.cpp
         parquet/group_reader.cpp
         parquet/file_reader.cpp
-        parquet/file_writer.cpp
+        parquet/parquet_file_writer.cpp
         parquet/chunk_writer.cpp
         parquet/level_builder.cpp
         parquet/column_chunk_writer.cpp
@@ -74,6 +74,7 @@ add_library(Formats STATIC
         orc/orc_file_writer.h
         csv/csv_file_writer.cpp
         csv/csv_file_writer.h
+        file_writer.cpp
 )
 
 add_subdirectory(orc/apache-orc)

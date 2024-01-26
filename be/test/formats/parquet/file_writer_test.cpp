@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "formats/parquet/file_writer.h"
+#include "formats/parquet/parquet_file_writer.h"
 
 #include <gtest/gtest.h>
 

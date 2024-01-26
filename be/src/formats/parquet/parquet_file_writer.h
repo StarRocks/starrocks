@@ -31,7 +31,7 @@
 
 #include "column/chunk.h"
 #include "column/nullable_column.h"
-#include "exec/pipeline/sink/rolling_file_writer.h"
+#include "formats/file_writer.h"
 #include "formats/parquet/chunk_writer.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
@@ -234,14 +234,11 @@ private:
     std::mutex _m;
 };
 
-template <typename T>
-std::future<T> make_completed_future(T&& t) {
-    std::promise<T> p;
-    p.set_value(std::forward<T>(t));
-    return p.get_future();
-}
+} // namespace starrocks::parquet
 
-class ParquetFileWriter final : public pipeline::FileWriter {
+namespace starrocks::formats {
+
+class ParquetFileWriter final : public FileWriter {
 public:
     struct FileColumnId {
         int32_t field_id = -1;
@@ -295,9 +292,9 @@ private:
     std::shared_ptr<::parquet::FileMetaData> _file_metadata;
 
     std::shared_ptr<::parquet::ParquetFileWriter> _writer;
-    std::shared_ptr<ChunkWriter> _rowgroup_writer;
-    std::shared_ptr<ParquetOutputStream> _output_stream;
+    std::shared_ptr<parquet::ChunkWriter> _rowgroup_writer;
+    std::shared_ptr<parquet::ParquetOutputStream> _output_stream;
     PriorityThreadPool* _executors;
 };
 
-} // namespace starrocks::parquet
+} // namespace starrocks::formats

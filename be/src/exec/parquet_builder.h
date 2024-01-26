@@ -29,7 +29,7 @@
 
 #include "common/status.h"
 #include "exec/file_builder.h"
-#include "formats/parquet/file_writer.h"
+#include "formats/parquet/parquet_file_writer.h"
 #include "gen_cpp/DataSinks_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/Types_types.h"

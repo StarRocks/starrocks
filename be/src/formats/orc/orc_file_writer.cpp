@@ -12,7 +12,7 @@
 #include "column/map_column.h"
 #include "column/struct_column.h"
 
-namespace starrocks {
+namespace starrocks::formats {
 
 ORCFileWriter::ORCFileWriter(std::unique_ptr<OrcOutputStream> output_stream,
                              const std::vector<std::string>& column_names,
@@ -51,7 +51,7 @@ std::future<Status> ORCFileWriter::write(ChunkPtr chunk) {
     return make_ready_future(Status::OK());
 }
 
-std::future<pipeline::FileWriter::CommitResult> ORCFileWriter::commit() {
+std::future<FileWriter::CommitResult> ORCFileWriter::commit() {
     auto promise = std::make_shared<std::promise<CommitResult>>();
     std::future<CommitResult> future = promise->get_future();
 
@@ -593,4 +593,4 @@ StatusOr<std::unique_ptr<orc::Type>> ORCFileWriter::_make_schema_node(const Type
     }
 }
 
-} // namespace starrocks
+} // namespace starrocks::formats

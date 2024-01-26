@@ -18,10 +18,10 @@
 #include <string>
 #include <unordered_map>
 
+#include "connector_sink/connector_chunk_sink.h"
 #include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
-#include "pipeline/sink/connector_chunk_sink.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 
@@ -160,15 +160,15 @@ using DataSourceProviderPtr = std::unique_ptr<DataSourceProvider>;
 
 struct ConnectorChunkSinkContext {
 public:
-    virtual ~ConnectorChunkSinkContext() = 0;
+    virtual ~ConnectorChunkSinkContext() = default;
 };
 
 class ConnectorChunkSinkProvider {
 public:
-    virtual ~ConnectorChunkSinkProvider() = 0;
+    virtual ~ConnectorChunkSinkProvider() = default;
 
-    virtual std::unique_ptr<pipeline::ConnectorChunkSink> create_chunk_sink(
-            std::shared_ptr<ConnectorChunkSinkContext> context, int32_t driver_id) = 0;
+    virtual std::unique_ptr<ConnectorChunkSink> create_chunk_sink(std::shared_ptr<ConnectorChunkSinkContext> context,
+                                                                  int32_t driver_id) = 0;
 };
 
 enum ConnectorType {
@@ -204,6 +204,7 @@ public:
 
     virtual std::unique_ptr<ConnectorChunkSinkProvider> create_data_sink_provider() const {
         CHECK(false) << connector_type() << " connector does not implement sink yet";
+        __builtin_unreachable();
     };
 
     virtual ConnectorType connector_type() const = 0;

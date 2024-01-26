@@ -33,7 +33,6 @@ std::future<T> make_ready_future(T&& t) {
     return p.get_future();
 }
 
-
 template <typename T>
 std::future<T> make_ready_future(const T& t) {
     T copy = t;

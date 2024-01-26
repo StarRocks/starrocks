@@ -20,9 +20,6 @@
 #include <utility>
 
 #include "common/logging.h"
-#include "connector/connector.h"
-#include "connector/file_connector.h"
-#include "connector_sink_operator.h"
 #include "exec/parquet_writer.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/operator.h"
@@ -99,19 +96,17 @@ private:
     const std::shared_ptr<::parquet::schema::GroupNode> _parquet_file_schema;
     std::unordered_map<std::string, std::unique_ptr<starrocks::RollingAsyncParquetWriter>> _partition_writers;
     std::atomic<bool> _is_finished = false;
-
-    std::unique_ptr<FileWriter> _file_writer;
-    int _next_id = 0;
-    // TODO: need lock?
-    mutable std::queue<std::future<Status>> _blocking_futures;
-
-    // TODO: lock
-    std::queue<std::function<void()>> _rollback_actions;
 };
 
 class TableFunctionTableSinkOperatorFactory final : public OperatorFactory {
 public:
-    TableFunctionTableSinkOperatorFactory(const int32_t id, std::shared_ptr<connector::FileChunkSinkContext> context,
+    TableFunctionTableSinkOperatorFactory(const int32_t id, const string& path, const string& file_format,
+                                          const TCompressionType::type& compression_type,
+                                          const std::vector<ExprContext*>& output_exprs,
+                                          const std::vector<ExprContext*>& partition_exprs,
+                                          const std::vector<std::string>& column_names,
+                                          const std::vector<std::string>& partition_column_names,
+                                          bool write_single_file, const TCloudConfiguration& cloud_conf,
                                           FragmentContext* fragment_ctx);
 
     ~TableFunctionTableSinkOperatorFactory() override = default;
@@ -123,9 +118,18 @@ public:
     void close(RuntimeState* state) override;
 
 private:
-    std::unique_ptr<ConnectorSinkOperatorFactory> _inner;
+    const std::string _path;
+    const std::string _file_format;
+    const TCompressionType::type _compression_type;
+    const std::vector<ExprContext*> _output_exprs;
+    const std::vector<ExprContext*> _partition_exprs;
+    const std::vector<std::string> _column_names;
+    const std::vector<std::string> _partition_column_names;
+    const bool _write_single_file;
+    const TCloudConfiguration _cloud_conf;
+    FragmentContext* _fragment_ctx;
 
-    FragmentContext* _fragment_context;
+    std::shared_ptr<::parquet::schema::GroupNode> _parquet_file_schema;
 };
 
 } // namespace starrocks::pipeline

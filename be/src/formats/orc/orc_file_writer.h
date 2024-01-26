@@ -17,12 +17,12 @@
 #include <orc/Writer.hh>
 #include <util/priority_thread_pool.hpp>
 
-#include "exec/pipeline/sink/rolling_file_writer.h"
+#include "formats/file_writer.h"
 #include "orc_chunk_writer.h"
 
-namespace starrocks {
+namespace starrocks::formats {
 
-class ORCFileWriter final : public pipeline::FileWriter {
+class ORCFileWriter final : public FileWriter {
 public:
     class ORCWriterOptions : public FileWriterOptions {
         int64_t stripe_size = 1 << 27; // 128MB
@@ -83,4 +83,4 @@ private:
     PriorityThreadPool* _executors;
 };
 
-} // namespace starrocks
+} // namespace starrocks::formats

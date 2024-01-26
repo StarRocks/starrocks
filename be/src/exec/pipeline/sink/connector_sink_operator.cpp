@@ -14,7 +14,7 @@
 
 #include "connector_sink_operator.h"
 
-#include "formats/parquet/file_writer.h"
+#include "formats/parquet/parquet_file_writer.h"
 #include "glog/logging.h"
 #include "util/url_coding.h"
 
@@ -88,7 +88,8 @@ bool ConnectorSinkOperator::is_finished() const {
         _commit_file_future_queue.pop();
 
         if (auto st = result.io_status; st.ok()) {
-            _connector_chunk_sink->callbackOnCommitSuccess()(result);
+            // _connector_chunk_sink->callbackOnCommitSuccess()(result);
+            _fragment_context->runtime_state()->update_num_rows_load_sink(result.file_metrics.record_count);
         } else {
             LOG(WARNING) << "cancel fragment: " << st;
             _fragment_context->cancel(st);
@@ -127,7 +128,7 @@ Status ConnectorSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
     return _enqueue_futures(std::move(future));
 }
 
-Status ConnectorSinkOperator::_enqueue_futures(ConnectorChunkSink::Futures future) {
+Status ConnectorSinkOperator::_enqueue_futures(connector::ConnectorChunkSink::Futures future) {
     for (auto& f : future.add_chunk_future) {
         _add_chunk_future_queue.push(std::move(f));
     }
@@ -147,7 +148,8 @@ ConnectorSinkOperatorFactory::ConnectorSinkOperatorFactory(
 
 OperatorPtr ConnectorSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     auto chunk_sink = _data_sink_provider->create_chunk_sink(_context, driver_sequence);
-    return std::make_shared<ConnectorSinkOperator>(chunk_sink, _fragment_context);
+    return std::make_shared<ConnectorSinkOperator>(this, _id, Operator::s_pseudo_plan_node_id_for_final_sink,
+                                                   driver_sequence, std::move(chunk_sink), _fragment_context);
 }
 
 } // namespace starrocks::pipeline

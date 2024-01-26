@@ -28,7 +28,7 @@
 
 #include "common/logging.h"
 #include "exec/pipeline/fragment_context.h"
-#include "formats/parquet/file_writer.h"
+#include "formats/parquet/parquet_file_writer.h"
 #include "fs/fs.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/runtime_state.h"

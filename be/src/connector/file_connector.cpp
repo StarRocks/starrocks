@@ -14,6 +14,7 @@
 
 #include "connector/file_connector.h"
 
+#include "connector_sink/connector_chunk_sink.h"
 #include "exec/avro_scanner.h"
 #include "exec/csv_scanner.h"
 #include "exec/exec_node.h"
@@ -21,8 +22,8 @@
 #include "exec/orc_scanner.h"
 #include "exec/parquet_scanner.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/sink/connector_chunk_sink.h"
 #include "exprs/expr.h"
+#include "formats/file_writer.h"
 
 namespace starrocks::connector {
 
@@ -204,18 +205,18 @@ void FileDataSource::_update_counter() {
     COUNTER_UPDATE(_scanner_file_reader_timer, _counter.file_read_ns);
 }
 
-std::unique_ptr<pipeline::ConnectorChunkSink> FileDataSinkProvider::create_chunk_sink(
+std::unique_ptr<ConnectorChunkSink> FileDataSinkProvider::create_chunk_sink(
         std::shared_ptr<ConnectorChunkSinkContext> context, int32_t driver_id) {
     auto ctx = std::dynamic_pointer_cast<FileChunkSinkContext>(context);
     auto fs = FileSystem::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)).value();
-    auto file_writer_factory = std::make_unique<pipeline::FileWriterFactory>(
+    auto file_writer_factory = std::make_unique<formats::FileWriterFactory>(
             std::move(fs), ctx->format, ctx->options, ctx->column_names, ctx->output_exprs, ctx->executor);
-    auto location_provider = std::make_unique<pipeline::LocationProvider>(
+    auto location_provider = std::make_unique<connector::LocationProvider>(
             ctx->path, print_id(ctx->fragment_context->query_id()), ctx->fragment_context->runtime_state()->be_number(),
             driver_id, "parquet");
-    return std::make_unique<pipeline::FileChunkSink>(ctx->partition_columns, ctx->partition_exprs,
-                                                     std::move(location_provider), std::move(file_writer_factory),
-                                                     ctx->max_file_size);
+    return std::make_unique<connector::FileChunkSink>(ctx->partition_columns, ctx->partition_exprs,
+                                                      std::move(location_provider), std::move(file_writer_factory),
+                                                      ctx->max_file_size);
 }
 
 } // namespace starrocks::connector

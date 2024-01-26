@@ -10,7 +10,7 @@
 #include <utility>
 
 #include "exec/file_builder.h"
-#include "exec/pipeline/sink/rolling_file_writer.h"
+#include "formats/file_writer.h"
 
 namespace starrocks {
 namespace csv {
