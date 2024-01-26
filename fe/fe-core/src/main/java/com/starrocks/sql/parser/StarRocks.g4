@@ -490,7 +490,7 @@ submitTaskStatement
     ;
 
 dropTaskStatement
-    : DROP TASK qualifiedName
+    : DROP TASK qualifiedName FORCE?
     ;
 
 // ------------------------------------------- Materialized View Statement ---------------------------------------------
