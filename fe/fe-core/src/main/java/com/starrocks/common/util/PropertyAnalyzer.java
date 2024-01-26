@@ -1116,6 +1116,10 @@ public class PropertyAnalyzer {
         }
     }
 
+    public static boolean analyzeDataCacheEnable(Map<String, String> properties) throws AnalysisException {
+        return analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, true);
+    }
+
     public static TPersistentIndexType analyzePersistentIndexType(Map<String, String> properties) throws AnalysisException {
         if (properties != null && properties.containsKey(PROPERTIES_PERSISTENT_INDEX_TYPE)) {
             String type = properties.get(PROPERTIES_PERSISTENT_INDEX_TYPE);

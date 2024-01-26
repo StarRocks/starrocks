@@ -1531,6 +1531,9 @@ public class SchemaChangeHandler extends AlterHandler {
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)) {
                     GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
                     return null;
+                }  else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)) {
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
+                    return null;
                 }
             }
 
