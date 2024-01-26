@@ -1824,7 +1824,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                         "old base table name:%s", this.name, remoteDbTblName));
                 MvBaseTableBackupInfo mvBaseTableBackupInfo = mvBaseTableToBackupTableInfo.get(remoteDbTblName);
 
-                Pair<Boolean, Optional<MvId>> resetResult = restoreBaseTableInfoIfRestored(db, mvRestoreContext, this,
+                Pair<Boolean, Optional<MvId>> resetResult = restoreBaseTableInfoIfRestored(mvRestoreContext, this,
                         mvBaseTableBackupInfo, baseTableInfo, remoteToLocalTableName, newBaseTableInfos);
                 if (!resetResult.first) {
                     isSetInactive = true;

@@ -54,8 +54,6 @@ public:
     void handle_failure();
     bool has_update_index() const { return _has_update_index; }
     void set_has_update_index() { _has_update_index = true; }
-    // collect files that need to removed
-    std::shared_ptr<std::vector<std::string>> trash_files() { return _trash_files; }
 
     // update num dels in rowset meta, `segment_id_to_add_dels` record each segment's incremental del count
     Status update_num_del_stat(const std::map<uint32_t, size_t>& segment_id_to_add_dels);
@@ -83,8 +81,6 @@ private:
     std::unordered_map<uint32_t, DelVectorPtr> _segmentid_to_delvec;
     // from cache key to segment id
     std::unordered_map<std::string, uint32_t> _cache_key_to_segment_id;
-    // ready to be removed
-    std::shared_ptr<std::vector<std::string>> _trash_files;
     // When recover flag isn't ok, need recover later
     RecoverFlag _recover_flag = RecoverFlag::OK;
 };

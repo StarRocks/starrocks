@@ -72,6 +72,11 @@ struct CompactionInfo {
     uint32_t output = UINT32_MAX;
 };
 
+struct ExtraFileSize {
+    int64_t pindex_size = 0;
+    int64_t col_size = 0;
+};
+
 struct EditVersionInfo {
     EditVersion version;
     int64_t creation_time;
@@ -337,6 +342,8 @@ public:
 
     Status primary_index_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb);
 
+    Status generate_pk_dump();
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;
@@ -452,7 +459,7 @@ private:
 
     std::timed_mutex* get_index_lock() { return &_index_lock; }
 
-    Status _get_extra_file_size(int64_t* pindex_size, int64_t* col_size) const;
+    StatusOr<ExtraFileSize> _get_extra_file_size() const;
 
 private:
     Tablet& _tablet;

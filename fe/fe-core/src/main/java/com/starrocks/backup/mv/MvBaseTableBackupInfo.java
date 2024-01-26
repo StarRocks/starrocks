@@ -18,14 +18,18 @@ import com.starrocks.backup.BackupJobInfo;
 
 public class MvBaseTableBackupInfo {
     private final BackupJobInfo.BackupTableInfo backupTableInfo;
+    private final String localDbName;
     private final String localTableName;
     private final long remoteTableId;
     private final long backupTime;
+
     public MvBaseTableBackupInfo(BackupJobInfo.BackupTableInfo backupTableInfo,
+                                 String localDbName,
                                  String localTableName,
                                  long remoteTableId,
                                  long backupTime) {
         this.backupTableInfo = backupTableInfo;
+        this.localDbName = localDbName;
         this.localTableName = localTableName;
         this.remoteTableId = remoteTableId;
         this.backupTime = backupTime;
@@ -45,5 +49,9 @@ public class MvBaseTableBackupInfo {
 
     public long getBackupTime() {
         return backupTime;
+    }
+
+    public String getLocalDbName() {
+        return this.localDbName;
     }
 }

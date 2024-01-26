@@ -188,12 +188,6 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
 
         auto st = log_applier->apply(*txn_log);
         if (!st.ok()) {
-            // For pk partial update, the segment file will be deleted if publish succeeds.
-            // If concurrent publish occurs, the later publish may return not found error
-            // because if the former pubilsh succeeded, the segment file has been deleted.
-            if (st.is_not_found()) {
-                return new_version_metadata_or_error(st);
-            }
             LOG(WARNING) << "Fail to apply " << log_path << ": " << st;
             return st;
         }
@@ -241,12 +235,6 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
 
     // Save new metadata
     RETURN_IF_ERROR(log_applier->finish());
-
-    // collect trash files, and remove them by background threads
-    auto trash_files = log_applier->trash_files();
-    if (trash_files != nullptr) {
-        files_to_delete.insert(files_to_delete.end(), trash_files->begin(), trash_files->end());
-    }
 
     delete_files_async(std::move(files_to_delete));
 
