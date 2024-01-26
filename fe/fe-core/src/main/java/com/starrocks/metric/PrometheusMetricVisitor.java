@@ -221,9 +221,9 @@ public class PrometheusMetricVisitor extends MetricVisitor {
                 .append("\n");
 
         sb.append(NODE_INFO).append("{type=\"cn_node_num\", state=\"total\"} ")
-            .append(GlobalStateMgr.getCurrentSystemInfo().getTotalComputeNodeNumber()).append("\n");
+            .append(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalComputeNodeNumber()).append("\n");
         sb.append(NODE_INFO).append("{type=\"cn_node_num\", state=\"alive\"} ")
-            .append(GlobalStateMgr.getCurrentSystemInfo().getAliveComputeNodeNumber()).append("\n");
+            .append(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAliveComputeNodeNumber()).append("\n");
 
 
 
