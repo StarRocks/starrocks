@@ -16,11 +16,13 @@ import UserPrivilegeCase from '../../../assets/commonMarkdown/userPrivilegeCase.
 
 在执行 GRANT 操作前，确保您已经在系统中创建了用户或角色。更多创建信息，参见 [CREATE USER](./CREATE_USER.md) 和 [CREATE ROLE](./CREATE_ROLE.md)。
 
-> **注意**
->
-> - 只有拥有 `user_admin` 角色的用户才可以将任意权限授予给任意用户和角色。
-> - 角色被赋予给用户之后，用户需要通过 [SET ROLE](SET_ROLE.md) 手动激活角色，方可利用角色的权限。如果希望用户登录时默认激活角色，则可以通过 [ALTER USER](ALTER_USER.md) 或 [SET DEFAULT ROLE](SET_DEFAULT_ROLE.md) 为用户设置默认角色。如果希望系统内所有用户都能够在登录时默认激活所有权限，则可以设置全局变量 `SET GLOBAL activate_all_roles_on_login = TRUE;`。
-> - 普通用户可以将自身拥有的授权中带有 WITH GRANT OPTION 关键字的权限赋予给其他用户和角色，参见示例七。
+:::tip
+
+- 只有拥有 `user_admin` 角色的用户才可以将任意权限授予给任意用户和角色。
+- 角色被赋予给用户之后，用户需要通过 [SET ROLE](SET_ROLE.md) 手动激活角色，方可利用角色的权限。如果希望用户登录时默认激活角色，则可以通过 [ALTER USER](ALTER_USER.md) 或 [SET DEFAULT ROLE](SET_DEFAULT_ROLE.md) 为用户设置默认角色。如果希望系统内所有用户都能够在登录时默认激活所有权限，则可以设置全局变量 `SET GLOBAL activate_all_roles_on_login = TRUE;`。
+- 普通用户可以将自身拥有的授权中带有 WITH GRANT OPTION 关键字的权限赋予给其他用户和角色，参见示例七。
+
+:::
 
 ## 语法
 
