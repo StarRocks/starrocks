@@ -95,7 +95,8 @@
         "loading/Flink_cdc_load",
         "loading/Flink-connector-starrocks",
         "loading/Load_to_Primary_Key_tables",
-        "loading/Etl_in_loading"
+        "loading/Etl_in_loading",
+        "loading/load_concept/strict_mode"
       ]
     },
     {
@@ -657,7 +658,8 @@
         "loading/Flink_cdc_load",
         "loading/Flink-connector-starrocks",
         "loading/Load_to_Primary_Key_tables",
-        "loading/Etl_in_loading"
+        "loading/Etl_in_loading",
+        "loading/load_concept/strict_mode"
       ]
     },
     {
