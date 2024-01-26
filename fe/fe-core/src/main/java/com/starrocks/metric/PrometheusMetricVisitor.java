@@ -43,11 +43,6 @@ import com.starrocks.monitor.jvm.JvmStats.GarbageCollector;
 import com.starrocks.monitor.jvm.JvmStats.MemoryPool;
 import com.starrocks.monitor.jvm.JvmStats.Threads;
 import com.starrocks.server.GlobalStateMgr;
-<<<<<<< HEAD
-=======
-import com.starrocks.server.NodeMgr;
-import com.starrocks.system.SystemInfoService;
->>>>>>> 7e69d6a195 ([Enhancement] Replica state should reflect whether it's bad when logging (#40071))
 
 import java.util.HashSet;
 import java.util.List;
@@ -210,7 +205,6 @@ public class PrometheusMetricVisitor extends MetricVisitor {
     @Override
     public void getNodeInfo() {
         final String NODE_INFO = "node_info";
-<<<<<<< HEAD
         sb.append(Joiner.on(" ").join(TYPE, NODE_INFO, "gauge\n"));
         sb.append(NODE_INFO).append("{type=\"fe_node_num\", state=\"total\"} ")
                 .append(GlobalStateMgr.getCurrentState().getFrontends(null).size()).append("\n");
@@ -220,20 +214,6 @@ public class PrometheusMetricVisitor extends MetricVisitor {
                 .append(GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber()).append("\n");
         sb.append(NODE_INFO).append("{type=\"be_node_num\", state=\"decommissioned\"} ")
                 .append(GlobalStateMgr.getCurrentSystemInfo().getDecommissionedBackendIds().size()).append("\n");
-=======
-        final NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
-        final SystemInfoService systemInfoService = nodeMgr.getClusterInfo();
-        sb.append(Joiner.on(" ").join(TYPE, NODE_INFO, "gauge\n"));
-        sb.append(NODE_INFO).append("{type=\"fe_node_num\", state=\"total\"} ")
-                .append(nodeMgr.getFrontends(null).size()).append("\n");
-        sb.append(NODE_INFO).append("{type=\"be_node_num\", state=\"total\"} ")
-                .append(systemInfoService.getTotalBackendNumber()).append("\n");
-        sb.append(NODE_INFO).append("{type=\"be_node_num\", state=\"alive\"} ")
-                .append(systemInfoService.getAliveBackendNumber()).append("\n");
-        sb.append(NODE_INFO).append("{type=\"be_node_num\", state=\"decommissioned\"} ")
-                .append(systemInfoService.getDecommissionedBackendIds().size())
-                .append("\n");
->>>>>>> 7e69d6a195 ([Enhancement] Replica state should reflect whether it's bad when logging (#40071))
         sb.append(NODE_INFO).append("{type=\"broker_node_num\", state=\"dead\"} ").append(
                         GlobalStateMgr.getCurrentState().getBrokerMgr().getAllBrokers().stream().filter(b -> !b.isAlive)
                                 .count())
