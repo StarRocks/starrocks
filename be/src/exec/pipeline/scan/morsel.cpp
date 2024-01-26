@@ -877,8 +877,7 @@ void DynamicMorselQueue::append_morsels(std::vector<MorselPtr>&& morsels) {
     std::lock_guard<std::mutex> _l(_mutex);
     _size += morsels.size();
     // add split morsels to front of this queue.
-    // and only in this way, we can guarantee it can work with bucket sequence morsel queue.
-    // In this way, same bucket id scan ranges are processed in order.
+    // so this new morsels share same owner_id with recently processed morsel.
     _queue.insert(_queue.begin(), std::make_move_iterator(morsels.begin()), std::make_move_iterator(morsels.end()));
 }
 
