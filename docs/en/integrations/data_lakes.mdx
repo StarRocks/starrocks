@@ -1,0 +1,50 @@
+---
+displayed_sidebar: "English"
+---
+import DataLakeIntro from '../assets/commonMarkdown/datalakeIntro.md'
+
+# Data Lakehouse
+
+<DataLakeIntro />
+
+## Key ideas
+
+- Open Data Formats: Supports a variety of data types, including JSON, Parquet, and Avro, facilitating the storage and processing of both structured and unstructured data.
+- Metadata Management: Implements a shared metadata layer, often utilizing formats like the Iceberg table format, to organize and govern data efficiently.
+- Diverse Query Engines: Incorporates multiple engines, like enhanced versions of Presto and Spark, to cater to various analytics and AI use cases.
+- Governance and Security: Features robust built-in mechanisms for data security, privacy, and compliance, ensuring data integrity and trustworthiness.
+
+## Advantages of Data Lakehouse architecture
+
+- Flexibility and Scalability: Seamlessly manages diverse data types and scales with the organization’s needs.
+- Cost-Effectiveness: Offers an economical alternative for data storage and processing, compared to traditional methods.
+- Enhanced Data Governance: Improves data control, management, and integrity, ensuring reliable and secure data handling.
+- AI and Analytics Readiness: Perfectly suited for complex analytical tasks, including machine learning and AI-driven data processing.
+
+## StarRocks approach
+
+The key things to consider are:
+
+- Standardizing the integration with catalog, or metadata services
+- Elastic scalability of compute nodes
+- Flexible caching mechanisms
+
+---
+
+## Catalogs
+
+StarRocks has two types of catalogs, internal and external. The internal catalog contains metadata for data stored within StarRocks databases. External catalogs are used to work with data stored externally, including the data managed by Hive, Iceberg, Delta Lake, and Hudi. There are many other external systems, links are in the More Information section at the bottom of the page.
+
+## Compute node (CN) scaling
+
+Separation of storage and compute reduces the complexity of scaling. Since the StarRocks compute nodes are only storing local cache, nodes can be added or removed based on load.
+
+## Data cache
+
+Cache on the compute nodes is optional. If your compute nodes are spinning up and down quickly based on quickly changing load patterns or your queries are often only on the most recent data it might not make sense to cache data.
+
+## Learn by doing
+
+Try out a Docker based lakehouse. This [data lakehouse tutorial](../quick_start/iceberg.md) creates a data lake built with Iceberg and MinIO and connects StarRocks containers as the query engine. Load the provided dataset, or add your own.
+
+More information is in the [Catalog docs](../data_source/catalog/catalog_intro.mdx).
