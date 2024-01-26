@@ -57,7 +57,7 @@ public class MaterializedViewOptimizer {
         }
         OptExpression mvPlan = plans.first;
         if (!MvUtils.isValidMVPlan(mvPlan)) {
-            return new MvPlanContext(false, MvUtils.getInvalidReason(mvPlan));
+            return new MvPlanContext(false, MvUtils.getInvalidReason(mvPlan, inlineView));
         }
         return new MvPlanContext(mvPlan, plans.second.getOutputColumn(), columnRefFactory);
     }
