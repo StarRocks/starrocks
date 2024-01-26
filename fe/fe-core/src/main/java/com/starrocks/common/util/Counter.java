@@ -69,11 +69,13 @@ public class Counter {
     }
 
     public boolean isSum() {
-        return Objects.equals(strategy.aggregate_type, TCounterAggregateType.SUM);
+        return Objects.equals(strategy.aggregate_type, TCounterAggregateType.SUM) ||
+                Objects.equals(strategy.aggregate_type, TCounterAggregateType.AVG_SUM);
     }
 
     public boolean isAvg() {
-        return Objects.equals(strategy.aggregate_type, TCounterAggregateType.AVG);
+        return Objects.equals(strategy.aggregate_type, TCounterAggregateType.AVG)
+                || Objects.equals(strategy.aggregate_type, TCounterAggregateType.SUM_AVG);
     }
 
     public boolean isSkipMerge() {
