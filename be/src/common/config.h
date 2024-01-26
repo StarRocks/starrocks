@@ -1009,4 +1009,33 @@ CONF_mBool(enable_stream_load_verbose_log, "false");
 CONF_mInt32(get_txn_status_internal_sec, "30");
 
 CONF_mBool(dump_metrics_with_bvar, "true");
+<<<<<<< HEAD
+=======
+
+CONF_mBool(enable_drop_tablet_if_unfinished_txn, "true");
+
+// 0 means no limit
+CONF_Int32(lake_service_max_concurrency, "0");
+
+CONF_mInt64(lake_vacuum_min_batch_delete_size, "1000");
+
+// TOPN RuntimeFilter parameters
+CONF_mInt32(desc_hint_split_range, "10");
+
+// If the local pk index file is older than this threshold
+// it may be evicted if the disk is full
+CONF_mInt64(lake_local_pk_index_unused_threshold_seconds, "86400"); // 1 day
+
+CONF_mBool(lake_enable_vertical_compaction_fill_data_cache, "false");
+
+CONF_mInt32(dictionary_cache_refresh_timeout_ms, "60000"); // 1 min
+CONF_mInt32(dictionary_cache_refresh_threadpool_size, "8");
+
+// Allowable intervals for continuous generation of pk dumps
+// Disable when pk_dump_interval_seconds <= 0
+CONF_mInt64(pk_dump_interval_seconds, "3600"); // 1 hour
+
+// whether enable query profile for queries initiated by spark or flink
+CONF_mBool(enable_profile_for_external_plan, "false");
+>>>>>>> 24f4ce9dae ([Enhancement] add be config enable_profile_for_external_plan (#40102))
 } // namespace starrocks::config
