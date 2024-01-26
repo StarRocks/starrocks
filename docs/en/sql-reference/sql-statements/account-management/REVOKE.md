@@ -8,7 +8,11 @@ displayed_sidebar: "English"
 
 Revokes specific privileges or roles from a user or a role. For the privileges supported by StarRocks, see [Privileges supported by StarRocks](../../../administration/privilege_item.md).
 
-> NOTE: Only the `user_admin` role can perform this operation.
+:::tip
+
+- Common users can only revoke their privileges that have the `WITH GRANT OPTION` keyword from other users and roles. For information about `WITH GRANT OPTION`, see [GRANT](GRANT.md).
+- Only users with the `user_admin` role has the privilege to revoke privileges from other users.
+:::
 
 ## Syntax
 

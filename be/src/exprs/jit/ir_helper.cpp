@@ -140,7 +140,6 @@ StatusOr<llvm::Value*> IRHelper::create_ir_number(llvm::IRBuilder<>& b, const Lo
 
 StatusOr<llvm::Value*> IRHelper::cast_to_type(llvm::IRBuilder<>& b, llvm::Value* value, const LogicalType& from_type,
                                               const LogicalType& to_type) {
-    ASSIGN_OR_RETURN(auto logical_from_type, IRHelper::logical_to_ir_type(b, from_type));
     ASSIGN_OR_RETURN(auto logical_to_type, IRHelper::logical_to_ir_type(b, to_type));
 
     if (from_type == to_type) {
@@ -149,13 +148,14 @@ StatusOr<llvm::Value*> IRHelper::cast_to_type(llvm::IRBuilder<>& b, llvm::Value*
         // TODO(Yueyang): check this.
         return b.CreateIntCast(value, logical_to_type, false);
     } else if (from_type == TYPE_BOOLEAN && is_float_type(to_type)) {
-        llvm::Value* integer = b.CreateIntCast(value, b.getInt32Ty(), false);
+        auto* integer = b.CreateIntCast(value, b.getInt32Ty(), false);
         return b.CreateCast(llvm::Instruction::SIToFP, integer, logical_to_type);
     } else if (is_integer_type(from_type) && to_type == TYPE_BOOLEAN) {
-        // TODO(Yueyang): check this type.
-        return b.CreateICmpNE(value, llvm::ConstantInt::get(logical_from_type, 0));
+        auto result = b.CreateICmpNE(value, llvm::ConstantInt::get(value->getType(), 0, true));
+        return b.CreateCast(llvm::Instruction::ZExt, result, logical_to_type);
     } else if (is_float_type(from_type) && to_type == TYPE_BOOLEAN) {
-        return b.CreateFCmpUNE(value, llvm::ConstantInt::get(logical_from_type, 0));
+        auto result = b.CreateFCmpUNE(value, llvm::ConstantFP::get(value->getType(), 0));
+        return b.CreateCast(llvm::Instruction::ZExt, result, logical_to_type);
     } else if (is_integer_type(from_type) && is_integer_type(to_type)) {
         return b.CreateIntCast(value, logical_to_type, true);
     } else if (is_integer_type(from_type) && is_float_type(to_type)) {
