@@ -1043,6 +1043,7 @@ CONF_Bool(block_cache_direct_io_enable, "false");
 CONF_String(block_cache_engine, "");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
+// max wal file size in l0
 CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
 CONF_mInt64(l0_min_mem_usage, "2097152");   // 2MB
 CONF_mInt64(l0_max_mem_usage, "104857600"); // 100MB
