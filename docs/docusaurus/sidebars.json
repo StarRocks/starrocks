@@ -165,13 +165,13 @@
             {
               "type": "category",
               "label": "Usage",
-              "link": {"type": "doc", "id": "cover_pages/mv_usage"},
-              "items": [ 
-                "sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW",
-                "sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW",
-                "sql-reference/sql-statements/data-definition/DROP_MATERIALIZED_VIEW",
-                "sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW",
-                "reference/information_schema/materialized_views",
+              "link": {"type": "doc", "id": "using_starrocks/usage/intro"},
+              "items": [
+                "using_starrocks/usage/create",
+                "using_starrocks/usage/alter",
+                "using_starrocks/usage/drop",
+                "using_starrocks/usage/show",
+                "using_starrocks/usage/information_schema-materialized_views",
                 "using_starrocks/troubleshooting_asynchronous_materialized_views"
               ]
             }
@@ -212,18 +212,7 @@
             "integrations/authenticate_to_gcs"
           ]
         },
-        {
-          "type": "category",
-          "label": "Data Lake",
-          "description": "Iceberg, Hive, Delta Lake, Hudi, etc.",
-          "link": {"type": "doc", "id": "integrations/data_lakes"},
-          "items": [
-             "data_source/catalog/hive_catalog",
-             "data_source/catalog/iceberg_catalog",
-             "data_source/catalog/hudi_catalog",
-             "data_source/catalog/deltalake_catalog"
-          ]
-        },
+        "integrations/data_lakes",
         {
           "type": "category",
           "label": "Streaming Data",
@@ -727,8 +716,8 @@
             "faq/Exporting_faq"
           ]
         },
-        "administration/privilege_faq",
-        "data_source/datalake_faq",
+        "faq/privilege",
+        "faq/datalake",
         "faq/Sql_faq",
         "faq/Dump_query",
         "faq/Others",
@@ -919,13 +908,13 @@
             {
               "type": "category",
               "label": "Usage",
-              "link": {"type": "doc", "id": "cover_pages/mv_usage"},
-              "items": [ 
-                "sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW",
-                "sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW",
-                "sql-reference/sql-statements/data-definition/DROP_MATERIALIZED_VIEW",
-                "sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW",
-                "reference/information_schema/materialized_views",
+              "link": {"type": "doc", "id": "using_starrocks/usage/intro"},
+              "items": [
+                "using_starrocks/usage/create",
+                "using_starrocks/usage/alter",
+                "using_starrocks/usage/drop",
+                "using_starrocks/usage/show",
+                "using_starrocks/usage/information_schema-materialized_views",
                 "using_starrocks/troubleshooting_asynchronous_materialized_views"
               ]
             }
@@ -966,18 +955,7 @@
             "integrations/authenticate_to_gcs"
           ]
         },
-        {
-          "type": "category",
-          "label": "查询数据湖",
-          "description": "Iceberg、Hive、Delta Lake、Hudi 等",
-          "link": {"type": "doc", "id": "integrations/data_lakes"},
-          "items": [
-             "data_source/catalog/hive_catalog",
-             "data_source/catalog/iceberg_catalog",
-             "data_source/catalog/hudi_catalog",
-             "data_source/catalog/deltalake_catalog"
-          ]
-        },
+        "integrations/data_lakes",
         {
           "type": "category",
           "label": "实时导入",
@@ -1481,8 +1459,8 @@
             "faq/Exporting_faq"
           ]
         },
-        "administration/privilege_faq",
-        "data_source/datalake_faq",
+        "faq/privilege",
+        "faq/datalake",
         "faq/Sql_faq",
         "faq/Dump_query",
         "faq/Others",
