@@ -72,6 +72,7 @@ public class OffHeapColumnVector {
         this.data = 0;
         this.offsetData = 0;
 
+        init(capacity);
         reserveInternal(capacity);
         reset();
     }
@@ -114,6 +115,28 @@ public class OffHeapColumnVector {
         throw new RuntimeException(message, cause);
     }
 
+    private void init(int requiredCapacity) {
+        int typeSize = type.getPrimitiveTypeValueSize();
+        if (type.isUnknown()) {
+            // don't do anything.
+        } else if (typeSize != -1) {
+            // don't do anything.
+        } else if (type.isByteStorageType()) {
+            int childCapacity = requiredCapacity * DEFAULT_STRING_LENGTH;
+            this.childColumns = new OffHeapColumnVector[1];
+            this.childColumns[0] = new OffHeapColumnVector(childCapacity,
+                    new ColumnType(type.name + "#data", ColumnType.TypeValue.BYTE));
+        } else if (type.isArray() || type.isMap() || type.isStruct()) {
+            int size = type.childTypes.size();
+            this.childColumns = new OffHeapColumnVector[size];
+            for (int i = 0; i < size; i++) {
+                this.childColumns[i] = new OffHeapColumnVector(requiredCapacity, type.childTypes.get(i));
+            }
+        } else {
+            throw new RuntimeException("Unhandled type: " + type);
+        }
+    }
+
     private void reserve(int requiredCapacity) {
         if (requiredCapacity < 0) {
             throwUnsupportedException(requiredCapacity, null);
@@ -143,17 +166,18 @@ public class OffHeapColumnVector {
         } else if (type.isByteStorageType()) {
             this.offsetData = Platform.reallocateMemory(offsetData, oldOffsetSize, newOffsetSize);
             int childCapacity = newCapacity * DEFAULT_STRING_LENGTH;
-            this.childColumns = new OffHeapColumnVector[1];
-            this.childColumns[0] = new OffHeapColumnVector(childCapacity, new ColumnType(type.name + "#data",
-                    ColumnType.TypeValue.BYTE));
+            if (this.childColumns[0].capacity < childCapacity) {
+                this.childColumns[0].reserveInternal(childCapacity);
+            }
         } else if (type.isArray() || type.isMap() || type.isStruct()) {
             if (type.isArray() || type.isMap()) {
                 this.offsetData = Platform.reallocateMemory(offsetData, oldOffsetSize, newOffsetSize);
             }
             int size = type.childTypes.size();
-            this.childColumns = new OffHeapColumnVector[size];
             for (int i = 0; i < size; i++) {
-                this.childColumns[i] = new OffHeapColumnVector(newCapacity, type.childTypes.get(i));
+                if (this.childColumns[i].capacity < newCapacity) {
+                    this.childColumns[i].reserveInternal(newCapacity);
+                }
             }
         } else {
             throw new RuntimeException("Unhandled type: " + type);
