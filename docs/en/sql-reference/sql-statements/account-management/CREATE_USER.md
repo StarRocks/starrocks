@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # CREATE USER
 
-import UserManagementPriv from '../assets/commonMarkdown/userManagementPriv.md'
+import UserManagementPriv from '../../../assets/commonMarkdown/userManagementPriv.md'
 
 ## Description
 

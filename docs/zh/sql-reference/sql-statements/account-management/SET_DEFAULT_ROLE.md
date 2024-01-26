@@ -8,6 +8,14 @@ displayed_sidebar: "Chinese"
 
 设置用户登录时默认激活的角色。该命令从 3.0 版本开始支持。
 
+:::tip
+
+普通用户可以设置自己的默认角色，`user_admin` 可以为其他用户设置默认角色。设定时，请确认用户已经拥有对应角色。
+
+可以通过 [SHOW GRANTS](SHOW_GRANTS.md) 查看拥有的角色。
+
+:::
+
 ## 语法
 
 ```SQL
@@ -18,14 +26,6 @@ SET DEFAULT ROLE ALL TO <user_identity>;
 -- 不设置任何角色为默认角色，但此时用户仍旧会默认激活 public 角色。
 SET DEFAULT ROLE NONE TO <user_identity>; 
 ```
-
-:::tip
-
-普通用户可以设置自己的默认角色，`user_admin` 可以为其他用户设置默认角色。设定时，请确认用户已经拥有对应角色。
-
-可以通过 [SHOW GRANTS](SHOW_GRANTS.md) 查看拥有的角色。
-
-:::
 
 ## 参数说明
 

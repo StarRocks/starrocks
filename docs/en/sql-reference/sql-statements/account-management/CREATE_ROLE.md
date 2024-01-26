@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # CREATE ROLE
 
-import UserManagementPriv from '../assets/commonMarkdown/userManagementPriv.md'
+import UserManagementPriv from '../../../assets/commonMarkdown/userManagementPriv.md'
 
 ## Description
 

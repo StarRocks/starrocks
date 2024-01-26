@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # SHOW USERS
 
-import UserManagementPriv from '../assets/commonMarkdown/userManagementPriv.md'
+import UserManagementPriv from '../../../assets/commonMarkdown/userManagementPriv.md'
 
 ## 功能
 
