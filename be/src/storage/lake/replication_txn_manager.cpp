@@ -39,6 +39,7 @@
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/vacuum.h"
 #include "storage/protobuf_file.h"
 #include "storage/replication_utils.h"
 #include "storage/rowset/rowset.h"
@@ -54,6 +55,10 @@ namespace starrocks::lake {
 
 Status ReplicationTxnManager::remote_snapshot(const TRemoteSnapshotRequest& request, std::string* src_snapshot_path,
                                               bool* incremental_snapshot) {
+    if (StorageEngine::instance()->bg_worker_stopped()) {
+        return Status::InternalError("Process is going to quit. The remote snapshot will stop");
+    }
+
     ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(request.tablet_id));
 
     auto status_or_txn_log = tablet.get_txn_slog(request.transaction_id);
@@ -135,10 +140,14 @@ Status ReplicationTxnManager::remote_snapshot(const TRemoteSnapshotRequest& requ
     txn_meta->set_snapshot_version(request.src_visible_version);
     txn_meta->set_incremental_snapshot(*incremental_snapshot);
 
-    return tablet.put_txn_slog(std::move(txn_log));
+    return tablet.put_txn_slog(txn_log);
 }
 
 Status ReplicationTxnManager::replicate_snapshot(const TReplicateSnapshotRequest& request) {
+    if (StorageEngine::instance()->bg_worker_stopped()) {
+        return Status::InternalError("Process is going to quit. The replicate snapshot will stop");
+    }
+
     ASSIGN_OR_RETURN(auto tablet, _tablet_manager->get_tablet(request.tablet_id));
 
     auto status_or_txn_log = tablet.get_txn_log(request.transaction_id);
@@ -159,10 +168,8 @@ Status ReplicationTxnManager::replicate_snapshot(const TReplicateSnapshotRequest
 
     Status status;
     for (const auto& src_snapshot_info : request.src_snapshot_infos) {
-        auto status_or = replicate_remote_snapshot(request, src_snapshot_info, tablet_metadata);
-
-        if (!status_or.ok()) {
-            status = status_or.status();
+        status = replicate_remote_snapshot(request, src_snapshot_info, tablet_metadata);
+        if (!status.ok()) {
             LOG(WARNING) << "Failed to download snapshot from " << src_snapshot_info.backend.host << ":"
                          << src_snapshot_info.backend.http_port << ":" << src_snapshot_info.snapshot_path << ", "
                          << status << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
@@ -180,7 +187,7 @@ Status ReplicationTxnManager::replicate_snapshot(const TReplicateSnapshotRequest
                   << ", src_tablet_id: " << request.src_tablet_id << ", visible_version: " << request.visible_version
                   << ", snapshot_version: " << request.src_visible_version;
 
-        return tablet.put_txn_log(std::move(status_or.value()));
+        return status;
     }
 
     return status;
@@ -218,9 +225,9 @@ Status ReplicationTxnManager::make_remote_snapshot(const TRemoteSnapshotRequest&
     return status;
 }
 
-StatusOr<TxnLogPtr> ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshotRequest& request,
-                                                                     const TRemoteSnapshotInfo& src_snapshot_info,
-                                                                     const TabletMetadataPtr& tablet_metadata) {
+Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshotRequest& request,
+                                                        const TRemoteSnapshotInfo& src_snapshot_info,
+                                                        const TabletMetadataPtr& tablet_metadata) {
     auto txn_log = std::make_shared<TxnLog>();
     std::unordered_map<std::string, std::string> filename_map;
     const TabletSchemaPB* source_schema_pb = nullptr;
@@ -306,8 +313,19 @@ StatusOr<TxnLogPtr> ReplicationTxnManager::replicate_remote_snapshot(const TRepl
     ReplicationUtils::calc_column_unique_id_map(source_schema_pb->column(), tablet_metadata->schema().column(),
                                                 &column_unique_id_map);
 
+    std::vector<std::string> files_to_delete;
+    CancelableDefer clean_files([&files_to_delete]() { lake::delete_files_async(std::move(files_to_delete)); });
+
     auto file_converters = [&](const std::string& file_name,
                                uint64_t file_size) -> StatusOr<std::unique_ptr<FileStreamConverter>> {
+        if (request.transaction_id < get_master_info().min_active_txn_id) {
+            LOG(WARNING) << "Transaction is aborted, txn_id: " << request.transaction_id
+                         << ", tablet_id: " << request.tablet_id << ", src_tablet_id: " << request.src_tablet_id
+                         << ", visible_version: " << request.visible_version
+                         << ", snapshot_version: " << request.src_visible_version;
+            return Status::InternalError("Transaction is aborted");
+        }
+
         auto iter = filename_map.find(file_name);
         if (iter == filename_map.end()) {
             return nullptr;
@@ -316,6 +334,8 @@ StatusOr<TxnLogPtr> ReplicationTxnManager::replicate_remote_snapshot(const TRepl
         auto segment_location = _tablet_manager->segment_location(request.tablet_id, iter->second);
         WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
         ASSIGN_OR_RETURN(auto output_file, fs::new_writable_file(opts, segment_location));
+
+        files_to_delete.push_back(std::move(segment_location));
 
         if (is_segment(file_name) && !column_unique_id_map.empty()) {
             return std::make_unique<SegmentStreamConverter>(file_name, file_size, std::move(output_file),
@@ -342,7 +362,10 @@ StatusOr<TxnLogPtr> ReplicationTxnManager::replicate_remote_snapshot(const TRepl
     txn_meta->set_snapshot_version(request.src_visible_version);
     txn_meta->set_incremental_snapshot(src_snapshot_info.incremental_snapshot);
 
-    return txn_log;
+    RETURN_IF_ERROR(_tablet_manager->put_txn_log(txn_log));
+
+    clean_files.cancel();
+    return Status::OK();
 }
 
 Status ReplicationTxnManager::convert_rowset_meta(const RowsetMeta& rowset_meta, TTransactionId transaction_id,
