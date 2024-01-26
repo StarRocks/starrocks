@@ -56,11 +56,11 @@ import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_
 // OR ((date_trunc('month', 1: k1) >= '2024-01-01') AND (date_trunc('month', 1: k1) < '2024-05-01'))))
 // OR ((date_trunc('year', 1: k1) >= '2023-01-01') AND (date_trunc('year', 1: k1) < '2024-01-01'))
 // and another rule "SplitScanORToUnionRule" can rewrite OR to Union, which can be rewritten by mv to speed up query
-public class ChangeDatePredicateRule extends TransformationRule {
+public class SplitDatePredicateRule extends TransformationRule {
 
-    private static final Logger LOG = LogManager.getLogger(ChangeDatePredicateRule.class);
+    private static final Logger LOG = LogManager.getLogger(SplitDatePredicateRule.class);
 
-    public ChangeDatePredicateRule() {
+    public SplitDatePredicateRule() {
         super(RuleType.TF_SPLIT_PREDICATE_WITH_DATE, Pattern.create(OperatorType.LOGICAL_OLAP_SCAN));
     }
 
@@ -90,11 +90,11 @@ public class ChangeDatePredicateRule extends TransformationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalOlapScanOperator scan = (LogicalOlapScanOperator) input.getOp();
 
-        List<ScalarOperator> predicate = Utils.extractConjuncts(scan.getPredicate());
+        List<ScalarOperator> predicates = Utils.extractConjuncts(scan.getPredicate());
         // store the final predicates
         List<ScalarOperator> resultPredicates = new ArrayList<>();
         Map<ColumnRefOperator, List<BinaryPredicateOperator>> columnToRange = Maps.newHashMap();
-        for (ScalarOperator p : predicate) {
+        for (ScalarOperator p : predicates) {
             if (!(p instanceof BinaryPredicateOperator)) {
                 resultPredicates.add(p);
                 continue;
@@ -135,14 +135,14 @@ public class ChangeDatePredicateRule extends TransformationRule {
                 columnToRange.entrySet().iterator();
         while (iterator.hasNext()) {
             Map.Entry<ColumnRefOperator, List<BinaryPredicateOperator>> entry = iterator.next();
-            List<BinaryPredicateOperator> predicates = entry.getValue();
+            List<BinaryPredicateOperator> colPredicates = entry.getValue();
 
-            long leLtNum = predicates.stream()
+            long leLtNum = colPredicates.stream()
                     .map(BinaryPredicateOperator::getBinaryType)
                     .filter(t -> BinaryType.LE.equals(t) || BinaryType.LT.equals(t))
                     .count();
 
-            long geGtNum = predicates.stream()
+            long geGtNum = colPredicates.stream()
                     .map(BinaryPredicateOperator::getBinaryType)
                     .filter(t -> BinaryType.GE.equals(t) || BinaryType.GT.equals(t))
                     .count();
