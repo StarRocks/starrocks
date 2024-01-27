@@ -47,6 +47,9 @@ public:
     void use_v2(bool use_v2) { _use_v2 = use_v2; }
 
 private:
+    Status _get_schema(std::vector<SlotDescriptor>* schema) override;
+    Status _get_schema_v2(std::vector<SlotDescriptor>* schema) override;
+
     class ScannerCSVReader : public CSVReader {
     public:
         ScannerCSVReader(std::shared_ptr<SequentialFile> file, RuntimeState* state,

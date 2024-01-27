@@ -537,6 +537,12 @@ static TypeDescriptor get_type_desc(const Slice& field) {
 }
 
 Status CSVScanner::get_schema(std::vector<SlotDescriptor>* schema) {
+    if (_use_v2) return _get_schema_v2(schema);
+
+    return _get_schema(schema);
+}
+
+Status CSVScanner::_get_schema(std::vector<SlotDescriptor>* schema) {
     if (schema == nullptr) {
         return Status::InternalError("ouput schema is null");
     }
@@ -552,6 +558,23 @@ Status CSVScanner::get_schema(std::vector<SlotDescriptor>* schema) {
         // column name: $1, $2, $3...
         schema->emplace_back(SlotDescriptor(i, fmt::format("${}", i + 1), get_type_desc(fields[i])));
     }
+    return Status::OK();
+}
+
+Status CSVScanner::_get_schema_v2(std::vector<SlotDescriptor>* schema) {
+    if (schema == nullptr) {
+        return Status::InternalError("ouput schema is null");
+    }
+
+    RETURN_IF_ERROR(_init_reader());
+
+    CSVRow row;
+    RETURN_IF_ERROR(_curr_reader->next_record(&row));
+
+    for (size_t i = 0; i < row.columns.size(); i++) {
+        schema->emplace_back(SlotDescriptor(i, fmt::format("${}", i + 1), get_type_desc(fields[i])));
+    }
+
     return Status::OK();
 }
 
