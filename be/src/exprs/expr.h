@@ -226,14 +226,6 @@ public:
     ColumnRef* get_column_ref();
 
     /**
-     * @brief For JIT compile, generate IR code for this expr.
-     * This function primarily generates generic union null code and calls the 'generate_ir_impl' method.
-     */
-    [[nodiscard]] virtual StatusOr<LLVMDatum> generate_ir(ExprContext* context, const llvm::Module& module,
-                                                          llvm::IRBuilder<>& b,
-                                                          const std::vector<LLVMDatum>& datums) const final;
-
-    /**
      * @brief For JIT compile, generate specific evaluation IR code for this expr.
      * Its internal logic is similar to the 'evaluate_checked' function.
      */

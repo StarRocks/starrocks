@@ -697,16 +697,6 @@ ColumnRef* Expr::get_column_ref() {
     return nullptr;
 }
 
-StatusOr<LLVMDatum> Expr::generate_ir(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
-                                      const std::vector<LLVMDatum>& datums) const {
-    if (!is_compilable()) {
-        return Status::NotSupported("JIT expr not supported");
-    }
-
-    ASSIGN_OR_RETURN(auto datum, generate_ir_impl(context, module, b, datums))
-    return datum;
-}
-
 StatusOr<LLVMDatum> Expr::generate_ir_impl(ExprContext* context, JITContext* jit_ctx) {
     if (is_compilable()) {
         throw std::runtime_error("[JIT] compilable expressions must not be here : " + debug_string());
