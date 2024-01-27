@@ -183,8 +183,9 @@ Status JITFunction::llvm_function(JITScalarFunction jit_function, const Columns&
     jit_columns.reserve(columns.size());
     // Extract data and null_data pointers from columns to generate JIT columns.
     for (const auto& column : columns) {
+        ColumnPtr col = column;
         DCHECK(!column->is_constant());
-        auto [un_col, un_col_null] = ColumnHelper::unpack_nullable_column(column);
+        auto [un_col, un_col_null] = ColumnHelper::unpack_nullable_column(col);
         auto data_col_ptr = reinterpret_cast<const int8_t*>(un_col->raw_data());
         const int8_t* null_flags_ptr = nullptr;
         if (un_col_null != nullptr) {
