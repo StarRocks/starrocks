@@ -130,7 +130,7 @@ Status JITEngine::init() {
     return Status::OK();
 }
 
-#define JIT_V2 1
+#define JIT_V2 0
 
 StatusOr<JITScalarFunction> JITEngine::compile_scalar_function(ExprContext* context, Expr* expr, bool* cached) {
     auto* instance = JITEngine::get_instance();
