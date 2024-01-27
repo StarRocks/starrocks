@@ -14,6 +14,7 @@
 
 #include "exprs/jit/jit_engine.h"
 
+#include <fmt/format.h>
 #include <glog/logging.h>
 
 #include <memory>
@@ -22,6 +23,7 @@
 
 #include "common/compiler_util.h"
 #include "common/status.h"
+#include "exprs/expr.h"
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/Orc/LLJIT.h"
 #include "llvm/IR/DataLayout.h"
@@ -122,7 +124,7 @@ StatusOr<JITScalarFunction> JITEngine::compile_scalar_function(ExprContext* cont
     return compiled_function;
 }
 
-Status JITEngine::generate_scalar_function_ir_v2(ExprContext* context, llvm::Module& module, Expr* expr) {
+Status JITEngine::generate_scalar_function_ir(ExprContext* context, llvm::Module& module, Expr* expr) {
     llvm::IRBuilder<> b(module.getContext());
 
     std::vector<Expr*> input_exprs;
