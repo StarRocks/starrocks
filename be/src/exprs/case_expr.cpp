@@ -23,6 +23,7 @@
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
+#include "exprs/jit/ir_helper.h"
 #include "gutil/casts.h"
 #include "simd/mulselector.h"
 #include "types/logical_type_infra.h"
@@ -67,6 +68,144 @@ public:
         }
 
         return _children.size() % 2 == 1 ? Status::OK() : Status::InvalidArgument("case when children is error!");
+    }
+
+    bool is_compilable() const override {
+        if (_has_case_expr) {
+            return IRHelper::support_jit(WhenType) && IRHelper::support_jit(ResultType);
+        } else {
+            return IRHelper::support_jit(ResultType);
+        }
+    }
+
+    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
+        if constexpr (lt_is_decimal<WhenType> || lt_is_decimal<ResultType>) {
+            // TODO(yueyang): Implement case...when in LLVM IR.
+            LOG(ERROR) << "JIT of case..when..else...end not support decimal";
+            return Status::NotSupported("JIT of case..when..else...end not support");
+        } else if constexpr (lt_is_number<WhenType> && lt_is_number<ResultType>) {
+            auto& b = jit_ctx->builder;
+            auto* head = b.GetInsertBlock();
+            auto* join = llvm::BasicBlock::Create(head->getContext(), "join_block", head->getParent());
+            LLVMDatum result(b);
+            llvm::Value* res = b.CreateAlloca(IRHelper::logical_to_ir_type(b, ResultType).value(), nullptr, "retVal");
+            llvm::Value* res_null = b.CreateAlloca(b.getInt8Ty(), nullptr, "retValNull");
+
+            auto* else_block = llvm::BasicBlock::Create(head->getContext(), "else_block", head->getParent());
+            if (_has_case_expr) {
+                LLVMDatum datum_0(b);
+                for (size_t i = 0; i + 1 < _children.size(); i += (1 + (i > 0))) { // 0, 1, 3, 5 ,,,
+                    auto* then = llvm::BasicBlock::Create(head->getContext(), "then_" + std::to_string(i),
+                                                          head->getParent());
+                    auto* next = llvm::BasicBlock::Create(head->getContext(), "next_" + std::to_string(i),
+                                                          head->getParent());
+                    ASSIGN_OR_RETURN(auto datum_i, _children[i]->generate_ir_impl(context, jit_ctx))
+                    if (i == 0) { // if caseExpr is null, go to else
+                        datum_0 = datum_i;
+                        if (_children[i]->is_nullable()) {
+                            auto* is_null = b.CreateICmpEQ(datum_i.null_flag, llvm::ConstantInt::get(b.getInt8Ty(), 1));
+                            b.CreateCondBr(is_null, then, next);
+                            b.SetInsertPoint(then);
+                            b.CreateBr(else_block);
+                        }
+                    } else { // if (whenExpr !=null & caseExpr = whenExpr), store the result
+                        llvm::Value* cmp_eq = nullptr;
+                        if constexpr (lt_is_float<ResultType>) {
+                            cmp_eq = b.CreateFCmpOEQ(datum_0.value, datum_i.value);
+                        } else {
+                            cmp_eq = b.CreateICmpEQ(datum_0.value, datum_i.value);
+                        }
+                        if (_children[i]->is_nullable()) {
+                            auto* not_null =
+                                    b.CreateICmpEQ(datum_i.null_flag, llvm::ConstantInt::get(b.getInt8Ty(), 0));
+                            b.CreateCondBr(b.CreateAnd(not_null, cmp_eq), then, next);
+                        } else {
+                            b.CreateCondBr(cmp_eq, then, next);
+                        }
+                        b.SetInsertPoint(then);
+                        ASSIGN_OR_RETURN(auto datum_i_1, _children[i + 1]->generate_ir_impl(context, jit_ctx))
+                        b.CreateStore(datum_i_1.value, res);
+                        if (_children[i + 1]->is_nullable()) {
+                            b.CreateStore(datum_i_1.null_flag, res_null);
+                        }
+                        b.CreateBr(join);
+                    }
+                    b.SetInsertPoint(next);
+                }
+            } else {
+                for (size_t i = 0; i + 1 < _children.size(); i += 2) {
+                    auto* then = llvm::BasicBlock::Create(head->getContext(), "then_" + std::to_string(i),
+                                                          head->getParent());
+                    auto* next = llvm::BasicBlock::Create(head->getContext(), "next_" + std::to_string(i),
+                                                          head->getParent());
+                    ASSIGN_OR_RETURN(auto datum_i, _children[i]->generate_ir_impl(context, jit_ctx))
+                    auto* is_true = IRHelper::bool_to_cond(b, datum_i.value);
+                    if (_children[i]->is_nullable()) {
+                        auto* not_null = b.CreateICmpEQ(datum_i.null_flag, llvm::ConstantInt::get(b.getInt8Ty(), 0));
+                        b.CreateCondBr(b.CreateAnd(not_null, is_true), then, next);
+                    } else {
+                        b.CreateCondBr(is_true, then, next);
+                    }
+                    b.SetInsertPoint(then);
+
+                    ASSIGN_OR_RETURN(auto datum_i_1, _children[i + 1]->generate_ir_impl(context, jit_ctx))
+                    b.CreateStore(datum_i_1.value, res);
+                    if (_children[i + 1]->is_nullable()) {
+                        b.CreateStore(datum_i_1.null_flag, res_null);
+                    }
+                    b.CreateBr(join);
+                    b.SetInsertPoint(next);
+                }
+            }
+            b.CreateBr(else_block);
+            b.SetInsertPoint(else_block);
+            LLVMDatum else_val(b);
+            if (_has_else_expr) {
+                ASSIGN_OR_RETURN(else_val, _children.back()->generate_ir_impl(context, jit_ctx))
+            } else {
+                ASSIGN_OR_RETURN(else_val.value,
+                                 IRHelper::create_ir_number<ResultType>(b, (RunTimeCppType<ResultType>)(0)))
+                else_val.null_flag = llvm::ConstantInt::get(b.getInt8Ty(), 1);
+            }
+            b.CreateStore(else_val.value, res);
+            b.CreateStore(else_val.null_flag, res_null);
+
+            b.CreateBr(join);
+            b.SetInsertPoint(join);
+            result.value = b.CreateLoad(IRHelper::logical_to_ir_type(b, ResultType).value(), res);
+            result.null_flag = b.CreateLoad(b.getInt8Ty(), res_null);
+            return result;
+        } else {
+            LOG(ERROR) << "JIT of case..when..else...end not support other types";
+            return Status::NotSupported("JIT of case..when..else...end not support");
+        }
+    }
+
+    std::string debug_string() const override {
+        std::stringstream out;
+        auto expr_debug_string = Expr::debug_string();
+        out << "VectorizedCaseWhenExpr ( ";
+        for (auto i = 0; i < _children.size(); i++) {
+            if (i == 0) {
+                if (_has_case_expr) {
+                    out << "case";
+                } else {
+                    out << "case when";
+                }
+            } else if (i + 1 == _children.size() && _has_else_expr) {
+                out << "else";
+            } else {
+                if ((i + _has_case_expr) % 2 == 0) {
+                    out << "when";
+                } else {
+                    out << "then";
+                }
+            }
+            out << "<" << _children[i]->type().debug_string() << " nullable " << _children[i]->is_nullable()
+                << " const=" << _children[i]->is_constant() << "> ";
+        }
+        out << " result=" << this->type().debug_string() << ", expr (" << expr_debug_string << ") )";
+        return out.str();
     }
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* chunk) override {

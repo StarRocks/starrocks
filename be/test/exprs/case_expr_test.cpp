@@ -25,8 +25,10 @@
 #include "column/column_viewer.h"
 #include "column/fixed_length_column.h"
 #include "common/object_pool.h"
+#include "exprs/exprs_test_helper.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "runtime/mem_pool.h"
+#include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -102,16 +104,17 @@ class VectorizedCaseExprTest : public ::testing::Test {
 public:
     void SetUp() override {
         expr_node.opcode = TExprOpcode::ADD;
-        expr_node.child_type = TPrimitiveType::INT;
-        expr_node.node_type = TExprNodeType::BINARY_PRED;
+        expr_node.child_type = TPrimitiveType::BOOLEAN;
+        expr_node.node_type = TExprNodeType::CASE_EXPR;
         expr_node.num_children = 2;
         expr_node.__isset.opcode = true;
         expr_node.__isset.child_type = true;
-        expr_node.type = gen_type_desc(TPrimitiveType::BIGINT);
+        expr_node.type = gen_type_desc(TPrimitiveType::INT);
     }
 
 public:
     TExprNode expr_node;
+    RuntimeState runtime_state;
 };
 
 TEST_F(VectorizedCaseExprTest, whenArrayMapCase) {
@@ -285,15 +288,21 @@ TEST_F(VectorizedCaseExprTest, whenIntCaseAllNull) {
     expr_node.type = gen_type_desc(TPrimitiveType::INT);
     expr_node.case_expr.has_case_expr = true;
     expr_node.case_expr.has_else_expr = false;
+    expr_node.is_nullable = true;
     std::vector<std::unique_ptr<Expr>> exprs;
     exprs.emplace_back(VectorizedCaseExprFactory::from_thrift(expr_node));
     exprs.emplace_back(VectorizedCaseExprFactory::from_thrift(expr_node, TYPE_ARRAY, TYPE_ARRAY));
 
     for (auto& expr : exprs) {
+        expr_node.is_nullable = false;
         MockVectorizedExpr<TYPE_INT> case1(expr_node, 10, 1);
+        expr_node.is_nullable = true;
         MockNullVectorizedExpr<TYPE_INT> when2(expr_node, 10, 2);
+        expr_node.is_nullable = false;
         MockVectorizedExpr<TYPE_INT> then2(expr_node, 10, 10);
+        expr_node.is_nullable = true;
         MockNullVectorizedExpr<TYPE_INT> when3(expr_node, 10, 1);
+        expr_node.is_nullable = false;
         MockVectorizedExpr<TYPE_INT> then3(expr_node, 10, 20);
 
         when2.only_null = true;
@@ -308,8 +317,70 @@ TEST_F(VectorizedCaseExprTest, whenIntCaseAllNull) {
         {
             Chunk chunk;
             ColumnPtr ptr = expr->evaluate(nullptr, &chunk);
-            ASSERT_TRUE(ptr->is_nullable());
-            ASSERT_TRUE(ptr->only_null());
+            ExprsTestHelper::verify_with_jit(
+                    ptr, expr.get(), &runtime_state,
+                    [](ColumnPtr const& ptr) {
+                        ASSERT_TRUE(ptr->is_nullable());
+                        if (ptr->is_constant()) {
+                            ASSERT_TRUE(ptr->only_null());
+                        } else {
+                            for (int j = 0; j < ptr->size(); ++j) {
+                                ASSERT_TRUE(ptr->is_null(j));
+                            }
+                        }
+                    },
+                    expr->is_compilable());
+        }
+    }
+}
+
+TEST_F(VectorizedCaseExprTest, whenNullIntCaseAllNull) {
+    expr_node.child_type = TPrimitiveType::INT;
+    expr_node.type = gen_type_desc(TPrimitiveType::INT);
+    expr_node.case_expr.has_case_expr = true;
+    expr_node.case_expr.has_else_expr = false;
+    expr_node.is_nullable = true;
+    std::vector<std::unique_ptr<Expr>> exprs;
+    exprs.emplace_back(VectorizedCaseExprFactory::from_thrift(expr_node));
+    exprs.emplace_back(VectorizedCaseExprFactory::from_thrift(expr_node, TYPE_ARRAY, TYPE_ARRAY));
+
+    for (auto& expr : exprs) {
+        expr_node.is_nullable = true;
+        MockNullVectorizedExpr<TYPE_INT> case1(expr_node, 10, 2);
+        expr_node.is_nullable = true;
+        MockNullVectorizedExpr<TYPE_INT> when2(expr_node, 10, 2);
+        expr_node.is_nullable = false;
+        MockVectorizedExpr<TYPE_INT> then2(expr_node, 10, 10);
+        expr_node.is_nullable = true;
+        MockNullVectorizedExpr<TYPE_INT> when3(expr_node, 10, 1);
+        expr_node.is_nullable = false;
+        MockVectorizedExpr<TYPE_INT> then3(expr_node, 10, 20);
+
+        case1.only_null = true;
+        when3.only_null = true;
+
+        expr->_children.push_back(&case1);
+        expr->_children.push_back(&when2);
+        expr->_children.push_back(&then2);
+        expr->_children.push_back(&when3);
+        expr->_children.push_back(&then3);
+
+        {
+            Chunk chunk;
+            ColumnPtr ptr = expr->evaluate(nullptr, &chunk);
+            ExprsTestHelper::verify_with_jit(
+                    ptr, expr.get(), &runtime_state,
+                    [](ColumnPtr const& ptr) {
+                        ASSERT_TRUE(ptr->is_nullable());
+                        if (ptr->is_constant()) {
+                            ASSERT_TRUE(ptr->only_null());
+                        } else {
+                            for (int j = 0; j < ptr->size(); ++j) {
+                                ASSERT_TRUE(ptr->is_null(j));
+                            }
+                        }
+                    },
+                    expr->is_compilable());
         }
     }
 }
@@ -409,16 +480,74 @@ TEST_F(VectorizedCaseExprTest, whenIntCaseNullElse) {
     expr_node.type = gen_type_desc(TPrimitiveType::INT);
     expr_node.case_expr.has_case_expr = true;
     expr_node.case_expr.has_else_expr = true;
+    expr_node.is_nullable = false;
+    std::vector<std::unique_ptr<Expr>> exprs;
+    exprs.emplace_back(VectorizedCaseExprFactory::from_thrift(expr_node));
+    //exprs.emplace_back(VectorizedCaseExprFactory::from_thrift(expr_node, TYPE_ARRAY, TYPE_ARRAY));
 
+    for (auto& expr : exprs) {
+        expr_node.is_nullable = false;
+        MockVectorizedExpr<TYPE_INT> case1(expr_node, 10, 1);
+        expr_node.is_nullable = true;
+        MockNullVectorizedExpr<TYPE_INT> when2(expr_node, 10, 2);
+        expr_node.is_nullable = false;
+        MockVectorizedExpr<TYPE_INT> then2(expr_node, 10, 10);
+        expr_node.is_nullable = true;
+        MockNullVectorizedExpr<TYPE_INT> when3(expr_node, 10, 1);
+        expr_node.is_nullable = false;
+        MockVectorizedExpr<TYPE_INT> then3(expr_node, 10, 20);
+        MockVectorizedExpr<TYPE_INT> else1(expr_node, 10, 30);
+
+        //when2.only_null = true;
+
+        expr->_children.push_back(&case1);
+        expr->_children.push_back(&when2);
+        expr->_children.push_back(&then2);
+        expr->_children.push_back(&when3);
+        expr->_children.push_back(&then3);
+        expr->_children.push_back(&else1);
+
+        {
+            Chunk chunk;
+            ColumnPtr ptr = expr->evaluate(nullptr, &chunk);
+            ExprsTestHelper::verify_with_jit(
+                    ptr, expr.get(), &runtime_state,
+                    [](ColumnPtr const& ptr) {
+                        ASSERT_TRUE(ptr->is_numeric());
+                        auto v = ColumnHelper::cast_to_raw<TYPE_INT>(ptr);
+                        for (int j = 0; j < ptr->size(); ++j) {
+                            if (j % 2) {
+                                ASSERT_EQ(30, v->get_data()[j]);
+                            } else {
+                                ASSERT_EQ(20, v->get_data()[j]);
+                            }
+                        }
+                    },
+                    expr->is_compilable());
+        }
+    }
+}
+
+TEST_F(VectorizedCaseExprTest, whenIntNullableCaseNullElse) {
+    expr_node.child_type = TPrimitiveType::INT;
+    expr_node.type = gen_type_desc(TPrimitiveType::INT);
+    expr_node.case_expr.has_case_expr = true;
+    expr_node.case_expr.has_else_expr = true;
+    expr_node.is_nullable = false;
     std::vector<std::unique_ptr<Expr>> exprs;
     exprs.emplace_back(VectorizedCaseExprFactory::from_thrift(expr_node));
     exprs.emplace_back(VectorizedCaseExprFactory::from_thrift(expr_node, TYPE_ARRAY, TYPE_ARRAY));
 
     for (auto& expr : exprs) {
-        MockVectorizedExpr<TYPE_INT> case1(expr_node, 10, 1);
+        expr_node.is_nullable = true;
+        MockNullVectorizedExpr<TYPE_INT> case1(expr_node, 10, 1);
+        expr_node.is_nullable = true;
         MockNullVectorizedExpr<TYPE_INT> when2(expr_node, 10, 2);
+        expr_node.is_nullable = false;
         MockVectorizedExpr<TYPE_INT> then2(expr_node, 10, 10);
+        expr_node.is_nullable = true;
         MockNullVectorizedExpr<TYPE_INT> when3(expr_node, 10, 1);
+        expr_node.is_nullable = false;
         MockVectorizedExpr<TYPE_INT> then3(expr_node, 10, 20);
         MockVectorizedExpr<TYPE_INT> else1(expr_node, 10, 30);
 
@@ -434,16 +563,20 @@ TEST_F(VectorizedCaseExprTest, whenIntCaseNullElse) {
         {
             Chunk chunk;
             ColumnPtr ptr = expr->evaluate(nullptr, &chunk);
-            ASSERT_TRUE(ptr->is_numeric());
-
-            auto v = ColumnHelper::cast_to_raw<TYPE_INT>(ptr);
-            for (int j = 0; j < ptr->size(); ++j) {
-                if (j % 2) {
-                    ASSERT_EQ(30, v->get_data()[j]);
-                } else {
-                    ASSERT_EQ(20, v->get_data()[j]);
-                }
-            }
+            ExprsTestHelper::verify_with_jit(
+                    ptr, expr.get(), &runtime_state,
+                    [](ColumnPtr const& ptr) {
+                        ASSERT_TRUE(ptr->is_numeric());
+                        auto v = ColumnHelper::cast_to_raw<TYPE_INT>(ptr);
+                        for (int j = 0; j < ptr->size(); ++j) {
+                            if (j % 2) {
+                                ASSERT_EQ(30, v->get_data()[j]);
+                            } else {
+                                ASSERT_EQ(20, v->get_data()[j]);
+                            }
+                        }
+                    },
+                    expr->is_compilable());
         }
     }
 }
@@ -501,7 +634,7 @@ TEST_F(VectorizedCaseExprTest, whenConstantAndElseVariable) {
     expr_node.type = gen_type_desc(TPrimitiveType::INT);
     expr_node.case_expr.has_case_expr = true;
     expr_node.case_expr.has_else_expr = true;
-
+    expr_node.is_nullable = false;
     std::vector<std::unique_ptr<Expr>> exprs;
     exprs.emplace_back(VectorizedCaseExprFactory::from_thrift(expr_node));
     exprs.emplace_back(VectorizedCaseExprFactory::from_thrift(expr_node, TYPE_ARRAY, TYPE_ARRAY));
@@ -520,12 +653,57 @@ TEST_F(VectorizedCaseExprTest, whenConstantAndElseVariable) {
         {
             Chunk chunk;
             ColumnPtr ptr = expr->evaluate(nullptr, &chunk);
-            ASSERT_TRUE(ptr->is_numeric());
+            ExprsTestHelper::verify_with_jit(
+                    ptr, expr.get(), &runtime_state,
+                    [](ColumnPtr const& ptr) {
+                        ASSERT_TRUE(ptr->is_numeric());
+                        auto v = ColumnHelper::cast_to_raw<TYPE_INT>(ptr);
+                        for (int j = 0; j < ptr->size(); ++j) {
+                            ASSERT_EQ(20, v->get_data()[j]);
+                        }
+                    },
+                    expr->is_compilable());
+        }
+    }
+}
 
-            auto v = ColumnHelper::cast_to_raw<TYPE_INT>(ptr);
-            for (int j = 0; j < ptr->size(); ++j) {
-                ASSERT_EQ(20, v->get_data()[j]);
-            }
+TEST_F(VectorizedCaseExprTest, whenNullAndElseVariable) {
+    expr_node.child_type = TPrimitiveType::INT;
+    expr_node.type = gen_type_desc(TPrimitiveType::INT);
+    expr_node.case_expr.has_case_expr = true;
+    expr_node.case_expr.has_else_expr = true;
+    expr_node.is_nullable = false;
+    std::vector<std::unique_ptr<Expr>> exprs;
+    exprs.emplace_back(VectorizedCaseExprFactory::from_thrift(expr_node));
+    exprs.emplace_back(VectorizedCaseExprFactory::from_thrift(expr_node, TYPE_ARRAY, TYPE_ARRAY));
+
+    for (auto& expr : exprs) {
+        expr_node.is_nullable = true;
+        MockNullVectorizedExpr<TYPE_INT> case1(expr_node, 10, 2);
+        expr_node.is_nullable = false;
+        MockConstVectorizedExpr<TYPE_INT> when2(expr_node, 2);
+        MockVectorizedExpr<TYPE_INT> then2(expr_node, 10, 10);
+        MockVectorizedExpr<TYPE_INT> else1(expr_node, 10, 20);
+
+        case1.only_null = true;
+        expr->_children.push_back(&case1);
+        expr->_children.push_back(&when2);
+        expr->_children.push_back(&then2);
+        expr->_children.push_back(&else1);
+
+        {
+            Chunk chunk;
+            ColumnPtr ptr = expr->evaluate(nullptr, &chunk);
+            ExprsTestHelper::verify_with_jit(
+                    ptr, expr.get(), &runtime_state,
+                    [](ColumnPtr const& ptr) {
+                        ASSERT_TRUE(ptr->is_numeric());
+                        auto v = ColumnHelper::cast_to_raw<TYPE_INT>(ptr);
+                        for (int j = 0; j < ptr->size(); ++j) {
+                            ASSERT_EQ(20, v->get_data()[j]);
+                        }
+                    },
+                    expr->is_compilable());
         }
     }
 }
@@ -535,16 +713,20 @@ TEST_F(VectorizedCaseExprTest, whenIntCaseAllNullElse) {
     expr_node.type = gen_type_desc(TPrimitiveType::INT);
     expr_node.case_expr.has_case_expr = true;
     expr_node.case_expr.has_else_expr = true;
-
+    expr_node.is_nullable = false;
     std::vector<std::unique_ptr<Expr>> exprs;
     exprs.emplace_back(VectorizedCaseExprFactory::from_thrift(expr_node));
     exprs.emplace_back(VectorizedCaseExprFactory::from_thrift(expr_node, TYPE_ARRAY, TYPE_ARRAY));
 
     for (auto& expr : exprs) {
         MockVectorizedExpr<TYPE_INT> case1(expr_node, 10, 1);
+        expr_node.is_nullable = true;
         MockNullVectorizedExpr<TYPE_INT> when2(expr_node, 10, 2);
+        expr_node.is_nullable = false;
         MockVectorizedExpr<TYPE_INT> then2(expr_node, 10, 10);
+        expr_node.is_nullable = true;
         MockNullVectorizedExpr<TYPE_INT> when3(expr_node, 10, 1);
+        expr_node.is_nullable = false;
         MockVectorizedExpr<TYPE_INT> then3(expr_node, 10, 20);
         MockVectorizedExpr<TYPE_INT> else1(expr_node, 10, 30);
 
@@ -561,32 +743,44 @@ TEST_F(VectorizedCaseExprTest, whenIntCaseAllNullElse) {
         {
             Chunk chunk;
             ColumnPtr ptr = expr->evaluate(nullptr, &chunk);
-            ASSERT_TRUE(ptr->is_numeric());
-
-            auto v = ColumnHelper::cast_to_raw<TYPE_INT>(ptr);
-            for (int j = 0; j < ptr->size(); ++j) {
-                ASSERT_EQ(30, v->get_data()[j]);
-            }
+            ExprsTestHelper::verify_with_jit(
+                    ptr, expr.get(), &runtime_state,
+                    [](ColumnPtr const& ptr) {
+                        ASSERT_TRUE(ptr->is_numeric());
+                        auto v = ColumnHelper::cast_to_raw<TYPE_INT>(ptr);
+                        for (int j = 0; j < ptr->size(); ++j) {
+                            ASSERT_EQ(30, v->get_data()[j]);
+                        }
+                    },
+                    expr->is_compilable());
         }
     }
 }
 
 TEST_F(VectorizedCaseExprTest, NoCaseReturnInt) {
-    expr_node.child_type = TPrimitiveType::INT;
+    expr_node.child_type = TPrimitiveType::BOOLEAN;
     expr_node.type = gen_type_desc(TPrimitiveType::INT);
     expr_node.case_expr.has_case_expr = false;
     expr_node.case_expr.has_else_expr = false;
-
+    expr_node.is_nullable = false;
+    expr_node.num_children = 4;
     std::vector<std::unique_ptr<Expr>> exprs;
-    exprs.emplace_back(VectorizedCaseExprFactory::from_thrift(expr_node));
+    exprs.emplace_back(VectorizedCaseExprFactory::from_thrift(expr_node, TYPE_INT, TYPE_BOOLEAN));
     exprs.emplace_back(VectorizedCaseExprFactory::from_thrift(expr_node, TYPE_ARRAY, TYPE_ARRAY));
 
     for (auto& expr : exprs) {
-        MockVectorizedExpr<TYPE_BOOLEAN> when2(expr_node, 10, true);
+        expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+        expr_node.is_nullable = false;
+        expr_node.num_children = 1;
+        MockVectorizedExpr<TYPE_BOOLEAN> when2(expr_node, 10, false);
+        expr_node.type = gen_type_desc(TPrimitiveType::INT);
         MockVectorizedExpr<TYPE_INT> then2(expr_node, 10, 10);
-        MockVectorizedExpr<TYPE_BOOLEAN> when3(expr_node, 10, false);
+        expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+        MockVectorizedExpr<TYPE_BOOLEAN> when3(expr_node, 10, true);
+        expr_node.type = gen_type_desc(TPrimitiveType::INT);
         MockVectorizedExpr<TYPE_INT> then3(expr_node, 10, 20);
 
+        expr->_children.clear();
         expr->_children.push_back(&when2);
         expr->_children.push_back(&then2);
         expr->_children.push_back(&when3);
@@ -595,12 +789,16 @@ TEST_F(VectorizedCaseExprTest, NoCaseReturnInt) {
         {
             Chunk chunk;
             ColumnPtr ptr = expr->evaluate(nullptr, &chunk);
-            ASSERT_TRUE(ptr->is_numeric());
-
-            auto v = ColumnHelper::cast_to_raw<TYPE_INT>(ptr);
-            for (int j = 0; j < ptr->size(); ++j) {
-                ASSERT_EQ(10, v->get_data()[j]);
-            }
+            ExprsTestHelper::verify_with_jit(
+                    ptr, expr.get(), &runtime_state,
+                    [](ColumnPtr const& ptr) {
+                        ASSERT_TRUE(ptr->is_numeric());
+                        auto v = ColumnHelper::cast_to_raw<TYPE_INT>(ptr);
+                        for (int j = 0; j < ptr->size(); ++j) {
+                            ASSERT_EQ(20, v->get_data()[j]);
+                        }
+                    },
+                    expr->is_compilable());
         }
     }
 }
@@ -610,20 +808,29 @@ TEST_F(VectorizedCaseExprTest, NoCaseAllNull) {
     expr_node.type = gen_type_desc(TPrimitiveType::INT);
     expr_node.case_expr.has_case_expr = false;
     expr_node.case_expr.has_else_expr = false;
+    expr_node.is_nullable = true;
 
     std::vector<std::unique_ptr<Expr>> exprs;
     exprs.emplace_back(VectorizedCaseExprFactory::from_thrift(expr_node));
     exprs.emplace_back(VectorizedCaseExprFactory::from_thrift(expr_node, TYPE_ARRAY, TYPE_ARRAY));
 
     for (auto& expr : exprs) {
+        expr_node.is_nullable = true;
+        expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
         MockNullVectorizedExpr<TYPE_BOOLEAN> when2(expr_node, 10, true);
+        expr_node.type = gen_type_desc(TPrimitiveType::INT);
+        expr_node.is_nullable = false;
         MockVectorizedExpr<TYPE_INT> then2(expr_node, 10, 10);
+        expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+        expr_node.is_nullable = true;
         MockNullVectorizedExpr<TYPE_BOOLEAN> when3(expr_node, 10, false);
+        expr_node.type = gen_type_desc(TPrimitiveType::INT);
+        expr_node.is_nullable = false;
         MockVectorizedExpr<TYPE_INT> then3(expr_node, 10, 20);
 
         when2.only_null = true;
         when3.only_null = true;
-
+        expr->_children.clear();
         expr->_children.push_back(&when2);
         expr->_children.push_back(&then2);
         expr->_children.push_back(&when3);
@@ -632,7 +839,18 @@ TEST_F(VectorizedCaseExprTest, NoCaseAllNull) {
         {
             Chunk chunk;
             ColumnPtr ptr = expr->evaluate(nullptr, &chunk);
-            ASSERT_TRUE(ptr->only_null());
+            ExprsTestHelper::verify_with_jit(
+                    ptr, expr.get(), &runtime_state,
+                    [](ColumnPtr const& ptr) {
+                        if (ptr->is_nullable() && !ptr->is_constant()) {
+                            for (int j = 0; j < ptr->size(); ++j) {
+                                ASSERT_TRUE(ptr->is_null(j));
+                            }
+                        } else {
+                            ASSERT_TRUE(ptr->only_null());
+                        }
+                    },
+                    expr->is_compilable());
         }
     }
 }
@@ -642,15 +860,21 @@ TEST_F(VectorizedCaseExprTest, NoCaseWhenNullReturnIntElse) {
     expr_node.type = gen_type_desc(TPrimitiveType::INT);
     expr_node.case_expr.has_case_expr = false;
     expr_node.case_expr.has_else_expr = true;
-
+    expr_node.is_nullable = false;
     std::vector<std::unique_ptr<Expr>> exprs;
     exprs.emplace_back(VectorizedCaseExprFactory::from_thrift(expr_node));
     exprs.emplace_back(VectorizedCaseExprFactory::from_thrift(expr_node, TYPE_ARRAY, TYPE_ARRAY));
 
     for (auto& expr : exprs) {
+        expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+        expr_node.is_nullable = true;
         MockNullVectorizedExpr<TYPE_BOOLEAN> when2(expr_node, 10, true);
+        expr_node.is_nullable = false;
+        expr_node.type = gen_type_desc(TPrimitiveType::INT);
         MockVectorizedExpr<TYPE_INT> then2(expr_node, 10, 10);
+        expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
         MockVectorizedExpr<TYPE_BOOLEAN> when3(expr_node, 10, false);
+        expr_node.type = gen_type_desc(TPrimitiveType::INT);
         MockVectorizedExpr<TYPE_INT> then3(expr_node, 10, 20);
         MockVectorizedExpr<TYPE_INT> else1(expr_node, 10, 30);
 
@@ -663,16 +887,20 @@ TEST_F(VectorizedCaseExprTest, NoCaseWhenNullReturnIntElse) {
         {
             Chunk chunk;
             ColumnPtr ptr = expr->evaluate(nullptr, &chunk);
-            ASSERT_TRUE(ptr->is_numeric());
-
-            auto v = ColumnHelper::cast_to_raw<TYPE_INT>(ptr);
-            for (int j = 0; j < ptr->size(); ++j) {
-                if (j % 2) {
-                    ASSERT_EQ(30, v->get_data()[j]);
-                } else {
-                    ASSERT_EQ(10, v->get_data()[j]);
-                }
-            }
+            ExprsTestHelper::verify_with_jit(
+                    ptr, expr.get(), &runtime_state,
+                    [](ColumnPtr const& ptr) {
+                        ASSERT_TRUE(ptr->is_numeric());
+                        auto v = ColumnHelper::cast_to_raw<TYPE_INT>(ptr);
+                        for (int j = 0; j < ptr->size(); ++j) {
+                            if (j % 2) {
+                                ASSERT_EQ(30, v->get_data()[j]);
+                            } else {
+                                ASSERT_EQ(10, v->get_data()[j]);
+                            }
+                        }
+                    },
+                    expr->is_compilable());
         }
     }
 }
