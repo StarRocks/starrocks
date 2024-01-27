@@ -45,10 +45,11 @@ struct LLVMDatum {
  * @brief The LLVMDatum struct is utilized to store the column's values and nullity flags within LLVM IR.
  */
 struct LLVMColumn {
-    llvm::Value* values = nullptr;     ///< Represents the actual values of the column.
+    llvm::Value* values = nullptr;      ///< Represents the actual values of the column.
     llvm::Value* null_flags = nullptr; ///< Represents the nullity status of the column.
-    llvm::Type* value_type = nullptr;  ///< Represents the type of the column's values.
+    llvm::Type* value_type = nullptr;   ///< Represents the type of the column's values.
 };
+
 
 class IRHelper {
 public:
