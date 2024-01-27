@@ -25,6 +25,7 @@
 #include "runtime/runtime_state.h"
 #include "storage/async_delta_writer.h"
 #include "storage/chunk_helper.h"
+#include "storage/chunk_iterator.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"
@@ -36,7 +37,7 @@
 #include "storage/txn_manager.h"
 #include "testutil/assert.h"
 
-namespace starrocks {
+namespace starrocks::vectorized {
 
 class SegmentFlushExecutorTest : public ::testing::Test {
 public:
@@ -92,11 +93,11 @@ public:
 
     TupleDescriptor* _create_tuple_desc() {
         TTupleDescriptorBuilder tuple_builder;
-        for (int i = 0; i < _tablet->tablet_schema()->num_columns(); i++) {
-            auto& column = _tablet->tablet_schema()->column(i);
+        for (int i = 0; i < _tablet->tablet_schema().num_columns(); i++) {
+            auto& column = _tablet->tablet_schema().column(i);
             TSlotDescriptorBuilder builder;
             std::string column_name{column.name()};
-            TSlotDescriptor slot_desc = builder.type(column.type())
+            TSlotDescriptor slot_desc = builder.type(scalar_field_type_to_primitive_type(column.type()))
                                                 .column_name(column_name)
                                                 .column_pos(i)
                                                 .nullable(column.is_nullable())
@@ -148,7 +149,7 @@ public:
         writer_context.partition_id = tablet->partition_id();
         writer_context.rowset_path_prefix = _tablet->schema_hash_path();
         writer_context.rowset_state = VISIBLE;
-        writer_context.tablet_schema = tablet->tablet_schema();
+        writer_context.tablet_schema = &tablet->tablet_schema();
         writer_context.version.first = 0;
         writer_context.version.second = 0;
 
@@ -172,7 +173,7 @@ public:
         auto rfile = std::move(res.value());
         auto buf = new uint8[segment_pb.data_size()];
         butil::IOBuf data;
-        data.append_user_data(buf, segment_pb.data_size(), [](void* buf) { delete[](uint8*) buf; });
+        data.append_user_data(buf, segment_pb.data_size(), [](void* buf) { delete[] (uint8*)buf; });
         auto st = rfile->read_fully(buf, segment_pb.data_size());
         ASSERT_OK(st);
         controller->request_attachment().append(data);
@@ -198,15 +199,14 @@ public:
         OlapReaderStatistics stats;
         seg_options.stats = &stats;
         std::string segment_file = Rowset::segment_file_path(_tablet->schema_hash_path(), rowset->rowset_id(), 0);
-        auto segment = *Segment::open(seg_options.fs, segment_file, 0, _tablet->tablet_schema());
+        auto segment = *Segment::open(seg_options.fs, segment_file, 0, &_tablet->tablet_schema());
         ASSERT_EQ(segment->num_rows(), num_rows);
         auto schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
         auto res = segment->new_iterator(schema, seg_options);
         ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
 
         auto seg_iterator = res.value();
-        ASSERT_TRUE(seg_iterator->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
-        auto chunk = ChunkHelper::new_chunk(seg_iterator->schema(), 100);
+        auto chunk = ChunkHelper::new_chunk(schema, 100);
         int count = 0;
         while (true) {
             auto st = seg_iterator->get_next(chunk.get());
@@ -315,4 +315,4 @@ TEST_F(SegmentFlushExecutorTest, test_abort) {
     async_delta_writer->abort();
     ASSERT_EQ(kAborted, async_delta_writer->writer()->get_state());
 }
-} // namespace starrocks
+} // namespace starrocks::vectorized
