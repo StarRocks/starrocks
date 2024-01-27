@@ -36,7 +36,6 @@ namespace starrocks {
  * JITColumn is a struct used to store the data and null data of a column.
  */
 struct JITColumn {
-    const bool is_constant = false;
     const int8_t* datums = nullptr;
     const int8_t* null_flags = nullptr;
 };
