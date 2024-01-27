@@ -61,7 +61,6 @@ import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
-import static com.google.common.base.Verify.verify;
 import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 
 public class TableFunctionTable extends Table {
@@ -101,7 +100,9 @@ public class TableFunctionTable extends Table {
     private List<Integer> partitionColumnIDs;
     private boolean writeSingleFile;
 
-    private Load.CSVOptions csvOptions = new Load.CSVOptions();
+    // CSV format options
+    public String csvColumnSeparator = "\t";
+    public String csvRowDelimiter = "\n";
 
     private List<TBrokerFileStatus> fileStatuses = Lists.newArrayList();
 
@@ -228,11 +229,11 @@ public class TableFunctionTable extends Table {
         }
 
         if (properties.containsKey(PROPERTY_CSV_COLUMN_SEPARATOR)) {
-            csvOptions.columnSeparator = properties.get(PROPERTY_CSV_COLUMN_SEPARATOR);
+            csvColumnSeparator = properties.get(PROPERTY_CSV_COLUMN_SEPARATOR);
         }
 
         if (properties.containsKey(PROPERTY_CSV_ROW_DELIMITER)) {
-            csvOptions.rowDelimiter = properties.get(PROPERTY_CSV_ROW_DELIMITER);
+            csvRowDelimiter = properties.get(PROPERTY_CSV_ROW_DELIMITER);
         }
     }
 
@@ -273,16 +274,16 @@ public class TableFunctionTable extends Table {
         params.setSrc_slot_ids(new ArrayList<>());
         params.setProperties(properties);
         params.setSchema_sample_file_count(autoDetectSampleFiles);
-        if (csvOptions.columnSeparator.length() == 1) {
-            params.setColumn_separator(csvOptions.columnSeparator.getBytes()[0]);
-        } else if (csvOptions.columnSeparator.length() > 1) {
-            params.setMulti_column_separator(csvOptions.columnSeparator);
+        if (csvColumnSeparator.length() == 1) {
+            params.setColumn_separator(csvColumnSeparator.getBytes()[0]);
+        } else if (csvColumnSeparator.length() > 1) {
+            params.setMulti_column_separator(csvColumnSeparator);
         }
 
-        if (csvOptions.rowDelimiter.length() == 1) {
-            params.setRow_delimiter(csvOptions.rowDelimiter.getBytes()[0]);
-        } else if (csvOptions.rowDelimiter.length() > 1) {
-            params.setMulti_row_delimiter(csvOptions.rowDelimiter);
+        if (csvRowDelimiter.length() == 1) {
+            params.setRow_delimiter(csvRowDelimiter.getBytes()[0]);
+        } else if (csvRowDelimiter.length() > 1) {
+            params.setMulti_row_delimiter(csvRowDelimiter);
         }
 
         try {
@@ -422,7 +423,11 @@ public class TableFunctionTable extends Table {
         return writeSingleFile;
     }
 
-    public Load.CSVOptions getCsvOptions() {
-        return csvOptions;
+    public String getCsvColumnSeparator() {
+        return csvColumnSeparator;
+    }
+
+    public String getCsvRowDelimiter() {
+        return csvRowDelimiter;
     }
 }
