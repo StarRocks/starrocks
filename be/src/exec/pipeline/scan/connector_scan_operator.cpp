@@ -36,6 +36,7 @@ struct ConnectorScanOperatorIOTasksMemLimiter {
     mutable std::mutex lock;
 
     const int64_t dop = 0;
+    const bool shared_scan = false;
     // query scan mem limit means limit for all scan nodes.
     // scan mem limit means limit for this scan node.
     int64_t query_scan_mem_limit = std::numeric_limits<int64_t>::max();
@@ -47,7 +48,7 @@ struct ConnectorScanOperatorIOTasksMemLimiter {
     int64_t last_arb_chunk_source_mem_bytes = 0;
     mutable int64_t debug_output_timestamp = 0;
 
-    ConnectorScanOperatorIOTasksMemLimiter(int64_t dop) : dop(dop) {}
+    ConnectorScanOperatorIOTasksMemLimiter(int64_t dop, bool shared_scan) : dop(dop), shared_scan(shared_scan) {}
 
     int available_chunk_source_count(int32_t plan_node_id, int driver_sequence) const {
         int64_t scan_mem_limit_value = scan_mem_limit.load(std::memory_order_relaxed);
@@ -59,7 +60,11 @@ struct ConnectorScanOperatorIOTasksMemLimiter {
         // int64_t avail_count = std::max(0L, max_count - running_count);
         int64_t per_count = avail_count / dop;
 
-        if (driver_sequence < (avail_count - per_count * dop)) {
+        if (shared_scan) {
+            if (driver_sequence < (avail_count - per_count * dop)) {
+                per_count += 1;
+            }
+        } else {
             per_count += 1;
         }
 
@@ -114,7 +119,8 @@ ConnectorScanOperatorFactory::ConnectorScanOperatorFactory(int32_t id, ScanNode*
         : ScanOperatorFactory(id, scan_node),
           _chunk_buffer(scan_node->is_shared_scan_enabled() ? BalanceStrategy::kRoundRobin : BalanceStrategy::kDirect,
                         dop, std::move(buffer_limiter)) {
-    _io_tasks_mem_limiter = state->obj_pool()->add(new ConnectorScanOperatorIOTasksMemLimiter(dop));
+    _io_tasks_mem_limiter = state->obj_pool()->add(
+            new ConnectorScanOperatorIOTasksMemLimiter(dop, scan_node->is_shared_scan_enabled()));
 }
 
 Status ConnectorScanOperatorFactory::do_prepare(RuntimeState* state) {
