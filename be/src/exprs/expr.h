@@ -237,11 +237,8 @@ public:
      * @brief For JIT compile, generate specific evaluation IR code for this expr.
      * Its internal logic is similar to the 'evaluate_checked' function.
      */
-    [[nodiscard]] virtual StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module,
-                                                               llvm::IRBuilder<>& b,
-                                                               const std::vector<LLVMDatum>& datums) const {
-        return Status::NotSupported("JIT expr not supported");
-    }
+
+    virtual StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx);
 
     // Return true if this expression supports JIT compilation.
     virtual bool is_compilable() const { return false; }
