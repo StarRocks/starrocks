@@ -55,7 +55,6 @@ TEST_F(VectorizedBinaryPredicateTest, eqExpr) {
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
         ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
-            LOG(INFO) << ptr->debug_string();
             ASSERT_FALSE(ptr->is_nullable());
             ASSERT_TRUE(ptr->is_numeric());
 
@@ -233,7 +232,6 @@ TEST_F(VectorizedBinaryPredicateTest, mergeNullLtExpr) {
     {
         ColumnPtr v = expr->evaluate(nullptr, nullptr);
         ExprsTestHelper::verify_with_jit(v, expr.get(), &runtime_state, [](ColumnPtr const& v) {
-            LOG(INFO) << v->get_name() << "  " << v->debug_string();
             ColumnPtr ptr = std::static_pointer_cast<NullableColumn>(v)->data_column();
 
             ASSERT_TRUE(v->is_nullable());
@@ -390,7 +388,6 @@ TEST_F(VectorizedBinaryPredicateTest, nullAndNotNullEqForNullExpr) {
     {
         ColumnPtr v = expr->evaluate(nullptr, nullptr);
         ExprsTestHelper::verify_with_jit(v, expr.get(), &runtime_state, [](ColumnPtr const& v) {
-            LOG(INFO) << v->get_name() <<"  " << v->debug_string();
             auto ptr = std::static_pointer_cast<BooleanColumn>(v);
 
             ASSERT_FALSE(v->is_nullable());
