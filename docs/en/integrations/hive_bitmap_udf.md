@@ -67,14 +67,14 @@ hive> add jar hdfs://<hdfs_ip>:<hdfs_port>/hive1-udf-1.0.0.jar;
 ```
 hive> create temporary function bitmap_agg as 'com.starrocks.hive.udf.UDAFBitmapAgg';
 hive> create temporary function bitmap_union as 'com.starrocks.hive.udf.UDAFBitmapUnion';
-hive> create temporary temporary function base64_to_bitmap as 'com.starrocks.hive.udf.UDFBase64ToBitmap';
-hive> create temporary temporary function bitmap_and as 'com.starrocks.hive.udf.UDFBitmapAnd';
-hive> create temporary temporary function bitmap_count as 'com.starrocks.hive.udf.UDFBitmapCount';
-hive> create temporary temporary function bitmap_from_string as 'com.starrocks.hive.udf.UDFBitmapFromString';
-hive> create temporary temporary function bitmap_or as 'com.starrocks.hive.udf.UDFBitmapOr';
-hive> create temporary temporary function bitmap_to_base64 as 'com.starrocks.hive.udf.UDFBitmapToBase64';
-hive> create temporary temporary function bitmap_to_string as 'com.starrocks.hive.udf.UDFBitmapToString';
-hive> create temporary temporary function bitmap_xor as 'com.starrocks.hive.udf.UDFBitmapXor';
+hive> create temporary function base64_to_bitmap as 'com.starrocks.hive.udf.UDFBase64ToBitmap';
+hive> create temporary function bitmap_and as 'com.starrocks.hive.udf.UDFBitmapAnd';
+hive> create temporary function bitmap_count as 'com.starrocks.hive.udf.UDFBitmapCount';
+hive> create temporary function bitmap_from_string as 'com.starrocks.hive.udf.UDFBitmapFromString';
+hive> create temporary function bitmap_or as 'com.starrocks.hive.udf.UDFBitmapOr';
+hive> create temporary function bitmap_to_base64 as 'com.starrocks.hive.udf.UDFBitmapToBase64';
+hive> create temporary function bitmap_to_string as 'com.starrocks.hive.udf.UDFBitmapToString';
+hive> create temporary function bitmap_xor as 'com.starrocks.hive.udf.UDFBitmapXor';
 ```
 
 ## Usage example
