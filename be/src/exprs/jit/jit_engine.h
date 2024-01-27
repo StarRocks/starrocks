@@ -22,7 +22,6 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
-#include "exprs/jit/jit_functions.h"
 #include "llvm/ExecutionEngine/JITSymbol.h"
 #include "llvm/ExecutionEngine/Orc/LLJIT.h"
 #include "llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h"
