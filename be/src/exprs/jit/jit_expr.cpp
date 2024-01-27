@@ -93,7 +93,7 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
     jit_columns.reserve(_children.size() + 1);
     Columns args;
     args.reserve(_children.size() + 1);
-    auto unfold_ptr = [&](ColumnPtr column) {
+    auto unfold_ptr = [&](const ColumnPtr& column) {
         DCHECK(!column->is_constant());
         auto [un_col, un_col_null] = ColumnHelper::unpack_nullable_column(column);
         auto data_col_ptr = reinterpret_cast<const int8_t*>(un_col->raw_data());
