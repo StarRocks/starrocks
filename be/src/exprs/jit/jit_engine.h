@@ -78,7 +78,6 @@ public:
     static Status remove_function(const std::string& expr_name);
 
 private:
-
     static Status generate_scalar_function_ir(ExprContext* context, llvm::Module& module, Expr* expr);
     /**
      * @brief Sets up an LLVM module by specifying its data layout and target triple.
