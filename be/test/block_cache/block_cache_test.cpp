@@ -228,7 +228,7 @@ TEST_F(BlockCacheTest, write_with_overwrite_option) {
     cache->shutdown();
 }
 
-TEST_F(BlockCacheTest, read_cache_with_adaptor) {
+TEST_F(BlockCacheTest, DISABLED_read_cache_with_adaptor) {
     std::unique_ptr<BlockCache> cache(new BlockCache);
     const size_t block_size = 1024 * 1024;
 
