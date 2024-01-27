@@ -35,6 +35,9 @@ public:
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
                                          const std::vector<LLVMDatum>& datums) const override;
 
+    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override;
+
+
     std::string debug_string() const override;
 
 private:

@@ -239,6 +239,8 @@ public:
         return Status::NotSupported("JIT expr not supported");
     }
 
+    virtual StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx);
+
     // Return true if this expression supports JIT compilation.
     virtual bool is_compilable() const { return false; }
 

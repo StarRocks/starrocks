@@ -20,6 +20,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exprs/jit/ir_helper.h"
+#include "exprs/jit/jit_functions.h"
 #include "gutil/port.h"
 #include "gutil/strings/fastmem.h"
 #include "types/constexpr.h"
@@ -175,6 +176,12 @@ StatusOr<LLVMDatum> VectorizedLiteral::generate_ir_impl(ExprContext* context, co
     ASSIGN_OR_RETURN(auto result, IRHelper::create_ir_number(b, _type.type, _value->raw_data()));
     LLVMDatum datum(b);
     datum.value = result;
+    return datum;
+}
+
+StatusOr<LLVMDatum> VectorizedLiteral::generate_ir_impl(ExprContext* context, JITContext* jit_ctx) {
+    LLVMDatum datum(jit_ctx->builder, _value->only_null());
+    ASSIGN_OR_RETURN(datum.value, IRHelper::create_ir_number(jit_ctx->builder, _type.type, _value->raw_data()));
     return datum;
 }
 

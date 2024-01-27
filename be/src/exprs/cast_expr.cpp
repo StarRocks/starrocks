@@ -33,6 +33,7 @@
 #include "exprs/column_ref.h"
 #include "exprs/decimal_cast_expr.h"
 #include "exprs/jit/ir_helper.h"
+#include "exprs/jit/jit_functions.h"
 #include "exprs/unary_function.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
@@ -1139,6 +1140,35 @@ public:
         return !AllowThrowException && IRHelper::support_jit(FromType) && IRHelper::support_jit(ToType);
     }
 
+    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
+        ASSIGN_OR_RETURN(auto r, _children[0]->generate_ir_impl(context, jit_ctx))
+        if constexpr (FromType == TYPE_JSON || ToType == TYPE_JSON) {
+            return Status::NotSupported("JIT casting does not support JSON");
+        } else if constexpr (lt_is_decimal<FromType> || lt_is_decimal<ToType>) {
+            return Status::NotSupported("JIT casting does not support decimal");
+        } else {
+            ASSIGN_OR_RETURN(r.value, IRHelper::cast_to_type(jit_ctx->builder, r.value, FromType, ToType))
+#if 0
+            if constexpr ((lt_is_integer<FromType> || lt_is_float<FromType>)&&(lt_is_integer<ToType> ||
+                                                                               lt_is_float<ToType>)) {
+                if constexpr (std::numeric_limits<RunTimeCppType<ToType>>::max() <
+                              std::numeric_limits<RunTimeCppType<FromType>>::max()) {
+                    // Check overflow.
+                    ASSIGN_OR_RETURN(auto cast_l, IRHelper::cast_to_type(jit_ctx->builder, datum.value, ToType, FromType));
+                    llvm::Value* is_overflow = nullptr;
+                    if constexpr (lt_is_integer<FromType>) {
+                        is_overflow = jit_ctx->builder.CreateICmpNE(l, cast_l);
+                    } else if constexpr (lt_is_float<FromType>) {
+                        is_overflow = jit_ctx->builder.CreateFCmpONE(l, cast_l);
+                    }
+                    jit_ctx->builder.CreateOr(datum.null_flag, is_overflow);
+                }
+            }
+#endif
+            return r;
+        }
+    }
+
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
                                          const std::vector<LLVMDatum>& datums) const override {
         auto* l = datums[0].value;
@@ -1148,8 +1178,8 @@ public:
             return Status::NotSupported("JIT casting does not support decimal");
         } else {
             LLVMDatum datum(b);
-            ASSIGN_OR_RETURN(datum.value, IRHelper::cast_to_type(b, l, FromType, ToType));
-
+            ASSIGN_OR_RETURN(datum.value, IRHelper::cast_to_type(b, l, FromType, ToType))
+            datum.null_flag = datums[0].null_flag;
 #if 0
             if constexpr ((lt_is_integer<FromType> || lt_is_float<FromType>)&&(lt_is_integer<ToType> ||
                                                                                lt_is_float<ToType>)) {

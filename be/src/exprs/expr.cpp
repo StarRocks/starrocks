@@ -65,6 +65,7 @@
 #include "exprs/info_func.h"
 #include "exprs/is_null_predicate.h"
 #include "exprs/java_function_call_expr.h"
+#include "exprs/jit/ir_helper.h"
 #include "exprs/jit/jit_engine.h"
 #include "exprs/jit/jit_expr.h"
 #include "exprs/jit/jit_functions.h"
@@ -700,6 +701,31 @@ StatusOr<LLVMDatum> Expr::generate_ir(ExprContext* context, const llvm::Module& 
     }
 
     ASSIGN_OR_RETURN(auto datum, generate_ir_impl(context, module, b, datums))
+    return datum;
+}
+
+StatusOr<LLVMDatum> Expr::generate_ir_impl(ExprContext* context, JITContext* jit_ctx) {
+    if (is_compilable()) {
+        throw std::runtime_error("[JIT] compilable expressions must not be here : " + debug_string());
+        return Status::NotSupported("[JIT] compilable expressions must not be here : " + debug_string());
+    }
+    if (jit_ctx->input_index >= jit_ctx->columns.size() - 1) {
+        throw std::runtime_error("[JIT] vector overflow for expr :" + debug_string());
+        return Status::RuntimeError("vector overflow");
+    }
+    LLVMDatum datum(jit_ctx->builder);
+    datum.value = jit_ctx->builder.CreateLoad(
+            jit_ctx->columns[jit_ctx->input_index].value_type,
+            jit_ctx->builder.CreateInBoundsGEP(jit_ctx->columns[jit_ctx->input_index].value_type,
+                                               jit_ctx->columns[jit_ctx->input_index].values, jit_ctx->index_phi));
+    if (is_nullable()) {
+        datum.null_flag = jit_ctx->builder.CreateLoad(
+                jit_ctx->builder.getInt8Ty(),
+                jit_ctx->builder.CreateInBoundsGEP(jit_ctx->builder.getInt8Ty(),
+                                                   jit_ctx->columns[jit_ctx->input_index].null_flags,
+                                                   jit_ctx->index_phi));
+    }
+    jit_ctx->input_index++;
     return datum;
 }
 

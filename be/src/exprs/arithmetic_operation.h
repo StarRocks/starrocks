@@ -310,7 +310,7 @@ struct ArithmeticBinaryOperator {
         } else {
             static_assert(is_binary_op<Op>, "Invalid binary operators");
         }
-        //result.null_flag = b.CreateXor(datums[0].null_flag, datums[1].null_flag);
+        result.null_flag = b.CreateOr(datums[0].null_flag, datums[1].null_flag);
         return result;
     }
 };

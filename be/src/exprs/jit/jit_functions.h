@@ -31,7 +31,6 @@
 #include "llvm/IR/Type.h"
 
 namespace starrocks {
-
 /**
  * JITColumn is a struct used to store the data and null data of a column.
  */

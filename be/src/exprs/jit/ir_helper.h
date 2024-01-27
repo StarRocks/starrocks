@@ -31,7 +31,15 @@ struct LLVMDatum {
     llvm::Value* value = nullptr;     ///< Represents the actual value of the datum.
     llvm::Value* null_flag = nullptr; ///< Represents the nullity status of the datum.
 
-    LLVMDatum(llvm::IRBuilder<>& b) { null_flag = llvm::ConstantInt::get(b.getInt8Ty(), 0); }
+    LLVMDatum(llvm::IRBuilder<>& b, bool null = false) {
+        if (null) {
+            null_flag = llvm::ConstantInt::get(b.getInt8Ty(), 1);
+        } else {
+            null_flag = llvm::ConstantInt::get(b.getInt8Ty(), 0);
+        }
+    }
+
+    LLVMDatum() = default;
 };
 
 /**
@@ -41,6 +49,14 @@ struct LLVMColumn {
     llvm::Value* values = nullptr;      ///< Represents the actual values of the column.
     llvm::Value* null_flags = nullptr; ///< Represents the nullity status of the column.
     llvm::Type* value_type = nullptr;   ///< Represents the type of the column's values.
+};
+
+struct JITContext {
+    llvm::Value* index_phi;
+    std::vector<LLVMColumn>& columns;
+    llvm::Module& module;
+    llvm::IRBuilder<>& builder;
+    int input_index;
 };
 
 class IRHelper {

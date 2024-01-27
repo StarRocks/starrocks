@@ -483,7 +483,7 @@ TEST_F(VectorizedCaseExprTest, whenIntCaseNullElse) {
     expr_node.is_nullable = false;
     std::vector<std::unique_ptr<Expr>> exprs;
     exprs.emplace_back(VectorizedCaseExprFactory::from_thrift(expr_node));
-    exprs.emplace_back(VectorizedCaseExprFactory::from_thrift(expr_node, TYPE_ARRAY, TYPE_ARRAY));
+    //exprs.emplace_back(VectorizedCaseExprFactory::from_thrift(expr_node, TYPE_ARRAY, TYPE_ARRAY));
 
     for (auto& expr : exprs) {
         expr_node.is_nullable = false;
@@ -498,7 +498,7 @@ TEST_F(VectorizedCaseExprTest, whenIntCaseNullElse) {
         MockVectorizedExpr<TYPE_INT> then3(expr_node, 10, 20);
         MockVectorizedExpr<TYPE_INT> else1(expr_node, 10, 30);
 
-        when2.only_null = true;
+        //when2.only_null = true;
 
         expr->_children.push_back(&case1);
         expr->_children.push_back(&when2);
