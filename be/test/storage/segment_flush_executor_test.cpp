@@ -25,6 +25,7 @@
 #include "runtime/runtime_state.h"
 #include "storage/async_delta_writer.h"
 #include "storage/chunk_helper.h"
+#include "storage/chunk_iterator.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"
@@ -92,8 +93,8 @@ public:
 
     TupleDescriptor* _create_tuple_desc() {
         TTupleDescriptorBuilder tuple_builder;
-        for (int i = 0; i < _tablet->tablet_schema()->num_columns(); i++) {
-            auto& column = _tablet->tablet_schema()->column(i);
+        for (int i = 0; i < _tablet->tablet_schema().num_columns(); i++) {
+            auto& column = _tablet->tablet_schema().column(i);
             TSlotDescriptorBuilder builder;
             std::string column_name{column.name()};
             TSlotDescriptor slot_desc = builder.type(column.type())
@@ -148,7 +149,7 @@ public:
         writer_context.partition_id = tablet->partition_id();
         writer_context.rowset_path_prefix = _tablet->schema_hash_path();
         writer_context.rowset_state = VISIBLE;
-        writer_context.tablet_schema = tablet->tablet_schema();
+        writer_context.tablet_schema = &tablet->tablet_schema();
         writer_context.version.first = 0;
         writer_context.version.second = 0;
 
@@ -198,14 +199,13 @@ public:
         OlapReaderStatistics stats;
         seg_options.stats = &stats;
         std::string segment_file = Rowset::segment_file_path(_tablet->schema_hash_path(), rowset->rowset_id(), 0);
-        auto segment = *Segment::open(seg_options.fs, segment_file, 0, _tablet->tablet_schema());
+        auto segment = *Segment::open(seg_options.fs, segment_file, 0, &_tablet->tablet_schema());
         ASSERT_EQ(segment->num_rows(), num_rows);
         auto schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
         auto res = segment->new_iterator(schema, seg_options);
         ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
 
         auto seg_iterator = res.value();
-        ASSERT_TRUE(seg_iterator->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
         auto chunk = ChunkHelper::new_chunk(seg_iterator->schema(), 100);
         int count = 0;
         while (true) {
