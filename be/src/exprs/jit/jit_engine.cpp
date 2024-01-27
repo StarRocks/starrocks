@@ -22,7 +22,6 @@
 
 #include "common/compiler_util.h"
 #include "common/status.h"
-#include "exprs/jit/jit_functions.h"
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/Orc/LLJIT.h"
 #include "llvm/IR/DataLayout.h"
