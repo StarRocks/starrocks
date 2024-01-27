@@ -92,7 +92,7 @@ public:
 
     // Just for testing
     DeltaWriter* writer() { return _writer.get(); }
-    
+
 private:
     struct private_type {
         explicit private_type(int) {}
