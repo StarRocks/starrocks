@@ -16,6 +16,7 @@ package com.starrocks.server;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.IndexDef.IndexType;
 import com.starrocks.analysis.KeysDesc;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.ColocateTableIndex;
@@ -49,6 +50,7 @@ import com.starrocks.common.util.Util;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.StorageInfo;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -384,6 +386,11 @@ public class OlapTableFactory implements AbstractTableFactory {
                         throw new DdlException("Table with AUTO_INCREMENT column must use Replicated Storage");
                     }
                 }
+            }
+
+            boolean hasGin = table.getIndexes().stream().anyMatch(index -> index.getIndexType() == IndexType.GIN);
+            if (hasGin && table.enableReplicatedStorage()) {
+                throw new SemanticException("GIN is only supported in not replicated mode");
             }
 
             TTabletType tabletType = TTabletType.TABLET_TYPE_DISK;

@@ -46,6 +46,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IndexDef;
+import com.starrocks.analysis.IndexDef.IndexType;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.AggregateType;
@@ -2324,6 +2325,10 @@ public class SchemaChangeHandler extends AlterHandler {
         Index newIndex = alterClause.getIndex();
         if (newIndex == null) {
             return;
+        }
+
+        if (newIndex.getIndexType() == IndexType.GIN && olapTable.enableReplicatedStorage()) {
+            throw new SemanticException("GIN is only supported in not replicated mode");
         }
 
         List<Index> existedIndexes = olapTable.getIndexes();
