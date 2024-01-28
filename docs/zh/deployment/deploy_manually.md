@@ -4,6 +4,10 @@ displayed_sidebar: "Chinese"
 
 # 手动部署 StarRocks
 
+:::tip
+这一步的先决条件在 [部署概述](./deployment_overview.md) 文档中有详细说明。如果您计划进行生产部署，请从那里开始。如果您刚开始使用 StarrRocks 并想要按照其中一个快速入门进行操作，请从 [快速入门](../quick_start/quick_start.mdx) 开始。
+:::
+
 本文介绍如何手动部署 StarRocks 存算一体集群（BE 同时做数据存储和计算）。其他安装方式请参考[部署概览](../deployment/deployment_overview.md)。
 
 如果要部署存算分离集群，参见 [部署使用 StarRocks 存算分离集群](./shared_data/s3.md)。
