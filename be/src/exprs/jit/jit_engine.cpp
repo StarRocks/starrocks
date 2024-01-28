@@ -182,7 +182,7 @@ Status JITEngine::generate_scalar_function_ir(ExprContext* context, llvm::Module
     auto* counter_phi = b.CreatePHI(rows_count_arg->getType(), 2);
     counter_phi->addIncoming(llvm::ConstantInt::get(size_type, 0), entry);
 
-    JITContext jc(counter_phi, columns, module, b, 0);
+    JITContext jc = {counter_phi, columns, module, b, 0};
     ASSIGN_OR_RETURN(auto result, expr->generate_ir_impl(context, &jc))
 
     // Pseudo code:
