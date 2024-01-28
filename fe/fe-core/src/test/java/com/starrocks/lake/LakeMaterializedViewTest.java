@@ -106,11 +106,11 @@ public class LakeMaterializedViewTest {
         new MockUp<StarOSAgent>() {
             @Mock
             public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) {
-                return GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
+                return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true).get(0);
             }
 
             @Mock
-            public FilePathInfo allocateFilePath(String storageVolumeId, long tableId) {
+            public FilePathInfo allocateFilePath(String storageVolumeId, long dbId, long tableId) {
                 FilePathInfo.Builder builder = FilePathInfo.newBuilder();
                 FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
 

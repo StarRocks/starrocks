@@ -21,6 +21,7 @@
 #include <utility>
 
 #include "column/column_builder.h"
+#include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
 #include "exprs/function_context.h"
@@ -236,6 +237,28 @@ public:
 private:
     template <LogicalType ResultType>
     [[nodiscard]] static StatusOr<ColumnPtr> _json_query_impl(FunctionContext* context, const Columns& columns);
+
+    template <LogicalType RresultType>
+    DEFINE_VECTORIZED_FN(_flat_json_query_impl);
+
+    template <LogicalType RresultType>
+    DEFINE_VECTORIZED_FN(_full_json_query_impl);
+
+    /**
+     * @param: [json_object, json_path]
+     * @paramType: [JsonColumn, BinaryColumn]
+     * @return: BooleanColumn
+     */
+    DEFINE_VECTORIZED_FN(_flat_json_exists);
+    DEFINE_VECTORIZED_FN(_full_json_exists);
+
+    /**
+     * Return number of elements in a JSON object/array
+     * @param JSON, JSONPath
+     * @return number of elements if it's object or array, otherwise return 1
+     */
+    DEFINE_VECTORIZED_FN(_flat_json_length);
+    DEFINE_VECTORIZED_FN(_full_json_length);
 
     /**
      * Parse string column as json column

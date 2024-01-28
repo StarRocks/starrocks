@@ -75,15 +75,17 @@ StatusOr<std::shared_ptr<Segment>> Segment::open(std::shared_ptr<FileSystem> fs,
                                                  uint32_t segment_id, std::shared_ptr<const TabletSchema> tablet_schema,
                                                  size_t* footer_length_hint,
                                                  const FooterPointerPB* partial_rowset_footer,
-                                                 bool skip_fill_local_cache, lake::TabletManager* tablet_manager) {
+                                                 const LakeIOOptions& lake_io_opts,
+                                                 lake::TabletManager* tablet_manager) {
     auto segment = std::make_shared<Segment>(std::move(fs), std::move(segment_file_info), segment_id,
                                              std::move(tablet_schema), tablet_manager);
-    RETURN_IF_ERROR(segment->open(footer_length_hint, partial_rowset_footer, skip_fill_local_cache));
+    RETURN_IF_ERROR(segment->open(footer_length_hint, partial_rowset_footer, lake_io_opts));
     return std::move(segment);
 }
 
-Status Segment::parse_segment_footer(RandomAccessFile* read_file, SegmentFooterPB* footer, size_t* footer_length_hint,
-                                     const FooterPointerPB* partial_rowset_footer) {
+StatusOr<size_t> Segment::parse_segment_footer(RandomAccessFile* read_file, SegmentFooterPB* footer,
+                                               size_t* footer_length_hint,
+                                               const FooterPointerPB* partial_rowset_footer) {
     // Footer := SegmentFooterPB, FooterPBSize(4), FooterPBChecksum(4), MagicNumber(4)
     ASSIGN_OR_RETURN(auto file_size, read_file->get_size());
 
@@ -119,13 +121,13 @@ Status Segment::parse_segment_footer(RandomAccessFile* read_file, SegmentFooterP
                 strings::Substitute("Bad segment file $0: magic number not match", read_file->filename()));
     }
 
+    if (footer_length_hint != nullptr && footer_length > *footer_length_hint) {
+        *footer_length_hint = footer_length + 128 /* allocate slightly more bytes next time*/;
+    }
+
     if (file_size < 12 + footer_length) {
         return Status::Corruption(strings::Substitute("Bad segment file $0: file size $1 < $2", read_file->filename(),
                                                       file_size, 12 + footer_length));
-    }
-
-    if (footer_length_hint != nullptr && footer_length > *footer_length_hint) {
-        *footer_length_hint = footer_length + 128 /* allocate slightly more bytes next time*/;
     }
 
     buff.resize(buff.size() - 12); // Remove the last 12 bytes.
@@ -169,7 +171,27 @@ Status Segment::parse_segment_footer(RandomAccessFile* read_file, SegmentFooterP
                                     read_file->filename(), actual_checksum, checksum));
     }
 
-    return Status::OK();
+    return footer_length + 12;
+}
+
+Status Segment::write_segment_footer(WritableFile* write_file, const SegmentFooterPB& footer) {
+    std::string footer_buf;
+    if (!footer.SerializeToString(&footer_buf)) {
+        return Status::InternalError("failed to serialize segment footer");
+    }
+
+    faststring fixed_buf;
+    // footer's size
+    put_fixed32_le(&fixed_buf, footer_buf.size());
+    // footer's checksum
+    uint32_t checksum = crc32c::Value(footer_buf.data(), footer_buf.size());
+    put_fixed32_le(&fixed_buf, checksum);
+    // Append magic number. we don't write magic number in the header because
+    // that will need an extra seek when reading
+    fixed_buf.append(k_segment_magic, k_segment_magic_length);
+
+    Slice slices[2] = {footer_buf, fixed_buf};
+    return write_file->appendv(&slices[0], 2);
 }
 
 Segment::Segment(std::shared_ptr<FileSystem> fs, FileInfo segment_file_info, uint32_t segment_id,
@@ -188,13 +210,12 @@ Segment::~Segment() {
 }
 
 Status Segment::open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
-                     bool skip_fill_local_cache) {
+                     const LakeIOOptions& lake_io_opts) {
     if (invoked(_open_once)) {
         return Status::OK();
     }
 
-    auto res = success_once(_open_once,
-                            [&] { return _open(footer_length_hint, partial_rowset_footer, skip_fill_local_cache); });
+    auto res = success_once(_open_once, [&] { return _open(footer_length_hint, partial_rowset_footer, lake_io_opts); });
 
     // move the cache size update out of the `success_once`,
     // so that the onceflag `_open_once` can be set before the cache_size is updated.
@@ -205,9 +226,10 @@ Status Segment::open(size_t* footer_length_hint, const FooterPointerPB* partial_
 }
 
 Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
-                      bool skip_fill_local_cache) {
+                      const LakeIOOptions& lake_io_opts) {
     SegmentFooterPB footer;
-    RandomAccessFileOptions opts{.skip_fill_local_cache = skip_fill_local_cache};
+    RandomAccessFileOptions opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache,
+                                 .buffer_size = lake_io_opts.buffer_size};
 
     ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(opts, _segment_file_info));
     RETURN_IF_ERROR(Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint, partial_rowset_footer));
@@ -285,11 +307,11 @@ Status Segment::new_inverted_index_iterator(uint32_t cid, InvertedIndexIterator*
     return Status::OK();
 }
 
-Status Segment::load_index(bool skip_fill_local_cache) {
+Status Segment::load_index(const LakeIOOptions& lake_io_opts) {
     auto res = success_once(_load_index_once, [&] {
         SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
 
-        Status st = _load_index(skip_fill_local_cache);
+        Status st = _load_index(lake_io_opts);
         if (st.ok()) {
             MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->short_key_index_mem_tracker(),
                                      _short_key_index_mem_usage());
@@ -302,9 +324,10 @@ Status Segment::load_index(bool skip_fill_local_cache) {
     return res.status();
 }
 
-Status Segment::_load_index(bool skip_fill_local_cache) {
+Status Segment::_load_index(const LakeIOOptions& lake_io_opts) {
     // read and parse short key index page
-    RandomAccessFileOptions file_opts{.skip_fill_local_cache = skip_fill_local_cache};
+    RandomAccessFileOptions file_opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache,
+                                      .buffer_size = lake_io_opts.buffer_size};
     ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(file_opts, _segment_file_info));
 
     PageReadOptions opts;
@@ -407,7 +430,8 @@ StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGro
 }
 
 Status Segment::get_short_key_index(std::vector<std::string>* sk_index_values) {
-    RETURN_IF_ERROR(load_index(false));
+    LakeIOOptions lakeIoOptions{.fill_data_cache = false, .buffer_size = -1};
+    RETURN_IF_ERROR(load_index(lakeIoOptions));
     for (size_t i = 0; i < _sk_index_decoder->num_items(); i++) {
         sk_index_values->emplace_back(_sk_index_decoder->key(i).to_string());
     }

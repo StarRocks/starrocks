@@ -75,7 +75,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
 
     @Override
     public void preCommit(TransactionState txnState, List<TabletCommitInfo> finishedTablets,
-                          List<TabletFailInfo> failedTablets) throws TransactionException {
+                            List<TabletFailInfo> failedTablets) throws TransactionException {
         Preconditions.checkState(txnState.getTransactionStatus() != TransactionStatus.COMMITTED);
         txnState.clearAutomaticPartitionSnapshot();
         if (!finishedTablets.isEmpty()) {
@@ -170,12 +170,8 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
         TableCommitInfo tableCommitInfo = new TableCommitInfo(table.getId());
         boolean isFirstPartition = true;
         for (long partitionId : dirtyPartitionSet) {
-            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             PartitionCommitInfo partitionCommitInfo;
             long version = -1;
-            if (txnState.getTransactionStatus() == TransactionStatus.COMMITTED) {
-                version = partition.getNextVersion();
-            }
             if (isFirstPartition) {
                 List<String> validDictCacheColumnNames = Lists.newArrayList();
                 List<Long> validDictCacheColumnVersions = Lists.newArrayList();
@@ -207,11 +203,6 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
         }
 
         txnState.putIdToTableCommitInfo(table.getId(), tableCommitInfo);
-    }
-
-    @Override
-    public void postWriteCommitLog(TransactionState txnState) {
-        // nothing to do
     }
 
     @Override
@@ -277,14 +268,14 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
 
     static List<ComputeNode> getAllAliveNodes() {
         List<ComputeNode> nodes = new ArrayList<>();
-        nodes.addAll(GlobalStateMgr.getCurrentSystemInfo().getAvailableComputeNodes());
-        nodes.addAll(GlobalStateMgr.getCurrentSystemInfo().getAvailableBackends());
+        nodes.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAvailableComputeNodes());
+        nodes.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAvailableBackends());
         return nodes;
     }
 
     @Nullable
     static ComputeNode getAliveNode(Long nodeId) {
-        return GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
+        return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
     }
 
     static boolean enableIngestSlowdown() {

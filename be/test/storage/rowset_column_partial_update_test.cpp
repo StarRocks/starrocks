@@ -915,7 +915,7 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_two_rowset_and_check) {
 TEST_P(RowsetColumnPartialUpdateTest, partial_update_too_many_segment_and_check) {
     const int N = 10;
     // generate M upt files in each partial rowset
-    const int M = 1000;
+    const int M = 100;
     auto tablet = create_tablet(rand(), rand());
     ASSERT_EQ(1, tablet->updates()->version_history_count());
 

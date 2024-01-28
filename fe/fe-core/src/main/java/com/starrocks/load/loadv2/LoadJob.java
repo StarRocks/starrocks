@@ -188,6 +188,8 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     // this request id is only used for checking if a load begin request is a duplicate request.
     protected TUniqueId requestId;
 
+    protected int retryTime = 2; // retry time if timeout
+
     // only for persistence param. see readFields() for usage
     private boolean isJobTypeRead = false;
 
@@ -270,7 +272,20 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         return createTimestamp + timeoutSecond * 1000;
     }
 
-    private boolean isTimeout() {
+    public void reset() {
+        if (ConnectContext.get() != null) {
+            ConnectContext.get().setStartTime();
+            this.createTimestamp = ConnectContext.get().getStartTime();
+        } else {
+            // only for test used
+            this.createTimestamp = System.currentTimeMillis();
+        }
+        idToTasks.clear();
+        finishedTaskIds.clear();
+        loadingStatus.setProgress(0);
+    }
+
+    public boolean isTimeout() {
         return System.currentTimeMillis() > getDeadlineMs();
     }
 
@@ -638,7 +653,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         }
 
         // remove callback before abortTransaction(), so that the afterAborted() callback will not be called again
-        GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
 
         if (abortTxn) {
             // abort txn
@@ -647,7 +662,8 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
                         .add("transaction_id", transactionId)
                         .add("msg", "begin to abort txn")
                         .build());
-                GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(dbId, transactionId, failMsg.getMsg());
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                        .abortTransaction(dbId, transactionId, failMsg.getMsg());
             } catch (UserException e) {
                 LOG.warn(new LogBuilder(LogKey.LOAD_JOB, id)
                         .add("transaction_id", transactionId)
@@ -671,10 +687,11 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     private void executeFinish() {
         progress = 100;
         finishTimestamp = System.currentTimeMillis();
-        GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
         state = JobState.FINISHED;
+        failMsg = null;
 
-        if (MetricRepo.isInit) {
+        if (MetricRepo.hasInit) {
             MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
         }
         // when load job finished, there is no need to hold the tasks which are the biggest memory consumers.
@@ -999,11 +1016,9 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
      * @param txnState
      * @param txnOperated
      * @param txnStatusChangeReason
-     * @throws UserException
      */
     @Override
-    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason)
-            throws UserException {
+    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason) {
         if (!txnOperated) {
             return;
         }
@@ -1034,7 +1049,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             failMsg = new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, txnState.getReason());
             finishTimestamp = txnState.getFinishTime();
             state = JobState.CANCELLED;
-            GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
         } finally {
             writeUnlock();
         }
@@ -1088,7 +1103,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             progress = 100;
             finishTimestamp = txnState.getFinishTime();
             state = JobState.FINISHED;
-            GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
         } finally {
             writeUnlock();
         }
@@ -1212,7 +1227,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         transactionId = info.getTransactionId();
         loadStartTimestamp = info.getLoadStartTimestamp();
     }
-    
+
     public boolean hasTxn() {
         return true;
     }

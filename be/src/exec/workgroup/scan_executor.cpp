@@ -27,8 +27,9 @@ ScanExecutor::ScanExecutor(std::unique_ptr<ThreadPool> thread_pool, std::unique_
     }
 }
 
-ScanExecutor::~ScanExecutor() {
+void ScanExecutor::close() {
     _task_queue->close();
+    _thread_pool->shutdown();
 }
 
 void ScanExecutor::initialize(int num_threads) {

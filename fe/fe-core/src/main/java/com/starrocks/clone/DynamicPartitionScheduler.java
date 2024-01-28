@@ -62,8 +62,8 @@ import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
@@ -72,6 +72,7 @@ import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
+import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.statistic.StatsConstants;
 import org.apache.logging.log4j.LogManager;
@@ -274,9 +275,8 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                     }
                     distributionDesc = new HashDistributionDesc(dynamicPartitionProperty.getBuckets(),
                             distColumnNames);
-                } else {
-                    RandomDistributionInfo randomDistributionInfo = (RandomDistributionInfo) distributionInfo;
-                    distributionDesc = randomDistributionInfo.toDistributionDesc();
+                } else if (distributionInfo instanceof  RandomDistributionInfo) {
+                    distributionDesc = new RandomDistributionDesc(dynamicPartitionProperty.getBuckets());
                 }
 
                 // add partition according to partition desc and distribution desc
@@ -429,7 +429,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                 return false;
             }
             try {
-                GlobalStateMgr.getCurrentState().dropPartition(db, olapTable, dropPartitionClause);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, olapTable, dropPartitionClause);
                 clearDropPartitionFailedMsg(tableName);
             } catch (DdlException e) {
                 recordDropPartitionFailedMsg(db.getOriginName(), tableName, e.getMessage());
@@ -441,7 +441,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
         if (!skipAddPartition) {
             for (AddPartitionClause addPartitionClause : addPartitionClauses) {
                 try {
-                    GlobalStateMgr.getCurrentState().addPartitions(db, tableName, addPartitionClause);
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(db, tableName, addPartitionClause);
                     clearCreatePartitionFailedMsg(tableName);
                 } catch (DdlException | AnalysisException e) {
                     recordCreatePartitionFailedMsg(db.getOriginName(), tableName, e.getMessage());
@@ -518,7 +518,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                 Locker locker = new Locker();
                 locker.lockDatabase(db, LockType.WRITE);
                 try {
-                    GlobalStateMgr.getCurrentState().dropPartition(db, olapTable, dropPartitionClause);
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, olapTable, dropPartitionClause);
                     clearDropPartitionFailedMsg(tableName);
                 } catch (DdlException e) {
                     recordDropPartitionFailedMsg(db.getOriginName(), tableName, e.getMessage());
@@ -653,7 +653,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
     }
 
     private void initDynamicPartitionTable() {
-        for (Long dbId : GlobalStateMgr.getCurrentState().getDbIds()) {
+        for (Long dbId : GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds()) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db == null) {
                 continue;

@@ -29,8 +29,7 @@ public class JournalFactory {
         switch (type) {
             case BDB: {
                 BDBEnvironment environment = BDBEnvironment.initBDBEnvironment(nodeName);
-                Journal journal = new BDBJEJournal(environment);
-                return journal;
+                return new BDBJEJournal(environment);
             }
 
             default:

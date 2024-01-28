@@ -15,7 +15,7 @@ import RoutineLoadPrivNote from '../../../assets/commonMarkdown/RoutineLoadPrivN
 ## 语法
 
 ```SQL
-SHOW [ALL] ROUTINE LOAD FOR [<db_name>.]<job_name>
+SHOW [ALL] ROUTINE LOAD [ FOR [<db_name>.]<job_name> | FROM <db_name> ]
 [ WHERE [ STATE = { "NEED_SCHEDULE" | "RUNNING" | "PAUSED" | "UNSTABLE" | "STOPPED" | "CANCELLED"  } ] ]
 [ ORDER BY <field_name> [ ASC | DESC ] ]
 [ LIMIT { [offset, ] limit | limit OFFSET offset } ]
@@ -31,8 +31,8 @@ SHOW [ALL] ROUTINE LOAD FOR [<db_name>.]<job_name>
 
 | **参数**                          | **必选** | **说明**                                                     |
 | --------------------------------- | -------- | ------------------------------------------------------------ |
-| db_name                           | 否       | 导入作业所属数据库名称。                                     |
-| job_name                          | ✅        | 导入作业名称。                                               |
+| db_name                           | 否       | 导入作业所属数据库名称。注意在使用 FROM 子句时，该参数为必填参数。                                     |
+| job_name                          | 否        | 导入作业名称。注意在使用 FOR 子句时，该参数为必填参数。                                              |
 | ALL                               | 否       | 显示所有导入作业，包括处于 `STOPPED` 和 `CANCELLED` 状态的导入作业。 |
 | STATE                             | 否       | 导入作业状态。                                               |
 | ORDER BY field_name [ASC \| DESC] | 否       | 将返回结果按照指定字段升序或降序排列，当前支持的排序字段（`field_name`）包括 `Id`、`Name`、`CreateTime`、`PauseTime`、`EndTime`、`TableName`、`State` 和 `CurrentTaskNum`。如要升序排列，指定 `ORDER BY field_name ASC`。如要降序排列，指定 `ORDER BY field_name DESC`。如既不指定排序字段也不指定排列顺序，则默认按照 `Id` 升序排列。 |
@@ -57,13 +57,13 @@ SHOW [ALL] ROUTINE LOAD FOR [<db_name>.]<job_name>
 | DataSourceProperties | 数据源属性。比如 Topic、Kafka 集群中 Broker 的地址和端口列表。 |
 | CustomProperties     | 导入作业中自定义的更多数据源相关属性。                       |
 | Statistic            | 导入数据的指标，比如成功导入数据行、总数据行、已接受的数据量。 |
-| Progress             | Topic 中各个分区消息的消费进度（以位点进行衡量）。           |
-| TimestampProgress    | Topic 中各个分区消息的消费进度（以时间戳进行衡量）。         |
+| Progress             | 导入作业消费 Topic 中各个分区消息的进度（以位点进行衡量）。           |
+| TimestampProgress    | 导入作业消费 Topic 中各个分区消息的进度（以时间戳进行衡量）。         |
 | ReasonOfStateChanged | 导致导入作业处于 `CANCELLED` 或者 `PAUSED` 状态的原因。      |
 | ErrorLogUrls         | 错误日志 URL。您可以使用 `curl` 或 `wget` 命令打开该地址。   |
 | TrackingSQL          | 直接通过 SQL 查询 Information Schema 中记录的错误日志信息。  |
 | OtherMsg             | 所有失败的导入任务的信息。                                   |
-| LatestSourcePosition | Topic 中各个分区中消息的最新消费位点。                       |
+| LatestSourcePosition | 数据源 Kafka 中 Topic 中各个分区的最新消息位点，便于检查导入延迟情况。  | 
 
 ## 示例
 

@@ -45,7 +45,6 @@ bool RowStoreEncoder::is_field_supported(const Field& f) {
     case TYPE_DECIMAL128:
     case TYPE_TIME:
     case TYPE_DECIMALV2:
-    case TYPE_PERCENTILE:
     case TYPE_FLOAT:
     case TYPE_DOUBLE:
         return true;

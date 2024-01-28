@@ -1,46 +1,319 @@
 ---
 displayed_sidebar: "English"
+toc_max_heading_level: 4
 ---
 
 # Load data from GCS
 
+import LoadMethodIntro from '../assets/commonMarkdown/loadMethodIntro.md'
+
 import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
 
-StarRocks provides two options for loading data from GCS:
+StarRocks provides the following options for loading data from GCS:
 
-1. Asynchronous loading using Broker Load
-2. Synchronous loading using the `FILES()` table function
+<LoadMethodIntro />
 
-Small datasets are often loaded synchronously using the `FILES()` table function, and large datasets are often loaded asynchronously using Broker Load. The two methods have different advantages and are described below.
+## Before you begin
+
+### Make source data ready
+
+Make sure the source data you want to load into StarRocks is properly stored in a GCS bucket. You may also consider where the data and the database are located, because data transfer costs are much lower when your bucket and your StarRocks cluster are located in the same region.
+
+In this topic, we provide you with a sample dataset in a GCS bucket, `gs://starrocks-samples/user_behavior_ten_million_rows.parquet`. You can access that dataset with any valid credentials as the object is readable by any GCP user.
+
+### Check privileges
 
 <InsertPrivNote />
 
-## Gather connection details
+### Gather authentication details
+
+The examples in this topic use service account-based authentication. To practice IAM user-based authentication, you need to gather information about the following GCS resources:
+
+- The GCS bucket that stores your data.
+- The GCS object key (object name) if accessing a specific object in the bucket. Note that the object key can include a prefix if your GCS objects are stored in sub-folders.
+- The GCS region to which the GCS bucket belongs.
+- The `private_ key_id`, `private_key`, and `client_email` of your Google Cloud service account
+
+For information about all the authentication methods available, see [Authenticate to Google Cloud Storage](../integrations/authenticate_to_gcs.md).
+
+## Use INSERT+FILES()
+
+This method is available from v3.2 onwards and currently supports only the Parquet and ORC file formats.
+
+### Advantages of INSERT+FILES()
+
+`FILES()` can read the file stored in cloud storage based on the path-related properties you specify, infer the table schema of the data in the file, and then return the data from the file as data rows.
+
+With `FILES()`, you can:
+
+- Query the data directly from GCS using [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md).
+- Create and load a table using [CREATE TABLE AS SELECT](../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md) (CTAS).
+- Load the data into an existing table using [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md).
+
+### Typical examples
+
+#### Querying directly from GCS using SELECT
+
+Querying directly from GCS using SELECT+`FILES()` can give a good preview of the content of a dataset before you create a table. For example:
+
+- Get a preview of the dataset without storing the data.
+- Query for the min and max values and decide what data types to use.
+- Check for `NULL` values.
+
+The following example queries the sample dataset `gs://starrocks-samples/user_behavior_ten_million_rows.parquet`:
+
+```SQL
+SELECT * FROM FILES
+(
+    "path" = "gs://starrocks-samples/user_behavior_ten_million_rows.parquet",
+    "format" = "parquet",
+    "gcp.gcs.service_account_email" = "sampledatareader@xxxxx-xxxxxx-000000.iam.gserviceaccount.com",
+    "gcp.gcs.service_account_private_key_id" = "baaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "gcp.gcs.service_account_private_key" = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+)
+LIMIT 3;
+```
 
 > **NOTE**
 >
-> The examples use service account key authentication. Other authentication methods are available and linked at the bottom of this page.
+> Substitute the credentials in the above command with your own credentials. Any valid service account email, key, and secret can be used, as the object is readable by any GCP authenticated user.
+
+The system returns a query result similar to the following:
+
+```Plain
++--------+---------+------------+--------------+---------------------+
+| UserID | ItemID  | CategoryID | BehaviorType | Timestamp           |
++--------+---------+------------+--------------+---------------------+
+| 543711 |  829192 |    2355072 | pv           | 2017-11-27 08:22:37 |
+| 543711 | 2056618 |    3645362 | pv           | 2017-11-27 10:16:46 |
+| 543711 | 1165492 |    3645362 | pv           | 2017-11-27 10:17:00 |
++--------+---------+------------+--------------+---------------------+
+```
+
+> **NOTE**
 >
-> This guide uses a dataset hosted by StarRocks. The dataset is readable by any authenticated GCP user, so
-you can use your credentials to read the Parquet file used below.
+> Notice that the column names as returned above are provided by the Parquet file.
 
-Loading data from GCS requires having the:
+#### Creating and loading a table using CTAS
 
-- GCS bucket
-- GCS object keys (object names) if accessing a specific object in the bucket. Note that the object key can include a prefix if your GCS objects are stored in sub-folders. The full syntax is linked in **more information**.
-- GCS region
-- The `private_key_id`, `private_key` and `client_email` of your Google Cloud service account 
+This is a continuation of the previous example. The previous query is wrapped in CREATE TABLE AS SELECT (CTAS) to automate the table creation using schema inference. This means StarRocks will infer the table schema, create the table you want, and then load the data into the table. The column names and types are not required to create a table when using the `FILES()` table function with Parquet files as the Parquet format includes the column names.
 
-## Using Broker Load
+> **NOTE**
+>
+> The syntax of CREATE TABLE when using schema inference does not allow setting the number of replicas. If you are using a StarRocks shared-nothing cluster, set the number of replicas before creating the table. The example below is for a system with three replicas:
+>
+> ```SQL
+> ADMIN SET FRONTEND CONFIG ('default_replication_num' = "3");
+> ```
+
+Create a database and switch to it:
+
+```SQL
+CREATE DATABASE IF NOT EXISTS mydatabase;
+USE mydatabase;
+```
+
+Use CTAS to create a table and load the data of the sample dataset `gs://starrocks-samples/user_behavior_ten_million_rows.parquet` into the table:
+
+```SQL
+CREATE TABLE user_behavior_inferred AS
+SELECT * FROM FILES
+(
+    "path" = "gs://starrocks-samples/user_behavior_ten_million_rows.parquet",
+    "format" = "parquet",
+    "gcp.gcs.service_account_email" = "sampledatareader@xxxxx-xxxxxx-000000.iam.gserviceaccount.com",
+    "gcp.gcs.service_account_private_key_id" = "baaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "gcp.gcs.service_account_private_key" = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+);
+```
+
+> **NOTE**
+>
+> Substitute the credentials in the above command with your own credentials. Any valid service account email, key, and secret can be used, as the object is readable by any GCP authenticated user.
+
+After creating the table, you can view its schema by using [DESCRIBE](../sql-reference/sql-statements/Utility/DESCRIBE.md):
+
+```SQL
+DESCRIBE user_behavior_inferred;
+```
+
+The system returns a query result similar to the following:
+
+```Plain
++--------------+-----------+------+-------+---------+-------+
+| Field        | Type      | Null | Key   | Default | Extra |
++--------------+-----------+------+-------+---------+-------+
+| UserID       | bigint    | YES  | true  | NULL    |       |
+| ItemID       | bigint    | YES  | true  | NULL    |       |
+| CategoryID   | bigint    | YES  | true  | NULL    |       |
+| BehaviorType | varbinary | YES  | false | NULL    |       |
+| Timestamp    | varbinary | YES  | false | NULL    |       |
++--------------+-----------+------+-------+---------+-------+
+```
+
+Compare the inferred schema with the schema created by hand:
+
+- data types
+- nullable
+- key fields
+
+To better control the schema of the destination table and for better query performance, we recommend that you specify the table schema by hand in production environments.
+
+Query the table to verify that the data has been loaded into it. Example:
+
+```SQL
+SELECT * from user_behavior_inferred LIMIT 3;
+```
+
+The following query result is returned, indicating that the data has been successfully loaded:
+
+```Plain
++--------+--------+------------+--------------+---------------------+
+| UserID | ItemID | CategoryID | BehaviorType | Timestamp           |
++--------+--------+------------+--------------+---------------------+
+|     84 | 162325 |    2939262 | pv           | 2017-12-02 05:41:41 |
+|     84 | 232622 |    4148053 | pv           | 2017-11-27 04:36:10 |
+|     84 | 595303 |     903809 | pv           | 2017-11-26 08:03:59 |
++--------+--------+------------+--------------+---------------------+
+```
+
+#### Loading into an existing table using INSERT
+
+You may want to customize the table that you are inserting into, for example, the:
+
+- column data type, nullable setting, or default values
+- key types and columns
+- data partitioning and bucketing
+
+> **NOTE**
+>
+> Creating the most efficient table structure requires knowledge of how the data will be used and the content of the columns. This topic does not cover table design. For information about table design, see [Table types](../table_design/StarRocks_table_design.md).
+
+In this example, we are creating a table based on knowledge of how the table will be queried and the data in the Parquet file. The knowledge of the data in the Parquet file can be gained by querying the file directly in GCS.
+
+- Since a query of the dataset in GCS indicates that the `Timestamp` column contains data that matches a VARBINARY data type, the column type is specified in the following DDL.
+- By querying the data in GCS, you can find that there are no `NULL` values in the dataset, so the DDL does not set any columns as nullable.
+- Based on knowledge of the expected query types, the sort key and bucketing column are set to the column `UserID`. Your use case might be different for this data, so you might decide to use `ItemID` in addition to or instead of `UserID` for the sort key.
+
+Create a database and switch to it:
+
+```SQL
+CREATE DATABASE IF NOT EXISTS mydatabase;
+USE mydatabase;
+```
+
+Create a table by hand (we recommend that the table have the same schema as the Parquet file you want to load from GCS):
+
+```SQL
+CREATE TABLE user_behavior_declared
+(
+    UserID int(11),
+    ItemID int(11),
+    CategoryID int(11),
+    BehaviorType varchar(65533),
+    Timestamp varbinary
+)
+ENGINE = OLAP 
+DUPLICATE KEY(UserID)
+DISTRIBUTED BY HASH(UserID);
+```
+
+After creating the table, you can load it with INSERT INTO SELECT FROM FILES():
+
+```SQL
+INSERT INTO user_behavior_declared
+  SELECT * FROM FILES
+  (
+    "path" = "gs://starrocks-samples/user_behavior_ten_million_rows.parquet",
+    "format" = "parquet",
+    "gcp.gcs.service_account_email" = "sampledatareader@xxxxx-xxxxxx-000000.iam.gserviceaccount.com",
+    "gcp.gcs.service_account_private_key_id" = "baaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "gcp.gcs.service_account_private_key" = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+);
+```
+
+> **NOTE**
+>
+> Substitute the credentials in the above command with your own credentials. Any valid service account email, key, and secret can be used, as the object is readable by any GCP authenticated user.
+
+After the load is complete, you can query the table to verify that the data has been loaded into it. Example:
+
+```SQL
+SELECT * from user_behavior_declared LIMIT 3;
+```
+
+The system returns a query result similar to the following, indicating that the data has been successfully loaded:
+
+```Plain
++--------+---------+------------+--------------+---------------------+
+| UserID | ItemID  | CategoryID | BehaviorType | Timestamp           |
++--------+---------+------------+--------------+---------------------+
+|    142 | 2869980 |    2939262 | pv           | 2017-11-25 03:43:22 |
+|    142 | 2522236 |    1669167 | pv           | 2017-11-25 15:14:12 |
+|    142 | 3031639 |    3607361 | pv           | 2017-11-25 15:19:25 |
++--------+---------+------------+--------------+---------------------+
+```
+
+#### Check load progress
+
+You can query the progress of INSERT jobs from the [`loads`](../reference/information_schema/loads.md) view in the StarRocks Information Schema. This feature is supported from v3.1 onwards. Example:
+
+```SQL
+SELECT * FROM information_schema.loads ORDER BY JOB_ID DESC;
+```
+
+If you have submitted multiple load jobs, you can filter on the `LABEL` associated with the job. Example:
+
+```SQL
+SELECT * FROM information_schema.loads WHERE LABEL = 'insert_f3fc2298-a553-11ee-92f4-00163e0842bd' \G
+*************************** 1. row ***************************
+              JOB_ID: 10193
+               LABEL: insert_f3fc2298-a553-11ee-92f4-00163e0842bd
+       DATABASE_NAME: mydatabase
+               STATE: FINISHED
+            PROGRESS: ETL:100%; LOAD:100%
+                TYPE: INSERT
+            PRIORITY: NORMAL
+           SCAN_ROWS: 10000000
+       FILTERED_ROWS: 0
+     UNSELECTED_ROWS: 0
+           SINK_ROWS: 10000000
+            ETL_INFO:
+           TASK_INFO: resource:N/A; timeout(s):300; max_filter_ratio:0.0
+         CREATE_TIME: 2023-12-28 15:37:38
+      ETL_START_TIME: 2023-12-28 15:37:38
+     ETL_FINISH_TIME: 2023-12-28 15:37:38
+     LOAD_START_TIME: 2023-12-28 15:37:38
+    LOAD_FINISH_TIME: 2023-12-28 15:39:35
+         JOB_DETAILS: {"All backends":{"f3fc2298-a553-11ee-92f4-00163e0842bd":[10120]},"FileNumber":0,"FileSize":0,"InternalTableLoadBytes":581730322,"InternalTableLoadRows":10000000,"ScanBytes":581574034,"ScanRows":10000000,"TaskNumber":1,"Unfinished backends":{"f3fc2298-a553-11ee-92f4-00163e0842bd":[]}}
+           ERROR_MSG: NULL
+        TRACKING_URL: NULL
+        TRACKING_SQL: NULL
+REJECTED_RECORD_PATH: NULL
+```
+
+For information about the fields provided in the `loads` view, see [`loads`](../reference/information_schema/loads.md).
+
+> **NOTE**
+>
+> INSERT is a synchronous command. If an INSERT job is still running, you need to open another session to check its execution status.
+
+## Use Broker Load
 
 An asynchronous Broker Load process handles making the connection to GCS, pulling the data, and storing the data in StarRocks.
 
+This method supports the following file formats:
+
+- Parquet
+- ORC
+- CSV
+- JSON (supported from v3.2.3 onwards)
+
 ### Advantages of Broker Load
 
-- Broker Load supports data transformation, UPSERT, and DELETE operations during loading.
 - Broker Load runs in the background and clients don't need to stay connected for the job to continue.
 - Broker Load is preferred for long running jobs, the default timeout is 4 hours.
-- In addition to Parquet and ORC file format, Broker Load supports CSV files.
+- In addition to Parquet and ORC file format, Broker Load supports CSV file format and JSON file format (JSON file format is supported from v3.2.3 onwards).
 
 ### Data flow
 
@@ -52,58 +325,36 @@ An asynchronous Broker Load process handles making the connection to GCS, pullin
 
 ### Typical example
 
-Create a table, start a load process that pulls a Parquet file from GCS, and verify the progress and success of the data loading.
+Create a table, start a load process that pulls the sample dataset `gs://starrocks-samples/user_behavior_ten_million_rows.parquet` from GCS, and verify the progress and success of the data loading.
 
-> **NOTE**
->
-> The examples use a sample dataset in Parquet format, if you want to load a CSV or ORC file, that information is linked at the bottom of this page.
+#### Create a database and a table
 
-#### Create a table
-
-Create a database for your table:
+Create a database and switch to it:
 
 ```SQL
-CREATE DATABASE IF NOT EXISTS project;
-USE project;
+CREATE DATABASE IF NOT EXISTS mydatabase;
+USE mydatabase;
 ```
 
-Create a table. This schema matches a sample dataset in a GCS bucket hosted in a StarRocks account.
+Create a table by hand (we recommend that the table has the same schema as the Parquet file that you want to load from GCS):
 
 ```SQL
-DROP TABLE IF EXISTS user_behavior;
-
-CREATE TABLE `user_behavior` (
-    `UserID` int(11),
-    `ItemID` int(11),
-    `CategoryID` int(11),
-    `BehaviorType` varchar(65533),
-    `Timestamp` datetime
-) ENGINE=OLAP 
-DUPLICATE KEY(`UserID`)
-DISTRIBUTED BY HASH(`UserID`)
-PROPERTIES (
-    "replication_num" = "1"
-);
+CREATE TABLE user_behavior
+(
+    UserID int(11),
+    ItemID int(11),
+    CategoryID int(11),
+    BehaviorType varchar(65533),
+    Timestamp varbinary
+)
+ENGINE = OLAP 
+DUPLICATE KEY(UserID)
+DISTRIBUTED BY HASH(UserID);
 ```
-
-> **NOTE**
->
-> The examples in this document have the property `replication_num` set to `1` so that they can be run on a simple single BE system. If you are using three or more BEs, then remove the `PROPERTIES` section of the DDL.
 
 #### Start a Broker Load
 
-This job has four main sections:
-
-- `LABEL`: A string used when querying the state of a `LOAD` job.
-- `LOAD` declaration: The source URI, destination table, and the source data format.
-- `BROKER`: The connection details for the source.
-- `PROPERTIES`: Timeout value and any other properties to apply to this job.
-
-:::note
-
-The dataset used in these examples is hosted in a GCS bucket in a StarRocks account. Any valid service account email, key, and secret can be used, as the object is readable by any GCP authenticated user. Substitute your credentials for the highlighted placeholders in the commands below.
-
-:::
+Run the following command to start a Broker Load job that loads data from the sample dataset `gs://starrocks-samples/user_behavior_ten_million_rows.parquet` to the `user_behavior` table:
 
 ```SQL
 LOAD LABEL user_behavior
@@ -114,11 +365,10 @@ LOAD LABEL user_behavior
  )
  WITH BROKER
  (
--- highlight-start
+ 
     "gcp.gcs.service_account_email" = "sampledatareader@xxxxx-xxxxxx-000000.iam.gserviceaccount.com",
     "gcp.gcs.service_account_private_key_id" = "baaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "gcp.gcs.service_account_private_key" = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
--- highlight-end
  )
 PROPERTIES
 (
@@ -126,217 +376,61 @@ PROPERTIES
 );
 ```
 
-#### Check progress
+> **NOTE**
+>
+> Substitute the credentials in the above command with your own credentials. Any valid service account email, key, and secret can be used, as the object is readable by any GCP authenticated user.
 
-Query the `information_schema.loads` table to track progress. If you have multiple `LOAD` jobs running you can filter on the `LABEL` associated with the job. In the output below there are two entries for the load job `user_behavior`. The first record shows a state of `CANCELLED`; scroll to the end of the output, and you see that `listPath failed`. The second record shows success with a valid AWS IAM access key and secret.
+This job has four main sections:
+
+- `LABEL`: A string used when querying the state of the load job.
+- `LOAD` declaration: The source URI, source data format, and destination table name.
+- `BROKER`: The connection details for the source.
+- `PROPERTIES`: The timeout value and any other properties to apply to the load job.
+
+For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md).
+
+#### Check load progress
+
+You can query the progress of INSERT jobs from the [`loads`](../reference/information_schema/loads.md) view in the StarRocks Information Schema. This feature is supported from v3.1 onwards.
 
 ```SQL
 SELECT * FROM information_schema.loads;
 ```
 
+For information about the fields provided in the `loads` view, see [`loads`](../reference/information_schema/loads.md).
+
+If you have submitted multiple load jobs, you can filter on the `LABEL` associated with the job. Example:
+
 ```SQL
 SELECT * FROM information_schema.loads WHERE LABEL = 'user_behavior';
 ```
 
-```plaintext
+In the output below there are two entries for the load job `user_behavior`:
+
+- The first record shows a state of `CANCELLED`. Scroll to `ERROR_MSG`, and you can see that the job has failed due to `listPath failed`.
+- The second record shows a state of `FINISHED`, which means that the job has succeeded.
+
+```Plain
 JOB_ID|LABEL                                      |DATABASE_NAME|STATE    |PROGRESS           |TYPE  |PRIORITY|SCAN_ROWS|FILTERED_ROWS|UNSELECTED_ROWS|SINK_ROWS|ETL_INFO|TASK_INFO                                           |CREATE_TIME        |ETL_START_TIME     |ETL_FINISH_TIME    |LOAD_START_TIME    |LOAD_FINISH_TIME   |JOB_DETAILS                                                                                                                                                                                                                                                    |ERROR_MSG                             |TRACKING_URL|TRACKING_SQL|REJECTED_RECORD_PATH|
 ------+-------------------------------------------+-------------+---------+-------------------+------+--------+---------+-------------+---------------+---------+--------+----------------------------------------------------+-------------------+-------------------+-------------------+-------------------+-------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+--------------------------------------+------------+------------+--------------------+
- 10121|user_behavior                              |project      |CANCELLED|ETL:N/A; LOAD:N/A  |BROKER|NORMAL  |        0|            0|              0|        0|        |resource:N/A; timeout(s):72000; max_filter_ratio:0.0|2023-08-10 14:59:30|                   |                   |                   |2023-08-10 14:59:34|{"All backends":{},"FileNumber":0,"FileSize":0,"InternalTableLoadBytes":0,"InternalTableLoadRows":0,"ScanBytes":0,"ScanRows":0,"TaskNumber":0,"Unfinished backends":{}}                                                                                        |type:ETL_RUN_FAIL; msg:listPath failed|            |            |                    |
- 10106|user_behavior                              |project      |FINISHED |ETL:100%; LOAD:100%|BROKER|NORMAL  | 86953525|            0|              0| 86953525|        |resource:N/A; timeout(s):72000; max_filter_ratio:0.0|2023-08-10 14:50:15|2023-08-10 14:50:19|2023-08-10 14:50:19|2023-08-10 14:50:19|2023-08-10 14:55:10|{"All backends":{"a5fe5e1d-d7d0-4826-ba99-c7348f9a5f2f":[10004]},"FileNumber":1,"FileSize":1225637388,"InternalTableLoadBytes":2710603082,"InternalTableLoadRows":86953525,"ScanBytes":1225637388,"ScanRows":86953525,"TaskNumber":1,"Unfinished backends":{"a5|                                      |            |            |                    |
+ 10121|user_behavior                              |mydatabase   |CANCELLED|ETL:N/A; LOAD:N/A  |BROKER|NORMAL  |        0|            0|              0|        0|        |resource:N/A; timeout(s):72000; max_filter_ratio:0.0|2023-08-10 14:59:30|                   |                   |                   |2023-08-10 14:59:34|{"All backends":{},"FileNumber":0,"FileSize":0,"InternalTableLoadBytes":0,"InternalTableLoadRows":0,"ScanBytes":0,"ScanRows":0,"TaskNumber":0,"Unfinished backends":{}}                                                                                        |type:ETL_RUN_FAIL; msg:listPath failed|            |            |                    |
+ 10106|user_behavior                              |mydatabase   |FINISHED |ETL:100%; LOAD:100%|BROKER|NORMAL  | 86953525|            0|              0| 86953525|        |resource:N/A; timeout(s):72000; max_filter_ratio:0.0|2023-08-10 14:50:15|2023-08-10 14:50:19|2023-08-10 14:50:19|2023-08-10 14:50:19|2023-08-10 14:55:10|{"All backends":{"a5fe5e1d-d7d0-4826-ba99-c7348f9a5f2f":[10004]},"FileNumber":1,"FileSize":1225637388,"InternalTableLoadBytes":2710603082,"InternalTableLoadRows":86953525,"ScanBytes":1225637388,"ScanRows":86953525,"TaskNumber":1,"Unfinished backends":{"a5|                                      |            |            |                    |
 ```
 
-You can also check a subset of the data at this point.
+After you confirm that the load job has finished, you can check a subset of the destination table to see if the data has been successfully loaded. Example:
 
 ```SQL
-SELECT * from user_behavior LIMIT 10;
+SELECT * from user_behavior LIMIT 3;
 ```
 
-```plaintext
-UserID|ItemID|CategoryID|BehaviorType|Timestamp          |
-------+------+----------+------------+-------------------+
-171146| 68873|   3002561|pv          |2017-11-30 07:11:14|
-171146|146539|   4672807|pv          |2017-11-27 09:51:41|
-171146|146539|   4672807|pv          |2017-11-27 14:08:33|
-171146|214198|   1320293|pv          |2017-11-25 22:38:27|
-171146|260659|   4756105|pv          |2017-11-30 05:11:25|
-171146|267617|   4565874|pv          |2017-11-27 14:01:25|
-171146|329115|   2858794|pv          |2017-12-01 02:10:51|
-171146|458604|   1349561|pv          |2017-11-25 22:49:39|
-171146|458604|   1349561|pv          |2017-11-27 14:03:44|
-171146|478802|    541347|pv          |2017-12-02 04:52:39|
+The system returns a query result similar to the following, indicating that the data has been successfully loaded:
+
+```Plain
++--------+---------+------------+--------------+---------------------+
+| UserID | ItemID  | CategoryID | BehaviorType | Timestamp           |
++--------+---------+------------+--------------+---------------------+
+|    142 | 2869980 |    2939262 | pv           | 2017-11-25 03:43:22 |
+|    142 | 2522236 |    1669167 | pv           | 2017-11-25 15:14:12 |
+|    142 | 3031639 |    3607361 | pv           | 2017-11-25 15:19:25 |
++--------+---------+------------+--------------+---------------------+
 ```
-
-## Using the `FILES()` table function
-
-### `FILES()` advantages
-
-`FILES()` can infer the data types of the columns of the Parquet data and generate the schema for a StarRocks table. This provides the ability to query the file directly from S3 with a `SELECT` or to have StarRocks automatically create a table for you based on the Parquet file schema.
-
-> **NOTE**
->
-> Schema inference is a new feature in version 3.1 and is provided for Parquet format only and nested types are not yet supported.
-
-### Typical examples
-
-There are three examples using the `FILES()` table function:
-
-- Querying the data directly from S3
-- Creating and loading the table using schema inference
-- Creating a table by hand and then loading the data
-
-#### Querying directly from S3
-
-Querying directly from S3 using `FILES()` can gives a good preview of the content of a dataset before you create a table. For example:
-
-- Get a preview of the dataset without storing the data.
-- Query for the min and max values and decide what data types to use.
-- Check for nulls.
-
-```sql
-SELECT * FROM FILES(
-    "path" = "gs://starrocks-samples/user_behavior_ten_million_rows.parquet",
-    "format" = "parquet",
-    "gcp.gcs.service_account_email" = "sampledatareader@xxxxx-xxxxxx-000000.iam.gserviceaccount.com",
-    "gcp.gcs.service_account_private_key_id" = "baaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "gcp.gcs.service_account_private_key" = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
-) LIMIT 10;
-```
-
-> **NOTE**
->
-> Notice that the column names are provided by the Parquet file.
-
-```plaintext
-UserID|ItemID |CategoryID|BehaviorType|Timestamp          |
-------+-------+----------+------------+-------------------+
-     1|2576651|    149192|pv          |2017-11-25 01:21:25|
-     1|3830808|   4181361|pv          |2017-11-25 07:04:53|
-     1|4365585|   2520377|pv          |2017-11-25 07:49:06|
-     1|4606018|   2735466|pv          |2017-11-25 13:28:01|
-     1| 230380|    411153|pv          |2017-11-25 21:22:22|
-     1|3827899|   2920476|pv          |2017-11-26 16:24:33|
-     1|3745169|   2891509|pv          |2017-11-26 19:44:31|
-     1|1531036|   2920476|pv          |2017-11-26 22:02:12|
-     1|2266567|   4145813|pv          |2017-11-27 00:11:11|
-     1|2951368|   1080785|pv          |2017-11-27 02:47:08|
-```
-
-#### Creating a table with schema inference
-
-This is a continuation of the previous example; the previous query is wrapped in `CREATE TABLE` to automate the table creation using schema inference. The column names and types are not required to create a table when using the `FILES()` table function with Parquet files as the Parquet format includes the column names and types and StarRocks will infer the schema.
-
-> **NOTE**
->
-> The syntax of `CREATE TABLE` when using schema inference does not allow setting the number of replicas, so set it before creating the table. The example below is for a system with a single replica:
->
-> `ADMIN SET FRONTEND CONFIG ('default_replication_num' ="1");`
-
-```sql
-CREATE DATABASE IF NOT EXISTS project;
-USE project;
-
-CREATE TABLE `user_behavior_inferred` AS
-SELECT * FROM FILES(
-    "path" = "gs://starrocks-samples/user_behavior_ten_million_rows.parquet",
-    "format" = "parquet",
-    "gcp.gcs.service_account_email" = "sampledatareader@xxxxx-xxxxxx-000000.iam.gserviceaccount.com",
-    "gcp.gcs.service_account_private_key_id" = "baaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "gcp.gcs.service_account_private_key" = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
-);
-```
-
-```SQL
-DESCRIBE user_behavior_inferred;
-```
-
-```plaintext
-Field       |Type            |Null|Key  |Default|Extra|
-------------+----------------+----+-----+-------+-----+
-UserID      |bigint          |YES |true |       |     |
-ItemID      |bigint          |YES |true |       |     |
-CategoryID  |bigint          |YES |true |       |     |
-BehaviorType|varchar(1048576)|YES |false|       |     |
-Timestamp   |varchar(1048576)|YES |false|       |     |
-```
-
-> **NOTE**
->
-> Compare the inferred schema with the schema created by hand:
->
-> - data types
-> - nullable
-> - key fields
-
-```SQL
-SELECT * from user_behavior_inferred LIMIT 10;
-```
-
-```plaintext
-UserID|ItemID|CategoryID|BehaviorType|Timestamp          |
-------+------+----------+------------+-------------------+
-171146| 68873|   3002561|pv          |2017-11-30 07:11:14|
-171146|146539|   4672807|pv          |2017-11-27 09:51:41|
-171146|146539|   4672807|pv          |2017-11-27 14:08:33|
-171146|214198|   1320293|pv          |2017-11-25 22:38:27|
-171146|260659|   4756105|pv          |2017-11-30 05:11:25|
-171146|267617|   4565874|pv          |2017-11-27 14:01:25|
-171146|329115|   2858794|pv          |2017-12-01 02:10:51|
-171146|458604|   1349561|pv          |2017-11-25 22:49:39|
-171146|458604|   1349561|pv          |2017-11-27 14:03:44|
-171146|478802|    541347|pv          |2017-12-02 04:52:39|
-```
-
-#### Loading into an existing table
-
-You may want to customize the table that you are inserting into, for example the:
-
-- column data type, nullable setting, or default values
-- key types and columns
-- distribution
-- etc.
-
-> **NOTE**
->
-> Creating the most efficient table structure requires knowledge of how the data will be used and the content of the columns. This document does not cover table design, there is a link in **more information** at the end of the page.
-
-In this example we are creating a table based on knowledge of how the table will be queried and the data in the Parquet file. The knowledge of the data in the Parquet file can be gained by querying the file directly in S3.
-
-- Since a query of the file in S3 indicates that the `Timestamp` column contains data that matches a `datetime` data type the column type is specified in the following DDL.
-- By querying the data in S3 you can find that there are no null values in the dataset, so the DDL does not set any columns as nullable.
-- Based on knowledge of the expected query types, the sort key and bucketing column are set to the column `UserID` (your use case might be different for this data, you might decide to use `ItemID` in addition to or instead of `UserID` for the sort key:
-
-```SQL
-CREATE TABLE `user_behavior_declared` (
-    `UserID` int(11),
-    `ItemID` int(11),
-    `CategoryID` int(11),
-    `BehaviorType` varchar(65533),
-    `Timestamp` datetime
-) ENGINE=OLAP 
-DUPLICATE KEY(`UserID`)
-DISTRIBUTED BY HASH(`UserID`)
-PROPERTIES (
-    "replication_num" = "1"
-);
-```
-
-After creating the table, you can load it with `INSERT INTO` … `SELECT FROM FILES()`:
-
-```SQL
-INSERT INTO user_behavior_declared
-  SELECT * FROM FILES(
-    "path" = "gs://starrocks-samples/user_behavior_ten_million_rows.parquet",
-    "format" = "parquet",
-    "gcp.gcs.service_account_email" = "sampledatareader@xxxxx-xxxxxx-000000.iam.gserviceaccount.com",
-    "gcp.gcs.service_account_private_key_id" = "baaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "gcp.gcs.service_account_private_key" = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
-);
-```
-
-## More information
-
-- This document only covered service account key authentication. For other options please see [authenticate to GCS resources](../integrations/authenticate_to_gcs.md).
-- For more details on synchronous and asynchronous data loading please see the [overview of data loading](../loading/Loading_intro.md) documentation.
-- Learn about how Broker Load supports data transformation during loading at [Transform data at loading](../loading/Etl_in_loading.md) and [Change data through loading](../loading/Load_to_Primary_Key_tables.md).
-- Learn more about [table design](../table_design/StarRocks_table_design.md).
-- Broker Load provides many more configuration and use options than those in the above examples, the details are in [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)

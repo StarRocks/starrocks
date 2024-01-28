@@ -254,6 +254,14 @@ public class MSchema {
             " ,(2,1,1),(2,1,2),(2,1,3),(2,2,1),(2,2,2),(2,2,3),(2,3,1),(2,3,2),(2,3,3)" +
             " ,(3,1,1),(3,1,2),(3,1,3),(3,2,1),(3,2,2),(3,2,3),(3,3,1),(3,3,2),(3,3,3)");
 
+    public static final MTable T2 = new MTable("t2", "v1",
+            List.of(
+                    "  `v1` bigint NULL",
+                    "  `v2` bigint NULL",
+                    "  `v3` bigint NULL"
+            )
+    ).withValues("(1, 2, 3)");
+
     public static final MTable T_METRICS = new MTable("t_metrics", "c1",
             List.of(
                     " c1 int",
@@ -327,7 +335,8 @@ public class MSchema {
             JSON_TBL,
             T_METRICS,
             TEST10,
-            TEST11
+            TEST11,
+            T2
     );
     public static final Map<String, MTable> TABLE_MAP = Maps.newHashMap();
 

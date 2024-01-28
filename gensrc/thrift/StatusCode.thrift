@@ -109,6 +109,8 @@ enum TStatusCode {
     
     JIT_COMPILE_ERROR = 57,
 
+    CAPACITY_LIMIT_EXCEED = 58,
+    
     // for gin
     INVERTED_INDEX_NOT_SUPPORTED = 61,
     INVERTED_INDEX_FILE_NOT_FOUND = 62,

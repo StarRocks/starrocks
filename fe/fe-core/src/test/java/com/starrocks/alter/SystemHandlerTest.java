@@ -111,7 +111,7 @@ public class SystemHandlerTest {
         Map<String, DiskInfo> diskInfoMap = Maps.newHashMap();
         diskInfoMap.put("/data", diskInfo);
 
-        for (Backend backend : GlobalStateMgr.getCurrentSystemInfo().getBackends()) {
+        for (Backend backend : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends()) {
             backend.setDisks(ImmutableMap.copyOf(diskInfoMap));
         }
 
@@ -128,7 +128,7 @@ public class SystemHandlerTest {
 
         Backend backend4 = new Backend(100, "host4", 123);
         backend4.setAlive(true);
-        GlobalStateMgr.getCurrentSystemInfo().addBackend(backend4);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend4);
 
         DiskInfo diskInfo = new DiskInfo("/data");
         diskInfo.setAvailableCapacityB(900);
@@ -137,7 +137,7 @@ public class SystemHandlerTest {
         Map<String, DiskInfo> diskInfoMap = Maps.newHashMap();
         diskInfoMap.put("/data", diskInfo);
 
-        for (Backend backend : GlobalStateMgr.getCurrentSystemInfo().getBackends()) {
+        for (Backend backend : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends()) {
             backend.setDisks(ImmutableMap.copyOf(diskInfoMap));
         }
 

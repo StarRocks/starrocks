@@ -384,4 +384,47 @@ public class OptimizeJobV2Test extends DDLTestBase {
         Assert.assertEquals(JobState.FINISHED, replayOptimizeJob.getJobState());
     }
 
+    @Test
+    public void testOptimizeFailedByVersion() throws Exception {
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        Database db = GlobalStateMgr.getCurrentState().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) db.getTable("testTable2");
+
+        String stmt = "alter table testTable2 distributed by hash(v1)";
+        AlterTableStmt alterStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+        schemaChangeHandler.process(alterStmt.getOps(), db, olapTable);
+        Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
+        Assert.assertEquals(1, alterJobsV2.size());
+        OptimizeJobV2 optimizeJob = (OptimizeJobV2) alterJobsV2.values().stream().findAny().get();
+
+        // runPendingJob
+        optimizeJob.runPendingJob();
+        Assert.assertEquals(JobState.WAITING_TXN, optimizeJob.getJobState());
+
+        // runWaitingTxnJob
+        optimizeJob.runWaitingTxnJob();
+        if (optimizeJob.getJobState() != JobState.RUNNING) {
+            return;
+        }
+
+        // runRunningJob
+        List<OptimizeTask> optimizeTasks = optimizeJob.getOptimizeTasks();
+        Assert.assertEquals(2, optimizeTasks.size());
+        optimizeTasks.get(0).setOptimizeTaskState(Constants.TaskRunState.SUCCESS);
+        optimizeTasks.get(1).setOptimizeTaskState(Constants.TaskRunState.SUCCESS);
+
+        for (Partition p : olapTable.getPartitions()) {
+            p.setVisibleVersion(p.getVisibleVersion() + 1, 0);
+        }
+
+        try {
+            optimizeJob.runRunningJob();
+        } catch (AlterCancelException e) {
+            optimizeJob.cancel(e.getMessage());
+        }
+
+        // finish alter tasks
+        Assert.assertEquals(JobState.CANCELLED, optimizeJob.getJobState());
+    }
+
 }

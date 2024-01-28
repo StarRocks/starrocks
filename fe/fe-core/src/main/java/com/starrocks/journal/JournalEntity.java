@@ -174,7 +174,7 @@ import java.io.IOException;
 public class JournalEntity implements Writable {
     public static final Logger LOG = LogManager.getLogger(Checkpoint.class);
 
-    private short opCode;
+    private short opCode = OperationType.OP_INVALID;
     private Writable data;
 
     public short getOpCode() {
@@ -207,11 +207,10 @@ public class JournalEntity implements Writable {
         opCode = in.readShort();
         // set it to true after the entity is truly read,
         // to avoid someone forget to call read method.
-        boolean isRead = false;
+        boolean isRead;
         LOG.debug("get opcode: {}", opCode);
         switch (opCode) {
             case OperationType.OP_SAVE_NEXTID:
-            case OperationType.OP_SAVE_TRANSACTION_ID:
             case OperationType.OP_ERASE_DB:
             case OperationType.OP_ERASE_TABLE:
             case OperationType.OP_ERASE_PARTITION:
@@ -478,7 +477,7 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_BATCH_DELETE_REPLICA_BATCH: {
+            case OperationType.OP_BATCH_DELETE_REPLICA: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), BatchDeleteReplicaInfo.class);
                 isRead = true;
                 break;
@@ -614,13 +613,6 @@ public class JournalEntity implements Writable {
             case OperationType.OP_UPDATE_CLUSTER_AND_BACKENDS: {
                 data = new BackendIdsUpdateInfo();
                 ((BackendIdsUpdateInfo) data).readFields(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_UPSERT_TRANSACTION_STATE:
-            case OperationType.OP_DELETE_TRANSACTION_STATE: {
-                data = new TransactionState();
-                ((TransactionState) data).readFields(in);
                 isRead = true;
                 break;
             }
@@ -859,7 +851,7 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_DYNAMIC_PARTITION:
             case OperationType.OP_MODIFY_IN_MEMORY:
-            case OperationType.OP_SET_FORBIT_GLOBAL_DICT:
+            case OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT:
             case OperationType.OP_MODIFY_REPLICATION_NUM:
             case OperationType.OP_MODIFY_WRITE_QUORUM:
             case OperationType.OP_MODIFY_REPLICATED_STORAGE:

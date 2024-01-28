@@ -28,6 +28,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -290,9 +291,9 @@ public class FrontendServiceImplTest {
         String dropSQL2 = "drop table if exists site_access_2";
         try {
             DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-            GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
             DropTableStmt dropTableStmt2 = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL2, ctx);
-            GlobalStateMgr.getCurrentState().dropTable(dropTableStmt2);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt2);
         } catch (Exception ex) {
 
         }
@@ -980,7 +981,7 @@ public class FrontendServiceImplTest {
         Table table = db.getTable("site_access_day");
         UUID uuid = UUID.randomUUID();
         TUniqueId requestId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
-        long transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
+        long transactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(db.getId(),
                 Lists.newArrayList(table.getId()), "1jdc689-xd232", requestId,
                 new TxnCoordinator(TxnSourceType.BE, "1.1.1.1"),
                 TransactionState.LoadJobSourceType.BACKEND_STREAMING, -1, 600);
@@ -1058,6 +1059,20 @@ public class FrontendServiceImplTest {
     }
 
     @Test
+    public void testLoadTxnCommitTimeout() throws UserException, TException {
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        TLoadTxnCommitRequest request = new TLoadTxnCommitRequest();
+        request.db = "test";
+        request.tbl = "tbl_test";
+        request.txnId = 1001L;
+        request.setAuth_code(100);
+        request.commitInfos = new ArrayList<>();
+        doThrow(new LockTimeoutException("get database write lock timeout")).when(impl).loadTxnCommitImpl(any(), any());
+        TLoadTxnCommitResult result = impl.loadTxnCommit(request);
+        Assert.assertEquals(TStatusCode.TIMEOUT, result.status.status_code);
+    }
+
+    @Test
     public void testLoadTxnCommitFailed() throws UserException, TException {
         FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
         TLoadTxnCommitRequest request = new TLoadTxnCommitRequest();
@@ -1069,6 +1084,19 @@ public class FrontendServiceImplTest {
         doThrow(new UserException("injected error")).when(impl).loadTxnCommitImpl(any(), any());
         TLoadTxnCommitResult result = impl.loadTxnCommit(request);
         Assert.assertEquals(TStatusCode.ANALYSIS_ERROR, result.status.status_code);
+    }
+
+    @Test
+    public void testStreamLoadPutTimeout() throws UserException, TException {
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        TStreamLoadPutRequest request = new TStreamLoadPutRequest();
+        request.db = "test";
+        request.tbl = "tbl_test";
+        request.txnId = 1001L;
+        request.setAuth_code(100);
+        doThrow(new LockTimeoutException("get database read lock timeout")).when(impl).streamLoadPutImpl(any());
+        TStreamLoadPutResult result = impl.streamLoadPut(request);
+        Assert.assertEquals(TStatusCode.TIMEOUT, result.status.status_code);
     }
 
     @Test

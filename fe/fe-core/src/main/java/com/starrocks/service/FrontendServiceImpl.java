@@ -89,6 +89,9 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileManager;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.http.BaseAction;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.lake.LakeTablet;
@@ -108,8 +111,6 @@ import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.load.streamload.StreamLoadTask;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
@@ -1072,7 +1073,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     // dbs and tables, when reach limit, we break;
     private void describeWithoutDbAndTable(UserIdentity currentUser, List<TColumnDef> columns, long limit) {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        List<String> dbNames = globalStateMgr.getDbNames();
+        List<String> dbNames = globalStateMgr.getLocalMetastore().listDbNames();
         boolean reachLimit;
         for (String fullName : dbNames) {
             try {
@@ -1241,7 +1242,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     public TMasterOpResult forward(TMasterOpRequest params) throws TException {
         TNetworkAddress clientAddr = getClientAddr();
         if (clientAddr != null) {
-            Frontend fe = GlobalStateMgr.getCurrentState().getFeByHost(clientAddr.getHostname());
+            Frontend fe = GlobalStateMgr.getCurrentState().getNodeMgr().getFeByHost(clientAddr.getHostname());
             if (fe == null) {
                 LOG.warn("reject request from invalid host. client: {}", clientAddr);
                 throw new TException("request from invalid host was rejected.");
@@ -1331,7 +1332,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         // check txn
         long limit = Config.stream_load_max_txn_num_per_be;
         if (limit >= 0) {
-            long txnNumBe = GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionNumByCoordinateBe(clientIp);
+            long txnNumBe = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionNumByCoordinateBe(clientIp);
             LOG.info("streamload check txn num, be: {}, txn_num: {}, limit: {}", clientIp, txnNumBe, limit);
             if (txnNumBe >= limit) {
                 throw new UserException("streamload txn num per be exceeds limit, be: "
@@ -1377,7 +1378,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return task.getTxnId();
         }
 
-        return GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
+        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
                 db.getId(), Lists.newArrayList(table.getId()), request.getLabel(), request.getRequest_id(),
                 new TxnCoordinator(TxnSourceType.BE, clientIp),
                 TransactionState.LoadJobSourceType.BACKEND_STREAMING, -1, timeoutSecond);
@@ -1403,6 +1404,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setStatus(status);
         try {
             loadTxnCommitImpl(request, status);
+        } catch (LockTimeoutException e) {
+            LOG.warn("failed to commit txn_id: {}: {}", request.getTxnId(), e.getMessage());
+            status.setStatus_code(TStatusCode.TIMEOUT);
+            status.addToError_msgs(e.getMessage());
         } catch (CommitRateExceededException e) {
             long allowCommitTime = e.getAllowCommitTime();
             LOG.warn("commit rate exceeded. txn_id: {}: allow commit time: {}", request.getTxnId(), allowCommitTime);
@@ -1445,7 +1450,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         // Otherwise, the publish process will be successful but commit timeout in BE
         // It will result in error like "call frontend service failed"
         timeoutMs = timeoutMs * 3 / 4;
-        boolean ret = GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
+        boolean ret = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().commitAndPublishTransaction(
                 db, request.getTxnId(),
                 TabletCommitInfo.fromThrift(request.getCommitInfos()),
                 TabletFailInfo.fromThrift(request.getFailInfos()),
@@ -1453,7 +1458,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (!ret) {
             // committed success but not visible
             status.setStatus_code(TStatusCode.PUBLISH_TIMEOUT);
-            String timeoutInfo = GlobalStateMgr.getCurrentGlobalTransactionMgr()
+            String timeoutInfo = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                     .getTxnPublishTimeoutDebugInfo(db.getId(), request.getTxnId());
             LOG.warn("txn {} publish timeout {}", request.getTxnId(), timeoutInfo);
             if (timeoutInfo.length() > 240) {
@@ -1546,7 +1551,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         try {
-            TTransactionStatus status = GlobalStateMgr.getCurrentGlobalTransactionMgr().getTxnStatus(db, request.getTxnId());
+            TTransactionStatus status =
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTxnStatus(db, request.getTxnId());
             LOG.debug("txn {} status is {}", request.getTxnId(), status);
             result.setStatus(status);
         } catch (Throwable e) {
@@ -1606,7 +1612,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         TxnCommitAttachment attachment = TxnCommitAttachment.fromThrift(request.txnCommitAttachment);
-        GlobalStateMgr.getCurrentGlobalTransactionMgr().prepareTransaction(
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().prepareTransaction(
                 db.getId(), request.getTxnId(),
                 TabletCommitInfo.fromThrift(request.getCommitInfos()),
                 TabletFailInfo.fromThrift(request.getFailInfos()),
@@ -1665,7 +1671,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throw new MetaNotFoundException("db " + dbName + " does not exist");
         }
         long dbId = db.getId();
-        GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(dbId, request.getTxnId(),
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(dbId, request.getTxnId(),
                 request.isSetReason() ? request.getReason() : "system cancel",
                 TxnCommitAttachment.fromThrift(request.getTxnCommitAttachment()));
 
@@ -1723,6 +1729,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setStatus(status);
         try {
             result.setParams(streamLoadPutImpl(request));
+        } catch (LockTimeoutException e) {
+            LOG.warn("failed to get stream load plan: {}", e.getMessage());
+            status.setStatus_code(TStatusCode.TIMEOUT);
+            status.addToError_msgs(e.getMessage());
         } catch (UserException | StarRocksPlannerException e) {
             LOG.warn("failed to get stream load plan: {}", e.getMessage());
             status.setStatus_code(TStatusCode.ANALYSIS_ERROR);
@@ -1740,7 +1750,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return new DefaultCoordinator.Factory();
     }
 
-    private TExecPlanFragmentParams streamLoadPutImpl(TStreamLoadPutRequest request) throws UserException {
+    TExecPlanFragmentParams streamLoadPutImpl(TStreamLoadPutRequest request) throws UserException {
         String cluster = request.getCluster();
         if (Strings.isNullOrEmpty(cluster)) {
             cluster = SystemInfoService.DEFAULT_CLUSTER;
@@ -1752,10 +1762,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (db == null) {
             throw new UserException("unknown database, database=" + dbName);
         }
+
         long timeoutMs = request.isSetThrift_rpc_timeout_ms() ? request.getThrift_rpc_timeout_ms() : 5000;
+        // Make timeout less than thrift_rpc_timeout_ms.
+        // Otherwise, it will result in error like "call frontend service failed"
+        timeoutMs = timeoutMs * 3 / 4;
+
         Locker locker = new Locker();
         if (!locker.tryLockDatabase(db, LockType.READ, timeoutMs)) {
-            throw new UserException("get database read lock timeout, database=" + dbName);
+            throw new LockTimeoutException(
+                    "get database read lock timeout, database=" + dbName + ", timeout=" + timeoutMs + "ms");
         }
         try {
             Table table = db.getTable(request.getTbl());
@@ -1793,7 +1809,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             plan.query_options.setLoad_job_type(TLoadJobType.STREAM_LOAD);
             // add table indexes to transaction state
             TransactionState txnState =
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionState(db.getId(), request.getTxnId());
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                            .getTransactionState(db.getId(), request.getTxnId());
             if (txnState == null) {
                 throw new UserException("txn does not exist: " + request.getTxnId());
             }
@@ -1949,7 +1966,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 }
             }
 
-            GlobalStateMgr.getCurrentState().setFrontendConfig(configs);
+            GlobalStateMgr.getCurrentState().getNodeMgr().setFrontendConfig(configs);
             return new TSetConfigResponse(new TStatus(TStatusCode.OK));
         } catch (DdlException e) {
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
@@ -1963,7 +1980,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         long rows = Math.max(request.rows, Config.auto_increment_cache_size);
         Long nextId = null;
         try {
-            nextId = GlobalStateMgr.getCurrentState().allocateAutoIncrementId(request.table_id, rows);
+            nextId = GlobalStateMgr.getCurrentState().getLocalMetastore().allocateAutoIncrementId(request.table_id, rows);
             // log the delta result.
             ConcurrentHashMap<Long, Long> deltaMap = new ConcurrentHashMap<>();
             deltaMap.put(request.table_id, nextId + rows);
@@ -2083,7 +2100,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 locker.unLockDatabase(db, LockType.READ);
             }
             if (mutablePartitions.size() <= 1) {
-                GlobalStateMgr.getCurrentState().addSubPartitions(db, olapTable.getName(), partition, 1);
+                GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .addSubPartitions(db, olapTable.getName(), partition, 1);
             }
             p.setImmutable(true);
         }
@@ -2321,7 +2339,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         GlobalStateMgr state = GlobalStateMgr.getCurrentState();
 
         try {
-            state.addPartitions(db, olapTable.getName(), addPartitionClause);
+            state.getLocalMetastore().addPartitions(db, olapTable.getName(), addPartitionClause);
         } catch (Exception e) {
             LOG.warn(e);
             errorStatus.setError_msgs(Lists.newArrayList(
@@ -2330,13 +2348,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return result;
         }
 
-
         // build partition & tablets
         List<TOlapTablePartition> partitions = Lists.newArrayList();
         List<TTabletLocation> tablets = Lists.newArrayList();
 
         TransactionState txnState =
-                GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionState(db.getId(), request.getTxn_id());
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(db.getId(), request.getTxn_id());
         if (txnState == null) {
             errorStatus.setError_msgs(Lists.newArrayList(
                     String.format("automatic create partition failed. error: txn %d not exist", request.getTxn_id())));

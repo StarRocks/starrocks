@@ -62,6 +62,7 @@ import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
@@ -80,9 +81,9 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.fs.HdfsUtil;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
@@ -513,6 +514,18 @@ public class RestoreJob extends AbstractJob {
                         // it must be !isReplay == true
                         ((OlapTable) localTbl).sendDropAutoIncrementMapTask();
                     }
+                    if (localTbl.isMaterializedView()) {
+                        MaterializedView mv = (MaterializedView) localTbl;
+                        if (mv.isActive()) {
+                            // Skip to restore existed mv if mv is existed and active in the current local db,
+                            // mv should be refreshed by local table changes rather than backup/restore because we don't
+                            // track mv's version map with data's restore.
+                            // eg: we restore mv's data (old version) but not restore associated version map which may
+                            // cause wrong result if it can be used to rewrite.
+                            LOG.warn("Skip to restore existed and active mv: {}", mv.getName());
+                            continue;
+                        }
+                    }
 
                     tblInfo.checkAndRecoverAutoIncrementId(localTbl);
                     // table already exist, check schema
@@ -838,7 +851,7 @@ public class RestoreJob extends AbstractJob {
 
         // check disk capacity
         com.starrocks.common.Status st =
-                GlobalStateMgr.getCurrentSystemInfo().checkExceedDiskCapacityLimit(bePathsMap, true);
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkExceedDiskCapacityLimit(bePathsMap, true);
         if (!st.ok()) {
             status = new Status(ErrCode.COMMON_ERROR, st.getErrorMsg());
             return;
@@ -881,9 +894,10 @@ public class RestoreJob extends AbstractJob {
                 TabletMeta tabletMeta = new TabletMeta(dbId, localTbl.getId(), physicalPartition.getId(),
                         restoredIdx.getId(), indexMeta.getSchemaHash(), TStorageMedium.HDD);
                 for (Tablet restoreTablet : restoredIdx.getTablets()) {
-                    GlobalStateMgr.getCurrentInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
+                    GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
                     for (Replica restoreReplica : ((LocalTablet) restoreTablet).getImmutableReplicas()) {
-                        GlobalStateMgr.getCurrentInvertedIndex().addReplica(restoreTablet.getId(), restoreReplica);
+                        GlobalStateMgr.getCurrentState().getTabletInvertedIndex()
+                                .addReplica(restoreTablet.getId(), restoreReplica);
                         LOG.info("tablet {} physical partition {} index {} replica {}",
                                 restoreTablet.getId(), physicalPartition.getId(), restoredIdx.getId(),
                                 restoreReplica.getId());
@@ -1085,9 +1099,9 @@ public class RestoreJob extends AbstractJob {
             TabletMeta tabletMeta = new TabletMeta(dbId, restoreTbl.getId(), restorePart.getId(),
                     restoreIdx.getId(), schemaHash, TStorageMedium.HDD);
             for (Tablet restoreTablet : restoreIdx.getTablets()) {
-                GlobalStateMgr.getCurrentInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
                 for (Replica restoreReplica : ((LocalTablet) restoreTablet).getImmutableReplicas()) {
-                    GlobalStateMgr.getCurrentInvertedIndex()
+                    GlobalStateMgr.getCurrentState().getTabletInvertedIndex()
                             .addReplica(restoreTablet.getId(), restoreReplica);
                 }
             }
@@ -1436,7 +1450,7 @@ public class RestoreJob extends AbstractJob {
                     if (tbl instanceof OlapTable) {
                         OlapTable olapTable = (OlapTable) tbl;
                         try {
-                            olapTable.doAfterRestore(db, mvRestoreContext);
+                            olapTable.doAfterRestore(mvRestoreContext);
                         } catch (Exception e) {
                             // no throw exceptions
                             LOG.warn(String.format("rebuild olap table %s failed: ", olapTable.getName()), e);
@@ -1581,7 +1595,7 @@ public class RestoreJob extends AbstractJob {
                     for (Partition part : restoreTbl.getPartitions()) {
                         for (MaterializedIndex idx : part.getMaterializedIndices(IndexExtState.VISIBLE)) {
                             for (Tablet tablet : idx.getTablets()) {
-                                GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tablet.getId());
+                                GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablet(tablet.getId());
                             }
                         }
                     }

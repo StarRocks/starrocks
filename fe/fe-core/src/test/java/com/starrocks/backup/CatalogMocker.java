@@ -546,60 +546,49 @@ public class CatalogMocker {
     }
 
     public static GlobalStateMgr fetchAdminCatalog() {
-        try {
-            FakeEditLog fakeEditLog = new FakeEditLog();
+        FakeEditLog fakeEditLog = new FakeEditLog();
 
-            GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
+        GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
 
-            Database db = new Database();
-            Auth auth = fetchAdminAccess();
+        Database db = new Database();
+        Auth auth = fetchAdminAccess();
 
-            new Expectations(globalStateMgr) {
-                {
-                    globalStateMgr.getAuth();
-                    minTimes = 0;
-                    result = auth;
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getAuth();
+                minTimes = 0;
+                result = auth;
 
-                    globalStateMgr.getDb(TEST_DB_NAME);
-                    minTimes = 0;
-                    result = db;
+                globalStateMgr.getDb(TEST_DB_NAME);
+                minTimes = 0;
+                result = db;
 
-                    globalStateMgr.getDb(WRONG_DB);
-                    minTimes = 0;
-                    result = null;
+                globalStateMgr.getDb(WRONG_DB);
+                minTimes = 0;
+                result = null;
 
-                    globalStateMgr.getDb(TEST_DB_ID);
-                    minTimes = 0;
-                    result = db;
+                globalStateMgr.getDb(TEST_DB_ID);
+                minTimes = 0;
+                result = db;
 
-                    globalStateMgr.getDb(anyString);
-                    minTimes = 0;
-                    result = new Database();
+                globalStateMgr.getDb(anyString);
+                minTimes = 0;
+                result = new Database();
 
-                    globalStateMgr.getDbNames();
-                    minTimes = 0;
-                    result = Lists.newArrayList(TEST_DB_NAME);
+                globalStateMgr.getLocalMetastore().listDbNames();
+                minTimes = 0;
+                result = Lists.newArrayList(TEST_DB_NAME);
 
-                    globalStateMgr.getLoadInstance();
-                    minTimes = 0;
-                    result = new Load();
+                globalStateMgr.getLoadInstance();
+                minTimes = 0;
+                result = new Load();
 
-                    globalStateMgr.getEditLog();
-                    minTimes = 0;
-                    result = new EditLog(new ArrayBlockingQueue<>(100));
-
-                    globalStateMgr.changeCatalogDb((ConnectContext) any, WRONG_DB);
-                    minTimes = 0;
-                    result = new DdlException("failed");
-
-                    globalStateMgr.changeCatalogDb((ConnectContext) any, anyString);
-                    minTimes = 0;
-                }
-            };
-            return globalStateMgr;
-        } catch (DdlException e) {
-            return null;
-        }
+                globalStateMgr.getEditLog();
+                minTimes = 0;
+                result = new EditLog(new ArrayBlockingQueue<>(100));
+            }
+        };
+        return globalStateMgr;
     }
 
     public static Auth fetchBlockAccess() {

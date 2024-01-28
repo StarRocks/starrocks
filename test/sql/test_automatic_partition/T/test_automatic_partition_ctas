@@ -89,3 +89,19 @@ PARTITION BY RANGE(event_day)(
 )
 DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 1;
 create table test_column_expr_partition partition by (event_day) as select event_day from site_access;
+CREATE TABLE `customers` (
+  `customer_id` int(11) NOT NULL COMMENT "",
+  `first_name` varchar(65533) NULL COMMENT "",
+  `last_name` varchar(65533) NULL COMMENT "",
+  `first_order` date NULL COMMENT "",
+  `most_recent_order` date NULL COMMENT "",
+  `number_of_orders` bigint(20) NULL COMMENT "",
+  `customer_lifetime_value` decimal128(38, 9) NULL COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`customer_id`)
+DISTRIBUTED BY HASH(`customer_id`)
+PROPERTIES (
+"replication_num" = "1"
+);
+create table cust_order_by_ctas ORDER BY (first_name,last_name) as select * from customers;
+create table cust_index_ctas (INDEX idx_bitmap_customer_id (customer_id) USING BITMAP) as select * from customers;

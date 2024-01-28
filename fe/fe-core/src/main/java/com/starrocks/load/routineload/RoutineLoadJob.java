@@ -63,12 +63,12 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.load.streamload.StreamLoadTask;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.RoutineLoadOperation;
@@ -750,7 +750,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         this.receivedBytes += receivedBytes;
         this.totalTaskExcutionTimeMs += taskExecutionTime;
 
-        if (MetricRepo.isInit && !isReplay) {
+        if (MetricRepo.hasInit && !isReplay) {
             MetricRepo.COUNTER_ROUTINE_LOAD_ROWS.increase(numOfTotalRows);
             MetricRepo.COUNTER_ROUTINE_LOAD_ERROR_ROWS.increase(numOfErrorRows);
             MetricRepo.COUNTER_ROUTINE_LOAD_RECEIVED_BYTES.increase(receivedBytes);
@@ -872,7 +872,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
 
             // add table indexes to transaction state
             TransactionState txnState =
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionState(db.getId(), txnId);
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(db.getId(), txnId);
             if (txnState == null) {
                 throw new MetaNotFoundException("txn does not exist: " + txnId);
             }
@@ -1302,14 +1302,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         }
 
         if (state.isFinalState()) {
-            GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
         }
 
         if (!isReplay && jobState != JobState.RUNNING) {
             GlobalStateMgr.getCurrentState().getEditLog().logOpRoutineLoadJob(new RoutineLoadOperation(id, jobState));
         }
 
-        if (!isReplay && MetricRepo.isInit && JobState.PAUSED == jobState) {
+        if (!isReplay && MetricRepo.hasInit && JobState.PAUSED == jobState) {
             MetricRepo.COUNTER_ROUTINE_LOAD_PAUSED.increase(1L);
         }
         LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)

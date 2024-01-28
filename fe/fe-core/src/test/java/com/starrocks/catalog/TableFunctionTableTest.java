@@ -65,7 +65,7 @@ public class TableFunctionTableTest {
                                   @Mocked SystemInfoService systemInfoService) throws Exception {
         new Expectations() {
             {
-                globalStateMgr.getCurrentSystemInfo();
+                globalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 result = systemInfoService;
                 minTimes = 0;
 

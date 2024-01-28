@@ -30,9 +30,9 @@ import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.http.HttpConnectContext;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.qe.ConnectContext;
@@ -50,6 +50,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UpdateStmt;
+import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.UnsupportedException;
@@ -132,7 +133,12 @@ public class StatementPlanner {
             if (stmt instanceof QueryStatement) {
                 return planQuery(stmt, resultSinkType, session, false);
             } else if (stmt instanceof InsertStmt) {
-                return new InsertPlanner().plan((InsertStmt) stmt, session);
+                InsertStmt insertStmt = (InsertStmt) stmt;
+                boolean isSelect = !(insertStmt.getQueryStatement().getQueryRelation() instanceof ValuesRelation);
+                boolean isLeader = GlobalStateMgr.getCurrentState().isLeader();
+                boolean useOptimisticLock = isOnlyOlapTableQueries && isSelect && isLeader &&
+                        !session.getSessionVariable().isCboUseDBLock();
+                return new InsertPlanner(dbs, useOptimisticLock).plan((InsertStmt) stmt, session);
             } else if (stmt instanceof UpdateStmt) {
                 return new UpdatePlanner().plan((UpdateStmt) stmt, session);
             } else if (stmt instanceof DeleteStmt) {
@@ -179,13 +185,15 @@ public class StatementPlanner {
             logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(query);
         }
 
+        OptExpression root = ShortCircuitPlanner.checkSupportShortCircuitRead(logicalPlan.getRoot(), session);
+
         OptExpression optimizedPlan;
         try (Timer ignored = Tracers.watchScope("Optimizer")) {
             // 2. Optimize logical plan and build physical plan
             Optimizer optimizer = new Optimizer();
             optimizedPlan = optimizer.optimize(
                     session,
-                    logicalPlan.getRoot(),
+                    root,
                     new PhysicalPropertySet(),
                     new ColumnRefSet(logicalPlan.getOutputColumn()),
                     columnRefFactory);
@@ -221,9 +229,10 @@ public class StatementPlanner {
         // only collect once to save the original olapTable info
         Set<OlapTable> olapTables = collectOriginalOlapTables(queryStmt, dbs);
         for (int i = 0; i < Config.max_query_retry_time; ++i) {
-            long planStartTime = System.nanoTime();
+            long planStartTime = OptimisticVersion.generate();
             if (!isSchemaValid) {
-                colNames = reAnalyzeStmt(queryStmt, dbs, session);
+                reAnalyzeStmt(queryStmt, dbs, session);
+                colNames = queryStmt.getQueryRelation().getColumnOutputNames();
             }
 
             LogicalPlan logicalPlan;
@@ -261,7 +270,7 @@ public class StatementPlanner {
                  */
                 // For only olap table queries, we need to lock db here.
                 // Because we need to ensure multi partition visible versions are consistent.
-                long buildFragmentStartTime = System.nanoTime();
+                long buildFragmentStartTime = OptimisticVersion.generate();
                 ExecPlan plan = PlanFragmentBuilder.createPhysicalPlan(
                         optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames,
                         resultSinkType,
@@ -291,7 +300,7 @@ public class StatementPlanner {
         return null;
     }
 
-    private static Set<OlapTable> collectOriginalOlapTables(QueryStatement queryStmt, Map<String, Database> dbs) {
+    public static Set<OlapTable> collectOriginalOlapTables(StatementBase queryStmt, Map<String, Database> dbs) {
         Set<OlapTable> olapTables = Sets.newHashSet();
         Locker locker = new Locker();
         try {
@@ -304,15 +313,17 @@ public class StatementPlanner {
         }
     }
 
-    public static List<String> reAnalyzeStmt(QueryStatement queryStmt, Map<String, Database> dbs, ConnectContext session) {
+    public static Set<OlapTable> reAnalyzeStmt(StatementBase queryStmt, Map<String, Database> dbs,
+                                               ConnectContext session) {
         Locker locker = new Locker();
         try {
             lock(locker, dbs);
             // analyze to obtain the latest table from metadata
             Analyzer.analyze(queryStmt, session);
             // only copy the latest olap table
-            AnalyzerUtils.copyOlapTable(queryStmt, Sets.newHashSet());
-            return queryStmt.getQueryRelation().getColumnOutputNames();
+            Set<OlapTable> copiedTables = Sets.newHashSet();
+            AnalyzerUtils.copyOlapTable(queryStmt, copiedTables);
+            return copiedTables;
         } finally {
             unLock(locker, dbs);
         }
@@ -403,10 +414,11 @@ public class StatementPlanner {
         } else if (stmt instanceof DeleteStmt) {
             label = MetaUtils.genDeleteLabel(session.getExecutionId());
         } else {
-            throw UnsupportedException.unsupportedException("Unsupported dml statement " + stmt.getClass().getSimpleName());
+            throw UnsupportedException.unsupportedException(
+                    "Unsupported dml statement " + stmt.getClass().getSimpleName());
         }
 
-        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         TransactionState.LoadJobSourceType sourceType = TransactionState.LoadJobSourceType.INSERT_STREAMING;
         long txnId = -1L;
         if (targetTable instanceof ExternalOlapTable) {
@@ -432,7 +444,6 @@ public class StatementPlanner {
                     tbl.getSourceTableHost(),
                     tbl.getSourceTablePort(),
                     authenticateParams);
-
         } else if (targetTable instanceof SystemTable || targetTable.isIcebergTable() || targetTable.isHiveTable()
                 || targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()) {
             // schema table and iceberg and hive table does not need txn

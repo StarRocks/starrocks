@@ -111,7 +111,7 @@ INTO TABLE <table_name>
 
   > **说明**
   >
-  > 该参数仅适用于目标 StarRocks 表使用聚合模型、并且所有 Value 列的聚合函数均为 `sum` 的情况。
+  > 该参数仅适用于目标 StarRocks 表使用聚合表、并且所有 Value 列的聚合函数均为 `sum` 的情况。
 
 - `PARTITION`
 
@@ -688,6 +688,16 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
    已经创建成功的导入作业，如果处于 **QUEUEING** 状态或者 **LOADING** 状态，那么您可以使用 [ALTER LOAD](../data-manipulation/ALTER_LOAD.md) 语句修改该作业的优先级。
 
    StarRocks 自 v2.5 版本起支持为导入作业设置 `priority` 参数。
+
+- `merge_condition`
+
+  用于指定作为更新生效条件的列名。这样只有当导入的数据中该列的值大于等于当前值的时候，更新才会生效。
+  
+  Broker Load 自 3.1 版本起支持条件更新。参见[通过导入实现数据变更](../../../loading/Load_to_Primary_Key_tables.md#条件更新)。
+  
+  > **说明**
+  >
+  > 指定的列必须为非主键列，且仅主键表支持条件更新。
 
 ## 列映射
 

@@ -262,6 +262,11 @@ statement
     | showSqlBlackListStatement
     | showWhiteListStatement
 
+    // Backend BlackList
+    | addBackendBlackListStatement
+    | delBackendBlackListStatement
+    | showBackendBlackListStatement
+
     // Data Cache management statement
     | createDataCacheRuleStatement
     | showDataCacheRulesStatement
@@ -485,11 +490,12 @@ createTemporaryTableStatement
 
 createTableAsSelectStatement
     : CREATE TABLE (IF NOT EXISTS)? qualifiedName
-        ('(' identifier (',' identifier)* ')')?
+        ('(' (identifier (',' identifier)*  (',' indexDesc)* | indexDesc (',' indexDesc)*) ')')?
         keyDesc?
         comment?
         partitionDesc?
         distributionDesc?
+        orderByDesc?
         properties?
         AS queryStatement
     ;
@@ -616,7 +622,7 @@ submitTaskStatement
     ;
 
 dropTaskStatement
-    : DROP TASK qualifiedName
+    : DROP TASK qualifiedName FORCE?
     ;
 
 // ------------------------------------------- Materialized View Statement ---------------------------------------------
@@ -1812,6 +1818,20 @@ showSqlBlackListStatement
 
 showWhiteListStatement
     : SHOW WHITELIST
+    ;
+
+// ------------------------------------ backend BlackList Statement ---------------------------------------------------
+
+addBackendBlackListStatement
+    : ADD BACKEND BLACKLIST INTEGER_VALUE (',' INTEGER_VALUE)*
+    ;
+
+delBackendBlackListStatement
+    : DELETE BACKEND BLACKLIST INTEGER_VALUE (',' INTEGER_VALUE)*
+    ;
+
+showBackendBlackListStatement
+    : SHOW BACKEND BLACKLIST
     ;
 
 // -------------------------------------- DataCache Management Statement --------------------------------------------

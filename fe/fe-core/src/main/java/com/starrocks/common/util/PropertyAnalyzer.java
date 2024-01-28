@@ -496,9 +496,9 @@ public class PropertyAnalyzer {
             throw new AnalysisException("Replication num should larger than 0");
         }
 
-        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
+        List<Long> backendIds = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAvailableBackendIds();
         if (RunMode.isSharedDataMode()) {
-            backendIds.addAll(GlobalStateMgr.getCurrentSystemInfo().getAvailableComputeNodeIds());
+            backendIds.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAvailableComputeNodeIds());
             if (RunMode.defaultReplicationNum() > backendIds.size()) {
                 throw new AnalysisException("Number of available CN nodes is " + backendIds.size()
                         + ", less than " + RunMode.defaultReplicationNum());
@@ -555,7 +555,11 @@ public class PropertyAnalyzer {
             } else {
                 throw new AnalysisException(storageType + " for " + olapTable.getKeysType() + " table not supported");
             }
-
+            if (!Config.enable_experimental_rowstore &&
+                    (tStorageType == TStorageType.ROW || tStorageType == TStorageType.COLUMN_WITH_ROW)) {
+                throw new AnalysisException(storageType + " for " + olapTable.getKeysType() +
+                        " table not supported, enable it by setting `enable_experimental_rowstore` to true");
+            }
             properties.remove(PROPERTIES_STORAGE_TYPE);
         }
         return tStorageType;
@@ -612,7 +616,8 @@ public class PropertyAnalyzer {
 
     public static Boolean analyzeUseFastSchemaEvolution(Map<String, String> properties) throws AnalysisException {
         if (properties == null || properties.isEmpty()) {
-            return Config.enable_fast_schema_evolution;
+            return RunMode.isSharedNothingMode() ? Config.enable_fast_schema_evolution
+                    : Config.experimental_enable_fast_schema_evolution_in_shared_data;
         }
         String value = properties.get(PROPERTIES_USE_FAST_SCHEMA_EVOLUTION);
         if (null == value) {

@@ -173,8 +173,7 @@ Status TabletSinkSender::open_wait() {
             }
         });
 
-        // when enable replicated storage, we only send to primary replica, one node channel lead to indicate whole load fail
-        if (index_channel->has_intolerable_failure() || (_enable_replicated_storage && !err_st.ok())) {
+        if (index_channel->has_intolerable_failure()) {
             LOG(WARNING) << "Open channel failed. load_id: " << _load_id << ", error: " << err_st.to_string();
             return err_st;
         }
@@ -199,14 +198,15 @@ Status TabletSinkSender::try_close(RuntimeState* state) {
                         err_st = st;
                         index_channel->mark_as_failed(ch);
                     }
+                } else {
+                    ch->cancel(Status::Cancelled("channel failed"));
                 }
                 if (index_channel->has_intolerable_failure()) {
                     intolerable_failure = true;
                 }
             });
 
-            // when enable replicated storage, we only send to primary replica, one node channel lead to indicate whole load fail
-            if (intolerable_failure || (_enable_replicated_storage && !err_st.ok())) {
+            if (intolerable_failure) {
                 break;
             }
 
@@ -231,6 +231,8 @@ Status TabletSinkSender::try_close(RuntimeState* state) {
                         err_st = st;
                         index_channel->mark_as_failed(ch);
                     }
+                } else {
+                    ch->cancel(Status::Cancelled("channel failed"));
                 }
                 if (index_channel->has_intolerable_failure()) {
                     intolerable_failure = true;
@@ -247,6 +249,8 @@ Status TabletSinkSender::try_close(RuntimeState* state) {
                         err_st = st;
                         index_channel->mark_as_failed(ch);
                     }
+                } else {
+                    ch->cancel(Status::Cancelled("channel failed"));
                 }
                 if (index_channel->has_intolerable_failure()) {
                     intolerable_failure = true;
@@ -256,7 +260,7 @@ Status TabletSinkSender::try_close(RuntimeState* state) {
     }
 
     // when enable replicated storage, we only send to primary replica, one node channel lead to indicate whole load fail
-    if (intolerable_failure || (_enable_replicated_storage && !err_st.ok())) {
+    if (intolerable_failure) {
         return err_st;
     } else {
         return Status::OK();
@@ -297,7 +301,7 @@ Status TabletSinkSender::close_wait(RuntimeState* state, Status close_status, Ta
                     ch->time_report(&node_add_batch_counter_map, &serialize_batch_ns, &actual_consume_ns);
                 });
                 // when enable replicated storage, we only send to primary replica, one node channel lead to indicate whole load fail
-                if (index_channel->has_intolerable_failure() || (_enable_replicated_storage && !err_st.ok())) {
+                if (index_channel->has_intolerable_failure()) {
                     status = err_st;
                     index_channel->for_each_node_channel([&status](NodeChannel* ch) { ch->cancel(status); });
                 }

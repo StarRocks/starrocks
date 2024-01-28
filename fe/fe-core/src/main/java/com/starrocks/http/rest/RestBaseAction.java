@@ -166,7 +166,7 @@ public class RestBaseAction extends BaseAction {
         if (globalStateMgr.isLeader()) {
             return false;
         }
-        Pair<String, Integer> leaderIpAndPort = globalStateMgr.getLeaderIpAndHttpPort();
+        Pair<String, Integer> leaderIpAndPort = globalStateMgr.getNodeMgr().getLeaderIpAndHttpPort();
         redirectTo(request, response,
                 new TNetworkAddress(leaderIpAndPort.first, leaderIpAndPort.second));
         return true;

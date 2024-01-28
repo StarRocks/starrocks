@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.lake.backup;
 
 import autovalue.shaded.com.google.common.common.collect.Maps;
@@ -129,7 +128,8 @@ public class LakeRestoreJob extends RestoreJob {
                 Partition part = tbl.getPartition(idChain.getPartId());
                 MaterializedIndex index = part.getIndex(idChain.getIdxId());
                 tablet = (LakeTablet) index.getTablet(idChain.getTabletId());
-                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(tablet.getPrimaryComputeNodeId());
+                Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                        .getBackend(tablet.getPrimaryComputeNodeId());
                 LakeTableSnapshotInfo info = new LakeTableSnapshotInfo(db.getId(), idChain.getTblId(),
                         idChain.getPartId(), idChain.getIdxId(), idChain.getTabletId(),
                         backend.getId(), tbl.getSchemaHashByIndexId(index.getId()), -1);
@@ -208,7 +208,7 @@ public class LakeRestoreJob extends RestoreJob {
     @Override
     protected void sendDownloadTasks() {
         for (Map.Entry<Long, RestoreSnapshotsRequest> entry : requests.entrySet()) {
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(entry.getKey());
+            Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(entry.getKey());
             LakeService lakeService = null;
             try {
                 lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
@@ -280,7 +280,7 @@ public class LakeRestoreJob extends RestoreJob {
             TabletMeta tabletMeta = new TabletMeta(dbId, restoreTbl.getId(), restorePart.getId(),
                     restoredIdx.getId(), indexMeta.getSchemaHash(), medium, true);
             for (Tablet restoreTablet : restoredIdx.getTablets()) {
-                GlobalStateMgr.getCurrentInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex().addTablet(restoreTablet.getId(), tabletMeta);
             }
         }
     }
@@ -313,7 +313,7 @@ public class LakeRestoreJob extends RestoreJob {
     @Override
     protected Status resetTableForRestore(OlapTable remoteOlapTbl, Database db) {
         try {
-            FilePathInfo pathInfo = globalStateMgr.getStarOSAgent().allocateFilePath(remoteOlapTbl.getId());
+            FilePathInfo pathInfo = globalStateMgr.getStarOSAgent().allocateFilePath(db.getId(), remoteOlapTbl.getId());
             LakeTable remoteLakeTbl = (LakeTable) remoteOlapTbl;
             StorageInfo storageInfo = remoteLakeTbl.getTableProperty().getStorageInfo();
             remoteLakeTbl.setStorageInfo(pathInfo, storageInfo.getDataCacheInfo());

@@ -35,7 +35,7 @@ public class TrinoTPCHTest extends TrinoTestBase {
         TrinoTestBase.beforeClass();
         FeConstants.runningUnitTest = true;
         connectContext.getGlobalStateMgr().setStatisticStorage(new MockTpchStatisticStorage(connectContext, 1));
-        GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().clear();
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().clear();
 
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         connectContext.getSessionVariable().setMaxTransformReorderJoins(8);

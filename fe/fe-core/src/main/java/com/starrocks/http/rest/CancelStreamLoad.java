@@ -82,7 +82,7 @@ public class CancelStreamLoad extends RestBaseAction {
         }
 
         try {
-            GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(db.getId(), label, "user cancel");
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(db.getId(), label, "user cancel");
         } catch (UserException e) {
             throw new DdlException(e.getMessage());
         }

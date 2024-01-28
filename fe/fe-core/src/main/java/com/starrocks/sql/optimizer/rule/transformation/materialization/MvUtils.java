@@ -153,7 +153,7 @@ public class MvUtils {
                 logMVPrepare(connectContext, "Table/MaterializedView {} has related materialized views: {}",
                         table.getName(), mvIds);
                 newMvIds.addAll(mvIds);
-            } else {
+            } else if (currentLevel == 0) {
                 logMVPrepare(connectContext, "Table/MaterializedView {} has no related materialized views, " +
                                 "identifier:{}", table.getName(), table.getTableIdentifier());
             }
@@ -302,6 +302,9 @@ public class MvUtils {
     }
 
     public static List<LogicalOlapScanOperator> getOlapScanNode(OptExpression root) {
+        if (root == null) {
+            return Lists.newArrayList();
+        }
         List<LogicalOlapScanOperator> olapScanOperators = Lists.newArrayList();
         getOlapScanNode(root, olapScanOperators);
         return olapScanOperators;
@@ -321,27 +324,25 @@ public class MvUtils {
         if (root == null) {
             return false;
         }
+        // 1. check whether is SPJ first
         if (isLogicalSPJ(root)) {
             return true;
         }
-        if (isLogicalSPJG(root)) {
-            LogicalAggregationOperator agg = (LogicalAggregationOperator) root.getOp();
-            // having is not supported now
-            return agg.getPredicate() == null;
-        }
-        return false;
+        // 2. check whether it's SPJG then
+        return isLogicalSPJG(root);
     }
 
-    public static String getInvalidReason(OptExpression expr) {
+    public static String getInvalidReason(OptExpression expr, boolean inlineView) {
         List<Operator> operators = collectOperators(expr);
+        String viewRewriteHint = inlineView ? "no view rewrite" : "view rewrite";
         if (operators.stream().anyMatch(op -> !isLogicalSPJGOperator(op))) {
             String nonSPJGOperators =
                     operators.stream().filter(x -> !isLogicalSPJGOperator(x))
                             .map(Operator::toString)
                             .collect(Collectors.joining(","));
-            return "MV contains non-SPJG operators: " + nonSPJGOperators;
+            return String.format("MV contains non-SPJG operators(%s): %s", viewRewriteHint, nonSPJGOperators);
         }
-        return "MV is not SPJG structure";
+        return String.format("MV is not SPJG structure(%s)", viewRewriteHint);
     }
 
     private static List<Operator> collectOperators(OptExpression expr) {
@@ -371,19 +372,28 @@ public class MvUtils {
         }
         Operator operator = root.getOp();
         if (!(operator instanceof LogicalAggregationOperator)) {
-            if (level == 0) {
+            return level == 0 ? false : isLogicalSPJ(root);
+        } else {
+            LogicalAggregationOperator agg = (LogicalAggregationOperator) operator;
+            if (agg.getType() != AggType.GLOBAL) {
                 return false;
-            } else {
-                return isLogicalSPJ(root);
             }
+            // Aggregate nested with aggregate is not supported yet.
+            // eg:
+            // create view v1 as
+            // select count(distinct cnt)
+            // from
+            //   (
+            //      select c_city, count(*) as cnt
+            //      from customer
+            //      group by c_city
+            //    ) t
+            if (level > 0) {
+                return false;
+            }
+            OptExpression child = root.inputAt(0);
+            return isLogicalSPJG(child, level + 1);
         }
-        LogicalAggregationOperator agg = (LogicalAggregationOperator) operator;
-        if (agg.getType() != AggType.GLOBAL) {
-            return false;
-        }
-
-        OptExpression child = root.inputAt(0);
-        return isLogicalSPJG(child, level + 1);
     }
 
     /**
@@ -1668,8 +1678,9 @@ public class MvUtils {
         }
     }
 
-    public static OptExpression replaceLogicalViewScanOperator(
-            OptExpression queryExpression, List<LogicalViewScanOperator> viewScans) {
+    public static OptExpression replaceLogicalViewScanOperator(OptExpression queryExpression,
+                                                               QueryMaterializationContext queryMaterializationContext) {
+        List<LogicalViewScanOperator> viewScans = queryMaterializationContext.getViewScans();
         if (viewScans == null) {
             return queryExpression;
         }

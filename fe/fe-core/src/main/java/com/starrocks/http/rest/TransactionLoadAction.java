@@ -89,8 +89,8 @@ public class TransactionLoadAction extends RestBaseAction {
 
     private Map<String, Long> txnNodeMap = new LinkedHashMap<String, Long>(512, 0.75f, true) {
         protected boolean removeEldestEntry(Map.Entry<String, Long> eldest) {
-            return size() > (GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber() +
-                    GlobalStateMgr.getCurrentSystemInfo().getTotalComputeNodeNumber()) * 512;
+            return size() > (GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber() +
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalComputeNodeNumber()) * 512;
         }
     };
 
@@ -221,9 +221,9 @@ public class TransactionLoadAction extends RestBaseAction {
             if (db == null) {
                 throw new UserException("database " + dbName + " not exists");
             }
-            TransactionStatus txnStatus = GlobalStateMgr.getCurrentGlobalTransactionMgr().getLabelStatus(db.getId(),
+            TransactionStatus txnStatus = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getLabelStatus(db.getId(),
                     label);
-            Long txnID = GlobalStateMgr.getCurrentGlobalTransactionMgr().getLabelTxnID(db.getId(), label);
+            Long txnID = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getLabelTxnID(db.getId(), label);
             if (txnStatus == TransactionStatus.PREPARED) {
                 if (txnID == -1) {
                     throw new UserException("label " + label + " txn not exist");
@@ -234,9 +234,10 @@ public class TransactionLoadAction extends RestBaseAction {
                     if (timeout != null) {
                         timeoutMillis = Long.parseLong(timeout) * 1000;
                     }
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr().commitPreparedTransaction(db, txnID, timeoutMillis);
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                            .commitPreparedTransaction(db, txnID, timeoutMillis);
                 } else if (op.equalsIgnoreCase(TXN_ROLLBACK)) {
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(db.getId(), txnID,
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(db.getId(), txnID,
                             "User Aborted");
                 }
                 resp.addResultEntry("Label", label);
@@ -246,7 +247,7 @@ public class TransactionLoadAction extends RestBaseAction {
                 // whether txnId is valid or not is not important
                 if (op.equalsIgnoreCase(TXN_ROLLBACK)) {
                     throw new UserException(String.format(
-                        "cannot abort committed transaction %s, label %s ", Long.toString(txnID), label));
+                            "cannot abort committed transaction %s, label %s ", Long.toString(txnID), label));
                 }
                 resp.setOKMsg("label " + label + " transaction " + txnID + " has already committed");
                 resp.addResultEntry("Label", label);
@@ -256,7 +257,7 @@ public class TransactionLoadAction extends RestBaseAction {
                 // whether txnId is valid or not is not important
                 if (op.equalsIgnoreCase(TXN_COMMIT)) {
                     throw new UserException(String.format(
-                        "cannot commit aborted transaction %s, label %s ", Long.toString(txnID), label));
+                            "cannot commit aborted transaction %s, label %s ", Long.toString(txnID), label));
                 }
                 resp.setOKMsg("label " + label + " transaction " + txnID + " has already aborted");
                 resp.addResultEntry("Label", label);
@@ -270,7 +271,7 @@ public class TransactionLoadAction extends RestBaseAction {
             synchronized (this) {
                 // 2.1 save label->be map when begin transaction, so that subsequent operator can send to same BE
                 if (op.equalsIgnoreCase(TXN_BEGIN)) {
-                    nodeID = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendOrComputeId();
+                    nodeID = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().seqChooseBackendOrComputeId();
                     // txnNodeMap is LRU cache, it atomic remove unused entry
                     txnNodeMap.put(label, nodeID);
                 } else if (channelIdStr == null) {
@@ -311,7 +312,7 @@ public class TransactionLoadAction extends RestBaseAction {
                     redirectAddr, dbName, tableName, op, label);
             redirectTo(request, response, redirectAddr);
             return;
-        } 
+        }
 
         if (op.equalsIgnoreCase(TXN_PREPARE) && channelIdStr != null) {
             int channelId = Integer.parseInt(channelIdStr);
@@ -341,14 +342,13 @@ public class TransactionLoadAction extends RestBaseAction {
             return;
         }
 
-
         if (nodeID == null) {
             throw new UserException("transaction with op " + op + " label " + label + " has no node");
         }
 
-        ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackend(nodeID);
+        ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(nodeID);
         if (node == null) {
-            node = GlobalStateMgr.getCurrentSystemInfo().getComputeNode(nodeID);
+            node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNode(nodeID);
             if (node == null) {
                 throw new UserException("Node " + nodeID + " is not alive");
             }

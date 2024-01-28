@@ -69,7 +69,8 @@
           "items": ["table_design/expression_partitioning", "table_design/list_partitioning", "table_design/dynamic_partitioning", "table_design/Temporary_partition"]
         },
         "table_design/data_compression",
-        "table_design/Sort_key"
+        "table_design/Sort_key",
+        "table_design/hybrid_table"
       ]
     },
     {
@@ -81,7 +82,7 @@
           "type": "category",
           "label": "Load from Object Storage",
           "link": {"type": "doc", "id": "loading/objectstorage"},
-          "items": ["loading/s3", "loading/gcs", "loading/minio", "loading/cloud_storage_load"]
+          "items": ["loading/s3", "loading/azure", "loading/gcs", "loading/minio", "loading/cloud_storage_load"]
         },
         "loading/StreamLoad",
         "loading/hdfs_load",
@@ -103,14 +104,8 @@
         "loading/Flink-connector-starrocks",
         "loading/Load_to_Primary_Key_tables",
         "loading/Etl_in_loading",
-        "loading/CloudCanal",
-        "loading/DataX-starrocks-writer",
-        {
-          "type": "category",
-          "label": "Concepts",
-          "link": {"type": "doc", "id": "loading/load_concept/strict_mode"},
-          "items": [ "loading/load_concept/strict_mode" ]
-        }
+        "loading/loading_tools",
+        "loading/load_concept/strict_mode"
       ]
     },
     {
@@ -136,8 +131,8 @@
         {
           "type": "category",
           "label": "Catalog",
-          "link": {"type": "doc", "id": "data_source/catalog/catalog_overview"},
-          "items": ["data_source/catalog/default_catalog", "data_source/catalog/hive_catalog", "data_source/catalog/iceberg_catalog", "data_source/catalog/hudi_catalog", "data_source/catalog/deltalake_catalog", "data_source/catalog/jdbc_catalog", "data_source/catalog/elasticsearch_catalog", "data_source/catalog/paimon_catalog", "data_source/catalog/unified_catalog", "data_source/catalog/query_external_data" ]
+          "link": {"type": "doc", "id": "data_source/catalog/catalog_intro"},
+          "items": ["data_source/catalog/catalog_overview", "data_source/catalog/default_catalog", "data_source/catalog/hive_catalog", "data_source/catalog/iceberg_catalog", "data_source/catalog/hudi_catalog", "data_source/catalog/deltalake_catalog", "data_source/catalog/jdbc_catalog", "data_source/catalog/elasticsearch_catalog", "data_source/catalog/paimon_catalog", "data_source/catalog/unified_catalog", "data_source/catalog/query_external_data" ]
         },
         "data_source/External_table",
         "data_source/file_external_table",
@@ -170,13 +165,13 @@
             {
               "type": "category",
               "label": "Usage",
-              "link": {"type": "doc", "id": "cover_pages/mv_usage"},
-              "items": [ 
-                "sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW",
-                "sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW",
-                "sql-reference/sql-statements/data-definition/DROP_MATERIALIZED_VIEW",
-                "sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW",
-                "reference/information_schema/materialized_views",
+              "link": {"type": "doc", "id": "using_starrocks/usage/intro"},
+              "items": [
+                "using_starrocks/usage/create",
+                "using_starrocks/usage/alter",
+                "using_starrocks/usage/drop",
+                "using_starrocks/usage/show",
+                "using_starrocks/usage/information_schema-materialized_views",
                 "using_starrocks/troubleshooting_asynchronous_materialized_views"
               ]
             }
@@ -217,18 +212,7 @@
             "integrations/authenticate_to_gcs"
           ]
         },
-        {
-          "type": "category",
-          "label": "Data Lake",
-          "description": "Iceberg, Hive, Delta Lake, Hudi, etc.",
-          "link": {"type": "doc", "id": "integrations/data_lakes"},
-          "items": [
-             "data_source/catalog/hive_catalog",
-             "data_source/catalog/iceberg_catalog",
-             "data_source/catalog/hudi_catalog",
-             "data_source/catalog/deltalake_catalog"
-          ]
-        },
+        "integrations/data_lakes",
         {
           "type": "category",
           "label": "Streaming Data",
@@ -266,15 +250,16 @@
           "type": "category",
           "label": "Loading Tools",
           "description": "Integrations with more loading tools",
-          "link": {"type": "doc", "id": "cover_pages/loading_tools_integration"},
+          "link": {"type": "doc", "id": "integrations/loading_tools/loading_tools_integration"},
           "items": [
-             "integrations/loading_tools/CloudCanal",
-             "integrations/loading_tools/DataX",
-             {
+            "integrations/loading_tools/SMT",
+            "integrations/loading_tools/DataX-starrocks-writer",
+            "integrations/loading_tools/CloudCanal",
+            {
               "type": "link",
-              "label": "DBT",
-              "description": "Modeling and transformation with DBT",
-              "href": "https://github.com/StarRocks/starrocks/tree/main/contrib/dbt-connector/README.md"
+              "label": "Kettle connector",
+              "description": "Integrations with Kettle",
+              "href": "https://github.com/StarRocks/starrocks-connector-for-kettle"
              }
            ]
         },
@@ -306,7 +291,13 @@
         {
           "type": "doc",
           "id": "integrations/other_integrations/datadog_support"
-        }
+        },
+        {
+          "type": "link",
+          "label": "DBT",
+          "description": "Modeling and transformation with DBT",
+          "href": "https://github.com/StarRocks/starrocks/tree/main/contrib/dbt-connector/README.md"
+         }
       ]
     },
     {
@@ -725,8 +716,8 @@
             "faq/Exporting_faq"
           ]
         },
-        "administration/privilege_faq",
-        "data_source/datalake_faq",
+        "faq/privilege",
+        "faq/datalake",
         "faq/Sql_faq",
         "faq/Dump_query",
         "faq/Others",
@@ -762,11 +753,11 @@
       "type": "category",
       "label": "快速开始",
       "link": {"type": "doc", "id": "quick_start/quick_start"},
-      "items": ["quick_start/deploy_with_docker", "quick_start/Create_table", "quick_start/Import_and_query"]
+      "items": ["quick_start/shared-nothing", "quick_start/shared-data", "quick_start/iceberg"]
     },
     {
       "type": "category",
-      "label": " 项目协助",
+      "label": "技术支持",
       "link": {"type": "doc", "id": "project_help/project_help"},
       "items": ["project_help/slack"]
     },
@@ -809,7 +800,7 @@
         "table_design/StarRocks_table_design",
         {
           "type": "category",
-          "label": "数据模型",
+          "label": "表类型",
           "link": {"type": "doc", "id": "table_design/table_types/table_types"},
           "items": ["table_design/table_types/duplicate_key_table", "table_design/table_types/aggregate_table", "table_design/table_types/unique_key_table", "table_design/table_types/primary_key_table" ]
         },
@@ -820,7 +811,8 @@
           "items": ["table_design/expression_partitioning", "table_design/list_partitioning", "table_design/dynamic_partitioning", "table_design/Temporary_partition"]
         },
         "table_design/data_compression",
-        "table_design/Sort_key"
+        "table_design/Sort_key",
+        "table_design/hybrid_table"
       ]
     },
     {
@@ -832,7 +824,7 @@
           "type": "category",
           "label": "从对象存储导入",
           "link": {"type": "doc", "id": "loading/objectstorage"},
-          "items": ["loading/s3"]
+          "items": ["loading/s3", "loading/azure", "loading/gcs"]
         },
         "loading/StreamLoad",
         "loading/hdfs_load",
@@ -855,14 +847,8 @@
         "loading/Flink-connector-starrocks",
         "loading/Load_to_Primary_Key_tables",
         "loading/Etl_in_loading",
-        "loading/CloudCanal",
-        "loading/DataX-starrocks-writer",
-        {
-          "type": "category",
-          "label": "概念介绍",
-          "link": {"type": "doc", "id": "loading/load_concept/strict_mode"},
-          "items": [ "loading/load_concept/strict_mode" ]
-        }
+        "loading/loading_tools",
+        "loading/load_concept/strict_mode"
       ]
     },
     {
@@ -882,10 +868,14 @@
       "link": {"type": "doc", "id": "data_source/data_lakes"},
       "items": [
         {
+          "type": "doc",
+          "id": "data_source/icebergtutorial"
+        },
+        {
           "type": "category",
           "label": "Catalog",
-          "link": {"type": "doc", "id": "data_source/catalog/catalog_overview"},
-          "items": ["data_source/catalog/default_catalog", "data_source/catalog/hive_catalog", "data_source/catalog/iceberg_catalog", "data_source/catalog/hudi_catalog", "data_source/catalog/deltalake_catalog", "data_source/catalog/jdbc_catalog", "data_source/catalog/elasticsearch_catalog", "data_source/catalog/paimon_catalog", "data_source/catalog/unified_catalog", "data_source/catalog/query_external_data" ]
+          "link": {"type": "doc", "id": "data_source/catalog/catalog_intro"},
+          "items": ["data_source/catalog/catalog_overview", "data_source/catalog/default_catalog", "data_source/catalog/hive_catalog", "data_source/catalog/iceberg_catalog", "data_source/catalog/hudi_catalog", "data_source/catalog/deltalake_catalog", "data_source/catalog/jdbc_catalog", "data_source/catalog/elasticsearch_catalog", "data_source/catalog/paimon_catalog", "data_source/catalog/unified_catalog", "data_source/catalog/query_external_data" ]
         },
         "data_source/External_table",
         "data_source/file_external_table",
@@ -918,13 +908,13 @@
             {
               "type": "category",
               "label": "Usage",
-              "link": {"type": "doc", "id": "cover_pages/mv_usage"},
-              "items": [ 
-                "sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW",
-                "sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW",
-                "sql-reference/sql-statements/data-definition/DROP_MATERIALIZED_VIEW",
-                "sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW",
-                "reference/information_schema/materialized_views",
+              "link": {"type": "doc", "id": "using_starrocks/usage/intro"},
+              "items": [
+                "using_starrocks/usage/create",
+                "using_starrocks/usage/alter",
+                "using_starrocks/usage/drop",
+                "using_starrocks/usage/show",
+                "using_starrocks/usage/information_schema-materialized_views",
                 "using_starrocks/troubleshooting_asynchronous_materialized_views"
               ]
             }
@@ -965,18 +955,7 @@
             "integrations/authenticate_to_gcs"
           ]
         },
-        {
-          "type": "category",
-          "label": "查询数据湖",
-          "description": "Iceberg、Hive、Delta Lake、Hudi 等",
-          "link": {"type": "doc", "id": "integrations/data_lakes"},
-          "items": [
-             "data_source/catalog/hive_catalog",
-             "data_source/catalog/iceberg_catalog",
-             "data_source/catalog/hudi_catalog",
-             "data_source/catalog/deltalake_catalog"
-          ]
-        },
+        "integrations/data_lakes",
         {
           "type": "category",
           "label": "实时导入",
@@ -1014,15 +993,17 @@
           "type": "category",
           "label": "导入工具",
           "description": "更多导入工具集成",
-          "link": {"type": "doc", "id": "cover_pages/loading_tools_integration"},
-          "items": [
-             "integrations/loading_tools/CloudCanal",
-             "integrations/loading_tools/DataX",
-             {
+          "link": {"type": "doc", "id": "integrations/loading_tools/loading_tools_integration"},
+          "items": 
+          [
+            "integrations/loading_tools/SMT",
+            "integrations/loading_tools/DataX-starrocks-writer",
+            "integrations/loading_tools/CloudCanal",
+            {
               "type": "link",
-              "label": "DBT",
-              "description": "通过 DBT 实现数据建模与转换",
-              "href": "https://github.com/StarRocks/starrocks/tree/main/contrib/dbt-connector/README.md"
+              "label": "Kettle connector",
+              "description": "Integrations with Kettle",
+              "href": "https://github.com/StarRocks/starrocks-connector-for-kettle"
              }
            ]
         },
@@ -1054,7 +1035,13 @@
         {
           "type": "doc",
           "id": "integrations/other_integrations/datadog_support"
-        }
+        },
+        {
+          "type": "link",
+          "label": "DBT",
+          "description": "通过 DBT 实现数据建模与转换",
+          "href": "https://github.com/StarRocks/starrocks/tree/main/contrib/dbt-connector/README.md"
+         }
       ]
     },
     {
@@ -1472,8 +1459,8 @@
             "faq/Exporting_faq"
           ]
         },
-        "administration/privilege_faq",
-        "data_source/datalake_faq",
+        "faq/privilege",
+        "faq/datalake",
         "faq/Sql_faq",
         "faq/Dump_query",
         "faq/Others",

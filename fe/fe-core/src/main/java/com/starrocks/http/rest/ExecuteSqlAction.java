@@ -167,9 +167,9 @@ public class ExecuteSqlAction extends RestBaseAction {
     private void changeCatalogAndDB(String catalogName, String databaseName, HttpConnectContext context)
             throws StarRocksHttpException {
         try {
-            context.getGlobalStateMgr().changeCatalog(context, catalogName);
+            context.changeCatalog(catalogName);
             if (databaseName != null) {
-                context.getGlobalStateMgr().changeCatalogDb(context, databaseName);
+                context.changeCatalogDb(databaseName);
             }
         } catch (Exception e) {
             // 403 Forbidden DdlException

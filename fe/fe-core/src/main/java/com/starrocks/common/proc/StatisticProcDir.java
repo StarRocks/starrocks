@@ -52,8 +52,8 @@ import com.starrocks.clone.TabletSchedCtx.Priority;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.ListComparator;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTaskQueue;
@@ -99,13 +99,13 @@ public class StatisticProcDir implements ProcDirInterface {
         BaseProcResult result = new BaseProcResult();
 
         result.setNames(TITLE_NAMES);
-        List<Long> dbIds = globalStateMgr.getDbIds();
+        List<Long> dbIds = globalStateMgr.getLocalMetastore().getDbIds();
         if (dbIds == null || dbIds.isEmpty()) {
             // empty
             return result;
         }
 
-        SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
 
         int totalDbNum = 0;
         int totalTableNum = 0;

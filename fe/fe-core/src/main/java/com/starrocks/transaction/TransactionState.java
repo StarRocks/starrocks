@@ -35,7 +35,6 @@
 package com.starrocks.transaction;
 
 import com.google.common.base.Joiner;
-import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -49,12 +48,10 @@ import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.Config;
 import com.starrocks.common.TraceManager;
 import com.starrocks.common.UserException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.metric.MetricRepo;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.Backend;
@@ -65,13 +62,10 @@ import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TTxnType;
 import com.starrocks.thrift.TUniqueId;
 import io.opentelemetry.api.trace.Span;
-import io.opentelemetry.api.trace.StatusCode;
-import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -328,8 +322,6 @@ public class TransactionState implements Writable {
     // tbl id -> (index ids)
     private final Map<Long, Set<Long>> loadedTblIndexes = Maps.newHashMap();
 
-    private String errorLogUrl = null;
-
     // record some error msgs during the transaction operation.
     // this msg will be shown in show proc "/transactions/dbId/";
     // no need to persist.
@@ -422,7 +414,7 @@ public class TransactionState implements Writable {
         TabletCommitInfo info = new TabletCommitInfo(tabletId, backendId);
         if (this.tabletCommitInfos == null) {
             if (LOG.isDebugEnabled()) {
-                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+                Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(backendId);
                 // if tabletCommitInfos is null, skip this check and return true
                 LOG.debug("tabletCommitInfos is null in TransactionState, tablet {} backend {} txn {}",
                         tabletId, backend != null ? backend.toString() : "", transactionId);
@@ -433,7 +425,7 @@ public class TransactionState implements Writable {
             // Skip check when replica is CLONE, ALTER or SCHEMA CHANGE
             // We handle version missing in finishTask when change state to NORMAL
             if (LOG.isDebugEnabled()) {
-                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+                Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(backendId);
                 LOG.debug("skip tabletCommitInfos check because tablet {} backend {} is in state {}",
                         tabletId, backend != null ? backend.toString() : "", state);
             }
@@ -516,27 +508,19 @@ public class TransactionState implements Writable {
         return timeoutMs;
     }
 
-    public void setErrorLogUrl(String errorLogUrl) {
-        this.errorLogUrl = errorLogUrl;
-    }
-
-    public String getErrorLogUrl() {
-        return errorLogUrl;
-    }
-
     public void setTransactionStatus(TransactionStatus transactionStatus) {
         // status changed
         this.transactionStatus = transactionStatus;
 
         // after status changed
         if (transactionStatus == TransactionStatus.VISIBLE) {
-            if (MetricRepo.isInit) {
+            if (MetricRepo.hasInit) {
                 MetricRepo.COUNTER_TXN_SUCCESS.increase(1L);
             }
             txnSpan.addEvent("set_visible");
             txnSpan.end();
         } else if (transactionStatus == TransactionStatus.ABORTED) {
-            if (MetricRepo.isInit) {
+            if (MetricRepo.hasInit) {
                 MetricRepo.COUNTER_TXN_FAILED.increase(1L);
             }
             txnSpan.setAttribute("state", "aborted");
@@ -561,7 +545,7 @@ public class TransactionState implements Writable {
             throws TransactionException {
         // callback will pass to afterStateTransform since it may be deleted from
         // GlobalTransactionMgr between beforeStateTransform and afterStateTransform
-        TxnStateChangeCallback callback = GlobalStateMgr.getCurrentGlobalTransactionMgr()
+        TxnStateChangeCallback callback = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                 .getCallbackFactory().getCallback(callbackId);
         // before status changed
         if (callback != null) {
@@ -589,9 +573,9 @@ public class TransactionState implements Writable {
         return callback;
     }
 
-    public void afterStateTransform(TransactionStatus transactionStatus, boolean txnOperated) throws UserException {
+    public void afterStateTransform(TransactionStatus transactionStatus, boolean txnOperated) {
         // after status changed
-        TxnStateChangeCallback callback = GlobalStateMgr.getCurrentGlobalTransactionMgr()
+        TxnStateChangeCallback callback = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                 .getCallbackFactory().getCallback(callbackId);
         if (callback != null) {
             if (Objects.requireNonNull(transactionStatus) == TransactionStatus.VISIBLE) {
@@ -624,7 +608,7 @@ public class TransactionState implements Writable {
 
     public void replaySetTransactionStatus() {
         TxnStateChangeCallback callback =
-                GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().getCallback(
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().getCallback(
                         callbackId);
         if (callback != null) {
             if (transactionStatus == TransactionStatus.ABORTED) {
@@ -672,17 +656,7 @@ public class TransactionState implements Writable {
     }
 
     public List<Long> getTableIdList() {
-        if (tableIdList.isEmpty()) {
-            // Old version sometimes forgot to set the tabletIdList, collect tabletIdList
-            // from idToTableCommitInfos.
-            // NOTE: this works only when the state is COMMITTED or VISIBLE
-            tableIdList = Lists.newArrayList(idToTableCommitInfos.keySet());
-        }
         return tableIdList;
-    }
-
-    public void setTableIdList(List<Long> tableIdList) {
-        this.tableIdList = tableIdList;
     }
 
     public Map<Long, TableCommitInfo> getIdToTableCommitInfos() {
@@ -813,142 +787,6 @@ public class TransactionState implements Writable {
         finishChecker = null;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        out.writeLong(transactionId);
-        Text.writeString(out, label);
-        out.writeLong(dbId);
-        out.writeInt(idToTableCommitInfos.size());
-        for (TableCommitInfo info : idToTableCommitInfos.values()) {
-            info.write(out);
-        }
-        out.writeInt(txnCoordinator.sourceType.value());
-        Text.writeString(out, txnCoordinator.ip);
-        out.writeInt(transactionStatus.value());
-        out.writeInt(sourceType.value());
-        out.writeLong(prepareTime);
-        out.writeLong(commitTime);
-        out.writeLong(finishTime);
-        // if txn use new publish mechanism, store state in the space originally used by `reason`
-        // if new publish with TxnFinishState, write json {"normal":[xx],"abnormal":[xxx,xxx]}
-        // else write `reason` field
-        // they are both String, so they are compatible
-        if (transactionStatus == TransactionStatus.VISIBLE) {
-            if (newFinish) {
-                Preconditions.checkNotNull(finishState);
-                Text.writeString(out, GsonUtils.GSON.toJson(finishState));
-            } else {
-                Text.writeString(out, "");
-            }
-        } else {
-            Text.writeString(out, reason);
-        }
-        out.writeInt(errorReplicas.size());
-        for (long errorReplicaId : errorReplicas) {
-            out.writeLong(errorReplicaId);
-        }
-
-        if (txnCommitAttachment == null) {
-            out.writeBoolean(false);
-        } else {
-            out.writeBoolean(true);
-            txnCommitAttachment.write(out);
-        }
-        out.writeLong(callbackId);
-        out.writeLong(timeoutMs);
-        out.writeInt(tableIdList.size());
-        for (Long tableId : tableIdList) {
-            out.writeLong(tableId);
-        }
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        transactionId = in.readLong();
-        label = Text.readString(in);
-        dbId = in.readLong();
-        int size = in.readInt();
-        for (int i = 0; i < size; i++) {
-            TableCommitInfo info = new TableCommitInfo();
-            info.readFields(in);
-            idToTableCommitInfos.put(info.getTableId(), info);
-        }
-        txnCoordinator = new TxnCoordinator(TxnSourceType.valueOf(in.readInt()), Text.readString(in));
-        transactionStatus = TransactionStatus.valueOf(in.readInt());
-        sourceType = LoadJobSourceType.valueOf(in.readInt());
-        prepareTime = in.readLong();
-        commitTime = in.readLong();
-        finishTime = in.readLong();
-        if (transactionStatus == TransactionStatus.VISIBLE) {
-            int len = in.readInt();
-            if (len == 0) {
-                newFinish = false;
-            } else {
-                byte[] bytes = new byte[len];
-                in.readFully(bytes);
-                try {
-                    // originally, TxnFinishState is serialized using protobuf(baidu jprotobuf),
-                    // but looks like the ser/deser is not compatible with java native serialization
-                    // causing FE error when upgrading, so changed to json serialization, but keep
-                    // the old deserialization code here for compatibility
-                    // see: https://github.com/StarRocks/starrocks/issues/15248
-                    byte version = bytes[0];
-                    if (version == 1) {
-                        if (finishState == null) {
-                            finishState = new TxnFinishState();
-                        }
-                        byte[] pbBytes = new byte[len - 1];
-                        System.arraycopy(bytes, 1, pbBytes, 0, len - 1);
-                        finishState.fromBytes(pbBytes);
-                        newFinish = true;
-                    } else {
-                        String content = Text.decode(bytes);
-                        if (content.length() > 2 && content.charAt(0) == '{') {
-                            finishState = GsonUtils.GSON.fromJson(content, TxnFinishState.class);
-                            newFinish = true;
-                        } else {
-                            // old reason
-                            reason = content;
-                            newFinish = false;
-                        }
-                    }
-                } catch (IOException e) {
-                    LOG.warn("failed to deserialize TxnFinishState data: " + Hex.encodeHexString(bytes));
-                }
-            }
-        } else {
-            reason = Text.readString(in);
-        }
-        int errorReplicaNum = in.readInt();
-        for (int i = 0; i < errorReplicaNum; ++i) {
-            errorReplicas.add(in.readLong());
-        }
-
-        if (in.readBoolean()) {
-            txnCommitAttachment = TxnCommitAttachment.read(in);
-        }
-        callbackId = in.readLong();
-        timeoutMs = in.readLong();
-
-        tableIdList = Lists.newArrayList();
-        int tableListSize = in.readInt();
-        for (int i = 0; i < tableListSize; i++) {
-            tableIdList.add(in.readLong());
-        }
-
-        txnSpan.setAttribute("txn_id", transactionId);
-        txnSpan.setAttribute("label", label);
-        if (transactionStatus == TransactionStatus.COMMITTED) {
-            txnSpan.addEvent("set_committed");
-        } else if (transactionStatus == TransactionStatus.ABORTED) {
-            txnSpan.setAttribute("state", "aborted");
-            txnSpan.setStatus(StatusCode.ERROR, reason);
-            txnSpan.end();
-        } else if (transactionStatus == TransactionStatus.VISIBLE) {
-            txnSpan.addEvent("set_visible");
-            txnSpan.end();
-        }
-    }
-
     public void setErrorMsg(String errMsg) {
         this.errMsg = errMsg;
         lastErrTimeMs = System.nanoTime() / 1000000;
@@ -979,7 +817,7 @@ public class TransactionState implements Writable {
         if (publishBackends.isEmpty()) {
             // note: tasks are sent to all backends including dead ones, or else
             // transaction manager will treat it as success
-            List<Long> allBackends = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false);
+            List<Long> allBackends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(false);
             if (!allBackends.isEmpty()) {
                 publishBackends = Sets.newHashSet();
                 publishBackends.addAll(allBackends);
@@ -1143,4 +981,8 @@ public class TransactionState implements Writable {
         tabletIdToTTabletLocation.clear();
     }
 
+    @Override
+    public void write(DataOutput out) throws IOException {
+
+    }
 }

@@ -77,7 +77,7 @@ Compared to those of the finished queries, the text-based Query Profile for runn
   - 🚀: Running operators.
   - ✅: Operators that have finished execution.
 
-- Overall progress: Calculated based on `number of running operators / total number of operators`. Due to the lack of detailed information on data rows, this value may be slightly distorted.
+- Overall progress: Calculated based on `number of operators that have finished execution / total number of operators`. Due to the lack of detailed information on data rows, this value may be slightly distorted.
 
 - Operator progress: Calculated based on `number of rows processed / total number of rows`. If the total number of rows cannot be calculated, the progress is displayed as `?`.
 
@@ -87,7 +87,7 @@ Example:
 
 ## Simulate a query for Profile Analysis Using EXPLAIN ANALYZE
 
-StarRocs provides the [EXPLAIN ANALYZE](../sql-reference/sql-statements/Administration/EXPLAIN_ANALYZE.md) statement, allowing you to simulate and analyze the profile of a query directly. The syntax is as follows:
+StarRocks provides the [EXPLAIN ANALYZE](../sql-reference/sql-statements/Administration/EXPLAIN_ANALYZE.md) statement, allowing you to simulate and analyze the profile of a query directly. The syntax is as follows:
 
 ```SQL
 EXPLAIN ANALYZE <sql_statement>

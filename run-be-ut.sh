@@ -251,6 +251,7 @@ export CLASSPATH=$STARROCKS_HOME/conf:$HADOOP_CLASSPATH:$CLASSPATH
 # ===========================================================
 
 export STARROCKS_TEST_BINARY_DIR=${STARROCKS_TEST_BINARY_DIR}/test
+export ASAN_OPTIONS="abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1:detect_stack_use_after_return=1"
 
 if [ $WITH_AWS = "OFF" ]; then
     append_negative_case "*S3*"
@@ -262,9 +263,8 @@ if [ -d ${STARROCKS_TEST_BINARY_DIR}/util/test_data ]; then
 fi
 cp -r ${STARROCKS_HOME}/be/test/util/test_data ${STARROCKS_TEST_BINARY_DIR}/util/
 
-test_files=`find ${STARROCKS_TEST_BINARY_DIR} -type f -perm -111 -name "*test*" \
-    | grep -v starrocks_test_part1 \
-    | grep -v starrocks_test_part2 \
+test_files=`find ${STARROCKS_TEST_BINARY_DIR} -type f -perm -111 -name "*test" \
+    | grep -v starrocks_test \
     | grep -v bench_test \
     | grep -e "$TEST_MODULE" `
 
@@ -272,18 +272,14 @@ echo "[INFO] gtest_filter: $TEST_NAME"
 # run cases in starrocks_test in parallel if has gtest-parallel script.
 # reference: https://github.com/google/gtest-parallel
 if [[ $TEST_MODULE == '.*'  || $TEST_MODULE == 'starrocks_test' ]]; then
-  echo "Run test: ${STARROCKS_TEST_BINARY_DIR}/starrocks_test_part1 ${STARROCKS_TEST_BINARY_DIR}/starrocks_test_part2"
+  echo "Run test: ${STARROCKS_TEST_BINARY_DIR}/starrocks_test"
   if [ ${DRY_RUN} -eq 0 ]; then
     if [ -x "${GTEST_PARALLEL}" ]; then
-        ${GTEST_PARALLEL} ${STARROCKS_TEST_BINARY_DIR}/starrocks_test_part1 \
-            --gtest_filter=${TEST_NAME} \
-            --serialize_test_cases ${GTEST_PARALLEL_OPTIONS}
-        ${GTEST_PARALLEL} ${STARROCKS_TEST_BINARY_DIR}/starrocks_test_part2 \
+        ${GTEST_PARALLEL} ${STARROCKS_TEST_BINARY_DIR}/starrocks_test \
             --gtest_filter=${TEST_NAME} \
             --serialize_test_cases ${GTEST_PARALLEL_OPTIONS}
     else
-        ${STARROCKS_TEST_BINARY_DIR}/starrocks_test_part1 $GTEST_OPTIONS --gtest_filter=${TEST_NAME}
-        ${STARROCKS_TEST_BINARY_DIR}/starrocks_test_part2 $GTEST_OPTIONS --gtest_filter=${TEST_NAME}
+        ${STARROCKS_TEST_BINARY_DIR}/starrocks_test $GTEST_OPTIONS --gtest_filter=${TEST_NAME}
     fi
   fi
 fi

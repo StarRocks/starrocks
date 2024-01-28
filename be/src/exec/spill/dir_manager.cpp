@@ -14,6 +14,7 @@
 
 #include "exec/spill/dir_manager.h"
 
+#include <cstdlib>
 #include <regex>
 
 #include "common/config.h"
@@ -101,9 +102,20 @@ Status DirManager::init(const std::string& spill_dirs) {
 }
 
 StatusOr<Dir*> DirManager::acquire_writable_dir(const AcquireDirOptions& opts) {
-    // @TODO(silverbullet233): refine the strategy for dir selection
-    size_t idx = _idx++ % _dirs.size();
-    return _dirs[idx].get();
+    // for the case of multiple dirs, we randomly select one as the start
+    // and then try one by one until we find the first one that meets the capacity requirements.
+    size_t start_idx = 0;
+    if (_dirs.size() > 1) {
+        std::lock_guard l(_mutex);
+        start_idx = _rand.Next() % _dirs.size();
+    }
+    for (size_t i = 0; i < _dirs.size(); i++) {
+        size_t idx = (start_idx + i) % _dirs.size();
+        if (_dirs[idx]->inc_size(opts.data_size)) {
+            return _dirs[idx].get();
+        }
+    }
+    return Status::CapacityLimitExceed("no writable spill storage directories");
 }
 
 } // namespace starrocks::spill

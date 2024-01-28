@@ -66,7 +66,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - **Unit**: -
 - **Default**: FALSE
-- **Description**: Whether to ignore an unknown log ID. When an FE is rolled back, the BEs of the earlier version may be unable to recognize some log IDs. If the value is `TRUE`, the FE ignores unknown log IDs. If the value is `FALSE`, the FE exits.
+- **Description**: Whether to ignore an unknown log ID. When an FE is rolled back, the FEs of the earlier version may be unable to recognize some log IDs. If the value is `TRUE`, the FE ignores unknown log IDs. If the value is `FALSE`, the FE exits.
 
 #### ignore_materialized_view_error
 
@@ -315,6 +315,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Threshold to determine whether a table in an external data source (Hive, Iceberg, Hudi) is a small table during automatic collection. If the table has rows less than this value, the table is considered a small table.
 - Introduced in: v3.2
 
+#### enable_statistic_collect_on_first_load
+
+- Unit: -
+- Default: true
+- Description: Whether to automatically collect statistics when data is loaded into a table for the first time. If a table has multiple partitions, any data loading into an empty partition of this table will trigger automatic statistics collection on this partition. If new tables are frequently created and data is frequently loaded, the memory and CPU overhead will increase.
+- Introduced in: v3.1
+
 #### enable_local_replica_selection
 
 - Unit: -
@@ -440,7 +447,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 #### routine_load_unstable_threshold_second
 - **Unit**: s
 - **Default**: 3600
-- **Description**: Routine Load job is set in the UNSTABLE state if any task within the Routine Load job lags. To be specificboth:
+- **Description**: Routine Load job is set to the UNSTABLE state if any task within the Routine Load job lags. To be specific:
   - The difference between the timestamp of the message being consumed and the current time exceeds this threshold.
   - Unconsumed messages exist in the data source.
 
@@ -659,13 +666,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - **Unit**: -
 - **Default**: 0.5
-- **Description**: The threshold for determining whether the BE disk usage is balanced. This parameter takes effect only when `tablet_sched_balancer_strategy` is set to `disk_and_tablet`. If the disk usage of all BEs is lower than 50%, disk usage is considered balanced. For the `disk_and_tablet` policy, if the difference between the highest and lowest BE disk usage is greater than 10%, disk usage is considered unbalanced and tablet re-balancing is triggered. The alias is `balance_load_disk_safe_threshold`.
+- **Description**: The percentage threshold for determining whether the disk usage of BEs is balanced. If the disk usage of all BEs is lower than this value, it is considered balanced. If the disk usage is greater than this value and the difference between the highest and lowest BE disk usage is greater than 10%, the disk usage is considered unbalanced and a tablet re-balancing is triggered. The alias is `balance_load_disk_safe_threshold`.
 
 #### tablet_sched_balance_load_score_threshold
 
 - **Unit**: -
 - **Default**: 0.1
-- **Description**: The threshold for determining whether the BE load is balanced. This parameter takes effect only when `tablet_sched_balancer_strategy` is set to `be_load_score`. A BE whose load is 10% lower than the average load is in a low load state, and a BE whose load is 10% higher than the average load is in a high load state. The alias is `balance_load_score_threshold`.
+- **Description**: The percentage threshold for determining whether the load of a BE is balanced. If a BE has a lower load than the average load of all BEs and the difference is greater than this value, this BE is in a low load state. On the contrary, if a BE has a higher load than the average load and the difference is greater than this value, this BE is in a high load state. The alias is `balance_load_score_threshold`.
 
 #### tablet_sched_repair_delay_factor_second
 
@@ -1146,10 +1153,15 @@ This section provides an overview of the static parameters that you can configur
 - **Default:** 1024
 - **Description:** The size of the blocking queue that stores heartbeat tasks run by the Heartbeat Manager.
 
-#### metadata_failure_recovery
+#### bdbje_reset_election_group
 
 - **Default:** FALSE
-- **Description:** Specifies whether to forcibly reset the metadata of the FE. Exercise caution when you set this parameter.
+- **Description:** Whether to reset the BDBJE replication group. If this parameter is set to `TRUE`, the FE will reset the BDBJE replication group (that is, remove the information of all electable FE nodes) and start as the leader FE. After the reset, this FE will be the only member in the cluster, and other FEs can rejoin this cluster by using `ALTER SYSTEM ADD/DROP FOLLOWER/OBSERVER 'xxx'`. Use this setting only when no leader FE can be elected because the data of most follower FEs have been damaged. `reset_election_group` is used to replace `metadata_failure_recovery`.
+
+#### metadata_journal_ignore_replay_failure
+
+- **Default:** FALSE
+- **Description:** Whether to ignore journal replay failures. `TRUE` indicates journal replay failures will be ignored. However, this configuration does not take effect for failures that will damage cluster data.
 
 #### edit_log_port
 
@@ -1287,11 +1299,6 @@ This section provides an overview of the static parameters that you can configur
 
 - **Default:** HDD
 - **Description:** The default storage media that is used for a table or partition at the time of table or partition creation if no storage media is specified. Valid values: `HDD` and `SSD`. When you create a table or partition, the default storage media specified by this parameter is used if you do not specify a storage media type for the table or partition.
-
-#### tablet_sched_balancer_strategy
-
-- **Default:** disk_and_tablet
-- **Description:** The policy based on which load balancing is implemented among tablets. The alias of this parameter is `tablet_balancer_strategy`. Valid values: `disk_and_tablet` and `be_load_score`.
 
 #### tablet_sched_storage_cooldown_second
 
@@ -1461,3 +1468,19 @@ DO NOT change run_mode after the cluster is deployed. Otherwise, the cluster fai
 
 - **Default:** TRUE
 - **Description:** Specifies whether to enable the feature that is used to periodically collect metrics. Valid values: `TRUE` and `FALSE`. `TRUE` specifies to enable this feature, and `FALSE` specifies to disable this feature.
+
+#### jdbc_connection_pool_size
+
+- **Default:** 8
+- **Description:** The maximum capacity of the JDBC connection pool for accessing JDBC catalogs.
+
+#### jdbc_minimum_idle_connections
+
+- **Default:** 1
+- **Description:** The minimum number of idle connections in the JDBC connection pool for accessing JDBC catalogs.
+
+#### jdbc_connection_idle_timeout_ms
+
+- **Unit**: ms
+- **Default:** 600000
+- **Description:** The maximum amount of time after which a connection for accessing a JDBC catalog times out. Timed-out connections are considered idle.

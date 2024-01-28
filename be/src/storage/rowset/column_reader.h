@@ -160,6 +160,8 @@ public:
 
     size_t mem_usage() const;
 
+    const std::string& name() const { return _name; }
+
 private:
     const std::string& file_name() const { return _segment->file_name(); }
 
@@ -223,6 +225,9 @@ private:
     uint8_t _flags = 0;
     // counter to record the reader's mem usage, sub readers excluded.
     std::atomic<size_t> _meta_mem_usage = 0;
+
+    // only for json flat column
+    std::string _name;
 };
 
 } // namespace starrocks
