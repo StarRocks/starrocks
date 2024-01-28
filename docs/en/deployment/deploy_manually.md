@@ -4,6 +4,10 @@ displayed_sidebar: "English"
 
 # Deploy StarRocks manually
 
+:::tip
+The prerequisites for this step are outlined in the [deployment overview](./deployment_overview.md) document. Please start there if you are planning a production deployment. If you are getting started with StarrRocks and would like to follow one of the Quick Starts, then start with the [Quick Starts](../quick_start/quick_start.md).
+:::
+
 This topic describes how to manually deploy shared-nothing StarRocks (in which the BE is responsible for both storage and computing). For other modes of installation, see [Deployment Overview](../deployment/deployment_overview.md).
 
 To deploy a shared-data StarRocks cluster (decoupled storage and computing), see [Deploy and use shared-data StarRocks](../deployment/shared_data/s3.md)
