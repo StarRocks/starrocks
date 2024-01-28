@@ -697,8 +697,7 @@ public:
         auto snapshot_meta = SnapshotManager::instance()->parse_snapshot_meta(meta_dir + "/meta");
         CHECK(snapshot_meta.ok()) << snapshot_meta.status();
 
-        RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(&(*snapshot_meta), meta_dir,
-                                                                          source_tablet->tablet_schema()));
+        RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(&(*snapshot_meta), meta_dir));
 
         std::set<std::string> files;
         auto st = fs::list_dirs_files(meta_dir, nullptr, &files);
@@ -745,8 +744,7 @@ public:
         snapshot_meta->tablet_meta().set_tablet_id(new_tablet_id);
         CHECK(snapshot_meta->serialize_to_file(meta_file).ok());
 
-        RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(&(*snapshot_meta), meta_dir,
-                                                                          source_tablet->tablet_schema()));
+        RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(&(*snapshot_meta), meta_dir));
 
         auto store = source_tablet->data_dir();
         auto new_schema_hash = source_tablet->schema_hash();
