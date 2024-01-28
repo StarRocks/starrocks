@@ -57,7 +57,6 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.binlog.BinlogConfig;
-import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.ColocateGroupSchema;
@@ -126,7 +125,6 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.CountingLatch;
 import com.starrocks.connector.ConnectorMetadata;
-import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeMaterializedView;
@@ -230,7 +228,6 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.common.SyncPartitionUtils;
-import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.Backend;
@@ -3512,6 +3509,9 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
+    /**
+     * Leave some clean up work to {@link MaterializedView#onDrop}
+     */
     @Override
     public void dropMaterializedView(DropMaterializedViewStmt stmt) throws DdlException, MetaNotFoundException {
         Database db = getDb(stmt.getDbName());
@@ -3537,35 +3537,7 @@ public class LocalMetastore implements ConnectorMetadata {
                         stmt.getDbMvName().getTbl());
             }
 
-            MaterializedView mv = (MaterializedView) table;
-            MaterializedViewMgr.getInstance().stopMaintainMV(mv);
-
-            MvId mvId = new MvId(db.getId(), table.getId());
             db.dropTable(table.getName(), stmt.isSetIfExists(), true);
-            CachingMvPlanContextBuilder.getInstance().invalidateFromCache(mv);
-            List<BaseTableInfo> baseTableInfos = ((MaterializedView) table).getBaseTableInfos();
-            if (baseTableInfos != null) {
-                for (BaseTableInfo baseTableInfo : baseTableInfos) {
-                    Table baseTable = baseTableInfo.getTable();
-                    if (baseTable != null) {
-                        baseTable.removeRelatedMaterializedView(mvId);
-                        if (!baseTable.isNativeTableOrMaterializedView()) {
-                            // remove relatedMaterializedViews for connector table
-                            GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().
-                                    removeConnectorTableInfo(baseTableInfo.getCatalogName(),
-                                            baseTableInfo.getDbName(),
-                                            baseTableInfo.getTableIdentifier(),
-                                            ConnectorTableInfo.builder().setRelatedMaterializedViews(
-                                                    Sets.newHashSet(mvId)).build());
-                        }
-                    }
-                }
-            }
-            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-            Task refreshTask = taskManager.getTask(TaskBuilder.getMvTaskName(table.getId()));
-            if (refreshTask != null) {
-                taskManager.dropTasks(Lists.newArrayList(refreshTask.getId()), false);
-            }
         } else {
             stateMgr.getAlterJobMgr().processDropMaterializedView(stmt);
         }
