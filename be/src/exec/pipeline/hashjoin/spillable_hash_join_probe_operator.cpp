@@ -315,7 +315,6 @@ Status SpillableHashJoinProbeOperator::_load_all_partition_build_side(RuntimeSta
         auto io_task = workgroup::ScanTask(_join_builder->spiller()->options().wg.get(), std::move(task),
                                            std::move(yield_func));
         RETURN_IF_ERROR(_executor->submit(std::move(io_task)));
-        // RETURN_IF_ERROR(_executor->submit(std::move(task)));
     }
     return Status::OK();
 }

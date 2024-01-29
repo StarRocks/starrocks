@@ -103,7 +103,6 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
         auto& spiller = _join_builder->spiller();
         return spiller->set_flush_all_call_back(
                 [this]() {
-                    LOG(INFO) << "hash join build done";
                     _is_finished = true;
                     _join_builder->enter_probe_phase();
                     return Status::OK();

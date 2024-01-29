@@ -105,7 +105,9 @@ SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile, std::atomic_in
 
 Status Spiller::prepare(RuntimeState* state) {
     _chunk_builder.chunk_schema() = std::make_shared<SpilledChunkBuildSchema>();
+#ifndef BE_TEST
     DCHECK(_opts.wg != nullptr) << "workgroup must be set";
+#endif
 
     ASSIGN_OR_RETURN(_serde, Serde::create_serde(this));
 

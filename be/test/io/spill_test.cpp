@@ -144,25 +144,27 @@ public:
 };
 
 struct SyncExecutor {
-    template <class Runnable>
-    Status submit(Runnable&& runnable) {
-        workgroup::YieldContext yield_ctx;
+    Status submit(workgroup::ScanTask task) {
         do {
-            std::forward<Runnable>(runnable)(yield_ctx);
-        } while (!yield_ctx.is_finished());
+            task.run();
+        } while (!task.is_finished());
         return Status::OK();
     }
+    void force_submit(workgroup::ScanTask task) { (void)submit(std::move(task)); }
 };
 
 struct ASyncExecutor {
     using ExecFunction = std::function<void(workgroup::YieldContext&)>;
-    template <class Runnable>
-    Status submit(Runnable&& runnable) {
-        ExecFunction func = std::forward<Runnable>(runnable);
-        _ctxs.emplace_back(std::make_unique<workgroup::YieldContext>());
-        _threads.emplace_back(func, std::ref(*_ctxs.back()));
+
+    Status submit(workgroup::ScanTask task) {
+        _threads.emplace_back([task = std::move(task)]() mutable {
+            do {
+                task.run();
+            } while (!task.is_finished());
+        });
         return Status::OK();
     }
+    void force_submit(workgroup::ScanTask task) { (void)submit(std::move(task)); }
     ~ASyncExecutor() {
         for (auto& thread : _threads) {
             thread.join();
@@ -189,8 +191,7 @@ public:
         dummy_dir_mgr = std::make_unique<spill::DirManager>();
         ASSERT_OK(dummy_dir_mgr->init(path));
 
-        dummy_block_mgr = std::make_unique<spill::LogBlockManager>(dummy_query_id);
-        dummy_block_mgr->set_dir_manager(dummy_dir_mgr.get());
+        dummy_block_mgr = std::make_unique<spill::LogBlockManager>(dummy_query_id, dummy_dir_mgr.get());
 
         dummy_rt_st.set_chunk_size(config::vector_chunk_size);
 

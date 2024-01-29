@@ -38,20 +38,16 @@ Status QuerySpillManager::init_block_manager(const TQueryOptions& query_options)
         return Status::OK();
     }
     const auto& remote_storage_paths = query_options.spill_remote_storage_paths;
-    // const auto& remote_storage_conf = query_options.spill_remote_storage_conf;
-    // @TODO we should hold conf
-    LOG(INFO) << "remote storage conf: " << apache::thrift::ThriftDebugString(query_options.spill_remote_storage_conf);
     auto remote_storage_conf = std::make_shared<TCloudConfiguration>(query_options.spill_remote_storage_conf);
     // init remote block manager
     std::vector<std::shared_ptr<Dir>> remote_dirs;
     for (const auto& path : remote_storage_paths) {
         ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(path, FSOptions(remote_storage_conf.get())));
-        LOG(INFO) << "create fs for remote storage path: " << path << " success";
         RETURN_IF_ERROR(fs->create_dir_if_missing(path));
         auto dir = std::make_shared<Dir>(path, std::move(fs), INT64_MAX);
+        // @TODO make Dir to be a base class
         dir->set_cloud_conf(std::move(remote_storage_conf));
         remote_dirs.emplace_back(dir);
-        // remote_dirs.emplace_back(std::make_shared<Dir>(path, std::move(fs), remote_storage_conf, INT64_MAX));
     }
     _remote_dir_manager = std::make_unique<DirManager>(remote_dirs);
 
@@ -62,14 +58,11 @@ Status QuerySpillManager::init_block_manager(const TQueryOptions& query_options)
         return Status::OK();
     }
 
-    // @TODO hybird block manager, unifty log and file manager together?
     // init block manager
     auto local_block_manager = std::make_unique<LogBlockManager>(_uid, ExecEnv::GetInstance()->spill_dir_mgr());
     auto remote_block_manager = std::make_unique<FileBlockManager>(_uid, _remote_dir_manager.get());
     _block_manager =
             std::make_unique<HyBirdBlockManager>(_uid, std::move(local_block_manager), std::move(remote_block_manager));
-    // _block_manager = std::make_unique<FileBlockManager>(_uid, _remote_dir_manager.get());
-    // _block_manager = std::make_unique<LogBlockManager>(_uid);
 
     return Status::OK();
 }

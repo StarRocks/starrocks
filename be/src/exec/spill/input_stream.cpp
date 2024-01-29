@@ -272,7 +272,7 @@ StatusOr<ChunkUniquePtr> UnorderedInputStream::get_next(workgroup::YieldContext&
         }
         auto& block = _input_blocks[_current_idx];
         if (!(block->is_remote() ^ io_ctx->use_local_io_executor)) {
-            TRACE_SPILL_LOG << fmt::format("block[{}], use local[{}], yield", block->debug_string(),
+            TRACE_SPILL_LOG << fmt::format("block[{}], use_local_io_executor[{}], should yield", block->debug_string(),
                                            io_ctx->use_local_io_executor);
             io_ctx->use_local_io_executor = !block->is_remote();
             return Status::Yield();

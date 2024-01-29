@@ -27,9 +27,7 @@
 namespace starrocks::spill {
 class QuerySpillManager {
 public:
-    QuerySpillManager(const TUniqueId& uid) : _uid(uid) {
-        // _block_manager = std::make_unique<LogBlockManager>(uid);
-    }
+    QuerySpillManager(const TUniqueId& uid) : _uid(uid) {}
 
     Status init_block_manager(const TQueryOptions& query_options);
 

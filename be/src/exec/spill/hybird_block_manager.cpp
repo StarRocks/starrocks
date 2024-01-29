@@ -14,6 +14,8 @@
 
 #include "exec/spill/hybird_block_manager.h"
 
+#include "util/failpoint/fail_point.h"
+
 namespace starrocks::spill {
 
 HyBirdBlockManager::HyBirdBlockManager(const TUniqueId& query_id, std::unique_ptr<BlockManager> local_block_manager,
@@ -37,8 +39,12 @@ void HyBirdBlockManager::close() {
     _remote_block_manager->close();
 }
 
+DEFINE_FAIL_POINT(force_allocate_remote_block);
+
 StatusOr<BlockPtr> HyBirdBlockManager::acquire_block(const AcquireBlockOptions& opts) {
-    if (rand() % 10 < 2) {
+    bool enable_allocate_local_block = true;
+    FAIL_POINT_TRIGGER_EXECUTE(force_allocate_remote_block, { enable_allocate_local_block = false; });
+    if (enable_allocate_local_block) {
         auto local_block = _local_block_manager->acquire_block(opts);
         if (local_block.ok()) {
             return local_block;

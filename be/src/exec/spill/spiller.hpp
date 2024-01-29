@@ -158,8 +158,6 @@ Status RawSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, Mem
         //
         if (!yield_ctx.task_context_data.has_value()) {
             yield_ctx.task_context_data = std::make_shared<FlushContext>();
-            // @TODO how to avoid yield
-            // @TODO seq read, record last executor used
         }
         auto defer = CancelableDefer([&]() {
             {
@@ -188,15 +186,9 @@ Status RawSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, Mem
 
         return Status::OK();
     };
-    auto yield_func = [&](workgroup::ScanTask&& task) {
-        // auto ctx = std::any_cast<SpillIOTaskContextPtr>(task.get_work_context().task_context_data);
-        executor.force_submit(std::move(task));
-    };
-    // @TODO set yield ctx first?
+    auto yield_func = [&](workgroup::ScanTask&& task) { executor.force_submit(std::move(task)); };
     auto io_task = workgroup::ScanTask(_spiller->options().wg.get(), std::move(task), std::move(yield_func));
     RETURN_IF_ERROR(executor.submit(std::move(io_task)));
-    // submit io task
-    // RETURN_IF_ERROR(executor.submit(std::move(task)));
     COUNTER_UPDATE(_spiller->metrics().flush_io_task_count, 1);
     COUNTER_SET(_spiller->metrics().peak_flush_io_task_count, _running_flush_tasks);
     return Status::OK();
@@ -356,13 +348,9 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
         }
         return Status::OK();
     };
-    auto yield_func = [&](workgroup::ScanTask&& task) {
-        // auto ctx = std::any_cast<SpillIOTaskContextPtr>(task.get_work_context().task_context_data);
-        executor.force_submit(std::move(task));
-    };
+    auto yield_func = [&](workgroup::ScanTask&& task) { executor.force_submit(std::move(task)); };
     auto io_task = workgroup::ScanTask(_spiller->options().wg.get(), std::move(task), std::move(yield_func));
     RETURN_IF_ERROR(executor.submit(std::move(io_task)));
-    // RETURN_IF_ERROR(executor.submit(std::move(task)));
     COUNTER_UPDATE(_spiller->metrics().flush_io_task_count, 1);
     COUNTER_SET(_spiller->metrics().peak_flush_io_task_count, _running_flush_tasks);
 

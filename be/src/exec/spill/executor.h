@@ -105,15 +105,6 @@ struct IOTaskExecutor {
                    workgroup::WorkGroupPtr wg)
             : local_io_executor(local_io_executor), remote_io_executor(remote_io_executor), wg(std::move(wg)) {}
 
-    // remove this
-    template <class Func>
-    Status submit(Func&& func) {
-        workgroup::ScanTask task(wg.get(), func);
-        DCHECK(false) << "should not use";
-        // get context
-        return Status::OK();
-    }
-
     Status submit(workgroup::ScanTask task) {
         const auto& task_ctx = task.get_work_context();
         bool use_local_io_executor = true;
@@ -121,7 +112,6 @@ struct IOTaskExecutor {
             auto io_ctx = std::any_cast<SpillIOTaskContextPtr>(task_ctx.task_context_data);
             use_local_io_executor = io_ctx->use_local_io_executor;
         }
-        // @TODO
         auto* pool = use_local_io_executor ? local_io_executor : remote_io_executor;
         if (pool->submit(std::move(task))) {
             return Status::OK();
@@ -137,43 +127,7 @@ struct IOTaskExecutor {
     }
 };
 
-// struct IOTaskExecutor {
-//     workgroup::ScanExecutor* pool;
-//     workgroup::WorkGroupPtr wg;
-
-//     IOTaskExecutor(workgroup::ScanExecutor* pool_, workgroup::WorkGroupPtr wg_) : pool(pool_), wg(std::move(wg_)) {}
-
-//     template <class Func>
-//     Status submit(Func&& func) {
-//         workgroup::ScanTask task(wg.get(), func);
-//         if (pool->submit(std::move(task))) {
-//             return Status::OK();
-//         } else {
-//             return Status::InternalError("offer task failed");
-//         }
-//     }
-//     Status submit(workgroup::ScanTask task) {
-//         if (pool->submit(std::move(task))) {
-//             return Status::OK();
-//         } else {
-//             return Status::InternalError("offer task failed");
-//         }
-//     }
-//     void force_submit(workgroup::ScanTask task) {
-//         pool->force_submit(std::move(task));
-//     }
-// };
-
 struct SyncTaskExecutor {
-    template <class Func>
-    Status submit(Func&& func) {
-        workgroup::YieldContext yield_ctx;
-        do {
-            std::forward<Func>(func)(yield_ctx);
-        } while (!yield_ctx.is_finished());
-        return Status::OK();
-    }
-
     Status submit(workgroup::ScanTask task) {
         do {
             task.run();
