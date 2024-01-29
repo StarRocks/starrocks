@@ -594,8 +594,7 @@ public class ConnectContext {
         if (!sessionVariable.isEnableBigQueryProfile()) {
             return false;
         }
-        return System.currentTimeMillis() - getStartTime() >
-                1000L * sessionVariable.getBigQueryProfileSecondThreshold();
+        return System.currentTimeMillis() - getStartTime() > sessionVariable.getBigQueryProfileMilliSecondThreshold();
     }
 
     public boolean needMergeProfile() {
