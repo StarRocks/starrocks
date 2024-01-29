@@ -2848,11 +2848,17 @@ StatusOr<ExtraFileSize> TabletUpdates::_get_extra_file_size() const {
             if (entry.is_regular_file()) {
                 std::string filename = entry.path().filename().string();
 
+<<<<<<< HEAD
                 if (HasPrefixString(filename, "index.l")) {
                     ef_size.pindex_size += std::filesystem::file_size(entry);
                 } else if (HasSuffixString(filename, ".cols")) {
+=======
+                if (filename.starts_with("index.l")) {
+                    ef_size.pindex_size += entry.file_size();
+                } else if (filename.ends_with(".cols")) {
+>>>>>>> 57c8ac1832 ([UT] fix unstable be ut (#40252))
                     // TODO skip the expired cols file
-                    ef_size.col_size += std::filesystem::file_size(entry);
+                    ef_size.col_size += entry.file_size();
                 }
             }
         }
