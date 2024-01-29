@@ -864,11 +864,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
             for (Replica replica : replicas) {
                 sb.append(String.format("%d:%d/%d/%d/%d:%s:%s,", replica.getBackendId(), replica.getVersion(),
                         replica.getLastFailedVersion(), replica.getLastSuccessVersion(), replica.getMinReadableVersion(),
-<<<<<<< HEAD
-                        replica.getState(), getReplicaBackendState(replica.getBackendId())));
-=======
                         replica.isBad() ? "BAD" : replica.getState(), getReplicaBackendState(replica.getBackendId())));
->>>>>>> 76addabf8d ([Enhancement] Replica state should reflect whether it's bad when logging (backport #40071) (#40115))
             }
         }
         return sb.toString();
