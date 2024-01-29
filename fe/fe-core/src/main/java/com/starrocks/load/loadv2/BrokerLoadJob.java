@@ -504,7 +504,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                 }
             });
         } finally {
-            locker.unLockTables(db, tableIdList, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE);
         }
     }
 

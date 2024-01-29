@@ -348,13 +348,13 @@ public class TransactionState implements Writable {
     private final ReentrantReadWriteLock txnLock = new ReentrantReadWriteLock(true);
 
     public void writeLock() {
-        if (Config.use_lock_manager) {
+        if (Config.load_using_fine_granularity_lock_enabled) {
             txnLock.writeLock().lock();
         }
     }
 
     public void writeUnlock() {
-        if (Config.use_lock_manager) {
+        if (Config.load_using_fine_granularity_lock_enabled) {
             txnLock.writeLock().unlock();
         }
     }

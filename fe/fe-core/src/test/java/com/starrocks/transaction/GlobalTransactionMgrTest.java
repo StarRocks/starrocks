@@ -912,6 +912,11 @@ public class GlobalTransactionMgrTest {
             throws UserException {
         Database db = new Database(10L, "db0");
         GlobalTransactionMgr globalTransactionMgr = spy(new GlobalTransactionMgr(GlobalStateMgr.getCurrentState()));
+        TransactionState transactionState = new TransactionState();
+        doReturn(transactionState)
+                .when(globalTransactionMgr)
+                .getTransactionState(10L, 1001L);
+
         doThrow(LockTimeoutException.class)
                 .when(globalTransactionMgr)
                 .commitTransaction(10L, 1001L, Collections.emptyList(), Collections.emptyList(), null);

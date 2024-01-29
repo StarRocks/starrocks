@@ -285,7 +285,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         try {
             waiter = getDatabaseTransactionMgr(db.getId()).commitPreparedTransaction(transactionId);
         } finally {
-            locker.unLockTables(db, tableIdList, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE);
         }
 
         MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
@@ -400,7 +400,6 @@ public class GlobalTransactionMgr implements MemoryTrackable {
             @Nullable TxnCommitAttachment attachment, long timeoutMs) throws UserException {
         TransactionState transactionState = getTransactionState(db.getId(), transactionId);
         List<Long> tableId = transactionState.getTableIdList();
-
         Locker locker = new Locker();
         if (!locker.tryLockTablesWithIntensiveDbLock(db, tableId, LockType.WRITE, timeoutMs)) {
             throw new LockTimeoutException(
@@ -409,7 +408,7 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         try {
             return commitTransaction(db.getId(), transactionId, tabletCommitInfos, tabletFailInfos, attachment);
         } finally {
-            locker.unLockTables(db, tableId, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db, tableId, LockType.WRITE);
         }
     }
 

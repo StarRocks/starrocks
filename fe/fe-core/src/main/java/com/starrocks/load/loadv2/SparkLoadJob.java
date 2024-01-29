@@ -754,7 +754,7 @@ public class SparkLoadJob extends BulkLoadJob {
             // retry in next loop
             LOG.info("Failed commit for txn {}, will retry. Error: {}", transactionId, e.getMessage());
         } finally {
-            locker.unLockTables(db, tableIdList, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE);
         }
     }
 

@@ -392,7 +392,6 @@ public class DatabaseTransactionMgr {
         }
         transactionState.writeLock();
         try {
-
             if (transactionState.getTransactionStatus() == TransactionStatus.ABORTED) {
                 throw new TransactionCommitFailedException(transactionState.getReason());
             }
@@ -523,12 +522,20 @@ public class DatabaseTransactionMgr {
         // before state transform
         TxnStateChangeCallback callback = transactionState.beforeStateTransform(TransactionStatus.ABORTED);
         boolean txnOperated = false;
-        writeLock();
+
+        transactionState.writeLock();
         try {
-            txnOperated = unprotectAbortTransaction(transactionId, abortPrepared, reason);
+            writeLock();
+            try {
+                txnOperated = unprotectAbortTransaction(transactionId, abortPrepared, reason);
+            } finally {
+                writeUnlock();
+                transactionState.afterStateTransform(TransactionStatus.ABORTED, txnOperated, callback, reason);
+            }
+
+            persistTxnStateInTxnLevelLock(transactionState);
         } finally {
-            writeUnlock();
-            transactionState.afterStateTransform(TransactionStatus.ABORTED, txnOperated, callback, reason);
+            transactionState.writeUnlock();
         }
 
         if (!txnOperated || transactionState.getTransactionStatus() != TransactionStatus.ABORTED) {
@@ -929,7 +936,7 @@ public class DatabaseTransactionMgr {
                 }
             }
         } finally {
-            locker.unLockTables(db, tableIdList, LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db, tableIdList, LockType.READ);
         }
         return true;
     }
@@ -1129,7 +1136,7 @@ public class DatabaseTransactionMgr {
                 transactionState.writeUnlock();
             }
         } finally {
-            locker.unLockTables(db, tableIdList, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE);
             finishSpan.end();
         }
 
@@ -1255,13 +1262,11 @@ public class DatabaseTransactionMgr {
 
     // The status of stateBach is VISIBLE or ABORTED
     public void unprotectSetTransactionStateBatch(TransactionStateBatch stateBatch, boolean isReplay) {
-        if (!isReplay) {
-            if (!Config.use_lock_manager) {
-                long start = System.currentTimeMillis();
-                editLog.logInsertTransactionStateBatch(stateBatch);
-                LOG.debug("insert txn state visible for txnIds batch {}, cost: {}ms",
-                        stateBatch.getTxnIds(), System.currentTimeMillis() - start);
-            }
+        if (!isReplay && !Config.load_using_fine_granularity_lock_enabled) {
+            long start = System.currentTimeMillis();
+            editLog.logInsertTransactionStateBatch(stateBatch);
+            LOG.debug("insert txn state visible for txnIds batch {}, cost: {}ms",
+                    stateBatch.getTxnIds(), System.currentTimeMillis() - start);
         }
 
         for (TransactionState transactionState : stateBatch.getTransactionStates()) {
@@ -1764,7 +1769,7 @@ public class DatabaseTransactionMgr {
                 transactionState.writeUnlock();
             }
         } finally {
-            locker.unLockTables(db, tableIdList, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE);
             finishSpan.end();
         }
 
@@ -1787,7 +1792,7 @@ public class DatabaseTransactionMgr {
                 } finally {
                     writeUnlock();
                 }
-                if (Config.use_lock_manager) {
+                if (Config.load_using_fine_granularity_lock_enabled) {
                     long start = System.currentTimeMillis();
                     editLog.logInsertTransactionStateBatch(stateBatch);
                     LOG.debug("insert txn state visible for txnIds batch {}, cost: {}ms",
@@ -1813,7 +1818,7 @@ public class DatabaseTransactionMgr {
                     writeUnlock();
                     stateBatch.afterVisible(TransactionStatus.VISIBLE, txnOperated);
                 }
-                if (Config.use_lock_manager) {
+                if (Config.load_using_fine_granularity_lock_enabled) {
                     long start = System.currentTimeMillis();
                     editLog.logInsertTransactionStateBatch(stateBatch);
                     LOG.debug("insert txn state visible for txnIds batch {}, cost: {}ms",
