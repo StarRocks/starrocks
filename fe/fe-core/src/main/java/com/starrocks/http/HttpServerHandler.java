@@ -96,7 +96,23 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("action: {} ", action.getClass().getName());
                 }
+<<<<<<< HEAD
                 action.handleRequest(req);
+=======
+
+                HttpServerHandlerMetrics metrics = HttpServerHandlerMetrics.getInstance();
+                long startTime = System.currentTimeMillis();
+                try {
+                    metrics.handlingRequestsNum.increase(1L);
+                    action.handleRequest(req);
+                } finally {
+                    long latency = System.currentTimeMillis() - startTime;
+                    metrics.handlingRequestsNum.increase(-1L);
+                    metrics.requestHandleLatencyMs.update(latency);
+                    LOG.info("receive http request. url: {}, thread id: {}, startTime: {}, latency: {} ms",
+                            req.getRequest().uri(), Thread.currentThread().getId(), startTime, latency);
+                }
+>>>>>>> 84029ec3b7 ([Enhancement] Avoid to register metrics for each HttpServerHandler (#39292))
             }
         } else {
             ReferenceCountUtil.release(msg);
@@ -105,6 +121,10 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
 
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
+<<<<<<< HEAD
+=======
+        HttpServerHandlerMetrics.getInstance().httpConnectionsNum.increase(1L);
+>>>>>>> 84029ec3b7 ([Enhancement] Avoid to register metrics for each HttpServerHandler (#39292))
         // create HttpConnectContext when channel is establised, and store it in channel attr
         ctx.channel().attr(HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY).setIfAbsent(new HttpConnectContext());
         super.channelActive(ctx);
@@ -112,6 +132,10 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+<<<<<<< HEAD
+=======
+        HttpServerHandlerMetrics.getInstance().httpConnectionsNum.increase(-1L);
+>>>>>>> 84029ec3b7 ([Enhancement] Avoid to register metrics for each HttpServerHandler (#39292))
         if (action != null) {
             action.handleChannelInactive(ctx);
         }
