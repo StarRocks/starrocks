@@ -5,7 +5,7 @@ displayed_sidebar: "English"
 # Deploy StarRocks manually
 
 :::tip
-The preparations for manual deployment are outlined in the [Deployment prerequisites](./deployment_prerequisites.md) and [Check environment configurations](./environment_configurations.md) documents. Please start there if you are planning a production deployment. If you are getting started with StarrRocks and would like to follow one of the Quick Starts, please refer to [Quick Starts](../quick_start/quick_start.mdx).
+The preparations for manual deployment are outlined in the [Deployment prerequisites](./deployment_prerequisites.md) and [Check environment configurations](./environment_configurations.md) documents. Please start there if you are planning a production deployment. If you are getting started with StarRocks and would like to follow one of the Quick Starts, please refer to [Quick Starts](../quick_start/quick_start.mdx).
 :::
 
 This topic describes how to manually deploy shared-nothing StarRocks (in which the BE is responsible for both storage and computing). For other modes of installation, see [Deployment Overview](../deployment/deployment_overview.md).
