@@ -54,14 +54,11 @@ Status SharedBufferedInputStream::_sort_and_check_overlap(std::vector<IORange>& 
         return a.size < b.size;
     });
 
-    for (auto item : ranges) {
-        LOG(INFO) << this << "sort offset and size " << item.offset << " " << item.size;
-    }
     // check io range is not overlapped.
     for (size_t i = 1; i < ranges.size(); i++) {
         if (ranges[i].offset < (ranges[i - 1].offset + ranges[i - 1].size)) {
-            LOG(INFO) << "io ranges are overalpped" << ranges[i].offset << " "
-                      << ranges[i - 1].offset + ranges[i - 1].size;
+            LOG(WARNING) << "io ranges are overalpped" << ranges[i].offset << " "
+                         << ranges[i - 1].offset + ranges[i - 1].size;
             return Status::RuntimeError("io ranges are overalpped");
         }
     }
@@ -123,7 +120,6 @@ Status SharedBufferedInputStream::_set_io_ranges_all_columns(const std::vector<I
 
     _merge_small_ranges(small_ranges);
     _update_estimated_mem_usage();
-    print_shared_buffer();
     return Status::OK();
 }
 
@@ -189,7 +185,6 @@ Status SharedBufferedInputStream::_set_io_ranges_active_and_lazy_columns(const s
     }
 
     _update_estimated_mem_usage();
-    //print_shared_buffer();
     return Status::OK();
 }
 

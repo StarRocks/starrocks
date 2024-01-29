@@ -121,12 +121,10 @@ public:
 
         std::vector<io::SharedBufferedInputStream::IORange> result;
         std::vector<std::pair<int, int>> page_index;
-        //int64_t start_ts = MonotonicMillis();
         int prev_page_index = -1;
         for (auto index = 0; index < range.size(); index++) {
             auto row_start = range[index].begin();
             auto row_end = range[index].end() - 1;
-            //LOG(INFO) << "converse range start1:" << row_start << "row_end:" << row_end;
             OrdinalPageIndexIterator iter_start;
             OrdinalPageIndexIterator iter_end;
             RETURN_IF_ERROR(reader->seek_at_or_before(row_start, &iter_start));
@@ -151,11 +149,7 @@ public:
             auto size = iter_end.page().offset - offset + iter_end.page().size;
             io::SharedBufferedInputStream::IORange io_range(offset, size);
             result.emplace_back(io_range);
-            LOG(INFO) << this << "pair index from to " << pair.first << " " << pair.second << ", offset size " << offset
-                      << " " << size;
         }
-        //int64_t end_ts = MonotonicMillis();
-        //LOG(INFO) << "converse sparse range to io::range cost " << end_ts - start_ts << " ms";
 
         return dynamic_cast<io::SharedBufferedInputStream*>(_opts.read_file)->set_io_ranges(result);
     }
