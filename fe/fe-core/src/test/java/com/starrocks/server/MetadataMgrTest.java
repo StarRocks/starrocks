@@ -16,23 +16,20 @@
 package com.starrocks.server;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TypeDef;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorMgr;
+import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.hive.HiveMetastoreApiConverter;
+import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
-import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
-import com.starrocks.sql.ast.ListPartitionDesc;
-import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -47,13 +44,11 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import static com.starrocks.connector.hive.HiveClassNames.MAPRED_PARQUET_INPUT_FORMAT_CLASS;
 
@@ -268,108 +263,110 @@ public class MetadataMgrTest {
 
     @Test
     public void testHiveCreateTableLike() throws Exception {
-        MetadataMgr metadataMgr = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
+        class MockedHiveMetadataMgr extends MockedMetadataMgr {
 
-        CreateTableStmt stmt = new CreateTableStmt(
-                false,
-                true,
-                new TableName("hive_catalog", "hive_db", "hive_table"),
-                Lists.newArrayList(
-                        new ColumnDef("col1", TypeDef.create(PrimitiveType.INT)),
-                        new ColumnDef("col2", TypeDef.create(PrimitiveType.INT))),
-                "hive",
-                null,
-                new ListPartitionDesc(Lists.newArrayList("col1"), new ArrayList<>()),
-                null,
-                new HashMap<>(),
-                new HashMap<>(),
-                "my table comment");
-        List<Column> columns = stmt.getColumnDefs().stream().map(ColumnDef::toColumn).collect(Collectors.toList());
-        stmt.getColumns().addAll(columns);
+            public MockedHiveMetadataMgr(LocalMetastore localMetastore, ConnectorMgr connectorMgr) {
+                super(localMetastore, connectorMgr);
+            }
 
-        CreateTableLikeStmt createTableLikeStmt = new CreateTableLikeStmt(
-                false,
-                new TableName("hive_catalog", "hive_db", "hive_table_1"),
-                new TableName("hive_catalog", "hive_db", "hive_table"),
-                null,
-                null,
-                new HashMap<>(),
-                NodePosition.ZERO);
-        createTableLikeStmt.setCreateTableStmt(stmt);
+            @Override
+            public com.starrocks.catalog.Database getDb(String catalogName, String dbName) {
+                return new com.starrocks.catalog.Database(0, "hive_db", "s3://test-db/");
+            }
+
+            @Override
+            public com.starrocks.catalog.Table getTable(String catalogName, String dbName, String tblName) {
+                List<FieldSchema> partKeys = Lists.newArrayList(new FieldSchema("col1", "INT", ""));
+                List<FieldSchema> unPartKeys = Lists.newArrayList(new FieldSchema("col2", "INT", ""));
+                String hdfsPath = "hdfs://127.0.0.1:10000/hive";
+                StorageDescriptor sd = new StorageDescriptor();
+                sd.setInputFormat(MAPRED_PARQUET_INPUT_FORMAT_CLASS);
+                sd.setCols(unPartKeys);
+                sd.setLocation(hdfsPath);
+                Table msTable = new Table();
+                msTable.setPartitionKeys(partKeys);
+                msTable.setSd(sd);
+                msTable.setTableType("MANAGED_TABLE");
+                msTable.setTableName("hive_tbl");
+                msTable.setDbName("hive_db");
+                int createTime = (int) System.currentTimeMillis();
+                msTable.setCreateTime(createTime);
+
+                return HiveMetastoreApiConverter.toHiveTable(msTable, "hive_catalog");
+            }
+
+            @Override
+            public boolean tableExists(String catalogName, String dbName, String tblName) {
+                return (catalogName.equals("hive_catalog") && dbName.equals("hive_db") && tblName.equals("hive_tbl")) ||
+                        (catalogName.equals("hive_catalog") && dbName.equals("hive_db") && tblName.equals("hive_tbl_1"));
+            }
+        }
+
+        ConnectContext connectContext = AnalyzeTestUtil.getConnectContext();
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        MockedHiveMetadataMgr mockedHiveMetadataMgr = new MockedHiveMetadataMgr(
+                connectContext.getGlobalStateMgr().getLocalMetastore(),
+                connectContext.getGlobalStateMgr().getConnectorMgr());
+
+        // set to mockedHiveMetadataMgr to pass Analyzer check
+        GlobalStateMgr.getCurrentState().setMetadataMgr(mockedHiveMetadataMgr);
+        MockedHiveMetadata mockedHiveMetadata = new MockedHiveMetadata();
+        mockedHiveMetadataMgr.registerMockedMetadata("hive_catalog", mockedHiveMetadata);
+
+        String stmt = "create external table hive_catalog_1.hive_db.hive_tbl_1 like hive_catalog.hive_db.hive_tbl";
+        CreateTableLikeStmt createTableLikeStmt =
+                (CreateTableLikeStmt) UtFrameUtils.parseStmtWithNewParser(stmt, AnalyzeTestUtil.getConnectContext());
 
         try {
-            metadataMgr.createTableLike(createTableLikeStmt);
-            Assert.fail();
+            mockedHiveMetadataMgr.createTableLike(createTableLikeStmt);
         } catch (Exception e) {
             Assert.assertTrue(e instanceof DdlException);
-            Assert.assertTrue(e.getMessage().contains("Unknown database 'hive_db'"));
+            Assert.assertTrue(e.getMessage().contains("Invalid catalog hive_catalog_1"));
         }
 
-        new Expectations(metadataMgr) {
-            {
-                metadataMgr.getDb("hive_catalog", "hive_db");
-                result = new com.starrocks.catalog.Database();
-                minTimes = 0;
-            }
-        };
+        stmt = "create external table hive_catalog.hive_db.hive_tbl_1 like hive_catalog.hive_db.hive_table";
+        createTableLikeStmt =
+                (CreateTableLikeStmt) UtFrameUtils.parseStmtWithNewParser(stmt, AnalyzeTestUtil.getConnectContext());
 
         try {
-            metadataMgr.createTableLike(createTableLikeStmt);
-            Assert.fail();
-        } catch (Exception e) {
-            Assert.assertTrue(e instanceof StarRocksConnectorException);
-            Assert.assertTrue(e.getMessage().contains("Unable to instantiate " +
-                    "org.apache.hadoop.hive.metastore.HiveMetaStoreClient"));
-        }
-
-        new Expectations(metadataMgr) {
-            {
-                metadataMgr.getDb("hive_catalog", "hive_db");
-                result = new com.starrocks.catalog.Database();
-                minTimes = 0;
-
-                metadataMgr.tableExists("hive_catalog", "hive_db", "hive_table_1");
-                result = true;
-                minTimes = 0;
-            }
-        };
-
-        try {
-            metadataMgr.createTableLike(createTableLikeStmt);
-            Assert.fail();
+            mockedHiveMetadataMgr.createTableLike(createTableLikeStmt);
         } catch (Exception e) {
             Assert.assertTrue(e instanceof DdlException);
-            Assert.assertTrue(e.getMessage().contains("Table 'hive_table_1' already exists"));
+            Assert.assertTrue(e.getMessage().contains("Table 'hive_tbl_1' already exists"));
         }
 
-        new Expectations(metadataMgr) {
-            {
-                metadataMgr.getDb("hive_catalog", "hive_db");
-                result = new com.starrocks.catalog.Database();
-                minTimes = 0;
-
-                metadataMgr.tableExists("hive_catalog", "hive_db", "hive_table");
-                result = true;
-                minTimes = 0;
-
-                metadataMgr.tableExists("hive_catalog", "hive_db", "hive_table_1");
-                result = false;
-                minTimes = 0;
-
-                metadataMgr.getTable("hive_catalog", "hive_db", "hive_table_1");
-                result = new com.starrocks.catalog.Table(com.starrocks.catalog.Table.TableType.HIVE);
-                minTimes = 0;
-            }
-        };
+        stmt = "create external table hive_catalog.hive_db.hive_tbl_2 like hive_catalog.hive_db.hive_tbl";
+        createTableLikeStmt =
+                (CreateTableLikeStmt) UtFrameUtils.parseStmtWithNewParser(stmt, AnalyzeTestUtil.getConnectContext());
 
         try {
-            metadataMgr.createTableLike(createTableLikeStmt);
-            Assert.fail();
+            mockedHiveMetadataMgr.createTableLike(createTableLikeStmt);
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof StarRocksConnectorException);
-            Assert.assertTrue(e.getMessage().contains("Unable to instantiate " +
-                    "org.apache.hadoop.hive.metastore.HiveMetaStoreClient"));
+            Assert.assertNull(e);
         }
+
+        stmt = "create external table if not exists hive_catalog.hive_db.hive_tbl_1 like hive_catalog.hive_db.hive_table";
+        createTableLikeStmt =
+                (CreateTableLikeStmt) UtFrameUtils.parseStmtWithNewParser(stmt, AnalyzeTestUtil.getConnectContext());
+
+        try {
+            mockedHiveMetadataMgr.createTableLike(createTableLikeStmt);
+        } catch (Exception e) {
+            Assert.assertNull(e);
+        }
+
+        stmt = "create external table if not exists hive_catalog.hive_db.hive_tbl_2 like hive_catalog.hive_db.hive_table";
+        createTableLikeStmt =
+                (CreateTableLikeStmt) UtFrameUtils.parseStmtWithNewParser(stmt, AnalyzeTestUtil.getConnectContext());
+
+        try {
+            mockedHiveMetadataMgr.createTableLike(createTableLikeStmt);
+        } catch (Exception e) {
+            Assert.assertNull(e);
+        }
+
+        // set back to original metadataMrg
+        GlobalStateMgr.getCurrentState().setMetadataMgr(metadataMgr);
     }
 
     @Test
