@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include <random>
+
 #include "column/binary_column.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
@@ -32,8 +34,10 @@ namespace starrocks {
 
 template <typename DatumType>
 void test_pk_dump(PrimaryIndex* pk_index, const std::map<std::string, uint64_t>& current_index_stat) {
-    const std::string kPrimaryIndexDumpDir = "./PrimaryIndexTest_test_index_dump";
-    const std::string kPrimaryIndexDumpFile = kPrimaryIndexDumpDir + "/111.pkdump";
+    std::srand(static_cast<unsigned int>(time(nullptr)));
+    std::string kPrimaryIndexDumpDir = "./PrimaryIndexTest_test_index_dump_" + std::to_string(std::rand()) + "_" +
+                                       std::to_string(static_cast<int64_t>(pthread_self()));
+    std::string kPrimaryIndexDumpFile = kPrimaryIndexDumpDir + "/111.pkdump";
     bool created;
     FileSystem* fs = FileSystem::Default();
     ASSERT_TRUE(fs->create_dir_if_missing(kPrimaryIndexDumpDir, &created).ok());

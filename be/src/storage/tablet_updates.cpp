@@ -2953,10 +2953,10 @@ StatusOr<ExtraFileSize> TabletUpdates::_get_extra_file_size() const {
                 std::string filename = entry.path().filename().string();
 
                 if (filename.starts_with("index.l")) {
-                    ef_size.pindex_size += std::filesystem::file_size(entry);
+                    ef_size.pindex_size += entry.file_size();
                 } else if (filename.ends_with(".cols")) {
                     // TODO skip the expired cols file
-                    ef_size.col_size += std::filesystem::file_size(entry);
+                    ef_size.col_size += entry.file_size();
                 }
             }
         }
