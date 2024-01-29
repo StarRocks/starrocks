@@ -25,7 +25,7 @@ Bitmap 索引能够提高指定列的查询效率。如果一个查询条件命�
   - 数值类型：TINYINT、SMALLINT、INT、BITGINT、LARGEINT、DECIMAL 和 BOOLEAN。
   - 字符串类型：CHAR、STRING 和 VARCHAR。
   - 其他类型：HLL。
-- 如要了解一个查询是否命中了 Bitmap 索引，可查看该查询的 Profile 中的 `BitmapIndexFilterRows` 字段。关于如何查看 Profile，参见[分析查询](../../administration/Query_planning.md#查看分析-profile)。
+- 如要了解一个查询是否命中了 Bitmap 索引，可查看该查询的 Profile 中的 `BitmapIndexFilterRows` 字段。关于如何查看 Profile，参见[分析查询](../administration/Query_planning.md#查看分析-profile)。
 
 ## 创建索引
 
