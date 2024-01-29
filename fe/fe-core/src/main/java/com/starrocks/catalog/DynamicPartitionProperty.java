@@ -38,6 +38,7 @@ import com.starrocks.analysis.TimestampArithmeticExpr.TimeUnit;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DynamicPartitionUtil.StartOfDate;
 import com.starrocks.common.util.TimeUtils;
+import org.apache.arrow.util.VisibleForTesting;
 
 import java.util.Map;
 import java.util.TimeZone;
@@ -193,6 +194,11 @@ public class DynamicPartitionProperty {
         sb.deleteCharAt(sb.length() - 1);
         sb.append("}");
         return sb.toString();
+    }
+
+    @VisibleForTesting
+    public void setTimeUnit(String timeUnit) {
+        this.timeUnit = timeUnit;
     }
 
     @Override

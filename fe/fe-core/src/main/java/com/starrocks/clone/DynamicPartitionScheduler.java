@@ -40,6 +40,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
@@ -256,6 +257,13 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                 partitionProperties.put("replication_num",
                         String.valueOf(dynamicPartitionProperty.getReplicationNum()));
             }
+
+            if (partitionColumn.getPrimitiveType().isDateType() &&
+                    dynamicPartitionProperty.getTimeUnit()
+                            .equalsIgnoreCase(TimestampArithmeticExpr.TimeUnit.HOUR.toString())) {
+                throw new SemanticException("Date type partition does not support dynamic partitioning granularity of hour");
+            }
+
             String partitionName = dynamicPartitionProperty.getPrefix() +
                     DynamicPartitionUtil.getFormattedPartitionName(dynamicPartitionProperty.getTimeZone(), prevBorder,
                             dynamicPartitionProperty.getTimeUnit());
@@ -405,20 +413,19 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                 return true;
             }
 
-            Column partitionColumn = rangePartitionInfo.getPartitionColumns().get(0);
-            String partitionFormat;
             try {
-                partitionFormat = DynamicPartitionUtil.getPartitionFormat(partitionColumn);
-            } catch (DdlException e) {
+                Column partitionColumn = rangePartitionInfo.getPartitionColumns().get(0);
+                String partitionFormat = DynamicPartitionUtil.getPartitionFormat(partitionColumn);
+                if (!skipAddPartition) {
+                    addPartitionClauses = getAddPartitionClause(db, olapTable, partitionColumn, partitionFormat);
+                }
+                dropPartitionClauses = getDropPartitionClause(db, olapTable, partitionColumn, partitionFormat);
+                tableName = olapTable.getName();
+            } catch (Exception e) {
+                LOG.warn("create or drop partition failed", e);
                 recordCreatePartitionFailedMsg(db.getOriginName(), olapTable.getName(), e.getMessage());
                 return false;
             }
-
-            if (!skipAddPartition) {
-                addPartitionClauses = getAddPartitionClause(db, olapTable, partitionColumn, partitionFormat);
-            }
-            dropPartitionClauses = getDropPartitionClause(db, olapTable, partitionColumn, partitionFormat);
-            tableName = olapTable.getName();
         } finally {
             locker.unLockDatabase(db, LockType.READ);
         }
