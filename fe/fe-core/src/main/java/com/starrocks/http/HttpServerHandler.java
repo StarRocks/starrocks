@@ -90,11 +90,35 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("action: {} ", action.getClass().getName());
                 }
-                action.handleRequest(req);
+
+                HttpServerHandlerMetrics metrics = HttpServerHandlerMetrics.getInstance();
+                long startTime = System.currentTimeMillis();
+                try {
+                    metrics.handlingRequestsNum.increase(1L);
+                    action.handleRequest(req);
+                } finally {
+                    long latency = System.currentTimeMillis() - startTime;
+                    metrics.handlingRequestsNum.increase(-1L);
+                    metrics.requestHandleLatencyMs.update(latency);
+                    LOG.info("receive http request. url: {}, thread id: {}, startTime: {}, latency: {} ms",
+                            req.getRequest().uri(), Thread.currentThread().getId(), startTime, latency);
+                }
             }
         } else {
             ReferenceCountUtil.release(msg);
         }
+    }
+
+    @Override
+    public void channelActive(ChannelHandlerContext ctx) throws Exception {
+        HttpServerHandlerMetrics.getInstance().httpConnectionsNum.increase(1L);
+        super.channelActive(ctx);
+    }
+
+    @Override
+    public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+        HttpServerHandlerMetrics.getInstance().httpConnectionsNum.increase(-1L);
+        super.channelInactive(ctx);
     }
 
     private void validateRequest(ChannelHandlerContext ctx, HttpRequest request) {

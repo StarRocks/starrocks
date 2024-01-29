@@ -620,6 +620,13 @@ public class Config extends ConfigBase {
     public static boolean http_web_page_display_hardware = true;
 
     /**
+     * Whether to enable the detail metrics for http. It may be expensive
+     * to get those metrics, and only enable it for debug in general.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_http_detail_metrics = false;
+
+    /**
      * Cluster name will be shown as the title of web page
      */
     @ConfField
