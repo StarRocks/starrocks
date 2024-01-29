@@ -59,7 +59,7 @@ public:
 
 private:
     Status _init();
-    void _send_request(SegmentPB* segment, butil::IOBuf& data, bool eos);
+    Status _send_request(SegmentPB* segment, butil::IOBuf& data, bool eos);
     Status _wait_response(std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos,
                           std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos);
 

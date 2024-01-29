@@ -66,7 +66,29 @@ public:
         }
     }
 
-    PInternalService_Stub* get_stub(const butil::EndPoint& endpoint) {
+    void reset_stub(const std::string& host, int port) {
+        butil::EndPoint endpoint;
+        std::string realhost;
+        realhost = host;
+        if (!is_valid_ip(host)) {
+            realhost = hostname_to_ip(host);
+            if (realhost == "") {
+                LOG(WARNING) << "failed to get ip from host, host=" << host;
+                return;
+            }
+        }
+        if (str2endpoint(realhost.c_str(), port, &endpoint)) {
+            LOG(WARNING) << "unknown endpoint, host=" << host;
+            return;
+        }
+        std::lock_guard<SpinLock> l(_lock);
+        auto stub_pool = _stub_map.seek(endpoint);
+        if (stub_pool != nullptr) {
+            (*stub_pool)->reset();
+        }
+    }
+
+    std::shared_ptr<PInternalService_Stub> get_stub(const butil::EndPoint& endpoint) {
         std::lock_guard<SpinLock> l(_lock);
         auto stub_pool = _stub_map.seek(endpoint);
         if (stub_pool == nullptr) {
@@ -77,9 +99,11 @@ public:
         return (*stub_pool)->get_or_create(endpoint);
     }
 
-    PInternalService_Stub* get_stub(const TNetworkAddress& taddr) { return get_stub(taddr.hostname, taddr.port); }
+    std::shared_ptr<PInternalService_Stub> get_stub(const TNetworkAddress& taddr) {
+        return get_stub(taddr.hostname, taddr.port);
+    }
 
-    PInternalService_Stub* get_stub(const std::string& host, int port) {
+    std::shared_ptr<PInternalService_Stub> get_stub(const std::string& host, int port) {
         butil::EndPoint endpoint;
         std::string realhost;
         realhost = host;
@@ -104,13 +128,7 @@ private:
     struct StubPool {
         StubPool() { _stubs.reserve(config::brpc_max_connections_per_server); }
 
-        ~StubPool() {
-            for (auto& stub : _stubs) {
-                delete stub;
-            }
-        }
-
-        PInternalService_Stub* get_or_create(const butil::EndPoint& endpoint) {
+        std::shared_ptr<PInternalService_Stub> get_or_create(const butil::EndPoint& endpoint) {
             if (UNLIKELY(_stubs.size() < config::brpc_max_connections_per_server)) {
                 brpc::ChannelOptions options;
                 options.connect_timeout_ms = config::rpc_connect_timeout_ms;
@@ -120,12 +138,13 @@ private:
                 // the single connection of brpc will only maintain one connection with the same server by default,
                 // all requests are sent on this connection and the throughput will be limited by this.
                 // we use `connection_group` to create multiple single connections to remove this bottleneck.
-                options.connection_group = std::to_string(_stubs.size());
+                options.connection_group = std::to_string(_connection_group++);
                 std::unique_ptr<brpc::Channel> channel(new brpc::Channel());
                 if (channel->Init(endpoint, &options)) {
                     return nullptr;
                 }
-                auto stub = new PInternalService_Stub(channel.release(), google::protobuf::Service::STUB_OWNS_CHANNEL);
+                auto stub = std::make_shared<PInternalService_Stub>(channel.release(),
+                                                                    google::protobuf::Service::STUB_OWNS_CHANNEL);
                 _stubs.push_back(stub);
                 return stub;
             }
@@ -135,8 +154,14 @@ private:
             return _stubs[_idx];
         }
 
-        std::vector<PInternalService_Stub*> _stubs;
+        void reset() {
+            _stubs.clear();
+            _idx = -1;
+        }
+
+        std::vector<std::shared_ptr<PInternalService_Stub>> _stubs;
         int64_t _idx = -1;
+        int64_t _connection_group = 0;
     };
 
     SpinLock _lock;
@@ -150,7 +175,7 @@ public:
         return &cache;
     }
 
-    StatusOr<PInternalService_Stub*> get_http_stub(const TNetworkAddress& taddr) {
+    StatusOr<std::shared_ptr<PInternalService_Stub>> get_http_stub(const TNetworkAddress& taddr) {
         butil::EndPoint endpoint;
         std::string realhost;
         realhost = taddr.hostname;
@@ -181,23 +206,19 @@ public:
             return Status::RuntimeError("init brpc http channel error on " + taddr.hostname + ":" +
                                         std::to_string(taddr.port));
         }
-        auto stub = new PInternalService_Stub(channel.release(), google::protobuf::Service::STUB_OWNS_CHANNEL);
+        auto stub = std::make_shared<PInternalService_Stub>(channel.release(),
+                                                            google::protobuf::Service::STUB_OWNS_CHANNEL);
         _stub_map.insert(endpoint, stub);
         return stub;
     }
 
 private:
     HttpBrpcStubCache() { _stub_map.init(500); }
-    ~HttpBrpcStubCache() {
-        for (auto& stub : _stub_map) {
-            delete stub.second;
-        }
-    }
     HttpBrpcStubCache(const HttpBrpcStubCache& cache) = delete;
     HttpBrpcStubCache& operator=(const HttpBrpcStubCache& cache) = delete;
 
     SpinLock _lock;
-    butil::FlatMap<butil::EndPoint, PInternalService_Stub*> _stub_map;
+    butil::FlatMap<butil::EndPoint, std::shared_ptr<PInternalService_Stub>> _stub_map;
 };
 
 } // namespace starrocks

@@ -72,12 +72,6 @@ Status ReplicateChannel::_init() {
     }
     _inited = true;
 
-    _stub = ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(_host, _port);
-    if (_stub == nullptr) {
-        auto msg = fmt::format("Failed to Connect {} failed.", debug_string().c_str());
-        LOG(WARNING) << msg;
-        return Status::InternalError(msg);
-    }
     _mem_tracker = GlobalEnv::GetInstance()->load_mem_tracker();
     if (!_mem_tracker) {
         auto msg = fmt::format("Failed to get load mem tracker for {} failed.", debug_string().c_str());
@@ -97,7 +91,7 @@ Status ReplicateChannel::sync_segment(SegmentPB* segment, butil::IOBuf& data, bo
     RETURN_IF_ERROR(_st);
 
     // 2. send segment sync request
-    _send_request(segment, data, eos);
+    RETURN_IF_ERROR(_send_request(segment, data, eos));
 
     // 3. wait result
     RETURN_IF_ERROR(_wait_response(replicate_tablet_infos, failed_tablet_infos));
@@ -124,7 +118,7 @@ Status ReplicateChannel::async_segment(SegmentPB* segment, butil::IOBuf& data, b
     RETURN_IF_ERROR(_wait_response(replicate_tablet_infos, failed_tablet_infos));
 
     // 3. send segment sync request
-    _send_request(segment, data, eos);
+    RETURN_IF_ERROR(_send_request(segment, data, eos));
 
     // 4. wait if eos=true
     if (eos || _mem_tracker->limit_exceeded()) {
@@ -138,13 +132,20 @@ Status ReplicateChannel::async_segment(SegmentPB* segment, butil::IOBuf& data, b
     return _st;
 }
 
-void ReplicateChannel::_send_request(SegmentPB* segment, butil::IOBuf& data, bool eos) {
+Status ReplicateChannel::_send_request(SegmentPB* segment, butil::IOBuf& data, bool eos) {
     PTabletWriterAddSegmentRequest request;
     request.set_allocated_id(const_cast<starrocks::PUniqueId*>(&_opt->load_id));
     request.set_tablet_id(_opt->tablet_id);
     request.set_eos(eos);
     request.set_txn_id(_opt->txn_id);
     request.set_index_id(_opt->index_id);
+
+    auto stub = ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(_host, _port);
+    if (stub == nullptr) {
+        auto msg = fmt::format("Failed to Connect {} failed.", debug_string().c_str());
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
+    }
 
     _closure->ref();
     _closure->reset();
@@ -159,12 +160,14 @@ void ReplicateChannel::_send_request(SegmentPB* segment, butil::IOBuf& data, boo
     // brpc send buffer is also considered as part of the memory used by load
     _mem_tracker->consume(_closure->request_size);
 
-    _stub->tablet_writer_add_segment(&_closure->cntl, &request, &_closure->result, _closure);
+    stub->tablet_writer_add_segment(&_closure->cntl, &request, &_closure->result, _closure);
 
     request.release_id();
     if (segment != nullptr) {
         request.release_segment();
     }
+
+    return Status::OK();
 }
 
 Status ReplicateChannel::_wait_response(std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos,

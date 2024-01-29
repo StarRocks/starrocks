@@ -52,4 +52,25 @@ TEST_F(BrpcStubCacheTest, invalid) {
     ASSERT_EQ(nullptr, stub1);
 }
 
+TEST_F(BrpcStubCacheTest, reset) {
+    BrpcStubCache cache;
+    TNetworkAddress address;
+    address.hostname = "127.0.0.1";
+    address.port = 123;
+    auto stub1 = cache.get_stub(address);
+    ASSERT_NE(nullptr, stub1);
+    address.port = 124;
+    auto stub2 = cache.get_stub(address);
+    ASSERT_NE(nullptr, stub2);
+    ASSERT_NE(stub1, stub2);
+
+    address.port = 123;
+    auto stub3 = cache.get_stub(address);
+    ASSERT_EQ(stub1, stub3);
+
+    cache.reset_stub(address.hostname, address.port);
+    auto stub4 = cache.get_stub(address);
+    ASSERT_NE(stub4, stub3);
+}
+
 } // namespace starrocks

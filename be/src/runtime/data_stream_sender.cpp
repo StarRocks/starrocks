@@ -138,6 +138,11 @@ private:
         auto cntl = &_chunk_closure->cntl;
         brpc::Join(cntl->call_id());
         if (cntl->Failed()) {
+            // work around for brpc bug https://github.com/apache/brpc/issues/2146
+            if (cntl->ErrorCode() == EHOSTDOWN) {
+                _state->exec_env()->brpc_stub_cache()->reset_stub(_brpc_dest_addr.hostname, _brpc_dest_addr.port);
+            }
+
             LOG(WARNING) << "fail to send brpc batch, error=" << berror(cntl->ErrorCode())
                          << ", error_text=" << cntl->ErrorText();
             return Status::ThriftRpcError("fail to send batch");
@@ -179,13 +184,13 @@ private:
 
     size_t _current_request_bytes = 0;
 
-    PInternalService_Stub* _brpc_stub = nullptr;
-
     int32_t _brpc_timeout_ms = 500;
     // whether the dest can be treated as query statistics transfer chain.
     bool _is_transfer_chain;
     bool _send_query_statistics_with_every_batch;
     bool _is_inited = false;
+
+    RuntimeState* _state = nullptr;
 };
 
 Status DataStreamSender::Channel::init(RuntimeState* state) {
@@ -197,12 +202,6 @@ Status DataStreamSender::Channel::init(RuntimeState* state) {
         LOG(WARNING) << "there is no brpc destination address's hostname"
                         ", maybe version is not compatible.";
         return Status::InternalError("no brpc destination");
-    }
-    _brpc_stub = state->exec_env()->brpc_stub_cache()->get_stub(_brpc_dest_addr);
-    if (UNLIKELY(_brpc_stub == nullptr)) {
-        auto msg = fmt::format("The brpc stub of {}:{} is null.", _brpc_dest_addr.hostname, _brpc_dest_addr.port);
-        LOG(WARNING) << msg;
-        return Status::InternalError(msg);
     }
 
     // initialize brpc request
@@ -227,6 +226,8 @@ Status DataStreamSender::Channel::init(RuntimeState* state) {
         _is_inited = true;
         return Status::OK();
     }
+
+    _state = state;
 
     _need_close = true;
     _is_inited = true;
@@ -279,6 +280,12 @@ Status DataStreamSender::Channel::send_chunk_request(PTransmitChunkParams* param
 
 Status DataStreamSender::Channel::_do_send_chunk_rpc(PTransmitChunkParams* request, const butil::IOBuf& attachment) {
     SCOPED_TIMER(_parent->_send_request_timer);
+    auto brpc_stub = _state->exec_env()->brpc_stub_cache()->get_stub(_brpc_dest_addr);
+    if (UNLIKELY(brpc_stub == nullptr)) {
+        auto msg = fmt::format("The brpc stub of {}:{} is null.", _brpc_dest_addr.hostname, _brpc_dest_addr.port);
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
+    }
 
     request->set_sequence(_request_seq);
     if (_is_transfer_chain && (_send_query_statistics_with_every_batch || request->eos())) {
@@ -289,7 +296,7 @@ Status DataStreamSender::Channel::_do_send_chunk_rpc(PTransmitChunkParams* reque
     _chunk_closure->cntl.Reset();
     _chunk_closure->cntl.set_timeout_ms(_brpc_timeout_ms);
     _chunk_closure->cntl.request_attachment().append(attachment);
-    _brpc_stub->transmit_chunk(&_chunk_closure->cntl, request, &_chunk_closure->result, _chunk_closure);
+    brpc_stub->transmit_chunk(&_chunk_closure->cntl, request, &_chunk_closure->result, _chunk_closure);
     _request_seq++;
     return Status::OK();
 }

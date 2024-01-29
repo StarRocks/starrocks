@@ -14,6 +14,7 @@
 
 #include "exec/tablet_sink_index_channel.h"
 
+#include "brpc/errno.pb.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
@@ -82,8 +83,8 @@ Status NodeChannel::init(RuntimeState* state) {
         return _err_st;
     }
 
-    _stub = state->exec_env()->brpc_stub_cache()->get_stub(_node_info->host, _node_info->brpc_port);
-    if (_stub == nullptr) {
+    auto stub = state->exec_env()->brpc_stub_cache()->get_stub(_node_info->host, _node_info->brpc_port);
+    if (stub == nullptr) {
         _cancelled = true;
         auto msg = fmt::format("Connect {}:{} failed.", _node_info->host, _node_info->brpc_port);
         LOG(WARNING) << msg;
@@ -211,6 +212,15 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
         }
     }
 
+    auto stub = _runtime_state->exec_env()->brpc_stub_cache()->get_stub(_node_info->host, _node_info->brpc_port);
+    if (stub == nullptr) {
+        _cancelled = true;
+        auto msg = fmt::format("Connect {}:{} failed.", _node_info->host, _node_info->brpc_port);
+        LOG(WARNING) << msg;
+        _err_st = Status::InternalError(msg);
+        return;
+    }
+
     // This ref is for RPC's reference
     open_closure->ref();
     open_closure->cntl.set_timeout_ms(_rpc_timeout_ms);
@@ -229,7 +239,7 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
         res.value()->tablet_writer_open(&open_closure->cntl, &request, &open_closure->result, open_closure);
         VLOG(2) << "NodeChannel::_open() issue a http rpc, request size = " << request.ByteSizeLong();
     } else {
-        _stub->tablet_writer_open(&open_closure->cntl, &request, &open_closure->result, open_closure);
+        stub->tablet_writer_open(&open_closure->cntl, &request, &open_closure->result, open_closure);
     }
     request.release_id();
     request.release_schema();
@@ -285,6 +295,11 @@ Status NodeChannel::_open_wait(RefCountClosure<PTabletWriterOpenResult>* open_cl
     if (open_closure->cntl.Failed()) {
         _cancelled = true;
         _err_st = Status::InternalError(open_closure->cntl.ErrorText());
+
+        // work around for brpc bug https://github.com/apache/brpc/issues/2146
+        if (open_closure->cntl.ErrorCode() == EHOSTDOWN) {
+            _runtime_state->exec_env()->brpc_stub_cache()->reset_stub(_node_info->host, _node_info->brpc_port);
+        }
 
         // tablet_id == -1 means add backend to blacklist
         TTabletFailInfo fail_info;
@@ -563,6 +578,11 @@ Status NodeChannel::_send_request(bool eos, bool wait_all_sender_close) {
 
     SCOPED_RAW_TIMER(&_actual_consume_ns);
 
+    auto stub = _runtime_state->exec_env()->brpc_stub_cache()->get_stub(_node_info->host, _node_info->brpc_port);
+    if (stub == nullptr) {
+        return Status::InternalError(fmt::format("Connect {}:{} failed.", _node_info->host, _node_info->brpc_port));
+    }
+
     for (int i = 0; i < request.requests_size(); i++) {
         auto req = request.mutable_requests(i);
         if (UNLIKELY(eos)) {
@@ -616,9 +636,9 @@ Status NodeChannel::_send_request(bool eos, bool wait_all_sender_close) {
                                                   _add_batch_closures[_current_request_index]);
             VLOG(2) << "NodeChannel::_send_request() issue a http rpc, request size = " << request.ByteSizeLong();
         } else {
-            _stub->tablet_writer_add_chunks(&_add_batch_closures[_current_request_index]->cntl, &request,
-                                            &_add_batch_closures[_current_request_index]->result,
-                                            _add_batch_closures[_current_request_index]);
+            stub->tablet_writer_add_chunks(&_add_batch_closures[_current_request_index]->cntl, &request,
+                                           &_add_batch_closures[_current_request_index]->result,
+                                           _add_batch_closures[_current_request_index]);
         }
     } else {
         DCHECK(request.requests_size() == 1);
@@ -636,7 +656,7 @@ Status NodeChannel::_send_request(bool eos, bool wait_all_sender_close) {
                     &_add_batch_closures[_current_request_index]->result, _add_batch_closures[_current_request_index]);
             VLOG(2) << "NodeChannel::_send_request() issue a http rpc, request size = " << request.ByteSizeLong();
         } else {
-            _stub->tablet_writer_add_chunk(
+            stub->tablet_writer_add_chunk(
                     &_add_batch_closures[_current_request_index]->cntl, request.mutable_requests(0),
                     &_add_batch_closures[_current_request_index]->result, _add_batch_closures[_current_request_index]);
         }
@@ -660,6 +680,11 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
     if (closure->cntl.Failed()) {
         _cancelled = true;
         _err_st = Status::InternalError(closure->cntl.ErrorText());
+
+        // work around for brpc bug https://github.com/apache/brpc/issues/2146
+        if (closure->cntl.ErrorCode() == EHOSTDOWN) {
+            _runtime_state->exec_env()->brpc_stub_cache()->reset_stub(_node_info->host, _node_info->brpc_port);
+        }
 
         TTabletFailInfo fail_info;
         fail_info.__set_tabletId(-1);
@@ -892,6 +917,11 @@ void NodeChannel::_cancel(int64_t index_id, const Status& err_st) {
     _cancelled = true;
     _err_st = err_st;
 
+    auto stub = _runtime_state->exec_env()->brpc_stub_cache()->get_stub(_node_info->host, _node_info->brpc_port);
+    if (stub == nullptr) {
+        return;
+    }
+
     PTabletWriterCancelRequest request;
     request.set_allocated_id(&_parent->_load_id);
     request.set_index_id(index_id);
@@ -903,7 +933,7 @@ void NodeChannel::_cancel(int64_t index_id, const Status& err_st) {
     closure->ref();
     closure->cntl.set_timeout_ms(_rpc_timeout_ms);
     closure->cntl.ignore_eovercrowded();
-    _stub->tablet_writer_cancel(&closure->cntl, &request, &closure->result, closure);
+    stub->tablet_writer_cancel(&closure->cntl, &request, &closure->result, closure);
     request.release_id();
 }
 
