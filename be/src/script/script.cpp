@@ -324,7 +324,7 @@ public:
             return "not support recover";
         }
         Status st = tablet->updates()->recover();
-        return strings::Substitute("recover tablet:$0 status:$1", std::to_string(tablet_id), st.message());
+        return strings::Substitute("recover tablet:$0 status:$1", std::to_string(tablet_id), st.get_error_msg());
     }
 
     static std::string get_tablet_meta_json(int64_t tablet_id) {
