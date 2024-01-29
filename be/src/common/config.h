@@ -1009,4 +1009,6 @@ CONF_mBool(enable_stream_load_verbose_log, "false");
 CONF_mInt32(get_txn_status_internal_sec, "30");
 
 CONF_mBool(dump_metrics_with_bvar, "true");
+// whether enable query profile for queries initiated by spark or flink
+CONF_mBool(enable_profile_for_external_plan, "false");
 } // namespace starrocks::config
