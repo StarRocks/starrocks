@@ -75,11 +75,7 @@
           "items": ["table_design/indexes/Bitmap_index", "table_design/indexes/Bloomfilter_index"]
         },
         "table_design/data_compression",
-<<<<<<< HEAD
-        "table_design/Sort_key"
-=======
         "table_design/hybrid_table"
->>>>>>> 4a0a7b3d58 ([Doc]add indexes overview (#40103))
       ]
     },
     {
@@ -820,11 +816,7 @@
           "items": ["table_design/indexes/Bitmap_index", "table_design/indexes/Bloomfilter_index"]
         },
         "table_design/data_compression",
-<<<<<<< HEAD
-        "table_design/Sort_key"
-=======
         "table_design/hybrid_table"
->>>>>>> 4a0a7b3d58 ([Doc]add indexes overview (#40103))
       ]
     },
     {
