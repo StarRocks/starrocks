@@ -8,7 +8,7 @@ This topic describes how to create and modify bloom filter indexes, along with h
 
 A bloom filter index is a space-efficiency data structure that is used to detect the possible presence of filtered data in data files of a table. If the bloom filter index detects that the data to be filtered are not in a certain data file, StarRocks skips scanning the data file. Bloom filter indexes can reduce response time when the column (such as ID) has a relatively high cardinality.
 
-If a query hits a sort key column, StarRocks efficiently returns the query result by using the [prefix index](./indexes_overview.md#prefix-indexes). However, the prefix index entry for a data block cannot exceed 36 bytes in length. If you want to improve the query performance on a column, which is not used as a sort key and has a relatively high cardinality, you can create a bloom filter index for the column.
+If a query hits a sort key column, StarRocks efficiently returns the query result by using the [prefix index](./Prefix_index_sort_key.md). However, the prefix index entry for a data block cannot exceed 36 bytes in length. If you want to improve the query performance on a column, which is not used as a sort key and has a relatively high cardinality, you can create a bloom filter index for the column.
 
 ## How it works
 
@@ -20,7 +20,10 @@ For example, you create a bloom filter index on a `column1` of a given table `ta
 ## Usage notes
 
 - You can create bloom filter indexes for all columns of a Duplicate Key or Primary Key table. For an Aggregate table or Unique Key table, you can only create bloom filter indexes for key columns.
-- TINYINT, FLOAT, DOUBLE, and DECIMAL columns do not support creating bloom filter indexes.
+- Bloom filter indexes can be created for columns of the following data types:
+    - Numeric types: SMALLINT, INT, BIGINT, and LARGEINT.
+    - String types: CHAR, STRING, and VARCHAR.
+    - Date types: DATE and DATETIME.
 - Bloom filter indexes can only improve the performance of queries that contain the `in` and `=` operators, such as `Select xxx from table where x in {}` and `Select xxx from table where column = xxx`.
 - You can check whether a query uses bloom filter indexes by viewing the `BloomFilterFilterRows` field of the query's profile.
 
