@@ -343,7 +343,6 @@ private:
                 } else {
                     entry.segment_itr = std::move(new_union_iterator(res.value()));
                 }
-                
             }
             if (sort_column) {
                 entry.encode_schema = &schema;
