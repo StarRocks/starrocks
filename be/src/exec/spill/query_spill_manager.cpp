@@ -14,6 +14,7 @@
 
 #include "exec/spill/query_spill_manager.h"
 
+#include <cstdint>
 #include <memory>
 
 #include "exec/spill/dir_manager.h"
@@ -44,9 +45,7 @@ Status QuerySpillManager::init_block_manager(const TQueryOptions& query_options)
     for (const auto& path : remote_storage_paths) {
         ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(path, FSOptions(remote_storage_conf.get())));
         RETURN_IF_ERROR(fs->create_dir_if_missing(path));
-        auto dir = std::make_shared<Dir>(path, std::move(fs), INT64_MAX);
-        // @TODO make Dir to be a base class
-        dir->set_cloud_conf(std::move(remote_storage_conf));
+        auto dir = std::make_shared<RemoteDir>(path, std::move(fs), remote_storage_conf, INT64_MAX);
         remote_dirs.emplace_back(dir);
     }
     _remote_dir_manager = std::make_unique<DirManager>(remote_dirs);

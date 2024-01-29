@@ -52,16 +52,23 @@ public:
     void dec_size(int64_t value) { _current_size -= value; }
 
     int64_t get_max_size() const { return _max_size; }
-    void set_cloud_conf(std::shared_ptr<TCloudConfiguration> cloud_conf) { _cloud_conf = std::move(cloud_conf); }
 
-private:
+protected:
     std::string _dir;
     std::shared_ptr<FileSystem> _fs;
-    std::shared_ptr<TCloudConfiguration> _cloud_conf;
     int64_t _max_size;
     std::atomic<int64_t> _current_size = 0;
 };
 using DirPtr = std::shared_ptr<Dir>;
+
+class RemoteDir: public Dir {
+public:
+    RemoteDir(std::string dir, std::shared_ptr<FileSystem> fs, std::shared_ptr<TCloudConfiguration> cloud_conf, int64_t max_dir_size):
+        Dir(std::move(dir), std::move(fs), max_dir_size), _cloud_conf(std::move(cloud_conf)) {}
+private:
+    std::shared_ptr<TCloudConfiguration> _cloud_conf;
+};
+
 
 struct AcquireDirOptions {
     // @TOOD(silverbullet233): support more properties when acquiring dir, such as the preference of dir selection
