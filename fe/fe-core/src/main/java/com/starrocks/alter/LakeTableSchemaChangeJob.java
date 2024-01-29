@@ -55,7 +55,6 @@ import com.starrocks.lake.Utils;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -134,9 +133,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     // Mapping from partition id to commit version
     private Map<Long, Long> commitVersionMap;
 
-    @SerializedName(value = "warehouseId")
-    private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
-
     @SerializedName(value = "sortKeyIdxes")
     private List<Integer> sortKeyIdxes;
 
@@ -160,10 +156,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
 
     void setStartTime(long startTime) {
         this.startTime = startTime;
-    }
-
-    void setWarehouseId(long warehouseId) {
-        this.warehouseId = warehouseId;
     }
 
     void setSortKeyIdxes(List<Integer> sortKeyIdxes) {

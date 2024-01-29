@@ -356,7 +356,7 @@ public class InsertOverwriteJobRunner {
             locker.unLockDatabase(db, LockType.READ);
         }
         PartitionUtils.createAndAddTempPartitionsForTable(db, targetTable, postfix,
-                job.getSourcePartitionIds(), job.getTmpPartitionIds(), null);
+                job.getSourcePartitionIds(), job.getTmpPartitionIds(), null, job.getWarehouseId());
         createPartitionElapse = System.currentTimeMillis() - createPartitionStartTimestamp;
     }
 

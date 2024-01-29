@@ -3107,9 +3107,10 @@ public class GlobalStateMgr {
 
     public List<Partition> createTempPartitionsFromPartitions(Database db, Table table,
                                                               String namePostfix, List<Long> sourcePartitionIds,
-                                                              List<Long> tmpPartitionIds, DistributionDesc distributionDesc) {
+                                                              List<Long> tmpPartitionIds, DistributionDesc distributionDesc,
+                                                              long warehouseId) {
         return localMetastore.createTempPartitionsFromPartitions(db, table, namePostfix, sourcePartitionIds,
-                tmpPartitionIds, distributionDesc);
+                tmpPartitionIds, distributionDesc, warehouseId);
     }
 
     public void truncateTable(TruncateTableStmt truncateTableStmt) throws DdlException {

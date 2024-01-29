@@ -37,7 +37,8 @@ public class CreateInsertOverwriteJobLog implements Writable {
     @SerializedName(value = "targetPartitionIds")
     private List<Long> targetPartitionIds;
 
-    public CreateInsertOverwriteJobLog(long jobId, long dbId, long tableId, List<Long> targetPartitionIds) {
+    public CreateInsertOverwriteJobLog(long jobId, long dbId, long tableId,
+                                       List<Long> targetPartitionIds) {
         this.jobId = jobId;
         this.dbId = dbId;
         this.tableId = tableId;

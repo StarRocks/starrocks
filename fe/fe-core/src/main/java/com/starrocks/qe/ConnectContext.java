@@ -52,6 +52,7 @@ import com.starrocks.mysql.ssl.SSLChannelImp;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
@@ -674,6 +675,10 @@ public class ConnectContext {
 
     public long getCurrentWarehouseId() {
         String warehouseName = this.sessionVariable.getWarehouseName();
+        if (warehouseName.equalsIgnoreCase(WarehouseManager.DEFAULT_WAREHOUSE_NAME)) {
+            return WarehouseManager.DEFAULT_WAREHOUSE_ID;
+        }
+
         Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouse(warehouseName);
         if (warehouse == null) {
             throw new SemanticException("Warehouse " + warehouseName + " not exist");

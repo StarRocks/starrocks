@@ -165,7 +165,8 @@ public class SchemaChangeHandler extends AlterHandler {
         jobBuilder.withOptimizeClause(optimizeClause)
                 .withJobId(GlobalStateMgr.getCurrentState().getNextId())
                 .withDbId(db.getId())
-                .withTimeoutSeconds(timeoutSecond);
+                .withTimeoutSeconds(timeoutSecond)
+                .withWarehouse(ConnectContext.get().getCurrentWarehouseId());
 
         return jobBuilder.build();
     }

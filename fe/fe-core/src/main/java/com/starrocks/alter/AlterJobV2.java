@@ -48,6 +48,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import io.opentelemetry.api.trace.Span;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -106,6 +107,8 @@ public abstract class AlterJobV2 implements Writable {
     protected long finishedTimeMs = -1;
     @SerializedName(value = "timeoutMs")
     protected long timeoutMs = -1;
+    @SerializedName(value = "warehouseId")
+    protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
     protected Span span;
 
@@ -175,6 +178,10 @@ public abstract class AlterJobV2 implements Writable {
 
     public void setFinishedTimeMs(long finishedTimeMs) {
         this.finishedTimeMs = finishedTimeMs;
+    }
+
+    public void setWarehouseId(long warehouseId) {
+        this.warehouseId = warehouseId;
     }
 
     /**
