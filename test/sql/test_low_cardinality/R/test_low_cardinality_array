@@ -499,7 +499,7 @@ insert into s3 select * from s3;
 -- !result
 [UC] analyze full table s3;
 -- result:
-test_db_a96d329abe7211ee9c5d00163e04d4c2.s3	analyze	status	OK
+test_db_ba84e764bf3811eeb48400163e04d4c2.s3	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('a1', 's3')
 -- result:
@@ -533,11 +533,13 @@ from s3 where a1[1] = 'Jiangsu' or a2[2] = 'GD' order by v1 limit 2;
 4	QH	Fujian	["Fujian","Jiangsu","Macao","Ningxia"]	["GD","JS","QH"]	["Ningxia","Macao","Jiangsu","Fujian"]	["GD","QH"]	3
 -- !result
 select count(a1[2]) from s3 where v3 = "GS"; 
-
-
-select /*+SET_VAR(cbo_enable_low_cardinality_optimize=false, low_cardinality_optimize_v2=false)*/ * from s3 order by v1 limit 2;
 -- result:
 384
+-- !result
+select /*+SET_VAR(cbo_enable_low_cardinality_optimize=false, low_cardinality_optimize_v2=false)*/ * from s3 order by v1 limit 2;
+-- result:
+28200	947	GY	["Hunan","Henan"]	["FJ","MO","HEB","JL"]
+28200	302	JL	["Henan","Chongqing","Ningxia","Tibet","Yunnan"]	["JL","BJ"]
 -- !result
 select /*+SET_VAR(cbo_enable_low_cardinality_optimize=false, low_cardinality_optimize_v2=false)*/ * from s3 where a1[1] = 'Jiangsu' and v3 = "BJ" order by v1 limit 2;
 -- result:
