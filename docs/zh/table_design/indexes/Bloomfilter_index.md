@@ -19,7 +19,7 @@ Bloom filter 索引可以快速判断表的数据文件中是否可能包含要�
 
 - 主键表和明细表中所有列都可以创建 Bloom filter 索引；聚合表和更新表中，只有维度列（即 Key 列）支持创建 Bloom filter 索引。
 - 支持为如下类型的列创建 Bloom filter 索引。
-  - 数值类型：SMALLINT、INT、BIGINT 和 LARGEINT,
+  - 数值类型：SMALLINT、INT、BIGINT 和 LARGEINT。
   - 字符串类型：CHAR、STRING 和 VARCHAR。
   - 日期类型：DATE、DATETIME。
 - Bloom filter 索引只能提高包含 `in` 和 `=` 过滤条件的查询效率，例如 `Select xxx from table where xxx in ()` 和 `Select xxx from table where column = xxx`。
