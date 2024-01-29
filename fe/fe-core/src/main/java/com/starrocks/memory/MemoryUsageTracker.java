@@ -27,8 +27,8 @@ import com.starrocks.sql.optimizer.statistics.IDictManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentSkipListMap;
 
 public class MemoryUsageTracker extends FrontendDaemon {
 
@@ -36,7 +36,8 @@ public class MemoryUsageTracker extends FrontendDaemon {
 
     // Used to save references to metadata submodules which need to be tracked memory on.
     // If the object needs to be counted, it first needs to be added to this collection.
-    private static final Map<String, Map<String, MemoryTrackable>> REFERENCE = Maps.newConcurrentMap();
+    public static final Map<String, Map<String, MemoryTrackable>> REFERENCE =
+            new ConcurrentSkipListMap<>(String.CASE_INSENSITIVE_ORDER);
 
     private static final Map<String, MemoryStat> MEMORY_USAGE = Maps.newConcurrentMap();
 
@@ -78,7 +79,7 @@ public class MemoryUsageTracker extends FrontendDaemon {
     }
 
     public static void registerMemoryTracker(String moduleName, MemoryTrackable object) {
-        REFERENCE.computeIfAbsent(moduleName, k -> new HashMap<>());
+        REFERENCE.computeIfAbsent(moduleName, k -> new ConcurrentSkipListMap<>(String.CASE_INSENSITIVE_ORDER));
         REFERENCE.get(moduleName).put(object.getClass().getSimpleName(), object);
     }
 
