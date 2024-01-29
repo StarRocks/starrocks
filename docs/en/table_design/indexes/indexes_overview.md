@@ -18,7 +18,7 @@ Indexes can help quickly locate data that matches certain query conditions. To b
 
 Specify one or more columns to comprise the sort key at table creation. The data rows in the table will be sorted based on the sort key and then stored on the disk.
 
-**During data writing, the Prefix index is automatically generated. After the data is sorted according to the specified sort key, every 1024 rows of data are included in one logical data block. An index entry that consists of the values of sort key columns  of the first row data in that logical data block is added to the Prefix index table.**
+**During data writing, the Prefix index is automatically generated. After the data is sorted according to the specified sort key, every 1024 rows of data are included in one logical data block. An index entry that consists of the values of sort key columns of the first data row in that logical data block is added to the Prefix index table.**
 
 With these two layers of sorting structures, queries can use binary search to quickly skip data that does not meet the query conditions, and can also avoid additional sorting operations during queries.
 
@@ -50,7 +50,7 @@ DUPLICATE KEY(uid, name);
 
 :::note
 
-After creating a Unique Key table, Aggregate table, or Unique Key table, you can use `DESCRIBE <table_name>;` to view its sort key columns. In the returned result, the columns whose `Key` field shows `true` are sort key columns. After creating a Primary Key table, you can use `SHOW CREATE TABLE <table_name>;` to view its sort key columns.  In the returned result, the columns in `ORDER BY` clause are sort key columns.
+After creating a Unique Key table, Aggregate table, or Unique Key table, you can use `DESCRIBE <table_name>;` to view its sort key columns. In the returned result, the columns whose `Key` field shows `true` are sort key columns. After creating a Primary Key table, you can use `SHOW CREATE TABLE <table_name>;` to view its sort key columns. In the returned result, the columns in `ORDER BY` clause are sort key columns.
 
 :::
 
@@ -58,15 +58,14 @@ Since the maximum length of a Prefix index entry is 36 bytes, the exceeded part 
 
 #### Precaution
 
+
 - The number of prefix fields cannot exceed 3, and the maximum length of a Prefix index entry is 36 bytes.
 
-- Prefix fields support to be of the xxx type.
+- Within the prefix fields, columns of the CHAR, VARCHAR, or STRING type can only appear once and must be at the end.
 
-- Among the prefix fields, columns of CHAR/VARCHAR/STRING type can only appear once and must be at the end.
+  Take the following table as example, where the first three columns are sort key columns. The prefix field of this table is `name` (20 bytes). It is because that this Prefix index begins with the VARCHAR-type column (`name`) and is truncated directly without including further columns even though the Prefix index entry does not reach 36 bytes in length. Therefore, this Prefix index only contains the `name` field.
 
-  -  Take the following table as example, where the first three columns are sort key columns. The prefix field of this table is `name` (20 bytes). It is because that this Prefix index begins with the VARCHAR-type column (`name`) and is truncated directly without including further columns even though the Prefix index entry does not reach 36 bytes in length. Therefore, this Prefix index only contains the `name` field.
-
-  - ```SQL
+    ```SQL
     MySQL [example_db]> describe user_access2;
     +-------------+-------------+------+-------+---------+-------+
     | Field       | Type        | Null | Key   | Default | Extra |
@@ -81,7 +80,7 @@ Since the maximum length of a Prefix index entry is 36 bytes, the exceeded part 
     6 rows in set (0.00 sec)
     ```
 
-##### How to design the sort key appropriately to form the Prefix index that can accelerate queries.
+##### How to design the sort key appropriately to form the Prefix index that can accelerate queries
 
 An analysis of queries and data in business scenarios helps choose appropriate sort key columns and arrange them in a proper order to form a Prefix index, which can significantly improve query performance.
 
@@ -92,8 +91,8 @@ Except for Primary Key tables, currently the sort key for other types of tables 
 :::
 
 - The number of sort key columns is generally 3 and is not recommended to exceed 4. A sort key with too many columns can not improve query performance but increase the sorting overhead during data loading.
-- It is recommended to prioritizing columns to form the sort key in the order below:
-  - **Select columns that are frequently used in query filter conditions as sort key columns.** If the number of the sort key columns is more than one, arrange them in descending order of their frequencies in query filter conditions. This way, if the query filter conditions include the prefix of the Prefix index, the query performance can be significantly improved. And if the filter conditions include the entire prefix of the Prefix index, the query can fully leverage the Prefix index. Of course, as long as the filter conditions include the prefix, though not the entire prefix, the Prefix index can still optimize the query. However, the effect of the Prefix index will be weakened if the length of the prefix included in the filter conditions is too short. Still, take the [Unique Key table](https://chat.openai.com/c/0c47f67a-8103-4ec6-a280-71495f037334#Usage-Guidelines) whose sort key is `(uid,name)` as an example. If the query filter conditions include the entire prefix, such as `select sum(credits) from user_access where uid = 123 and name = 'Jane Smith';`, the query can fully utilize the Prefix index to improve performance.  If the query conditions only include part of the prefix, such as `select sum(credits) from user_access where uid = 123;`, the query can also benefit from the Prefix index to improve performance.  However, if the query conditions do not include the prefix, for example, `select sum(credits) from user_access where name = 'Jane Smith';`, the query can not use the Prefix index to accelerate.
+- It is recommended to prioritize columns to form the sort key in the order below:
+  1. **Select columns that are frequently used in query filter conditions as sort key columns.** If the number of the sort key columns is more than one, arrange them in descending order of their frequencies in query filter conditions. This way, if the query filter conditions include the prefix of the Prefix index, the query performance can be significantly improved. And if the filter conditions include the entire prefix of the Prefix index, the query can fully leverage the Prefix index. Of course, as long as the filter conditions include the prefix, though not the entire prefix, the Prefix index can still optimize the query. However, the effect of the Prefix index will be weakened if the length of the prefix included in the filter conditions is too short. Still, take the [Unique Key table](https://chat.openai.com/c/0c47f67a-8103-4ec6-a280-71495f037334#Usage-Guidelines) whose sort key is `(uid,name)` as an example. If the query filter conditions include the entire prefix, such as `select sum(credits) from user_access where uid = 123 and name = 'Jane Smith';`, the query can fully utilize the Prefix index to improve performance. If the query conditions only include part of the prefix, such as `select sum(credits) from user_access where uid = 123;`, the query can also benefit from the Prefix index to improve performance. However, if the query conditions do not include the prefix, for example, `select sum(credits) from user_access where name = 'Jane Smith';`, the query can not use the Prefix index to accelerate.
   - If multiple sort key columns have similar frequencies as query filter conditions, you can measure the cardinality of these columns.
   - If the cardinality of the column is high, it can filter more data during the query. If the cardinality is too low, such as for Boolean-type columns, its filtering effect is not ideal. 
     :::tip
@@ -105,11 +104,11 @@ Except for Primary Key tables, currently the sort key for other types of tables 
 
 ##### Considerations for defining sort key columns at table creation
 
-When defining sort key columns for a Duplicate Key table, an Aggregate table, a Unique Key table, pay attention to the following points:
+When defining sort key columns for a Duplicate Key table, an Aggregate table, or a Unique Key table, pay attention to the following points:
 
 - The sort key columns must be defined before other columns at table creation.
 - The sort key columns must be the first one or more columns in the table, and the order of the sort key columns must match the sequence of these columns in the table.
-- The data types of the sort key columns do not can be numeric types (excluding DOUBLE and FLOAT), strings, and date types.
+- The data types of the sort key columns can be numeric types (excluding DOUBLE and FLOAT), strings, and date types.
 
 ##### Can the Prefix index be modified?
 
@@ -117,7 +116,7 @@ The Prefix indexes can not be modified directly after table creation (except for
 
 ### Ordinal indexes
 
-StarRocks actually adopts columnar storage in the underlying storage. Data per column is stored in data pages, and the size of each data page's  is generally 64 * 1024 bytes (data_page_size = 64 * 1024). An Ordinal index entry is added at the same time when a data page is generated. The Ordinal index entry contains information such as the starting row number of the data page. In this way, the Ordinal index can locate the physical address of the column Data Page data page by using the row number.
+StarRocks actually adopts columnar storage in the underlying storage. Data per column is stored in data pages, and the size of each data page's is generally 64 * 1024 bytes (data_page_size = 64 * 1024). An Ordinal index entry is added at the same time when a data page is generated. The Ordinal index entry contains information such as the starting row number of the data page. In this way, the Ordinal index can locate the physical address of the column Data Page data page by using the row number.
 
 ![img](../../assets/3.1-2.png)
 
@@ -129,7 +128,7 @@ ZoneMap index stores each data chunk's statistics that include Min (maximum valu
 
 <summary> More information</summary>
 
-Each data chunk can be a segment, or a data page of a column. So correspondingly, two types of  ZoneMap indexes exist: one storing statistics for each Segment and the other for each data page of a column. 
+Each data chunk can be a segment, or a data page of a column. So correspondingly, two types of ZoneMap indexes exist: one storing statistics for each Segment and the other for each data page of a column. 
 
 </details>
 
@@ -139,7 +138,7 @@ If the column in the query condition is not a prefix field, you can manually app
 
 ### [Bitmap indexes](./Bitmap_index.md)
 
-Bitmap indexes are generally suitable for columns with high cardinality. Bitmap indexes are a good choice when  Bitmap indexes can exhibit high selectivity, and its filtering effect (number of data rows filtered by the Bitmap index/total number of data rows) is lower than one in ten thousand.
+Bitmap indexes are generally suitable for columns with high cardinality. Bitmap indexes are a good choice when Bitmap indexes can exhibit high selectivity, and its filtering effect (number of data rows filtered by the Bitmap index/total number of data rows) is lower than one in ten thousand.
 
 ### [Bloom filter indexes](./Bloomfilter_index.md)
 

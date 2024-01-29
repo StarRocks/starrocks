@@ -10,7 +10,7 @@ A bitmap index is a special database index that uses bitmaps, which are an array
 
 A bitmap index can help improve the query performance on a given column. If a query hits a sort key column, StarRocks efficiently returns the query result by using the [prefix index](./indexes_overview.md#prefix-indexes). However, the prefix index entry for a data block cannot exceed 36 bytes in length. If you want to improve the query performance on a column, which is not used as a sort key, you can create a bitmap index for the column.
 
-Bitmap indexes are generally suitable for columns with high cardinality. Bitmap indexes are a good choice when  Bitmap indexes can exhibit high selectivity, and its filtering effect (number of data rows filtered by the Bitmap index/total number of data rows) is lower than one in ten thousand.
+Bitmap indexes are generally suitable for columns with high cardinality. Bitmap indexes are a good choice when Bitmap indexes can exhibit high selectivity, and its filtering effect (number of data rows filtered by the Bitmap index/total number of data rows) is lower than one in ten thousand.
 
 To evaluate the performance improvement of Bitmap indexes in StarRocks, queries are performed on a 100 GB SSB dataset in StarRocks. The test results are as follows:
 

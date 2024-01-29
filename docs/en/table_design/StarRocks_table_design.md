@@ -122,7 +122,7 @@ In addition to basic data types such as NUMERIC, DATE, and STRING, StarRocks sup
 
 An index is a special data structure and is used as a pointer to data in a table. When the conditional columns in queries are indexed columns, StarRocks can swiftly locate the data that meets the conditions.
 
-StarRocks provides built-in indexes, including Prefix indexes. StarRocks also allows users to create indexes, including Bitmap indexes and Bloom Filter indexes, to further enhance query efficiency.
+StarRocks provides built-in indexes: Prefix indexes, Ordinal indexes, and ZoneMap indexes. StarRocks also allows users to create indexes, that is, Bitmap indexes and Bloom Filter indexes, to further enhance query efficiency.
 
 
 ### Constraints

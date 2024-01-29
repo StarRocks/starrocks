@@ -123,7 +123,7 @@ StarRocks 提供两种分桶方式：
 
 索引是一种特殊的数据结构，相当于数据的目录。查询条件命中索引列时，StarRocks 能够快速定位到满足条件的数据的位置。
 
-StarRocks 提供内置索引，包括前缀索引，Ordinal 索引和ZoneMap 索引。也支持用户手动创建索引，以提高查询效率，包括 Bitmap 和 Bloom Filter 索引。
+StarRocks 提供内置索引，包括前缀索引、Ordinal 索引和 ZoneMap 索引。也支持用户手动创建索引，以提高查询效率，包括 Bitmap 和 Bloom Filter 索引。
 
 ### 约束
 
