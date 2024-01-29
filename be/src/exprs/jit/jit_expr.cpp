@@ -52,30 +52,27 @@ Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
     }
     _is_prepared = true;
 
-    if (is_constant()) {
-        _jit_function = nullptr;
-        return Status::OK();
+    if (!is_constant()) {
+        auto start = MonotonicNanos();
+
+        // Compile the expression into native code and retrieve the function pointer.
+        auto* jit_engine = JITEngine::get_instance();
+        if (!jit_engine->initialized()) {
+            return Status::JitCompileError("JIT is not supported");
+        }
+
+        auto function = jit_engine->compile_scalar_function(context, _expr);
+
+        auto elapsed = MonotonicNanos() - start;
+        if (!function.ok()) {
+            LOG(INFO) << "JIT: JIT compile failed, time cost: " << elapsed / 1000000.0 << " ms"
+                      << " Reason: " << function.status();
+        } else {
+            LOG(INFO) << "JIT: JIT compile success, time cost: " << elapsed / 1000000.0 << " ms";
+        }
+
+        _jit_function = function.value_or(nullptr);
     }
-
-    auto start = MonotonicNanos();
-
-    // Compile the expression into native code and retrieve the function pointer.
-    auto* jit_engine = JITEngine::get_instance();
-    if (!jit_engine->initialized()) {
-        return Status::JitCompileError("JIT is not supported");
-    }
-
-    auto function = jit_engine->compile_scalar_function(context, _expr);
-
-    auto elapsed = MonotonicNanos() - start;
-    if (!function.ok()) {
-        LOG(INFO) << "JIT: JIT compile failed, time cost: " << elapsed / 1000000.0 << " ms"
-                  << " Reason: " << function.status();
-    } else {
-        LOG(INFO) << "JIT: JIT compile success, time cost: " << elapsed / 1000000.0 << " ms";
-    }
-
-    _jit_function = function.value_or(nullptr);
     if (_jit_function != nullptr) {
         _jit_expr_name = _expr->debug_string();
     } else {
