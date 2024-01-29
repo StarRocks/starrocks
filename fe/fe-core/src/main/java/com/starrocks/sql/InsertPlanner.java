@@ -584,7 +584,8 @@ public class InsertPlanner {
                                              List<ColumnRefOperator> outputColumns, OptExprBuilder root,
                                              ConnectContext session) {
         Set<Column> baseSchema = Sets.newHashSet(insertStatement.getTargetTable().getBaseSchema());
-        List<Column> fullSchema = insertStatement.getTargetTable().getFullSchema();
+        Table targetTable = insertStatement.getTargetTable();
+        List<Column> fullSchema = targetTable.getFullSchema();
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
 
         for (int columnIdx = 0; columnIdx < fullSchema.size(); ++columnIdx) {
@@ -616,7 +617,6 @@ public class InsertPlanner {
             if (targetColumn.isNameWithPrefix(MATERIALIZED_VIEW_NAME_PREFIX) &&
                     !baseSchema.contains(targetColumn)) {
                 if (targetColumn.getDefineExpr() == null) {
-                    Table targetTable = insertStatement.getTargetTable();
                     // Only olap table can have the synchronized materialized view.
                     OlapTable targetOlapTable = (OlapTable) targetTable;
                     MaterializedIndexMeta targetIndexMeta = null;

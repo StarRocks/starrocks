@@ -133,10 +133,11 @@ public class MVColumnItem {
                 int nextUniqueId = olapTable.incAndGetMaxColUniqueId();
                 result.setUniqueId(nextUniqueId);
             }
+            // only set the column when column is not existed in the base table because of case-insensitive
+            result.setName(name);
         } else {
             result = new Column(baseColumn);
         }
-        result.setName(name);
         result.setIsKey(isKey);
         result.setAggregationType(aggregationType, isAggregationTypeImplicit);
         return result;

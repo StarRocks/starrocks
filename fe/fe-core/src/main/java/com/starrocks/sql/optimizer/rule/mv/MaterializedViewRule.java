@@ -181,7 +181,8 @@ public class MaterializedViewRule extends Rule {
         if (operator instanceof LogicalOlapScanOperator) {
             LogicalOlapScanOperator scanOperator = (LogicalOlapScanOperator) operator;
             OlapTable olapTable = (OlapTable) scanOperator.getTable();
-            return olapTable.hasMaterializedView();
+            return olapTable.hasMaterializedView() &&
+                    olapTable.getVisibleIndexMetas().stream().anyMatch(meta -> !meta.isInActive());
         }
         return false;
     }
@@ -200,6 +201,12 @@ public class MaterializedViewRule extends Rule {
 
             // Ignore original query index.
             if (mvIdx == scanOperator.getSelectedIndexId()) {
+                iterator.remove();
+                continue;
+            }
+
+            // Ignore inactive meta index.
+            if (mvMeta.isInActive()) {
                 iterator.remove();
                 continue;
             }
