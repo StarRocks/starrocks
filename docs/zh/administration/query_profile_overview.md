@@ -16,10 +16,17 @@ SET enable_profile = true;
 
 ### 针对慢查询开启 Query Profile
 
-在生产环境中，通常不推荐全面启用 Query Profile 功能。这是因为 Query Profile 的数据采集和处理过程可能会为系统带来额外的负担。然而，如果需要捕捉到耗时的慢查询，就需要巧妙地使用这一功能。为此，您可以选择只对慢查询启用 Query Profile。这可以通过设置变量 `big_query_profile_second_threshold` 为一个大于 `0` 的整数来实现。例如，若将此变量设置为 30，意味着只有那些执行时间超过 30 秒的查询会启用 Query Profile 功能。这样既保证了系统性能，又能有效监控到慢查询。
+在生产环境中，通常不推荐全面启用 Query Profile 功能。这是因为 Query Profile 的数据采集和处理过程可能会为系统带来额外的负担。然而，如果需要捕捉到耗时的慢查询，就需要巧妙地使用这一功能。为此，您可以选择只对慢查询启用 Query Profile。这可以通过设置变量 `big_query_profile_threshold` 为一个大于 `0s` 的时间来实现。例如，若将此变量设置为 `30s`，意味着只有那些执行时间超过 30 秒的查询会启用 Query Profile 功能。这样既保证了系统性能，又能有效监控到慢查询。
 
 ```SQL
-SET global big_query_profile_second_threshold = 30;
+-- 30 seconds
+SET global big_query_profile_threshold = '30s';
+
+-- 500 milliseconds
+SET global big_query_profile_threshold = '500ms';
+
+-- 60 minutes
+SET global big_query_profile_threshold = '60m';
 ```
 
 ### 启用 Runtime Query Profile
@@ -41,7 +48,7 @@ Runtime Query Profile 与普通 Query Profile 格式和内容均相同。您可�
 | Session 变量 | enable_profile | true/false | false |是否启用 Query Profile 功能。`true` 表示启用。 |
 | Session 变量 | pipeline_profile_level | 1/2 | 1 | 设置 Query Profile 的级别。`1` 表示会对 Profile 进行合并展示；`2` 表示保留原始的 Profile，如果选用这一级别，那么所有可视化的分析工具将不再起作用，因此通常不建议修改该参数。 |
 | Session 变量 | runtime_profile_report_interval | 正整数 | 10 | 设置 Runtime Query Profile 上报的时间间隔，单位秒。 |
-| Session 变量 | big_query_profile_second_threshold | 整数 | 0 | 设置长查询自动开启 Query Profile 的阈值，`0` 或者负数表示关闭该功能。正整数表示启用，单位秒。 |
+| Session 变量 | big_query_profile_threshold | 字符串 | `0s` | 设置长查询自动开启 Query Profile 的阈值，`0s` 表示关闭该功能。整数结合时间单位表示启用，可以用单位包括：`ms`、`s`、`m`。 |
 | FE 动态配置项 | enable_statistics_collect_profile | true/false | false | 是否启用统计信息采集相关查询的 Query Profile。`true` 表示启用。 |
 
 ## 获取 Query Profile

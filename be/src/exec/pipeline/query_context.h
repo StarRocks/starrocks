@@ -102,8 +102,29 @@ public:
         }
         return MonotonicNanos() - _query_begin_time > _big_query_profile_threshold_ns;
     }
-    void set_big_query_profile_threshold(int64_t big_query_profile_threshold_s) {
-        _big_query_profile_threshold_ns = 1'000'000'000L * big_query_profile_threshold_s;
+    void set_big_query_profile_threshold(int64_t big_query_profile_threshold,
+                                         TTimeUnit::type big_query_profile_threshold_unit) {
+        int64_t factor = 1;
+        switch (big_query_profile_threshold_unit) {
+        case TTimeUnit::NANOSECOND:
+            factor = 1;
+            break;
+        case TTimeUnit::MICROSECOND:
+            factor = 1'000L;
+            break;
+        case TTimeUnit::MILLISECOND:
+            factor = 1'000'000L;
+            break;
+        case TTimeUnit::SECOND:
+            factor = 1'000'000'000L;
+            break;
+        case TTimeUnit::MINUTE:
+            factor = 60 * 1'000'000'000L;
+            break;
+        default:
+            DCHECK(false);
+        }
+        _big_query_profile_threshold_ns = factor * big_query_profile_threshold;
     }
     void set_runtime_profile_report_interval(int64_t runtime_profile_report_interval_s) {
         _runtime_profile_report_interval_ns = 1'000'000'000L * runtime_profile_report_interval_s;
