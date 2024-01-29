@@ -91,7 +91,8 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
     }
 }
 
-void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction) {
+void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction,
+                                         uint32_t max_compact_input_rowset_id) {
     // delete input rowsets
     std::stringstream del_range_ss;
     std::vector<std::pair<uint32_t, uint32_t>> delete_delvec_sid_range;
@@ -138,6 +139,7 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
         auto rowset = _tablet_meta->add_rowsets();
         rowset->CopyFrom(op_compaction.output_rowset());
         rowset->set_id(_tablet_meta->next_rowset_id());
+        rowset->set_max_compact_input_rowset_id(max_compact_input_rowset_id);
         _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + rowset->segments_size());
     }
 

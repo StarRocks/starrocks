@@ -223,6 +223,9 @@ public:
     static Status put_del_vector(DataDir* store, WriteBatch* batch, TTabletId tablet_id, uint32_t segment_id,
                                  const DelVector& delvec);
 
+    static Status put_del_vectors(DataDir* store, WriteBatch* batch, TTabletId tablet_id, const EditVersion& version,
+                                  const vector<std::pair<uint32_t, DelVectorPtr>>& delvecs);
+
     static Status put_delta_column_group(DataDir* store, WriteBatch* batch, TTabletId tablet_id, uint32_t segment_id,
                                          const DeltaColumnGroupList& dcgs);
 

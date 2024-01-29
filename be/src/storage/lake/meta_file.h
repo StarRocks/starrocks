@@ -42,7 +42,7 @@ public:
     // handle txn log
     void apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
                        const std::vector<std::string>& orphan_files);
-    void apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction);
+    void apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction, uint32_t max_compact_input_rowset_id);
     // finalize will generate and sync final meta state to storage.
     // |txn_id| the maximum applied transaction ID, used to construct the delvec file name, and
     // the garbage collection module relies on this value to check if a delvec file can be safely
