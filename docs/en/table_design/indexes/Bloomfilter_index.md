@@ -20,7 +20,7 @@ For example, you create a bloom filter index on a `column1` of a given table `ta
 ## Usage notes
 
 - You can create bloom filter indexes for all columns of a Duplicate Key or Primary Key table. For an Aggregate table or Unique Key table, you can only create bloom filter indexes for key columns.
-- The Bloom filter indexes can be created for columns of the following data types:
+- Bloom filter indexes can be created for columns of the following data types:
     - Numeric types: SMALLINT, INT, BIGINT, and LARGEINT.
     - String types: CHAR, STRING, and VARCHAR.
     - Date types: DATE and DATETIME.
