@@ -61,6 +61,7 @@ import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
+import static com.google.common.base.Verify.verify;
 import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 
 public class TableFunctionTable extends Table {
@@ -85,8 +86,11 @@ public class TableFunctionTable extends Table {
     public static final String PROPERTY_AUTO_DETECT_SAMPLE_FILES = "auto_detect_sample_files";
 
     public static final String PROPERTY_CSV_COLUMN_SEPARATOR = "csv.column_separator";
-
     public static final String PROPERTY_CSV_ROW_DELIMITER = "csv.row_delimiter";
+    public static final String PROPERTY_CSV_SKIP_HEADER = "csv.skip_header";
+    public static final String PROPERTY_CSV_ENCLOSE = "csv.enclose";
+    public static final String PROPERTY_CSV_ESCAPE = "csv.escape";
+    public static final String PROPERTY_CSV_TRIM_SPACE = "csv.trim_space";
 
     private String path;
     private String format;
@@ -101,8 +105,12 @@ public class TableFunctionTable extends Table {
     private boolean writeSingleFile;
 
     // CSV format options
-    public String csvColumnSeparator = "\t";
-    public String csvRowDelimiter = "\n";
+    private String csvColumnSeparator = "\t";
+    private String csvRowDelimiter = "\n";
+    private byte csvEnclose;
+    private byte csvEscape;
+    private long csvSkipHeader;
+    private boolean csvTrimSpace;
 
     private List<TBrokerFileStatus> fileStatuses = Lists.newArrayList();
 
@@ -429,5 +437,21 @@ public class TableFunctionTable extends Table {
 
     public String getCsvRowDelimiter() {
         return csvRowDelimiter;
+    }
+
+    public byte getCsvEnclose() {
+        return csvEnclose;
+    }
+
+    public byte getCsvEscape() {
+        return csvEscape;
+    }
+
+    public long getCsvSkipHeader() {
+        return csvSkipHeader;
+    }
+
+    public Boolean getCsvTrimSpace() {
+        return csvTrimSpace;
     }
 }

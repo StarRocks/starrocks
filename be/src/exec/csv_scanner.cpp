@@ -568,8 +568,24 @@ Status CSVScanner::_get_schema_v2(std::vector<SlotDescriptor>* schema) {
 
     RETURN_IF_ERROR(_init_reader());
 
+    // skip header
+    for (int64_t i = 0; i < _parse_options.skip_header; i++) {
+        CSVReader::Record dummy;
+        auto st = _curr_reader->next_record(&dummy);
+        if (!st.ok() && st.is_end_of_file()) {
+            return Status::OK();
+        } else if (!st.ok()) {
+            return st;
+        }
+    }
+
     CSVRow row;
-    RETURN_IF_ERROR(_curr_reader->next_record(&row));
+    auto st = _curr_reader->next_record(row);
+    if (!st.ok() && st.is_end_of_file()) {
+        return Status::OK();
+    } else if (!st.ok()) {
+        return st;
+    }
 
     for (size_t i = 0; i < row.columns.size(); i++) {
         schema->emplace_back(SlotDescriptor(i, fmt::format("${}", i + 1), get_type_desc(fields[i])));
