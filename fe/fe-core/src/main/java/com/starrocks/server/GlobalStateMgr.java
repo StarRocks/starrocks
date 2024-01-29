@@ -2660,6 +2660,7 @@ public class GlobalStateMgr {
                         .append(partitionDuration).append("\"");
             }
 
+            Map<String, String> properties = olapTable.getTableProperty().getProperties();
             if (table.isCloudNativeTable()) {
                 Map<String, String> storageProperties = olapTable.getProperties();
 
@@ -2738,9 +2739,6 @@ public class GlobalStateMgr {
                     sb.append(WriteQuorum.writeQuorumToName(olapTable.writeQuorum())).append("\"");
                 }
 
-                // storage media
-                Map<String, String> properties = olapTable.getTableProperty().getProperties();
-
                 if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
                     sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
                             .append("\" = \"");
@@ -2754,13 +2752,6 @@ public class GlobalStateMgr {
                             .append(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)
                             .append("\" = \"")
                             .append(storageCoolDownTTL).append("\"");
-                }
-
-                // partition live number
-                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
-                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)
-                            .append("\" = \"");
-                    sb.append(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)).append("\"");
                 }
 
                 // unique constraint
@@ -2779,6 +2770,13 @@ public class GlobalStateMgr {
                     sb.append(ForeignKeyConstraint.getShowCreateTableConstraintDesc(olapTable.getForeignKeyConstraints()))
                             .append("\"");
                 }
+            }
+
+            // partition live number
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)
+                        .append("\" = \"");
+                sb.append(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)).append("\"");
             }
 
             // compression type
