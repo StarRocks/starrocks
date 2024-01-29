@@ -14,8 +14,8 @@
 
 #pragma once
 
-#include <future>
 #include <boost/algorithm/string.hpp>
+#include <future>
 #include <string>
 
 namespace starrocks {

@@ -102,9 +102,9 @@ struct FileChunkSinkContext : public ConnectorChunkSinkContext {
 
     std::string path;
     std::vector<std::string> column_names;
-    std::vector<ExprContext*> output_exprs;
+    std::vector<TExpr> output_exprs;
     std::vector<std::string> partition_columns;
-    std::vector<ExprContext*> partition_exprs;
+    std::vector<TExpr> partition_exprs;
     int64_t max_file_size;
     formats::FileWriter::FileFormat format;
     std::shared_ptr<formats::FileWriter::FileWriterOptions> options;

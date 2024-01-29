@@ -14,13 +14,13 @@
 
 #pragma once
 
+#include <future>
+
 #include "column/chunk.h"
 #include "common/status.h"
-#include "runtime/runtime_state.h"
 #include "fs/fs.h"
+#include "runtime/runtime_state.h"
 #include "util/priority_thread_pool.hpp"
-
-#include <future>
 
 namespace starrocks::formats {
 
@@ -38,7 +38,7 @@ public:
     };
 
     struct FileWriterOptions {
-        virtual ~FileWriterOptions() = 0;
+        virtual ~FileWriterOptions() = default;
     };
 
     struct FileMetrics {
@@ -69,11 +69,10 @@ public:
 
 class FileWriterFactory {
 public:
-    // TODO: how to handle file options of different formats
     FileWriterFactory(std::shared_ptr<FileSystem> fs, FileWriter::FileFormat format,
                       std::shared_ptr<FileWriter::FileWriterOptions> options,
-                      const std::vector<std::string>& column_names, const std::vector<ExprContext*>& output_exprs,
-                      PriorityThreadPool* executors = nullptr);
+                      const std::vector<std::string>& column_names, const std::vector<TExpr>& output_exprs,
+                      RuntimeState* runtime_state, PriorityThreadPool* executors = nullptr);
 
     StatusOr<std::shared_ptr<FileWriter>> create(const std::string& path) const;
 
@@ -82,7 +81,8 @@ private:
     std::shared_ptr<FileSystem> _fs;
     FileWriter::FileFormat _format;
     std::vector<std::string> _column_names;
-    std::vector<ExprContext*> _output_exprs;
+    std::vector<TExpr> _output_exprs;
+    RuntimeState* _runtime_state;
     PriorityThreadPool* _executors;
 };
 

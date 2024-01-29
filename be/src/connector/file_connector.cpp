@@ -24,6 +24,8 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/expr.h"
 #include "formats/file_writer.h"
+#include "connector_sink/utils.h"
+#include "connector_sink/file_chunk_sink.h"
 
 namespace starrocks::connector {
 
@@ -208,15 +210,16 @@ void FileDataSource::_update_counter() {
 std::unique_ptr<ConnectorChunkSink> FileDataSinkProvider::create_chunk_sink(
         std::shared_ptr<ConnectorChunkSinkContext> context, int32_t driver_id) {
     auto ctx = std::dynamic_pointer_cast<FileChunkSinkContext>(context);
+    auto runtime_state = ctx->fragment_context->runtime_state();
     auto fs = FileSystem::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)).value();
     auto file_writer_factory = std::make_unique<formats::FileWriterFactory>(
-            std::move(fs), ctx->format, ctx->options, ctx->column_names, ctx->output_exprs, ctx->executor);
+            std::move(fs), ctx->format, ctx->options, ctx->column_names, ctx->output_exprs, runtime_state, ctx->executor);
     auto location_provider = std::make_unique<connector::LocationProvider>(
-            ctx->path, print_id(ctx->fragment_context->query_id()), ctx->fragment_context->runtime_state()->be_number(),
+            ctx->path, print_id(ctx->fragment_context->query_id()), runtime_state->be_number(),
             driver_id, "parquet");
     return std::make_unique<connector::FileChunkSink>(ctx->partition_columns, ctx->partition_exprs,
                                                       std::move(location_provider), std::move(file_writer_factory),
-                                                      ctx->max_file_size);
+                                                      ctx->max_file_size, runtime_state);
 }
 
 } // namespace starrocks::connector

@@ -1049,46 +1049,35 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
                 partition_column_names.push_back(target_table.columns[id].column_name);
             }
         }
-        std::vector<ExprContext*> partition_expr_ctxs;
-        RETURN_IF_ERROR(Expr::create_expr_trees(runtime_state->obj_pool(), partition_exprs, &partition_expr_ctxs,
-                                                runtime_state));
 
-        std::vector<ExprContext*> output_expr_ctxs;
-        RETURN_IF_ERROR(
-                Expr::create_expr_trees(runtime_state->obj_pool(), output_exprs, &output_expr_ctxs, runtime_state));
-
-        auto ctx = std::make_shared<connector::FileChunkSinkContext>();
-        ctx->path = target_table.path;
-        ctx->cloud_conf = thrift_sink.table_function_table_sink.cloud_configuration;
-        ctx->partition_columns = partition_column_names;
-        ctx->executor = ExecEnv::GetInstance()->pipeline_sink_io_pool();
-        ctx->format = formats::FileWriter::FileFormat::PARQUET;
-        ctx->max_file_size = target_table.write_single_file ? INT64_MAX : 1 << 30;
-        ctx->output_exprs = output_expr_ctxs;
-        ctx->partition_exprs = partition_expr_ctxs;
-
-        // TODO(letian-jiang): handle exprs
-        RETURN_IF_ERROR(Expr::prepare(ctx->output_exprs, runtime_state));
-        RETURN_IF_ERROR(Expr::prepare(ctx->partition_exprs, runtime_state));
+        auto sink_ctx = std::make_shared<connector::FileChunkSinkContext>();
+        sink_ctx->path = target_table.path;
+        sink_ctx->cloud_conf = thrift_sink.table_function_table_sink.cloud_configuration;
+        sink_ctx->column_names = column_names;
+        sink_ctx->partition_columns = partition_column_names;
+        sink_ctx->executor = ExecEnv::GetInstance()->pipeline_sink_io_pool();
+        sink_ctx->format = formats::FileWriter::FileFormat::PARQUET;
+        sink_ctx->options = std::make_shared<formats::ParquetFileWriter::ParquetWriterOptions>();
+        sink_ctx->max_file_size = target_table.write_single_file ? INT64_MAX : 1 << 30;
+        sink_ctx->output_exprs = output_exprs;
+        sink_ctx->partition_exprs = partition_exprs;
+        sink_ctx->fragment_context = fragment_ctx;
 
         auto connector = connector::ConnectorManager::default_instance()->get(connector::Connector::FILE);
         auto sink_provider = connector->create_data_sink_provider();
-        auto op = std::make_shared<ConnectorSinkOperatorFactory>(context->next_operator_id(), std::move(sink_provider), ctx, fragment_ctx);
+        auto op = std::make_shared<ConnectorSinkOperatorFactory>(context->next_operator_id(), std::move(sink_provider), sink_ctx, fragment_ctx);
 
         size_t source_dop = fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
-        size_t sink_dop = _calc_sink_dop(ExecEnv::GetInstance(), request);
+        size_t sink_dop = target_table.write_single_file ? 1 : _calc_sink_dop(ExecEnv::GetInstance(), request);
 
-        if (target_table.write_single_file) {
-            sink_dop = 1;
-        }
-
-        if (partition_expr_ctxs.empty()) {
+        if (partition_exprs.empty()) {
             context->maybe_interpolate_local_passthrough_exchange_for_sink(
                     runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, std::move(op), source_dop, sink_dop);
         } else {
-            context->maybe_interpolate_local_key_partition_exchange_for_sink(
-                    runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, op, partition_expr_ctxs, source_dop,
-                    sink_dop);
+            // TODO: partition
+//            context->maybe_interpolate_local_key_partition_exchange_for_sink(
+//                    runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, op, partition_expr_ctxs, source_dop,
+//                    sink_dop);
         }
     } else if (typeid(*datasink) == typeid(starrocks::DictionaryCacheSink)) {
         OpFactoryPtr op = std::make_shared<DictionaryCacheSinkOperatorFactory>(

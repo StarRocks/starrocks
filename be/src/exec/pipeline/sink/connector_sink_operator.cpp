@@ -21,15 +21,19 @@
 namespace starrocks::pipeline {
 
 Status ConnectorSinkOperator::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::prepare(state));
+    RETURN_IF_ERROR(_connector_chunk_sink->init());
     return Status::OK();
 }
 
 void ConnectorSinkOperator::close(RuntimeState* state) {
-    // TODO: rollback async-ly
-    while (!_rollback_actions.empty()) {
-        _rollback_actions.front()();
-        _rollback_actions.pop();
+    if (_is_cancelled) {
+        while (!_rollback_actions.empty()) {
+            _rollback_actions.front()();
+            _rollback_actions.pop();
+        }
     }
+    Operator::close(state);
 }
 
 template <typename R>
@@ -42,7 +46,6 @@ bool ConnectorSinkOperator::need_input() const {
         return false;
     }
 
-    // LOG(INFO) << "need input";
     while (!_add_chunk_future_queue.empty()) {
         // return if any future is not ready, check in order of FIFO
         if (!is_ready(_add_chunk_future_queue.front())) {
@@ -51,7 +54,6 @@ bool ConnectorSinkOperator::need_input() const {
         if (auto st = _add_chunk_future_queue.front().get(); !st.ok()) {
             LOG(WARNING) << "cancel fragment: " << st;
             _fragment_context->cancel(st);
-            return false;
         }
         _add_chunk_future_queue.pop();
     }
@@ -60,7 +62,6 @@ bool ConnectorSinkOperator::need_input() const {
 }
 
 bool ConnectorSinkOperator::is_finished() const {
-    LOG(INFO) << "is finished";
     if (!_no_more_input) {
         return false;
     }
@@ -70,10 +71,10 @@ bool ConnectorSinkOperator::is_finished() const {
         if (!is_ready(_add_chunk_future_queue.front())) {
             return false;
         }
+
         if (auto st = _add_chunk_future_queue.front().get(); !st.ok()) {
             LOG(WARNING) << "cancel fragment: " << st;
             _fragment_context->cancel(st);
-            return false;
         }
         _add_chunk_future_queue.pop();
     }
@@ -88,13 +89,12 @@ bool ConnectorSinkOperator::is_finished() const {
         _commit_file_future_queue.pop();
 
         if (auto st = result.io_status; st.ok()) {
-            // _connector_chunk_sink->callbackOnCommitSuccess()(result);
-            _fragment_context->runtime_state()->update_num_rows_load_sink(result.file_metrics.record_count);
+            _connector_chunk_sink->callback_on_success()(result);
         } else {
             LOG(WARNING) << "cancel fragment: " << st;
             _fragment_context->cancel(st);
         }
-        _rollback_actions.push(result.rollback_action);
+        _rollback_actions.push(std::move(result.rollback_action));
     }
 
     DCHECK(_add_chunk_future_queue.empty());
@@ -140,14 +140,14 @@ Status ConnectorSinkOperator::_enqueue_futures(connector::ConnectorChunkSink::Fu
 
 ConnectorSinkOperatorFactory::ConnectorSinkOperatorFactory(
         int32_t id, std::unique_ptr<connector::ConnectorChunkSinkProvider> data_sink_provider,
-        std::shared_ptr<connector::ConnectorChunkSinkContext> context, FragmentContext* fragment_context)
+        std::shared_ptr<connector::ConnectorChunkSinkContext> sink_context, FragmentContext* fragment_context)
         : OperatorFactory(id, "connector sink operator", Operator::s_pseudo_plan_node_id_for_final_sink),
           _data_sink_provider(std::move(data_sink_provider)),
-          _context(context),
+          _sink_context(sink_context),
           _fragment_context(fragment_context) {}
 
 OperatorPtr ConnectorSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
-    auto chunk_sink = _data_sink_provider->create_chunk_sink(_context, driver_sequence);
+    auto chunk_sink = _data_sink_provider->create_chunk_sink(_sink_context, driver_sequence);
     return std::make_shared<ConnectorSinkOperator>(this, _id, Operator::s_pseudo_plan_node_id_for_final_sink,
                                                    driver_sequence, std::move(chunk_sink), _fragment_context);
 }

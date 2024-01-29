@@ -20,4 +20,7 @@ endif()
 
 add_library(ConnectorSink STATIC
         connector_chunk_sink.cpp
+        file_chunk_sink.cpp
+        hive_chunk_sink.cpp
+        utils.cpp
 )

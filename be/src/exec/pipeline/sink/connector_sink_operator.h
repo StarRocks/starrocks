@@ -29,7 +29,6 @@
 
 namespace starrocks::pipeline {
 
-// TODO(letian-jiang): inherit Operator, and deprecate all external table sink operators
 class ConnectorSinkOperator final : public Operator {
 public:
     ConnectorSinkOperator(OperatorFactory* factory, const int32_t id, const int32_t plan_node_id,
@@ -69,18 +68,17 @@ private:
 
     mutable std::queue<std::future<Status>> _add_chunk_future_queue;
     mutable std::queue<std::future<formats::FileWriter::CommitResult>> _commit_file_future_queue;
-    mutable std::queue<std::function<void()>> _rollback_actions; // TODO: file system
+    mutable std::queue<std::function<void()>> _rollback_actions;
 
     bool _no_more_input = false;
     bool _is_cancelled = false;
     FragmentContext* _fragment_context;
 };
 
-// TODO(letian-jiang): inherit OperatorFactory, and deprecate all external table sink operators
 class ConnectorSinkOperatorFactory final : public OperatorFactory {
 public:
     ConnectorSinkOperatorFactory(int32_t id, std::unique_ptr<connector::ConnectorChunkSinkProvider> data_sink_provider,
-                                 std::shared_ptr<connector::ConnectorChunkSinkContext> context,
+                                 std::shared_ptr<connector::ConnectorChunkSinkContext> sink_context,
                                  FragmentContext* fragment_context);
 
     ~ConnectorSinkOperatorFactory() override = default;
@@ -89,7 +87,7 @@ public:
 
 private:
     std::unique_ptr<connector::ConnectorChunkSinkProvider> _data_sink_provider;
-    std::shared_ptr<connector::ConnectorChunkSinkContext> _context;
+    std::shared_ptr<connector::ConnectorChunkSinkContext> _sink_context;
     FragmentContext* _fragment_context;
 };
 
