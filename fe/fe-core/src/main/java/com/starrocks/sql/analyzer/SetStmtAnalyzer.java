@@ -31,6 +31,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.monitor.unit.TimeValue;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
@@ -223,6 +224,33 @@ public class SetStmtAnalyzer {
             }
         }
 
+<<<<<<< HEAD
+=======
+        // cbo_materialized_view_rewrite_candidate_limit
+        if (variable.equalsIgnoreCase(SessionVariable.CBO_MATERIALIZED_VIEW_REWRITE_CANDIDATE_LIMIT)) {
+            checkRangeIntVariable(resolvedExpression, SessionVariable.CBO_MATERIALIZED_VIEW_REWRITE_CANDIDATE_LIMIT,
+                    1, null);
+        }
+        // cbo_materialized_view_rewrite_rule_output_limit
+        if (variable.equalsIgnoreCase(SessionVariable.CBO_MATERIALIZED_VIEW_REWRITE_RULE_OUTPUT_LIMIT)) {
+            checkRangeIntVariable(resolvedExpression, SessionVariable.CBO_MATERIALIZED_VIEW_REWRITE_RULE_OUTPUT_LIMIT,
+                    1, null);
+        }
+        // cbo_materialized_view_rewrite_related_mvs_limit
+        if (variable.equalsIgnoreCase(SessionVariable.CBO_MATERIALIZED_VIEW_REWRITE_RELATED_MVS_LIMIT)) {
+            checkRangeIntVariable(resolvedExpression, SessionVariable.CBO_MATERIALIZED_VIEW_REWRITE_RELATED_MVS_LIMIT,
+                    1, null);
+        }
+        // big_query_profile_threshold
+        if (variable.equalsIgnoreCase(SessionVariable.BIG_QUERY_PROFILE_THRESHOLD)) {
+            String timeStr = resolvedExpression.getStringValue();
+            TimeValue timeValue = TimeValue.parseTimeValue(timeStr, null);
+            if (timeValue == null) {
+                throw new SemanticException(String.format("failed to parse time value %s", timeStr));
+            }
+        }
+
+>>>>>>> a3758dfd36 ([Enhancement] Support profile for only big query (2) (#39855))
         var.setResolvedExpression(resolvedExpression);
     }
 
