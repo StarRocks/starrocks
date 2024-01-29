@@ -238,7 +238,7 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
         Map<TableName, Relation> allTablesRelations = AnalyzerUtils.collectAllTableAndViewRelations(statement);
         if (Config.authorization_enable_column_level_privilege) {
             try {
-              checkSelectTableAction(context, allTablesRelations);
+                checkSelectTableAction(context, allTablesRelations);
             } catch (ErrorReportException e) {
                 Map<TableName, Set<String>> allTouchedColumns = AnalyzerUtils.collectAllSelectTableColumns(statement);
                 checkCanSelectFromColumns(context, allTouchedColumns, allTablesRelations);
@@ -298,6 +298,11 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
                     if (allTouchedColumns.containsKey(statement.getTableName())) {
                         // no need to check COLUMN SELECT privilege when user already has COLUMN INSERT privilege
                         Set<String> usedCols = allTouchedColumns.get(statement.getTableName());
+                        if (usedCols.contains("*")) {
+                            usedCols = statement.getTargetTable().getColumns().stream()
+                                    .map(column -> column.getName()).collect(Collectors.toSet());
+                            allTouchedColumns.put(statement.getTableName(), usedCols);
+                        }
                         if (columnNames.contains("*")) {
                             usedCols.clear();
                         } else {
@@ -400,6 +405,11 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
                     // no need to check COLUMN SELECT privilege when user already has COLUMN UPDATE privilege
                     if (tableColumns.containsKey(statement.getTableName())) {
                         Set<String> usedCols = tableColumns.get(statement.getTableName());
+                        if (usedCols.contains("*")) {
+                            usedCols = statement.getTable().getColumns().stream()
+                                    .map(column -> column.getName()).collect(Collectors.toSet());
+                            tableColumns.put(statement.getTableName(), usedCols);
+                        }
                         usedCols.removeAll(assignmentColumns);
                         if (usedCols.isEmpty()) {
                             tableColumns.remove(statement.getTableName());
@@ -490,10 +500,10 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
         HashSet<TableName> usedColOfTables = new HashSet<>(allTouchedTableColumns.keySet());
         usedTables.removeAll(usedColOfTables);
         if (!usedTables.isEmpty()) {
-            String warnMsg = String.format("The usage columns information of some actually used tables " +
+            String warnMsg = String.format("The column usage information of some actually used tables " +
                     "has not been successfully collected. tables: %s", usedTables);
             LOG.warn(warnMsg);
-            // used `*` to fill these tables column privileges
+            // check SELECT privilege of all the columns(`*`) for these tables instead
             for (TableName usedTable : usedTables) {
                 try {
                     Authorizer.checkColumnsAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -515,6 +525,12 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
                 String warnMsg = String.format("Some used columns of tables were incorrectly collected. table: %s",
                         tableName);
                 LOG.warn(warnMsg);
+                AccessDeniedException.reportAccessDenied(
+                        tableName.getCatalog(),
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.SELECT.name(), ObjectType.COLUMN.name(),
+                        String.join(".", tableName.getTbl(),
+                                String.join(",", columns)));
             } else {
                 Table table = relation instanceof TableRelation ? ((TableRelation) relation).getTable() :
                         ((ViewRelation) relation).getView();

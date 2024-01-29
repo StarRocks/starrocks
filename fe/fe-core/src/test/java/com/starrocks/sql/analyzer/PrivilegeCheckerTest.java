@@ -985,6 +985,9 @@ public class PrivilegeCheckerTest {
                     "Access denied; you need (at least one of) the SELECT privilege(s) on" +
                             " COLUMN tbl2.k1,k2,k3,k4 for this operation", ctx);
             verifySuccess("insert into db2.tbl1 (k1, k2) select k1,k2 from db2.tbl1", ctx);
+            verify("insert into db2.tbl1 (k1, k2) select k1,k2 from (select * from db2.tbl1) t",
+                    "Access denied; you need (at least one of) the SELECT privilege(s) on" +
+                            " COLUMN tbl1.k3,k4 for this operation", ctx);
         }
 
         // update
@@ -1016,6 +1019,10 @@ public class PrivilegeCheckerTest {
             verify("update db3.tprimary set k2 = k3 where k2 < (select avg(k4) from db3.tprimary)",
                     "Access denied; you need (at least one of) the SELECT privilege(s) on" +
                             " COLUMN tprimary.k3,k4 for this operation", ctx);
+            verify("update db3.tprimary set k2 = '2' where k2 = (select k2 from (select * from db3.tprimary) t1" +
+                            " where k1='1')",
+                    "Access denied; you need (at least one of) the SELECT privilege(s) on" +
+                            " COLUMN tprimary.k1,k3,k4 for this operation", ctx);
         }
 
         // delete
@@ -1026,11 +1033,13 @@ public class PrivilegeCheckerTest {
         verifyGrantRevoke("delete from db3.tprimary where k1 = '1'",
                 "grant delete on db3.tprimary to test", "revoke delete on db3.tprimary from test",
                 "Access denied; you need (at least one of) the DELETE privilege(s) on TABLE tprimary for this operation");
-        verifyGrantRevokeFail("delete from db3.tprimary where exists (select k1 from db2.tbl1 where db3.tprimary.k1=db2.tbl1.k1 and k2='3')",
+        verifyGrantRevokeFail("delete from db3.tprimary where exists" +
+                        " (select k1 from db2.tbl1 where db3.tprimary.k1=db2.tbl1.k1 and k2='3')",
                 "grant delete on db3.tprimary to test", "revoke delete on db3.tprimary from test",
                 "Access denied; you need (at least one of) the DELETE privilege(s) on TABLE tprimary for this operation",
                 "Access denied; you need (at least one of) the SELECT privilege(s) on COLUMN tbl1.k1,k2 for this operation");
-        verifyGrantRevokeFail("with cte as (select k1 from db2.tbl1 where k2='3') delete from db3.tprimary using cte where db3.tprimary.k1=cte.k1",
+        verifyGrantRevokeFail("with cte as (select k1 from db2.tbl1 where k2='3') " +
+                        "delete from db3.tprimary using cte where db3.tprimary.k1=cte.k1",
                 "grant delete on db3.tprimary to test", "revoke delete on db3.tprimary from test",
                 "Access denied; you need (at least one of) the DELETE privilege(s) on TABLE tprimary for this operation",
                 "Access denied; you need (at least one of) the SELECT privilege(s) on COLUMN tbl1.k1,k2 for this operation");
