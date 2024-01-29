@@ -494,9 +494,32 @@ Status UpdateManager::get_del_vec_in_meta(const TabletSegmentId& tsid, int64_t m
 
 void UpdateManager::expire_cache() {
     if (MonotonicMillis() - _last_clear_expired_cache_millis > _cache_expire_ms) {
+        ssize_t update_state_orig_size = _update_state_cache.size();
+        ssize_t update_state_orig_obj_size = _update_state_cache.object_size();
         _update_state_cache.clear_expired();
+        ssize_t update_state_size = _update_state_cache.size();
+        ssize_t update_state_obj_size = _update_state_cache.object_size();
+
+        ssize_t index_orig_size = _index_cache.size();
+        ssize_t index_orig_obj_size = _index_cache.object_size();
         _index_cache.clear_expired();
+        ssize_t index_size = _index_cache.size();
+        ssize_t index_obj_size = _index_cache.object_size();
+
+        ssize_t compaction_cache_orig_size = _compaction_cache.size();
+        ssize_t compaction_cache_orig_obj_size = _compaction_cache.object_size();
         _compaction_cache.clear_expired();
+        ssize_t compaction_cache_size = _compaction_cache.size();
+        ssize_t compaction_cache_obj_size = _compaction_cache.object_size();
+
+        LOG(INFO) << strings::Substitute(
+                "update state cache expire: ($0 $1), index cache expire: ($2 $3), compaction cache expire: ($4 $5)",
+                update_state_orig_obj_size - update_state_obj_size,
+                PrettyPrinter::print_bytes(update_state_orig_size - update_state_size),
+                index_orig_obj_size - index_obj_size, PrettyPrinter::print_bytes(index_orig_size - index_size),
+                compaction_cache_orig_obj_size - compaction_cache_obj_size,
+                PrettyPrinter::print_bytes(compaction_cache_orig_size - compaction_cache_size));
+
         _last_clear_expired_cache_millis = MonotonicMillis();
     }
 }
