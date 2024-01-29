@@ -1566,6 +1566,11 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 if (indexMeta == null) {
                     continue;
                 }
+                
+                // already has one update scheam task, ignore to prevent send too many task
+                if (indexMeta.hasUpdateSchemaTask(backendId)) {
+                    continue;
+                }
 
                 List<String> columns = Lists.newArrayList();
                 List<TColumn> columnsDesc = Lists.newArrayList();
@@ -1588,6 +1593,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                             indexId, tablets, indexMeta.getSchemaId(), indexMeta.getSchemaVersion(),
                             columnParam);
                 updateSchemaBatchTask.addTask(task);
+                indexMeta.addUpdateSchemaBackend(backendId);
 
             } finally {
                 locker.unLockDatabase(db, LockType.READ);
