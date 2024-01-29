@@ -35,7 +35,8 @@ namespace starrocks {
 template <typename DatumType>
 void test_pk_dump(PrimaryIndex* pk_index, const std::map<std::string, uint64_t>& current_index_stat) {
     std::srand(static_cast<unsigned int>(time(nullptr)));
-    std::string kPrimaryIndexDumpDir = "./PrimaryIndexTest_test_index_dump_" + std::to_string(std::rand());
+    std::string kPrimaryIndexDumpDir = "./PrimaryIndexTest_test_index_dump_" + std::to_string(std::rand()) + "_" +
+                                       std::to_string(static_cast<int64_t>(pthread_self()));
     std::string kPrimaryIndexDumpFile = kPrimaryIndexDumpDir + "/111.pkdump";
     bool created;
     FileSystem* fs = FileSystem::Default();
