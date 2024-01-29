@@ -138,4 +138,25 @@ public class ShowCreateTableStmtTest {
         System.out.println(value);
         Assert.assertTrue(value.contains("\"COLUMN_STATS_ACCURATE\"  =  \"{\\\"BASIC_STATS\\\":\\\"true\\\"}\""));
     }
+
+    @Test
+    public void testShowPartitionLiveNumber() throws Exception {
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE `aaa` (\n" +
+                        "  `id` int(11) NOT NULL COMMENT \"\",\n" +
+                        "  `city` varchar(20) NOT NULL COMMENT \"\"\n" +
+                        ") ENGINE=OLAP \n" +
+                        "DUPLICATE KEY(`id`)\n" +
+                        "PARTITION BY (`city`) \n" +
+                        "DISTRIBUTED BY HASH(`id`) BUCKETS 5 \n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"partition_live_number\" = \"1\"\n" +
+                        ");");
+        String sql = "show create table test.aaa";
+        ShowCreateTableStmt showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        ShowExecutor executor = new ShowExecutor(ctx, showCreateTableStmt);
+        ShowResultSet resultSet = executor.execute();
+        Assert.assertTrue(resultSet.getResultRows().get(0).get(1).contains("partition_live_number"));
+    }
 }
