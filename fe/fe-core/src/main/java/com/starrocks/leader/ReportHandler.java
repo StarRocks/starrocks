@@ -1584,7 +1584,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 TOlapTableColumnParam columnParam = new TOlapTableColumnParam(columnsDesc, columnSortKeyUids,
                                             indexMeta.getShortKeyColumnCount());
 
-                UpdateSchemaTask task = new UpdateSchemaTask(null, backendId, db.getId(), olapTable.getId(),
+                UpdateSchemaTask task = new UpdateSchemaTask(backendId, db.getId(), olapTable.getId(),
                             indexId, tablets, indexMeta.getSchemaId(), indexMeta.getSchemaVersion(),
                             columnParam);
                 updateSchemaBatchTask.addTask(task);

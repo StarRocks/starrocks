@@ -458,7 +458,6 @@ public class LeaderImpl {
     }
 
     private void finishUpdateSchemaTask(AgentTask task, TFinishTaskRequest request) {
-        LOG.info("finish update schema task");
         AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
     }
 

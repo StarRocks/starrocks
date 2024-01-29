@@ -21,6 +21,7 @@
 #include "agent/task_signatures_manager.h"
 #include "boost/lexical_cast.hpp"
 #include "common/status.h"
+#include "gutil/strings/join.h"
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "runtime/snapshot_loader.h"
@@ -593,6 +594,7 @@ void run_update_schema_task(const std::shared_ptr<UpdateSchemaTaskRequest>& agen
                 LOG(WARNING) << msg;
                 error_msgs.emplace_back(msg);
                 error_tablet_ids.push_back(tablet_id);
+                continue;
             }
             tablet->update_max_version_schema(new_schema);
             VLOG(1) << "update tablet:" << tablet_id << " schema version from " << ori_tablet_schema->schema_version()
@@ -613,6 +615,8 @@ void run_update_schema_task(const std::shared_ptr<UpdateSchemaTaskRequest>& agen
 
     finish_task(finish_task_request);
     remove_task_info(agent_task_req->task_type, agent_task_req->signature);
+    LOG(INFO) << "Update schema task signature=" << agent_task_req->signature << " error_tablets["
+              << error_tablet_ids.size() << "):" << JoinInts(error_tablet_ids, ",");
 }
 
 void run_upload_task(const std::shared_ptr<UploadAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {

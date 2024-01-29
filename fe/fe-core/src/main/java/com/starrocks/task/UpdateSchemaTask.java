@@ -35,27 +35,23 @@
 package com.starrocks.task;
 
 import com.starrocks.thrift.TOlapTableColumnParam;
-import com.starrocks.thrift.TResourceInfo;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.thrift.TUpdateSchemaReq;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
 public class UpdateSchemaTask extends AgentTask {
-    private static final Logger LOG = LogManager.getLogger(UpdateSchemaTask.class);
 
     private Long schemaId;
     private Long schemaVersion;
     private List<Long> tablets;
     private TOlapTableColumnParam columnParam;
 
-    public UpdateSchemaTask(TResourceInfo resourceInfo, long backendId, long dbId,
+    public UpdateSchemaTask(long backendId, long dbId,
                             long tableId, long indexId, List<Long> tablets,
                             long schemaId, long schemaVersion,
                             TOlapTableColumnParam columnParam) {
-        super(resourceInfo, backendId, TTaskType.UPDATE_SCHEMA, dbId, tableId, -1, indexId, -1);
+        super(null, backendId, TTaskType.UPDATE_SCHEMA, dbId, tableId, -1, indexId, -1);
 
         this.schemaId = schemaId;
         this.schemaVersion = schemaVersion;
