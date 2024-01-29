@@ -20,7 +20,10 @@ For example, you create a bloom filter index on a `column1` of a given table `ta
 ## Usage notes
 
 - You can create bloom filter indexes for all columns of a Duplicate Key or Primary Key table. For an Aggregate table or Unique Key table, you can only create bloom filter indexes for key columns.
-- TINYINT, FLOAT, DOUBLE, and DECIMAL columns do not support creating bloom filter indexes.
+- The Bloom filter indexes can be created for the columns of the following types:
+    - Numeric types: SMALLINT, INT, BIGINT, and LARGEINT.
+    - String types: CHAR, STRING, and VARCHAR.
+    - Date types: DATE, DATETIME.
 - Bloom filter indexes can only improve the performance of queries that contain the `in` and `=` operators, such as `Select xxx from table where x in {}` and `Select xxx from table where column = xxx`.
 - You can check whether a query uses bloom filter indexes by viewing the `BloomFilterFilterRows` field of the query's profile.
 
