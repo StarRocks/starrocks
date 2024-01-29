@@ -14,10 +14,12 @@
 
 package com.starrocks.load.pipe;
 
+import com.google.common.base.Stopwatch;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.fs.HdfsUtil;
@@ -36,6 +38,8 @@ import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.SubmitResult;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.TaskRun;
+import com.starrocks.scheduler.TaskRunExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
@@ -80,7 +84,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
 import java.util.concurrent.FutureTask;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public class PipeManagerTest {
@@ -157,6 +165,32 @@ public class PipeManagerTest {
         pm.alterPipe(alterStmt);
     }
 
+    private void suspendPipe(String name) throws Exception {
+        PipeManager pm = ctx.getGlobalStateMgr().getPipeManager();
+        String sql = "alter pipe " + name + " suspend";
+        AlterPipeStmt alterStmt = (AlterPipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        pm.alterPipe(alterStmt);
+    }
+
+    private void waitPipeTaskFinish(String name) {
+        Pipe pipe = getPipe(name);
+        Stopwatch watch = Stopwatch.createStarted();
+        while (pipe.getState() != Pipe.State.FINISHED) {
+            if (watch.elapsed(TimeUnit.SECONDS) > 60) {
+                Assert.fail("wait for pipe but failed: elapsed " + watch.elapsed(TimeUnit.SECONDS));
+            }
+            if (pipe.getState() == Pipe.State.ERROR) {
+                Assert.fail("pipe in ERROR state: " + pipe);
+            }
+            pipe.schedule();
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                Assert.fail("wait for pipe but failed: " + e);
+            }
+        }
+    }
+
     @Test
     public void testPipeWithWarehouse() throws Exception {
         // not exists
@@ -201,7 +235,8 @@ public class PipeManagerTest {
         pm.dropPipesOfDb(PIPE_TEST_DB, dbId);
 
         // create pipe 1
-        String sql = "create pipe p1 as insert into tbl select * from files('path'='fake://pipe', 'format'='parquet')";
+        String sql = "create pipe p1 properties ('AUTO_INGEST'='FALSE') as " +
+                "insert into tbl select * from files('path'='fake://pipe', 'format'='parquet')";
         CreatePipeStmt createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         pm.createPipe(createStmt);
         UtFrameUtils.PseudoImage image1 = new UtFrameUtils.PseudoImage();
@@ -247,6 +282,42 @@ public class PipeManagerTest {
         p2.schedule();
         p1 = follower.mayGetPipe(new PipeName(PIPE_TEST_DB, "p1")).get();
         Assert.assertEquals(Pipe.State.SUSPEND, p1.getState());
+    }
+
+    private void mockTaskLongRunning(long runningSecs, Constants.TaskRunState result) {
+        new MockUp<TaskRunExecutor>() {
+            /**
+             * @see TaskRunExecutor#executeTaskRun(TaskRun)
+             */
+            @Mock
+            public boolean executeTaskRun(TaskRun taskRun) {
+
+                ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();
+                executorService.schedule(() -> {
+                    taskRun.getFuture().complete(result);
+                }, runningSecs, TimeUnit.SECONDS);
+                return true;
+            }
+        };
+    }
+
+    private void mockTaskExecutor(Supplier<Constants.TaskRunState> runnable) {
+
+        new MockUp<TaskRunExecutor>() {
+            /**
+             * @see TaskRunExecutor#executeTaskRun(TaskRun)
+             */
+            @Mock
+            public boolean executeTaskRun(TaskRun taskRun) {
+                try {
+                    Constants.TaskRunState result = runnable.get();
+                    taskRun.getFuture().complete(result);
+                } catch (Exception e) {
+                    taskRun.getFuture().completeExceptionally(e);
+                }
+                return true;
+            }
+        };
     }
 
     private void mockTaskExecution(Constants.TaskRunState executionState) {
@@ -602,6 +673,41 @@ public class PipeManagerTest {
         resumePipe(pipeName);
         Assert.assertEquals(Pipe.State.RUNNING, p3.getState());
         Assert.assertEquals(0, p3.getFailedTaskExecutionCount());
+    }
+
+    /**
+     * The suspend operation could either interrupt the normal execution of task, or
+     */
+    @Test
+    public void testSuspend() throws Exception {
+        mockRepoExecutor();
+        final String name = "p_suspend";
+        String sql = "create pipe p_suspend " +
+                "properties('auto_ingest'='false') " +
+                "as " +
+                "insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
+        createPipe(sql);
+
+        // normal execution of task, will retry after interruption
+        mockTaskLongRunning(10, Constants.TaskRunState.SUCCESS);
+        Pipe p = getPipe(name);
+        p.poll();
+        p.schedule();
+
+        // suspend make the pipe-task enter RUNNABLE state
+        suspendPipe(name);
+        Assert.assertEquals(1, p.getRunningTasks().size());
+        Assert.assertEquals(PipeTaskDesc.PipeTaskState.RUNNABLE, p.getRunningTasks().get(0).getState());
+
+        // Throw the LabelAlreadyUsed exception
+        // But Pipe could finish since this exception is acceptable
+        mockTaskExecutor(() -> {
+            throw new RuntimeException(new LabelAlreadyUsedException("h"));
+        });
+        resumePipe(name);
+        waitPipeTaskFinish(name);
+
+        dropPipe(name);
     }
 
     @Test

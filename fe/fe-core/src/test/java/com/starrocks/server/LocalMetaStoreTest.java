@@ -141,13 +141,15 @@ public class LocalMetaStoreTest {
 
         LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
         localMetastore.getPartitionIdToStorageMediumMap();
+        // Clean test.mv1, avoid its refreshment affecting other cases in this testsuite.
+        starRocksAssert.dropMaterializedView("test.mv1");
     }
 
     @Test
     public void testLoadClusterV2() throws Exception {
         LocalMetastore localMetaStore = new LocalMetastore(GlobalStateMgr.getCurrentState(),
-                GlobalStateMgr.getCurrentRecycleBin(),
-                GlobalStateMgr.getCurrentColocateIndex());
+                GlobalStateMgr.getCurrentState().getRecycleBin(),
+                GlobalStateMgr.getCurrentState().getColocateTableIndex());
 
         UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
         localMetaStore.save(image.getDataOutputStream());

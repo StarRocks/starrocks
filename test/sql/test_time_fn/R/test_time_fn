@@ -917,3 +917,15 @@ select to_iso8601(date'2020-01-01'), to_iso8601(datetime'2020-01-01 00:00:00'),t
 -- result:
 2020-01-01	2020-01-01T00:00:00.000000	2020-01-01T00:00:00.100000
 -- !result
+
+-- name: test_timestamp_add
+select timestampadd(MILLISECOND, 1, '2019-01-02 00:00:00');
+-- result:
+2019-01-02 00:00:00.001000
+-- !result
+
+-- name: test_timestamp_diff
+select  timestampdiff(MILLISECOND, '2003-02-01 00:00:00', '2003-05-01 12:05:55');
+-- result:
+7733155000
+-- !result

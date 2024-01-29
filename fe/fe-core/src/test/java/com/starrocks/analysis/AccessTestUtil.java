@@ -112,7 +112,7 @@ public class AccessTestUtil {
         Column column = new Column();
         baseSchema.add(column);
         OlapTable table = new OlapTable(30000, "testTbl", baseSchema,
-                KeysType.AGG_KEYS, new SinglePartitionInfo(), distributionInfo, globalStateMgr.getClusterId(),
+                KeysType.AGG_KEYS, new SinglePartitionInfo(), distributionInfo, globalStateMgr.getNodeMgr().getClusterId(),
                 null);
         table.setIndexMeta(baseIndex.getId(), "testTbl", baseSchema, 0, 1, (short) 1,
                 TStorageType.COLUMN, KeysType.AGG_KEYS);
@@ -220,47 +220,39 @@ public class AccessTestUtil {
     }
 
     public static GlobalStateMgr fetchBlockCatalog() {
-        try {
-            GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
+        GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
 
-            Auth auth = fetchBlockAccess();
-            Database db = mockDb("testDb");
+        Auth auth = fetchBlockAccess();
+        Database db = mockDb("testDb");
 
-            new Expectations(globalStateMgr) {
-                {
-                    globalStateMgr.getAuth();
-                    minTimes = 0;
-                    result = auth;
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getAuth();
+                minTimes = 0;
+                result = auth;
 
-                    globalStateMgr.changeCatalogDb((ConnectContext) any, anyString);
-                    minTimes = 0;
-                    result = new DdlException("failed");
+                //globalStateMgr.changeCatalogDb((ConnectContext) any, anyString);
+                //minTimes = 0;
+                //result = new DdlException("failed");
 
-                    globalStateMgr.getDb("testDb");
-                    minTimes = 0;
-                    result = db;
+                globalStateMgr.getDb("testDb");
+                minTimes = 0;
+                result = db;
 
-                    globalStateMgr.getDb("emptyDb");
-                    minTimes = 0;
-                    result = null;
+                globalStateMgr.getDb("emptyDb");
+                minTimes = 0;
+                result = null;
 
-                    globalStateMgr.getDb(anyString);
-                    minTimes = 0;
-                    result = new Database();
+                globalStateMgr.getDb(anyString);
+                minTimes = 0;
+                result = new Database();
 
-                    globalStateMgr.getDbNames();
-                    minTimes = 0;
-                    result = Lists.newArrayList("testDb");
-
-                    globalStateMgr.getDb("emptyCluster");
-                    minTimes = 0;
-                    result = null;
-                }
-            };
-            return globalStateMgr;
-        } catch (DdlException e) {
-            return null;
-        }
+                globalStateMgr.getDb("emptyCluster");
+                minTimes = 0;
+                result = null;
+            }
+        };
+        return globalStateMgr;
     }
 
     public static Analyzer fetchAdminAnalyzer() {

@@ -132,7 +132,7 @@ Status HdfsScanner::_build_scanner_context() {
 
     ctx.tuple_desc = _scanner_params.tuple_desc;
     ctx.conjunct_ctxs_by_slot = _scanner_params.conjunct_ctxs_by_slot;
-    ctx.scan_ranges = _scanner_params.scan_ranges;
+    ctx.scan_range = _scanner_params.scan_range;
     ctx.runtime_filter_collector = _scanner_params.runtime_filter_collector;
     ctx.min_max_conjunct_ctxs = _scanner_params.min_max_conjunct_ctxs;
     ctx.min_max_tuple_desc = _scanner_params.min_max_tuple_desc;
@@ -166,7 +166,7 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     RETURN_IF_ERROR(_runtime_state->check_mem_limit("get chunk from scanner"));
     Status status = do_get_next(runtime_state, chunk);
     if (status.ok()) {
-        if (!_scanner_params.conjunct_ctxs.empty() && _scanner_params.eval_conjunct_ctxs) {
+        if (!_scanner_params.conjunct_ctxs.empty()) {
             SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
             RETURN_IF_ERROR(ExecNode::eval_conjuncts(_scanner_params.conjunct_ctxs, (*chunk).get()));
         }
@@ -186,41 +186,22 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
         return Status::OK();
     }
     RETURN_IF_ERROR(_build_scanner_context());
-    auto status = do_open(runtime_state);
-    if (status.ok()) {
-        _opened = true;
-        if (_scanner_params.open_limit != nullptr) {
-            _scanner_params.open_limit->fetch_add(1, std::memory_order_relaxed);
-        }
-        VLOG_FILE << "open file success: " << _scanner_params.path;
-    }
-    return status;
+    RETURN_IF_ERROR(do_open(runtime_state));
+    _opened = true;
+    VLOG_FILE << "open file success: " << _scanner_params.path;
+    return Status::OK();
 }
 
 void HdfsScanner::close() noexcept {
     if (!_runtime_state) {
         return;
     }
-
-    DCHECK(!has_pending_token());
     bool expect = false;
     if (!_closed.compare_exchange_strong(expect, true)) return;
     update_counter();
     do_close(_runtime_state);
     _file.reset(nullptr);
-    if (_opened && _scanner_params.open_limit != nullptr) {
-        _scanner_params.open_limit->fetch_sub(1, std::memory_order_relaxed);
-    }
-
     _mor_processor->close(_runtime_state);
-}
-
-void HdfsScanner::enter_pending_queue() {
-    _pending_queue_sw.start();
-}
-
-uint64_t HdfsScanner::exit_pending_queue() {
-    return _pending_queue_sw.reset();
 }
 
 Status HdfsScanner::open_random_access_file() {

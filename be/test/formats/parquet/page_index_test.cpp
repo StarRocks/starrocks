@@ -86,7 +86,7 @@ HdfsScannerContext* PageIndexTest::_create_file_random_read_context(const std::s
     };
     ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
-    ctx->scan_ranges.emplace_back(_create_scan_range(file_path));
+    ctx->scan_range = (_create_scan_range(file_path));
 
     return ctx;
 }
@@ -101,7 +101,7 @@ HdfsScannerContext* PageIndexTest::_create_file_only_c0_context(const std::strin
     };
     ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
-    ctx->scan_ranges.emplace_back(_create_scan_range(file_path));
+    ctx->scan_range = (_create_scan_range(file_path));
 
     return ctx;
 }
@@ -118,7 +118,7 @@ HdfsScannerContext* PageIndexTest::_create_file_c0_c1_c2_context(const std::stri
     };
     ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
-    ctx->scan_ranges.emplace_back(_create_scan_range(file_path));
+    ctx->scan_range = (_create_scan_range(file_path));
 
     return ctx;
 }
@@ -180,11 +180,15 @@ TEST_F(PageIndexTest, TestRandomReadWith2PageSize) {
     //     "c3": df.apply(lambda x: pd.NA if x["c0"] % 10 == 0 else [x["c0"] % 1000, pd.NA, x["c1"] % 1000], axis = 1)
     // })
     const std::string big_page_file = "./be/test/formats/parquet/test_data/page_index_big_page.parquet";
+    // same data with above but without dictionary
+    const std::string repeated_no_dict_file = "./be/test//formats/parquet/test_data/page_index_repeated_nodict.parquet";
+
+    std::vector<std::string> files = {small_page_file, big_page_file, repeated_no_dict_file};
 
     // for small page 1000 values / page
     // for big page 10000 values / page
-    for (size_t index = 0; index < 2; index++) {
-        const std::string& file_path = index == 0 ? small_page_file : big_page_file;
+    for (size_t index = 0; index < 3; index++) {
+        const std::string& file_path = files[index];
         std::cout << "file_path: " << file_path << std::endl;
 
         std::uniform_int_distribution<int> dist_small(1, 20000);
@@ -205,8 +209,8 @@ TEST_F(PageIndexTest, TestRandomReadWith2PageSize) {
         std::vector<bool> single_or_not{true, false};
 
         for (bool single_flag : single_or_not) {
-            // use 20 to save ci's time, change bigger to test more case
-            for (int32_t i = 0; i < 20; i++) {
+            // use 2 to save ci's time, change bigger to test more case
+            for (int32_t i = 0; i < 2; i++) {
                 oprands.clear();
                 for (int32_t j = 0; j < 4; j++) {
                     int num = index == 0 ? dist_small(rng) : dist_big(rng);

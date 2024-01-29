@@ -206,6 +206,13 @@ public:
         return _rowset_meta_pb->set_segments_overlap_pb(overlap);
     }
 
+    void set_max_compact_input_rowset_id(uint32_t max_compact_input_rowset_id) {
+        _rowset_meta_pb->set_max_compact_input_rowset_id(max_compact_input_rowset_id);
+    }
+
+    uint32_t max_compact_input_rowset_id() const { return _rowset_meta_pb->max_compact_input_rowset_id(); }
+    bool has_max_compact_input_rowset_id() const { return _rowset_meta_pb->has_max_compact_input_rowset_id(); }
+
     void set_rowset_seg_id(uint32_t id) { _rowset_meta_pb->set_rowset_seg_id(id); }
 
     uint32_t get_num_delete_files() const { return _rowset_meta_pb->num_delete_files(); }
@@ -266,7 +273,6 @@ private:
     }
 
     void _init() {
-        LOG(INFO) << "_rowset_meta_pb memory before clear:" << _rowset_meta_pb->SpaceUsedLong();
         if (_rowset_meta_pb->deprecated_rowset_id() > 0) {
             _rowset_id.init(_rowset_meta_pb->deprecated_rowset_id());
         } else {
@@ -287,7 +293,6 @@ private:
         _rowset_meta_pb->clear_tablet_schema();
         std::unique_ptr<RowsetMetaPB> ptr = std::make_unique<RowsetMetaPB>(*_rowset_meta_pb);
         _rowset_meta_pb = std::move(ptr);
-        LOG(INFO) << "_rowset_meta_pb memory after clear:" << _rowset_meta_pb->SpaceUsedLong();
     }
 
     int64_t _calc_mem_usage() const {

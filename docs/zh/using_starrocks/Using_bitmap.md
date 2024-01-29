@@ -52,7 +52,7 @@ select page, count(distinct user_id) as uv from table group by page;
 ## 使用说明
 
 - Bitmap index 和 Bitmap 去重二者虽然都使用 Bitmap 技术，但引入原因和解决的问题完全不同。前者用于低基数的枚举型列的等值条件过滤，后者则用于计算一组数据行的指标列的不重复元素的个数。
-- 从 StarRocks 2.3 版本开始，所有数据模型表的指标列均支持设置为 BITMAP 类型，但是所有数据模型表的不支持[排序键](../table_design/Sort_key.md)为 BITMAP 类型。
+- 从 StarRocks 2.3 版本开始，所有类型的表均支持设置指标列为 BITMAP 类型，但是所有类型的表不支持设置[排序键](../table_design/indexes/indexes_overview.md)为 BITMAP 类型。
 - 建表时，指定指标列类型为 BITMAP，使用 [BITMAP_UNION](../sql-reference/sql-functions/bitmap-functions/bitmap_union.md) 函数进行聚合。
 - StarRocks 的 bitmap 去重是基于 Roaring Bitmap 实现的，roaring bitmap 只能对 TINYINT，SMALLINT，INT 和 BIGINT 类型的数据去重。如想要使用 Roaring Bitmap 对其他类型的数据去重，则需要构建全局字典。
 

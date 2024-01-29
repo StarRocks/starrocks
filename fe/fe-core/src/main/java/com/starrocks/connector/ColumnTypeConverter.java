@@ -46,6 +46,7 @@ import org.apache.paimon.types.DecimalType;
 import org.apache.paimon.types.DoubleType;
 import org.apache.paimon.types.FloatType;
 import org.apache.paimon.types.IntType;
+import org.apache.paimon.types.LocalZonedTimestampType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.SmallIntType;
 import org.apache.paimon.types.TimestampType;
@@ -550,6 +551,10 @@ public class ColumnTypeConverter {
             return ScalarType.createType(PrimitiveType.DATETIME);
         }
 
+        public Type visit(LocalZonedTimestampType timestampType) {
+            return ScalarType.createType(PrimitiveType.DATETIME);
+        }
+
         public Type visit(org.apache.paimon.types.ArrayType arrayType) {
             return new ArrayType(fromPaimonType(arrayType.getElementType()));
         }
@@ -730,13 +735,14 @@ public class ColumnTypeConverter {
         Matcher matcher = Pattern.compile(ARRAY_PATTERN).matcher(typeStr.toLowerCase(Locale.ROOT));
         Type itemType;
         if (matcher.find()) {
-            if (fromHiveTypeToArrayType(matcher.group(1)).equals(Type.UNKNOWN_TYPE)) {
+            Type innerType = fromHiveType(matcher.group(1));
+            if (Type.UNKNOWN_TYPE.equals(innerType)) {
                 itemType = Type.UNKNOWN_TYPE;
             } else {
-                itemType = new ArrayType(fromHiveTypeToArrayType(matcher.group(1)));
+                itemType = new ArrayType(innerType);
             }
         } else {
-            itemType = fromHiveType(typeStr);
+            throw new StarRocksConnectorException("Failed to get ArrayType at " + typeStr);
         }
         return itemType;
     }

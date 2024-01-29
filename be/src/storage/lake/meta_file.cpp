@@ -37,9 +37,7 @@ static std::string delvec_cache_key(int64_t tablet_id, const DelvecPagePB& page)
 }
 
 MetaFileBuilder::MetaFileBuilder(Tablet tablet, std::shared_ptr<TabletMetadata> metadata)
-        : _tablet(tablet), _tablet_meta(std::move(metadata)), _update_mgr(_tablet.update_mgr()) {
-    _trash_files = std::make_shared<std::vector<std::string>>();
-}
+        : _tablet(tablet), _tablet_meta(std::move(metadata)), _update_mgr(_tablet.update_mgr()) {}
 
 void MetaFileBuilder::append_delvec(const DelVectorPtr& delvec, uint32_t segment_id) {
     if (delvec->cardinality() > 0) {
@@ -82,14 +80,19 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
     // collect trash files
     for (const auto& orphan_file : orphan_files) {
         DCHECK(is_segment(orphan_file));
-        _trash_files->push_back(_tablet.segment_location(orphan_file));
+        FileMetaPB file_meta;
+        file_meta.set_name(orphan_file);
+        _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
     }
     for (const auto& del_file : op_write.dels()) {
-        _trash_files->push_back(_tablet.del_location(del_file));
+        FileMetaPB file_meta;
+        file_meta.set_name(del_file);
+        _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
     }
 }
 
-void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction) {
+void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction,
+                                         uint32_t max_compact_input_rowset_id) {
     // delete input rowsets
     std::stringstream del_range_ss;
     std::vector<std::pair<uint32_t, uint32_t>> delete_delvec_sid_range;
@@ -136,6 +139,7 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
         auto rowset = _tablet_meta->add_rowsets();
         rowset->CopyFrom(op_compaction.output_rowset());
         rowset->set_id(_tablet_meta->next_rowset_id());
+        rowset->set_max_compact_input_rowset_id(max_compact_input_rowset_id);
         _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + rowset->segments_size());
     }
 

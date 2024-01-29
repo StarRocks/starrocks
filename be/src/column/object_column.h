@@ -26,17 +26,6 @@
 
 namespace starrocks {
 
-//class Object {
-//    Object();
-//
-//    Object(const Slice& s);
-//
-//    void clear();
-//
-//    size_t serialize_size() const;
-//    size_t serialize(uint8_t* dst) const;
-//};
-
 template <typename T>
 class ObjectColumn : public ColumnFactory<Column, ObjectColumn<T>> {
     friend class ColumnFactory<Column, ObjectColumn>;
@@ -238,6 +227,8 @@ public:
 
     bool has_large_column() const override { return false; }
 
+    void check_or_die() const {}
+
 private:
     // add this to avoid warning clang-diagnostic-overloaded-virtual
     using Column::append;
@@ -258,8 +249,6 @@ private:
 
     // Currently, only for data loading
     void _build_slices() const;
-
-    void check_or_die() const override {}
 
 private:
     Buffer<T> _pool;

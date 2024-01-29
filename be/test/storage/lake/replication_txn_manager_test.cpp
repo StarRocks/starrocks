@@ -60,7 +60,8 @@ public:
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->metadata_root_location(1)));
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->txn_log_root_location(1)));
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->segment_root_location(1)));
-        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider.get());
+        _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
+        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider.get(), _mem_tracker.get());
         _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider.get(), _update_manager.get(), 16384);
         _replication_txn_manager = std::make_unique<lake::ReplicationTxnManager>(_tablet_manager.get());
 
@@ -79,9 +80,12 @@ public:
     }
 
     void TearDown() override {
-        (void)StorageEngine::instance()->tablet_manager()->drop_tablet(_src_tablet_id, kDeleteFiles);
-        (void)StorageEngine::instance()->tablet_manager()->delete_shutdown_tablet(_src_tablet_id);
-        (void)fs::remove_all(config::storage_root_path);
+        auto status = StorageEngine::instance()->tablet_manager()->drop_tablet(_src_tablet_id, kDeleteFiles);
+        EXPECT_TRUE(status.ok()) << status;
+        status = StorageEngine::instance()->tablet_manager()->delete_shutdown_tablet(_src_tablet_id);
+        EXPECT_TRUE(status.ok()) << status;
+        status = fs::remove_all(config::storage_root_path);
+        EXPECT_TRUE(status.ok() || status.is_not_found()) << status;
     }
 
     TCreateTabletReq get_create_tablet_req(int64_t tablet_id, int64_t version, int32_t schema_hash,
@@ -90,7 +94,7 @@ public:
         request.tablet_id = tablet_id;
         request.__set_version(version);
         request.__set_version_hash(0);
-        request.tablet_schema.__set_id(1);
+        request.tablet_schema.__set_id(GetParam() + 1);
         request.tablet_schema.schema_hash = schema_hash;
         request.tablet_schema.short_key_column_count = 1;
         request.tablet_schema.keys_type = GetParam();
@@ -201,6 +205,7 @@ protected:
     std::string _test_dir;
     std::unique_ptr<lake::LocationProvider> _location_provider;
     std::unique_ptr<lake::UpdateManager> _update_manager;
+    std::unique_ptr<MemTracker> _mem_tracker;
     std::unique_ptr<lake::ReplicationTxnManager> _replication_txn_manager;
 
     int64_t _transaction_id = 100;
@@ -308,7 +313,7 @@ TEST_P(LakeReplicationTxnManagerTest, test_replicate_snapshot_failed) {
 
     auto slog_path = _tablet_manager->txn_slog_location(_tablet_id, _transaction_id);
     auto txn_slog_or = _tablet_manager->get_txn_log(slog_path, false);
-    EXPECT_TRUE(txn_slog_or.ok()) << status;
+    EXPECT_TRUE(txn_slog_or.ok()) << txn_slog_or.status();
 
     _replication_txn_manager->clear_snapshots(txn_slog_or.value());
 }
@@ -338,7 +343,7 @@ TEST_P(LakeReplicationTxnManagerTest, test_publish_failed) {
     const int64_t txn_ids[] = {_transaction_id};
     auto txn_id_span = std::span<const int64_t>(txn_ids, 1);
     auto status_or = lake::publish_version(_tablet_manager.get(), _tablet_id, _version, _src_version, txn_id_span, 0);
-    EXPECT_TRUE(!status_or.ok()) << status;
+    EXPECT_TRUE(!status_or.ok()) << status_or.status();
 
     const int32_t txn_types[] = {TxnTypePB::TXN_REPLICATION};
     auto txn_type_span = std::span<const int32_t>(txn_types, 1);

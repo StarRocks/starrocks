@@ -166,14 +166,11 @@ protected:
         }
 
         {
-            auto child_path = std::make_unique<ColumnAccessPath>();
-            child_path->init(TAccessPathType::type::FIELD, "f1", 0);
+            ASSIGN_OR_ABORT(auto child_path, ColumnAccessPath::create(TAccessPathType::type::FIELD, "f1", 0));
+            ASSIGN_OR_ABORT(auto path, ColumnAccessPath::create(TAccessPathType::type::ROOT, "root", 0));
+            path->children().emplace_back(std::move(child_path));
 
-            ColumnAccessPath path;
-            path.init(TAccessPathType::type::ROOT, "root", 0);
-            path.children().emplace_back(std::move(child_path));
-
-            ASSIGN_OR_ABORT(auto iter, reader->new_iterator(&path));
+            ASSIGN_OR_ABORT(auto iter, reader->new_iterator(path.get()));
             ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
 
             ColumnIteratorOptions iter_opts;
@@ -205,14 +202,11 @@ protected:
 
         // read and check
         {
-            auto child_path = std::make_unique<ColumnAccessPath>();
-            child_path->init(TAccessPathType::type::FIELD, "f2", 1);
+            ASSIGN_OR_ABORT(auto child_path, ColumnAccessPath::create(TAccessPathType::type::FIELD, "f2", 1));
+            ASSIGN_OR_ABORT(auto path, ColumnAccessPath::create(TAccessPathType::type::ROOT, "root", 0));
+            path->children().emplace_back(std::move(child_path));
 
-            ColumnAccessPath path;
-            path.init(TAccessPathType::type::ROOT, "root", 0);
-            path.children().emplace_back(std::move(child_path));
-
-            ASSIGN_OR_ABORT(auto iter, reader->new_iterator(&path));
+            ASSIGN_OR_ABORT(auto iter, reader->new_iterator(path.get()));
             ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
 
             ColumnIteratorOptions iter_opts;

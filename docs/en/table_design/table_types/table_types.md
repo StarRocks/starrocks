@@ -24,7 +24,7 @@ In the Primary Key table, the primary key and sort key are decoupled. The primar
 > **NOTE**
 >
 > - In versions earlier than v3.0, the Primary Key table does not support defining the primary key and sort key separately.
-> - For more descriptions of sort keys, see [Sort keys and prefix indexes](../Sort_key.md).
+> - For more descriptions of sort keys, see [Sort keys and prefix indexes](../indexes/indexes_overview.md).
 
 ## Precautions
 

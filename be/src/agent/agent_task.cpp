@@ -175,6 +175,10 @@ void run_drop_tablet_task(const std::shared_ptr<DropTabletAgentTaskRequest>& age
                 StorageEngine::instance()->txn_manager()->get_tablet_related_txns(
                         drop_tablet_req.tablet_id, drop_tablet_req.schema_hash, dropped_tablet->tablet_uid(),
                         &partition_id, &transaction_ids);
+                if (transaction_ids.empty()) {
+                    StorageEngine::instance()->replication_txn_manager()->get_tablet_related_txns(
+                            drop_tablet_req.tablet_id, &transaction_ids);
+                }
             }
             if (!transaction_ids.empty()) {
                 std::stringstream ss;
@@ -889,7 +893,6 @@ void run_remote_snapshot_task(const std::shared_ptr<RemoteSnapshotAgentTaskReque
     } else {
         finish_task_request.__set_snapshot_path(src_snapshot_path);
         finish_task_request.__set_incremental_snapshot(incremental_snapshot);
-        LOG(INFO) << "remote snapshot success, signature:" << agent_task_req->signature;
     }
 
     task_status.__set_status_code(status_code);
@@ -899,7 +902,9 @@ void run_remote_snapshot_task(const std::shared_ptr<RemoteSnapshotAgentTaskReque
 #ifndef BE_TEST
     finish_task(finish_task_request);
 #endif
-    remove_task_info(agent_task_req->task_type, agent_task_req->signature);
+    auto task_queue_size = remove_task_info(agent_task_req->task_type, agent_task_req->signature);
+    LOG(INFO) << "Remove task success. type=" << agent_task_req->task_type
+              << ", signature=" << agent_task_req->signature << ", task_count_in_queue=" << task_queue_size;
 }
 
 void run_replicate_snapshot_task(const std::shared_ptr<ReplicateSnapshotAgentTaskRequest>& agent_task_req,
@@ -923,8 +928,6 @@ void run_replicate_snapshot_task(const std::shared_ptr<ReplicateSnapshotAgentTas
         status_code = TStatusCode::RUNTIME_ERROR;
         LOG(WARNING) << "replicate snapshot failed. status: " << res << ", signature:" << agent_task_req->signature;
         error_msgs.emplace_back("replicate snapshot failed, " + res.to_string());
-    } else {
-        LOG(INFO) << "replicate snapshot success, signature:" << agent_task_req->signature;
     }
 
     // Return result to fe
@@ -941,7 +944,9 @@ void run_replicate_snapshot_task(const std::shared_ptr<ReplicateSnapshotAgentTas
 #ifndef BE_TEST
     finish_task(finish_task_request);
 #endif
-    remove_task_info(agent_task_req->task_type, agent_task_req->signature);
+    auto task_queue_size = remove_task_info(agent_task_req->task_type, agent_task_req->signature);
+    LOG(INFO) << "Remove task success. type=" << agent_task_req->task_type
+              << ", signature=" << agent_task_req->signature << ", task_count_in_queue=" << task_queue_size;
 }
 
 } // namespace starrocks

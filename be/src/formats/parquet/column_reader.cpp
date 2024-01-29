@@ -405,7 +405,12 @@ void ScalarColumnReader::select_offset_index(const SparseRange<uint64_t>& range,
         }
         _offset_index_ctx->page_selected.emplace_back(first_row < r.end() && end_row > r.begin());
     }
-    _reader = std::make_unique<StoredColumnReaderWithIndex>(std::move(_reader), _offset_index_ctx.get());
+    const tparquet::ColumnMetaData& column_metadata =
+            _opts.row_group_meta->columns[_field->physical_column_index].meta_data;
+    bool has_dict_page = column_metadata.__isset.dictionary_page_offset;
+    // be compatible with PARQUET-1850
+    has_dict_page |= _offset_index_ctx->check_dictionary_page(column_metadata.data_page_offset);
+    _reader = std::make_unique<StoredColumnReaderWithIndex>(std::move(_reader), _offset_index_ctx.get(), has_dict_page);
 }
 
 Status ColumnDictFilterContext::rewrite_conjunct_ctxs_to_predicate(StoredColumnReader* reader,

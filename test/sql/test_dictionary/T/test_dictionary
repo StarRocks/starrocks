@@ -523,3 +523,31 @@ PROPERTIES (
 DROP DICTIONARY test_dictionary_generated_column_create_table;
 DROP TABLE t_dictionary_generated_column_create_table_1;
 DROP TABLE t_dictionary_generated_column_create_table_2;
+
+-- name: test_dictionary_common_expression
+CREATE TABLE `t_dictionary_common_expression` (
+  `id1` BIGINT NOT NULL COMMENT "",
+  `id2` BIGINT NOT NULL COMMENT "",
+  `id3` BIGINT NOT NULL COMMENT "",
+  `id4` BIGINT NOT NULL COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+INSERT INTO t_dictionary_common_expression VALUES (1,2,3,4);
+[UC]DROP DICTIONARY test_dictionary_common_expression;
+CREATE DICTIONARY test_dictionary_common_expression USING t_dictionary_common_expression (id1 KEY, id2 VALUE, id3 VALUE, id4 VALUE);
+function: wait_refresh_dictionary_finish("test_dictionary_common_expression", "FINISHED")
+
+explain SELECT dictionary_get("test_dictionary_common_expression", id1)[1],dictionary_get("test_dictionary_common_expression", id1)[2],dictionary_get("test_dictionary_common_expression", id1)[3] FROM t_dictionary_common_expression;
+SELECT dictionary_get("test_dictionary_common_expression", id1)[1],dictionary_get("test_dictionary_common_expression", id1)[2],dictionary_get("test_dictionary_common_expression", id1)[3] FROM t_dictionary_common_expression;
+
+DROP DICTIONARY test_dictionary_common_expression;
+DROP TABLE t_dictionary_common_expression;

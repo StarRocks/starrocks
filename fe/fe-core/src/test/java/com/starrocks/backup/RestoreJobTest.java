@@ -178,7 +178,7 @@ public class RestoreJobTest {
                 minTimes = 0;
                 result = editLog;
 
-                GlobalStateMgr.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 minTimes = 0;
                 result = systemInfoService;
             }
@@ -348,7 +348,7 @@ public class RestoreJobTest {
                 minTimes = 0;
                 result = editLog;
 
-                GlobalStateMgr.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 minTimes = 0;
                 result = systemInfoService;
             }

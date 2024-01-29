@@ -54,8 +54,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.FrontendDaemon;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -294,7 +294,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
     private boolean relocateAndBalancePerGroup() {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         ColocateTableIndex colocateIndex = globalStateMgr.getColocateTableIndex();
-        SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
 
         // get all groups
         Set<GroupId> groupIds = colocateIndex.getAllGroupIds();
@@ -303,7 +303,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
         Set<GroupId> toIgnoreGroupIds = new HashSet<>();
         boolean isAnyGroupChanged = false;
         for (GroupId groupId : groupIds) {
-            Database db = globalStateMgr.getDbIncludeRecycleBin(groupId.dbId);
+            Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(groupId.dbId);
             if (db == null) {
                 continue;
             }
@@ -503,7 +503,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
         }
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         ColocateTableIndex colocateIndex = globalStateMgr.getColocateTableIndex();
         Set<GroupId> allGroups = colocateIndex.getAllGroupIds();
         if (allGroups.isEmpty()) {
@@ -699,7 +699,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
         long lockTotalTime = 0;
         long waitTotalTimeMs = 0;
         List<Long> tableIds = colocateIndex.getAllTableIds(groupId);
-        Database db = globalStateMgr.getDbIncludeRecycleBin(groupId.dbId);
+        Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(groupId.dbId);
         if (db == null) {
             return lockTotalTime;
         }
@@ -719,7 +719,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
         try {
             TABLE:
             for (Long tableId : tableIds) {
-                OlapTable olapTable = (OlapTable) globalStateMgr.getTableIncludeRecycleBin(db, tableId);
+                OlapTable olapTable = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tableId);
                 if (olapTable == null || !colocateIndex.isColocateTable(olapTable.getId())) {
                     continue;
                 }
@@ -728,7 +728,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
                     continue;
                 }
 
-                for (Partition partition : globalStateMgr.getPartitionsIncludeRecycleBin(olapTable)) {
+                for (Partition partition : globalStateMgr.getLocalMetastore().getPartitionsIncludeRecycleBin(olapTable)) {
                     partitionChecked++;
 
                     boolean isPartitionUrgent =
@@ -744,18 +744,19 @@ public class ColocateTableBalancer extends FrontendDaemon {
                         locker.unLockDatabase(db, LockType.READ);
                         locker.lockDatabase(db, LockType.READ);
                         lockStart = System.nanoTime();
-                        if (globalStateMgr.getDbIncludeRecycleBin(groupId.dbId) == null) {
+                        if (globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(groupId.dbId) == null) {
                             return lockTotalTime;
                         }
-                        if (globalStateMgr.getTableIncludeRecycleBin(db, olapTable.getId()) == null) {
+                        if (globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, olapTable.getId()) == null) {
                             continue TABLE;
                         }
-                        if (globalStateMgr.getPartitionIncludeRecycleBin(olapTable, partition.getId()) == null) {
+                        if (globalStateMgr.getLocalMetastore().getPartitionIncludeRecycleBin(olapTable, partition.getId()) ==
+                                null) {
                             continue;
                         }
                     }
                     short replicationNum =
-                            globalStateMgr.getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(),
+                            globalStateMgr.getLocalMetastore().getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(),
                                     partition.getId());
                     if (replicationNum == (short) -1) {
                         continue;
@@ -815,7 +816,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
                                         Pair<Boolean, Long> result =
                                                 tabletScheduler.blockingAddTabletCtxToScheduler(db, tabletCtx,
                                                         needToForceRepair(st, tablet,
-                                                        bucketsSeq) || isPartitionUrgent /* forcefully add or not */);
+                                                                bucketsSeq) || isPartitionUrgent /* forcefully add or not */);
                                         if (LOG.isDebugEnabled() && result.first &&
                                                 st == TabletStatus.COLOCATE_MISMATCH) {
                                             logDebugInfoForColocateMismatch(bucketsSeq, tablet);

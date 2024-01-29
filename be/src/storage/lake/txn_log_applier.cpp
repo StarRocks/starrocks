@@ -18,8 +18,8 @@
 
 #include "gutil/strings/join.h"
 #include "storage/lake/lake_primary_index.h"
+#include "storage/lake/lake_primary_key_recover.h"
 #include "storage/lake/meta_file.h"
-#include "storage/lake/primary_key_recover.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
@@ -63,7 +63,7 @@ public:
             _inited = true;
             return check_meta_version();
         } else {
-            return Status::InternalError("primary key does not support concurrent log applying");
+            return Status::ResourceBusy("primary key does not support concurrent log applying");
         }
     }
 
@@ -103,8 +103,6 @@ public:
         return _builder.finalize(_max_txn_id);
     }
 
-    std::shared_ptr<std::vector<std::string>> trash_files() override { return _builder.trash_files(); }
-
 private:
     bool need_recover(const Status& st) { return _builder.recover_flag() != RecoverFlag::OK; }
     bool need_re_publish(const Status& st) { return _builder.recover_flag() == RecoverFlag::RECOVER_WITH_PUBLISH; }
@@ -119,8 +117,7 @@ private:
                 _tablet.update_mgr()->release_primary_index_cache(_index_entry);
                 _index_entry = nullptr;
                 // rebuild delvec and pk index
-                PrimaryKeyRecover recover(&_builder, &_tablet, _metadata);
-                RETURN_IF_ERROR(recover.pre_cleanup());
+                LakePrimaryKeyRecover recover(&_builder, &_tablet, _metadata);
                 RETURN_IF_ERROR(recover.recover());
                 LOG(INFO) << "Primary Key recover finish, tablet_id: " << _tablet.id()
                           << " base_ver: " << _base_version;
@@ -284,6 +281,10 @@ private:
                       << ", txn_id: " << txn_id;
         }
 
+        if (op_replication.has_source_schema()) {
+            _metadata->mutable_source_schema()->CopyFrom(op_replication.source_schema());
+        }
+
         return Status::OK();
     }
 
@@ -325,8 +326,6 @@ public:
         _metadata->set_version(_new_version);
         return _tablet.put_metadata(_metadata);
     }
-
-    std::shared_ptr<std::vector<std::string>> trash_files() override { return nullptr; }
 
 private:
     Status apply_write_log(const TxnLogPB_OpWrite& op_write) {
@@ -478,6 +477,10 @@ private:
             LOG(INFO) << "Apply full replication log finish. tablet_id: " << _tablet.id()
                       << ", base_version: " << _metadata->version() << ", new_version: " << _new_version
                       << ", txn_id: " << op_replication.txn_meta().txn_id();
+        }
+
+        if (op_replication.has_source_schema()) {
+            _metadata->mutable_source_schema()->CopyFrom(op_replication.source_schema());
         }
 
         return Status::OK();

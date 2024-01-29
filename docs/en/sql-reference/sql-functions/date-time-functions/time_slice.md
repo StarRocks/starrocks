@@ -8,7 +8,9 @@ displayed_sidebar: "English"
 
 Converts a given time into the beginning or end of a time interval based on the specified time granularity.
 
-This function is supported from v2.3. v2.5 supports converting a given time into the end of a time interval.
+This function is supported from v2.3.
+
+v2.5 supports converting a given time into the end of a time interval.
 
 ## Syntax
 
@@ -21,7 +23,7 @@ DATETIME time_slice(DATETIME dt, INTERVAL N type[, boundary])
 - `dt`: the time to convert, DATETIME.
 - `INTERVAL N type`: the time granularity, for example, `interval 5 second`.
   - `N` is the length of time interval. It must be an INT value.
-  - `type` is the unit, which can be YEAR, QUARTER, MONTH, WEEK, DAY, HOUR, MINUTE, SECOND.
+  - `type` is the unit, which can be YEAR, QUARTER, MONTH, WEEK, DAY, HOUR, MINUTE, SECOND, MILLISECOND (since 3.1.7), and MICROSECOND (since 3.1.7).
 - `boundary`: optional. It is used to specify whether to return the beginning (`FLOOR`) or end (`CEIL`) of the time interval. Valid values: FLOOR, CEIL. If this parameter is not specified, `FLOOR` is the default. This parameter is supported from v2.5.
 
 ## Return value
@@ -38,7 +40,6 @@ The following examples are provided based on the `test_all_type_select` table.
 
 ```Plaintext
 select * from test_all_type_select order by id_int;
-
 +------------+---------------------+--------+
 | id_date    | id_datetime         | id_int |
 +------------+---------------------+--------+
@@ -57,7 +58,6 @@ Example 1: Convert a given DATETIME value to the beginning of a 5-second time in
 select time_slice(id_datetime, interval 5 second)
 from test_all_type_select
 order by id_int;
-
 +---------------------------------------------------+
 | time_slice(id_datetime, INTERVAL 5 second, floor) |
 +---------------------------------------------------+
@@ -70,13 +70,12 @@ order by id_int;
 5 rows in set (0.16 sec)
 ```
 
-Example 2: Convert a given DATETIME value to the beginning of a 5-day time interval with  `boundary` set to FLOOR.
+Example 2: Convert a given DATETIME value to the beginning of a 5-day time interval with  `boundary` set to `FLOOR`.
 
 ```Plaintext
 select time_slice(id_datetime, interval 5 day, FLOOR)
 from test_all_type_select
 order by id_int;
-
 +------------------------------------------------+
 | time_slice(id_datetime, INTERVAL 5 day, floor) |
 +------------------------------------------------+
@@ -95,7 +94,6 @@ Example 3: Convert a given DATETIME value to the end of a 5-day time interval.
 select time_slice(id_datetime, interval 5 day, CEIL)
 from test_all_type_select
 order by id_int;
-
 +-----------------------------------------------+
 | time_slice(id_datetime, INTERVAL 5 day, ceil) |
 +-----------------------------------------------+
@@ -105,5 +103,38 @@ order by id_int;
 | 1751-03-23 00:00:00                           |
 | 1861-09-17 00:00:00                           |
 +-----------------------------------------------+
-5 rows in set (0.12 sec)
+```
+
+Example 4: Convert a given DATETIME value to the end of a 1-millisecond time interval.
+
+```Plaintext
+select id_datetime, time_slice(id_datetime, interval 1 millisecond, CEIL)
+from test_all_type_select
+order by id_int;
++---------------------+-------------------------------------------------------+
+| id_datetime         | time_slice(id_datetime, INTERVAL 1 millisecond, ceil) |
++---------------------+-------------------------------------------------------+
+| 1691-12-23 04:01:09 | 1691-12-23 04:01:09.001000                            |
+| 2169-12-18 15:44:31 | 2169-12-18 15:44:31.001000                            |
+| 1840-11-23 13:09:50 | 1840-11-23 13:09:50.001000                            |
+| 1751-03-21 00:19:04 | 1751-03-21 00:19:04.001000                            |
+| 1861-09-12 13:28:18 | 1861-09-12 13:28:18.001000                            |
++---------------------+-------------------------------------------------------+
+```
+
+Example 5: Convert a given DATETIME value to the end of a 1-microsecond time interval.
+
+```Plaintext
+select id_datetime, time_slice(id_datetime, interval 1 microsecond, CEIL)
+from test_all_type_select
+order by id_int;
++---------------------+-------------------------------------------------------+
+| id_datetime         | time_slice(id_datetime, INTERVAL 1 microsecond, ceil) |
++---------------------+-------------------------------------------------------+
+| 1691-12-23 04:01:09 | 1691-12-23 04:01:09.000001                            |
+| 2169-12-18 15:44:31 | 2169-12-18 15:44:31.000001                            |
+| 1840-11-23 13:09:50 | 1840-11-23 13:09:50.000001                            |
+| 1751-03-21 00:19:04 | 1751-03-21 00:19:04.000001                            |
+| 1861-09-12 13:28:18 | 1861-09-12 13:28:18.000001                            |
++---------------------+-------------------------------------------------------+
 ```

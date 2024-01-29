@@ -231,6 +231,7 @@ Status GlobalEnv::_init_mem_tracker() {
     _clone_mem_tracker = regist_tracker(-1, "clone", _process_mem_tracker.get());
     int64_t consistency_mem_limit = calc_max_consistency_memory(_process_mem_tracker->limit());
     _consistency_mem_tracker = regist_tracker(consistency_mem_limit, "consistency", _process_mem_tracker.get());
+    _datacache_mem_tracker = regist_tracker(-1, "datacache", _process_mem_tracker.get());
     _replication_mem_tracker = regist_tracker(-1, "replication", _process_mem_tracker.get());
 
     MemChunkAllocator::init_instance(_chunk_allocator_mem_tracker.get(), config::chunk_reserved_bytes_limit);
@@ -382,8 +383,8 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
 
     RETURN_IF_ERROR(ThreadPoolBuilder("dictionary_cache") // thread pool for dictionary cache Sink
                             .set_min_threads(1)
-                            .set_max_threads(8)
-                            .set_max_queue_size(1000)
+                            .set_max_threads(config::dictionary_cache_refresh_threadpool_size)
+                            .set_max_queue_size(INT32_MAX) // unlimit queue size
                             .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
                             .build(&_dictionary_cache_pool));
 
@@ -442,7 +443,9 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     }
 
     _broker_mgr = new BrokerMgr(this);
+#ifndef BE_TEST
     _bfd_parser = BfdParser::create();
+#endif
     _load_channel_mgr = new LoadChannelMgr();
     _load_stream_mgr = new LoadStreamMgr();
     _brpc_stub_cache = new BrpcStubCache();
@@ -577,12 +580,48 @@ void ExecEnv::stop() {
         _agent_server->stop();
     }
 
+    if (_runtime_filter_worker) {
+        _runtime_filter_worker->close();
+    }
+
+    if (_profile_report_worker) {
+        _profile_report_worker->close();
+    }
+
     if (_automatic_partition_pool) {
         _automatic_partition_pool->shutdown();
     }
 
+    if (_query_rpc_pool) {
+        _query_rpc_pool->shutdown();
+    }
+
     if (_load_rpc_pool) {
         _load_rpc_pool->shutdown();
+    }
+
+    if (_scan_executor) {
+        _scan_executor->close();
+    }
+
+    if (_connector_scan_executor) {
+        _connector_scan_executor->close();
+    }
+
+    if (_thread_pool) {
+        _thread_pool->shutdown();
+    }
+
+    if (_query_context_mgr) {
+        _query_context_mgr->clear();
+    }
+
+    if (_result_mgr) {
+        _result_mgr->stop();
+    }
+
+    if (_stream_mgr) {
+        _stream_mgr->close();
     }
 
     if (_routine_load_task_executor) {
@@ -620,6 +659,7 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_pipeline_prepare_pool);
     SAFE_DELETE(_pipeline_sink_io_pool);
     SAFE_DELETE(_query_rpc_pool);
+    _load_rpc_pool.reset();
     SAFE_DELETE(_scan_executor);
     SAFE_DELETE(_connector_scan_executor);
     SAFE_DELETE(_thread_pool);

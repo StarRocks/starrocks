@@ -188,7 +188,7 @@ public:
                                                                    const TabletSchemaCSPtr& tablet_schema,
                                                                    KVStore* meta, int64_t version,
                                                                    OlapReaderStatistics* stats,
-                                                                   KVStore* dcg_meta = nullptr);
+                                                                   KVStore* dcg_meta = nullptr, size_t chunk_size = 0);
 
     // only used for updatable tablets' rowset in column mode partial update
     // simply get iterators to iterate all rows without complex options like predicates
@@ -215,6 +215,9 @@ public:
     // like make_visible but updatable tablet has different mechanism
     // NOTE: only used for updatable tablet's rowset
     void make_commit(int64_t version, uint32_t rowset_seg_id);
+
+    // Used in commit compaction, record `max_compact_input_rowset_id` for pk recover
+    void make_commit(int64_t version, uint32_t rowset_seg_id, uint32_t max_compact_input_rowset_id);
 
     // helper class to access RowsetMeta
     int64_t start_version() const { return rowset_meta()->version().first; }

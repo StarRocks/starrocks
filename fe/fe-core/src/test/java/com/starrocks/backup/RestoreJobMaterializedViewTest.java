@@ -78,7 +78,6 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.IntStream;
-import java.util.zip.Adler32;
 
 import static com.starrocks.common.util.UnitTestUtil.DB_NAME;
 import static com.starrocks.common.util.UnitTestUtil.MATERIALIZED_VIEW_NAME;
@@ -172,7 +171,7 @@ public class RestoreJobMaterializedViewTest {
                 minTimes = 0;
                 result = editLog;
 
-                GlobalStateMgr.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 minTimes = 0;
                 result = systemInfoService;
 
@@ -221,7 +220,6 @@ public class RestoreJobMaterializedViewTest {
                 };
             }
         };
-
         new MockUp<MarkedCountDownLatch>() {
                 @Mock
                 boolean await(long timeout, TimeUnit unit) {
@@ -439,8 +437,19 @@ public class RestoreJobMaterializedViewTest {
     @Test
     @Order(1)
     public void testMVRestore_TestOneTable1() {
+        new Expectations() {
+            {
+                globalStateMgr.getCurrentState().getCatalogMgr().catalogExists("default_catalog");
+                result = true;
+
+                globalStateMgr.getCurrentState().getMetadataMgr().getDb("default_catalog", DB_NAME);
+                minTimes = 0;
+                result = db;
+            }
+        };
         RestoreJob job = createRestoreJob(ImmutableList.of(UnitTestUtil.MATERIALIZED_VIEW_NAME));
         checkJobRun(job);
+        assertMVActiveEquals(MATERIALIZED_VIEW_NAME, true);
     }
 
     @Test
@@ -448,93 +457,41 @@ public class RestoreJobMaterializedViewTest {
     public void testMVRestore_TestOneTable2() {
         RestoreJob job = createRestoreJob(ImmutableList.of(UnitTestUtil.TABLE_NAME));
         checkJobRun(job);
+        assertMVActiveEquals(MATERIALIZED_VIEW_NAME, true);
     }
 
     @Test
     @Order(3)
     public void testMVRestore_TestMVWithBaseTable1() {
-        new Expectations() {
-            {
-                globalStateMgr.getCurrentState().getCatalogMgr().catalogExists("default_catalog");
-                result = true;
-
-                globalStateMgr.getCurrentState().getMetadataMgr().getDb("default_catalog", DB_NAME);
-                minTimes = 0;
-                result = db;
-            }
-        };
-
         // gen BackupJobInfo
         RestoreJob job = createRestoreJob(ImmutableList.of(TABLE_NAME, MATERIALIZED_VIEW_NAME));
         // backup & restore
         checkJobRun(job);
-
-        {
-            Table mvTable = db.getTable(UnitTestUtil.MATERIALIZED_VIEW_NAME);
-            Assert.assertTrue(mvTable != null);
-            Assert.assertTrue(mvTable.isMaterializedView());
-            MaterializedView mv = (MaterializedView) mvTable;
-            Assert.assertTrue(mv.isActive());
-        }
+        assertMVActiveEquals(MATERIALIZED_VIEW_NAME, true);
     }
 
     @Test
     @Order(4)
     public void testMVRestore_TestMVWithBaseTable2() {
-        new Expectations() {
-            {
-                globalStateMgr.getCurrentState().getCatalogMgr().catalogExists("default_catalog");
-                result = true;
-
-                globalStateMgr.getCurrentState().getMetadataMgr().getDb("default_catalog", DB_NAME);
-                minTimes = 0;
-                result = db;
-            }
-        };
-
         // gen BackupJobInfo
         RestoreJob job = createRestoreJob(ImmutableList.of(MATERIALIZED_VIEW_NAME, TABLE_NAME));
         // backup & restore
         checkJobRun(job);
-
-        {
-            Table mvTable = db.getTable(UnitTestUtil.MATERIALIZED_VIEW_NAME);
-            Assert.assertTrue(mvTable != null);
-            Assert.assertTrue(mvTable.isMaterializedView());
-            MaterializedView mv = (MaterializedView) mvTable;
-            Assert.assertTrue(mv.isActive());
-        }
+        assertMVActiveEquals(MATERIALIZED_VIEW_NAME, true);
     }
 
     @Test
     @Order(5)
     public void testMVRestore_TestMVWithBaseTable3() {
-        new Expectations() {
-            {
-                globalStateMgr.getCurrentState().getCatalogMgr().catalogExists("default_catalog");
-                result = true;
-
-                globalStateMgr.getCurrentState().getMetadataMgr().getDb("default_catalog", DB_NAME);
-                minTimes = 0;
-                result = db;
-            }
-        };
-
         // gen BackupJobInfo
         RestoreJob job1 = createRestoreJob(ImmutableList.of(TABLE_NAME));
         // backup & restore
         checkJobRun(job1);
+        assertMVActiveEquals(MATERIALIZED_VIEW_NAME, true);
 
         RestoreJob job2 = createRestoreJob(ImmutableList.of(MATERIALIZED_VIEW_NAME));
         checkJobRun(job2);
-
-        {
-            Table mvTable = db.getTable(UnitTestUtil.MATERIALIZED_VIEW_NAME);
-            Assert.assertTrue(mvTable != null);
-            Assert.assertTrue(mvTable.isMaterializedView());
-            MaterializedView mv = (MaterializedView) mvTable;
-            Assert.assertTrue(mv.isActive());
-        }
+        assertMVActiveEquals(MATERIALIZED_VIEW_NAME, true);
     }
 
     @Test
@@ -548,53 +505,35 @@ public class RestoreJobMaterializedViewTest {
                 globalStateMgr.getCurrentState().getMetadataMgr().getDb("default_catalog", DB_NAME);
                 minTimes = 0;
                 result = db;
+
+                globalStateMgr.getCurrentState().getDb(DB_NAME);
+                minTimes = 0;
+                result = db;
             }
         };
-
         new MockUp<MetadataMgr>() {
             @Mock
             public Table getTable(String catalogName, String dbName, String tblName) {
                 return db.getTable(tblName);
             }
         };
-
         // gen BackupJobInfo
         RestoreJob job1 = createRestoreJob(ImmutableList.of(MATERIALIZED_VIEW_NAME));
         // backup & restore
         checkJobRun(job1);
+        assertMVActiveEquals(MATERIALIZED_VIEW_NAME, true);
 
         RestoreJob job2 = createRestoreJob(ImmutableList.of(TABLE_NAME));
         checkJobRun(job2);
-
-        {
-            Table mvTable = db.getTable(UnitTestUtil.MATERIALIZED_VIEW_NAME);
-            Assert.assertTrue(mvTable != null);
-            Assert.assertTrue(mvTable.isMaterializedView());
-            MaterializedView mv = (MaterializedView) mvTable;
-            Assert.assertTrue(mv.isActive());
-        }
+        assertMVActiveEquals(MATERIALIZED_VIEW_NAME, true);
     }
 
-    @Test
-    @Order(7)
-    public void testSignature() {
-        Adler32 sig1 = new Adler32();
-        sig1.update("name1".getBytes());
-        sig1.update("name2".getBytes());
-        System.out.println("sig1: " + Math.abs((int) sig1.getValue()));
-
-        Adler32 sig2 = new Adler32();
-        sig2.update("name2".getBytes());
-        sig2.update("name1".getBytes());
-        System.out.println("sig2: " + Math.abs((int) sig2.getValue()));
-
-        OlapTable tbl = (OlapTable) db.getTable(UnitTestUtil.MATERIALIZED_VIEW_NAME);
-        List<String> partNames = Lists.newArrayList(tbl.getPartitionNames());
-        System.out.println(partNames);
-        System.out.println("tbl signature: " + tbl.getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true));
-        tbl.setName("newName");
-        partNames = Lists.newArrayList(tbl.getPartitionNames());
-        System.out.println("tbl signature: " + tbl.getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true));
+    private void assertMVActiveEquals(String mvName, boolean expect) {
+        Table mvTable = db.getTable(mvName);
+        Assert.assertTrue(mvTable != null);
+        Assert.assertTrue(mvTable.isMaterializedView());
+        MaterializedView mv = (MaterializedView) mvTable;
+        Assert.assertEquals(mv.isActive(), expect);
     }
 }
 

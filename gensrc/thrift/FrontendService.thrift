@@ -990,6 +990,7 @@ struct TLoadTxnRollbackRequest {
     9: optional i64 auth_code
     10: optional TTxnCommitAttachment txnCommitAttachment
     11: optional list<Types.TTabletFailInfo> failInfos
+    12: optional list<Types.TTabletCommitInfo> commitInfos
 }
 
 struct TGetLoadTxnStatusResult {
@@ -1300,6 +1301,9 @@ struct TAbortRemoteTxnRequest {
     2: optional i64 db_id
     3: optional string error_msg
     4: optional TAuthenticateParams auth_info
+    5: optional list<Types.TTabletCommitInfo> commit_infos
+    6: optional TTxnCommitAttachment commit_attachment
+    7: optional list<Types.TTabletFailInfo> fail_infos
 }
 
 struct TAbortRemoteTxnResponse {
@@ -1558,7 +1562,8 @@ struct TFeLocksItem {
     1: optional string lock_type
     2: optional string lock_object
     3: optional string lock_mode
-    4: optional i64 lock_start_time
+    4: optional i64 start_time
+    5: optional i64 hold_time_ms
     
     11: optional string thread_info
     12: optional bool granted
@@ -1648,6 +1653,7 @@ struct TTableReplicationRequest {
     6: optional Types.TTableType src_table_type
     7: optional i64 src_table_data_size
     8: optional map<i64, TPartitionReplicationInfo> partition_replication_infos
+    9: optional string job_id
 }
 
 struct TTableReplicationResponse {

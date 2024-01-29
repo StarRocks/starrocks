@@ -85,7 +85,7 @@ protected:
 
         ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
         Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
-        ctx->scan_ranges.emplace_back(_create_scan_range(filepath));
+        ctx->scan_range = (_create_scan_range(filepath));
         // --------------finish init context---------------
 
         Status status = file_reader->init(ctx);
@@ -269,6 +269,17 @@ TEST_F(ColumnConverterTest, Int32Test) {
         {
             const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
             check(file_path, col_type, col_name, "[67676767]", expected_rows);
+        }
+    }
+    {
+        const std::string col_name = "date";
+        {
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATE);
+            check(file_path, col_type, col_name, "[2023-04-25]", expected_rows);
+        }
+        {
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
+            check(file_path, col_type, col_name, "[2023-04-25 00:00:00]", expected_rows);
         }
     }
     {

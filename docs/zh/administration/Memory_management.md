@@ -106,7 +106,7 @@ StarRocks BE 中的内存分为以下几类。
 | consistency | starrocks_be_consistency_mem_bytes | 定期一致性校验使用的内存。 | consistency_max_memory_limit_percent, consistency_max_memory_limit |
 | schema_change | starrocks_be_schema_change_mem_bytes | Schema Change 任务使用的总内存。 | memory_limitation_per_thread_for_schema_change |
 | clone | starrocks_be_clone_mem_bytes | Tablet Clone 任务使用的总内存。 | |
-| update | starrocks_be_update_mem_bytes | 主键模型使用的总内存。 | |
+| update | starrocks_be_update_mem_bytes | 主键表使用的总内存。 | |
 
 ## 内存相关配置项
 
@@ -117,8 +117,8 @@ StarRocks BE 中的内存分为以下几类。
 | mem_limit | 90% | BE 进程内存上限。可设为比例上限（如 "80%"）或物理上限（如 "100G"）。默认硬上限为 BE 所在机器内存的 90%，软上限为 BE 所在机器内存的 80%。如果 BE 为独立部署，则无需配置，如果 BE 与其它占用内存较多的服务混合部署，则需要合理配置。|
 | load_process_max_memory_limit_bytes | 107374182400 | 单节点上所有的导入线程占据的内存上限，取 mem_limit * load_process_max_memory_limit_percent / 100 和 load_process_max_memory_limit_bytes 中较小的值。如导入内存到达限制，则会触发刷盘和反压逻辑。|
 | load_process_max_memory_limit_percent | 30 | 单节点上所有的导入线程占据的内存上限比例，取 mem_limit * load_process_max_memory_limit_percent / 100 和 load_process_max_memory_limit_bytes 中较小的值，导入内存到达限制，会触发刷盘和反压逻辑。|
-| compaction_max_memory_limit | -1 | Compaction 内存上限，取 mem_limit * compaction_max_memory_limit_percent / 100 和 compaction_max_memory_limit 中较小的值，-1 表示没有限制。当前不建议修改默认配置。Compaction 内存到达限制，会导致 Compaction 任务失败。|
-| compaction_max_memory_limit_percent | 100 | Compaction 内存百分比上限，取 mem_limit * compaction_max_memory_limit_percent / 100 和 compaction_max_memory_limit 中较小的值，-1 表示没有限制。当前不建议修改默认配置。Compaction 内存到达限制，会导致 Compaction 任务失败。|
+| compaction_max_memory_limit | -1 | 所有 Compaction 线程的最大内存使用量，取 mem_limit * compaction_max_memory_limit_percent/100 和 compaction_max_memory_limit 中较小的值，-1 表示没有限制。当前不建议修改默认配置。Compaction 内存到达限制，会导致 Compaction 任务失败。|
+| compaction_max_memory_limit_percent | 100 | 所有 Compaction 线程的最大内存使用百分比，取 mem_limit * compaction_max_memory_limit_percent / 100 和 compaction_max_memory_limit 中较小的值，-1 表示没有限制。当前不建议修改默认配置。Compaction 内存到达限制，会导致 Compaction 任务失败。|
 | disable_storage_page_cache | false | 是否开启 PageCache。开启 PageCache 后，StarRocks 会缓存最近扫描过的数据，对于查询重复性高的场景，会大幅提升查询效率。`true` 表示不开启。该配置项与 storage_page_cache_limit 配合使用，在内存资源充足和有大数据量 Scan 的场景中启用能够加速查询性能。自 2.4 版本起，该参数默认值由 `TRUE` 变更为 `FALSE`。 自 3.1 版本开始，该参数由静态变为动态。|
 | storage_page_cache_limit | 20% | BE 存储层 page 缓存可以使用的内存上限。|
 | chunk_reserved_bytes_limit | 2147483648 | 用于加速小块内存分配的 Cache，默认上限为 2GB。您可以在内存资源充足的情况下打开。|

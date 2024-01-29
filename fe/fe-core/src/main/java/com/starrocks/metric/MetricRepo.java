@@ -97,7 +97,7 @@ public final class MetricRepo {
     private static final MetricRegistry METRIC_REGISTER = new MetricRegistry();
     private static final StarRocksMetricRegistry STARROCKS_METRIC_REGISTER = new StarRocksMetricRegistry();
 
-    public static volatile boolean isInit = false;
+    public static volatile boolean hasInit = false;
     public static final SystemMetrics SYSTEM_METRICS = new SystemMetrics();
 
     public static final String TABLET_NUM = "tablet_num";
@@ -167,7 +167,7 @@ public final class MetricRepo {
     private static final MetricCalculator METRIC_CALCULATOR = new MetricCalculator();
 
     public static synchronized void init() {
-        if (isInit) {
+        if (hasInit) {
             return;
         }
 
@@ -232,14 +232,14 @@ public final class MetricRepo {
         generateBackendsTabletMetrics();
 
         // connections
-        GaugeMetric<Integer> conections = new GaugeMetric<Integer>(
+        GaugeMetric<Integer> connections = new GaugeMetric<Integer>(
                 "connection_total", MetricUnit.CONNECTIONS, "total connections") {
             @Override
             public Integer getValue() {
                 return ExecuteEnv.getInstance().getScheduler().getConnectionNum();
             }
         };
-        STARROCKS_METRIC_REGISTER.addMetric(conections);
+        STARROCKS_METRIC_REGISTER.addMetric(connections);
 
         // journal id
         GaugeMetric<Long> maxJournalId = (GaugeMetric<Long>) new GaugeMetric<Long>(
@@ -415,7 +415,7 @@ public final class MetricRepo {
         COUNTER_TXN_REJECT =
                 new LongCounterMetric("txn_reject", MetricUnit.REQUESTS, "counter of rejected transactions");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TXN_REJECT);
-        COUNTER_TXN_BEGIN = new LongCounterMetric("txn_begin", MetricUnit.REQUESTS, "counter of begining transactions");
+        COUNTER_TXN_BEGIN = new LongCounterMetric("txn_begin", MetricUnit.REQUESTS, "counter of beginning transactions");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TXN_BEGIN);
         COUNTER_TXN_SUCCESS =
                 new LongCounterMetric("txn_success", MetricUnit.REQUESTS, "counter of success transactions");
@@ -440,8 +440,8 @@ public final class MetricRepo {
                 "current unfinished restore job");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_UNFINISHED_RESTORE_JOB);
         List<Database> dbs = Lists.newArrayList();
-        if (GlobalStateMgr.getCurrentState().getIdToDb() != null) {
-            for (Map.Entry<Long, Database> entry : GlobalStateMgr.getCurrentState().getIdToDb().entrySet()) {
+        if (GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb() != null) {
+            for (Map.Entry<Long, Database> entry : GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().entrySet()) {
                 dbs.add(entry.getValue());
             }
 
@@ -474,7 +474,7 @@ public final class MetricRepo {
         initMemoryMetrics();
 
         updateMetrics();
-        isInit = true;
+        hasInit = true;
 
         if (Config.enable_metric_calculator) {
             METRIC_TIMER.scheduleAtFixedRate(METRIC_CALCULATOR, 0, 15 * 1000L, TimeUnit.MILLISECONDS);
@@ -532,7 +532,7 @@ public final class MetricRepo {
                 "The count of tablets") {
             @Override
             public Long getValue() {
-                return GlobalStateMgr.getCurrentInvertedIndex().getTabletCount();
+                return GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletCount();
             }
         };
         tabletCnt.addLabel(new MetricLabel("type", "tablet_count"));
@@ -542,7 +542,7 @@ public final class MetricRepo {
                 "The bytes of tablets") {
             @Override
             public Long getValue() {
-                return GlobalStateMgr.getCurrentInvertedIndex().getTabletCount()
+                return GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletCount()
                         * SizeEstimator.estimate(new LocalTablet());
             }
         };
@@ -553,7 +553,7 @@ public final class MetricRepo {
                 "The count of replicas") {
             @Override
             public Long getValue() {
-                return GlobalStateMgr.getCurrentInvertedIndex().getReplicaCount();
+                return GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicaCount();
             }
         };
         replicaCnt.addLabel(new MetricLabel("type", "replica_count"));
@@ -563,7 +563,7 @@ public final class MetricRepo {
                 "The bytes of replicas") {
             @Override
             public Long getValue() {
-                return GlobalStateMgr.getCurrentInvertedIndex().getReplicaCount()
+                return GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicaCount()
                         * SizeEstimator.estimate(new Replica());
             }
         };
@@ -574,7 +574,7 @@ public final class MetricRepo {
                 "The count of txns") {
             @Override
             public Long getValue() {
-                return (long) GlobalStateMgr.getCurrentGlobalTransactionMgr().getFinishedTransactionNum();
+                return (long) GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getFinishedTransactionNum();
             }
         };
         txnCnt.addLabel(new MetricLabel("type", "txn_count"));
@@ -584,7 +584,7 @@ public final class MetricRepo {
                 "The bytes of txns") {
             @Override
             public Long getValue() {
-                return GlobalStateMgr.getCurrentGlobalTransactionMgr().getFinishedTransactionNum()
+                return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getFinishedTransactionNum()
                         * SizeEstimator.estimate(new TransactionState());
             }
         };
@@ -595,7 +595,7 @@ public final class MetricRepo {
                 "The count of txn callbacks") {
             @Override
             public Long getValue() {
-                return GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().getCallBackCnt();
+                return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().getCallBackCnt();
             }
         };
         txnCallbackCnt.addLabel(new MetricLabel("type", "txn_callback_count"));
@@ -752,7 +752,7 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.addMetric(agentTaskCount);
     }
 
-    // to generate the metrics related to tablets of each backends
+    // to generate the metrics related to tablets of each backend
     // this metric is reentrant, so that we can add or remove metric along with the backend add or remove
     // at runtime.
     public static void generateBackendsTabletMetrics() {
@@ -760,8 +760,8 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.removeMetrics(TABLET_NUM);
         STARROCKS_METRIC_REGISTER.removeMetrics(TABLET_MAX_COMPACTION_SCORE);
 
-        SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
 
         for (Long beId : infoService.getBackendIds(false)) {
             Backend be = infoService.getBackend(beId);
@@ -769,7 +769,7 @@ public final class MetricRepo {
                 continue;
             }
 
-            // tablet number of each backends
+            // tablet number of each backend
             GaugeMetric<Long> tabletNum = (GaugeMetric<Long>) new GaugeMetric<Long>(TABLET_NUM,
                     MetricUnit.NOUNIT, "tablet number") {
                 @Override
@@ -783,7 +783,7 @@ public final class MetricRepo {
             tabletNum.addLabel(new MetricLabel("backend", be.getHost() + ":" + be.getHeartbeatPort()));
             STARROCKS_METRIC_REGISTER.addMetric(tabletNum);
 
-            // max compaction score of tablets on each backends
+            // max compaction score of tablets on each backend
             GaugeMetric<Long> tabletMaxCompactionScore = (GaugeMetric<Long>) new GaugeMetric<Long>(
                     TABLET_MAX_COMPACTION_SCORE, MetricUnit.NOUNIT,
                     "tablet max compaction score") {
@@ -879,7 +879,7 @@ public final class MetricRepo {
     }
 
     public static synchronized String getMetric(MetricVisitor visitor, MetricsAction.RequestParams requestParams) {
-        if (!isInit) {
+        if (!hasInit) {
             return "";
         }
 
@@ -940,7 +940,7 @@ public final class MetricRepo {
     // collect table-level metrics
     private static void collectTableMetrics(MetricVisitor visitor, boolean minifyTableMetrics) {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        List<String> dbNames = globalStateMgr.getDbNames();
+        List<String> dbNames = globalStateMgr.getLocalMetastore().listDbNames();
         for (String dbName : dbNames) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (null == db) {
@@ -968,7 +968,7 @@ public final class MetricRepo {
 
     private static void collectDatabaseMetrics(MetricVisitor visitor) {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        List<String> dbNames = globalStateMgr.getDbNames();
+        List<String> dbNames = globalStateMgr.getLocalMetastore().listDbNames();
         GaugeMetricImpl<Integer> databaseNum = new GaugeMetricImpl<>(
                 "database_num", MetricUnit.OPERATIONS, "count of database");
         int dbNum = 0;

@@ -701,6 +701,27 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
     return best_tablet;
 }
 
+Status TabletManager::generate_pk_dump() {
+    std::vector<TabletAndScore> pick_tablets;
+    // 1. pick primary key tablet
+    std::vector<TabletSharedPtr> tablet_ptr_list;
+    for (const auto& tablets_shard : _tablets_shards) {
+        std::shared_lock rlock(tablets_shard.lock);
+        for (const auto& [tablet_id, tablet_ptr] : tablets_shard.tablet_map) {
+            if (tablet_ptr->keys_type() != PRIMARY_KEYS) {
+                continue;
+            }
+
+            tablet_ptr_list.push_back(tablet_ptr);
+        }
+    }
+    // 2. generate pk dump if need
+    for (const auto& tablet_ptr : tablet_ptr_list) {
+        RETURN_IF_ERROR(tablet_ptr->updates()->generate_pk_dump_if_in_error_state());
+    }
+    return Status::OK();
+}
+
 // pick tablets to do primary index compaction
 std::vector<TabletAndScore> TabletManager::pick_tablets_to_do_pk_index_major_compaction() {
     std::vector<TabletAndScore> pick_tablets;
@@ -831,16 +852,21 @@ Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_
         LOG(WARNING) << "Fail to create table, tablet path not exists, path=" << tablet->schema_hash_path();
         return Status::NotFound("tablet path not exists");
     }
-    if (Status st = tablet->init(); !st.ok()) {
-        LOG(WARNING) << "Fail to init tablet " << tablet->full_name() << ": " << st;
-        return Status::InternalError("tablet init failed: " + st.to_string());
-    }
+    Status init_st = tablet->init();
     if (tablet->tablet_state() == TABLET_SHUTDOWN) {
-        LOG(INFO) << "Loaded shutdown tablet " << tablet_id;
+        if (init_st.ok()) {
+            LOG(INFO) << "Loaded shutdown tablet " << tablet_id;
+        } else {
+            LOG(WARNING) << "Loaded shutdown tablet " << tablet_id << " with ignored failure: " << init_st.to_string();
+        }
         std::unique_lock shutdown_tablets_wlock(_shutdown_tablets_lock);
         DroppedTabletInfo info{.tablet = tablet, .flag = kMoveFilesToTrash};
         _shutdown_tablets.emplace(tablet->tablet_id(), std::move(info));
         return Status::NotFound("tablet state is shutdown");
+    }
+    if (!init_st.ok()) {
+        LOG(WARNING) << "Fail to init tablet " << tablet->full_name() << ": " << init_st.message();
+        return Status::InternalError("tablet init failed: " + init_st.to_string());
     }
     // NOTE: We do not check tablet's initial version here, because if BE restarts when
     // one tablet is doing schema-change, we may meet empty tablet.

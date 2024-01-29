@@ -4,6 +4,55 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 3.1
 
+## 3.1.7
+
+发布日期：2024 年 1 月 12日
+
+### 新增特性
+
+- 新增表函数 `unnest_bitmap`。[#38136](https://github.com/StarRocks/starrocks/pull/38136)
+- [Broker Load](https://docs.starrocks.io/zh/docs/3.1/sql-reference/sql-statements/data-manipulation/BROKER_LOAD/#opt_properties) 支持条件更新。[#37400](https://github.com/StarRocks/starrocks/pull/37400)
+
+### 行为变更
+
+- 新增 Session 变量 `enable_materialized_view_for_insert`，默认值为 `FALSE`，表示物化视图不再改写 INSERT INTO SELECT 语句中的查询。[#37505](https://github.com/StarRocks/starrocks/pull/37505)
+- 将 FE 配置项 `enable_new_publish_mechanism` 改为静态参数，修改后必须重启 FE 才可以生效。[#35338](https://github.com/StarRocks/starrocks/pull/35338)
+- 新增 Session 变量 `enable_strict_order_by`。当取值为默认值 `TRUE` 时，如果查询中的输出列存在不同的表达式使用重复别名的情况，且按照该别名进行排序，查询会报错，例如 `select distinct t1.* from tbl1 t1 order by t1.k1;`。该行为和 2.3 及之前版本的逻辑一致。如果取值为 `FALSE`，采用宽松的去重机制，把这类查询作为有效 SQL 处理。[#37910](https://github.com/StarRocks/starrocks/pull/37910)
+
+### 参数变更
+
+- 增加 FE 配置项 `routine_load_unstable_threshold_second`。[#36222](https://github.com/StarRocks/starrocks/pull/36222)
+- 新增 FE 配置项 `http_worker_threads_num`，指定 HTTP Server 用于处理 HTTP 请求的线程数。默认取值为 `0`。如果配置为负数或 `0` ，线程数将设置为 CPU 核数的 2 倍。[#37530](https://github.com/StarRocks/starrocks/pull/37530)
+- 新增 BE 配置项 `pindex_major_compaction_limit_per_disk`，配置每块盘 Compaction 的最大并发数，用于解决 Compaction 在磁盘之间不均衡导致个别磁盘 I/O 过高的问题，默认取值为 `1`。[#36681](https://github.com/StarRocks/starrocks/pull/36681)
+- 新增 Session 变量 `transaction_read_only` 和 `tx_read_only`，设置事务的访问模式并且兼容 MySQL 5.7.20 以上的版本。[#37249](https://github.com/StarRocks/starrocks/pull/37249)
+- 新增 FE 配置项 `default_mv_refresh_immediate`，用于控制物化视图创建完成后是否立刻进行刷新，默认值为 `true`。[#37093](https://github.com/StarRocks/starrocks/pull/37093)
+- 新增 BE 配置项 `lake_enable_vertical_compaction_fill_data_cache`，表示存算分离模式下是否允许 Compaction 任务在执行时缓存数据到本地磁盘上，默认取值是 `false`。[#37296](https://github.com/StarRocks/starrocks/pull/37296)
+
+### 功能优化
+
+- INSERT INTO FILE() SELECT FROM 支持读取表中 BINARY 类型的数据并导出至远端存储中的 Parquet 格式文件中。[#36797](https://github.com/StarRocks/starrocks/pull/36797)
+- 异步物化视图可以设置 `datacache.partition_duration` 属性且支持动态修改，用于控制 Data Cache 的有效时间。[#35681](https://github.com/StarRocks/starrocks/pull/35681)
+- 使用 JDK 时 GC 算法默认采用 G1。[#37386](https://github.com/StarRocks/starrocks/pull/37386)
+- `date_trunc`、`adddate`、`time_slice` 函数的 `interval` 参数可支持毫秒和微秒。[#36386](https://github.com/StarRocks/starrocks/pull/36386)
+- WHERE 子句中 LIKE 运算符右侧字符串中不包括 `%` 或者 `_` 时，LIKE 运算符会转换成 `=` 运算符。[#37515](https://github.com/StarRocks/starrocks/pull/37515)
+- [SHOW ROUTINE LOAD](https://docs.starrocks.io/zh/docs/3.1/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) 返回结果中增加 `LatestSourcePosition`，记录 数据源 Kafka 中 Topic 内各个分区的最新消息位点，便于检查导入延迟情况。[#38298](https://github.com/StarRocks/starrocks/pull/38298)
+- 新增资源组属性 `spill_mem_limit_threshold`，用于设置开启自动落盘（即系统变量 `spill_mode` 设置为 `auto`）时，当前资源组触发落盘的内存占用阈值（百分比）。取值范围：(0,1)。默认取值为 `1`，表示不生效。[#36701](https://github.com/StarRocks/starrocks/pull/36701)
+- [SHOW ROUTINE LOAD](https://docs.starrocks.io/zh/docs/3.1/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) 返回结果中增加时间戳进度信息，展示各个分区当前消费消息的时间戳。[#36222](https://github.com/StarRocks/starrocks/pull/36222)
+- 优化 Rountine Load 的调度策略，慢任务不阻塞其他正常任务的执行。[#37638](https://github.com/StarRocks/starrocks/pull/37638)
+
+### 问题修复
+
+修复了如下问题：
+
+- [ANALYZE TABLE](https://docs.starrocks.io/zh/docs/3.1/sql-reference/sql-statements/data-definition/ANALYZE_TABLE/) 偶尔会出现卡住的问题。[#36836](https://github.com/StarRocks/starrocks/pull/36836)
+- PageCache 内存占用在有些情况下会超过 BE 动态参数 `storage_page_cache_limit` 设定的阈值。[#37740](https://github.com/StarRocks/starrocks/pull/37740)
+- [Hive Catalog](https://docs.starrocks.io/zh/docs/3.1/data_source/catalog/hive_catalog/) 的元数据在 Hive 表新增字段后不会自动刷新。[#37668](https://github.com/StarRocks/starrocks/pull/37668)
+- 某些情况下 `bitmap_to_string` 会因为转换时数据类型溢出导致查询结果错误。[#37405](https://github.com/StarRocks/starrocks/pull/37405)
+- 空表执行 DELETE 报错“ERROR 1064 (HY000): Index: 0, Size: 0”。[#37461](https://github.com/StarRocks/starrocks/pull/37461)
+- 当 FE 动态参数 `enable_sync_publish` 设置为 `TRUE` 时，BE Crash 重启后写入数据可能会出现无法查询的情况。[#37398](https://github.com/StarRocks/starrocks/pull/37398)
+- Information Schema 里的视图 `views` 中 `TABLE_CATALOG` 字段取值是 `null`。[#37570](https://github.com/StarRocks/starrocks/pull/37570)
+- `SELECT ... FROM ... INTO OUTFILE` 导出至 CSV 时，如果 FROM 子句中包含多个常量，执行时会报错："Unmatched number of columns"。[#38045](https://github.com/StarRocks/starrocks/pull/38045)
+
 ## 3.1.6
 
 发布日期：2023 年 12 月 18 日
@@ -15,7 +64,7 @@ displayed_sidebar: "Chinese"
 - 支持使用命令行获取 Heap Profile，便于发生问题后进行定位分析。[#35322](https://github.com/StarRocks/starrocks/pull/35322)
 - 支持使用 Common Table Expression (CTE) 创建异步物化视图。[#36142](https://github.com/StarRocks/starrocks/pull/36142)
 - 新增如下 Bitmap 函数：[subdivide_bitmap](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/bitmap-functions/subdivide_bitmap/)、[bitmap_from_binary](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/bitmap-functions/bitmap_from_binary/)、[bitmap_to_binary](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/bitmap-functions/bitmap_to_binary/)。[#35817](https://github.com/StarRocks/starrocks/pull/35817) [#35621](https://github.com/StarRocks/starrocks/pull/35621)
-- 优化主键模型表 Compaction Score 的取值逻辑，使其和其他模型的表的取值范围看起来更一致。[#36534](https://github.com/StarRocks/starrocks/pull/36534)
+- 优化主键表 Compaction Score 的取值逻辑，使其和其他类型的表的取值范围看起来更一致。[#36534](https://github.com/StarRocks/starrocks/pull/36534)
 
 ### 参数变更
 
@@ -27,7 +76,7 @@ displayed_sidebar: "Chinese"
 ### 功能优化
 
 - 系统变量 [sql_mode](https://docs.starrocks.io/zh/docs/reference/System_variable/#sql_mode) 增加 `GROUP_CONCAT_LEGACY` 选项，用以兼容 [group_concat](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/string-functions/group_concat/) 函数在 2.5（不含）版本之前的实现逻辑。[#36150](https://github.com/StarRocks/starrocks/pull/36150)
-- 主键模型表 [SHOW DATA](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/SHOW_DATA/) 的结果中新增包括 **.cols** 文件（部分列更新和生成列相关的文件）和持久化索引文件的文件大小信息。[#34898](https://github.com/StarRocks/starrocks/pull/34898)
+- 主键表 [SHOW DATA](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/SHOW_DATA/) 的结果中新增包括 **.cols** 文件（部分列更新和生成列相关的文件）和持久化索引文件的文件大小信息。[#34898](https://github.com/StarRocks/starrocks/pull/34898)
 - 支持 MySQL 外部表和 JDBC Catalog 外部表的 WHERE 子句中包含关键字。[#35917](https://github.com/StarRocks/starrocks/pull/35917)
 - 加载 StarRocks 的插件失败时，不再抛出异常并导致 FE 无法启动，而是 FE 可正常启动、同时可以通过 [SHOW PLUGINS](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/Administration/SHOW_PLUGINS/) 查看插件的错误状态。[#36566](https://github.com/StarRocks/starrocks/pull/36566)
 - 动态分区支持 Random 分布。[#35513](https://github.com/StarRocks/starrocks/pull/35513)
@@ -81,17 +130,17 @@ displayed_sidebar: "Chinese"
 - 查询时报错 "get_applied_rowsets failed, tablet updates is in error state: tablet:18849 actual row size changed after compaction"。[#33246](https://github.com/StarRocks/starrocks/pull/33246)
 - 存算一体模式下，单独查询 Iceberg 或者 Hive 外表容易出现 BE crash。[#34682](https://github.com/StarRocks/starrocks/pull/34682)
 - 存算一体模式下，导入数据时同时自动创建多个分区，偶尔会出现数据写错分区的情况。[#34731](https://github.com/StarRocks/starrocks/pull/34731)
-- 长时间向持久化索引打开的主键模型表高频导入，可能会引起 BE crash。[#33220](https://github.com/StarRocks/starrocks/pull/33220)
+- 长时间向持久化索引打开的主键表高频导入，可能会引起 BE crash。[#33220](https://github.com/StarRocks/starrocks/pull/33220)
 - 查询时报错 "Exception: java.lang.IllegalStateException: null"。[#33535](https://github.com/StarRocks/starrocks/pull/33535)
 - 执行 `show proc '/current_queries';` 时，如果某个查询刚开始执行， 可能会引起 BE Crash。[#34316](https://github.com/StarRocks/starrocks/pull/34316)
-- 向打开持久化索引的主键模型表中导入大量数据，有时会报错。[#34352](https://github.com/StarRocks/starrocks/pull/34352)
+- 向打开持久化索引的主键表中导入大量数据，有时会报错。[#34352](https://github.com/StarRocks/starrocks/pull/34352)
 - 2.4 及以下的版本升级到高版本，可能会出现 Compaction Score 很高的问题。[#34618](https://github.com/StarRocks/starrocks/pull/34618)
 - 使用 MariaDB ODBC Driver 查询 `INFORMATION_SCHEMA` 中的信息时，`schemata` 视图中 `CATALOG_NAME` 列中取值都显示的是 `null`。[#34627](https://github.com/StarRocks/starrocks/pull/34627)
 - 导入数据异常导致 FE Crash 后无法重启。[#34590](https://github.com/StarRocks/starrocks/pull/34590)
 - Stream Load 导入作业在 **PREPARD** 状态下、同时有 Schema Change 在执行，会导致数据丢失。[#34381](https://github.com/StarRocks/starrocks/pull/34381)
 - 如果 HDFS 路径以两个或以上斜杠（`/`）结尾，HDFS 备份恢复会失败。[#34601](https://github.com/StarRocks/starrocks/pull/34601)
 - 打开 `enable_load_profile` 后，Stream Load 会很容易失败。[#34544](https://github.com/StarRocks/starrocks/pull/34544)
-- 使用列模式进行主键模型表部分列更新后，会有 Tablet 出现副本之间数据不一致。[#34555](https://github.com/StarRocks/starrocks/pull/34555)
+- 使用列模式进行主键表部分列更新后，会有 Tablet 出现副本之间数据不一致。[#34555](https://github.com/StarRocks/starrocks/pull/34555)
 - 使用 ALTER TABLE 增加 `partition_live_number` 属性没有生效。[#34842](https://github.com/StarRocks/starrocks/pull/34842)
 - FE 启动失败，报错 "failed to load journal type 118"。[#34590](https://github.com/StarRocks/starrocks/pull/34590)
 - 当 `recover_with_empty_tablet` 设置为 `true` 时可能会引起 FE Crash。[#33071](https://github.com/StarRocks/starrocks/pull/33071)
@@ -103,7 +152,7 @@ displayed_sidebar: "Chinese"
 
 - 新增 FE 配置项 [`enable_statistics_collect_profile`](https://docs.starrocks.io/zh/docs/administration/FE_configuration#enable_statistics_collect_profile) 用于控制统计信息查询时是否生成 Profile，默认值是 `false`。[#33815](https://github.com/StarRocks/starrocks/pull/33815)
 - FE 配置项 [`mysql_server_version`](https://docs.starrocks.io/zh/docs/administration/FE_configuration#mysql_server_version) 从静态变为动态（`mutable`），修改配置项设置后，无需重启 FE 即可在当前会话动态生效。[#34033](https://github.com/StarRocks/starrocks/pull/34033)
-- 新增 BE/CN 配置项 [`update_compaction_ratio_threshold`](https://docs.starrocks.io/zh/docs/administration/BE_configuration#update_compaction_ratio_threshold)，用于手动设置存算分离模式下主键模型表单次 Compaction 合并的最大数据比例，默认值是 `0.5`。如果单个 Tablet 过大，建议适当调小该配置项取值。存算一体模式下主键模型表单次 Compaction 合并的最大数据比例仍然保持原来自动调整模式。[#35129](https://github.com/StarRocks/starrocks/pull/35129)
+- 新增 BE/CN 配置项 [`update_compaction_ratio_threshold`](https://docs.starrocks.io/zh/docs/administration/BE_configuration#update_compaction_ratio_threshold)，用于手动设置存算分离模式下主键表单次 Compaction 合并的最大数据比例，默认值是 `0.5`。如果单个 Tablet 过大，建议适当调小该配置项取值。存算一体模式下主键表单次 Compaction 合并的最大数据比例仍然保持原来自动调整模式。[#35129](https://github.com/StarRocks/starrocks/pull/35129)
 
 #### 系统变量
 
@@ -117,7 +166,7 @@ displayed_sidebar: "Chinese"
 
 ### 新增特性
 
-- 存算分离下的主键模型（Primary Key）表支持 Sort Key。
+- 存算分离下的主键表支持 Sort Key。
 - 异步物化视图支持通过 str2date 函数指定分区表达式，可用于外表分区类型为 STRING 类型数据的物化视图的增量刷新和查询改写。[#29923](https://github.com/StarRocks/starrocks/pull/29923) [#31964](https://github.com/StarRocks/starrocks/pull/31964)
 - 新增会话变量 [`enable_query_tablet_affinity`](https://docs.starrocks.io/zh/docs/reference/System_variable#enable_query_tablet_affinity25-及以后)，用于控制多次查询同一个 Tablet 时选择固定的同一个副本，默认关闭。[#33049](https://github.com/StarRocks/starrocks/pull/33049)
 - 新增工具函数 `is_role_in_session`，用于查看指定角色是否在当前会话下被激活，并且支持查看嵌套的角色被激活的情况。 [#32984](https://github.com/StarRocks/starrocks/pull/32984)
@@ -152,8 +201,8 @@ displayed_sidebar: "Chinese"
 
 ### 行为变更
 
-- 从 3.1.4 版本开始，新搭建集群的主键模型持久化索引在表创建时默认打开（如若从低版本升级到 3.1.4 版本则保持不变）。[#33374](https://github.com/StarRocks/starrocks/pull/33374)
-- 新增 FE 参数 `enable_sync_publish` 且默认开启。设置为 `true` 时，主键模型表导入的 Publish 过程会等 Apply 完成后才返回结果，这样，导入作业返回成功后数据立即可见，但可能会导致主键模型表导入比原来有延迟。（之前无此参数，导入时 Publish 过程中 Apply 是异步的）。[#27055](https://github.com/StarRocks/starrocks/pull/27055)
+- 从 3.1.4 版本开始，新搭建集群的主键表持久化索引在表创建时默认打开（如若从低版本升级到 3.1.4 版本则保持不变）。[#33374](https://github.com/StarRocks/starrocks/pull/33374)
+- 新增 FE 参数 `enable_sync_publish` 且默认开启。设置为 `true` 时，主键表导入的 Publish 过程会等 Apply 完成后才返回结果，这样，导入作业返回成功后数据立即可见，但可能会导致主键表导入比原来有延迟。（之前无此参数，导入时 Publish 过程中 Apply 是异步的）。[#27055](https://github.com/StarRocks/starrocks/pull/27055)
 
 ## 3.1.3
 
@@ -161,9 +210,9 @@ displayed_sidebar: "Chinese"
 
 ### 新增特性
 
-- 存算分离下的主键模型支持基于本地磁盘上的持久化索引，使用方式与存算一体一致。
+- 存算分离下的主键表支持基于本地磁盘上的持久化索引，使用方式与存算一体一致。
 - 聚合函数 [group_concat](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/string-functions/group_concat/) 支持使用 DISTINCT 关键词和 ORDER BY 子句。[#28778](https://github.com/StarRocks/starrocks/pull/28778)
-- [Stream Load](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/STREAM_LOAD/)、[Broker Load](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/BROKER_LOAD/)、[Kafka Connector](https://docs.starrocks.io/zh/docs/loading/Kafka-connector-starrocks/)、[Flink Connector](https://docs.starrocks.io/zh/docs/loading/Flink-connector-starrocks/) 和 [Spark Connector](https://docs.starrocks.io/zh/docs/loading/Spark-connector-starrocks/) 均支持对主键模型表进行部分列更新时启用列模式。[#28288](https://github.com/StarRocks/starrocks/pull/28288)
+- [Stream Load](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/STREAM_LOAD/)、[Broker Load](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/BROKER_LOAD/)、[Kafka Connector](https://docs.starrocks.io/zh/docs/loading/Kafka-connector-starrocks/)、[Flink Connector](https://docs.starrocks.io/zh/docs/loading/Flink-connector-starrocks/) 和 [Spark Connector](https://docs.starrocks.io/zh/docs/loading/Spark-connector-starrocks/) 均支持对主键表进行部分列更新时启用列模式。[#28288](https://github.com/StarRocks/starrocks/pull/28288)
 - 分区中数据可以随着时间推移自动进行降冷操作（[List 分区方式](https://docs.starrocks.io/zh/docs/table_design/list_partitioning/)还不支持）。[#29335](https://github.com/StarRocks/starrocks/pull/29335) [#29393](https://github.com/StarRocks/starrocks/pull/29393)
 
 ### 功能优化
@@ -183,9 +232,9 @@ displayed_sidebar: "Chinese"
 - 调用 [date_diff()](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/date-time-functions/date_diff/) 函数时，如果函数中指定的时间单位是个常量而日期是非常量，会导致 BE Crash。[#29937](https://github.com/StarRocks/starrocks/issues/29937)
 - 如果 [Hive Catalog](https://docs.starrocks.io/zh/docs/data_source/catalog/hive_catalog/) 是多级目录，且数据存储在腾讯云 COS 中，会导致查询结果不正确。[#30363](https://github.com/StarRocks/starrocks/pull/30363)
 - 存算分离架构下，开启数据异步写入后，自动分区不生效。[#29986](https://github.com/StarRocks/starrocks/issues/29986)
-- 通过 [CREATE TABLE LIKE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-definition/CREATE_TABLE_LIKE/) 语句创建主键模型表时，会报错`Unexpected exception: Unknown properties: {persistent_index_type=LOCAL}`。[#30255](https://github.com/StarRocks/starrocks/pull/30255)
-- 主键模型表 Restore 之后，BE 重启后元数据发生错误，导致元数据不一致。[#30135](https://github.com/StarRocks/starrocks/pull/30135)
-- 主键模型表导入时，如果 Truncate 操作和查询并发，在有些情况下会报错“java.lang.NullPointerException”。[#30573](https://github.com/StarRocks/starrocks/pull/30573)
+- 通过 [CREATE TABLE LIKE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-definition/CREATE_TABLE_LIKE/) 语句创建主键表时，会报错`Unexpected exception: Unknown properties: {persistent_index_type=LOCAL}`。[#30255](https://github.com/StarRocks/starrocks/pull/30255)
+- 主键表 Restore 之后，BE 重启后元数据发生错误，导致元数据不一致。[#30135](https://github.com/StarRocks/starrocks/pull/30135)
+- 主键表导入时，如果 Truncate 操作和查询并发，在有些情况下会报错“java.lang.NullPointerException”。[#30573](https://github.com/StarRocks/starrocks/pull/30573)
 - 物化视图创建语句中包含谓词表达式时，刷新结果不正确。[#29904](https://github.com/StarRocks/starrocks/pull/29904)
 - 升级到 3.1.2 版本后，原来创建的表中 Storage Volume 属性被重置成了 `null`。[#30647](https://github.com/StarRocks/starrocks/pull/30647)
 - Tablet 元数据做 Checkpoint 与 Restore 操作并行时， 会导致某些副本丢失不可查。[#30603](https://github.com/StarRocks/starrocks/pull/30603)
@@ -238,7 +287,7 @@ displayed_sidebar: "Chinese"
 修复了如下问题：
 
 - 向多副本的表中导入数据时，如果某些分区没有数据，则会写入很多无用日志。 [#28824](https://github.com/StarRocks/starrocks/issues/28824)
-- 主键模型表部分列更新时平均 row size 预估不准导致内存占用过多。 [#27485](https://github.com/StarRocks/starrocks/pull/27485)
+- 主键表部分列更新时平均 row size 预估不准导致内存占用过多。 [#27485](https://github.com/StarRocks/starrocks/pull/27485)
 - 某个 Tablet 出现某种 ERROR 状态之后触发 Clone 操作，会导致磁盘使用上升。 [#28488](https://github.com/StarRocks/starrocks/pull/28488)
 - Compaction 会触发冷数据写入 Local Cache。 [#28831](https://github.com/StarRocks/starrocks/pull/28831)
 
@@ -250,7 +299,7 @@ displayed_sidebar: "Chinese"
 
 #### 存算分离架构
 
-- 新增支持主键模型（Primary Key）表，暂不支持持久化索引。
+- 新增支持主键表，暂不支持持久化索引。
 - 支持自增列属性 [AUTO_INCREMENT](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/auto_increment/)，提供表内全局唯一 ID，简化数据管理。
 - 支持[导入时自动创建分区和使用分区表达式定义分区规则](https://docs.starrocks.io/zh/docs/table_design/expression_partitioning/)，提高了分区创建的易用性和灵活性。
 - 支持[存储卷（Storage Volume）抽象](https://docs.starrocks.io/zh/docs/deployment/shared_data/s3/)，方便在存算分离架构中配置存储位置及鉴权等相关信息。后续创建库表时可以直接引用，提升易用性。
@@ -336,7 +385,7 @@ displayed_sidebar: "Chinese"
 
 - 正式支持[大算子落盘 (Spill)](https://docs.starrocks.io/zh/docs/administration/spill_to_disk/) 功能，允许将部分阻塞算子的中间结果落盘。开启大算子落盘功能后，当查询中包含聚合、排序或连接算子时，StarRocks 会将以上算子的中间结果缓存到磁盘以减少内存占用，尽量避免查询因内存不足而导致查询失败。
 - 支持基数保持 JOIN 表（Cardinality-preserving Joins）的裁剪。在较多表的星型模型（比如 SSB）和雪花模型 (TPC-H) 的建模中、且查询只涉及到少量表的一些情况下，能裁剪掉一些不必要的表，从而提升 JOIN 的性能。
-- 执行 [UPDATE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/UPDATE/) 语句对主键模型表进行部分更新时支持启用列模式，适用于更新少部分列但是大量行的场景，更新性能可提升十倍。
+- 执行 [UPDATE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/UPDATE/) 语句对主键表进行部分更新时支持启用列模式，适用于更新少部分列但是大量行的场景，更新性能可提升十倍。
 - 优化统计信息收集，以降低对导入影响，提高收集性能。
 - 优化并行 Merge 算法，在全排序场景下整体性能最高可提升 2 倍。
 - 优化查询逻辑以不再依赖 DB 锁。

@@ -35,14 +35,19 @@
 
 namespace starrocks {
 
-const std::string HTTP_REQUEST_PREFIX = "/api/_tablet/_download";
-const uint32_t DOWNLOAD_FILE_MAX_RETRY = 3;
-const uint32_t LIST_REMOTE_FILE_TIMEOUT = 15;
-const uint32_t GET_LENGTH_TIMEOUT = 10;
-
 #ifndef BE_TEST
+
+static const std::string HTTP_REQUEST_PREFIX = "/api/_tablet/_download";
+static const uint32_t DOWNLOAD_FILE_MAX_RETRY = 3;
+static const uint32_t LIST_REMOTE_FILE_TIMEOUT = 15;
+static const uint32_t GET_LENGTH_TIMEOUT = 10;
+
 static Status list_remote_files(const std::string& remote_url_prefix, std::vector<string>* file_name_list,
                                 std::vector<int64_t>* file_size_list) {
+    if (StorageEngine::instance()->bg_worker_stopped()) {
+        return Status::InternalError("Process is going to quit. The list remote files will stop");
+    }
+
     // Get remote dir file list
     string file_list_str;
     auto list_files_cb = [&remote_url_prefix, &file_list_str](HttpClient* client) {
@@ -82,6 +87,10 @@ static Status list_remote_files(const std::string& remote_url_prefix, std::vecto
 }
 
 static StatusOr<uint64_t> get_remote_file_size(const std::string& remote_file_url) {
+    if (StorageEngine::instance()->bg_worker_stopped()) {
+        return Status::InternalError("Process is going to quit. The get remote file size will stop");
+    }
+
     uint64_t file_size = 0;
     auto get_file_size_cb = [&remote_file_url, &file_size](HttpClient* client) {
         RETURN_IF_ERROR(client->init(remote_file_url));
@@ -94,17 +103,26 @@ static StatusOr<uint64_t> get_remote_file_size(const std::string& remote_file_ur
     return file_size;
 }
 
-static StatusOr<uint64_t> download_remote_file(const std::string& remote_file_url, const std::string& local_file_path,
-                                               uint64_t timeout_sec) {
-    uint64_t file_size = 0;
-    auto download_cb = [&remote_file_url, timeout_sec, &local_file_path, &file_size](HttpClient* client) {
+static Status download_remote_file(
+        const std::string& remote_file_url, uint64_t timeout_sec,
+        const std::function<StatusOr<std::unique_ptr<FileStreamConverter>>()>& converter_creator) {
+    if (StorageEngine::instance()->bg_worker_stopped()) {
+        return Status::InternalError("Process is going to quit. The download remote file will stop");
+    }
+
+    auto download_cb = [&](HttpClient* client) {
+        ASSIGN_OR_RETURN(auto converter, converter_creator());
+        if (converter == nullptr) {
+            return Status::OK();
+        }
+
         RETURN_IF_ERROR(client->init(remote_file_url));
         client->set_timeout_ms(timeout_sec * 1000);
-        ASSIGN_OR_RETURN(file_size, client->download(local_file_path));
+        RETURN_IF_ERROR(client->download([&](const void* data, size_t size) { return converter->append(data, size); }));
+        RETURN_IF_ERROR(converter->close());
         return Status::OK();
     };
-    RETURN_IF_ERROR(HttpClient::execute_with_retry(DOWNLOAD_FILE_MAX_RETRY, 1, download_cb));
-    return file_size;
+    return HttpClient::execute_with_retry(DOWNLOAD_FILE_MAX_RETRY, 1, download_cb);
 }
 #endif
 
@@ -113,6 +131,10 @@ Status ReplicationUtils::make_remote_snapshot(const std::string& host, int32_t b
                                               const std::vector<Version>* missed_versions,
                                               const std::vector<int64_t>* missing_version_ranges,
                                               std::string* remote_snapshot_path) {
+    if (StorageEngine::instance()->bg_worker_stopped()) {
+        return Status::InternalError("Process is going to quit. The make remote snapshot will stop");
+    }
+
     TSnapshotRequest request;
     request.__set_tablet_id(tablet_id);
     request.__set_schema_hash(schema_hash);
@@ -178,6 +200,10 @@ Status ReplicationUtils::make_remote_snapshot(const std::string& host, int32_t b
 
 Status ReplicationUtils::release_remote_snapshot(const std::string& ip, int32_t port,
                                                  const std::string& src_snapshot_path) {
+    if (StorageEngine::instance()->bg_worker_stopped()) {
+        return Status::InternalError("Process is going to quit. The release remote snapshot will stop");
+    }
+
     TAgentResult result;
 
 #ifdef BE_TEST
@@ -194,9 +220,21 @@ Status ReplicationUtils::release_remote_snapshot(const std::string& ip, int32_t 
 Status ReplicationUtils::download_remote_snapshot(
         const std::string& host, int32_t http_port, const std::string& remote_token,
         const std::string& remote_snapshot_path, TTabletId remote_tablet_id, TSchemaHash remote_schema_hash,
-        DataDir* data_dir, const std::string& local_path_prefix,
-        const std::function<std::string(const std::string&)>& name_converter) {
+        const std::function<StatusOr<std::unique_ptr<FileStreamConverter>>(const std::string& file_name,
+                                                                           uint64_t file_size)>& file_converters,
+        DataDir* data_dir) {
+    if (StorageEngine::instance()->bg_worker_stopped()) {
+        return Status::InternalError("Process is going to quit. The download remote snapshot will stop");
+    }
+
 #ifdef BE_TEST
+    std::string test_file = "test_file";
+    ASSIGN_OR_RETURN(auto file_converter, file_converters(test_file, 0));
+    if (file_converter == nullptr) {
+        return Status::OK();
+    }
+    auto output_file_name = file_converter->output_file_name();
+    auto local_path_prefix = output_file_name.substr(0, output_file_name.size() - test_file.size());
     std::error_code error_code;
     std::filesystem::copy(strings::Substitute("$0/$1/$2/", remote_snapshot_path, remote_tablet_id, remote_schema_hash),
                           local_path_prefix, error_code);
@@ -214,26 +252,15 @@ Status ReplicationUtils::download_remote_snapshot(
     std::vector<int64_t> file_size_list;
     RETURN_IF_ERROR(list_remote_files(remote_url_prefix, &file_name_list, &file_size_list));
 
-    // If the header file is not exist, the table could't loaded by olap engine.
-    // Avoid of data is not complete, we copy the header file at last.
-    // The header file's name is end of .hdr.
-    for (int i = 0; i < file_name_list.size() - 1; ++i) {
-        StringPiece sp(file_name_list[i]);
-        if (sp.ends_with(".hdr")) {
-            std::swap(file_name_list[i], file_name_list[file_name_list.size() - 1]);
-            if (!file_size_list.empty()) {
-                std::swap(file_size_list[i], file_size_list[file_size_list.size() - 1]);
-            }
-            break;
-        }
-    }
-
-    // Get copy from remote
+    // Copy files from remote backend
     uint64_t total_file_size = 0;
-    uint64_t skipped_file_count = 0;
     MonotonicStopWatch watch;
     watch.start();
     for (int i = 0; i < file_name_list.size(); ++i) {
+        if (StorageEngine::instance()->bg_worker_stopped()) {
+            return Status::InternalError("Process is going to quit. The download remote snapshot will stop");
+        }
+
         const std::string& remote_file_name = file_name_list[i];
         auto remote_file_url = remote_url_prefix + remote_file_name;
 
@@ -250,32 +277,19 @@ Status ReplicationUtils::download_remote_snapshot(
         }
 
         total_file_size += file_size;
-        uint64_t estimate_timeout = file_size / config::download_low_speed_limit_kbps / 1024;
-        if (estimate_timeout < config::download_low_speed_time) {
-            estimate_timeout = config::download_low_speed_time;
+        uint64_t estimate_timeout_sec = file_size / config::download_low_speed_limit_kbps / 1024;
+        if (estimate_timeout_sec < config::download_low_speed_time) {
+            estimate_timeout_sec = config::download_low_speed_time;
         }
 
-        std::string local_file_name = name_converter ? name_converter(remote_file_name) : remote_file_name;
-        if (local_file_name.empty()) {
-            ++skipped_file_count;
-            LOG(INFO) << "Skipped download remote file: " << remote_file_url << ", file_size: " << file_size;
-            continue;
-        }
+        VLOG(1) << "Downloading " << remote_file_url << ", bytes: " << file_size
+                << ", timeout: " << estimate_timeout_sec << "s";
 
-        std::string local_file_path = local_path_prefix + local_file_name;
-
-        VLOG(1) << "Downloading " << remote_file_url << " to " << local_file_path << ", bytes: " << file_size
-                << ", timeout: " << estimate_timeout;
-
-        ASSIGN_OR_RETURN(uint64_t local_file_size,
-                         download_remote_file(remote_file_url, local_file_path, estimate_timeout));
-        // Check file length
-        if (local_file_size != file_size) {
-            LOG(WARNING) << "Fail to download " << remote_file_url << ", file_size: " << local_file_size << "/"
-                         << file_size;
-            return Status::InternalError("mismatched file size");
-        }
-    } // Clone files from remote backend
+        RETURN_IF_ERROR(download_remote_file(remote_file_url, estimate_timeout_sec,
+                                             [&file_converters, &remote_file_name, file_size]() {
+                                                 return file_converters(remote_file_name, file_size);
+                                             }));
+    } // Copy files from remote backend
 
     double total_time_sec = watch.elapsed_time() / 1000. / 1000. / 1000.;
     double copy_rate = 0.0;
@@ -283,7 +297,7 @@ Status ReplicationUtils::download_remote_snapshot(
         copy_rate = (total_file_size / 1024. / 1024.) / total_time_sec;
     }
     LOG(INFO) << "Copied tablet file count: " << file_name_list.size() << ", total bytes: " << total_file_size
-              << ", cost: " << total_time_sec << " s, rate: " << copy_rate << " MB/s";
+              << ", cost: " << total_time_sec << "s, rate: " << copy_rate << "MB/s";
     return Status::OK();
 #endif
 }
@@ -292,6 +306,10 @@ StatusOr<std::string> ReplicationUtils::download_remote_snapshot_file(
         const std::string& host, int32_t http_port, const std::string& remote_token,
         const std::string& remote_snapshot_path, TTabletId remote_tablet_id, TSchemaHash remote_schema_hash,
         const std::string& file_name, uint64_t timeout_sec) {
+    if (StorageEngine::instance()->bg_worker_stopped()) {
+        return Status::InternalError("Process is going to quit. The download remote snapshot file will stop");
+    }
+
 #ifdef BE_TEST
     std::string path =
             strings::Substitute("$0/$1/$2/$3", remote_snapshot_path, remote_tablet_id, remote_schema_hash, file_name);

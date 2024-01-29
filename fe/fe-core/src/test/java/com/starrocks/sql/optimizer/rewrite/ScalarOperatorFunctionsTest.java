@@ -305,6 +305,14 @@ public class ScalarOperatorFunctionsTest {
                 ScalarOperatorFunctions.dateFormat(ConstantOperator.createDate(LocalDateTime.of(2020, 2, 21, 13, 4, 5)),
                         ConstantOperator.createVarchar("asdfafdfsçv")).getVarchar());
 
+        Assert.assertNotEquals("53",
+                ScalarOperatorFunctions.dateFormat(ConstantOperator.createDatetime(LocalDateTime.of(2024, 12, 31, 22, 0, 0)),
+                        ConstantOperator.createVarchar("%v")).getVarchar());
+
+        assertEquals("01",
+                ScalarOperatorFunctions.dateFormat(ConstantOperator.createDatetime(LocalDateTime.of(2024, 12, 31, 22, 0, 0)),
+                        ConstantOperator.createVarchar("%v")).getVarchar());
+
         Assert.assertThrows("%a not supported in date format string", IllegalArgumentException.class, () ->
                 ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar("%a")).getVarchar());
         Assert.assertThrows("%b not supported in date format string", IllegalArgumentException.class, () ->
@@ -471,6 +479,15 @@ public class ScalarOperatorFunctionsTest {
         Assert.assertThrows(DateTimeParseException.class, () -> ScalarOperatorFunctions
                 .str2Date(ConstantOperator.createVarchar("2019-02-29"),
                         ConstantOperator.createVarchar("%Y-%m-%d")).getDatetime());
+    }
+
+    @Test
+    public void toDate() {
+        ConstantOperator result = ScalarOperatorFunctions
+                .toDate(ConstantOperator.createDatetime(LocalDateTime.of(2001, 1, 9, 13, 4, 5)));
+        assertTrue(result.getType().isDate());
+        // when transfer constantOpeartor to DateLiteral, only y/m/d will keep
+        assertEquals("2001-01-09T13:04:05", result.getDate().toString());
     }
 
     @Test

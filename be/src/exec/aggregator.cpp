@@ -194,6 +194,10 @@ ChunkUniquePtr AggregatorParams::create_result_chunk(bool is_serialize_fmt, cons
 Aggregator::Aggregator(AggregatorParamsPtr params) : _params(std::move(params)) {}
 
 Status Aggregator::open(RuntimeState* state) {
+    if (_is_opened) {
+        return Status::OK();
+    }
+    _is_opened = true;
     RETURN_IF_ERROR(Expr::open(_group_by_expr_ctxs, state));
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
         RETURN_IF_ERROR(Expr::open(_agg_expr_ctxs[i], state));
@@ -311,8 +315,11 @@ Status Aggregator::open(RuntimeState* state) {
 }
 
 Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile) {
+    if (_is_prepared) {
+        return Status::OK();
+    }
+    _is_prepared = true;
     _state = state;
-
     _pool = pool;
     _runtime_profile = runtime_profile;
 
@@ -418,24 +425,8 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
             ++node_idx;
             Expr* expr = nullptr;
             ExprContext* ctx = nullptr;
-            RETURN_IF_ERROR(Expr::create_tree_from_thrift(_pool, desc.nodes, nullptr, &node_idx, &expr, &ctx, state));
-
-            if (state->is_jit_enabled()) {
-                auto* jit_engine = JITEngine::get_instance();
-                if (jit_engine->support_jit()) {
-                    const auto* prev_e = expr;
-                    auto status = expr->replace_compilable_exprs(&expr, _pool);
-                    if (!status.ok()) {
-                        LOG(ERROR) << "Can't replace compilable exprs.\n" << status.message() << "\n";
-                        continue;
-                    }
-
-                    if (expr != prev_e) {
-                        // The root node was replaced, so we need to update the context.
-                        ctx = _pool->add(new ExprContext(expr));
-                    }
-                }
-            }
+            RETURN_IF_ERROR(
+                    Expr::create_tree_from_thrift_with_jit(_pool, desc.nodes, nullptr, &node_idx, &expr, &ctx, state));
             _agg_expr_ctxs[i].emplace_back(ctx);
         }
 
@@ -455,8 +446,8 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
             int node_idx = 0;
             Expr* expr = nullptr;
             ExprContext* ctx = nullptr;
-            RETURN_IF_ERROR(
-                    Expr::create_tree_from_thrift(_pool, aggr_exprs[i].nodes, nullptr, &node_idx, &expr, &ctx, state));
+            RETURN_IF_ERROR(Expr::create_tree_from_thrift_with_jit(_pool, aggr_exprs[i].nodes, nullptr, &node_idx,
+                                                                   &expr, &ctx, state));
             _intermediate_agg_expr_ctxs[i].emplace_back(ctx);
         }
     }
@@ -528,6 +519,8 @@ Status Aggregator::reset_state(starrocks::RuntimeState* state, const std::vector
 Status Aggregator::_reset_state(RuntimeState* state, bool reset_sink_complete) {
     _is_ht_eos = false;
     _num_input_rows = 0;
+    _is_prepared = false;
+    _is_opened = false;
     if (reset_sink_complete) {
         _is_sink_complete = false;
     }

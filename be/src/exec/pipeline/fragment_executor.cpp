@@ -140,8 +140,9 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
     if (query_options.__isset.enable_profile && query_options.enable_profile) {
         _query_ctx->set_enable_profile();
     }
-    if (query_options.__isset.big_query_profile_second_threshold) {
-        _query_ctx->set_big_query_profile_threshold(query_options.big_query_profile_second_threshold);
+    if (query_options.__isset.big_query_profile_threshold) {
+        _query_ctx->set_big_query_profile_threshold(query_options.big_query_profile_threshold,
+                                                    query_options.big_query_profile_threshold_unit);
     }
     if (query_options.__isset.pipeline_profile_level) {
         _query_ctx->set_profile_level(query_options.pipeline_profile_level);
@@ -530,8 +531,8 @@ void create_adaptive_group_initialize_events(RuntimeState* state, PipelineGroupM
 
     auto* driver_executor = state->exec_env()->wg_driver_executor();
     for (auto& [leader_source_op, pipelines] : unready_pipeline_groups) {
-        EventPtr group_initialize_event = Event::create_collect_stats_source_initialize_event(
-                driver_executor, leader_source_op, std::move(pipelines));
+        EventPtr group_initialize_event =
+                Event::create_collect_stats_source_initialize_event(driver_executor, std::move(pipelines));
 
         if (auto blocking_event = leader_source_op->adaptive_blocking_event(); blocking_event != nullptr) {
             group_initialize_event->add_dependency(blocking_event.get());
@@ -893,7 +894,7 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
             auto source_op = std::make_shared<MultiCastLocalExchangeSourceOperatorFactory>(
                     context->next_operator_id(), upstream_plan_node_id, i, mcast_local_exchanger);
             source_op->set_degree_of_parallelism(dop);
-            source_op->set_group_leader(upstream_pipeline->source_operator_factory());
+            source_op->add_upstream_source(upstream_pipeline->source_operator_factory());
 
             // sink op
             auto sink_op = _create_exchange_sink_operator(context, t_stream_sink, sender.get(), dop);

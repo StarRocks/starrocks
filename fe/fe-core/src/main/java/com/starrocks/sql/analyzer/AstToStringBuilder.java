@@ -15,7 +15,10 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Range;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.AnalyticWindow;
 import com.starrocks.analysis.ArithmeticExpr;
@@ -48,9 +51,38 @@ import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.VariableExpr;
+import com.starrocks.binlog.BinlogConfig;
+import com.starrocks.catalog.BrokerTable;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.EsTable;
+import com.starrocks.catalog.ExternalOlapTable;
+import com.starrocks.catalog.FileTable;
+import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.HudiTable;
+import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.Index;
+import com.starrocks.catalog.JDBCTable;
+import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MysqlTable;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.View;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PrintableMap;
+import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.WriteQuorum;
+import com.starrocks.credential.CredentialUtil;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivilegeType;
@@ -104,15 +136,22 @@ import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
+import com.starrocks.statistic.StatsConstants;
 import com.starrocks.storagevolume.StorageVolume;
+import com.starrocks.thrift.TCompressionType;
+import com.starrocks.thrift.TWriteQuorumType;
+import org.apache.commons.collections.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.StringJoiner;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.FunctionSet.IGNORE_NULL_WINDOW_FUNCTION;
+import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_TYPE_COLUMN;
 import static java.util.stream.Collectors.toList;
 
 /**
@@ -124,11 +163,11 @@ import static java.util.stream.Collectors.toList;
  */
 public class AstToStringBuilder {
     public static String toString(ParseNode expr) {
-        return toString(expr, true);
+        return new AST2StringBuilderVisitor().visit(expr);
     }
 
-    public static String toString(ParseNode expr, boolean addFunctionDbName) {
-        return new AST2StringBuilderVisitor(addFunctionDbName).visit(expr);
+    public static String getAliasName(ParseNode expr, boolean addFunctionDbName, boolean withBackquote) {
+        return new AST2StringBuilderVisitor(addFunctionDbName, withBackquote).visit(expr);
     }
 
     public static class AST2StringBuilderVisitor extends AstVisitor<String, Void> {
@@ -137,12 +176,17 @@ public class AstToStringBuilder {
         // when you just want to a function name as its alias set it false
         protected boolean addFunctionDbName;
 
+        // when you want to get an expr name with backquote set it true
+        // when you just want to get the real expr name set it false
+        protected boolean withBackquote;
+
         public AST2StringBuilderVisitor() {
-            this(true);
+            this(true, true);
         }
 
-        public AST2StringBuilderVisitor(boolean addFunctionDbName) {
+        public AST2StringBuilderVisitor(boolean addFunctionDbName, boolean withBackquote) {
             this.addFunctionDbName = addFunctionDbName;
+            this.withBackquote = withBackquote;
         }
 
         // ------------------------------------------- Privilege Statement -------------------------------------------------
@@ -357,7 +401,7 @@ public class AstToStringBuilder {
             }
             if (dbName != null) {
                 sb.append("CREATE ROUTINE LOAD ").append(dbName).append(".")
-                    .append(jobName).append(" ON ").append(stmt.getTableName());
+                        .append(jobName).append(" ON ").append(stmt.getTableName());
             } else {
                 sb.append("CREATE ROUTINE LOAD ").append(jobName).append(" ON ").append(stmt.getTableName());
             }
@@ -991,7 +1035,16 @@ public class AstToStringBuilder {
 
         @Override
         public String visitSubfieldExpr(SubfieldExpr node, Void context) {
-            return String.format("%s.%s", visit(node.getChild(0)), Joiner.on('.').join(node.getFieldNames()));
+            StringJoiner joiner = new StringJoiner(".");
+            for (String field : node.getFieldNames()) {
+                if (withBackquote) {
+                    joiner.add(ParseUtil.backquote(field));
+                } else {
+                    joiner.add(field);
+                }
+
+            }
+            return String.format("%s.%s", visit(node.getChild(0)), joiner);
         }
 
         public String visitGroupingFunctionCall(GroupingFunctionCallExpr node, Void context) {
@@ -1288,6 +1341,544 @@ public class AstToStringBuilder {
             }
             sb.append("PROPERTIES(").append(new PrintableMap<>(stmt.getProperties(), " = ", true, false, true)).append(")");
             return sb.toString();
+        }
+    }
+
+    public static void getDdlStmt(Table table, List<String> createTableStmt, List<String> addPartitionStmt,
+                                  List<String> createRollupStmt, boolean separatePartition,
+                                  boolean hidePassword) {
+        getDdlStmt(null, table, createTableStmt, addPartitionStmt, createRollupStmt, separatePartition, hidePassword);
+    }
+
+    public static void getDdlStmt(String dbName, Table table, List<String> createTableStmt,
+                                  List<String> addPartitionStmt,
+                                  List<String> createRollupStmt, boolean separatePartition, boolean hidePassword) {
+        // 1. create table
+        // 1.1 materialized view
+        if (table.isMaterializedView()) {
+            MaterializedView mv = (MaterializedView) table;
+            createTableStmt.add(mv.getMaterializedViewDdlStmt(true));
+            return;
+        }
+
+        StringBuilder sb = new StringBuilder();
+        // 1.2 view
+        if (table.getType() == Table.TableType.VIEW) {
+            View view = (View) table;
+            sb.append("CREATE VIEW `").append(table.getName()).append("` (");
+            List<String> colDef = Lists.newArrayList();
+            for (Column column : table.getBaseSchema()) {
+                StringBuilder colSb = new StringBuilder();
+                colSb.append("`" + column.getName() + "`");
+                if (!Strings.isNullOrEmpty(column.getComment())) {
+                    colSb.append(" COMMENT ").append("\"").append(column.getDisplayComment()).append("\"");
+                }
+                colDef.add(colSb.toString());
+            }
+            sb.append(Joiner.on(", ").join(colDef));
+            sb.append(")");
+            addTableComment(sb, view);
+
+            sb.append(" AS ").append(view.getInlineViewDef()).append(";");
+            createTableStmt.add(sb.toString());
+            return;
+        }
+
+        // 1.3 other table type
+        sb.append("CREATE ");
+        if (table.getType() == Table.TableType.MYSQL || table.getType() == Table.TableType.ELASTICSEARCH
+                || table.getType() == Table.TableType.BROKER || table.getType() == Table.TableType.HIVE
+                || table.getType() == Table.TableType.HUDI || table.getType() == Table.TableType.ICEBERG
+                || table.getType() == Table.TableType.OLAP_EXTERNAL || table.getType() == Table.TableType.JDBC
+                || table.getType() == Table.TableType.FILE) {
+            sb.append("EXTERNAL ");
+        }
+        sb.append("TABLE ");
+        if (!Strings.isNullOrEmpty(dbName)) {
+            sb.append("`").append(dbName).append("`.");
+        }
+        sb.append("`").append(table.getName()).append("` (\n");
+        int idx = 0;
+        for (Column column : table.getBaseSchema()) {
+            if (idx++ != 0) {
+                sb.append(",\n");
+            }
+            // There MUST BE 2 space in front of each column description line
+            // sqlalchemy requires this to parse SHOW CREATE TABLE stmt.
+            if (table.isOlapOrCloudNativeTable() || table.getType() == Table.TableType.OLAP_EXTERNAL) {
+                OlapTable olapTable = (OlapTable) table;
+                if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
+                    sb.append("  ").append(column.toSqlWithoutAggregateTypeName());
+                } else {
+                    sb.append("  ").append(column.toSql());
+                }
+            } else {
+                sb.append("  ").append(column.toSql());
+            }
+        }
+        if (table.isOlapOrCloudNativeTable() || table.getType() == Table.TableType.OLAP_EXTERNAL) {
+            OlapTable olapTable = (OlapTable) table;
+            if (CollectionUtils.isNotEmpty(olapTable.getIndexes())) {
+                for (Index index : olapTable.getIndexes()) {
+                    sb.append(",\n");
+                    sb.append("  ").append(index.toSql());
+                }
+            }
+        }
+
+        sb.append("\n) ENGINE=");
+        sb.append(table.getType() == Table.TableType.CLOUD_NATIVE ? "OLAP" : table.getType().name()).append(" ");
+
+        if (table.isOlapOrCloudNativeTable() || table.getType() == Table.TableType.OLAP_EXTERNAL) {
+            OlapTable olapTable = (OlapTable) table;
+
+            // keys
+            sb.append("\n").append(olapTable.getKeysType().toSql()).append("(");
+            List<String> keysColumnNames = Lists.newArrayList();
+            for (Column column : olapTable.getBaseSchema()) {
+                if (column.isKey()) {
+                    keysColumnNames.add("`" + column.getName() + "`");
+                }
+            }
+            sb.append(Joiner.on(", ").join(keysColumnNames)).append(")");
+            addTableComment(sb, table);
+
+            // partition
+            PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+            List<Long> partitionId = null;
+            if (separatePartition) {
+                partitionId = Lists.newArrayList();
+            }
+            if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
+                sb.append("\n").append(partitionInfo.toSql(olapTable, partitionId));
+            }
+
+            // distribution
+            DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
+            sb.append("\n").append(distributionInfo.toSql());
+
+            // order by
+            MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
+            if (index.getSortKeyIdxes() != null) {
+                sb.append("\nORDER BY(");
+                List<String> sortKeysColumnNames = Lists.newArrayList();
+                for (Integer i : index.getSortKeyIdxes()) {
+                    sortKeysColumnNames.add("`" + table.getBaseSchema().get(i).getName() + "`");
+                }
+                sb.append(Joiner.on(", ").join(sortKeysColumnNames)).append(")");
+            }
+
+            // properties
+            sb.append("\nPROPERTIES (\n");
+
+            // replicationNum
+            Short replicationNum = olapTable.getDefaultReplicationNum();
+            sb.append("\"").append(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM).append("\" = \"");
+            sb.append(replicationNum).append("\"");
+
+            // bloom filter
+            Set<String> bfColumnNames = olapTable.getCopiedBfColumns();
+            if (bfColumnNames != null) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_BF_COLUMNS)
+                        .append("\" = \"");
+                sb.append(Joiner.on(", ").join(olapTable.getCopiedBfColumns())).append("\"");
+            }
+
+            if (separatePartition) {
+                // version info
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_VERSION_INFO)
+                        .append("\" = \"");
+                Partition partition = null;
+                if (olapTable.getPartitionInfo().getType() == PartitionType.UNPARTITIONED) {
+                    partition = olapTable.getPartition(olapTable.getName());
+                } else {
+                    Preconditions.checkState(partitionId.size() == 1);
+                    partition = olapTable.getPartition(partitionId.get(0));
+                }
+                sb.append(partition.getVisibleVersion()).append("\"");
+            }
+
+            // colocateTable
+            String colocateTable = olapTable.getColocateGroup();
+            if (colocateTable != null) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)
+                        .append("\" = \"");
+                sb.append(colocateTable).append("\"");
+            }
+
+            // dynamic partition
+            if (olapTable.dynamicPartitionExists()) {
+                sb.append(olapTable.getTableProperty().getDynamicPartitionProperty().toString());
+            }
+
+            String partitionDuration = olapTable.getTableProperty()
+                    .getProperties().get(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION);
+            if (partitionDuration != null) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)
+                        .append("\" = \"")
+                        .append(partitionDuration).append("\"");
+            }
+
+            if (olapTable.getAutomaticBucketSize() > 0) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE)
+                        .append("\" = \"")
+                        .append(olapTable.getAutomaticBucketSize()).append("\"");
+            }
+
+            Map<String, String> properties = olapTable.getTableProperty().getProperties();
+            if (table.isCloudNativeTable()) {
+                Map<String, String> storageProperties = olapTable.getProperties();
+
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)
+                        .append("\" = \"");
+                sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)).append("\"");
+
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)
+                        .append("\" = \"");
+                sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)).append("\"");
+
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK)
+                        .append("\" = \"");
+                sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK)).append("\"");
+
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)
+                        .append("\" = \"");
+                sb.append(olapTable.enablePersistentIndex()).append("\"");
+
+                if (olapTable.enablePersistentIndex() && !Strings.isNullOrEmpty(olapTable.getPersistentIndexTypeString())) {
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                            .append(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE)
+                            .append("\" = \"");
+                    sb.append(olapTable.getPersistentIndexTypeString()).append("\"");
+                }
+            } else {
+                // in memory
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_INMEMORY)
+                        .append("\" = \"");
+                sb.append(olapTable.isInMemory()).append("\"");
+
+                // enable_persistent_index
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)
+                        .append("\" = \"");
+                sb.append(olapTable.enablePersistentIndex()).append("\"");
+
+                // replicated_storage
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)
+                        .append("\" = \"");
+                sb.append(olapTable.enableReplicatedStorage()).append("\"");
+
+                // binlog config
+                if (olapTable.containsBinlogConfig()) {
+                    // binlog_version
+                    BinlogConfig binlogConfig = olapTable.getCurBinlogConfig();
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                            .append(PropertyAnalyzer.PROPERTIES_BINLOG_VERSION)
+                            .append("\" = \"");
+                    sb.append(binlogConfig.getVersion()).append("\"");
+                    // binlog_enable
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                            .append(PropertyAnalyzer.PROPERTIES_BINLOG_ENABLE)
+                            .append("\" = \"");
+                    sb.append(binlogConfig.getBinlogEnable()).append("\"");
+                    // binlog_ttl
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                            .append(PropertyAnalyzer.PROPERTIES_BINLOG_TTL)
+                            .append("\" = \"");
+                    sb.append(binlogConfig.getBinlogTtlSecond()).append("\"");
+                    // binlog_max_size
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                            .append(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE)
+                            .append("\" = \"");
+                    sb.append(binlogConfig.getBinlogMaxSize()).append("\"");
+                }
+
+                // write quorum
+                if (olapTable.writeQuorum() != TWriteQuorumType.MAJORITY) {
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)
+                            .append("\" = \"");
+                    sb.append(WriteQuorum.writeQuorumToName(olapTable.writeQuorum())).append("\"");
+                }
+
+                // show fastSchemaEvolution only when it is set true
+                if (olapTable.getUseFastSchemaEvolution()) {
+                    sb.append(",\n\"").append(PropertyAnalyzer.PROPERTIES_USE_FAST_SCHEMA_EVOLUTION).append("\" = \"");
+                    sb.append(olapTable.getUseFastSchemaEvolution()).append("\"");
+                }
+
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
+                            .append("\" = \"");
+                    sb.append(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)).append("\"");
+                }
+
+                String storageCoolDownTTL =
+                        olapTable.getTableProperty().getProperties().get(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL);
+                if (storageCoolDownTTL != null) {
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                            .append(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)
+                            .append("\" = \"")
+                            .append(storageCoolDownTTL).append("\"");
+                }
+
+                // unique constraint
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)
+                        && !Strings.isNullOrEmpty(properties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT))) {
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)
+                            .append("\" = \"");
+                    sb.append(properties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)).append("\"");
+                }
+
+                // foreign key constraint
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
+                        && !Strings.isNullOrEmpty(properties.get(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT))) {
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                            .append(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
+                            .append("\" = \"");
+                    sb.append(ForeignKeyConstraint.getShowCreateTableConstraintDesc(olapTable.getForeignKeyConstraints()))
+                            .append("\"");
+                }
+
+                // store type
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE)) {
+                    if (olapTable.storageType() != null &&
+                            !PROPERTIES_STORAGE_TYPE_COLUMN.equalsIgnoreCase(olapTable.storageType())) {
+                        sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                                .append(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE)
+                                .append("\" = \"");
+
+                        sb.append(olapTable.storageType()).append("\"");
+                    }
+                }
+            }
+
+            // partition live number
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)
+                        .append("\" = \"");
+                sb.append(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)).append("\"");
+            }
+
+            if (olapTable.primaryIndexCacheExpireSec() > 0) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC)
+                        .append("\" = \"");
+                sb.append(olapTable.primaryIndexCacheExpireSec()).append("\"");
+            }
+
+            // compression type
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_COMPRESSION)
+                    .append("\" = \"");
+            if (olapTable.getCompressionType() == TCompressionType.LZ4_FRAME) {
+                sb.append("LZ4").append("\"");
+            } else if (olapTable.getCompressionType() == TCompressionType.LZ4) {
+                sb.append("LZ4").append("\"");
+            } else {
+                sb.append(olapTable.getCompressionType()).append("\"");
+            }
+
+            if (table.getType() == Table.TableType.OLAP_EXTERNAL) {
+                ExternalOlapTable externalOlapTable = (ExternalOlapTable) table;
+                // properties
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("host\" = \"")
+                        .append(externalOlapTable.getSourceTableHost()).append("\"");
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("port\" = \"")
+                        .append(externalOlapTable.getSourceTablePort()).append("\"");
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("user\" = \"")
+                        .append(externalOlapTable.getSourceTableUser()).append("\"");
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("password\" = \"")
+                        .append(hidePassword ? "" : externalOlapTable.getSourceTablePassword())
+                        .append("\"");
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("database\" = \"")
+                        .append(externalOlapTable.getSourceTableDbName()).append("\"");
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("table\" = \"")
+                        .append(externalOlapTable.getSourceTableName()).append("\"");
+            }
+            sb.append("\n)");
+        } else if (table.getType() == Table.TableType.MYSQL) {
+            MysqlTable mysqlTable = (MysqlTable) table;
+            addTableComment(sb, table);
+
+            // properties
+            sb.append("\nPROPERTIES (\n");
+            sb.append("\"host\" = \"").append(mysqlTable.getHost()).append("\",\n");
+            sb.append("\"port\" = \"").append(mysqlTable.getPort()).append("\",\n");
+            sb.append("\"user\" = \"").append(mysqlTable.getUserName()).append("\",\n");
+            sb.append("\"password\" = \"").append(hidePassword ? "" : mysqlTable.getPasswd()).append("\",\n");
+            sb.append("\"database\" = \"").append(mysqlTable.getMysqlDatabaseName()).append("\",\n");
+            sb.append("\"table\" = \"").append(mysqlTable.getMysqlTableName()).append("\"\n");
+            sb.append(")");
+        } else if (table.getType() == Table.TableType.BROKER) {
+            BrokerTable brokerTable = (BrokerTable) table;
+            addTableComment(sb, table);
+
+            // properties
+            sb.append("\nPROPERTIES (\n");
+            sb.append("\"broker_name\" = \"").append(brokerTable.getBrokerName()).append("\",\n");
+            sb.append("\"path\" = \"").append(Joiner.on(",").join(brokerTable.getEncodedPaths())).append("\",\n");
+            sb.append("\"column_separator\" = \"").append(brokerTable.getReadableColumnSeparator()).append("\",\n");
+            sb.append("\"line_delimiter\" = \"").append(brokerTable.getReadableRowDelimiter()).append("\"\n");
+            sb.append(")");
+            if (!brokerTable.getBrokerProperties().isEmpty()) {
+                sb.append("\nBROKER PROPERTIES (\n");
+                sb.append(new PrintableMap<>(brokerTable.getBrokerProperties(), " = ", true, true,
+                        hidePassword).toString());
+                sb.append("\n)");
+            }
+        } else if (table.getType() == Table.TableType.ELASTICSEARCH) {
+            EsTable esTable = (EsTable) table;
+            addTableComment(sb, table);
+
+            // partition
+            PartitionInfo partitionInfo = esTable.getPartitionInfo();
+            if (partitionInfo.getType() == PartitionType.RANGE) {
+                sb.append("\n");
+                sb.append("PARTITION BY RANGE(");
+                idx = 0;
+                RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+                for (Column column : rangePartitionInfo.getPartitionColumns()) {
+                    if (idx != 0) {
+                        sb.append(", ");
+                    }
+                    sb.append("`").append(column.getName()).append("`");
+                }
+                sb.append(")\n()");
+            }
+
+            // properties
+            sb.append("\nPROPERTIES (\n");
+            sb.append("\"hosts\" = \"").append(esTable.getHosts()).append("\",\n");
+            sb.append("\"user\" = \"").append(esTable.getUserName()).append("\",\n");
+            sb.append("\"password\" = \"").append(hidePassword ? "" : esTable.getPasswd()).append("\",\n");
+            sb.append("\"index\" = \"").append(esTable.getIndexName()).append("\",\n");
+            if (esTable.getMappingType() != null) {
+                sb.append("\"type\" = \"").append(esTable.getMappingType()).append("\",\n");
+            }
+            sb.append("\"transport\" = \"").append(esTable.getTransport()).append("\",\n");
+            sb.append("\"enable_docvalue_scan\" = \"").append(esTable.isDocValueScanEnable()).append("\",\n");
+            sb.append("\"max_docvalue_fields\" = \"").append(esTable.maxDocValueFields()).append("\",\n");
+            sb.append("\"enable_keyword_sniff\" = \"").append(esTable.isKeywordSniffEnable()).append("\",\n");
+            sb.append("\"es.nodes.wan.only\" = \"").append(esTable.wanOnly()).append("\"\n");
+            sb.append(")");
+        } else if (table.getType() == Table.TableType.HIVE) {
+            HiveTable hiveTable = (HiveTable) table;
+            addTableComment(sb, table);
+
+            // properties
+            sb.append("\nPROPERTIES (\n");
+            sb.append("\"database\" = \"").append(hiveTable.getDbName()).append("\",\n");
+            sb.append("\"table\" = \"").append(hiveTable.getTableName()).append("\",\n");
+            sb.append("\"resource\" = \"").append(hiveTable.getResourceName()).append("\"");
+            if (!hiveTable.getProperties().isEmpty()) {
+                sb.append(",\n");
+            }
+            sb.append(new PrintableMap<>(hiveTable.getProperties(), " = ", true, true, false).toString());
+            sb.append("\n)");
+        } else if (table.getType() == Table.TableType.FILE) {
+            FileTable fileTable = (FileTable) table;
+            Map<String, String> clonedFileProperties = new HashMap<>(fileTable.getFileProperties());
+            CredentialUtil.maskCredential(clonedFileProperties);
+            addTableComment(sb, table);
+
+            sb.append("\nPROPERTIES (\n");
+            sb.append(new PrintableMap<>(clonedFileProperties, " = ", true, true, false).toString());
+            sb.append("\n)");
+        } else if (table.getType() == Table.TableType.HUDI) {
+            HudiTable hudiTable = (HudiTable) table;
+            addTableComment(sb, table);
+
+            // properties
+            sb.append("\nPROPERTIES (\n");
+            sb.append("\"database\" = \"").append(hudiTable.getDbName()).append("\",\n");
+            sb.append("\"table\" = \"").append(hudiTable.getTableName()).append("\",\n");
+            sb.append("\"resource\" = \"").append(hudiTable.getResourceName()).append("\"");
+            sb.append("\n)");
+        } else if (table.getType() == Table.TableType.ICEBERG) {
+            IcebergTable icebergTable = (IcebergTable) table;
+            addTableComment(sb, table);
+
+            // properties
+            sb.append("\nPROPERTIES (\n");
+            sb.append("\"database\" = \"").append(icebergTable.getRemoteDbName()).append("\",\n");
+            sb.append("\"table\" = \"").append(icebergTable.getRemoteTableName()).append("\",\n");
+            sb.append("\"resource\" = \"").append(icebergTable.getResourceName()).append("\"");
+            sb.append("\n)");
+        } else if (table.getType() == Table.TableType.JDBC) {
+            JDBCTable jdbcTable = (JDBCTable) table;
+            addTableComment(sb, table);
+
+            // properties
+            sb.append("\nPROPERTIES (\n");
+            sb.append("\"resource\" = \"").append(jdbcTable.getResourceName()).append("\",\n");
+            sb.append("\"table\" = \"").append(jdbcTable.getJdbcTable()).append("\"");
+            sb.append("\n)");
+        }
+        sb.append(";");
+
+        createTableStmt.add(sb.toString());
+
+        // 2. add partition
+        if (separatePartition && (table instanceof OlapTable)
+                && ((OlapTable) table).getPartitionInfo().isRangePartition()
+                && table.getPartitions().size() > 1) {
+            OlapTable olapTable = (OlapTable) table;
+            RangePartitionInfo partitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
+            boolean first = true;
+            for (Map.Entry<Long, Range<PartitionKey>> entry : partitionInfo.getSortedRangeMap(false)) {
+                if (first) {
+                    first = false;
+                    continue;
+                }
+                sb = new StringBuilder();
+                Partition partition = olapTable.getPartition(entry.getKey());
+                sb.append("ALTER TABLE ").append(table.getName());
+                sb.append(" ADD PARTITION ").append(partition.getName()).append(" VALUES [");
+                sb.append(entry.getValue().lowerEndpoint().toSql());
+                sb.append(", ").append(entry.getValue().upperEndpoint().toSql()).append(")");
+                sb.append("(\"version_info\" = \"");
+                sb.append(partition.getVisibleVersion()).append("\"");
+                sb.append(");");
+                addPartitionStmt.add(sb.toString());
+            }
+        }
+
+        // 3. rollup
+        if (createRollupStmt != null && (table instanceof OlapTable)) {
+            OlapTable olapTable = (OlapTable) table;
+            for (Map.Entry<Long, MaterializedIndexMeta> entry : olapTable.getIndexIdToMeta().entrySet()) {
+                if (entry.getKey() == olapTable.getBaseIndexId()) {
+                    continue;
+                }
+                MaterializedIndexMeta materializedIndexMeta = entry.getValue();
+                sb = new StringBuilder();
+                String indexName = olapTable.getIndexNameById(entry.getKey());
+                sb.append("ALTER TABLE ").append(table.getName()).append(" ADD ROLLUP ").append(indexName);
+                sb.append("(");
+
+                List<Column> indexSchema = materializedIndexMeta.getSchema();
+                for (int i = 0; i < indexSchema.size(); i++) {
+                    Column column = indexSchema.get(i);
+                    sb.append(column.getName());
+                    if (i != indexSchema.size() - 1) {
+                        sb.append(", ");
+                    }
+                }
+                sb.append(");");
+                createRollupStmt.add(sb.toString());
+            }
+        }
+    }
+
+    private static void addTableComment(StringBuilder sb, Table table) {
+        if (!Strings.isNullOrEmpty(table.getComment())) {
+            sb.append("\nCOMMENT \"").append(table.getDisplayComment()).append("\"");
         }
     }
 }

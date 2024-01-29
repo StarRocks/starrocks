@@ -14,6 +14,11 @@
 
 #include "storage/tablet_updates_test.h"
 
+#include <random>
+
+#include "storage/local_primary_key_recover.h"
+#include "storage/primary_key_dump.h"
+
 namespace starrocks {
 
 static TabletSharedPtr load_same_tablet_from_store(const TabletSharedPtr& tablet) {
@@ -349,6 +354,10 @@ void TabletUpdatesTest::test_writeread(bool enable_persistent_index) {
     ASSERT_EQ(N, read_tablet(_tablet, 3));
     ASSERT_EQ(N, read_tablet(_tablet, 2));
     ASSERT_TRUE(read_with_cancel(_tablet, 4).is_cancelled());
+
+    // get tablet info
+    TTabletInfo tablet_info;
+    _tablet->updates()->get_tablet_info_extra(&tablet_info);
 }
 
 TEST_F(TabletUpdatesTest, writeread) {
@@ -740,6 +749,33 @@ TEST_F(TabletUpdatesTest, remove_expired_versions_with_persistent_index) {
     test_remove_expired_versions(true);
 }
 
+void TabletUpdatesTest::test_pk_dump(size_t rowset_cnt) {
+    PrimaryKeyDumpPB dump_pb;
+    std::string dump_filepath;
+    {
+        // dump primary key tablet
+        PrimaryKeyDump dump(_tablet.get());
+        dump_filepath = dump.dump_filepath();
+        ASSERT_TRUE(dump.dump_filepath().length() > 0);
+        ASSERT_FALSE(dump.dump_file_exist().ok());
+        ASSERT_TRUE(dump.dump().ok());
+        ASSERT_TRUE(dump.dump_file_exist().ok());
+    }
+    {
+        // read primary index dump
+        starrocks::PrimaryKeyDumpPB dump_pb;
+        ASSERT_TRUE(PrimaryKeyDump::read_deserialize_from_file(dump_filepath, &dump_pb).ok());
+        ASSERT_TRUE(PrimaryKeyDump::deserialize_pkcol_pkindex_from_meta(
+                            dump_filepath, dump_pb, [&](const starrocks::Chunk& chunk) {},
+                            [&](const std::string& filename, const starrocks::PartialKVsPB& kvs) {})
+                            .ok());
+        ASSERT_TRUE(dump_pb.tablet_meta().tablet_id() == _tablet->tablet_id());
+        ASSERT_TRUE(dump_pb.tablet_meta().table_id() == _tablet->belonged_table_id());
+        ASSERT_TRUE(dump_pb.rowset_metas_size() == rowset_cnt);
+        ASSERT_TRUE(dump_pb.rowset_stats_size() == rowset_cnt);
+    }
+}
+
 // NOLINTNEXTLINE
 void TabletUpdatesTest::test_apply(bool enable_persistent_index, bool has_merge_condition = false) {
     const int N = 10;
@@ -779,6 +815,7 @@ void TabletUpdatesTest::test_apply(bool enable_persistent_index, bool has_merge_
     for (int i = 2; i <= max_version; i++) {
         ASSERT_EQ(N, read_tablet(_tablet, i));
     }
+    test_pk_dump(rowsets.size());
 }
 
 TEST_F(TabletUpdatesTest, apply) {
@@ -2882,6 +2919,122 @@ TEST_F(TabletUpdatesTest, test_partial_update_with_lsc) {
         ASSERT_EQ(version, _tablet->updates()->version_history_count());
         ASSERT_EQ(N, read_tablet(_tablet, version));
     }
+}
+
+void TabletUpdatesTest::update_and_recover(bool enable_persistent_index) {
+    const int N = 10;
+    _tablet = create_tablet(rand(), rand());
+    _tablet->set_enable_persistent_index(enable_persistent_index);
+    ASSERT_EQ(1, _tablet->updates()->version_history_count());
+
+    std::vector<int64_t> keys(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = i;
+    }
+    std::vector<RowsetSharedPtr> rowsets;
+    rowsets.reserve(64);
+    for (int i = 0; i < 64; i++) {
+        rowsets.emplace_back(create_rowset(_tablet, keys, nullptr, false, false));
+    }
+    auto pool = StorageEngine::instance()->update_manager()->apply_thread_pool();
+    int64_t version = 2;
+    for (int i = 0; i < rowsets.size(); i++) {
+        auto st = _tablet->rowset_commit(version, rowsets[i]);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+        // Ensure that there is at most one thread doing the version apply job.
+        ASSERT_LE(pool->num_threads(), 1);
+        ASSERT_EQ(version, _tablet->updates()->max_version());
+        ASSERT_EQ(version, _tablet->updates()->version_history_count());
+        version++;
+    }
+    ASSERT_EQ(N, read_tablet(_tablet, version - 1));
+    {
+        // Delete [0, 1, 2 ... N/2)
+        Int64Column deletes;
+        deletes.append_numbers(keys.data(), sizeof(int64_t) * keys.size() / 2);
+        ASSERT_TRUE(_tablet->rowset_commit(version, create_rowset(_tablet, {}, &deletes)).ok());
+        version++;
+    }
+    ASSERT_EQ(N / 2, read_tablet(_tablet, version - 1));
+
+    _tablet->updates()->set_error("ut_test");
+    ASSERT_OK(_tablet->updates()->recover());
+    ASSERT_EQ(N / 2, read_tablet(_tablet, version - 1));
+    int64_t old_version = version - 1;
+    // upsert again
+    std::vector<RowsetSharedPtr> rowsets2;
+    rowsets2.reserve(64);
+    for (int i = 0; i < 64; i++) {
+        rowsets2.emplace_back(create_rowset(_tablet, keys, nullptr, false, false));
+    }
+    for (int i = 0; i < rowsets2.size(); i++) {
+        auto st = _tablet->rowset_commit(version, rowsets2[i]);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+        // Ensure that there is at most one thread doing the version apply job.
+        ASSERT_LE(pool->num_threads(), 1);
+        ASSERT_EQ(version, _tablet->updates()->max_version());
+        ASSERT_EQ(version, _tablet->updates()->version_history_count());
+        version++;
+    }
+    ASSERT_EQ(N, read_tablet(_tablet, version - 1));
+    ASSERT_EQ(N / 2, read_tablet(_tablet, old_version));
+}
+
+TEST_F(TabletUpdatesTest, test_update_and_recover) {
+    update_and_recover(true);
+    update_and_recover(false);
+}
+
+TEST_F(TabletUpdatesTest, test_recover_rowset_sorter) {
+    const int N = 10;
+    _tablet = create_tablet(rand(), rand());
+    ASSERT_EQ(1, _tablet->updates()->version_history_count());
+
+    std::vector<int64_t> keys(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = i;
+    }
+    std::vector<int64_t> keys2(N);
+    for (int i = 0; i < N; i++) {
+        keys2[i] = (i + 1) * 1000;
+    }
+    std::vector<RowsetSharedPtr> rowsets;
+    rowsets.reserve(20);
+    for (int i = 0; i < 10; i++) {
+        rowsets.emplace_back(create_rowset(_tablet, keys, nullptr, false, false));
+    }
+    for (int i = 0; i < 10; i++) {
+        rowsets.emplace_back(create_rowset(_tablet, keys2, nullptr, false, false));
+    }
+    auto pool = StorageEngine::instance()->update_manager()->apply_thread_pool();
+    for (int i = 0; i < rowsets.size(); i++) {
+        auto version = i + 2;
+        auto st = _tablet->rowset_commit(version, rowsets[i]);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+        // Ensure that there is at most one thread doing the version apply job.
+        ASSERT_LE(pool->num_threads(), 1);
+        ASSERT_EQ(version, _tablet->updates()->max_version());
+        ASSERT_EQ(version, _tablet->updates()->version_history_count());
+    }
+    ASSERT_EQ(N * 2, read_tablet(_tablet, rowsets.size() + 1));
+    int64_t old_config = config::max_update_compaction_num_singleton_deltas;
+    config::max_update_compaction_num_singleton_deltas = 3;
+    ASSERT_TRUE(_tablet->updates()->compaction(_compaction_mem_tracker.get()).ok());
+    std::random_device rd;
+    std::default_random_engine rng(rd());
+    std::vector<RowsetSharedPtr> latest_rowsets;
+    std::vector<uint32_t> rowset_ids;
+    int64_t latest_applied_major_version;
+    ASSERT_TRUE(_tablet->updates()
+                        ->get_apply_version_and_rowsets(&latest_applied_major_version, &latest_rowsets, &rowset_ids)
+                        .ok());
+    std::shuffle(latest_rowsets.begin(), latest_rowsets.end(), rng);
+    LocalPrimaryKeyRecover::sort_rowsets(&latest_rowsets);
+    ASSERT_TRUE(latest_rowsets.size() == 2);
+    ASSERT_TRUE(latest_rowsets[0]->rowset_meta()->has_max_compact_input_rowset_id());
+    ASSERT_TRUE(latest_rowsets[0]->rowset_meta()->max_compact_input_rowset_id() <
+                latest_rowsets[1]->rowset_meta()->get_rowset_seg_id());
+    config::max_update_compaction_num_singleton_deltas = old_config;
 }
 
 } // namespace starrocks

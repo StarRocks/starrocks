@@ -41,7 +41,7 @@ under the License.
         <iceberg.version>1.4.2</iceberg.version>
         <awsv2.version>2.17.257</awsv2.version>
         <paimon.version>0.6.0-incubating</paimon.version>
-        <staros.version>3.2-rc6</staros.version>
+        <staros.version>3.2-rc7</staros.version>
         <python>python</python>
     </properties>
 
@@ -866,6 +866,12 @@ under the License.
             <artifactId>junit-benchmarks</artifactId>
             <version>0.7.2</version>
             <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.zaxxer</groupId>
+            <artifactId>HikariCP</artifactId>
+            <version>${hikaricp.version}</version>
         </dependency>
     </dependencies>
 

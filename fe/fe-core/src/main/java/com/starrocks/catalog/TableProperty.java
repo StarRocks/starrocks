@@ -212,7 +212,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // foreign key constraint for mv rewrite
     private List<ForeignKeyConstraint> foreignKeyConstraints;
 
-    private Boolean useFastSchemaEvolution;
+    private boolean useFastSchemaEvolution;
 
     private PeriodDuration dataCachePartitionDuration;
 
@@ -300,6 +300,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    // TODO: refactor the postProcessing code into listener-based instead of procedure-oriented
     public TableProperty buildMvProperties() {
         buildPartitionTTL();
         buildPartitionRefreshNumber();
@@ -308,6 +309,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildResourceGroup();
         buildConstraint();
         buildMvSortKeys();
+        buildQueryRewrite();
         return this;
     }
 
@@ -807,7 +809,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
-    public Boolean getUseFastSchemaEvolution() {
+    public boolean getUseFastSchemaEvolution() {
         return useFastSchemaEvolution;
     }
 
@@ -836,19 +838,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildPrimaryIndexCacheExpireSec();
         buildCompressionType();
         buildWriteQuorum();
-        buildPartitionTTL();
         buildPartitionLiveNumber();
-        buildAutoRefreshPartitionsLimit();
-        buildPartitionRefreshNumber();
-        buildExcludedTriggerTables();
         buildReplicatedStorage();
-        buildQueryRewrite();
         buildBucketSize();
         buildBinlogConfig();
         buildBinlogAvailableVersion();
-        buildConstraint();
         buildDataCachePartitionDuration();
         buildUseFastSchemaEvolution();
         buildStorageType();
+        buildMvProperties();
     }
 }

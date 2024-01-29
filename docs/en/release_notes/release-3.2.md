@@ -113,7 +113,7 @@ Added the following functions:
 - hash function: xx_hash3_64
 - Aggregate functions: approx_top_k
 - Window functions: cume_dist, percent_rank and session_number
-- Utility functions: dict_mapping and get_query_profile
+- Utility functions: get_query_profile and is_role_in_session
 
 #### Privileges and security
 
@@ -245,7 +245,6 @@ To be updated.
   - Static parameter `tc_max_total_thread_cache_byte`
 - Default value modifications:
   - The default value of `disable_column_pool` is changed from `false` to `true`.
-  - The default value of `txn_commit_rpc_timeout_ms` is changed from `20000` to `60000`.
   - The default value of `thrift_port` is changed from `9060` to `0`.
   - The default value of `enable_load_colocate_mv` is changed from `false` to `true`.
   - The default value of `enable_pindex_minor_compaction` is changed from `false` to `true`.

@@ -176,7 +176,7 @@ public class OlapTableSink extends DataSink {
         tSink.setMiss_auto_increment_column(missAutoIncrementColumn);
         tSink.setAuto_increment_slot_id(autoIncrementSlotId);
         TransactionState txnState =
-                GlobalStateMgr.getCurrentGlobalTransactionMgr()
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                         .getTransactionState(dbId, txnId);
         if (txnState != null) {
             tSink.setTxn_trace_parent(txnState.getTraceParent());
@@ -468,11 +468,29 @@ public class OlapTableSink extends DataSink {
                         Column column = slotDesc.getColumn();
                         if (column.getName().equalsIgnoreCase(slotRefs.get(0).getColumnName())) {
                             slotRefs.get(0).setDesc(slotDesc);
+                            break;
                         }
                     }
                     partitionParam.setPartition_exprs(Expr.treesToThrift(exprPartitionInfo.getPartitionExprs()));
                 } else if (rangePartitionInfo instanceof ExpressionRangePartitionInfoV2) {
                     ExpressionRangePartitionInfoV2 expressionRangePartitionInfoV2 = (ExpressionRangePartitionInfoV2) rangePartitionInfo;
+                    List<Expr> partitionExprs = expressionRangePartitionInfoV2.getPartitionExprs();
+                    Preconditions.checkArgument(partitionExprs.size() == 1,
+                            "Number of partition expr is not 1 for expression partition table, expr num="
+                                    + partitionExprs.size());
+                    Expr expr = partitionExprs.get(0);
+                    List<SlotRef> slotRefs = Lists.newArrayList();
+                    expr.collect(SlotRef.class, slotRefs);
+                    Preconditions.checkState(slotRefs.size() == 1);
+                    // default slot is table column slot, when there are some expr on column
+                    // the slot desc will change, so we need to reset the slot desc
+                    for (SlotDescriptor slotDesc : tupleDescriptor.getSlots()) {
+                        Column column = slotDesc.getColumn();
+                        if (column.getName().equalsIgnoreCase(slotRefs.get(0).getColumnName())) {
+                            slotRefs.get(0).setDesc(slotDesc);
+                            break;
+                        }
+                    }
                     partitionParam.setPartition_exprs(Expr.treesToThrift(expressionRangePartitionInfoV2.getPartitionExprs()));
                 }
                 break;
@@ -645,8 +663,7 @@ public class OlapTableSink extends DataSink {
         // replica -> path hash
         Multimap<Long, Long> allBePathsMap = HashMultimap.create();
         Map<Long, Long> bePrimaryMap = new HashMap<>();
-        SystemInfoService infoService = GlobalStateMgr.getCurrentState()
-                .getOrCreateSystemInfo(clusterId);
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getOrCreateSystemInfo(clusterId);
         if (partitionParam.getPartitions() == null) {
             return locationParam;
         }
@@ -661,7 +678,7 @@ public class OlapTableSink extends DataSink {
                 for (int idx = 0; idx < index.getTablets().size(); ++idx) {
                     Tablet tablet = index.getTablets().get(idx);
                     if (table.isCloudNativeTableOrMaterializedView()) {
-                        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+                        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
                         long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
                         locationParam.addToTablets(new TTabletLocation(tablet.getId(),
                                 Lists.newArrayList(((LakeTablet) tablet).getPrimaryComputeNodeId(workerGroupId))));
@@ -705,7 +722,8 @@ public class OlapTableSink extends DataSink {
 
         // check if disk capacity reach limit
         // this is for load process, so use high water mark to check
-        Status st = GlobalStateMgr.getCurrentSystemInfo().checkExceedDiskCapacityLimit(allBePathsMap, true);
+        Status st = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                .checkExceedDiskCapacityLimit(allBePathsMap, true);
         if (!st.ok()) {
             throw new DdlException(st.getErrorMsg());
         }

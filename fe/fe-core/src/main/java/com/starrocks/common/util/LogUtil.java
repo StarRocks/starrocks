@@ -50,7 +50,7 @@ public class LogUtil {
                 .setDb(authPacket == null ? "null" : authPacket.getDb())
                 .setState(ctx.getState().toString())
                 .setErrorCode(ctx.getState().getErrorMessage());
-        GlobalStateMgr.getCurrentAuditEventProcessor().handleAuditEvent(builder.build());
+        GlobalStateMgr.getCurrentState().getAuditEventProcessor().handleAuditEvent(builder.build());
 
         QueryDetail queryDetail = new QueryDetail();
         queryDetail.setQueryId(DebugUtil.printId(UUIDUtil.genUUID()));

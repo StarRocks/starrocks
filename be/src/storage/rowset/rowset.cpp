@@ -126,6 +126,11 @@ void Rowset::make_commit(int64_t version, uint32_t rowset_seg_id) {
     make_visible_extra(v);
 }
 
+void Rowset::make_commit(int64_t version, uint32_t rowset_seg_id, uint32_t max_compact_input_rowset_id) {
+    _rowset_meta->set_max_compact_input_rowset_id(max_compact_input_rowset_id);
+    make_commit(version, rowset_seg_id);
+}
+
 std::string Rowset::segment_file_path(const std::string& dir, const RowsetId& rowset_id, int segment_id) {
     return strings::Substitute("$0/$1_$2.dat", dir, rowset_id.to_string(), segment_id);
 }
@@ -677,7 +682,8 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_segment_iterators2(const Schema& schema,
                                                                        const TabletSchemaCSPtr& tablet_schema,
                                                                        KVStore* meta, int64_t version,
-                                                                       OlapReaderStatistics* stats, KVStore* dcg_meta) {
+                                                                       OlapReaderStatistics* stats, KVStore* dcg_meta,
+                                                                       size_t chunk_size) {
     RETURN_IF_ERROR(load());
 
     SegmentReadOptions seg_options;
@@ -690,6 +696,9 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_segment_iterators2(const Sch
     seg_options.tablet_schema = tablet_schema;
     seg_options.delvec_loader = std::make_shared<LocalDelvecLoader>(meta);
     seg_options.dcg_loader = std::make_shared<LocalDeltaColumnGroupLoader>(meta != nullptr ? meta : dcg_meta);
+    if (chunk_size > 0) {
+        seg_options.chunk_size = chunk_size;
+    }
 
     std::vector<ChunkIteratorPtr> seg_iterators(num_segments());
     TabletSegmentId tsid;

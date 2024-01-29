@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.clone;
 
 import com.google.common.collect.Maps;
@@ -30,8 +29,10 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.CreateReplicaTask;
@@ -68,6 +69,12 @@ public class TabletSchedulerTest {
     @Mocked
     GlobalStateMgr globalStateMgr;
 
+    @Mocked
+    private NodeMgr nodeMgr;
+
+    @Mocked
+    private EditLog editLog;
+
     SystemInfoService systemInfoService;
     TabletInvertedIndex tabletInvertedIndex;
     TabletSchedulerStat tabletSchedulerStat;
@@ -86,15 +93,36 @@ public class TabletSchedulerTest {
                 result = globalStateMgr;
                 minTimes = 0;
 
-                GlobalStateMgr.getCurrentSystemInfo();
-                result = systemInfoService;
+                GlobalStateMgr.isCheckpointThread();
                 minTimes = 0;
-
-                GlobalStateMgr.getCurrentInvertedIndex();
-                result = tabletInvertedIndex;
-                minTimes = 0;
+                result = false;
             }
         };
+
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getTabletInvertedIndex();
+                minTimes = 0;
+                result = tabletInvertedIndex;
+
+                globalStateMgr.getNodeMgr();
+                minTimes = 0;
+                result = nodeMgr;
+
+                globalStateMgr.getEditLog();
+                minTimes = 0;
+                result = editLog;
+            }
+        };
+
+        new Expectations(nodeMgr) {
+            {
+                nodeMgr.getClusterInfo();
+                minTimes = 0;
+                result = systemInfoService;
+            }
+        };
+
     }
 
     @Test

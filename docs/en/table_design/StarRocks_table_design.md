@@ -4,6 +4,8 @@ displayed_sidebar: "English"
 
 # Table overview
 
+import Replicanum from '../assets/commonMarkdown/replicanum.md'
+
 Tables are units of data storage. Understanding the table structure in StarRocks and how to design an efficient table structure helps optimize data organization and enhance query efficiency. Also, compared to traditional databases, StarRocks can store complex semi-structured data such as JSON, ARRAY, in a columnar manner to improve query performance.
 
 This topic introduces the table structure in StarRocks from both basic and general perspectives.
@@ -33,11 +35,7 @@ DUPLICATE KEY(uid, name);
 
 The above CREATE TABLE example creates a Duplicate Key table. No constraint is added to columns in this type of table, so duplicate data rows can exist in the table. The first two columns of the Duplicate Key table are specified as sort columns to form the sort key. Data is stored after being sorted based on the sort key, which can accelerate indexing during queries.
 
-:::note
-
-If a StarRocks cluster in a staging environment contains only one BE, the number of replicas can be set to `1` in the `PROPERTIES` clause, such as `PROPERTIES( "replicaton_num" = "1" )`. The default number of replicas is 3, which is also the number recommended for production StarRocks clusters. If you want to use the default number, you do not need to configure the `PROPERTIES`.
-
-:::
+<Replicanum />
 
 Execute [DESCRIBE](../sql-reference/sql-statements/Utility/DESCRIBE.md) to view the table schema.
 
@@ -120,11 +118,11 @@ StarRocks provides two bucketing methods:
 
 In addition to basic data types such as NUMERIC, DATE, and STRING, StarRocks supports complex semi-structured data types, including ARRAY, JSON, MAP, and STRUCT.
 
-### Index
+### [Index](./indexes/indexes_overview.md)
 
 An index is a special data structure and is used as a pointer to data in a table. When the conditional columns in queries are indexed columns, StarRocks can swiftly locate the data that meets the conditions.
 
-StarRocks provides a built-in primary index, which is a prefix index composed of the prefixes of the table's sort key columns. StarRocks also allows you to create secondary indexes, including Bitmap and Bloom Filter indexes, to further enhance query efficiency.
+StarRocks provides built-in indexes: Prefix indexes, Ordinal indexes, and ZoneMap indexes. StarRocks also allows users to create indexes, that is, Bitmap indexes and Bloom Filter indexes, to further enhance query efficiency.
 
 
 ### Constraints

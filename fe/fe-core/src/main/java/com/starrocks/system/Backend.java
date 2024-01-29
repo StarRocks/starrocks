@@ -223,7 +223,7 @@ public class Backend extends ComputeNode {
             }
             if (allPathHashUpdated) {
                 initPathInfo = true;
-                GlobalStateMgr.getCurrentSystemInfo()
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                         .updatePathInfo(new ArrayList<>(disksRef.values()), Lists.newArrayList());
             }
         }
@@ -293,7 +293,7 @@ public class Backend extends ComputeNode {
         if (isChanged) {
             // update disksRef
             disksRef = new ConcurrentHashMap<>(newDiskInfos);
-            GlobalStateMgr.getCurrentSystemInfo().updatePathInfo(addedDisks, removedDisks);
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updatePathInfo(addedDisks, removedDisks);
             // log disk changing
             GlobalStateMgr.getCurrentState().getEditLog().logBackendStateChange(this);
         }

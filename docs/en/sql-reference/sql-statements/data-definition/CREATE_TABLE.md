@@ -97,7 +97,7 @@ This aggregation type applies ONLY to the Aggregate table whose key_desc type is
 
 ### index_definition
 
-You can only create bitmap indexes when you create tables. For more information about parameter descriptions and usage notes, see [Bitmap indexing](../../../using_starrocks/Bitmap_index.md#create-a-bitmap-index).
+You can only create bitmap indexes when you create tables. For more information about parameter descriptions and usage notes, see [Bitmap indexing](../../../table_design/indexes/Bitmap_index.md#create-a-bitmap-index).
 
 ```SQL
 INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] COMMENT 'xxxxxx'
@@ -333,7 +333,7 @@ StarRocks supports hash bucketing and random bucketing. If you do not configure 
 
 - Random bucketing (since v3.1)
 
-  For data in a partition, StarRocks distributes the data randomly across all buckets, which is not based on specific column values. And if you want StarRocks to automatically determine the number of buckets, you do not need to specify any bucketing configurations. If you choose to manually specify the number of buckets, the syntax is as follows:
+  For data in a partition, StarRocks distributes the data randomly across all buckets, which is not based on specific column values. And if you want StarRocks to automatically set the number of buckets, you do not need to specify any bucketing configurations. If you choose to manually specify the number of buckets, the syntax is as follows:
 
   ```SQL
   DISTRIBUTED BY RANDOM BUCKETS <num>
@@ -469,7 +469,7 @@ The following limits apply when you use bloom filter index:
 - TINYINT, FLOAT, DOUBLE, and DECIMAL columns do not support creating bloom filter indexes.
 - Bloom filter indexes can only improve the performance of queries that contain the `in` and `=` operators, such as `Select xxx from table where x in {}` and `Select xxx from table where column = xxx`. More discrete values in this column will result in more precise queries.
 
-For more information, see [Bloom filter indexing](../../../using_starrocks/Bloomfilter_index.md)
+For more information, see [Bloom filter indexing](../../../table_design/indexes/Bloomfilter_index.md)
 
 ```SQL
 PROPERTIES (

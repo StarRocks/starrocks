@@ -66,7 +66,7 @@ public class SubfieldExprNoCopyRule implements TreeRewriteRule {
                 if (value instanceof SubfieldOperator && value.getChild(0) instanceof ColumnRefOperator) {
                     SubfieldOperator subfield = value.cast();
                     ColumnRefOperator col = value.getChild(0).cast();
-                    SubfieldExpressionCollector collector = new SubfieldExpressionCollector();
+                    SubfieldExpressionCollector collector = new SubfieldExpressionCollector(false);
                     // collect other expr that used the same root slot
                     for (int j = 0; j < projectMapValues.size(); j++) {
                         if (j != i && projectMapValues.get(j).getUsedColumns().contains(col)) {

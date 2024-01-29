@@ -412,9 +412,10 @@ jobs:
     needs: [ deploy, SQL-Tester, admit, be-ut, fe-ut ]
     if: always()
     env:
-      BRANCH: ${{ github.base_ref }}
+      BRANCH: ${{ needs.deploy.outputs.branch }}
       CONF_FILE: ${{ needs.deploy.outputs.deploy_conf_file }}
       GH_TOKEN: ${{ github.token }}
+      PR_NUMBER: ${{ needs.deploy.outputs.pr_number }}
     steps:
       - name: Backup SR Info
         if: needs.deploy.outputs.deploy_conf_file != ''
@@ -424,6 +425,7 @@ jobs:
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           cp -f $CONF_FILE ./conf/starrocks_deploy.conf
           cat ./conf/starrocks_deploy.conf
+          ./bin/backup_log_cores.sh --branch "$BRANCH" --pr "$PR_NUMBER" --build Release --conf "$CONF_FILE" --repository ${{ github.repository }}
 
       - name: Clean ECS
         if: steps.backup.outcome == 'success'
@@ -432,7 +434,7 @@ jobs:
           ADMIT_RESULT: ${{ needs.admit.result }}
         run: |
           cd ci-tool && source lib/init.sh
-          ./bin/elastic-cluster.sh --renew 0.5
+          ./bin/elastic-cluster.sh --delete
 
       - name: save unstable cases
         if: always() && github.event_name == 'schedule' && steps.backup.outcome == 'success'

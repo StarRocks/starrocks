@@ -130,6 +130,12 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                     config::update_memory_limit_percent);
 #endif
         });
+        _config_callback.emplace("dictionary_cache_refresh_threadpool_size", [&]() {
+            if (_exec_env->dictionary_cache_pool() != nullptr) {
+                (void)_exec_env->dictionary_cache_pool()->update_max_threads(
+                        config::dictionary_cache_refresh_threadpool_size);
+            }
+        });
         _config_callback.emplace("transaction_publish_version_worker_count", [&]() {
             auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::PUBLISH_VERSION);
             (void)thread_pool->update_max_threads(
@@ -138,6 +144,10 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         _config_callback.emplace("parallel_clone_task_per_path", [&]() {
             _exec_env->agent_server()->update_max_thread_by_type(TTaskType::CLONE,
                                                                  config::parallel_clone_task_per_path);
+        });
+        _config_callback.emplace("replication_threads", [&]() {
+            _exec_env->agent_server()->update_max_thread_by_type(TTaskType::REPLICATE_SNAPSHOT,
+                                                                 config::replication_threads);
         });
         _config_callback.emplace("alter_tablet_worker_count", [&]() {
             _exec_env->agent_server()->update_max_thread_by_type(TTaskType::ALTER, config::alter_tablet_worker_count);

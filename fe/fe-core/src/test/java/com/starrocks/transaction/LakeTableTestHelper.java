@@ -41,7 +41,7 @@ public class LakeTableTestHelper {
 
     LakeTable buildLakeTable() {
         MaterializedIndex index = new MaterializedIndex(indexId);
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (long id : tabletId) {
             TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, 0, 0, TStorageMedium.HDD, true);
             invertedIndex.addTablet(id, tabletMeta);
@@ -57,9 +57,9 @@ public class LakeTableTestHelper {
     }
 
     DatabaseTransactionMgr addDatabaseTransactionMgr() {
-        GlobalStateMgr.getCurrentGlobalTransactionMgr().addDatabaseTransactionMgr(dbId);
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().addDatabaseTransactionMgr(dbId);
         try {
-            return GlobalStateMgr.getCurrentGlobalTransactionMgr().getDatabaseTransactionMgr(dbId);
+            return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getDatabaseTransactionMgr(dbId);
         } catch (AnalysisException e) {
             throw new RuntimeException(e);
         }

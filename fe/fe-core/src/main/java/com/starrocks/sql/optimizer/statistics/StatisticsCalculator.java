@@ -568,7 +568,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             }
             String partitionColumn = olapTable.getPartitionColumnNames().get(0);
             ColumnStatistic partitionColumnStatistic =
-                    GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistic(olapTable, partitionColumn);
+                    GlobalStateMgr.getCurrentState().getStatisticStorage().getColumnStatistic(olapTable, partitionColumn);
 
             if (optimizerContext.getDumpInfo() != null) {
                 optimizerContext.getDumpInfo().addTableStatistics(olapTable, partitionColumn, partitionColumnStatistic);

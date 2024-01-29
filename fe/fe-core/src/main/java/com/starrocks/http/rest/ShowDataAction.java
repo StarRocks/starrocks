@@ -37,12 +37,12 @@ package com.starrocks.http.rest;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -86,7 +86,7 @@ public class ShowDataAction extends RestBaseAction {
     @Override
     public void execute(BaseRequest request, BaseResponse response) {
         String dbName = request.getSingleParameter("db");
-        ConcurrentHashMap<String, Database> fullNameToDb = GlobalStateMgr.getCurrentState().getFullNameToDb();
+        ConcurrentHashMap<String, Database> fullNameToDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getFullNameToDb();
         long totalSize = 0;
         if (dbName != null) {
             Database db = fullNameToDb.get(dbName);

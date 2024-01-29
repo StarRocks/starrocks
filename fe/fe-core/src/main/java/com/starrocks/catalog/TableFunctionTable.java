@@ -305,9 +305,9 @@ public class TableFunctionTable extends Table {
             return Lists.newArrayList();
         }
         TNetworkAddress address;
-        List<Long> nodeIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
+        List<Long> nodeIds = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true);
         if (RunMode.isSharedDataMode()) {
-            nodeIds.addAll(GlobalStateMgr.getCurrentSystemInfo().getComputeNodeIds(true));
+            nodeIds.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodeIds(true));
         }
         if (nodeIds.isEmpty()) {
             if (RunMode.isSharedNothingMode()) {
@@ -318,7 +318,7 @@ public class TableFunctionTable extends Table {
         }
 
         Collections.shuffle(nodeIds);
-        ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeIds.get(0));
+        ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeIds.get(0));
         address = new TNetworkAddress(node.getHost(), node.getBrpcPort());
 
         PGetFileSchemaResult result;

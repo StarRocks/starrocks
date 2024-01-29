@@ -14,11 +14,15 @@
 
 #include "table_function_table_sink_operator.h"
 
+#include <boost/algorithm/string.hpp>
+
 #include "formats/parquet/file_writer.h"
 #include "glog/logging.h"
 #include "util/url_coding.h"
 
 namespace starrocks::pipeline {
+
+static const std::string PARQUET_FORMAT = "parquet";
 
 // TODO(letian-jiang): optimize
 StatusOr<std::string> column_to_string(const TypeDescriptor& type_desc, const ColumnPtr& column) {
@@ -147,7 +151,7 @@ Status TableFunctionTableSinkOperator::push_chunk(RuntimeState* state, const Chu
     if (_partition_exprs.empty()) {
         if (_partition_writers.empty()) {
             auto writer = std::make_unique<RollingAsyncParquetWriter>(_make_table_info(_path), _output_exprs,
-                                                                      _common_metrics.get(), add_commit_info, state,
+                                                                      _unique_metrics.get(), add_commit_info, state,
                                                                       _driver_sequence);
             RETURN_IF_ERROR(writer->init());
             _partition_writers.insert({"default writer", std::move(writer)});
@@ -167,7 +171,7 @@ Status TableFunctionTableSinkOperator::push_chunk(RuntimeState* state, const Chu
     // create writer for current partition if not exists
     if (partition_writer == _partition_writers.end()) {
         auto writer = std::make_unique<RollingAsyncParquetWriter>(_make_table_info(partition_location), _output_exprs,
-                                                                  _common_metrics.get(), add_commit_info, state,
+                                                                  _unique_metrics.get(), add_commit_info, state,
                                                                   _driver_sequence);
         RETURN_IF_ERROR(writer->init());
         RETURN_IF_ERROR(writer->append_chunk(chunk.get(), state));
@@ -216,7 +220,7 @@ Status TableFunctionTableSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::prepare(_partition_exprs, state));
     RETURN_IF_ERROR(Expr::open(_partition_exprs, state));
 
-    if (_file_format == "parquet") {
+    if (boost::algorithm::iequals(_file_format, PARQUET_FORMAT)) {
         auto result = parquet::ParquetBuildHelper::make_schema(
                 _column_names, _output_exprs, std::vector<parquet::FileColumnId>(_output_exprs.size()));
         if (!result.ok()) {
@@ -224,7 +228,7 @@ Status TableFunctionTableSinkOperatorFactory::prepare(RuntimeState* state) {
         }
         _parquet_file_schema = result.ValueOrDie();
     } else {
-        return Status::InternalError("unsupported file format" + _file_format);
+        return Status::InternalError("unsupported file format: " + _file_format);
     }
 
     return Status::OK();

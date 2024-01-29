@@ -158,7 +158,6 @@ public class Task implements Writable {
     }
 
     public void setProperties(Map<String, String> properties) {
-        ;
         this.properties = properties;
     }
 

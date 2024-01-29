@@ -62,7 +62,7 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
                 "                );");
         String sql = "CREATE MATERIALIZED VIEW sync_mv1 AS select a, b*10 as col2, c+1 as col3 from sync_tbl_t1;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().createMaterializedView((CreateMaterializedViewStmt) statementBase);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView((CreateMaterializedViewStmt) statementBase);
         waitingRollupJobV2Finish();
         String query = "select a, b*10 as col2, c+1 as col3 from sync_tbl_t1 order by a;";
         String plan = getFragmentPlan(query);
@@ -169,6 +169,8 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
                 "FROM t1_agg AS t1_17 " +
                 "GROUP BY t1_17.c_1_0, t1_17.c_1_1 ORDER BY t1_17.c_1_0 DESC, t1_17.c_1_1 ASC");
 
+        // NOTE: change `selectBestRowCountIndex` to prefer non-baseIndexId so can choose the mv for
+        // mv's rowCount and columnSize is the same with the base table.
         {
             String query = "select * from t1_agg";
             String plan = UtFrameUtils.getVerboseFragmentPlan(connectContext, query);

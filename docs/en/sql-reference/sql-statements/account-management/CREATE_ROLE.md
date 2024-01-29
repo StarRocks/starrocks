@@ -4,11 +4,13 @@ displayed_sidebar: "English"
 
 # CREATE ROLE
 
+import UserManagementPriv from '../../../assets/commonMarkdown/userManagementPriv.md'
+
 ## Description
 
 Creates a role. After a role is created, you can grant privileges to the role and then assign this role to a user or another role. This way, the privileges associated with this role are passed on to users or roles.
 
-Only users with the `user_admin` role or the `GRANT` privilege can create a role.
+<UserManagementPriv />
 
 ## Syntax
 
