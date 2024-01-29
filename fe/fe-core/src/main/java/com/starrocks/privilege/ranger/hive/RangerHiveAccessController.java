@@ -67,6 +67,13 @@ public class RangerHiveAccessController extends RangerAccessController {
     public HiveAccessType convertToAccessType(PrivilegeType privilegeType) {
         if (privilegeType == PrivilegeType.SELECT) {
             return HiveAccessType.SELECT;
+        } else if (privilegeType == PrivilegeType.INSERT) {
+            return HiveAccessType.UPDATE;
+        } else if (privilegeType == PrivilegeType.CREATE_DATABASE
+                || privilegeType == PrivilegeType.CREATE_TABLE) {
+            return HiveAccessType.CREATE;
+        } else if (privilegeType == PrivilegeType.DROP) {
+            return HiveAccessType.DROP;
         } else {
             return HiveAccessType.NONE;
         }
