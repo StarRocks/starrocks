@@ -29,10 +29,10 @@ You can benefit from bitmap indexes in the following aspects:
 
 - You can create a bitmap index for a column that can be filtered by using the equal (`=`) or [NOT] IN operator.
 - You can create bitmap indexes for all columns of a Duplicate Key table or Unique Key table. For an Aggregate table or Primary Key table, you can only create bitmap indexes for key columns.
-- Bitmap indexes can be created for the columns of the following  types:
+- Bitmap indexes can be created for columns of the following data types:
     - Numeric types: TINYINT, SMALLINT, INT, BITGINT, LARGEINT, DECIMAL, and BOOLEAN.
     - String types: CHAR, STRING, and VARCHAR.
-    - Date types: DATE, DATETIME.
+    - Date types: DATE and DATETIME.
     - Other types: HLL.
 - You can check whether a query uses bitmap indexes by viewing the `BitmapIndexFilterRows` field of the query's profile.
 
