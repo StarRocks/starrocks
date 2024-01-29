@@ -25,10 +25,10 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.ListComparator;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.epack.warehouse.WarehouseUnavailableException;
 import com.starrocks.lake.LakeTablet;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -163,6 +163,7 @@ public class LakeTabletsProcDir implements ProcDirInterface {
     // Handle showing single tablet info
     public static class LakeTabletProcNode implements ProcNodeInterface {
         private final LakeTablet tablet;
+
         public LakeTabletProcNode(LakeTablet tablet) {
             this.tablet = tablet;
         }

@@ -62,11 +62,11 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.lake.LakeTable;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.MaterializedViewMetricsEntity;
 import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
@@ -179,6 +179,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     public MvTaskRunContext getMvContext() {
         return mvContext;
     }
+
     @VisibleForTesting
     public void setMvContext(MvTaskRunContext mvContext) {
         this.mvContext = mvContext;
@@ -452,6 +453,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
      * Change default connect context when for mv refresh this is because:
      * - MV Refresh may take much resource to load base tables' data into the final materialized view.
      * - Those changes are set by default and also able to be changed by users for their needs.
+     *
      * @param mvConnectCtx
      */
     private void changeDefaultConnectContextIfNeeded(ConnectContext mvConnectCtx) {
@@ -715,8 +717,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
      * Update materialized view partition to ref base table partition names meta, this is used in base table's partition
      * changes.
      * eg:
-     *  base table has dropped one partitioned, we can only drop the vesion map of associated materialized view's
-     *  partitions rather than the whole table.
+     * base table has dropped one partitioned, we can only drop the vesion map of associated materialized view's
+     * partitions rather than the whole table.
      */
     private void updateAssociatedPartitionMeta(MaterializedView.AsyncRefreshContext refreshContext,
                                                Set<String> mvRefreshedPartitions,
@@ -929,7 +931,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
     /**
      * return the ref base table and column that materialized view's partition column
-     *  derives from if it exists, otherwise return null.
+     * derives from if it exists, otherwise return null.
      */
     private Pair<Table, Column> getRefBaseTableAndPartitionColumn(Map<Long, TableSnapshotInfo> tableSnapshotInfos) {
         SlotRef slotRef = MaterializedView.getRefBaseTablePartitionSlotRef(materializedView);
@@ -1148,6 +1150,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
     /**
      * Update task run status's extra message to add more information for information_schema if possible.
+     *
      * @param action
      */
     private void updateTaskRunStatus(Consumer<TaskRunStatus> action) {
@@ -1157,10 +1160,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     }
 
     /**
-     * @param mvPartitionInfo   : materialized view's partition info
-     * @param start             : materialized view's refresh start in this task run
-     * @param end               : materialized view's refresh end in this task run
-     * @param force             : whether this task run is force or not
+     * @param mvPartitionInfo : materialized view's partition info
+     * @param start           : materialized view's refresh start in this task run
+     * @param end             : materialized view's refresh end in this task run
+     * @param force           : whether this task run is force or not
      * @return
      * @throws AnalysisException
      */
@@ -1318,9 +1321,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     }
 
     /**
-     *
      * @param basePartitionNames : ref base table partition names to check.
-     * @return                   : Return mv corresponding partition names to the ref base table partition names.
+     * @return : Return mv corresponding partition names to the ref base table partition names.
      */
     private Set<String> getMVPartitionNamesByBasePartitionNames(Table baseTable, Set<String> basePartitionNames) {
         Set<String> result = Sets.newHashSet();
@@ -1342,7 +1344,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
     /**
      * @param mvPartitionNames : the need to refresh materialized view partition names
-     * @return                 : the corresponding ref base table partition names to the materialized view partition names
+     * @return : the corresponding ref base table partition names to the materialized view partition names
      */
     private Map<Table, Set<String>> getBasePartitionNamesByMVPartitionNames(Set<String> mvPartitionNames) {
         Map<Table, Set<String>> result = new HashMap<>();
@@ -1482,6 +1484,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
     /**
      * Check whether to push down predicate expr with the slot refs into the scope.
+     *
      * @param slots : slot refs that are contained in the predicate expr
      * @param scope : scope that try to push down into.
      * @return
@@ -1493,9 +1496,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     /**
      * Generate partition predicates to refresh the materialized view so can be refreshed by the incremental partitions.
      *
-     * @param tablePartitionNames           : the need pruned partition tables of the ref base table
-     * @param queryStatement                : the materialized view's defined query statement
-     * @param mvPartitionInfo               : the materialized view's partition information
+     * @param tablePartitionNames : the need pruned partition tables of the ref base table
+     * @param queryStatement      : the materialized view's defined query statement
+     * @param mvPartitionInfo     : the materialized view's partition information
      * @return
      * @throws AnalysisException
      */
@@ -1925,13 +1928,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
     /**
      * For external table, the partition name is normalized which should convert it into original partition name.
-     *
+     * <p>
      * For multi-partition columns, `refTableAndPartitionNames` is not fully exact to describe which partitions
-     *  of ref base table are refreshed, use `getSelectedPartitionInfosOfExternalTable` later if we can solve the multi
+     * of ref base table are refreshed, use `getSelectedPartitionInfosOfExternalTable` later if we can solve the multi
      * partition columns problem.
      * eg:
-     *  partitionName1 : par_col=0/par_date=2020-01-01 => p20200101
-     *  partitionName2 : par_col=1/par_date=2020-01-01 => p20200101
+     * partitionName1 : par_col=0/par_date=2020-01-01 => p20200101
+     * partitionName2 : par_col=1/par_date=2020-01-01 => p20200101
      */
     private Set<String> convertMVPartitionNameToRealPartitionName(Table table, String mvPartitionName) {
         if (!table.isNativeTableOrMaterializedView()) {
@@ -2036,10 +2039,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     }
 
     /**
-     * @param table                     : input table to collect refresh partition infos
-     * @param selectedPartitionNames    : input table refreshed partition names
-     * @param baseTableInfo             : input table's base table info
-     * @return                          : return the given table's refresh partition infos
+     * @param table                  : input table to collect refresh partition infos
+     * @param selectedPartitionNames : input table refreshed partition names
+     * @param baseTableInfo          : input table's base table info
+     * @return : return the given table's refresh partition infos
      */
     private Map<String, MaterializedView.BasePartitionInfo> getSelectedPartitionInfos(Table table,
                                                                                       List<String> selectedPartitionNames,

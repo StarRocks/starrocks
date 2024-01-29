@@ -318,6 +318,11 @@ public enum ErrorCode {
     ERR_ACCESS_DENIED_FOR_EXTERNAL_ACCESS_CONTROLLER(5204, new byte[] {'4', '2', '0', '0', '0'},
             "Access denied; you need (at least one of) the %s privilege(s) on %s%s for this operation."),
 
+    /**
+     * 5300 - 5399: Lock and Transaction
+     */
+    ERR_LOCK_ERROR(5300, new byte[] {'5', '5', 'P', '0', '3'}, "Attempt to acquire lock fail : %s"),
+
     // warehouse
     ERR_UNKNOWN_WAREHOUSE(10001, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse '%s' not exist."),
     ERR_WAREHOUSE_EXISTS(10002, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse '%s' already exists."),
@@ -329,7 +334,6 @@ public enum ErrorCode {
 
     ERR_NOT_SUPPORTED_STATEMENT_IN_SHARED_NOTHING_MODE(10007, new byte[] {'4', '2', '0', '0', '0'},
             "unsupported statement in shared_nothing mode");
-
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {
         this.code = code;

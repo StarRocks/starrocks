@@ -198,7 +198,6 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDatetimeOrNull(date.getDatetime().plusSeconds(second.getInt()));
     }
 
-
     @ConstantFunction.List(list = {
             @ConstantFunction(name = "date_trunc", argTypes = {VARCHAR, DATETIME}, returnType = DATETIME, isMonotonic = true),
             @ConstantFunction(name = "date_trunc", argTypes = {VARCHAR, DATE}, returnType = DATE, isMonotonic = true)
@@ -518,7 +517,7 @@ public class ScalarOperatorFunctions {
         Instant instant = connectContext.getStartTimeInstant();
         int factor = NOW_PRECISION_FACTORS[fspVal - 1];
         LocalDateTime startTime = Instant.ofEpochSecond(
-                instant.getEpochSecond(), instant.getNano() / factor * factor)
+                        instant.getEpochSecond(), instant.getNano() / factor * factor)
                 .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
         return ConstantOperator.createDatetimeOrNull(startTime);
     }

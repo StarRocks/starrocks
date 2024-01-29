@@ -126,6 +126,8 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.CountingLatch;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -142,8 +144,6 @@ import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.load.pipe.PipeManager;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.AddPartitionsInfoV2;
 import com.starrocks.persist.AddSubPartitionsInfoV2;
 import com.starrocks.persist.AutoIncrementInfo;
@@ -1140,10 +1140,10 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     private List<Pair<Partition, PartitionDesc>> createPartitionMap(Database db, OlapTable copiedTable,
-                                                             List<PartitionDesc> partitionDescs,
-                                                             HashMap<String, Set<Long>> partitionNameToTabletSet,
-                                                             Set<Long> tabletIdSetForAll,
-                                                             Set<String> existPartitionNameSet)
+                                                                    List<PartitionDesc> partitionDescs,
+                                                                    HashMap<String, Set<Long>> partitionNameToTabletSet,
+                                                                    Set<Long> tabletIdSetForAll,
+                                                                    Set<String> existPartitionNameSet)
             throws DdlException {
         List<Pair<Partition, PartitionDesc>> partitionList = Lists.newArrayList();
         for (PartitionDesc partitionDesc : partitionDescs) {
@@ -5302,7 +5302,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 olapTable.replacePartition(replaceTempPartitionLog.getPartitions().get(0),
                         replaceTempPartitionLog.getTempPartitions().get(0));
                 return;
-            } 
+            }
             olapTable.replaceTempPartitions(replaceTempPartitionLog.getPartitions(),
                     replaceTempPartitionLog.getTempPartitions(),
                     replaceTempPartitionLog.isStrictRange(),

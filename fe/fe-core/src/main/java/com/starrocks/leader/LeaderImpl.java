@@ -73,6 +73,8 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.epack.thrift.TFailoverGroupHandshakeRequest;
 import com.starrocks.epack.thrift.TFailoverGroupHandshakeResponse;
 import com.starrocks.epack.thrift.TFailoverGroupRequestMetaRequest;
@@ -81,8 +83,6 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.DeleteJob;
 import com.starrocks.load.OlapDeleteJob;
 import com.starrocks.load.loadv2.SparkLoadJob;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -257,13 +257,13 @@ public class LeaderImpl {
                         PushTask pushTask = (PushTask) task;
                         if (pushTask.getPushType() == TPushType.DELETE) {
                             LOG.info("remove push replica. tabletId: {}, backendId: {}", task.getSignature(),
-                                     pushTask.getBackendId());
+                                    pushTask.getBackendId());
 
                             String failMsg = "Backend: " + task.getBackendId() + "Tablet: " + pushTask.getTabletId() +
-                                             " error msg: " + taskStatus.getError_msgs().toString();
+                                    " error msg: " + taskStatus.getError_msgs().toString();
                             pushTask.countDownLatch(pushTask.getBackendId(), pushTask.getTabletId(), failMsg);
-                            AgentTaskQueue.removeTask(pushTask.getBackendId(), TTaskType.REALTIME_PUSH, 
-                                                      task.getSignature());
+                            AgentTaskQueue.removeTask(pushTask.getBackendId(), TTaskType.REALTIME_PUSH,
+                                    task.getSignature());
                         }
                     }
                     return result;
@@ -1358,7 +1358,7 @@ public class LeaderImpl {
         }
     }
 
-    public TFailoverGroupHandshakeResponse failoverGroupHandshake(TFailoverGroupHandshakeRequest request) 
+    public TFailoverGroupHandshakeResponse failoverGroupHandshake(TFailoverGroupHandshakeRequest request)
             throws TException {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         // if current node is follower, forward it to leader
@@ -1395,7 +1395,7 @@ public class LeaderImpl {
         }
     }
 
-    public TFailoverGroupRequestMetaResponse failoverGroupRequestMeta(TFailoverGroupRequestMetaRequest request) 
+    public TFailoverGroupRequestMetaResponse failoverGroupRequestMeta(TFailoverGroupRequestMetaRequest request)
             throws TException {
         try {
             return GlobalStateMgr.getCurrentState().getFailoverGroupMgr().handleRequestMetaRequest(request);

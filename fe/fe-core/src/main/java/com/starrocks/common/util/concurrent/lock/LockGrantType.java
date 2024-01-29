@@ -11,10 +11,24 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package com.starrocks.meta.lock;
 
-public class NotSupportLockException extends RuntimeException {
-    public NotSupportLockException() {
-        super("Lock operations under the new framework are currently not supported.");
-    }
+package com.starrocks.common.util.concurrent.lock;
+
+public enum LockGrantType {
+
+    /**
+     * The locker did not previously own a lock on the node, and a new lock has been granted.
+     */
+    NEW,
+
+    /**
+     * The locker did not previously own a lock, and must wait for
+     * a new lock because a conflicting lock is held by another locker.
+     */
+    WAIT,
+
+    /**
+     * The locker already owns the requested lock, just increment the reference count
+     */
+    EXISTING,
 }
