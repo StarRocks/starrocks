@@ -68,8 +68,8 @@ public:
     starrocks::lake::TabletManager* _tablet_manager{nullptr};
     std::string _test_dir;
     lake::LocationProvider* _location_provider{nullptr};
-    std::unique_ptr<lake::UpdateManager> _update_manager;
     std::unique_ptr<MemTracker> _mem_tracker;
+    std::unique_ptr<lake::UpdateManager> _update_manager;
 };
 
 // NOLINTNEXTLINE
