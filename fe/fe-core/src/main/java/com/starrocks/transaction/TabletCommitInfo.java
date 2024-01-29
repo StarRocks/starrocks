@@ -93,6 +93,9 @@ public class TabletCommitInfo implements Writable {
     @NotNull
     public static List<TabletCommitInfo> fromThrift(List<TTabletCommitInfo> tTabletCommitInfos) {
         List<TabletCommitInfo> commitInfos = Lists.newArrayList();
+        if (tTabletCommitInfos == null) {
+            return commitInfos;
+        }
         for (TTabletCommitInfo tTabletCommitInfo : tTabletCommitInfos) {
             if (tTabletCommitInfo.isSetInvalid_dict_cache_columns()) {
                 commitInfos.add(new TabletCommitInfo(tTabletCommitInfo.getTabletId(),

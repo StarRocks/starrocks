@@ -82,6 +82,7 @@ import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -470,7 +471,9 @@ public class DatabaseTransactionMgr {
      * @param reason        abort reason
      */
     public void abortTransaction(long transactionId, boolean abortPrepared, String reason,
-                                 TxnCommitAttachment txnCommitAttachment, List<TabletFailInfo> failedTablets)
+                                 TxnCommitAttachment txnCommitAttachment,
+                                 List<TabletCommitInfo> finishedTablets,
+                                 List<TabletFailInfo> failedTablets)
             throws UserException {
         if (transactionId < 0) {
             LOG.info("transaction id is {}, less than 0, maybe this is an old type load job, ignore abort operation",
@@ -524,7 +527,7 @@ public class DatabaseTransactionMgr {
             }
             TransactionStateListener listener = stateListenerFactory.create(this, table);
             if (listener != null) {
-                listener.postAbort(transactionState, failedTablets);
+                listener.postAbort(transactionState, finishedTablets, failedTablets);
             }
         }
     }
@@ -1261,7 +1264,8 @@ public class DatabaseTransactionMgr {
 
     public void abortTransaction(long transactionId, String reason, TxnCommitAttachment txnCommitAttachment)
             throws UserException {
-        abortTransaction(transactionId, true, reason, txnCommitAttachment, Lists.newArrayList());
+        abortTransaction(transactionId, true, reason, txnCommitAttachment,
+                Collections.emptyList(), Collections.emptyList());
     }
 
     private void processNotFoundTxn(long transactionId, String reason, TxnCommitAttachment txnCommitAttachment) {
