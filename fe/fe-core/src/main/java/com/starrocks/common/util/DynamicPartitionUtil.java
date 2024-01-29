@@ -253,7 +253,7 @@ public class DynamicPartitionUtil {
             if (timeUnit.equalsIgnoreCase(TimestampArithmeticExpr.TimeUnit.HOUR.toString())) {
                 List<Column> partitionColumns = partitionInfo.getPartitionColumns();
                 for (Column partitionColumn : partitionColumns) {
-                    if (partitionColumn.getPrimitiveType().isDateType()) {
+                    if (partitionColumn.getPrimitiveType() == PrimitiveType.DATE) {
                         throw new SemanticException("Date type partition does not support dynamic partitioning" +
                                 " granularity of hour");
                     }

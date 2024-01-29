@@ -50,6 +50,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
@@ -258,7 +259,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                         String.valueOf(dynamicPartitionProperty.getReplicationNum()));
             }
 
-            if (partitionColumn.getPrimitiveType().isDateType() &&
+            if (partitionColumn.getPrimitiveType() == PrimitiveType.DATE &&
                     dynamicPartitionProperty.getTimeUnit()
                             .equalsIgnoreCase(TimestampArithmeticExpr.TimeUnit.HOUR.toString())) {
                 throw new SemanticException("Date type partition does not support dynamic partitioning granularity of hour");
