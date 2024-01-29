@@ -11,7 +11,7 @@ Indexes can help quickly locate data that matches certain query conditions. To b
 
 ## Built-in indexes
 
-### [Prefix indexes](./Prefix_index.md)
+### [Prefix indexes](./Prefix_index_sort_key.md)
 
 The Prefix index is automatically generated during data writing. To more specifically, when data is written into StarRocks, the data is sorted according to the specified sort key, and every 1024 rows of data are included in one logical data block. An index entry that consists of the values of sort key columns of the first data row in that logical data block is added to the Prefix index table. When the filtering condition in a query match the prefix of the Prefix index, the Prefix index can quickly locate the data that meets the conditions, and reduce the amount of data scanned, which can significantly improve query performance.
 
