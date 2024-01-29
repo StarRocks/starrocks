@@ -196,8 +196,9 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
     request.txnId = ctx->txn_id;
     request.sync = true;
     request.commitInfos = std::move(ctx->commit_infos);
-    request.failInfos = std::move(ctx->fail_infos);
     request.__isset.commitInfos = true;
+    request.failInfos = std::move(ctx->fail_infos);
+    request.__isset.failInfos = true;
     request.__set_thrift_rpc_timeout_ms(config::txn_commit_rpc_timeout_ms);
 
     // set attachment if has
@@ -279,8 +280,9 @@ Status StreamLoadExecutor::prepare_txn(StreamLoadContext* ctx) {
     request.txnId = ctx->txn_id;
     request.sync = true;
     request.commitInfos = std::move(ctx->commit_infos);
-    request.failInfos = std::move(ctx->fail_infos);
     request.__isset.commitInfos = true;
+    request.failInfos = std::move(ctx->fail_infos);
+    request.__isset.failInfos = true;
     request.__set_thrift_rpc_timeout_ms(config::txn_commit_rpc_timeout_ms);
 
     // set attachment if has
@@ -321,7 +323,10 @@ Status StreamLoadExecutor::rollback_txn(StreamLoadContext* ctx) {
     request.db = ctx->db;
     request.tbl = ctx->table;
     request.txnId = ctx->txn_id;
+    request.commitInfos = std::move(ctx->commit_infos);
+    request.__isset.commitInfos = true;
     request.failInfos = std::move(ctx->fail_infos);
+    request.__isset.failInfos = true;
     request.__set_reason(ctx->status.get_error_msg());
 
     // set attachment if has
