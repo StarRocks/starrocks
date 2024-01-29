@@ -669,6 +669,9 @@ public class RestoreJob extends AbstractJob {
                     // Table does not exist
                     OlapTable remoteOlapTbl = (OlapTable) remoteTbl;
 
+                    // remove colocate flag, restore does not support colocate yet.
+                    remoteOlapTbl.setColocateGroup(null);
+
                     // Retain only expected restore partitions in this table;
                     Set<String> allPartNames = remoteOlapTbl.getPartitionNames();
                     for (String partName : allPartNames) {
@@ -1519,7 +1522,8 @@ public class RestoreJob extends AbstractJob {
         try {
             info.add(Joiner.on(", ").join(unfinishedSignatureToId.entrySet()));
             info.add(Joiner.on(", ").join(taskProgress.entrySet().stream().map(
-                    e -> "[" + e.getKey() + ": " + e.getValue().first + "/" + e.getValue().second + "]").collect(
+                    e -> "[ task id: " + e.getKey() + " -> " + "finished part:" + e.getValue().first +
+                    "/" + " total number of subtasks:" + e.getValue().second + "]").collect(
                     Collectors.toList())));
             info.add(Joiner.on(", ").join(taskErrMsg.entrySet().stream().map(n -> "[" + n.getKey() + ": " + n.getValue()
                     + "]").collect(Collectors.toList())));
