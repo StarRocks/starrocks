@@ -700,7 +700,7 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
     return best_tablet;
 }
 
-Status TabletManager::generate_pk_dump_in_error_state() {
+Status TabletManager::generate_pk_dump() {
     std::vector<TabletAndScore> pick_tablets;
     // 1. pick primary key tablet
     std::vector<TabletSharedPtr> tablet_ptr_list;
@@ -716,7 +716,7 @@ Status TabletManager::generate_pk_dump_in_error_state() {
     }
     // 2. generate pk dump if need
     for (const auto& tablet_ptr : tablet_ptr_list) {
-        RETURN_IF_ERROR(tablet_ptr->updates()->generate_pk_dump());
+        RETURN_IF_ERROR(tablet_ptr->updates()->generate_pk_dump_if_in_error_state());
     }
     return Status::OK();
 }
