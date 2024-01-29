@@ -123,6 +123,14 @@ enum TOverflowMode {
   REPORT_ERROR = 1;
 }
 
+enum TTimeUnit {
+    NANOSECOND = 0;
+    MICROSECOND = 1;
+    MILLISECOND = 2;
+    SECOND = 3;
+    MINUTE = 4;
+}
+
 struct TQueryQueueOptions {
   1: optional bool enable_global_query_queue;
   2: optional bool enable_group_level_query_queue;
@@ -243,6 +251,8 @@ struct TQueryOptions {
   111: optional bool enable_file_metacache;
 
   112: optional bool enable_pipeline_level_shuffle;
+
+  115: optional TTimeUnit big_query_profile_threshold_unit = TTimeUnit.SECOND;
 }
 
 
