@@ -1664,6 +1664,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         long dbId = db.getId();
         GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(dbId, request.getTxnId(),
                 request.isSetReason() ? request.getReason() : "system cancel",
+                TabletCommitInfo.fromThrift(request.getCommitInfos()),
+                TabletFailInfo.fromThrift(request.getFailInfos()),
                 TxnCommitAttachment.fromThrift(request.getTxnCommitAttachment()));
 
         TxnCommitAttachment attachment = TxnCommitAttachment.fromThrift(request.txnCommitAttachment);

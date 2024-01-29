@@ -210,12 +210,21 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
     }
 
     @Override
+<<<<<<< HEAD
     public void postWriteCommitLog(TransactionState txnState) {
         // nothing to do
     }
 
     @Override
     public void postAbort(TransactionState txnState, List<TabletFailInfo> failedTablets) {
+=======
+    public void postAbort(TransactionState txnState, List<TabletCommitInfo> finishedTablets,
+            List<TabletFailInfo> failedTablets) {
+        // If a transaction is prepared then aborted, the commit infos in txn state may be already assigned
+        if (!finishedTablets.isEmpty()) {
+            txnState.setTabletCommitInfos(finishedTablets);
+        }
+>>>>>>> 203e9d07d6 ([Enhancement] Aborting transaction supports carrying finished tablets info to help clean dirty data for shared-data mode (#39834))
         if (CollectionUtils.isEmpty(txnState.getTabletCommitInfos())) {
             abortTxnSkipCleanup(txnState);
         } else {
@@ -226,10 +235,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
 
     private void abortTxnSkipCleanup(TransactionState txnState) {
         List<Long> txnIds = Collections.singletonList(txnState.getTransactionId());
-        List<TxnTypePB> txnTypes = Collections.singletonList(
-                txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
-                        ? TxnTypePB.TXN_REPLICATION
-                        : TxnTypePB.TXN_NORMAL);
+        List<TxnTypePB> txnTypes = Collections.singletonList(txnState.getTxnTypePB());
         List<ComputeNode> nodes = getAllAliveNodes();
         for (ComputeNode node : nodes) { // Send abortTxn() request to all nodes
             AbortTxnRequest request = new AbortTxnRequest();
@@ -244,13 +250,14 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
 
     private void abortTxnWithCleanup(TransactionState txnState) {
         List<Long> txnIds = Collections.singletonList(txnState.getTransactionId());
-        List<TxnTypePB> txnTypes = Collections.singletonList(
-                txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
-                        ? TxnTypePB.TXN_REPLICATION
-                        : TxnTypePB.TXN_NORMAL);
+        List<TxnTypePB> txnTypes = Collections.singletonList(txnState.getTxnTypePB());
         Map<Long, List<Long>> tabletGroup = new HashMap<>();
         for (TabletCommitInfo info : txnState.getTabletCommitInfos()) {
             tabletGroup.computeIfAbsent(info.getBackendId(), k -> Lists.newArrayList()).add(info.getTabletId());
+        }
+        Map<Long, ComputeNode> allNodes = new HashMap<>();
+        for (ComputeNode node : getAllAliveNodes()) {
+            allNodes.put(node.getId(), node);
         }
         for (Map.Entry<Long, List<Long>> entry : tabletGroup.entrySet()) {
             ComputeNode node = getAliveNode(entry.getKey());
@@ -262,6 +269,17 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             request.txnTypes = txnTypes;
             request.tabletIds = entry.getValue();
             request.skipCleanup = false;
+
+            sendAbortTxnRequestIgnoreResponse(request, node);
+            allNodes.remove(node.getId());
+        }
+        // Send abortTxn() request to rest nodes
+        for (ComputeNode node : allNodes.values()) {
+            AbortTxnRequest request = new AbortTxnRequest();
+            request.txnIds = txnIds;
+            request.txnTypes = txnTypes;
+            request.skipCleanup = true;
+            request.tabletIds = null; // unused when skipCleanup is true
 
             sendAbortTxnRequestIgnoreResponse(request, node);
         }
