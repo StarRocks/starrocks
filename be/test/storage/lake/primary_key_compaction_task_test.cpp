@@ -901,12 +901,16 @@ TEST_P(LakePrimaryKeyCompactionTest, test_pk_recover_rowset_order_after_compact)
         check_local_persistent_index_meta(tablet_id, version);
     }
 
+    Tablet tablet(_tablet_mgr.get(), tablet_id);
     ASSIGN_OR_ABORT(auto new_tablet_metadata2, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata2->rowsets_size(), 2);
-    EXPECT_TRUE(new_tablet_metadata2->rowsets(0).has_max_compact_input_rowset_id());
-    EXPECT_FALSE(new_tablet_metadata2->rowsets(1).has_max_compact_input_rowset_id());
-    EXPECT_TRUE(new_tablet_metadata2->rowsets(0).id() > new_tablet_metadata2->rowsets(1).id());
-    EXPECT_TRUE(new_tablet_metadata2->rowsets(0).max_compact_input_rowset_id() < new_tablet_metadata2->rowsets(1).id());
+    ASSIGN_OR_ABORT(auto rs_list, tablet.get_rowsets(*new_tablet_metadata2));
+    EXPECT_EQ(2, rs_list.size());
+    ASSERT_OK(LakePrimaryKeyRecover::sort_rowsets(&rs_list));
+    EXPECT_TRUE(rs_list[0]->metadata().has_max_compact_input_rowset_id());
+    EXPECT_FALSE(rs_list[1]->metadata().has_max_compact_input_rowset_id());
+    EXPECT_TRUE(rs_list[0]->metadata().id() > rs_list[1]->metadata().id());
+    EXPECT_TRUE(rs_list[0]->metadata().max_compact_input_rowset_id() < rs_list[1]->metadata().id());
 
     config::lake_pk_compaction_max_input_rowsets = 1000;
 }
