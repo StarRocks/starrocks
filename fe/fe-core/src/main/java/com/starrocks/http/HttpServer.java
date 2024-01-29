@@ -304,7 +304,7 @@ public class HttpServer {
         httpWorkersNum.setValue(0L);
         httpMetricRegistry.registerGauge(httpWorkersNum);
 
-        GaugeMetric<Long> pendingTasks = new GaugeMetric<>(HTTP_WORKER_PENDING_TASKS_NUM, Metric.MetricUnit.NOUNIT,
+        GaugeMetric<Long> pendingTasks = new GaugeMetric<Long>(HTTP_WORKER_PENDING_TASKS_NUM, Metric.MetricUnit.NOUNIT,
                 "the number of tasks that are pending for processing in the queues of http workers") {
             @Override
             public Long getValue() {
