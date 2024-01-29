@@ -1,4 +1,5 @@
 -- name: test_column_with_row_partial_update
+ADMIN SET FRONTEND CONFIG ("enable_experimental_rowstore" = "true");
 create database test_column_with_row_partial_update;
 use test_column_with_row_partial_update;
 

@@ -555,7 +555,11 @@ public class PropertyAnalyzer {
             } else {
                 throw new AnalysisException(storageType + " for " + olapTable.getKeysType() + " table not supported");
             }
-
+            if (!Config.enable_experimental_rowstore &&
+                    (tStorageType == TStorageType.ROW || tStorageType == TStorageType.COLUMN_WITH_ROW)) {
+                throw new AnalysisException(storageType + " for " + olapTable.getKeysType() +
+                        " table not supported, enable it by setting `enable_experimental_rowstore` to true");
+            }
             properties.remove(PROPERTIES_STORAGE_TYPE);
         }
         return tStorageType;

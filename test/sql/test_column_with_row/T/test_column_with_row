@@ -1,4 +1,5 @@
 -- name: test_columm_with_row
+ADMIN SET FRONTEND CONFIG ("enable_experimental_rowstore" = "true");
 --创建行存表
 CREATE TABLE IF NOT EXISTS t1(
     k1 int,
