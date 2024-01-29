@@ -100,4 +100,10 @@ select a.c_dis,b.c_largeint + a.c_bigint + b.c_int + a.c_smallint + b.c_tinyint 
                 on b.c_largeint + b.c_bigint + b.c_int + b.c_smallint + b.c_tinyint = a.c_largeint + a.c_bigint + a.c_int + a.c_smallint + a.c_tinyint
                 order by 1;
 
+SELECT (((1 / 1) % 1) * 1);
+select 1+2 * null;
+select 2/null;
+
+SELECT min(((1 / 1) % 1) * 1) from jit_basic;
+SELECT min(((1 / 1) % 1) * null) from jit_basic;
 DROP TABLE IF EXISTS `jit_basic`;

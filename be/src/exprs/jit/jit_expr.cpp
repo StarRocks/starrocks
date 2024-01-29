@@ -52,27 +52,33 @@ Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
     }
     _is_prepared = true;
 
-    auto start = MonotonicNanos();
+    if (!is_constant()) {
+        auto start = MonotonicNanos();
 
-    // Compile the expression into native code and retrieve the function pointer.
-    auto* jit_engine = JITEngine::get_instance();
-    if (!jit_engine->initialized()) {
-        return Status::JitCompileError("JIT is not supported");
+        // Compile the expression into native code and retrieve the function pointer.
+        auto* jit_engine = JITEngine::get_instance();
+        if (!jit_engine->initialized()) {
+            return Status::JitCompileError("JIT is not supported");
+        }
+
+        auto function = jit_engine->compile_scalar_function(context, _expr);
+
+        auto elapsed = MonotonicNanos() - start;
+        if (!function.ok()) {
+            LOG(INFO) << "JIT: JIT compile failed, time cost: " << elapsed / 1000000.0 << " ms"
+                      << " Reason: " << function.status();
+        } else {
+            LOG(INFO) << "JIT: JIT compile success, time cost: " << elapsed / 1000000.0 << " ms";
+        }
+
+        _jit_function = function.value_or(nullptr);
     }
-
-    auto function = jit_engine->compile_scalar_function(context, _expr);
-
-    auto elapsed = MonotonicNanos() - start;
-    if (!function.ok()) {
-        LOG(INFO) << "JIT: JIT compile failed, time cost: " << elapsed / 1000000.0 << " ms"
-                  << " Reason: " << function.status();
-    } else {
-        LOG(INFO) << "JIT: JIT compile success, time cost: " << elapsed / 1000000.0 << " ms";
-    }
-
-    _jit_function = function.value_or(nullptr);
     if (_jit_function != nullptr) {
         _jit_expr_name = _expr->debug_string();
+    } else {
+        _children.clear();
+        _children.push_back(_expr);
+        RETURN_IF_ERROR(Expr::prepare(state, context)); // jitExpr becomes an empty node, fallback to original expr.
     }
     return Status::OK();
 }
@@ -80,19 +86,26 @@ Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
 StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, Chunk* ptr) {
     // If the expr fails to compile, evaluate using the original expr.
     if (UNLIKELY(_jit_function == nullptr)) {
-        LOG(ERROR) << "JIT: JIT compile failed, fallback to original expr";
-        // TODO(Yueyang): fallback to original expr perfectly.
         return _expr->evaluate_checked(context, ptr);
     }
 
     Columns args;
     args.reserve(_children.size() + 1);
+    size_t num_rows = 0;
     for (Expr* child : _children) {
         ColumnPtr column = EVALUATE_NULL_IF_ERROR(context, child, ptr);
         if (column->only_null()) { // TODO(Yueyang): remove this when support ifnull expr.
             return ColumnHelper::align_return_type(column, type(), column->size(), true);
         }
         args.emplace_back(column);
+        num_rows = std::max<size_t>(num_rows, column->size());
+    }
+    if (ptr == nullptr) {
+        if (is_constant() && num_rows == 0) {
+            num_rows = 1;
+        }
+    } else {
+        num_rows = ptr->num_rows();
     }
 
 #ifdef DEBUG
@@ -105,8 +118,7 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
     }
 #endif
 
-    auto result_column =
-            ColumnHelper::create_column(type(), !is_constant() && is_nullable(), is_constant(), ptr->num_rows(), false);
+    auto result_column = ColumnHelper::create_column(type(), is_nullable(), false, num_rows, false);
     args.emplace_back(result_column);
 
     RETURN_IF_ERROR(JITFunction::llvm_function(_jit_function, args));
@@ -115,8 +127,6 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
         result_column->resize(ptr->num_rows());
     }
 
-    // TODO(Yueyang): handle nullable produce
-    // RETURN_IF_ERROR(result_column->unfold_const_children(_type));
     return result_column;
 }
 
