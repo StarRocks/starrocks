@@ -40,6 +40,7 @@
 #include <string>
 
 #include "common/constexpr.h"
+#include "common/config.h"
 
 namespace starrocks {
 
