@@ -283,6 +283,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -556,12 +557,38 @@ public class GlobalStateMgr {
         private static final GlobalStateMgr INSTANCE = new GlobalStateMgr();
     }
 
-    private GlobalStateMgr() {
-        this(false);
+    @VisibleForTesting
+    protected GlobalStateMgr() {
+        this(new NodeMgr());
     }
 
+    @VisibleForTesting
+    protected GlobalStateMgr(NodeMgr nodeMgr) {
+        this(false, nodeMgr);
+    }
+
+    private GlobalStateMgr(boolean isCkptGlobalState) {
+        this(isCkptGlobalState, new NodeMgr());
+    }
+
+<<<<<<< HEAD
     // if isCheckpointCatalog is true, it means that we should not collect thread pool metric
     private GlobalStateMgr(boolean isCheckpointCatalog) {
+=======
+    // if isCkptGlobalState is true, it means that we should not collect thread pool metric
+    private GlobalStateMgr(boolean isCkptGlobalState, NodeMgr nodeMgr) {
+        if (!isCkptGlobalState) {
+            RunMode.detectRunMode();
+        }
+
+        if (RunMode.isSharedDataMode()) {
+            this.starOSAgent = new StarOSAgent();
+        }
+
+        // System Manager
+        this.nodeMgr = Objects.requireNonNullElseGet(nodeMgr, NodeMgr::new);
+        this.heartbeatMgr = new HeartbeatMgr(!isCkptGlobalState);
+>>>>>>> 763e2aaad4 ([BugFix] Remove version and role file after failing to start fe at first time. (#39672))
         this.portConnectivityChecker = new PortConnectivityChecker();
         this.load = new Load();
         this.streamLoadManager = new StreamLoadManager();
@@ -945,47 +972,69 @@ public class GlobalStateMgr {
         // we already set these variables in constructor. but GlobalStateMgr is a singleton class.
         // so they may be set before Config is initialized.
         // set them here again to make sure these variables use values in fe.conf.
-
         setMetaDir();
 
-        // 0. get local node and helper node info
-        nodeMgr.initialize(args);
+        // must judge whether it is first time start here before initializing GlobalStateMgr.
+        // Possibly remove clusterId and role to ensure that the system is not left in a half-initialized state.
+        boolean isFirstTimeStart = nodeMgr.isVersionAndRoleFilesNotExist();
+        try {
+            // 0. get local node and helper node info
+            nodeMgr.initialize(args);
 
-        // 1. create dirs and files
-        if (Config.edit_log_type.equalsIgnoreCase("bdb")) {
-            File imageDir = new File(this.imageDir);
-            if (!imageDir.exists()) {
-                imageDir.mkdirs();
+            // 1. create dirs and files
+            if (Config.edit_log_type.equalsIgnoreCase("bdb")) {
+                File imageDir = new File(this.imageDir);
+                if (!imageDir.exists()) {
+                    imageDir.mkdirs();
+                }
+            } else {
+                LOG.error("Invalid edit log type: {}", Config.edit_log_type);
+                System.exit(-1);
             }
-        } else {
-            LOG.error("Invalid edit log type: {}", Config.edit_log_type);
-            System.exit(-1);
-        }
 
-        // init plugin manager
-        pluginMgr.init();
-        auditEventProcessor.start();
+            // init plugin manager
+            pluginMgr.init();
+            auditEventProcessor.start();
 
-        // 2. get cluster id and role (Observer or Follower)
-        nodeMgr.getClusterIdAndRoleOnStartup();
+            // 2. get cluster id and role (Observer or Follower)
+            nodeMgr.getClusterIdAndRoleOnStartup();
 
-        // 3. Load image first and replay edits
-        initJournal();
-        loadImage(this.imageDir); // load image file
+            // 3. Load image first and replay edits
+            initJournal();
+            loadImage(this.imageDir); // load image file
 
-        // 4. create load and export job label cleaner thread
-        createLabelCleaner();
+            // 4. create load and export job label cleaner thread
+            createLabelCleaner();
 
-        // 5. create txn timeout checker thread
-        createTxnTimeoutChecker();
+            // 5. create txn timeout checker thread
+            createTxnTimeoutChecker();
 
-        // 6. start task cleaner thread
-        createTaskCleaner();
+            // 6. start task cleaner thread
+            createTaskCleaner();
 
+<<<<<<< HEAD
         // 7. init starosAgent
         if (Config.use_staros && !starOSAgent.init()) {
             LOG.error("init starOSAgent failed");
             System.exit(-1);
+=======
+            // 7. init starosAgent
+            if (RunMode.isSharedDataMode() && !starOSAgent.init(null)) {
+                LOG.error("init starOSAgent failed");
+                System.exit(-1);
+            }
+        } catch (Exception e) {
+            try {
+                if (isFirstTimeStart) {
+                    // If it is the first time we start, we remove the cluster ID and role
+                    // to prevent leaving the system in an inconsistent state.
+                    nodeMgr.removeClusterIdAndRole();
+                }
+            } catch (Throwable t) {
+                e.addSuppressed(t);
+            }
+            throw e;
+>>>>>>> 763e2aaad4 ([BugFix] Remove version and role file after failing to start fe at first time. (#39672))
         }
     }
 
