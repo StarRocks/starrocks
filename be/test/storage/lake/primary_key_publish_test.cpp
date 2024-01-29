@@ -596,68 +596,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_abort_txn) {
     SyncPoint::GetInstance()->DisableProcessing();
 }
 
-<<<<<<< HEAD
-=======
-TEST_P(LakePrimaryKeyPublishTest, test_batch_publish) {
-    auto [chunk0, indexes0] = gen_data_and_index(kChunkSize, 0, true, true);
-    auto [chunk1, indexes1] = gen_data_and_index(kChunkSize, 0, false, false);
-    auto base_version = 1;
-    auto tablet_id = _tablet_metadata->id();
-    std::vector<int64_t> txn_ids;
-    auto txn_id = next_id();
-    txn_ids.emplace_back(txn_id);
-    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
-                                               .set_tablet_manager(_tablet_mgr.get())
-                                               .set_tablet_id(tablet_id)
-                                               .set_txn_id(txn_id)
-                                               .set_partition_id(_partition_id)
-                                               .set_mem_tracker(_mem_tracker.get())
-                                               .set_index_id(_tablet_schema->id())
-                                               .set_slot_descriptors(&_slot_pointers)
-                                               .build());
-    ASSERT_OK(delta_writer->open());
-    ASSERT_OK(delta_writer->write(*chunk0, indexes0.data(), indexes0.size()));
-    ASSERT_OK(delta_writer->finish());
-    delta_writer->close();
-
-    txn_id = next_id();
-    txn_ids.emplace_back(txn_id);
-    ASSIGN_OR_ABORT(delta_writer, DeltaWriterBuilder()
-                                          .set_tablet_manager(_tablet_mgr.get())
-                                          .set_tablet_id(tablet_id)
-                                          .set_txn_id(txn_id)
-                                          .set_partition_id(_partition_id)
-                                          .set_mem_tracker(_mem_tracker.get())
-                                          .set_index_id(_tablet_schema->id())
-                                          .set_slot_descriptors(&_slot_pointers)
-                                          .build());
-    ASSERT_OK(delta_writer->open());
-    ASSERT_OK(delta_writer->write(*chunk1, indexes1.data(), indexes1.size()));
-    ASSERT_OK(delta_writer->finish());
-    delta_writer->close();
-
-    auto new_version = base_version + 2;
-    ASSERT_OK(batch_publish(tablet_id, base_version, new_version, txn_ids).status());
-
-    ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, new_version));
-    EXPECT_EQ(new_tablet_metadata->rowsets_size(), 2);
-    EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 1);
-    EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 12);
-    EXPECT_EQ(new_tablet_metadata->rowsets(1).num_dels(), 0);
-    EXPECT_EQ(0, read_rows(tablet_id, new_version));
-    _tablet_mgr->prune_metacache();
-    _update_mgr->remove_primary_index_cache(tablet_id);
-
-    // publish again
-    ASSERT_OK(batch_publish(tablet_id, base_version, new_version, txn_ids).status());
-    ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, new_version));
-    EXPECT_EQ(new_tablet_metadata->rowsets_size(), 2);
-    EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 1);
-    EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 12);
-    EXPECT_EQ(new_tablet_metadata->rowsets(1).num_dels(), 0);
-    EXPECT_EQ(0, read_rows(tablet_id, new_version));
-}
-
 TEST_P(LakePrimaryKeyPublishTest, test_mem_tracker) {
     EXPECT_EQ(1024 * 1024, _mem_tracker->limit());
     EXPECT_EQ(1024 * 1024 * config::lake_pk_preload_memory_limit_percent / 100,
@@ -666,7 +604,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_mem_tracker) {
               _update_mgr->update_state_mem_tracker()->limit());
 }
 
->>>>>>> 562b5d5e90 ([Enhancement] add sub level memory limit to preload state in lake pk table (#39982))
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyPublishTest, LakePrimaryKeyPublishTest,
                          ::testing::Values(PrimaryKeyParam{true}, PrimaryKeyParam{false}));
 
