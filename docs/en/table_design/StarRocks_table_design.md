@@ -114,7 +114,7 @@ StarRocks provides two bucketing methods:
 - Hash bucketing: Data is distributed into buckets based on the hash values of the bucketing key. You can select columns frequently used as condition columns in queries as bucketing columns, which helps improve query efficiency.
 - Random bucketing: Data is randomly distributed to buckets. This bucketing method is more simple and ease to use.
 
-### [Data types](../sql-referenc  e/sql-statements/data-types/data-type-list.md)
+### [Data types](../sql-reference/sql-statements/data-types/data-type-list.md)
 
 In addition to basic data types such as NUMERIC, DATE, and STRING, StarRocks supports complex semi-structured data types, including ARRAY, JSON, MAP, and STRUCT.
 
