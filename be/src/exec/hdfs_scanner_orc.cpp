@@ -494,6 +494,8 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
                     ASSIGN_OR_RETURN(rows_read,
                                      ExecNode::eval_conjuncts_into_filter(it.second, ck.get(), &_chunk_filter));
                     if (rows_read == 0) {
+                        // If rows_read = 0, we need to set chunk size = 0 and bypass filter chunk directly
+                        ck->set_num_rows(0);
                         break;
                     }
                 }
