@@ -178,17 +178,41 @@ public class ScalarOperatorFunctions {
                 first.getDatetime().truncatedTo(ChronoUnit.DAYS)).toDays());
     }
 
-    @ConstantFunction(name = "years_add", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "years_add", argTypes = {DATETIME,
+                    INT}, returnType = DATETIME, isMonotonic = true),
+            @ConstantFunction(name = "years_add", argTypes = {DATE, INT}, returnType = DATE, isMonotonic = true)
+    })
     public static ConstantOperator yearsAdd(ConstantOperator date, ConstantOperator year) {
+<<<<<<< HEAD
         return ConstantOperator.createDatetime(date.getDatetime().plusYears(year.getInt()));
+=======
+        if (date.getType().isDate()) {
+            return ConstantOperator.createDateOrNull(date.getDatetime().plusYears(year.getInt()));
+        } else {
+            return ConstantOperator.createDatetimeOrNull(date.getDatetime().plusYears(year.getInt()));
+        }
+>>>>>>> 217803a95d ([Enhancement] support rewrite scan predicate to or (#39989))
     }
 
     @ConstantFunction.List(list = {
-            @ConstantFunction(name = "months_add", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true),
-            @ConstantFunction(name = "add_months", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
+            @ConstantFunction(name = "months_add", argTypes = {DATETIME,
+                    INT}, returnType = DATETIME, isMonotonic = true),
+            @ConstantFunction(name = "add_months", argTypes = {DATETIME,
+                    INT}, returnType = DATETIME, isMonotonic = true),
+            @ConstantFunction(name = "months_add", argTypes = {DATE, INT}, returnType = DATE, isMonotonic = true),
+            @ConstantFunction(name = "add_months", argTypes = {DATE, INT}, returnType = DATE, isMonotonic = true)
     })
     public static ConstantOperator monthsAdd(ConstantOperator date, ConstantOperator month) {
+<<<<<<< HEAD
         return ConstantOperator.createDatetime(date.getDatetime().plusMonths(month.getInt()));
+=======
+        if (date.getType().isDate()) {
+            return ConstantOperator.createDateOrNull(date.getDate().plusMonths(month.getInt()));
+        } else {
+            return ConstantOperator.createDatetimeOrNull(date.getDatetime().plusMonths(month.getInt()));
+        }
+>>>>>>> 217803a95d ([Enhancement] support rewrite scan predicate to or (#39989))
     }
 
     @ConstantFunction.List(list = {

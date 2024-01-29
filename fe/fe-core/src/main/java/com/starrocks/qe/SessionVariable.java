@@ -438,6 +438,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PLAN_SERIALIZE_CONCURRENTLY = "enable_plan_serialize_concurrently";
 
     public static final String ENABLE_STRICT_ORDER_BY = "enable_strict_order_by";
+    private static final String CBO_SPLIT_SCAN_PREDICATE_WITH_DATE = "enable_split_scan_predicate_with_date";
 
     // Flag to control whether to proxy follower's query statement to leader/follower.
     public enum FollowerQueryForwardMode {
@@ -1568,6 +1569,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_DERIVE_RANGE_JOIN_PREDICATE)
     private boolean cboDeriveRangeJoinPredicate = false;
+
+    @VarAttr(name = CBO_SPLIT_SCAN_PREDICATE_WITH_DATE)
+    private boolean cboSplitScanPredicateWithDate = false;
 
     @VarAttr(name = CBO_DERIVE_JOIN_IS_NULL_PREDICATE)
     private boolean cboDeriveJoinIsNullPredicate = true;
@@ -2958,6 +2962,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCboDeriveRangeJoinPredicate(boolean cboDeriveRangeJoinPredicate) {
         this.cboDeriveRangeJoinPredicate = cboDeriveRangeJoinPredicate;
+    }
+
+
+    public boolean isCboSplitScanPredicateWithDate() {
+        return cboSplitScanPredicateWithDate;
+    }
+
+    public void setCboSplitScanPredicateWithDate(boolean cboSplitScanPredicateWithDate) {
+        this.cboSplitScanPredicateWithDate = cboSplitScanPredicateWithDate;
     }
 
     public boolean isCboDeriveJoinIsNullPredicate() {
