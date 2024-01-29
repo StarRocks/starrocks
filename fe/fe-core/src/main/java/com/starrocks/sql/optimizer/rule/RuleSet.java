@@ -360,8 +360,8 @@ public class RuleSet {
         ));
 
         REWRITE_RULES.put(RuleSetType.MULTI_DISTINCT_REWRITE, ImmutableList.of(
-                new RewriteMultiDistinctByCTERule(),
-                new RewriteMultiDistinctRule()
+                new RewriteMultiDistinctRule(),
+                new RewriteMultiDistinctByCTERule()
         ));
 
         REWRITE_RULES.put(RuleSetType.PRUNE_PROJECT, ImmutableList.of(

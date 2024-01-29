@@ -17,7 +17,6 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
-import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
@@ -126,10 +125,10 @@ public class SplitTwoPhaseAggRule extends SplitAggregateRule {
     private boolean isSuitableForTwoStageDistinct(OptExpression input, LogicalAggregationOperator operator,
                                                   List<ColumnRefOperator> distinctColumns) {
         int aggMode = ConnectContext.get().getSessionVariable().getNewPlannerAggStage();
-        boolean canTwoStage = canGenerateTwoStageAggregate(operator, distinctColumns);
-
-        if (!canTwoStage) {
-            return false;
+        for (CallOperator callOperator : operator.getAggregations().values()) {
+            if (callOperator.isDistinct() && !Utils.canGenerateTwoStageAggregate(callOperator, distinctColumns)) {
+                return false;
+            }
         }
 
         if (aggMode == TWO_STAGE.ordinal()) {
@@ -141,30 +140,7 @@ public class SplitTwoPhaseAggRule extends SplitAggregateRule {
                 && isTwoStageMoreEfficient(input, distinctColumns);
     }
 
-    private boolean canGenerateTwoStageAggregate(LogicalAggregationOperator operator,
-                                                 List<ColumnRefOperator> distinctColumns) {
 
-        // 1. multiple cols distinct is not support two stage aggregate
-        // 2. array type col is not support two stage aggregate
-        if (distinctColumns.size() > 1 || distinctColumns.get(0).getType().isArrayType()) {
-            return false;
-        }
-
-        // 3. group_concat distinct with columnRef is not support two stage aggregate
-        // 4. array_agg with order by clause is not support two stage aggregate
-        for (CallOperator aggCall : operator.getAggregations().values()) {
-            String fnName = aggCall.getFnName();
-            if (FunctionSet.GROUP_CONCAT.equalsIgnoreCase(fnName)) {
-                return false;
-            } else if (FunctionSet.ARRAY_AGG.equalsIgnoreCase(fnName)) {
-                AggregateFunction aggregateFunction = (AggregateFunction) aggCall.getFunction();
-                if (CollectionUtils.isNotEmpty(aggregateFunction.getIsAscOrder())) {
-                    return false;
-                }
-            }
-        }
-        return true;
-    }
 
     private boolean isTwoStageMoreEfficient(OptExpression input, List<ColumnRefOperator> distinctColumns) {
         LogicalAggregationOperator aggOp = input.getOp().cast();
