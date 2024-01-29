@@ -129,6 +129,16 @@ public:
                 key = k.get<KeyCppType>();
             }
 
+            // Memory structure for string type value:
+            //             | fast decode flag |
+            //  Slice 1 -> |  buffer  |
+            //             |buffer size|
+            //             | fast decode flag |
+            //  Slice 2 -> |  buffer  |
+            //             |buffer size|
+            //             | fast decode flag |
+            //  Slice 3 -> |  buffer  |
+            //             |buffer size|
             if constexpr (std::is_same_v<ValueCppType, Slice>) {
                 const Slice& input = v.get<ValueCppType>();
                 size_t allocate_size = input.size + sizeof(uint8_t);
