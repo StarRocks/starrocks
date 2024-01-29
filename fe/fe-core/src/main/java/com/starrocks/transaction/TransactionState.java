@@ -53,6 +53,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.proto.TxnTypePB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.Backend;
@@ -800,6 +801,10 @@ public class TransactionState implements Writable {
 
     public TTxnType getTxnType() {
         return sourceType == LoadJobSourceType.REPLICATION ? TTxnType.TXN_REPLICATION : TTxnType.TXN_NORMAL;
+    }
+
+    public TxnTypePB getTxnTypePB() {
+        return sourceType == LoadJobSourceType.REPLICATION ? TxnTypePB.TXN_REPLICATION : TxnTypePB.TXN_NORMAL;
     }
 
     public Map<Long, PublishVersionTask> getPublishVersionTasks() {
