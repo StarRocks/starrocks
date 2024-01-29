@@ -12,11 +12,11 @@ A bitmap index can help improve the query performance on a given column. If a qu
 
 Bitmap indexes are generally suitable for columns with high cardinality. Bitmap indexes are a good choice when  Bitmap indexes can exhibit high selectivity, and its filtering effect (number of data rows filtered by the Bitmap index/total number of data rows) is lower than one in ten thousand.
 
-To evaluate the acceleration performance of Bitmap indexes in StarRocks, queries are performed on a 100 GB SSB dataset in StarRocks. The test results are as follows:
+To evaluate the performance improvement of Bitmap indexes in StarRocks, queries are performed on a 100 GB SSB dataset in StarRocks. The test results are as follows:
 
--  when bitmap indexes are added on high-cardinality columns (in this dataset, a noticeable performance improvement can be observed when the cardinality reaches the magnitude of 100,000).
-- Query performance can be significantly improved no matter the Bitmap index is added on a high-cardinality column or high-cardinality columns combination.
-- In scenarios with low cardinality, using Bitmap indexing basically does not provide performance improvement and may even lead to performance degradation.
+- Query performance can be significantly improved only when bitmap indexes are created on high-cardinality columns (in this test dataset, a noticeable performance improvement is observed when the cardinality reaches the order of 100,000).
+- The column or columns with high-cardinality can either be a single column with high cardinality or a columns combination with high cardinality.
+- Query performance is essentially not improved and may even decrease when bitmap indexes are created on low-cardinality columns.
 
 ## Benefits
 
