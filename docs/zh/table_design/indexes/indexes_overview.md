@@ -13,13 +13,12 @@ displayed_sidebar: "Chinese"
 
 ### [前缀索引](./Prefix_index.md)
 
-数据写入时候自动生成前缀索引。写入时数据按照指定的排序键排序，并且每写入 1024 行数据构成一个逻辑数据块（Data Block），在前缀索引表中存储一个索引项，内容为该逻辑数据块中第一行数据的排序列组成的前缀。
+数据写入时候自动生成前缀索引。具体来说，写入时数据按照指定的排序键排序，并且每写入 1024 行数据构成一个逻辑数据块（Data Block），在前缀索引表中存储一个索引项，内容为该逻辑数据块中第一行数据的排序列组成的前缀。
 当查询的过滤条件命中前缀索引的前缀，则可以快速定位符合条件的数据，减少扫描的数据量，从而查询性能可以得到显著提升。
-
 
 ### Ordinal 索引
 
-底层存储数据时，StarRocks 实际上采用列式存储。每一列数据以 Date Page 为单位分块存储，每个 Data Page 大小一般为 64*1024 个字节（data_page_size = 64 * 1024）。每一个列 Date Page 会对应生成一条 Ordinal 索引项，记录 Data Page 的起始行号等信息。这样 Ordinal 索引提供了通过行号来查找列 Data Page 数据页的物理地址。其他索引查找数据时，最终都要通过 Ordinal 索引查找列 Data Page g的位置。
+底层存储数据时，StarRocks 实际上采用列式存储。每一列数据以 Date Page 为单位分块存储，每个 Data Page 大小一般为 64*1024 个字节（data_page_size = 64 * 1024）。每一个列 Date Page 会对应生成一条 Ordinal 索引项，记录 Data Page 的起始行号等信息。这样 Ordinal 索引提供了通过行号来查找列 Data Page 数据页的物理地址。其他索引查找数据时，最终都要通过 Ordinal 索引查找列 Data Page 的位置。
 
 ![img](../../assets/3.1-2.png)
 

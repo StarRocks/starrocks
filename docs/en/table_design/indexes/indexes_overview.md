@@ -1,6 +1,5 @@
 ---
 displayed_sidebar: "English"
-toc_max_heading_level: 5
 ---
 
 # Indexes
@@ -12,7 +11,9 @@ Indexes can help quickly locate data that matches certain query conditions. To b
 
 ## Built-in indexes
 
-### Prefix indexes
+### [Prefix indexes](./Prefix_index.md)
+
+The Prefix index is automatically generated during data writing. To more specifically, when data is written into StarRocks, the data is sorted according to the specified sort key, and every 1024 rows of data are included in one logical data block. An index entry that consists of the values of sort key columns of the first data row in that logical data block is added to the Prefix index table. When the filtering condition in a query match the prefix of the Prefix index, the Prefix index can quickly locate the data that meets the conditions, and reduce the amount of data scanned, which can significantly improve query performance.
 
 ### Ordinal indexes
 
@@ -43,7 +44,3 @@ Bitmap indexes are generally suitable for columns with high cardinality. Bitmap 
 ### [Bloom filter indexes](./Bloomfilter_index.md)
 
 Bloom filter indexes are suitable for columns with relatively high cardinality, such as ID columns, but they may incur a certain rate of misjudgment.
-
-## How to verify whether an index accelerates queries
-
-After executing a query, you can check whether the index takes effect and view their filtering effect from detailed metrics, such as `ShortKeyFilterRows` and `ZoneMapIndexFilterRows`, in the scan node in the [Query Profile](../../administration/query_profile.md).

@@ -102,3 +102,7 @@ When defining sort key columns for a Duplicate Key table, an Aggregate table, or
 ### Can the Prefix index be modified?
 
 The Prefix indexes can not be modified directly after table creation (except for Primary Key tables) because the sort key columns can not be changed. If columns other than the prefix fields are frequently used in query filter conditions, the existing Prefix index can not filter data and the query performance may not be ideal. Then you can also create a [synchronous materialized view](../../using_starrocks/Materialized_view-single_table.md) based on this table and choose other columns commonly used as conditional columns to form the Prefix index, which can improve performance for these queries. But note that it will increase storage space.
+
+## How to verify whether the Prefix index accelerates queries
+
+After executing a query, you can check whether the Prefix index takes effect and view its filtering effect from detailed metrics, such as `ShortKeyFilterRows`, in the scan node in the [Query Profile](../../administration/query_profile.md).
