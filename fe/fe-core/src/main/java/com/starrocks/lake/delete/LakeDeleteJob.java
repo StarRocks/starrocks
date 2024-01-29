@@ -49,6 +49,7 @@ import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TabletFailInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -183,6 +184,13 @@ public class LakeDeleteJob extends DeleteJob {
 
     @Override
     public boolean commitImpl(Database db, long timeoutMs) throws UserException {
+        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .commitAndPublishTransaction(db, getTransactionId(), getTabletCommitInfos(), getTabletFailInfos(),
+                        timeoutMs);
+    }
+
+    @Override
+    protected List<TabletCommitInfo> getTabletCommitInfos() {
         List<TabletCommitInfo> tabletCommitInfos = Lists.newArrayList();
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
             long backendId = entry.getKey();
@@ -190,9 +198,17 @@ public class LakeDeleteJob extends DeleteJob {
                 tabletCommitInfos.add(new TabletCommitInfo(tabletId, backendId));
             }
         }
+        return tabletCommitInfos;
+    }
 
+<<<<<<< HEAD
         return GlobalStateMgr.getCurrentGlobalTransactionMgr()
                 .commitAndPublishTransaction(db, getTransactionId(), tabletCommitInfos, Lists.newArrayList(),
                         timeoutMs);
+=======
+    @Override
+    protected List<TabletFailInfo> getTabletFailInfos() {
+        return Collections.emptyList();
+>>>>>>> 203e9d07d6 ([Enhancement] Aborting transaction supports carrying finished tablets info to help clean dirty data for shared-data mode (#39834))
     }
 }

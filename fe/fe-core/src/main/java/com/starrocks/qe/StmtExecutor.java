@@ -1795,7 +1795,14 @@ public class StmtExecutor {
                                 externalTable.getSourceTableDbId(), transactionId,
                                 externalTable.getSourceTableHost(),
                                 externalTable.getSourceTablePort(),
+<<<<<<< HEAD
                                 TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " + trackingSql
+=======
+                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " +
+                                        trackingSql,
+                                coord == null ? Collections.emptyList() : coord.getCommitInfos(),
+                                coord == null ? Collections.emptyList() : coord.getFailInfos()
+>>>>>>> 203e9d07d6 ([Enhancement] Aborting transaction supports carrying finished tablets info to help clean dirty data for shared-data mode (#39834))
                         );
                     } else if (targetTable instanceof SystemTable || targetTable instanceof IcebergTable) {
                         // schema table does not need txn
@@ -1803,9 +1810,15 @@ public class StmtExecutor {
                         GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
                                 database.getId(),
                                 transactionId,
+<<<<<<< HEAD
                                 TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " + trackingSql,
                                 TabletFailInfo.fromThrift(coord.getFailInfos())
                         );
+=======
+                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " +
+                                        trackingSql,
+                                Coordinator.getCommitInfos(coord), Coordinator.getFailInfos(coord), null);
+>>>>>>> 203e9d07d6 ([Enhancement] Aborting transaction supports carrying finished tablets info to help clean dirty data for shared-data mode (#39834))
                     }
                     context.getState().setError("Insert has filtered data in strict mode, txn_id = " + transactionId +
                             " tracking sql = " + trackingSql);
@@ -1823,8 +1836,13 @@ public class StmtExecutor {
                 if (!(targetTable instanceof ExternalOlapTable || targetTable instanceof OlapTable)) {
                     if (!(targetTable instanceof SystemTable || targetTable instanceof IcebergTable)) {
                         // schema table and iceberg table does not need txn
+<<<<<<< HEAD
                         GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
                                 database.getId(), transactionId, errorMsg);
+=======
+                        mgr.abortTransaction(database.getId(), transactionId, errorMsg,
+                                Coordinator.getCommitInfos(coord), Coordinator.getFailInfos(coord), null);
+>>>>>>> 203e9d07d6 ([Enhancement] Aborting transaction supports carrying finished tablets info to help clean dirty data for shared-data mode (#39834))
                     }
                     context.getState().setOk();
                     insertError = true;
@@ -1859,6 +1877,35 @@ public class StmtExecutor {
                 context.getGlobalStateMgr().getMetadataMgr().finishSink(catalogName, dbName, tableName, commitInfos);
                 txnStatus = TransactionStatus.VISIBLE;
                 label = "FAKE_ICEBERG_SINK_LABEL";
+<<<<<<< HEAD
+=======
+            } else if (targetTable.isHiveTable()) {
+                List<TSinkCommitInfo> commitInfos = coord.getSinkCommitInfos();
+                HiveTableSink hiveTableSink = (HiveTableSink) execPlan.getFragments().get(0).getSink();
+                String stagingDir = hiveTableSink.getStagingDir();
+                if (stmt instanceof InsertStmt) {
+                    InsertStmt insertStmt = (InsertStmt) stmt;
+                    for (TSinkCommitInfo commitInfo : commitInfos) {
+                        commitInfo.setStaging_dir(stagingDir);
+                        if (insertStmt.isOverwrite()) {
+                            commitInfo.setIs_overwrite(true);
+                        }
+                    }
+                }
+                context.getGlobalStateMgr().getMetadataMgr().finishSink(catalogName, dbName, tableName, commitInfos);
+                txnStatus = TransactionStatus.VISIBLE;
+                label = "FAKE_HIVE_SINK_LABEL";
+            } else if (targetTable.isTableFunctionTable()) {
+                txnStatus = TransactionStatus.VISIBLE;
+                label = "FAKE_TABLE_FUNCTION_TABLE_SINK_LABEL";
+            } else if (targetTable.isBlackHoleTable()) {
+                txnStatus = TransactionStatus.VISIBLE;
+                label = "FAKE_BLACKHOLE_TABLE_SINK_LABEL";
+            } else if (isExplainAnalyze) {
+                transactionMgr.abortTransaction(database.getId(), transactionId, "Explain Analyze",
+                        Coordinator.getCommitInfos(coord), Coordinator.getFailInfos(coord), null);
+                txnStatus = TransactionStatus.ABORTED;
+>>>>>>> 203e9d07d6 ([Enhancement] Aborting transaction supports carrying finished tablets info to help clean dirty data for shared-data mode (#39834))
             } else {
                 if (isExplainAnalyze) {
                     GlobalStateMgr.getCurrentGlobalTransactionMgr()
@@ -1905,12 +1952,24 @@ public class StmtExecutor {
                             externalTable.getSourceTableDbId(), transactionId,
                             externalTable.getSourceTableHost(),
                             externalTable.getSourceTablePort(),
+<<<<<<< HEAD
                             errMsg);
                 } else {
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
                             database.getId(), transactionId,
                             errMsg,
                             coord == null ? Lists.newArrayList() : TabletFailInfo.fromThrift(coord.getFailInfos()));
+=======
+                            errMsg,
+                            coord == null ? Collections.emptyList() : coord.getCommitInfos(),
+                            coord == null ? Collections.emptyList() : coord.getFailInfos());
+                } else if (targetTable.isExternalTableWithFileSystem()) {
+                    GlobalStateMgr.getCurrentState().getMetadataMgr().abortSink(
+                            catalogName, dbName, tableName, coord.getSinkCommitInfos());
+                } else {
+                    transactionMgr.abortTransaction(database.getId(), transactionId, errMsg,
+                            Coordinator.getCommitInfos(coord), Coordinator.getFailInfos(coord), null);
+>>>>>>> 203e9d07d6 ([Enhancement] Aborting transaction supports carrying finished tablets info to help clean dirty data for shared-data mode (#39834))
                 }
             } catch (Exception abortTxnException) {
                 // just print a log if abort txn failed. This failure do not need to pass to user.

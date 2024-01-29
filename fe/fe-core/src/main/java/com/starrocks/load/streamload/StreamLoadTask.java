@@ -876,8 +876,13 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         }
         try {
             if (txnId != -1L) {
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
                         dbId, txnId, reason);
+=======
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(
+                        dbId, txnId, reason, Coordinator.getCommitInfos(coord), Coordinator.getFailInfos(coord), null);
+>>>>>>> 203e9d07d6 ([Enhancement] Aborting transaction supports carrying finished tablets info to help clean dirty data for shared-data mode (#39834))
             } else {
                 writeLock();
                 for (int i = 0; i < channelNum; i++) {

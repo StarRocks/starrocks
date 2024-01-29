@@ -196,9 +196,19 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
     request.txnId = ctx->txn_id;
     request.sync = true;
     request.commitInfos = std::move(ctx->commit_infos);
-    request.failInfos = std::move(ctx->fail_infos);
     request.__isset.commitInfos = true;
+<<<<<<< HEAD
     request.__set_thrift_rpc_timeout_ms(config::txn_commit_rpc_timeout_ms);
+=======
+    request.failInfos = std::move(ctx->fail_infos);
+    request.__isset.failInfos = true;
+    int32_t rpc_timeout_ms = config::txn_commit_rpc_timeout_ms;
+    if (ctx->timeout_second != -1) {
+        rpc_timeout_ms = std::min(ctx->timeout_second * 1000 / 2, rpc_timeout_ms);
+        rpc_timeout_ms = std::max(ctx->timeout_second * 1000 / 4, rpc_timeout_ms);
+    }
+    request.__set_thrift_rpc_timeout_ms(rpc_timeout_ms);
+>>>>>>> 203e9d07d6 ([Enhancement] Aborting transaction supports carrying finished tablets info to help clean dirty data for shared-data mode (#39834))
 
     // set attachment if has
     TTxnCommitAttachment attachment;
@@ -279,9 +289,19 @@ Status StreamLoadExecutor::prepare_txn(StreamLoadContext* ctx) {
     request.txnId = ctx->txn_id;
     request.sync = true;
     request.commitInfos = std::move(ctx->commit_infos);
-    request.failInfos = std::move(ctx->fail_infos);
     request.__isset.commitInfos = true;
+<<<<<<< HEAD
     request.__set_thrift_rpc_timeout_ms(config::txn_commit_rpc_timeout_ms);
+=======
+    request.failInfos = std::move(ctx->fail_infos);
+    request.__isset.failInfos = true;
+    int32_t rpc_timeout_ms = config::txn_commit_rpc_timeout_ms;
+    if (ctx->timeout_second != -1) {
+        rpc_timeout_ms = std::min(ctx->timeout_second * 1000 / 2, rpc_timeout_ms);
+        rpc_timeout_ms = std::max(ctx->timeout_second * 1000 / 4, rpc_timeout_ms);
+    }
+    request.__set_thrift_rpc_timeout_ms(rpc_timeout_ms);
+>>>>>>> 203e9d07d6 ([Enhancement] Aborting transaction supports carrying finished tablets info to help clean dirty data for shared-data mode (#39834))
 
     // set attachment if has
     TTxnCommitAttachment attachment;
@@ -321,8 +341,15 @@ Status StreamLoadExecutor::rollback_txn(StreamLoadContext* ctx) {
     request.db = ctx->db;
     request.tbl = ctx->table;
     request.txnId = ctx->txn_id;
+    request.commitInfos = std::move(ctx->commit_infos);
+    request.__isset.commitInfos = true;
     request.failInfos = std::move(ctx->fail_infos);
+<<<<<<< HEAD
     request.__set_reason(ctx->status.get_error_msg());
+=======
+    request.__isset.failInfos = true;
+    request.__set_reason(std::string(ctx->status.message()));
+>>>>>>> 203e9d07d6 ([Enhancement] Aborting transaction supports carrying finished tablets info to help clean dirty data for shared-data mode (#39834))
 
     // set attachment if has
     TTxnCommitAttachment attachment;

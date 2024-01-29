@@ -1292,8 +1292,16 @@ public class LeaderImpl {
         }
 
         try {
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
                     request.getDb_id(), request.getTxn_id(), request.getError_msg());
+=======
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(
+                    request.getDb_id(), request.getTxn_id(), request.getError_msg(),
+                    TabletCommitInfo.fromThrift(request.getCommit_infos()),
+                    TabletFailInfo.fromThrift(request.getFail_infos()),
+                    TxnCommitAttachment.fromThrift(request.getCommit_attachment()));
+>>>>>>> 203e9d07d6 ([Enhancement] Aborting transaction supports carrying finished tablets info to help clean dirty data for shared-data mode (#39834))
         } catch (Exception e) {
             LOG.warn("abort remote txn failed, txn_id: {}", request.getTxn_id(), e);
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);

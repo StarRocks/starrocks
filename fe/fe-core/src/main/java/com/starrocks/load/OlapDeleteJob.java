@@ -69,10 +69,12 @@ import com.starrocks.thrift.TTaskType;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TabletFailInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -102,7 +104,7 @@ public class OlapDeleteJob extends DeleteJob {
     }
 
     @Override
-    @java.lang.SuppressWarnings("squid:S2142")  // allow catch InterruptedException
+    @java.lang.SuppressWarnings("squid:S2142") // allow catch InterruptedException
     public void run(DeleteStmt stmt, Database db, Table table, List<Partition> partitions)
             throws DdlException, QueryStateException {
         Preconditions.checkState(table.isOlapTable());
@@ -372,7 +374,18 @@ public class OlapDeleteJob extends DeleteJob {
     @Override
     public boolean commitImpl(Database db, long timeoutMs) throws UserException {
         long transactionId = getTransactionId();
+<<<<<<< HEAD
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+=======
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        return globalTransactionMgr.commitAndPublishTransaction(db, transactionId, getTabletCommitInfos(),
+                getTabletFailInfos(), timeoutMs,
+                new InsertTxnCommitAttachment());
+    }
+
+    @Override
+    protected List<TabletCommitInfo> getTabletCommitInfos() {
+>>>>>>> 203e9d07d6 ([Enhancement] Aborting transaction supports carrying finished tablets info to help clean dirty data for shared-data mode (#39834))
         List<TabletCommitInfo> tabletCommitInfos = Lists.newArrayList();
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         for (TabletDeleteInfo tDeleteInfo : getTabletDeleteInfo()) {
@@ -386,8 +399,11 @@ public class OlapDeleteJob extends DeleteJob {
                 tabletCommitInfos.add(new TabletCommitInfo(tabletId, replica.getBackendId()));
             }
         }
-        return globalTransactionMgr.commitAndPublishTransaction(db, transactionId, tabletCommitInfos,
-                Lists.newArrayList(), timeoutMs,
-                new InsertTxnCommitAttachment());
+        return tabletCommitInfos;
+    }
+
+    @Override
+    protected List<TabletFailInfo> getTabletFailInfos() {
+        return Collections.emptyList();
     }
 }

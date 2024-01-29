@@ -160,7 +160,12 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
         long txnId = epoch.getTxnId();
         String failReason = "";
         try {
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(dbId, txnId, failReason);
+=======
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(dbId, txnId, failReason,
+                    epoch.getCommitInfos(), epoch.getFailedInfos(), null);
+>>>>>>> 203e9d07d6 ([Enhancement] Aborting transaction supports carrying finished tablets info to help clean dirty data for shared-data mode (#39834))
             epoch.onFailed();
         } catch (UserException e) {
             LOG.warn("Abort transaction failed: {}", txnId);
