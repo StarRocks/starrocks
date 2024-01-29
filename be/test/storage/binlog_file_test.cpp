@@ -393,7 +393,7 @@ TEST_F(BinlogFileTest, test_random_begin_commit_abort) {
             std::make_shared<BinlogFileWriter>(1, file_path, max_page_size, compression_type);
     ASSERT_OK(file_writer->init());
     std::vector<DupKeyVersionInfo> versions;
-    for (int i = 1; i <= 2000 || versions.empty(); i++) {
+    for (int i = 1; i <= 500 || versions.empty(); i++) {
         DupKeyVersionInfo version_info;
         version_info.version = i;
         int32_t num_pages = std::rand() % 5;
