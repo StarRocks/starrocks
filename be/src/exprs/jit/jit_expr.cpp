@@ -52,6 +52,11 @@ Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
     }
     _is_prepared = true;
 
+    if (is_constant()) {
+        _jit_function = nullptr;
+        return Status::OK();
+    }
+
     auto start = MonotonicNanos();
 
     // Compile the expression into native code and retrieve the function pointer.
@@ -73,6 +78,10 @@ Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
     _jit_function = function.value_or(nullptr);
     if (_jit_function != nullptr) {
         _jit_expr_name = _expr->debug_string();
+    } else {
+        _children.clear();
+        _children.push_back(_expr);
+        RETURN_IF_ERROR(Expr::prepare(state, context)); // jitExpr becomes an empty node, fallback to original expr.
     }
     return Status::OK();
 }
@@ -80,8 +89,6 @@ Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
 StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, Chunk* ptr) {
     // If the expr fails to compile, evaluate using the original expr.
     if (UNLIKELY(_jit_function == nullptr)) {
-        LOG(ERROR) << "JIT: JIT compile failed, fallback to original expr";
-        // TODO(Yueyang): fallback to original expr perfectly.
         return _expr->evaluate_checked(context, ptr);
     }
 
