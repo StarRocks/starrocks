@@ -19,16 +19,12 @@
 
 #include "column/schema.h"
 #include "common/status.h"
-#include "storage/lake/tablet_metadata.h"
+#include "storage/chunk_iterator.h"
+#include "storage/primary_index.h"
 
 namespace starrocks {
 
-class Column;
-
-namespace lake {
-
-class Tablet;
-class MetaFileBuilder;
+class OlapReaderStatistics;
 
 /**
  * PrimaryKeyRecover is used for error recover when tablet is in inconsistent state.
@@ -43,29 +39,29 @@ class MetaFileBuilder;
 */
 class PrimaryKeyRecover {
 public:
-    explicit PrimaryKeyRecover(MetaFileBuilder* builder, Tablet* tablet, MutableTabletMetadataPtr metadata);
-
-    ~PrimaryKeyRecover();
-
     // Follow the steps below:
     // 1. reset_state
-    // 2. rebuild
+    // 2. recover
     //
     // clean up delvec and primary index
-    Status pre_cleanup();
-    // rebuild delvec and primary index
+    virtual Status pre_cleanup() = 0;
+
+    // Primary key schema
+    virtual starrocks::Schema generate_pkey_schema() = 0;
+
+    // iterator all rowset and get their iterator and basic stat
+    virtual Status rowset_iterator(const starrocks::Schema& pkey_schema, OlapReaderStatistics& stats,
+                                   const std::function<Status(const std::vector<ChunkIteratorPtr>&,
+                                                              const std::vector<std::unique_ptr<RandomAccessFile>>&,
+                                                              const std::vector<uint32_t>&, uint32_t)>& handler) = 0;
+
+    // generate delvec and save
+    virtual Status finalize_delvec(const PrimaryIndex::DeletesMap& new_deletes) = 0;
+
+    virtual int64_t tablet_id() = 0;
+
+    // delete pk index and delvec, then rebuild them
     Status recover();
-
-private:
-    Status _init_schema(const TabletMetadata& metadata);
-
-private:
-    MetaFileBuilder* _builder;
-    Tablet* _tablet;
-    MutableTabletMetadataPtr _metadata;
-    std::unique_ptr<Column> _pk_column;
-    starrocks::Schema _pkey_schema;
 };
 
-} // namespace lake
 } // namespace starrocks
