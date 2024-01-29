@@ -10,15 +10,18 @@ CREATE TABLE map_array_tbl
 
 insert into map_array_tbl values
 (1, map{"key1":1}, [1]),
-(2, map{"key1":5, "key2":6}, [1, 2]);
+(2, map{"key1":5, "key2":6}, [1, 2]),
+(3, null, null);
 
 select c2['key1'], c3[1] from map_array_tbl;
 select c2['not-existed'] from map_array_tbl;
 select c3[100] from map_array_tbl;
+select concat(c3[1], c3[100]) from map_array_tbl;
 select element_at(c2, 'not-existed'), element_at(c3, 100) from map_array_tbl;
 
 set sql_dialect='trino';
 select c2['key1'], c3[1] from map_array_tbl;
 select c2['not-existed'] from map_array_tbl;
 select c3[100] from map_array_tbl;
+select concat(c3[1], c3[100]) from map_array_tbl;
 select element_at(c2, 'not-existed'), element_at(c3, 100) from map_array_tbl;

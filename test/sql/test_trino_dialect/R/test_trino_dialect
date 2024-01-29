@@ -11,16 +11,19 @@ CREATE TABLE map_array_tbl
 -- !result
 insert into map_array_tbl values
 (1, map{"key1":1}, [1]),
-(2, map{"key1":5, "key2":6}, [1, 2]);
+(2, map{"key1":5, "key2":6}, [1, 2]),
+(3, null, null);
 -- result:
 -- !result
 select c2['key1'], c3[1] from map_array_tbl;
 -- result:
 1	1
 5	1
+None	None
 -- !result
 select c2['not-existed'] from map_array_tbl;
 -- result:
+None
 None
 None
 -- !result
@@ -28,9 +31,17 @@ select c3[100] from map_array_tbl;
 -- result:
 None
 None
+None
+-- !result
+select concat(c3[1], c3[100]) from map_array_tbl;
+-- result:
+None
+None
+None
 -- !result
 select element_at(c2, 'not-existed'), element_at(c3, 100) from map_array_tbl;
 -- result:
+None	None
 None	None
 None	None
 -- !result
@@ -41,6 +52,7 @@ select c2['key1'], c3[1] from map_array_tbl;
 -- result:
 1	1
 5	1
+None	None
 -- !result
 select c2['not-existed'] from map_array_tbl;
 -- result:
@@ -50,8 +62,13 @@ select c3[100] from map_array_tbl;
 -- result:
 E: (1064, 'Array subscript must be less than or equal to array length: 100 > 1')
 -- !result
+select concat(c3[1], c3[100]) from map_array_tbl;
+-- result:
+E: (1064, 'Array subscript must be less than or equal to array length: 100 > 1')
+-- !result
 select element_at(c2, 'not-existed'), element_at(c3, 100) from map_array_tbl;
 -- result:
+None	None
 None	None
 None	None
 -- !result
