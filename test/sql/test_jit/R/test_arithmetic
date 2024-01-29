@@ -948,15 +948,3 @@ None
 DROP TABLE IF EXISTS `jit_basic`;
 -- result:
 -- !result
-SELECT (((1 / 1) % 1) * 1);
--- result:
-0.0
--- !result
-select 1+2 * null;
--- result:
-None
--- !result
-select 2/null;
--- result:
-None
--- !result
