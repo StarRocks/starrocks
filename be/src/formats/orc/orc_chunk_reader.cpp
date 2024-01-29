@@ -550,7 +550,7 @@ Status OrcChunkReader::_fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescri
             }
         }
         ColumnPtr& col = (*chunk)->get_column_by_slot_id(slot_desc->id());
-        _fill_functions[src_index](cvb, col, 0, _batch->numElements, slot_desc->type(),
+        _fill_functions[src_index](cvb, col, 0, _batch->numElements, _src_types[src_index],
                                    _root_selected_mapping->get_column_id_or_child_mapping(src_index).orc_mapping, this);
     }
 
