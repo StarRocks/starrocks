@@ -834,6 +834,7 @@ public:
     void load_snapshot(const std::string& meta_dir, const TabletSharedPtr& tablet, SegmentFooterPB* footer);
     void test_schema_change_optimiazation_adding_generated_column(bool enable_persistent_index);
     void test_pk_dump(size_t rowset_cnt);
+    void update_and_recover(bool enable_persistent_index);
 
 protected:
     TabletSharedPtr _tablet;
