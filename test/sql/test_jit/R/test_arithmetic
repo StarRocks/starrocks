@@ -941,6 +941,10 @@ SELECT min(((1 / 1) % 1) * 1) from jit_basic;
 -- result:
 0.0
 -- !result
+SELECT min(((1 / 1) % 1) * null) from jit_basic;
+-- result:
+None
+-- !result
 DROP TABLE IF EXISTS `jit_basic`;
 -- result:
 -- !result

@@ -88,7 +88,6 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
     Columns args;
     args.reserve(_children.size() + 1);
     size_t num_rows = 0;
-    bool all_const = true;
     for (Expr* child : _children) {
         ColumnPtr column = EVALUATE_NULL_IF_ERROR(context, child, ptr);
         if (column->only_null()) { // TODO(Yueyang): remove this when support ifnull expr.
@@ -96,10 +95,9 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
         }
         args.emplace_back(column);
         num_rows = std::max<size_t>(num_rows, column->size());
-        all_const &= child->is_constant();
     }
     if (ptr == nullptr) {
-        if (all_const && num_rows == 0) {
+        if (is_constant() && num_rows == 0) {
             num_rows = 1;
         }
     } else {
@@ -116,8 +114,7 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
     }
 #endif
 
-    auto result_column =
-            ColumnHelper::create_column(type(), is_nullable(), false, num_rows, false);
+    auto result_column = ColumnHelper::create_column(type(), is_nullable(), false, num_rows, false);
     args.emplace_back(result_column);
 
     RETURN_IF_ERROR(JITFunction::llvm_function(_jit_function, args));
@@ -126,8 +123,6 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
         result_column->resize(ptr->num_rows());
     }
 
-    // TODO(Yueyang): handle nullable produce
-    // RETURN_IF_ERROR(result_column->unfold_const_children(_type));
     return result_column;
 }
 

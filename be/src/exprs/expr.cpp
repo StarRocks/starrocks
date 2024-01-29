@@ -753,7 +753,7 @@ Status Expr::replace_compilable_exprs(Expr** expr, ObjectPool* pool) {
 }
 
 bool Expr::should_compile() const {
-    if (!is_compilable() || _children.empty()) {
+    if (!is_compilable() || _children.empty() || is_constant()) {
         return false;
     }
 

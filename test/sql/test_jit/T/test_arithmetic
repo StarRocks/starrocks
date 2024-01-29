@@ -105,5 +105,5 @@ select 1+2 * null;
 select 2/null;
 
 SELECT min(((1 / 1) % 1) * 1) from jit_basic;
-
+SELECT min(((1 / 1) % 1) * null) from jit_basic;
 DROP TABLE IF EXISTS `jit_basic`;
