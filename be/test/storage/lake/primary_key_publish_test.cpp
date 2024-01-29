@@ -793,6 +793,14 @@ TEST_P(LakePrimaryKeyPublishTest, test_batch_publish) {
     EXPECT_EQ(0, read_rows(tablet_id, new_version));
 }
 
+TEST_P(LakePrimaryKeyPublishTest, test_mem_tracker) {
+    EXPECT_EQ(1024 * 1024, _mem_tracker->limit());
+    EXPECT_EQ(1024 * 1024 * config::lake_pk_preload_memory_limit_percent / 100,
+              _update_mgr->compaction_state_mem_tracker()->limit());
+    EXPECT_EQ(1024 * 1024 * config::lake_pk_preload_memory_limit_percent / 100,
+              _update_mgr->update_state_mem_tracker()->limit());
+}
+
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyPublishTest, LakePrimaryKeyPublishTest,
                          ::testing::Values(PrimaryKeyParam{true}, PrimaryKeyParam{false}));
 

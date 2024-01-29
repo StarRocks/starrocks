@@ -2288,7 +2288,7 @@ bool TabletUpdates::check_rowset_id(const RowsetId& rowset_id) const {
     return false;
 }
 
-Status TabletUpdates::generate_pk_dump() {
+Status TabletUpdates::generate_pk_dump_if_in_error_state() {
     if (_error) {
         // generate pk dump
         static int64_t last_generate_time = 0;
