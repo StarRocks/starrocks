@@ -1084,4 +1084,22 @@ CONF_mInt64(lake_vacuum_min_batch_delete_size, "1000");
 // 20min
 CONF_mInt64(query_ctx_dump_interval_ns, "1200000000000");
 
+// If the local pk index file is older than this threshold
+// it may be evicted if the disk is full
+CONF_mInt64(lake_local_pk_index_unused_threshold_seconds, "86400"); // 1 day
+
+CONF_mBool(lake_enable_vertical_compaction_fill_data_cache, "false");
+
+CONF_mInt32(dictionary_cache_refresh_timeout_ms, "60000"); // 1 min
+CONF_mInt32(dictionary_cache_refresh_threadpool_size, "8");
+
+// Allowable intervals for continuous generation of pk dumps
+// Disable when pk_dump_interval_seconds <= 0
+CONF_mInt64(pk_dump_interval_seconds, "3600"); // 1 hour
+
+// whether enable query profile for queries initiated by spark or flink
+CONF_mBool(enable_profile_for_external_plan, "false");
+
+// the max length supported for varchar type
+CONF_mInt32(olap_string_max_length, "1048576");
 } // namespace starrocks::config
