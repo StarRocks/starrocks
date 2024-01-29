@@ -228,7 +228,7 @@ TEST_F(StringFunctionConcatTest, concatConstOversizeTest) {
     auto col3 = BinaryColumn::create();
     auto null_col = NullColumn::create();
     for (int i = 0; i < 10; ++i) {
-        col0->append(Slice(std::string(OLAP_STRING_MAX_LENGTH - i, 'x')));
+        col0->append(Slice(std::string(get_olap_string_max_length() - i, 'x')));
         col0->append(Slice(std::string(i + 1, 'y')));
     }
     col1->append(Slice(std::string(33, 'A')));
@@ -278,7 +278,7 @@ TEST_F(StringFunctionConcatTest, concatConstOversizeTest) {
         auto s = result_binary->get_slice(i);
         std::string tail =
                 col1->get_slice(0).to_string() + col2->get_slice(0).to_string() + col3->get_slice(0).to_string();
-        if (s0.size + 99 > OLAP_STRING_MAX_LENGTH) {
+        if (s0.size + 99 > get_olap_string_max_length()) {
             ASSERT_TRUE(result->is_null(i));
         } else {
             ASSERT_FALSE(result->is_null(i));
@@ -311,7 +311,7 @@ static inline void concat_not_const_test(const NullColumnPtr& null_col, Columns 
         }
         auto s0 = col->get_slice(i);
         auto s = result_binary->get_slice(i);
-        if (s0.size + 99 > OLAP_STRING_MAX_LENGTH) {
+        if (s0.size + 99 > get_olap_string_max_length()) {
             ASSERT_TRUE(result->is_null(i));
         } else {
             ASSERT_FALSE(result->is_null(i));
@@ -364,7 +364,7 @@ TEST_F(StringFunctionConcatTest, concatNotConstSmallOversizeTest) {
     auto col3 = BinaryColumn::create();
     auto null_col = NullColumn::create();
     for (int i = 0; i < 5; ++i) {
-        col0->append(Slice(std::string(OLAP_STRING_MAX_LENGTH - i, 'x')));
+        col0->append(Slice(std::string(get_olap_string_max_length() - i, 'x')));
         col0->append(Slice(std::string(i + 1, 'y')));
     }
     const auto row_num = col0->size();
@@ -392,7 +392,7 @@ TEST_F(StringFunctionConcatTest, concatNotConstBigOversizeTest) {
     auto null_col = NullColumn::create();
 
     for (int i = 0; i < 10; ++i) {
-        col0->append(Slice(std::string(OLAP_STRING_MAX_LENGTH - i, 'x')));
+        col0->append(Slice(std::string(get_olap_string_max_length() - i, 'x')));
         col0->append(Slice(std::string(i + 1, 'x')));
     }
 
@@ -450,7 +450,7 @@ static inline void concat_ws_test(const NullColumnPtr& sep_null_col, const NullC
             expect.resize(expect.size() - sep_str.size());
         }
 
-        if (expect.size() > OLAP_STRING_MAX_LENGTH) {
+        if (expect.size() > get_olap_string_max_length()) {
             ASSERT_TRUE(result->is_null(i));
         } else {
             ASSERT_FALSE(result->is_null(i));
@@ -516,13 +516,13 @@ void prepare_concat_ws_data(const NullColumnPtr& sep_null_col, const NullColumnP
 
     for (auto i = 0; i < 5; ++i) {
         sep->append_datum(Slice(""));
-        sep->append_datum(Slice(std::string(OLAP_STRING_MAX_LENGTH, 'x')));
+        sep->append_datum(Slice(std::string(get_olap_string_max_length(), 'x')));
         sep->append_datum(Slice(std::string(i + 1, 'x')));
         sep->append_datum(Slice(std::string(5 - i, 'x')));
     }
 
     for (auto i = 0; i < 10; ++i) {
-        col0->append_datum(Slice(std::string(OLAP_STRING_MAX_LENGTH - i, 'x')));
+        col0->append_datum(Slice(std::string(get_olap_string_max_length() - i, 'x')));
         col0->append_datum(Slice(std::string(i + 1, 'x')));
     }
 
@@ -567,7 +567,7 @@ TEST_F(StringFunctionConcatTest, concatWsBigOversizeTest) {
     auto sep_null_col = NullColumn::create();
     auto null_col = NullColumn::create();
     for (int i = 3795; i < 3796; ++i) {
-        sep->append(Slice(std::string(OLAP_STRING_MAX_LENGTH - i, 'x')));
+        sep->append(Slice(std::string(get_olap_string_max_length() - i, 'x')));
         col0->append(Slice(std::string(100, 'y')));
         col1->append(Slice(std::string(i + 1, 'z')));
         col2->append(Slice(std::string(4096 - i, 'w')));

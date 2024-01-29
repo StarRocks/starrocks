@@ -49,9 +49,9 @@ TEST_F(StringFunctionSpaceTest, spaceConstTest) {
             {ColumnHelper::create_const_column<TYPE_INT>(-1, 1), true, ""},
             {ColumnHelper::create_const_column<TYPE_INT>(0, 1), false, ""},
             {ColumnHelper::create_const_column<TYPE_INT>(1, 1), false, std::string(1, ' ')},
-            {ColumnHelper::create_const_column<TYPE_INT>(OLAP_STRING_MAX_LENGTH - 1, 1), false,
-             std::string(OLAP_STRING_MAX_LENGTH - 1, ' ')},
-            {ColumnHelper::create_const_column<TYPE_INT>(OLAP_STRING_MAX_LENGTH + 1, 1), true, ""},
+            {ColumnHelper::create_const_column<TYPE_INT>(get_olap_string_max_length() - 1, 1), false,
+             std::string(get_olap_string_max_length() - 1, ' ')},
+            {ColumnHelper::create_const_column<TYPE_INT>(get_olap_string_max_length() + 1, 1), true, ""},
             {ColumnHelper::create_const_column<TYPE_INT>(INT32_MAX, 1), true, ""},
             {ColumnHelper::create_const_column<TYPE_INT>(INT32_MIN, 1), true, ""},
             {ColumnHelper::create_const_null_column(1), true, ""}};
@@ -79,8 +79,8 @@ TEST_F(StringFunctionSpaceTest, spaceNullableColumnTest) {
     for (int i = 0; i < 100; ++i) {
         times_col->append(INT_MIN);
         times_col->append(INT_MAX);
-        times_col->append(OLAP_STRING_MAX_LENGTH + i);
-        times_col->append(OLAP_STRING_MAX_LENGTH - i);
+        times_col->append(get_olap_string_max_length() + i);
+        times_col->append(get_olap_string_max_length() - i);
         times_col->append(i);
         times_col->append(-i);
     }
@@ -100,9 +100,9 @@ TEST_F(StringFunctionSpaceTest, spaceNullableColumnTest) {
             {0, false, false, ""},
             {INT32_MAX, false, true, ""},
             {INT32_MIN, false, true, ""},
-            {OLAP_STRING_MAX_LENGTH, false, false, std::string(OLAP_STRING_MAX_LENGTH, ' ')},
-            {OLAP_STRING_MAX_LENGTH - 1, false, false, std::string(OLAP_STRING_MAX_LENGTH - 1, ' ')},
-            {OLAP_STRING_MAX_LENGTH + 1, true, true, ""},
+            {get_olap_string_max_length(), false, false, std::string(get_olap_string_max_length(), ' ')},
+            {get_olap_string_max_length() - 1, false, false, std::string(get_olap_string_max_length() - 1, ' ')},
+            {get_olap_string_max_length() + 1, true, true, ""},
             {-10, false, true, ""},
             {0, true, true, ""},
             {100, true, true, ""},

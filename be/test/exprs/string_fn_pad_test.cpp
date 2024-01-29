@@ -138,8 +138,8 @@ TEST_F(StringFunctionPadTest, padNotConstASCIITest) {
     std::string x65531(65531, 'x');
     TestCaseArray cases = {
             {"test", 10, "123", false, "123123test", "test123123"},
-            {"test", OLAP_STRING_MAX_LENGTH + 1, "123", true, "", ""},
-            {"test", -OLAP_STRING_MAX_LENGTH - 1, "123", true, "", ""},
+            {"test", get_olap_string_max_length() + 1, "123", true, "", ""},
+            {"test", -get_olap_string_max_length() - 1, "123", true, "", ""},
             {"test", -1, "123", true, "", ""},
             {"test", 0, "x", false, "", ""},
             {"test", 10, "", false, "test", "test"},
@@ -183,8 +183,8 @@ TEST_F(StringFunctionPadTest, padNotConstUTF8Test) {
     std::string x65531(65531, 'x');
     TestCaseArray cases = {
             {"test", 10, "123", false, "123123test", "test123123"},
-            {"test", OLAP_STRING_MAX_LENGTH + 1, "123", true, "", ""},
-            {"test", -OLAP_STRING_MAX_LENGTH - 1, "123", true, "", ""},
+            {"test", get_olap_string_max_length() + 1, "123", true, "", ""},
+            {"test", -get_olap_string_max_length() - 1, "123", true, "", ""},
             {"test", -1, "123", true, "", ""},
             {"test", 0, "x", false, "", ""},
             {"test", 10, "", false, "test", "test"},
@@ -269,8 +269,8 @@ TEST_F(StringFunctionPadTest, padConstPadTest) {
     std::string x65531(65531, 'x');
     TestCaseArray cases = {
             {"test", 10, "123", false, "123123test", "test123123"},
-            {"test", OLAP_STRING_MAX_LENGTH + 1, "123", true, "", ""},
-            {"test", -OLAP_STRING_MAX_LENGTH - 1, "123", true, "", ""},
+            {"test", get_olap_string_max_length() + 1, "123", true, "", ""},
+            {"test", -get_olap_string_max_length() - 1, "123", true, "", ""},
             {"test", -1, "123", true, "", ""},
             {"test", 0, "x", false, "", ""},
             {"test", 10, "", false, "test", "test"},
@@ -366,8 +366,8 @@ TEST_F(StringFunctionPadTest, padConstLenAndPadTest) {
     std::string x65531(65531, 'x');
     TestCaseArray cases = {
             {"test", 10, "123", false, "123123test", "test123123"},
-            {"test", OLAP_STRING_MAX_LENGTH + 1, "123", true, "", ""},
-            {"test", -OLAP_STRING_MAX_LENGTH - 1, "123", true, "", ""},
+            {"test", get_olap_string_max_length() + 1, "123", true, "", ""},
+            {"test", -get_olap_string_max_length() - 1, "123", true, "", ""},
             {"test", -1, "123", true, "", ""},
             {"test", 0, "x", false, "", ""},
             {"test", 10, "", false, "test", "test"},
