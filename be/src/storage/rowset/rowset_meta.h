@@ -212,6 +212,13 @@ public:
 
     uint32_t get_rowset_seg_id() const { return _rowset_meta_pb->rowset_seg_id(); }
 
+    void set_max_compact_input_rowset_id(uint32_t max_compact_input_rowset_id) {
+        _rowset_meta_pb->set_max_compact_input_rowset_id(max_compact_input_rowset_id);
+    }
+
+    uint32_t max_compact_input_rowset_id() const { return _rowset_meta_pb->max_compact_input_rowset_id(); }
+    bool has_max_compact_input_rowset_id() const { return _rowset_meta_pb->has_max_compact_input_rowset_id(); }
+
     void set_rowset_seg_id(uint32_t id) { _rowset_meta_pb->set_rowset_seg_id(id); }
 
     uint32_t get_num_delete_files() const { return _rowset_meta_pb->num_delete_files(); }
