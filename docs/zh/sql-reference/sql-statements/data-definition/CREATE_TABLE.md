@@ -139,7 +139,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 
 ### **index_definition**
 
-建表时仅支持创建 bitmap 索引，语法如下。有关参数说明和使用限制，请参见 [Bitmap 索引](../../../using_starrocks/Bitmap_index.md#创建索引)。
+建表时仅支持创建 bitmap 索引，语法如下。有关参数说明和使用限制，请参见 [Bitmap 索引](../../../table_design/indexes/Bitmap_index.md#创建索引)。
 
 ```sql
 INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
@@ -574,7 +574,7 @@ PROPERTIES (
 * 不支持为 TINYINT、FLOAT、DOUBLE 和 DECIMAL 类型的列创建 Bloom filter 索引。
 * Bloom filter 索引只能提高查询条件为 `in` 和 `=` 的查询效率，值越分散效果越好。
 
-更多信息，参见 [Bloom filter 索引](../../../using_starrocks/Bloomfilter_index.md)。
+更多信息，参见 [Bloom filter 索引](../../../table_design/indexes/Bloomfilter_index.md)。
 
 ```sql
 PROPERTIES (

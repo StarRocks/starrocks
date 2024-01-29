@@ -118,11 +118,11 @@ StarRocks provides two bucketing methods:
 
 In addition to basic data types such as NUMERIC, DATE, and STRING, StarRocks supports complex semi-structured data types, including ARRAY, JSON, MAP, and STRUCT.
 
-### Index
+### [Index](./indexes/indexes_overview.md)
 
 An index is a special data structure and is used as a pointer to data in a table. When the conditional columns in queries are indexed columns, StarRocks can swiftly locate the data that meets the conditions.
 
-StarRocks provides a built-in primary index, which is a prefix index composed of the prefixes of the table's sort key columns. StarRocks also allows you to create secondary indexes, including Bitmap and Bloom Filter indexes, to further enhance query efficiency.
+StarRocks provides built-in indexes: Prefix indexes, Ordinal indexes, and ZoneMap indexes. StarRocks also allows users to create indexes, that is, Bitmap indexes and Bloom Filter indexes, to further enhance query efficiency.
 
 
 ### Constraints

@@ -96,7 +96,7 @@ DISTRIBUTED BY HASH(`recruit_date`, `region_num`);
 
 StarRocks 表内部组织存储数据时会按照指定列排序，这些列为排序列（Sort Key）。明细表中由 `DUPLICATE KEY` 指定排序列。以上示例中的 `recruit_date` 以及 `region_num` 两列为排序列。
 
-> 注意：排序列在建表时应定义在其他列之前。排序键详细描述以及不同类型表中排序键的设置方法请参考 [排序键](../table_design/Sort_key.md)。
+> 注意：排序列在建表时应定义在其他列之前。排序键详细描述以及不同类型表中排序键的设置方法请参考 [排序键](../table_design/indexes/indexes_overview.md)。
 
 #### 字段类型
 
@@ -118,7 +118,7 @@ StarRocks 表中支持多种字段类型，除以上示例中已经列举的字�
 
 #### 索引
 
-StarRocks 默认会给 Key 列创建稀疏索引加速查询，具体规则见 [排序键](../table_design/Sort_key.md)。支持的索引类型有 [Bitmap 索引](../using_starrocks/Bitmap_index.md)，[Bloomfilter 索引](../using_starrocks/Bloomfilter_index.md) 等。
+StarRocks 默认会给 Key 列创建稀疏索引加速查询，具体规则见 [排序键](../table_design/indexes/indexes_overview.md)。支持的索引类型有 [Bitmap 索引](../table_design/indexes/Bitmap_index.md)，[Bloomfilter 索引](../table_design/indexes/Bloomfilter_index.md) 等。
 
 > 注意：索引创建对表类型和列有要求，详细说明见对应索引介绍章节。
 
@@ -166,7 +166,7 @@ SHOW CREATE TABLE detailDemo;
 
 StarRocks 支持多种 DDL 操作。
 
-您可以通过 [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md#schema-change) 命令可以修改表的 Schema，包括增加列，删除列，修改列类型（暂不支持修改列名称），改变列顺序。
+您可以通过 [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md) 命令可以修改表的 Schema，包括增加列，删除列，修改列类型（暂不支持修改列名称），改变列顺序。
 
 ### 增加列
 
