@@ -772,13 +772,14 @@ public class Utils {
         }
 
         // 3. group_concat distinct with columnRef is not support two stage aggregate
-        // 4. array_agg with order by clause is not support two stage aggregate
+        // 4. array_agg with order by clause or decimal distinct col is not support two stage aggregate
         String fnName = distinctCall.getFnName();
         if (FunctionSet.GROUP_CONCAT.equalsIgnoreCase(fnName)) {
             return false;
         } else if (FunctionSet.ARRAY_AGG.equalsIgnoreCase(fnName)) {
             AggregateFunction aggregateFunction = (AggregateFunction) distinctCall.getFunction();
-            if (CollectionUtils.isNotEmpty(aggregateFunction.getIsAscOrder())) {
+            if (CollectionUtils.isNotEmpty(aggregateFunction.getIsAscOrder()) ||
+                    distinctColumns.get(0).getType().isDecimalOfAnyVersion()) {
                 return false;
             }
         }

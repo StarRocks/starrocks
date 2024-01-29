@@ -58,16 +58,23 @@ public class MultiDistinctByMultiFuncRewriter {
             CallOperator oldFunctionCall = aggregation.getValue();
             if (oldFunctionCall.isDistinct()) {
                 CallOperator newAggOperator;
-                if (oldFunctionCall.getFnName().equalsIgnoreCase(FunctionSet.COUNT)) {
+                List<ColumnRefOperator> distinctCols = oldFunctionCall.getColumnRefs();
+
+                if (distinctCols.size() > 1) {
+                    newAggOperator = oldFunctionCall;
+                } else if (oldFunctionCall.getFnName().equalsIgnoreCase(FunctionSet.COUNT)) {
                     newAggOperator = buildMultiCountDistinct(oldFunctionCall);
                 } else if (oldFunctionCall.getFnName().equalsIgnoreCase(FunctionSet.SUM)) {
                     newAggOperator = buildMultiSumDistinct(oldFunctionCall);
                 } else if (oldFunctionCall.getFnName().equals(FunctionSet.ARRAY_AGG)) {
-                    newAggOperator = buildArrayAggDistinct(oldFunctionCall);
-                } else if (oldFunctionCall.getFnName().equalsIgnoreCase(FunctionSet.AVG)) {
-                    newAggOperator = oldFunctionCall;
+                    if (oldFunctionCall.getColumnRefs().size() == 1 &&
+                            !oldFunctionCall.getColumnRefs().get(0).getType().isDecimalOfAnyVersion()) {
+                        newAggOperator = buildArrayAggDistinct(oldFunctionCall);
+                    } else {
+                        newAggOperator = oldFunctionCall;
+                    }
                 } else {
-                    return Lists.newArrayList();
+                    newAggOperator = oldFunctionCall;
                 }
                 newAggMap.put(aggregation.getKey(), newAggOperator);
             } else {
@@ -185,6 +192,4 @@ public class MultiDistinctByMultiFuncRewriter {
                         FunctionSet.MULTI_DISTINCT_SUM, multiDistinctSum.getReturnType(),
                         oldFunctionCall.getChildren(), multiDistinctSum), DEFAULT_TYPE_CAST_RULE);
     }
-
-
 }

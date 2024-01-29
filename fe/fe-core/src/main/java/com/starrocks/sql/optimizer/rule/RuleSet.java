@@ -139,8 +139,6 @@ import com.starrocks.sql.optimizer.rule.transformation.RewriteBitmapCountDistinc
 import com.starrocks.sql.optimizer.rule.transformation.RewriteCountIfFunction;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteDuplicateAggregateFnRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteHllCountDistinctRule;
-import com.starrocks.sql.optimizer.rule.transformation.RewriteMultiDistinctByCTERule;
-import com.starrocks.sql.optimizer.rule.transformation.RewriteMultiDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSumByAssociativeRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2AnalyticRule;
@@ -357,11 +355,6 @@ public class RuleSet {
                 new RewriteSimpleAggToMetaScanRule(),
                 new RewriteSumByAssociativeRule(),
                 new RewriteCountIfFunction()
-        ));
-
-        REWRITE_RULES.put(RuleSetType.MULTI_DISTINCT_REWRITE, ImmutableList.of(
-                new RewriteMultiDistinctRule(),
-                new RewriteMultiDistinctByCTERule()
         ));
 
         REWRITE_RULES.put(RuleSetType.PRUNE_PROJECT, ImmutableList.of(

@@ -14,7 +14,9 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -27,11 +29,9 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
-import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 
-import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -40,6 +40,7 @@ import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficie
 import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.MEDIUM_AGGREGATE_EFFECT_COEFFICIENT;
 
 public class RewriteMultiDistinctRule extends TransformationRule {
+
     public RewriteMultiDistinctRule() {
         super(RuleType.TF_REWRITE_MULTI_DISTINCT,
                 Pattern.create(OperatorType.LOGICAL_AGGR).addChildren(Pattern.create(
@@ -75,20 +76,11 @@ public class RewriteMultiDistinctRule extends TransformationRule {
         List<CallOperator> distinctAggOperatorList = agg.getAggregations().values().stream()
                 .filter(CallOperator::isDistinct).collect(Collectors.toList());
         boolean hasMultiColumns = distinctAggOperatorList.stream().anyMatch(f -> f.getColumnRefs().size() > 1);
-        // exist multiple distinct columns should use cte to rewrite
+        // exist multiple distinct columns should enable cte use
         if (hasMultiColumns) {
             if (!context.getSessionVariable().isCboCteReuse()) {
                 throw new StarRocksPlannerException(ErrorType.USER_ERROR,
                         "%s is unsupported when cbo_cte_reuse is disabled", distinctAggOperatorList);
-            }
-            return true;
-        }
-
-        // exist unsupported two stage aggregate func should use cte to rewrite
-        for (CallOperator distinctCall : distinctAggOperatorList) {
-            List<ColumnRefOperator> distinctCols = distinctCall.getColumnRefs();
-            if (!Utils.canGenerateTwoStageAggregate(distinctCall, distinctCols)) {
-                return true;
             }
         }
 
@@ -106,22 +98,35 @@ public class RewriteMultiDistinctRule extends TransformationRule {
             return true;
         }
 
-        return false;
+        // exist distinct function can be rewritten by multi distinct function
+        for (CallOperator distinctCall : distinctAggOperatorList) {
+            String fnName = distinctCall.getFnName();
+            List<ColumnRefOperator> distinctCols = distinctCall.getColumnRefs();
 
+            if (distinctCols.size() == 1) {
+                if (FunctionSet.COUNT.equalsIgnoreCase(fnName)
+                        || FunctionSet.SUM.equalsIgnoreCase(fnName)
+                        || FunctionSet.AVG.equalsIgnoreCase(fnName)
+                        || (FunctionSet.ARRAY_AGG.equalsIgnoreCase(fnName)
+                        && !distinctCols.get(0).getType().isDecimalOfAnyVersion())) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     private boolean isCTEMoreEfficient(OptExpression input, OptimizerContext context,
                                        List<CallOperator> distinctAggOperatorList) {
         LogicalAggregationOperator aggOp = input.getOp().cast();
-        if (aggOp.hasLimit()) {
-            return true;
-        }
-
         calculateStatistics(input, context);
 
         Statistics inputStatistics = input.inputAt(0).getStatistics();
-        Collection<ColumnStatistic> inputsColumnStatistics = inputStatistics.getColumnStatistics().values();
-        if (inputsColumnStatistics.stream().anyMatch(ColumnStatistic::isUnknown) || !aggOp.hasLimit()) {
+        List<ColumnRefOperator> neededCols = Lists.newArrayList(aggOp.getGroupingKeys());
+        distinctAggOperatorList.stream().forEach(e -> neededCols.addAll(e.getColumnRefs()));
+
+        if (neededCols.stream().anyMatch(e -> inputStatistics.getColumnStatistics().get(e).isUnknown())
+                || aggOp.getGroupingKeys().size() > 2) {
             return false;
         }
 

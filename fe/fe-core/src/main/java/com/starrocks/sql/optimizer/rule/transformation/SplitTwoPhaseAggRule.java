@@ -126,7 +126,7 @@ public class SplitTwoPhaseAggRule extends SplitAggregateRule {
                                                   List<ColumnRefOperator> distinctColumns) {
         int aggMode = ConnectContext.get().getSessionVariable().getNewPlannerAggStage();
         for (CallOperator callOperator : operator.getAggregations().values()) {
-            if (callOperator.isDistinct() && !Utils.canGenerateTwoStageAggregate(callOperator, distinctColumns)) {
+            if (callOperator.isDistinct() && !canGenerateTwoStageAggregate(callOperator, distinctColumns)) {
                 return false;
             }
         }
@@ -140,7 +140,26 @@ public class SplitTwoPhaseAggRule extends SplitAggregateRule {
                 && isTwoStageMoreEfficient(input, distinctColumns);
     }
 
+    private boolean canGenerateTwoStageAggregate(CallOperator distinctCall,
+                                                 List<ColumnRefOperator> distinctColumns) {
+        // 1. multiple cols distinct is not support two stage aggregate
+        // 2. array type col is not support two stage aggregate
+        if (distinctColumns.size() > 1 || distinctColumns.get(0).getType().isArrayType()) {
+            return false;
+        }
 
+        // 3. group_concat distinct or avg distinct is not support two stage aggregate
+        // 4. array_agg with order by clause or decimal distinct col is not support two stage aggregate
+        String fnName = distinctCall.getFnName();
+        if (FunctionSet.GROUP_CONCAT.equalsIgnoreCase(fnName) || FunctionSet.AVG.equalsIgnoreCase(fnName)) {
+            return false;
+        } else if (FunctionSet.ARRAY_AGG.equalsIgnoreCase(fnName)) {
+            if (distinctColumns.get(0).getType().isDecimalOfAnyVersion()) {
+                return false;
+            }
+        }
+        return true;
+    }
 
     private boolean isTwoStageMoreEfficient(OptExpression input, List<ColumnRefOperator> distinctColumns) {
         LogicalAggregationOperator aggOp = input.getOp().cast();
