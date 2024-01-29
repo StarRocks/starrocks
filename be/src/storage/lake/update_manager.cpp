@@ -594,7 +594,7 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     for (auto&& each : delvecs) {
         builder->append_delvec(each.second, each.first);
     }
-    builder->apply_opcompaction(op_compaction);
+    builder->apply_opcompaction(op_compaction, max_rowset_id);
     RETURN_IF_ERROR(builder->update_num_del_stat(segment_id_to_add_dels));
 
     TRACE_COUNTER_INCREMENT("rowsetid", rowset_id);
