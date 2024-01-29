@@ -14,20 +14,20 @@
 
 package com.starrocks.privilege.ranger.hive;
 
-import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Column;
 import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.privilege.RangerAccessController;
-import com.starrocks.privilege.ranger.RangerStarRocksAccessRequest;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.UserIdentity;
-import org.apache.ranger.plugin.policyengine.RangerAccessResult;
-import org.apache.ranger.plugin.policyengine.RangerPolicyEngine;
 
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
-
-import static java.util.Locale.ENGLISH;
 
 public class RangerHiveAccessController extends RangerAccessController {
     public RangerHiveAccessController(String serviceName) {
@@ -37,56 +37,79 @@ public class RangerHiveAccessController extends RangerAccessController {
     @Override
     public void checkDbAction(UserIdentity currentUser, Set<Long> roleIds, String catalogName, String db,
                               PrivilegeType privilegeType) throws AccessDeniedException {
-        RangerHiveResource resource = new RangerHiveResource(ObjectType.DATABASE, Lists.newArrayList(db));
-        hasPermission(resource, currentUser, privilegeType);
+        hasPermission(RangerHiveResource.builder()
+                        .setDatabase(db)
+                        .build(),
+                currentUser,
+                privilegeType);
     }
 
     @Override
     public void checkAnyActionOnDb(UserIdentity currentUser, Set<Long> roleIds, String catalogName, String db)
             throws AccessDeniedException {
-        RangerHiveResource resource = new RangerHiveResource(ObjectType.DATABASE, Lists.newArrayList(db));
-        hasPermission(resource, currentUser, PrivilegeType.ANY);
+        hasPermission(RangerHiveResource.builder()
+                        .setDatabase(db)
+                        .build(),
+                currentUser,
+                PrivilegeType.ANY);
     }
 
     @Override
     public void checkTableAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName, PrivilegeType privilegeType)
             throws AccessDeniedException {
-        RangerHiveResource resource = new RangerHiveResource(ObjectType.TABLE,
-                Lists.newArrayList(tableName.getDb(), tableName.getTbl()));
-        hasPermission(resource, currentUser, privilegeType);
+        hasPermission(RangerHiveResource.builder()
+                        .setDatabase(tableName.getDb())
+                        .setTable(tableName.getTbl())
+                        .build(),
+                currentUser,
+                privilegeType);
     }
 
     @Override
     public void checkAnyActionOnTable(UserIdentity currentUser, Set<Long> roleIds, TableName tableName)
             throws AccessDeniedException {
-        RangerHiveResource resource = new RangerHiveResource(ObjectType.TABLE,
-                Lists.newArrayList(tableName.getDb(), tableName.getTbl()));
-        hasPermission(resource, currentUser, PrivilegeType.ANY);
+        hasPermission(RangerHiveResource.builder()
+                        .setDatabase(tableName.getDb())
+                        .setTable(tableName.getTbl())
+                        .build(),
+                currentUser,
+                PrivilegeType.ANY);
     }
 
-    public HiveAccessType convertToAccessType(PrivilegeType privilegeType) {
+    @Override
+    public Map<String, Expr> getColumnMaskingPolicy(ConnectContext context, TableName tableName, List<Column> columns) {
+        Map<String, Expr> maskingExprMap = Maps.newHashMap();
+        for (Column column : columns) {
+            Expr columnMaskingExpression = getColumnMaskingExpression(RangerHiveResource.builder()
+                    .setDatabase(tableName.getDb())
+                    .setTable(tableName.getTbl())
+                    .setColumn(column.getName())
+                    .build(), column, context);
+            if (columnMaskingExpression != null) {
+                maskingExprMap.put(column.getName(), columnMaskingExpression);
+            }
+        }
+
+        return maskingExprMap;
+    }
+
+    @Override
+    public Expr getRowAccessPolicy(ConnectContext context, TableName tableName) {
+        return getRowAccessExpression(RangerHiveResource.builder()
+                .setDatabase(tableName.getDb())
+                .setTable(tableName.getTbl())
+                .build(), context);
+    }
+
+    @Override
+    public String convertToAccessType(PrivilegeType privilegeType) {
+        HiveAccessType hiveAccessType;
         if (privilegeType == PrivilegeType.SELECT) {
-            return HiveAccessType.SELECT;
+            hiveAccessType = HiveAccessType.SELECT;
         } else {
-            return HiveAccessType.NONE;
-        }
-    }
-
-    private void hasPermission(RangerHiveResource resource, UserIdentity user, PrivilegeType privilegeType)
-            throws AccessDeniedException {
-        String accessType;
-        if (privilegeType.equals(PrivilegeType.ANY)) {
-            accessType = RangerPolicyEngine.ANY_ACCESS;
-        } else {
-            HiveAccessType hiveAccessType = convertToAccessType(privilegeType);
-            accessType = hiveAccessType.name().toLowerCase(ENGLISH);
+            hiveAccessType = HiveAccessType.NONE;
         }
 
-        RangerStarRocksAccessRequest request = RangerStarRocksAccessRequest.createAccessRequest(resource, user, accessType);
-        RangerAccessResult result = rangerPlugin.isAccessAllowed(request);
-
-        if (result == null || !result.getIsAllowed()) {
-            throw new AccessDeniedException();
-        }
+        return hiveAccessType.name().toLowerCase(Locale.ENGLISH);
     }
 }
