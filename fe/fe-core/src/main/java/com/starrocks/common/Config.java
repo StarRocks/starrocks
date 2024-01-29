@@ -2699,6 +2699,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean mv_auto_analyze_async = true;
 
+    @ConfField(mutable = true, comment = "Whether to check olap table's materialized index meta at inserting data, to " +
+            "avoid BE corrupt if the materialized index meta has been corrupted or bad")
+    public static boolean enable_check_materialized_index_meta_at_insert = true;
+
     /**
      * To prevent the external catalog from displaying too many entries in the grantsTo system table,
      * you can use this variable to ignore the entries in the external catalog

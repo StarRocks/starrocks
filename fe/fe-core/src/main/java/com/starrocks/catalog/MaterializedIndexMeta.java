@@ -89,7 +89,7 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     @SerializedName(value = "isColocateMVIndex")
     private boolean isColocateMVIndex = false;
 
-    @SerializedName(value = "active")
+    @SerializedName(value = "isInactive")
     private boolean isInactive = false;
     @SerializedName(value = "inactiveReason")
     private String inactiveReason;

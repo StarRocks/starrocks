@@ -692,6 +692,20 @@ public class InsertPlanner {
                 columnRefMap.put(outputColumns.get(columnIdx), outputColumns.get(columnIdx));
             }
         }
+        if (Config.enable_check_materialized_index_meta_at_insert) {
+            if (targetTable.isOlapTableOrMaterializedView()) {
+                OlapTable olapTargetTable = (OlapTable) targetTable;
+                for (MaterializedIndexMeta indexMeta : olapTargetTable.getVisibleIndexMetas()) {
+                    if (indexMeta.isInActive()) {
+                        String mvName = ((OlapTable) targetTable).getIndexNameById(indexMeta.getIndexId());
+                        String errorMsg = String.format("Table's %s associated materialized view %s has been inactive, " +
+                                "please drop it first: `drop materialized view %s`", targetTable.getName(), mvName, mvName);
+                        LOG.warn(errorMsg);
+                        throw new SemanticException(errorMsg);
+                    }
+                }
+            }
+        }
         return root.withNewRoot(new LogicalProjectOperator(new HashMap<>(columnRefMap)));
     }
 

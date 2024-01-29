@@ -2814,7 +2814,7 @@ public class OlapTable extends Table {
     public void onReload() {
         analyzePartitionInfo();
         tryToAssignIndexId();
-        // Check all materialized index metas except base are valid at final
+        // Check all materialized index metas except base are valid
         checkMaterializedIndexMeta(this);
     }
 
@@ -2825,7 +2825,7 @@ public class OlapTable extends Table {
      * @throws SemanticException: if non-base materialized index meta's referred columns are not existed in the base
      * schema, {@code SemanticException} will be thrown.
      */
-    private void checkMaterializedIndexMeta(Table targetTable) {
+    public static void checkMaterializedIndexMeta(Table targetTable) {
         if (!targetTable.isOlapTableOrMaterializedView()) {
             return;
         }
@@ -2850,10 +2850,9 @@ public class OlapTable extends Table {
                 } else {
                     // after 3.1.0, slot ref of base table also has defined expr. so needs to check the column name too.
                     Expr defineExpr = targetColumn.getDefineExpr();
-                    if (defineExpr != null && defineExpr instanceof SlotRef) {
+                    if (!targetColumn.isAggregated() && defineExpr != null && defineExpr instanceof SlotRef) {
                         referredColumnNames.add(targetColumn.getName());
                     }
-
                     slots.stream().map(slot -> slot.getColumnName()).forEach(x -> referredColumnNames.add(x));
                 }
 
