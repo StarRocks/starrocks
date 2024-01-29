@@ -74,8 +74,7 @@
           "link": {"type": "doc", "id": "table_design/indexes/indexes_overview"},
           "items": ["table_design/indexes/Bitmap_index", "table_design/indexes/Bloomfilter_index"]
         },
-        "table_design/data_compression",
-        "table_design/hybrid_table"
+        "table_design/data_compression"
       ]
     },
     {
@@ -815,8 +814,7 @@
           "link": {"type": "doc", "id": "table_design/indexes/indexes_overview"},
           "items": ["table_design/indexes/Bitmap_index", "table_design/indexes/Bloomfilter_index"]
         },
-        "table_design/data_compression",
-        "table_design/hybrid_table"
+        "table_design/data_compression"
       ]
     },
     {
