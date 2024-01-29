@@ -1096,7 +1096,12 @@ public class DatabaseTransactionMgr {
                 } else {
                     partitionCommitInfo.setVersion(partition.getNextVersion());
                 }
-                partitionCommitInfo.setVersionTime(table.isCloudNativeTable() ? 0 : commitTs);
+                // versionTime has different meanings in shared data and shared nothing mode.
+                // In shared nothing mode, versionTime is the time when the transaction was
+                // committed, while in shared data mode, versionTime is the time when the
+                // transaction was successfully published. This is a design error due to
+                // carelessness, and should have been consistent here.
+                partitionCommitInfo.setVersionTime(table.isCloudNativeTableOrMaterializedView() ? 0 : commitTs);
             }
         }
 
