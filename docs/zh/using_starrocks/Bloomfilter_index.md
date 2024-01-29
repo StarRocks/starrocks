@@ -17,8 +17,16 @@ Bloom filter 索引可以快速判断表的数据文件中是否可能包含要�
 
 ## 使用说明
 
+<<<<<<< HEAD:docs/zh/using_starrocks/Bloomfilter_index.md
 - 主键模型和明细模型中所有列都可以创建 Bloom filter 索引；聚合模型和更新模型中，只有维度列（即 Key 列）支持创建 Bloom filter 索引。
 - 不支持为 TINYINT、FLOAT、DOUBLE 和 DECIMAL 类型的列创建 Bloom filter 索引。
+=======
+- 主键表和明细表中所有列都可以创建 Bloom filter 索引；聚合表和更新表中，只有维度列（即 Key 列）支持创建 Bloom filter 索引。
+- 支持为如下类型的列创建 Bloom filter 索引。
+  - 数值类型：SMALLINT、INT、BIGINT 和 LARGEINT。
+  - 字符串类型：CHAR、STRING 和 VARCHAR。
+  - 日期类型：DATE、DATETIME。
+>>>>>>> 2c97460c21 ([Doc]Update the supported data types of bitmap and bloomfilter indexes (#40271)):docs/zh/table_design/indexes/Bloomfilter_index.md
 - Bloom filter 索引只能提高包含 `in` 和 `=` 过滤条件的查询效率，例如 `Select xxx from table where xxx in ()` 和 `Select xxx from table where column = xxx`。
 - 如要了解一个查询是否命中了 Bloom filter 索引，可查看该查询的 Profile 中的 `BloomFilterFilterRows` 字段。关于如何查看 Profile，参见[分析查询](../administration/Query_planning.md#查看分析-profile)。
 
