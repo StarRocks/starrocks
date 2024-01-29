@@ -942,6 +942,8 @@ CONF_mInt64(lake_vacuum_retry_max_attempts, "5");
 CONF_mInt64(lake_vacuum_retry_min_delay_ms, "10");
 CONF_mBool(enable_primary_key_recover, "false");
 CONF_mInt64(lake_pk_compaction_max_input_rowsets, "5");
+// Used for control memory usage of update state cache and compaction state cache
+CONF_mInt32(lake_pk_preload_memory_limit_percent, "30");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
