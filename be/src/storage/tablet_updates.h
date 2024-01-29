@@ -347,7 +347,7 @@ public:
 
     void set_error(const string& msg) { _set_error(msg); }
 
-    Status generate_pk_dump();
+    Status generate_pk_dump_if_in_error_state();
 
 private:
     friend class Tablet;
