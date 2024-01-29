@@ -71,8 +71,8 @@ protected:
     constexpr static const char* const kTestDir = "./lake_meta_test";
     inline static std::unique_ptr<lake::LocationProvider> s_location_provider;
     inline static std::unique_ptr<TabletManager> s_tablet_manager;
-    inline static std::unique_ptr<UpdateManager> s_update_manager;
     inline static std::unique_ptr<MemTracker> s_mem_tracker;
+    inline static std::unique_ptr<UpdateManager> s_update_manager;
 };
 
 TEST_F(MetaFileTest, test_meta_rw) {

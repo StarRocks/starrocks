@@ -588,13 +588,13 @@ bool UpdateManager::TEST_update_state_exist(Tablet* tablet, Rowset* rowset) {
         auto column_state_entry =
                 _update_column_state_cache.get(strings::Substitute("$0_$1", tablet->tablet_id(), rowset_unique_id));
         if (column_state_entry != nullptr) {
-            _update_column_state_cache.remove(column_state_entry);
+            _update_column_state_cache.release(column_state_entry);
             return true;
         }
     } else {
         auto state_entry = _update_state_cache.get(strings::Substitute("$0_$1", tablet->tablet_id(), rowset_unique_id));
         if (state_entry != nullptr) {
-            _update_state_cache.remove(state_entry);
+            _update_state_cache.release(state_entry);
             return true;
         }
     }
