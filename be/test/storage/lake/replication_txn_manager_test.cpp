@@ -204,8 +204,8 @@ protected:
     std::unique_ptr<starrocks::lake::TabletManager> _tablet_manager;
     std::string _test_dir;
     std::unique_ptr<lake::LocationProvider> _location_provider;
-    std::unique_ptr<lake::UpdateManager> _update_manager;
     std::unique_ptr<MemTracker> _mem_tracker;
+    std::unique_ptr<lake::UpdateManager> _update_manager;
     std::unique_ptr<lake::ReplicationTxnManager> _replication_txn_manager;
 
     int64_t _transaction_id = 100;
