@@ -47,6 +47,10 @@ public class CompactionJob {
         this.warehouse = warehouse;
     }
 
+    Database getDb() {
+        return db;
+    }
+
     public long getTxnId() {
         return txnId;
     }

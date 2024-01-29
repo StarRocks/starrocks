@@ -299,7 +299,8 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
     }
 
     @Override
-    public void postAbort(TransactionState txnState, List<TabletFailInfo> failedTablets) {
+    public void postAbort(TransactionState txnState, List<TabletCommitInfo> finishedTablets,
+            List<TabletFailInfo> failedTablets) {
         txnState.clearAutomaticPartitionSnapshot();
         Database db = GlobalStateMgr.getCurrentState().getDb(txnState.getDbId());
         if (db != null) {
