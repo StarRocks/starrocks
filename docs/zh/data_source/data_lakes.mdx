@@ -2,7 +2,73 @@
 displayed_sidebar: "Chinese"
 ---
 
+import DataLakeIntro from '../assets/commonMarkdown/datalakeIntro.md'
+
 # 查询数据湖
+
+<DataLakeIntro />
+
+## 重点概念
+
+- 开源的文件格式
+
+  支持各种常见的开源文件格式，如 JSON、Parquet、Avro 等，便于结构化和非结构化数据的存储与处理。
+
+- 元数据管理
+
+  提供共享的元数据层，通常利用 Iceberg 表等格式，实现数据的高效组织和管理。
+
+- 多样化的查询引擎
+
+  整合多款引擎，如增强版本的 Presto 和 Spark 等，以满足各种数据分析和 AI 用例场景。
+
+- 安全管理
+
+  内置强大有效的安全管理机制，全面管控数据安全、隐私与合规性，确保数据的完整性和可信度。
+
+## 湖仓一体架构的优势
+
+- 灵活性和可扩展性
+
+  支持无缝管理各种文件格式的数据，并能根据实际业务场景需求灵活扩展计算和存储能力。
+
+- 成本效益
+
+  与传统方案相比，数据存储和处理更为经济有效。
+
+- 数据治理能力增强
+
+  提升数据控制、管理和完整性，确保数据处理的可靠性和安全性。
+
+- AI 和分析场景适配性
+
+  完美契合机器学习和基于AI 的数据处理等各种涉及复杂的分析任务的用例场景。
+
+## StarRocks 湖仓一体
+
+对于 StarRocks 湖仓一体方案，需要重点考虑以下几个方面：
+
+- 规范的 Catalog 及元数据服务集成
+- 存算分离架构下，弹性可扩展的计算节点（简称 CN）
+- 灵活的缓存机制
+
+---
+
+## Catalog
+
+StarRocks 提供两种类型的 Catalog：Internal Catalog 和 External Catalog。Internal Catalog 用于管理 StarRocks 数据库中存储的数据的元数据。External Catalog 用于连接存储在 Hive、Iceberg、Hudi、Delta Lake 等各种外部数据源中的数据。
+
+## 计算节点可扩展
+
+在存算分离架构下，存储和计算的分离降低了扩展的复杂度。StarRocks 计算节点仅存储本地缓存，因此可以根据负载情况灵活地添加或移除计算节点。
+
+## Data cache
+
+计算节点上的缓存是可选的。如果计算节点因为负载变化过快而频繁启动和关闭、或者是查询大多集中在近期数据上，那么缓存数据可能就没有多大意义了。
+
+## 学习实践
+
+基于 Docker 创建智能湖仓。具体操作参见[基于 Apache Iceberg 的数据湖分析](../quick_start/iceberg.md)。教程中创建了一个对接 Iceberg 和 MinIO 的数据湖，并连接 StarRocks 容器作为查询引擎。您可以直接导入教程中提供的数据集，也可以创建您自己的数据集。
 
 import DocCardList from '@theme/DocCardList';
 
