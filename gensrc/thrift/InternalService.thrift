@@ -264,6 +264,8 @@ struct TQueryOptions {
   114: optional bool enable_jit = false;
 
   115: optional TTimeUnit big_query_profile_threshold_unit = TTimeUnit.SECOND;
+  
+  116: optional string sql_dialect;
 }
 
 
