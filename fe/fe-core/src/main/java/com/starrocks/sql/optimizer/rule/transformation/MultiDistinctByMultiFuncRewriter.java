@@ -58,11 +58,8 @@ public class MultiDistinctByMultiFuncRewriter {
             CallOperator oldFunctionCall = aggregation.getValue();
             if (oldFunctionCall.isDistinct()) {
                 CallOperator newAggOperator;
-                List<ColumnRefOperator> distinctCols = oldFunctionCall.getColumnRefs();
 
-                if (distinctCols.size() > 1) {
-                    newAggOperator = oldFunctionCall;
-                } else if (oldFunctionCall.getFnName().equalsIgnoreCase(FunctionSet.COUNT)) {
+                if (oldFunctionCall.getFnName().equalsIgnoreCase(FunctionSet.COUNT)) {
                     newAggOperator = buildMultiCountDistinct(oldFunctionCall);
                 } else if (oldFunctionCall.getFnName().equalsIgnoreCase(FunctionSet.SUM)) {
                     newAggOperator = buildMultiSumDistinct(oldFunctionCall);
@@ -142,6 +139,7 @@ public class MultiDistinctByMultiFuncRewriter {
                     .create(new LogicalAggregationOperator.Builder().withOperator(aggregationOperator)
                                     .setType(AggType.GLOBAL)
                                     .setAggregations(newAggMapWithAvg)
+                                    .setPredicate(null)
                                     .build(),
                             input.getInputs());
             aggregationOperator.getGroupingKeys().forEach(c -> projections.put(c, c));
@@ -151,6 +149,7 @@ public class MultiDistinctByMultiFuncRewriter {
                     .create(new LogicalAggregationOperator.Builder().withOperator(aggregationOperator)
                                     .setType(AggType.GLOBAL)
                                     .setAggregations(newAggMap)
+                                    .setPredicate(null)
                                     .build(),
                             input.getInputs());
         }
