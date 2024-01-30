@@ -2023,6 +2023,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
                 return;
             }
         }
+        manager->index_cache().update_object_size(index_entry, index.memory_usage());
         DelVectorPtr dv = std::make_shared<DelVector>();
         if (tmp_deletes.empty()) {
             dv->init(version.major(), nullptr, 0);
@@ -2044,6 +2045,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         _set_error(msg);
         return;
     }
+    manager->index_cache().update_object_size(index_entry, index.memory_usage());
 
     {
         std::lock_guard wl(_lock);
