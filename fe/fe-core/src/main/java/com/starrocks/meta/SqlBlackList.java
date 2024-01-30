@@ -35,7 +35,7 @@ public class SqlBlackList {
     }
 
     public static void verifying(String sql) throws AnalysisException {
-        String formatSql = sql.replaceAll("\r\n|\r|\n|\\s+", " ");
+        String formatSql = sql.replaceAll("\r|\n|\\s+", " ");
         for (BlackListSql patternAndId : getInstance().sqlBlackListMap.values()) {
             Matcher m = patternAndId.pattern.matcher(formatSql);
             if (m.find()) {
