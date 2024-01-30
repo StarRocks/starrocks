@@ -126,7 +126,7 @@ public class TestLockInterface {
         Assert.assertTrue(lockManager.isOwner(rid3, locker, LockType.READ));
 
 
-        locker.unLockTables(database, Lists.newArrayList(rid2, rid3), LockType.READ);
+        locker.unLockTablesWithIntensiveDbLock(database, Lists.newArrayList(rid2, rid3), LockType.READ);
         Assert.assertFalse(lockManager.isOwner(rid, locker, LockType.INTENTION_SHARED));
         Assert.assertFalse(lockManager.isOwner(rid2, locker, LockType.READ));
         Assert.assertFalse(lockManager.isOwner(rid3, locker, LockType.READ));

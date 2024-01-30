@@ -273,15 +273,19 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         VisibleStateWaiter waiter;
         StopWatch stopWatch = new StopWatch();
         stopWatch.start();
+
+        TransactionState transactionState = getTransactionState(db.getId(), transactionId);
+        List<Long> tableIdList = transactionState.getTableIdList();
+
         Locker locker = new Locker();
-        if (!locker.tryLockDatabase(db, LockType.WRITE, timeoutMillis)) {
+        if (!locker.tryLockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE, timeoutMillis)) {
             throw new UserException("get database write lock timeout, database="
                     + db.getFullName() + ", timeoutMillis=" + timeoutMillis);
         }
         try {
             waiter = getDatabaseTransactionMgr(db.getId()).commitPreparedTransaction(transactionId);
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE);
         }
 
         MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
@@ -394,15 +398,17 @@ public class GlobalTransactionMgr implements MemoryTrackable {
             @NotNull Database db, long transactionId, @NotNull List<TabletCommitInfo> tabletCommitInfos,
             @NotNull List<TabletFailInfo> tabletFailInfos,
             @Nullable TxnCommitAttachment attachment, long timeoutMs) throws UserException {
+        TransactionState transactionState = getTransactionState(db.getId(), transactionId);
+        List<Long> tableId = transactionState.getTableIdList();
         Locker locker = new Locker();
-        if (!locker.tryLockDatabase(db, LockType.WRITE, timeoutMs)) {
+        if (!locker.tryLockTablesWithIntensiveDbLock(db, tableId, LockType.WRITE, timeoutMs)) {
             throw new LockTimeoutException(
                     "get database write lock timeout, database=" + db.getFullName() + ", timeout=" + timeoutMs + "ms");
         }
         try {
             return commitTransaction(db.getId(), transactionId, tabletCommitInfos, tabletFailInfos, attachment);
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db, tableId, LockType.WRITE);
         }
     }
 
