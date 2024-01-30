@@ -42,7 +42,6 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.handler.codec.DecoderResult;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
-import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpRequest;
@@ -58,9 +57,8 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     // keep connectContext when channel is open
     private static final AttributeKey<HttpConnectContext> HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY =
             AttributeKey.valueOf("httpContextKey");
-    protected FullHttpRequest fullRequest = null;
     protected HttpRequest request = null;
-    private ActionController controller = null;
+    private final ActionController controller;
     private BaseAction action = null;
 
     public HttpServerHandler(ActionController controller) {
@@ -108,6 +106,9 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
                     metrics.requestHandleLatencyMs.update(latency);
                     LOG.info("receive http request. url: {}, thread id: {}, startTime: {}, latency: {} ms",
                             req.getRequest().uri(), Thread.currentThread().getId(), startTime, latency);
+                    LOG.info("receive http request. uri: {}, thread id: {}, startTime: {}, latency: {} ms",
+                            WebUtils.sanitizeHttpReqUri(req.getRequest().uri()), Thread.currentThread().getId(),
+                            startTime, latency);
                 }
             }
         } else {
@@ -118,7 +119,7 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
         HttpServerHandlerMetrics.getInstance().httpConnectionsNum.increase(1L);
-        // create HttpConnectContext when channel is establised, and store it in channel attr
+        // create HttpConnectContext when channel is established, and store it in channel attr
         ctx.channel().attr(HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY).setIfAbsent(new HttpConnectContext());
         super.channelActive(ctx);
     }
@@ -150,7 +151,7 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     }
 
     @Override
-    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
         LOG.warn(String.format("[remote=%s] Exception caught: %s",
                 ctx.channel().remoteAddress(), cause.getMessage()), cause);
         ctx.close();
