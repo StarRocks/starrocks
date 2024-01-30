@@ -51,6 +51,8 @@ public:
     JITEngine* engine;
 };
 
+// Each shard in LRU cache has one entry capacity. In each loop, the 3 expressions' first run insert the compiled func
+// into the cache, and the second run hit the cache, and at last, invalid all cache.
 TEST_F(JITFunctionCacheTest, cache) {
     for (auto i = 0; i < 20; i++) {
         // Normal int8
@@ -163,7 +165,7 @@ TEST_F(JITFunctionCacheTest, cache) {
                     ASSERT_EQ(7, v->get_data()[j]);
                 }
             });
-
+            // cached
             ASSERT_TRUE(engine->lookup_function(expr->debug_string()) != nullptr);
             ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
                 ASSERT_FALSE(ptr->is_nullable());
@@ -178,7 +180,7 @@ TEST_F(JITFunctionCacheTest, cache) {
             });
         }
 
-        // invalid the cache
+        // invalid the cache, by inserting new entries into used shared (14, 20, 0).
         for (auto j = 0; j < 32; j++) {
             mock_insert(std::to_string(j));
         }

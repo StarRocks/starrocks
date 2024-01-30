@@ -201,7 +201,7 @@ public:
     std::string debug_string() const override {
         std::stringstream out;
         auto expr_debug_string = Expr::debug_string();
-        out << "VectorizedArithmeticExpr ("
+        out << "VectorizedDivArithmeticExpr ("
             << "lhs=" << _children[0]->type().debug_string() << ", rhs=" << _children[1]->type().debug_string()
             << ", result=" << this->type().debug_string() << ", lhs_is_constant=" << _children[0]->is_constant()
             << ", rhs_is_constant=" << _children[1]->is_constant() << ", expr (" << expr_debug_string << ") )";
@@ -271,7 +271,7 @@ public:
     std::string debug_string() const override {
         std::stringstream out;
         auto expr_debug_string = Expr::debug_string();
-        out << "VectorizedArithmeticExpr ("
+        out << "VectorizedModArithmeticExpr ("
             << "lhs=" << _children[0]->type().debug_string() << ", rhs=" << _children[1]->type().debug_string()
             << ", result=" << this->type().debug_string() << ", lhs_is_constant=" << _children[0]->is_constant()
             << ", rhs_is_constant=" << _children[1]->is_constant() << ", expr (" << expr_debug_string << ") )";
@@ -304,7 +304,7 @@ public:
     std::string debug_string() const override {
         std::stringstream out;
         auto expr_debug_string = Expr::debug_string();
-        out << "VectorizedArithmeticExpr ("
+        out << "VectorizedBitNotArithmeticExpr ("
             << "lhs=" << _children[0]->type().debug_string() << ", result=" << this->type().debug_string()
             << ", lhs_is_constant=" << _children[0]->is_constant() << ", expr (" << expr_debug_string << ") )";
         return out.str();
@@ -337,7 +337,7 @@ public:
     std::string debug_string() const override {
         std::stringstream out;
         auto expr_debug_string = Expr::debug_string();
-        out << "VectorizedArithmeticExpr ("
+        out << "VectorizedBitShiftArithmeticExpr ("
             << "lhs=" << _children[0]->type().debug_string() << ", rhs=" << _children[1]->type().debug_string()
             << ", result=" << this->type().debug_string() << ", lhs_is_constant=" << _children[0]->is_constant()
             << ", rhs_is_constant=" << _children[1]->is_constant() << ", expr (" << expr_debug_string << ") )";
