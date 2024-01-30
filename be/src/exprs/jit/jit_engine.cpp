@@ -236,7 +236,7 @@ std::pair<JITScalarFunction, std::function<void()>> JITEngine::lookup_function(c
     }
 
     return std::make_pair(((JitCacheEntry*)_func_cache->value(handle))->func,
-                     [this, handle]() { this->_func_cache->release(handle); });
+                          [this, handle]() { this->_func_cache->release(handle); });
 }
 
 } // namespace starrocks
