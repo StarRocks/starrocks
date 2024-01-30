@@ -25,6 +25,7 @@ public enum IcebergPartitionTransform {
     UNKNOWN;
 
     public static IcebergPartitionTransform fromString(String partitionTransform) {
+        partitionTransform = partitionTransform.replaceAll("\\[.*\\]$", "");
         try {
             return IcebergPartitionTransform.valueOf(partitionTransform.toUpperCase());
         } catch (IllegalArgumentException e) {
