@@ -21,6 +21,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.analysis.TimestampArithmeticExpr.TimeUnit;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DynamicPartitionUtil.StartOfDate;
@@ -180,6 +181,11 @@ public class DynamicPartitionProperty {
         sb.deleteCharAt(sb.length() - 1);
         sb.append("}");
         return sb.toString();
+    }
+
+    @VisibleForTesting
+    public void setTimeUnit(String timeUnit) {
+        this.timeUnit = timeUnit;
     }
 
     @Override

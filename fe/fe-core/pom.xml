@@ -811,6 +811,7 @@ under the License.
             <!-- also parse the proto for FE -->
             <plugin>
                 <artifactId>maven-antrun-plugin</artifactId>
+                <version>1.8</version>
                 <executions>
                     <execution>
                         <id>generate-sources</id>
