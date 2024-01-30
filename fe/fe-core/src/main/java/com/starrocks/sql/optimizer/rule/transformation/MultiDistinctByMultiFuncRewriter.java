@@ -142,6 +142,7 @@ public class MultiDistinctByMultiFuncRewriter {
                     .create(new LogicalAggregationOperator.Builder().withOperator(aggregationOperator)
                                     .setType(AggType.GLOBAL)
                                     .setAggregations(newAggMapWithAvg)
+                                    .setPredicate(null)
                                     .build(),
                             input.getInputs());
             aggregationOperator.getGroupingKeys().forEach(c -> projections.put(c, c));
@@ -151,6 +152,7 @@ public class MultiDistinctByMultiFuncRewriter {
                     .create(new LogicalAggregationOperator.Builder().withOperator(aggregationOperator)
                                     .setType(AggType.GLOBAL)
                                     .setAggregations(newAggMap)
+                                    .setPredicate(null)
                                     .build(),
                             input.getInputs());
         }

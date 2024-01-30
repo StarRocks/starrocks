@@ -53,7 +53,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
-import org.apache.commons.collections.MapUtils;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.SetUtils;
 import org.apache.logging.log4j.LogManager;
@@ -716,15 +715,25 @@ public class Utils {
             aggs = ((PhysicalHashAggregateOperator) inputOp).getAggregations();
         }
 
-        if (MapUtils.isEmpty(aggs)) {
-            return false;
-        } else {
-            // Must do multiple stage aggregate when aggregate distinct function has array type
-            // Must generate three, four phase aggregate for distinct aggregate with multi columns
-            return aggs.values().stream().anyMatch(callOperator -> callOperator.isDistinct()
-                    && (callOperator.getChildren().size() > 1 ||
-                    callOperator.getChildren().stream().anyMatch(c -> c.getType().isComplexType())));
+        for (CallOperator callOperator : aggs.values()) {
+            if (callOperator.isDistinct()) {
+                String fnName = callOperator.getFnName();
+                List<ColumnRefOperator> distinctCols = callOperator.getColumnRefs();
+                if (distinctCols.size() > 1 || distinctCols.stream().anyMatch(c -> c.getType().isComplexType())) {
+                    return true;
+                }
+                if (FunctionSet.GROUP_CONCAT.equalsIgnoreCase(fnName) || FunctionSet.AVG.equalsIgnoreCase(fnName)) {
+                    return true;
+                } else if (FunctionSet.ARRAY_AGG.equalsIgnoreCase(fnName))  {
+                    AggregateFunction aggregateFunction = (AggregateFunction) callOperator.getFunction();
+                    if (CollectionUtils.isNotEmpty(aggregateFunction.getIsAscOrder()) ||
+                            (!distinctCols.isEmpty() &&distinctCols.get(0).getType().isDecimalOfAnyVersion())) {
+                        return true;
+                    }
+                }
+            }
         }
+        return false;
     }
 
     // without distinct function, the common distinctCols is an empty list.
@@ -760,30 +769,5 @@ public class Utils {
             }
         }
         return false;
-    }
-
-    public static boolean canGenerateTwoStageAggregate(CallOperator distinctCall,
-                                                 List<ColumnRefOperator> distinctColumns) {
-
-        // 1. multiple cols distinct is not support two stage aggregate
-        // 2. array type col is not support two stage aggregate
-        if (distinctColumns.size() > 1 || distinctColumns.get(0).getType().isArrayType()) {
-            return false;
-        }
-
-        // 3. group_concat distinct with columnRef is not support two stage aggregate
-        // 4. array_agg with order by clause or decimal distinct col is not support two stage aggregate
-        String fnName = distinctCall.getFnName();
-        if (FunctionSet.GROUP_CONCAT.equalsIgnoreCase(fnName)) {
-            return false;
-        } else if (FunctionSet.ARRAY_AGG.equalsIgnoreCase(fnName)) {
-            AggregateFunction aggregateFunction = (AggregateFunction) distinctCall.getFunction();
-            if (CollectionUtils.isNotEmpty(aggregateFunction.getIsAscOrder()) ||
-                    distinctColumns.get(0).getType().isDecimalOfAnyVersion()) {
-                return false;
-            }
-        }
-
-        return true;
     }
 }

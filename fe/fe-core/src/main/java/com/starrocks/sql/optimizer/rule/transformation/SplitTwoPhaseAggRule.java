@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
+import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
@@ -154,7 +155,9 @@ public class SplitTwoPhaseAggRule extends SplitAggregateRule {
         if (FunctionSet.GROUP_CONCAT.equalsIgnoreCase(fnName) || FunctionSet.AVG.equalsIgnoreCase(fnName)) {
             return false;
         } else if (FunctionSet.ARRAY_AGG.equalsIgnoreCase(fnName)) {
-            if (distinctColumns.get(0).getType().isDecimalOfAnyVersion()) {
+            AggregateFunction aggregateFunction = (AggregateFunction) distinctCall.getFunction();
+            if (CollectionUtils.isNotEmpty(aggregateFunction.getIsAscOrder()) ||
+                    distinctColumns.get(0).getType().isDecimalOfAnyVersion()) {
                 return false;
             }
         }
@@ -198,8 +201,11 @@ public class SplitTwoPhaseAggRule extends SplitAggregateRule {
                     Expr.getBuiltinFunction(FunctionSet.ARRAY_AGG_DISTINCT, new Type[] {fnCall.getChild(0).getType()},
                             IS_NONSTRICT_SUPERTYPE_OF), false);
         } else if (functionName.equals(FunctionSet.GROUP_CONCAT)) {
-            // all children of group_concat is constant
+            // all children of group_concat are constant
             return fnCall;
+        } else if (functionName.equals(FunctionSet.AVG)) {
+            // all children of avg are constant
+            return new CallOperator(FunctionSet.AVG, fnCall.getType(), fnCall.getChildren(), fnCall.getFunction(), false);
         }
         throw new StarRocksPlannerException(ErrorType.INTERNAL_ERROR, "unsupported distinct agg functions: %s in two phase agg",
                 fnCall);
