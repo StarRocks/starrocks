@@ -15,6 +15,7 @@
 package com.starrocks.connector.iceberg;
 
 import com.google.common.base.Objects;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
@@ -22,6 +23,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.statistic.StatisticUtils;
 import org.apache.iceberg.AddedRowsScanTask;
 import org.apache.iceberg.ChangelogOperation;
 import org.apache.iceberg.ChangelogScanTask;
@@ -232,6 +234,85 @@ public class IcebergPartitionUtils {
                 return PartitionUtil.DateTimeInterval.HOUR;
             default:
                 return PartitionUtil.DateTimeInterval.NONE;
+        }
+    }
+
+    public static boolean isSupportedConvertPartitionTransform(IcebergPartitionTransform transform) {
+        return transform == IcebergPartitionTransform.IDENTITY ||
+                transform == IcebergPartitionTransform.YEAR ||
+                transform == IcebergPartitionTransform.MONTH ||
+                transform == IcebergPartitionTransform.DAY ||
+                transform == IcebergPartitionTransform.HOUR;
+    }
+
+    public static LocalDateTime addDateTimeInterval(LocalDateTime dateTime, IcebergPartitionTransform transform) {
+        switch (transform) {
+            case YEAR:
+                return dateTime.plusYears(1);
+            case MONTH:
+                return dateTime.plusMonths(1);
+            case DAY:
+                return dateTime.plusDays(1);
+            case HOUR:
+                return dateTime.plusHours(1);
+            default:
+                throw new StarRocksConnectorException("Unsupported partition transform to add: %s", transform);
+        }
+    }
+
+    /**
+        convert partition value to predicate
+        eg.
+        partitionColumn: ts(date)
+        partitionValue: 2023  transform: year
+        return ts >= '2023-01-01' and ts < '2024-01-01'
+        partitionValue: 2023-01 transform: month
+        return ts >= '2023-01-01' and ts < '2023-02-01'
+        partitionValue: 2023-01-01  transform: day
+        return ts >= '2023-01-01' and ts < '2023-01-02'
+
+        partitionColumn: ts(datetime)   transform: year
+        partitionValue: 2023  transform: year
+        return ts >= '2023-01-01 00:00:00' and ts < '2024-01-01 00:00:00'
+        partitionValue: 2023-01 transform: month
+        return ts >= '2023-01-01 00:00:00' and ts < '2023-02-01 00:00:00'
+        partitionValue: 2023-01-01  transform: day
+        return ts >= '2023-01-01 00:00:00' and ts < '2023-01-02 00:00:00'
+        partitionValue: 2023-01-01-12  transform: hour
+        return ts >= '2023-01-01 12:00:00' and ts < '2023-01-01 13:00:00'
+    */
+    public static String convertPartitionFieldToPredicate(IcebergTable table, String partitionColumn,
+                                                          String partitionValue) {
+        PartitionField partitionField = table.getPartitionFiled(partitionColumn);
+        if (partitionField == null) {
+            throw new StarRocksConnectorException("Partition column %s not found in table %s.%s.%s",
+                    partitionColumn, table.getCatalogName(), table.getRemoteDbName(), table.getRemoteTableName());
+        }
+        IcebergPartitionTransform transform = IcebergPartitionTransform.fromString(partitionField.transform().toString());
+        if (transform == IcebergPartitionTransform.IDENTITY) {
+            return StatisticUtils.quoting(partitionColumn) + " = '" + partitionValue + "'";
+        } else {
+            // transform is year, month, day, hour
+            Type partitiopnColumnType = table.getColumn(partitionColumn).getType();
+            Preconditions.checkState(partitiopnColumnType.isDateType(),
+                    "Partition column %s type must be date or datetime", partitionColumn);
+            String normalizedPartitionValue = normalizeTimePartitionName(partitionValue, partitionField,
+                    table.getNativeTable().schema(), partitiopnColumnType);
+
+            LocalDateTime startDateTime = null;
+            DateTimeFormatter dateTimeFormatter = null;
+            if (partitiopnColumnType.isDate()) {
+                dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+                startDateTime = LocalDate.parse(normalizedPartitionValue, dateTimeFormatter).atStartOfDay();
+            } else {
+                dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+                startDateTime = LocalDateTime.parse(normalizedPartitionValue, dateTimeFormatter);
+            }
+            LocalDateTime endDateTime = addDateTimeInterval(startDateTime, transform);
+            String endDateTimeStr = endDateTime.format(dateTimeFormatter);
+
+            return StatisticUtils.quoting(partitionColumn) + " >= '" + normalizedPartitionValue + "' and " +
+                    StatisticUtils.quoting(partitionColumn) + " < '" + endDateTimeStr + "'";
         }
     }
 }
