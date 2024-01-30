@@ -128,7 +128,7 @@ TBC
 
 ### Contributing documentation
 
-To contribute to StarRocks documentation, please refer to [Document Contribution Guideline](https://github.com/StarRocks/docs/blob/main/README.md).
+To contribute to StarRocks documentation, please refer to [Document Contribution Guideline](https://github.com/StarRocks/starrocks/blob/main/docs/README.md).
 
 ### Help community members
 
