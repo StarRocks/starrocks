@@ -94,12 +94,7 @@ public class RestBaseAction extends BaseAction {
         ActionAuthorizationInfo authInfo = getAuthorizationInfo(request);
         // check password
         UserIdentity currentUser = checkPassword(authInfo);
-<<<<<<< HEAD
         ConnectContext ctx = new ConnectContext(null);
-=======
-        // ctx lifetime is the same as the channel
-        HttpConnectContext ctx = request.getConnectContext();
->>>>>>> 02be7213b5 ([BugFix] Fix small file related security issues (#40255))
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx.setQualifiedUser(authInfo.fullUserName);
         ctx.setQueryId(UUIDUtil.genUUID());
