@@ -122,6 +122,10 @@ public:
 
     void set_stream_load_contexts(const std::vector<StreamLoadContext*>& contexts);
 
+    size_t expired_log_count() { return _expired_log_count; }
+
+    void set_expired_log_count(size_t val) { _expired_log_count = val; }
+
 private:
     // Id of this query
     TUniqueId _query_id;
@@ -157,6 +161,8 @@ private:
     PerDriverScanRangesMap _scan_ranges_per_driver_seq;
     std::vector<StreamLoadContext*> _stream_load_contexts;
     bool _channel_stream_load = false;
+
+    size_t _expired_log_count = 0;
 };
 
 class FragmentContextManager {
