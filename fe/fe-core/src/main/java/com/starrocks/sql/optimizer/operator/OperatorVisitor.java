@@ -26,6 +26,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalFileScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergMetadataScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJDBCScanOperator;
@@ -63,6 +64,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperat
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHudiScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergMetadataScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
@@ -151,6 +153,10 @@ public abstract class OperatorVisitor<R, C> {
     }
 
     public R visitLogicalMysqlScan(LogicalMysqlScanOperator node, C context) {
+        return visitLogicalTableScan(node, context);
+    }
+
+    public R visitLogicalIcebergMetadataScan(LogicalIcebergMetadataScanOperator node, C context) {
         return visitLogicalTableScan(node, context);
     }
 
@@ -322,6 +328,10 @@ public abstract class OperatorVisitor<R, C> {
     }
 
     public R visitPhysicalOdpsScan(PhysicalOdpsScanOperator node, C context) {
+        return visitOperator(node, context);
+    }
+
+    public R visitPhysicalIcebergMetadataScan(PhysicalIcebergMetadataScanOperator node, C context) {
         return visitOperator(node, context);
     }
 

@@ -46,6 +46,7 @@ import com.starrocks.connector.ConnectorTableColumnStats;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.SerializedMetaSpec;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -464,6 +465,20 @@ public class MetadataMgr {
             }
         }
         return ImmutableList.copyOf(files.build());
+    }
+
+    public SerializedMetaSpec getSerializedMetaSpec(String catalogName, String dbName, String tableName,
+                                                   long snapshotId, String serializedPredicate) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        if (connectorMetadata.isPresent()) {
+            try {
+                return connectorMetadata.get().getSerializedMetaSpec(dbName, tableName, snapshotId, serializedPredicate);
+            } catch (Exception e) {
+                LOG.error("Failed to get remote meta splits on catalog [{}], table [{}.{}]", catalogName, dbName, tableName, e);
+                throw e;
+            }
+        }
+        return null;
     }
 
     public List<PartitionInfo> getPartitions(String catalogName, Table table, List<String> partitionNames) {

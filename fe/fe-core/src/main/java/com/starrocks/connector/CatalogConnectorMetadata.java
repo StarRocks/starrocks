@@ -27,6 +27,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
+import com.starrocks.connector.metadata.MetaMetadata;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
@@ -64,13 +65,15 @@ import static java.util.Objects.requireNonNull;
 public class CatalogConnectorMetadata implements ConnectorMetadata {
     private final ConnectorMetadata normal;
     private final ConnectorMetadata informationSchema;
+    private final ConnectorMetadata metadata;
 
-    public CatalogConnectorMetadata(ConnectorMetadata normal, ConnectorMetadata informationSchema) {
+    public CatalogConnectorMetadata(ConnectorMetadata normal, ConnectorMetadata informationSchema, ConnectorMetadata metadata) {
         requireNonNull(normal, "metadata is null");
         requireNonNull(informationSchema, "infoSchemaDb is null");
         checkArgument(informationSchema instanceof InformationSchemaMetadata);
         this.normal = normal;
         this.informationSchema = informationSchema;
+        this.metadata = metadata;
     }
 
     private ConnectorMetadata metadataOfDb(String dBName) {
@@ -78,6 +81,13 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
             return informationSchema;
         }
         return normal;
+    }
+
+    private ConnectorMetadata metadataOfTable(String tableName) {
+        if (MetaMetadata.isMetadataTable(tableName)) {
+            return metadata;
+        }
+        return null;
     }
 
     @Override
@@ -107,7 +117,11 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
 
     @Override
     public Table getTable(String dbName, String tblName) {
-        ConnectorMetadata metadata = metadataOfDb(dbName);
+        ConnectorMetadata metadata = metadataOfTable(tblName);
+        if (metadata == null) {
+            metadata = metadataOfDb(dbName);
+        }
+
         return metadata.getTable(dbName, tblName);
     }
 
@@ -126,6 +140,12 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys, long snapshotId,
                                                    ScalarOperator predicate, List<String> fieldNames, long limit) {
         return normal.getRemoteFileInfos(table, partitionKeys, snapshotId, predicate, fieldNames, limit);
+    }
+
+    @Override
+    public SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName,
+                                                      long snapshotId, String serializedPredicate) {
+        return normal.getSerializedMetaSpec(dbName, tableName, snapshotId, serializedPredicate);
     }
 
     @Override
