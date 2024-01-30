@@ -51,8 +51,10 @@ import com.starrocks.thrift.TStorageType;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
@@ -66,7 +68,7 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     @SerializedName(value = "sortKeyUniqueIds")
     public List<Integer> sortKeyUniqueIds;
     @SerializedName(value = "schemaVersion")
-    private int schemaVersion;
+    private int schemaVersion = -1;
     @SerializedName(value = "schemaHash")
     private int schemaHash;
     @SerializedName(value = "schemaId")
@@ -87,6 +89,7 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     private boolean isColocateMVIndex = false;
 
     private Expr whereClause;
+    private Set<Long> updateSchemaBackendId = new HashSet<>();
 
     private MaterializedIndexMeta() {
 
@@ -232,6 +235,18 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
 
     public Expr getWhereClause() {
         return whereClause;
+    }
+
+    public boolean hasUpdateSchemaTask(Long backendId) {
+        return updateSchemaBackendId.contains(backendId);
+    }
+
+    public void addUpdateSchemaBackend(Long backendId) {
+        updateSchemaBackendId.add(backendId);
+    }
+
+    public void removeUpdateSchemaBackend(Long backendId) {
+        updateSchemaBackendId.remove(backendId);
     }
 
     // The column names of the materialized view are all lowercase, but the column names may be uppercase

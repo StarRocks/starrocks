@@ -1443,6 +1443,7 @@ void Tablet::build_tablet_report_info(TTabletInfo* tablet_info) {
     tablet_info->__set_path_hash(_data_dir->path_hash());
     tablet_info->__set_enable_persistent_index(_tablet_meta->get_enable_persistent_index());
     tablet_info->__set_primary_index_cache_expire_sec(_tablet_meta->get_primary_index_cache_expire_sec());
+    tablet_info->__set_tablet_schema_version(_max_version_schema->schema_version());
     if (_tablet_meta->get_binlog_config() != nullptr) {
         tablet_info->__set_binlog_config_version(_tablet_meta->get_binlog_config()->version);
     }
