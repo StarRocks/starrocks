@@ -1449,8 +1449,7 @@ public class ReportHandler extends Daemon {
                 if (db == null) {
                     continue;
                 }
-                Locker locker = new Locker();
-                locker.lockDatabase(db, LockType.READ);
+                db.readLock();
                 try {
                     OlapTable olapTable = (OlapTable) db.getTable(tableId);
                     if (olapTable == null) {
@@ -1474,7 +1473,7 @@ public class ReportHandler extends Daemon {
                         tableToDb.put(tableId, dbId);
                     }
                 } finally {
-                    locker.unLockDatabase(db, LockType.READ);
+                    db.readUnlock();
                 }
             }
         }
@@ -1491,8 +1490,7 @@ public class ReportHandler extends Daemon {
             if (db == null) {
                 continue;
             }
-            Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            db.readLock();
             try {
                 OlapTable olapTable = (OlapTable) db.getTable(tableId);
                 if (olapTable == null) {
@@ -1515,7 +1513,7 @@ public class ReportHandler extends Daemon {
                 for (Column column : indexMeta.getSchema()) {
                     TColumn tColumn = column.toThrift();
                     tColumn.setColumn_name(
-                            column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX, tColumn.column_name));
+                            column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX));
                     column.setIndexFlag(tColumn, olapTable.getIndexes(), olapTable.getBfColumns());
                     columnsDesc.add(tColumn);
                 }
@@ -1532,7 +1530,7 @@ public class ReportHandler extends Daemon {
                 indexMeta.addUpdateSchemaBackend(backendId);
 
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                db.readUnlock();
             }
         }
         // send agent batch task

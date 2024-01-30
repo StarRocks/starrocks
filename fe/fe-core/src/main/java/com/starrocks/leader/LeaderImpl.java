@@ -462,8 +462,7 @@ public class LeaderImpl {
             long backendId = task.getBackendId();
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db != null) {
-                Locker locker = new Locker();
-                locker.lockDatabase(db, LockType.READ);
+                db.readLock();
                 try {
                     OlapTable olapTable = (OlapTable) db.getTable(tableId);
                     if (olapTable != null) {
@@ -473,7 +472,7 @@ public class LeaderImpl {
                         }
                     }
                 } finally {
-                    locker.unLockDatabase(db, LockType.READ);
+                    db.readUnlock();
                 }
             }
         } finally {
