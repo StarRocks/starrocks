@@ -167,6 +167,16 @@ public class QueryPlannerTest {
         stmtExecutor2.execute();
         Assert.assertEquals("Access denied; This sql is in blacklist, please contact your admin",
                 connectContext.getState().getErrorMessage());
+        connectContext.getState().setError("");
+
+        String sqlWithLineSeparators = "select k1 \n" +
+                " from \n" +
+                " test.baseall";
+        StatementBase statement1 = SqlParser.parse(sqlWithLineSeparators, connectContext.getSessionVariable().getSqlMode()).get(0);
+        StmtExecutor stmtExecutor4 = new StmtExecutor(connectContext, statement1);
+        stmtExecutor4.execute();
+        Assert.assertEquals("Access denied; This sql is in blacklist, please contact your admin",
+                connectContext.getState().getErrorMessage());
 
         String deleteBlackListSql = "delete sqlblacklist " + String.valueOf(id);
         StmtExecutor stmtExecutor3 = new StmtExecutor(connectContext, deleteBlackListSql);
