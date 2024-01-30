@@ -143,7 +143,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     // 2. rewrite segment file if it is partial update
     std::vector<std::string> orphan_files;
     std::map<int, FileInfo> replace_segments;
-    RETURN_IF_ERROR(state.rewrite_segment(op_write, metadata, tablet, &replace_segments, &orphan_files));
+    RETURN_IF_ERROR(state.rewrite_segment(op_write, txn_id, metadata, tablet, &replace_segments, &orphan_files));
     PrimaryIndex::DeletesMap new_deletes;
     for (uint32_t i = 0; i < op_write.rowset().segments_size(); i++) {
         new_deletes[rowset_id + i] = {};
@@ -332,15 +332,15 @@ Status UpdateManager::_handle_index_op(Tablet* tablet, int64_t base_version, boo
     // release index entry but keep it in cache
     DeferOp release_index_entry([&] { _index_cache.release(index_entry); });
     auto& index = index_entry->value();
-    if (!index.is_load(base_version)) {
-        return Status::Uninitialized(fmt::format("Primary index not load yet, tablet_id: {}", tablet->id()));
-    }
     std::unique_ptr<std::lock_guard<std::mutex>> guard = nullptr;
     if (need_lock) {
         guard = index.try_fetch_guard();
         if (guard == nullptr) {
             return Status::Cancelled(fmt::format("Fail to fetch primary index guard, tablet_id: {}", tablet->id()));
         }
+    }
+    if (!index.is_load(base_version)) {
+        return Status::Uninitialized(fmt::format("Primary index not load yet, tablet_id: {}", tablet->id()));
     }
     op(index);
 
@@ -637,6 +637,7 @@ void UpdateManager::remove_primary_index_cache(uint32_t tablet_id) {
     bool succ = false;
     auto index_entry = _index_cache.get(tablet_id);
     if (index_entry != nullptr) {
+        index_entry->value().unload();
         _index_cache.remove(index_entry);
         succ = true;
     }

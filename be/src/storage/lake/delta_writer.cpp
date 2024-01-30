@@ -461,10 +461,6 @@ Status DeltaWriterImpl::finish(DeltaWriter::FinishMode mode) {
                 op_write->mutable_txn_meta()->add_partial_update_column_ids(_write_column_ids[i]);
                 op_write->mutable_txn_meta()->add_partial_update_column_unique_ids(tablet_column.unique_id());
             }
-            // generate rewrite segment names to avoid gc in rewrite operation
-            for (auto i = 0; i < op_write->rowset().segments_size(); i++) {
-                op_write->add_rewrite_segments(gen_segment_filename(_txn_id));
-            }
         }
         // handle condition update
         if (_merge_condition != "") {
@@ -482,12 +478,6 @@ Status DeltaWriterImpl::finish(DeltaWriter::FinishMode mode) {
                     */
                     op_write->mutable_txn_meta()->set_auto_increment_partial_update_column_id(i);
                     break;
-                }
-            }
-
-            if (op_write->rewrite_segments_size() == 0) {
-                for (auto i = 0; i < op_write->rowset().segments_size(); i++) {
-                    op_write->add_rewrite_segments(gen_segment_filename(_txn_id));
                 }
             }
         }

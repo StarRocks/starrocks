@@ -454,8 +454,9 @@ Status RowsetUpdateState::_prepare_partial_update_states(const TxnLogPB_OpWrite&
     return Status::OK();
 }
 
-Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata,
-                                          Tablet* tablet, std::map<int, FileInfo>* replace_segments,
+Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
+                                          const TabletMetadata& metadata, Tablet* tablet,
+                                          std::map<int, FileInfo>* replace_segments,
                                           std::vector<std::string>* orphan_files) {
     TRACE_COUNTER_SCOPE_LATENCY_US("rewrite_segment_latency_us");
     const RowsetMetadata& rowset_meta = op_write.rowset();
@@ -463,11 +464,9 @@ Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, cons
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_path));
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata.schema());
     // get rowset schema
-    if (!op_write.has_txn_meta() || op_write.rewrite_segments_size() == 0 || rowset_meta.num_rows() == 0 ||
-        op_write.txn_meta().has_merge_condition()) {
+    if (!op_write.has_txn_meta() || rowset_meta.num_rows() == 0 || op_write.txn_meta().has_merge_condition()) {
         return Status::OK();
     }
-    CHECK(op_write.rewrite_segments_size() == rowset_meta.segments_size());
     // currently assume it's a partial update
     const auto& txn_meta = op_write.txn_meta();
     // columns supplied in rowset
@@ -488,7 +487,7 @@ Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, cons
     std::vector<bool> need_rename(rowset_meta.segments_size(), true);
     for (int i = 0; i < rowset_meta.segments_size(); i++) {
         const auto& src_path = rowset_meta.segments(i);
-        const auto& dest_path = op_write.rewrite_segments(i);
+        const auto& dest_path = gen_segment_filename(txn_id);
         DCHECK(src_path != dest_path);
 
         int64_t t_rewrite_start = MonotonicMillis();

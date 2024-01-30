@@ -114,7 +114,7 @@ message TxnLogPB {
         // some txn semantic information bind to this rowset
         optional RowsetTxnMetaPB txn_meta = 2;
         repeated string dels = 3;
-        // for partial update, record dest rewrite segment names to avoid gc
+        // Deprecated
         repeated string rewrite_segments = 4;
     }
 

@@ -99,7 +99,6 @@ public:
         // because if `commit_primary_index` or `finalize` fail, we can remove index in `handle_failure`.
         // if `_index_entry` is null, do nothing.
         RETURN_IF_ERROR(_tablet.update_mgr()->commit_primary_index(_index_entry, &_tablet));
-        _guard.reset(nullptr);
         return _builder.finalize(_max_txn_id);
     }
 
