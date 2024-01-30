@@ -161,19 +161,8 @@ private:
     PerDriverScanRangesMap _scan_ranges_per_driver_seq;
     std::vector<StreamLoadContext*> _stream_load_contexts;
     bool _channel_stream_load = false;
-<<<<<<< HEAD
-=======
-
-    // STREAM MV
-    std::atomic<size_t> _num_finished_epoch_pipelines = 0;
-    bool _is_stream_pipeline = false;
-    bool _is_stream_test = false;
-
-    bool _enable_adaptive_dop = false;
-    AdaptiveDopParam _adaptive_dop_param;
 
     size_t _expired_log_count = 0;
->>>>>>> 079f18b1d5 ([Enhancement] Avoid printing too many irrelevant logs when be hang (#22820))
 };
 
 class FragmentContextManager {
