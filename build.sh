@@ -277,13 +277,13 @@ cd ${STARROCKS_HOME}
 FE_MODULES=
 if [ ${BUILD_FE} -eq 1 ] || [ ${BUILD_SPARK_DPP} -eq 1 ] || [ ${BUILD_HIVE_UDF} -eq 1 ]; then
     if [ ${BUILD_SPARK_DPP} -eq 1 ]; then
-        FE_MODULES="fe-common,spark-dpp"
+        FE_MODULES="fe-common,plugin-common,spark-dpp"
     fi
     if [ ${BUILD_HIVE_UDF} -eq 1 ]; then
-        FE_MODULES="fe-common,hive-udf"
+        FE_MODULES="fe-common,plugin-common,hive-udf"
     fi
     if [ ${BUILD_FE} -eq 1 ]; then
-        FE_MODULES="hive-udf,fe-common,spark-dpp,fe-core"
+        FE_MODULES="hive-udf,plugin-common,fe-common,spark-dpp,fe-core"
     fi
 fi
 
