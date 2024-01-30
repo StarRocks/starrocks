@@ -39,8 +39,8 @@ struct ConnectorScanOperatorMemShareArbitrator {
             : query_mem_limit(query_mem_limit), scan_mem_limit(query_mem_limit) {}
 
     int64_t set_scan_mem_ratio(double mem_ratio) {
-        scan_mem_limit = query_mem_limit * mem_ratio;
-        return std::max<int64_t>(1, scan_mem_limit);
+        scan_mem_limit = std::max<int64_t>(1, query_mem_limit * mem_ratio);
+        return scan_mem_limit;
     }
 
     int64_t update_chunk_source_mem_bytes(int64_t old_value, int64_t new_value);
