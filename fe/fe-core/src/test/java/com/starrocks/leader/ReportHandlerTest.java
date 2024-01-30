@@ -151,7 +151,7 @@ public class ReportHandlerTest {
                         (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         schemaChangeHandler.process(alterTableStmt.getOps(), db, olapTable);
-        Assert.assertEquals(OlapTableState.NORMAL, olapTable.getState());
+        Assert.assertEquals(OlapTableState.SCHEMA_CHANGE, olapTable.getState());
 
         long backendId = 10001L;
         List<Long> tabletIds = 
