@@ -433,6 +433,8 @@ public:
 
     bool is_jit_enabled() const { return _query_options.__isset.enable_jit && _query_options.enable_jit; }
 
+    std::string_view get_sql_dialect() const { return _query_options.sql_dialect; }
+
 private:
     // Set per-query state.
     void _init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
