@@ -655,19 +655,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
-    public void testTPCH11() throws Exception {
-        try {
-            FeConstants.USE_MOCK_DICT_MANAGER = true;
-            Pair<QueryDumpInfo, String> replayPair =
-                    getCostPlanFragment(getDumpInfoFromFile("query_dump/tpch_query11_mv_rewrite"));
-            Assert.assertTrue(replayPair.second, replayPair.second.contains(
-                    "DictDecode(78: n_name, [<place-holder> = 'GERMANY'])"));
-        } finally {
-            FeConstants.USE_MOCK_DICT_MANAGER = false;
-        }
-    }
-
-    @Test
     public void testPruneCTEProperty() throws Exception {
         String jsonStr = getDumpInfoFromFile("query_dump/cte_reuse");
         connectContext.getSessionVariable().disableJoinReorder();

@@ -42,11 +42,17 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.staros.starlet.StarletAgentFactory;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
+import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
@@ -73,6 +79,7 @@ import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -108,6 +115,7 @@ import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
+import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
 import com.starrocks.system.BackendCoreStat;
@@ -115,6 +123,8 @@ import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.warehouse.Warehouse;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.commons.codec.binary.Hex;
 import org.junit.Assert;
 
@@ -1105,6 +1115,18 @@ public class UtFrameUtils {
         return ret;
     }
 
+    public static void setPartitionVersion(Partition partition, long version) {
+        partition.setVisibleVersion(version, System.currentTimeMillis());
+        MaterializedIndex baseIndex = partition.getBaseIndex();
+        List<Tablet> tablets = baseIndex.getTablets();
+        for (Tablet tablet : tablets) {
+            List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
+            for (Replica replica : replicas) {
+                replica.updateVersionInfo(version, -1, version);
+            }
+        }
+    }
+
     public static void setDefaultConfigForAsyncMVTest(ConnectContext connectContext) {
         Config.dynamic_partition_check_interval_seconds = 10;
         Config.bdbje_heartbeat_timeout_second = 60;
@@ -1136,7 +1158,45 @@ public class UtFrameUtils {
             connectContext.getSessionVariable().setOptimizerExecuteTimeout(300 * 1000);
             // 300s: 5min
             connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(300 * 1000);
+            // 300s: 5min
+            connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(300 * 1000);
+
             connectContext.getSessionVariable().setEnableShortCircuit(false);
+            connectContext.getSessionVariable().setEnableQueryCache(false);
+            connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
+            connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
+            connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
         }
+
+        new MockUp<PlanTestBase>() {
+            /**
+             * {@link com.starrocks.sql.plan.PlanTestNoneDBBase#isIgnoreExplicitColRefIds()}
+             */
+            @Mock
+            boolean isIgnoreExplicitColRefIds() {
+                return true;
+            }
+        };
+
+        new MockUp<StmtExecutor>() {
+            /**
+             * {@link StmtExecutor#handleDMLStmt(ExecPlan, DmlStmt)}
+             */
+            @Mock
+            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+                if (stmt instanceof InsertStmt) {
+                    InsertStmt insertStmt = (InsertStmt) stmt;
+                    TableName tableName = insertStmt.getTableName();
+                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+                    OlapTable tbl = ((OlapTable) testDb.getTable(tableName.getTbl()));
+                    if (tbl != null) {
+                        for (Long partitionId : insertStmt.getTargetPartitionIds()) {
+                            Partition partition = tbl.getPartition(partitionId);
+                            setPartitionVersion(partition, partition.getVisibleVersion() + 1);
+                        }
+                    }
+                }
+            }
+        };
     }
 }

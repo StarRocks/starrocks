@@ -772,7 +772,7 @@ public class BackupJob extends AbstractJob {
         return true;
     }
 
-    private boolean validateLocalFile(String filePath) {
+    protected boolean validateLocalFile(String filePath) {
         File file = new File(filePath);
         if (!file.exists() || !file.canRead()) {
             status = new Status(ErrCode.COMMON_ERROR, "file is invalid: " + filePath);
