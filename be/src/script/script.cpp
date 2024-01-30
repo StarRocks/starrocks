@@ -238,7 +238,7 @@ public:
     static std::shared_ptr<TabletBasicInfo> get_tablet_info(int64_t tablet_id) {
         std::vector<TabletBasicInfo> tablet_infos;
         auto manager = StorageEngine::instance()->tablet_manager();
-        manager->get_tablets_basic_infos(-1, -1, tablet_id, tablet_infos);
+        manager->get_tablets_basic_infos(-1, -1, tablet_id, tablet_infos, nullptr);
         if (tablet_infos.empty()) {
             return nullptr;
         } else {
@@ -249,7 +249,7 @@ public:
     static std::vector<TabletBasicInfo> get_tablet_infos(int64_t table_id, int64_t partition_id) {
         std::vector<TabletBasicInfo> tablet_infos;
         auto manager = StorageEngine::instance()->tablet_manager();
-        manager->get_tablets_basic_infos(table_id, partition_id, -1, tablet_infos);
+        manager->get_tablets_basic_infos(table_id, partition_id, -1, tablet_infos, nullptr);
         return tablet_infos;
     }
 

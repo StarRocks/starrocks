@@ -1237,6 +1237,7 @@ struct TGetTabletScheduleRequest {
     4: optional string type
     5: optional string state
     6: optional i64 limit
+    7: optional Types.TUserIdentity current_user_ident
 }
 
 struct TGetTabletScheduleResponse {

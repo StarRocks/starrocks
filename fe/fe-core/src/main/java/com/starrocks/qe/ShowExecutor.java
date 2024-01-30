@@ -1783,6 +1783,13 @@ public class ShowExecutor {
                         break;
                     }
                     tableName = table.getName();
+                    Pair<Boolean, Boolean> privResult = Authorizer.checkPrivForShowTablet(connectContext, dbName, table);
+                    if (!privResult.first) {
+                        AccessDeniedException.reportAccessDenied(
+                                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                                connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                                PrivilegeType.ANY.name(), ObjectType.TABLE.name(), null);
+                    }
 
                     OlapTable olapTable = (OlapTable) table;
                     Partition partition = olapTable.getPartition(partitionId);
@@ -1848,6 +1855,16 @@ public class ShowExecutor {
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_NOT_OLAP_TABLE, showStmt.getTableName());
                 }
 
+                Pair<Boolean, Boolean> privResult = Authorizer.checkPrivForShowTablet(
+                        connectContext, db.getFullName(), table);
+                if (!privResult.first) {
+                    AccessDeniedException.reportAccessDenied(
+                            InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                            connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                            PrivilegeType.ANY.name(), ObjectType.TABLE.name(), null);
+                }
+                Boolean hideIpPort = privResult.second;
+
                 OlapTable olapTable = (OlapTable) table;
                 long sizeLimit = -1;
                 if (showStmt.hasOffset() && showStmt.hasLimit()) {
@@ -1885,6 +1902,7 @@ public class ShowExecutor {
                     if (stop) {
                         break;
                     }
+<<<<<<< HEAD
                     for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
                         if (indexId > -1 && index.getId() != indexId) {
                             continue;
@@ -1901,6 +1919,27 @@ public class ShowExecutor {
                                 && tabletInfos.size() >= sizeLimit) {
                             stop = true;
                             break;
+=======
+                    for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                        for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.ALL)) {
+                            if (indexId > -1 && index.getId() != indexId) {
+                                continue;
+                            }
+                            if (olapTable.isCloudNativeTableOrMaterializedView()) {
+                                LakeTabletsProcDir procNode = new LakeTabletsProcDir(db, olapTable, index);
+                                tabletInfos.addAll(procNode.fetchComparableResult());
+                            } else {
+                                LocalTabletsProcDir procDir = new LocalTabletsProcDir(db, olapTable, index);
+                                tabletInfos.addAll(procDir.fetchComparableResult(
+                                        showStmt.getVersion(), showStmt.getBackendId(), showStmt.getReplicaState(),
+                                        hideIpPort));
+                            }
+                            if (sizeLimit > -1 && CollectionUtils.isEmpty(showStmt.getOrderByPairs())
+                                    && tabletInfos.size() >= sizeLimit) {
+                                stop = true;
+                                break;
+                            }
+>>>>>>> 28d549c9e4 ([Enhancement] Refine the priv check for be_tablets and show tablet (#39762))
                         }
                     }
                 }
