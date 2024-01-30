@@ -682,7 +682,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                         "\"password\"=\"test_passwd\",\n" +
                         "\"driver_url\"=\"test_driver_url\",\n" +
                         "\"driver_class\"=\"test.driver.class\",\n" +
-                        "\"jdbc_uri\"=\"jdbc:mysql://127.0.0.1:3306\"\n" +
+                        "\"jdbc_uri\"=\"jdbc:mariadb://127.0.0.1:3306\"\n" +
                         ");")
                 .withTable("create external table test.jdbc_test\n" +
                         "(a int, b varchar(20), c float)\n" +

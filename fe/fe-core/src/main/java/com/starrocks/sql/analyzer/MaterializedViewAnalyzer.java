@@ -116,7 +116,7 @@ public class MaterializedViewAnalyzer {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewAnalyzer.class);
 
     private static final Set<JDBCTable.ProtocolType> SUPPORTED_JDBC_PARTITION_TYPE =
-            ImmutableSet.of(JDBCTable.ProtocolType.MYSQL);
+            ImmutableSet.of(JDBCTable.ProtocolType.MYSQL, JDBCTable.ProtocolType.MARIADB);
 
     private static final Set<Table.TableType> SUPPORTED_TABLE_TYPE =
             ImmutableSet.of(Table.TableType.OLAP,
