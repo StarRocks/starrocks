@@ -39,6 +39,7 @@
 
 #include "agent/agent_server.h"
 #include "agent/master_info.h"
+#include "block_cache/block_cache.h"
 #include "column/column_pool.h"
 #include "common/config.h"
 #include "common/configbase.h"
@@ -525,6 +526,8 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _heartbeat_flags = new HeartbeatFlags();
     auto capacity = std::max<size_t>(config::query_cache_capacity, 4L * 1024 * 1024);
     _cache_mgr = new query_cache::CacheManager(capacity);
+
+    _block_cache = BlockCache::instance();
 
     _spill_dir_mgr = std::make_shared<spill::DirManager>();
     RETURN_IF_ERROR(_spill_dir_mgr->init(config::spill_local_storage_dir));

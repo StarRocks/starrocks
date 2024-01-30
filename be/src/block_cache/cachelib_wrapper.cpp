@@ -92,7 +92,7 @@ Status CacheLibWrapper::remove(const std::string& key) {
     return Status::OK();
 }
 
-const DataCacheMetrics CacheLibWrapper::cache_metrics() {
+const DataCacheMetrics CacheLibWrapper::cache_metrics(int level) {
     // not implemented
     DataCacheMetrics metrics{};
     return metrics;

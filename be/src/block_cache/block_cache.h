@@ -61,7 +61,7 @@ public:
 
     void record_read_cache(size_t size, int64_t lateny_us);
 
-    const DataCacheMetrics cache_metrics() const;
+    const DataCacheMetrics cache_metrics(int level = 0) const;
 
     // Shutdown the cache instance to save some state meta
     Status shutdown();
