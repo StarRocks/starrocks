@@ -1859,12 +1859,22 @@ functionCall
 aggregationFunction
     : AVG '(' DISTINCT? expression ')'
     | COUNT '(' ASTERISK_SYMBOL? ')'
+<<<<<<< HEAD
     | COUNT '(' (DISTINCT bracketHint?)? (expression (',' expression)*)? ')'
     | MAX '(' DISTINCT? expression ')'
     | MIN '(' DISTINCT? expression ')'
     | SUM '(' DISTINCT? expression ')'
     | ARRAY_AGG '(' DISTINCT? expression (ORDER BY sortItem (',' sortItem)*)? ')'
     | GROUP_CONCAT '(' DISTINCT? expression (',' expression)* (ORDER BY sortItem (',' sortItem)*)? (SEPARATOR expression)? ')'
+=======
+    | COUNT '(' (setQuantifier bracketHint?)? (expression (',' expression)*)? ')'
+    | MAX '(' setQuantifier? expression ')'
+    | MIN '(' setQuantifier? expression ')'
+    | SUM '(' setQuantifier? expression ')'
+    | ARRAY_AGG '(' setQuantifier? expression (ORDER BY sortItem (',' sortItem)*)? ')'
+    | ARRAY_AGG_DISTINCT '(' expression (ORDER BY sortItem (',' sortItem)*)? ')'
+    | GROUP_CONCAT '(' setQuantifier? expression (',' expression)* (ORDER BY sortItem (',' sortItem)*)? (SEPARATOR expression)? ')'
+>>>>>>> fd97ca421f ([Feature] ARRAY_AGG_DISTINCT() is an alias to ARRAY_AGG(DISTINCT) (#40025))
     ;
 
 userVariable
@@ -2248,6 +2258,7 @@ number
     ;
 
 nonReserved
+<<<<<<< HEAD
     : ACTIVE | AFTER | AGGREGATE | ARRAY_AGG | ASYNC | AUTHORS | AVG | ADMIN
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BINARY | BOOLEAN | BROKER | BUCKETS | BUILTIN
     | CAST | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
@@ -2255,6 +2266,19 @@ nonReserved
     | DATA | DATE | DATETIME | DAY | DECOMMISSION | DISTRIBUTION | DUPLICATE | DYNAMIC
     | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY
     | FIELDS | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE | FUNCTIONS
+=======
+    : ACCESS | ACTIVE | AFTER | AGGREGATE | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT
+    | ARRAY_AGG | ARRAY_AGG_DISTINCT
+    | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BLACKHOLE | BINARY | BODY | BOOLEAN | BROKER | BUCKETS
+    | BUILTIN | BASE
+    | CACHE | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
+    | CUME_DIST | CUMULATIVE | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONSISTENT | COSTS | COUNT
+    | CONFIG | COMPACT
+    | DATA | DATE | DATACACHE | DATETIME | DAY | DECOMMISSION | DISABLE | DISK | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DICTIONARY | DICTIONARY_GET | DEALLOCATE
+    | ENABLE | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY | ENCLOSE | ESCAPE | EXPORT
+    | FAILPOINT | FAILPOINTS | FIELDS | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE
+    | FUNCTIONS
+>>>>>>> fd97ca421f ([Feature] ARRAY_AGG_DISTINCT() is an alias to ARRAY_AGG(DISTINCT) (#40025))
     | GLOBAL | GRANTS | GROUP_CONCAT
     | HASH | HISTOGRAM | HELP | HLL_UNION | HOST | HOUR | HUB
     | IDENTIFIED | IMAGE | IMPERSONATE | INACTIVE | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION

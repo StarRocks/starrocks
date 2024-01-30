@@ -5187,6 +5187,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String functionName;
         boolean isGroupConcat = false;
         boolean isLegacyGroupConcat = false;
+        boolean isDistinct = false;
         if (context.aggregationFunction().COUNT() != null) {
             functionName = FunctionSet.COUNT;
         } else if (context.aggregationFunction().AVG() != null) {
@@ -5199,6 +5200,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             functionName = FunctionSet.MAX;
         } else if (context.aggregationFunction().ARRAY_AGG() != null) {
             functionName = FunctionSet.ARRAY_AGG;
+        } else if (context.aggregationFunction().ARRAY_AGG_DISTINCT() != null) { // alias to ARRAY_AGG
+            functionName = FunctionSet.ARRAY_AGG;
+            isDistinct = true;
         } else if (context.aggregationFunction().GROUP_CONCAT() != null) {
             functionName = FunctionSet.GROUP_CONCAT;
             isGroupConcat = true;
@@ -5218,7 +5222,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             hints = context.aggregationFunction().bracketHint().identifier().stream().map(
                     RuleContext::getText).collect(Collectors.toList());
         }
+<<<<<<< HEAD
         boolean isDistinct = context.aggregationFunction().DISTINCT() != null;
+=======
+        if (context.aggregationFunction().setQuantifier() != null) {
+            isDistinct = context.aggregationFunction().setQuantifier().DISTINCT() != null;
+        }
+>>>>>>> fd97ca421f ([Feature] ARRAY_AGG_DISTINCT() is an alias to ARRAY_AGG(DISTINCT) (#40025))
 
         if (isDistinct && context.aggregationFunction().expression().isEmpty()) {
             throw new ParsingException(functionName + " should have at least one input");

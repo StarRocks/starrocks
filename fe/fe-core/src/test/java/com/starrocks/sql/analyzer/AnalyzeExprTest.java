@@ -304,6 +304,15 @@ public class AnalyzeExprTest {
         analyzeFail("select array_agg(1,1);");
         analyzeFail("select array_agg([1,1]);");
         analyzeFail("select array_agg(1 order by 1 nulls first desc)");
+<<<<<<< HEAD
+=======
+        analyzeFail("select array_agg(case when c1='a' then struct(1,3) else map(1,2) end order by c3) as arr1 from " +
+                " (select 'a' as c1, 1 as c2, 2 as c3)t");
+        analyzeFail("select array_agg(case when c1='a' then [1,3] else map(1,2) end order by c3) as arr1" +
+                " from (select 'a' as c1, 1 as c2, 2 as c3)t");
+
+        analyzeSuccess("select array_agg_distinct(v1), array_agg(distinct v1),array_agg(v1) from t0;");
+>>>>>>> fd97ca421f ([Feature] ARRAY_AGG_DISTINCT() is an alias to ARRAY_AGG(DISTINCT) (#40025))
     }
 
     @Test
