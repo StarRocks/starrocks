@@ -573,7 +573,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                         }
 
                         // check tablet health state, if unhealthy, won't choose this one
-                        if (isTabletUnhealthy(olapTable, tabletId, tabletMeta, aliveBeIds)) {
+                        if (isTabletUnhealthy(tabletMeta.getDbId(), olapTable, tabletId, tabletMeta, aliveBeIds)) {
                             continue;
                         }
 
@@ -711,7 +711,13 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             return null;
         }
 
-        return (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tblId);
+        Locker locker = new Locker();
+        try {
+            locker.lockDatabase(db, LockType.READ);
+            return (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tblId);
+        } finally {
+            locker.unLockDatabase(db, LockType.READ);
+        }
     }
 
     private void balanceBackendDisk(TStorageMedium medium, double avgUsedPercent,
@@ -790,7 +796,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                     continue;
                 }
                 // check tablet healthy
-                if (isTabletUnhealthy(olapTable, tabletId, tabletMeta, aliveBeIds)) {
+                if (isTabletUnhealthy(tabletMeta.getDbId(), olapTable, tabletId, tabletMeta, aliveBeIds)) {
                     continue;
                 }
 
@@ -1410,7 +1416,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 continue;
             }
 
-            if (isTabletUnhealthy(olapTable, tabletId, tabletMeta, aliveBeIds)) {
+            if (isTabletUnhealthy(tabletMeta.getDbId(), olapTable, tabletId, tabletMeta, aliveBeIds)) {
                 continue;
             }
 
@@ -1529,43 +1535,53 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         return result;
     }
 
-    private boolean isTabletUnhealthy(OlapTable olapTable, Long tabletId,
+    private boolean isTabletUnhealthy(long dbId, OlapTable olapTable, Long tabletId,
                                       TabletMeta tabletMeta, List<Long> aliveBeIds) {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        // Won't hold the db lock, meta change will cause this clone task failed, this is acceptable.
-        Partition partition = globalStateMgr.getLocalMetastore()
-                .getPartitionIncludeRecycleBin(olapTable, tabletMeta.getPartitionId());
-        if (partition == null) {
-            return true;
+        Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
+        if (db == null) {
+            return false;
         }
 
-        MaterializedIndex index = partition.getIndex(tabletMeta.getIndexId());
-        if (index == null) {
-            return true;
+        Locker locker = new Locker();
+        try {
+            locker.lockDatabase(db, LockType.READ);
+            Partition partition = globalStateMgr.getLocalMetastore()
+                    .getPartitionIncludeRecycleBin(olapTable, tabletMeta.getPartitionId());
+            if (partition == null) {
+                return true;
+            }
+
+            MaterializedIndex index = partition.getIndex(tabletMeta.getIndexId());
+            if (index == null) {
+                return true;
+            }
+
+            LocalTablet tablet = (LocalTablet) index.getTablet(tabletId);
+            if (tablet == null) {
+                return true;
+            }
+
+            short replicaNum = globalStateMgr.getLocalMetastore()
+                    .getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(), partition.getId());
+            if (replicaNum == (short) -1) {
+                return true;
+            }
+
+            Pair<LocalTablet.TabletHealthStatus, TabletSchedCtx.Priority> statusPair =
+                    TabletChecker.getTabletHealthStatusWithPriority(
+                            tablet,
+                            globalStateMgr.getNodeMgr().getClusterInfo(),
+                            partition.getVisibleVersion(),
+                            replicaNum,
+                            aliveBeIds,
+                            olapTable.getLocation());
+
+            return statusPair.first != LocalTablet.TabletHealthStatus.LOCATION_MISMATCH &&
+                    statusPair.first != LocalTablet.TabletHealthStatus.HEALTHY;
+        } finally {
+            locker.unLockDatabase(db, LockType.READ);
         }
-
-        LocalTablet tablet = (LocalTablet) index.getTablet(tabletId);
-        if (tablet == null) {
-            return true;
-        }
-
-        short replicaNum = globalStateMgr.getLocalMetastore()
-                .getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(), partition.getId());
-        if (replicaNum == (short) -1) {
-            return true;
-        }
-
-        Pair<LocalTablet.TabletHealthStatus, TabletSchedCtx.Priority> statusPair =
-                TabletChecker.getTabletHealthStatusWithPriority(
-                        tablet,
-                        globalStateMgr.getNodeMgr().getClusterInfo(),
-                        partition.getVisibleVersion(),
-                        replicaNum,
-                        aliveBeIds,
-                        olapTable.getLocation());
-
-        return statusPair.first != LocalTablet.TabletHealthStatus.LOCATION_MISMATCH &&
-                statusPair.first != LocalTablet.TabletHealthStatus.HEALTHY;
     }
 
     /**
