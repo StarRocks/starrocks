@@ -357,6 +357,11 @@ public class IcebergTable extends Table {
     }
 
     @Override
+    public boolean supportPreCollectMetadata() {
+        return true;
+    }
+
+    @Override
     public int hashCode() {
         return com.google.common.base.Objects.hashCode(getCatalogName(), remoteDbName, getTableIdentifier());
     }

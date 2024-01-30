@@ -26,6 +26,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.sql.ast.AddPartitionClause;
@@ -120,6 +121,11 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys, long snapshotId,
                                                    ScalarOperator predicate, List<String> fieldNames, long limit) {
         return normal.getRemoteFileInfos(table, partitionKeys, snapshotId, predicate, fieldNames, limit);
+    }
+
+    @Override
+    public boolean prepareMetadata(MetaPreparationItem item, Tracers tracers) {
+        return normal.prepareMetadata(item, tracers);
     }
 
     @Override

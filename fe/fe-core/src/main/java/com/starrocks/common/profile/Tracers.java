@@ -70,6 +70,11 @@ public class Tracers {
         tracers.allTracer[1] = new TracerImpl(Stopwatch.createStarted(), new TimeWatcher(), new VarTracer(), logTracer);
     }
 
+    // for record metrics in parallel
+    public static Tracers get() {
+        return THREAD_LOCAL.get();
+    }
+
     public static void init(ConnectContext context, Mode mode, String moduleStr) {
         Tracers tracers = THREAD_LOCAL.get();
         boolean enableProfile =
@@ -168,6 +173,10 @@ public class Tracers {
 
     public static void record(Module module, String name, String value) {
         Tracers tracers = THREAD_LOCAL.get();
+        tracers.tracer(module, Mode.VARS).record(name, value);
+    }
+
+    public static synchronized void record(Tracers tracers, Module module, String name, String value) {
         tracers.tracer(module, Mode.VARS).record(name, value);
     }
 
