@@ -168,7 +168,7 @@ public class QueryPlannerTest {
         Assert.assertEquals("Access denied; This sql is in blacklist, please contact your admin",
                 connectContext.getState().getErrorMessage());
         connectContext.getState().setError("");
-        
+
         String sqlWithLineSeparators = "select k1 \n" +
                 " from \n" +
                 " test.baseall";
