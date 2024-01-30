@@ -98,8 +98,7 @@ public class BootstrapFinishAction extends RestBaseAction {
                 if (result.status == ActionStatus.OK) {
                     if (clusterId != GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId()) {
                         result.status = ActionStatus.FAILED;
-                        LOG.info("invalid cluster id: {}",
-                                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId());
+                        LOG.info("invalid cluster id: {}", clusterIdStr);
                         result.msg = "invalid parameter";
                     }
                 }
@@ -107,7 +106,7 @@ public class BootstrapFinishAction extends RestBaseAction {
                 if (result.status == ActionStatus.OK) {
                     if (!token.equals(GlobalStateMgr.getCurrentState().getNodeMgr().getToken())) {
                         result.status = ActionStatus.FAILED;
-                        LOG.info("invalid token: {}", GlobalStateMgr.getCurrentState().getNodeMgr().getToken());
+                        LOG.info("invalid token: {}", token);
                         result.msg = "invalid parameter";
                     }
                 }
