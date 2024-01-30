@@ -225,8 +225,13 @@ public class ColumnRangePredicate extends RangePredicate {
     private ScalarOperator toScalarOperatorImpl(TreeRangeSet<ConstantOperator> ranges) {
         List<ScalarOperator> orOperators = Lists.newArrayList();
         // process in predicates
-        Set<Range<ConstantOperator>> rangeSet = Sets.newCopyOnWriteArraySet(ranges.asRanges());
-        Set<Range<ConstantOperator>> equalRangeSet = rangeSet.stream().filter(r -> isEqualRange(r)).collect(Collectors.toSet());
+        Set<Range<ConstantOperator>> rangeSet = ranges.asRanges();
+        Set<Range<ConstantOperator>> equalRangeSet = Sets.newHashSet();
+        rangeSet.forEach(r -> {
+            if (isEqualRange(r)) {
+                equalRangeSet.add(r);
+            }
+        });
         if (equalRangeSet.size() > 1) {
             List<ConstantOperator> constants = equalRangeSet.stream()
                     .map(this::getValue)
