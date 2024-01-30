@@ -53,6 +53,7 @@ add_library(Webserver STATIC
   action/update_config_action.cpp
   action/runtime_filter_cache_action.cpp
   action/query_cache_action.cpp
+  action/datacache_action.cpp
   action/pipeline_blocking_drivers_action.cpp
   action/lake/dump_tablet_metadata_action.cpp
   action/stop_be_action.cpp)
