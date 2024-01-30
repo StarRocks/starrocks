@@ -236,6 +236,10 @@ public final class GlobalVariable {
         return queryQueueDriverHighWater;
     }
 
+    public static void setQueryQueueDriverHighWater(int queryQueueDriverHighWater) {
+        GlobalVariable.queryQueueDriverHighWater = queryQueueDriverHighWater;
+    }
+
     public static boolean isQueryQueueDriverLowWaterEffective() {
         return queryQueueDriverLowWater >= 0;
     }
@@ -245,6 +249,10 @@ public final class GlobalVariable {
             return BackendCoreStat.getAvgNumOfHardwareCoresOfBe() * 8;
         }
         return queryQueueDriverLowWater;
+    }
+
+    public static void setQueryQueueDriverLowWater(int queryQueueDriverLowWater) {
+        GlobalVariable.queryQueueDriverLowWater = queryQueueDriverLowWater;
     }
 
     public static boolean isQueryQueueMemUsedPctLimitEffective() {

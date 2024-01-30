@@ -18,6 +18,7 @@ import com.starrocks.qe.scheduler.RecoverableException;
 import com.starrocks.thrift.TNetworkAddress;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Future;
 
 public class PendingSlotRequest {
     private final LogicalSlot slot;
@@ -37,7 +38,7 @@ public class PendingSlotRequest {
         return leaderEndpoint;
     }
 
-    public CompletableFuture<LogicalSlot> getSlotFuture() {
+    public Future<LogicalSlot> getSlotFuture() {
         return slotFuture;
     }
 

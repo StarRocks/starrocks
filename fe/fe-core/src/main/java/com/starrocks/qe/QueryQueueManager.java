@@ -19,8 +19,8 @@ import com.starrocks.common.UserException;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.ResourceGroupMetricMgr;
 import com.starrocks.qe.scheduler.RecoverableException;
-import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
+import com.starrocks.qe.scheduler.slot.SlotProvider;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TWorkGroup;
@@ -49,11 +49,7 @@ public class QueryQueueManager {
     }
 
     public void maybeWait(ConnectContext context, DefaultCoordinator coord) throws UserException, InterruptedException {
-        JobSpec jobSpec = coord.getJobSpec();
-        if (!jobSpec.isNeedQueued() || !jobSpec.isEnableQueue()) {
-            return;
-        }
-
+        SlotProvider slotProvider = coord.getJobSpec().getSlotProvider();
         long startMs = System.currentTimeMillis();
         boolean isPending = false;
         try {
@@ -73,7 +69,7 @@ public class QueryQueueManager {
                 long currentMs = System.currentTimeMillis();
                 if (currentMs >= timeoutMs) {
                     MetricRepo.COUNTER_QUERY_QUEUE_TIMEOUT.increase(1L);
-                    GlobalStateMgr.getCurrentState().getSlotProvider().cancelSlotRequirement(slotRequirement);
+                    slotProvider.cancelSlotRequirement(slotRequirement);
                     String errMsg = String.format(PENDING_TIMEOUT_ERROR_MSG_FORMAT,
                             GlobalVariable.getQueryQueuePendingTimeoutSecond(),
                             GlobalVariable.QUERY_QUEUE_PENDING_TIMEOUT_SECOND);
@@ -81,7 +77,7 @@ public class QueryQueueManager {
                     throw new UserException(errMsg);
                 }
 
-                Future<LogicalSlot> slotFuture = GlobalStateMgr.getCurrentState().getSlotProvider().requireSlot(slotRequirement);
+                Future<LogicalSlot> slotFuture = slotProvider.requireSlot(slotRequirement);
 
                 // Wait for slot allocated.
                 try {

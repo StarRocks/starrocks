@@ -221,7 +221,7 @@ public class DefaultCoordinator extends Coordinator {
                                                                         List<ScanNode> scanNodes) {
 
             JobSpec jobSpec = JobSpec.Factory.fromRefreshDictionaryCacheSpec(context, queryId, descTable, fragments,
-                                                                             scanNodes);
+                    scanNodes);
             return new DefaultCoordinator(context, jobSpec);
         }
 
@@ -461,8 +461,8 @@ public class DefaultCoordinator extends Coordinator {
 
     @Override
     public void onFinished() {
-        GlobalStateMgr.getCurrentState().getSlotProvider().cancelSlotRequirement(slot);
-        GlobalStateMgr.getCurrentState().getSlotProvider().releaseSlot(slot);
+        jobSpec.getSlotProvider().cancelSlotRequirement(slot);
+        jobSpec.getSlotProvider().releaseSlot(slot);
     }
 
     public CoordinatorPreprocessor getPrepareInfo() {
@@ -842,7 +842,7 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     private void cancelInternal(PPlanFragmentCancelReason cancelReason) {
-        GlobalStateMgr.getCurrentState().getSlotProvider().cancelSlotRequirement(slot);
+        jobSpec.getSlotProvider().cancelSlotRequirement(slot);
         if (StringUtils.isEmpty(connectContext.getState().getErrorMessage())) {
             connectContext.getState().setError(cancelReason.toString());
         }
