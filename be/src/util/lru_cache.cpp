@@ -193,15 +193,11 @@ void LRUCache::set_capacity(size_t capacity) {
     }
 }
 
-<<<<<<< HEAD
-uint64_t LRUCache::get_lookup_count() {
-=======
 void LRUCache::set_charge_mode(ChargeMode charge_mode) {
     _charge_mode = charge_mode;
 }
 
-uint64_t LRUCache::get_lookup_count() const {
->>>>>>> 65b0fa9774 ([Enhancement] Adjust calculation method for page cache mem usage metrics (#37740))
+uint64_t LRUCache::get_lookup_count() {
     std::lock_guard l(_mutex);
     return _lookup_count;
 }
