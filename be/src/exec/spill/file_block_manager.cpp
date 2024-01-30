@@ -215,7 +215,9 @@ StatusOr<BlockPtr> FileBlockManager::acquire_block(const AcquireBlockOptions& op
     ASSIGN_OR_RETURN(auto dir, _dir_mgr->acquire_writable_dir(acquire_dir_opts));
     ASSIGN_OR_RETURN(auto block_container,
                      get_or_create_container(dir, opts.fragment_instance_id, opts.plan_node_id, opts.name));
-    return std::make_shared<FileBlock>(block_container);
+    auto res = std::make_shared<FileBlock>(block_container);
+    res->set_is_remote(dir->is_remote());
+    return res;
 }
 
 Status FileBlockManager::release_block(const BlockPtr& block) {

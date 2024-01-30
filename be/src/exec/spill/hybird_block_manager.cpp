@@ -51,7 +51,6 @@ StatusOr<BlockPtr> HyBirdBlockManager::acquire_block(const AcquireBlockOptions& 
         }
     }
     ASSIGN_OR_RETURN(auto remote_block, _remote_block_manager->acquire_block(opts));
-    remote_block->set_is_remote(true);
     return remote_block;
 }
 

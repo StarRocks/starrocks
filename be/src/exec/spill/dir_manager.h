@@ -33,6 +33,8 @@ public:
     Dir(std::string dir, std::shared_ptr<FileSystem> fs, int64_t max_dir_size)
             : _dir(std::move(dir)), _fs(fs), _max_size(max_dir_size) {}
 
+    virtual ~Dir() = default;
+
     FileSystem* fs() const { return _fs.get(); }
     std::string dir() const { return _dir; }
 
@@ -53,6 +55,8 @@ public:
 
     int64_t get_max_size() const { return _max_size; }
 
+    virtual bool is_remote() const { return false; }
+
 protected:
     std::string _dir;
     std::shared_ptr<FileSystem> _fs;
@@ -61,14 +65,18 @@ protected:
 };
 using DirPtr = std::shared_ptr<Dir>;
 
-class RemoteDir: public Dir {
+class RemoteDir : public Dir {
 public:
-    RemoteDir(std::string dir, std::shared_ptr<FileSystem> fs, std::shared_ptr<TCloudConfiguration> cloud_conf, int64_t max_dir_size):
-        Dir(std::move(dir), std::move(fs), max_dir_size), _cloud_conf(std::move(cloud_conf)) {}
+    RemoteDir(std::string dir, std::shared_ptr<FileSystem> fs, std::shared_ptr<TCloudConfiguration> cloud_conf,
+              int64_t max_dir_size)
+            : Dir(std::move(dir), std::move(fs), max_dir_size), _cloud_conf(std::move(cloud_conf)) {}
+    ~RemoteDir() override = default;
+
+    bool is_remote() const override { return true; }
+
 private:
     std::shared_ptr<TCloudConfiguration> _cloud_conf;
 };
-
 
 struct AcquireDirOptions {
     // @TOOD(silverbullet233): support more properties when acquiring dir, such as the preference of dir selection

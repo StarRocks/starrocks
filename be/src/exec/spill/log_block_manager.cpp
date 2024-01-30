@@ -257,7 +257,9 @@ StatusOr<BlockPtr> LogBlockManager::acquire_block(const AcquireBlockOptions& opt
 
     ASSIGN_OR_RETURN(auto block_container, get_or_create_container(dir, opts.fragment_instance_id, opts.plan_node_id,
                                                                    opts.name, opts.direct_io));
-    return std::make_shared<LogBlock>(block_container, block_container->size());
+    auto res = std::make_shared<LogBlock>(block_container, block_container->size());
+    res->set_is_remote(dir->is_remote());
+    return res;
 }
 
 Status LogBlockManager::release_block(const BlockPtr& block) {
