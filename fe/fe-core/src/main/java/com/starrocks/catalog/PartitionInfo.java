@@ -37,7 +37,6 @@ package com.starrocks.catalog;
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.DataCacheInfo;
@@ -52,6 +51,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -222,8 +222,8 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
         return "";
     }
 
-    public List<Column> getPartitionColumns() throws NotImplementedException {
-        throw new NotImplementedException("method not implemented yet");
+    public List<Column> getPartitionColumns() {
+        return Collections.emptyList();
     }
 
     @Override
