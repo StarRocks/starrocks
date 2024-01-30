@@ -85,10 +85,15 @@ Status JITEngine::init() {
 
     _initialized = true;
     _support_jit = true;
+    //TODO(fzh): trace per function by memory usage
 #if BE_TEST
-    _func_cache = new_lru_cache(32); // 1 capacity per cache of 32
+    _func_cache = new_lru_cache(32); // 1 capacity per cache of 32 shards in LRU cache
 #else
-    _func_cache = new_lru_cache(3200); // 100 capacity per cache of 32
+    auto jit_lru_cache_size = config::jit_lru_cache_size;
+    if (jit_lru_cache_size < 0) {
+        jit_lru_cache_size = 3200; // 100 capacity per cache of 32 shards in LRU cache
+    }
+    _func_cache = new_lru_cache(jit_lru_cache_size);
 #endif
     return Status::OK();
 }

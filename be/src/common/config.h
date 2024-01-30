@@ -1198,4 +1198,7 @@ CONF_mInt64(pk_dump_interval_seconds, "3600"); // 1 hour
 
 // whether enable query profile for queries initiated by spark or flink
 CONF_mBool(enable_profile_for_external_plan, "false");
+
+// jit LRU cache size, will div 32 shards, i.e., 100 per shard by default, taking more memory if larger
+CONF_mInt32(jit_lru_cache_size, "3200");
 } // namespace starrocks::config
