@@ -39,7 +39,6 @@ import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.MockedAuth;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.qe.ConnectContext;
@@ -64,13 +63,10 @@ import org.junit.Test;
 public class SetPassVarTest {
 
     @Mocked
-    private Auth auth;
-    @Mocked
     private ConnectContext ctx;
 
     @Before
     public void setUp() {
-        MockedAuth.mockedAuth(auth);
         MockedAuth.mockedConnectContext(ctx, "root", "192.168.1.1");
         UserIdentity currentUser = new UserIdentity("root", "192.168.1.1");
         ctx.setCurrentUserIdentity(currentUser);

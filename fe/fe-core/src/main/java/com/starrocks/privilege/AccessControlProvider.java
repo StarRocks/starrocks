@@ -49,10 +49,24 @@ public class AccessControlProvider {
     }
 
     public void setAccessControl(String catalog, AccessController accessControl) {
-        catalogToAccessControl.put(catalog, accessControl);
+        AccessController obsoleteAccessController = catalogToAccessControl.put(catalog, accessControl);
+        if (obsoleteAccessController instanceof RangerAccessController) {
+            // Clean up Ranger related threads and context
+            ((RangerAccessController) obsoleteAccessController).rangerPlugin.cleanup();
+        }
     }
 
     public void removeAccessControl(String catalog) {
+        AccessController accessController = catalogToAccessControl.get(catalog);
+        if (accessController == null) {
+            return;
+        }
+
         catalogToAccessControl.remove(catalog);
+
+        if (accessController instanceof RangerAccessController) {
+            // Clean up Ranger related threads and context
+            ((RangerAccessController) accessController).rangerPlugin.cleanup();
+        }
     }
 }

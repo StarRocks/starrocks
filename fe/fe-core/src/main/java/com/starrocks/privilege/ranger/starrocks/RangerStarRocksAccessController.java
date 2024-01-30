@@ -14,23 +14,24 @@
 
 package com.starrocks.privilege.ranger.starrocks;
 
-import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.privilege.RangerAccessController;
-import com.starrocks.privilege.ranger.RangerStarRocksAccessRequest;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.pipe.PipeName;
-import org.apache.ranger.plugin.policyengine.RangerAccessResult;
-import org.apache.ranger.plugin.policyengine.RangerPolicyEngine;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static java.util.Locale.ENGLISH;
@@ -43,63 +44,85 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     @Override
     public void checkSystemAction(UserIdentity currentUser, Set<Long> roleIds, PrivilegeType privilegeType)
             throws AccessDeniedException {
-        RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.SYSTEM, null);
-        hasPermission(resource, currentUser, privilegeType);
+        hasPermission(
+                RangerStarRocksResource.builder().setSystem().build(),
+                currentUser,
+                privilegeType);
     }
 
     @Override
     public void checkUserAction(UserIdentity currentUser, Set<Long> roleIds, UserIdentity impersonateUser,
                                 PrivilegeType privilegeType) throws AccessDeniedException {
-        RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.USER,
-                Lists.newArrayList(impersonateUser.getUser()));
-        hasPermission(resource, currentUser, privilegeType);
+        hasPermission(
+                RangerStarRocksResource.builder().setUser(impersonateUser.getUser()).build(),
+                currentUser,
+                privilegeType);
     }
 
     @Override
     public void checkCatalogAction(UserIdentity currentUser, Set<Long> roleIds, String catalogName, PrivilegeType privilegeType)
             throws AccessDeniedException {
-        RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.CATALOG, Lists.newArrayList(catalogName));
-        hasPermission(resource, currentUser, privilegeType);
+        hasPermission(
+                RangerStarRocksResource.builder().setCatalog(catalogName).build(),
+                currentUser,
+                privilegeType);
     }
 
     @Override
     public void checkAnyActionOnCatalog(UserIdentity currentUser, Set<Long> roleIds, String catalogName)
             throws AccessDeniedException {
-        RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.CATALOG, Lists.newArrayList(catalogName));
-        hasPermission(resource, currentUser, PrivilegeType.ANY);
+        hasPermission(
+                RangerStarRocksResource.builder().setCatalog(catalogName).build(),
+                currentUser,
+                PrivilegeType.ANY);
     }
 
     @Override
     public void checkDbAction(UserIdentity currentUser, Set<Long> roleIds, String catalogName, String db,
                               PrivilegeType privilegeType) throws AccessDeniedException {
-        RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.DATABASE, Lists.newArrayList(catalogName, db));
-        hasPermission(resource, currentUser, privilegeType);
+        hasPermission(
+                RangerStarRocksResource.builder().setCatalog(catalogName).setDatabase(db).build(),
+                currentUser,
+                privilegeType);
     }
 
     @Override
     public void checkAnyActionOnDb(UserIdentity currentUser, Set<Long> roleIds, String catalogName, String db)
             throws AccessDeniedException {
-        RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.DATABASE,
-                Lists.newArrayList(catalogName, db));
-        hasPermission(resource, currentUser, PrivilegeType.ANY);
+        hasPermission(
+                RangerStarRocksResource.builder().setCatalog(catalogName).setDatabase(db).build(),
+                currentUser,
+                PrivilegeType.ANY);
     }
 
     @Override
     public void checkTableAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName, PrivilegeType privilegeType)
             throws AccessDeniedException {
         String catalog = tableName.getCatalog() == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
-        RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.TABLE,
-                Lists.newArrayList(catalog, tableName.getDb(), tableName.getTbl()));
-        hasPermission(resource, currentUser, privilegeType);
+
+        hasPermission(
+                RangerStarRocksResource.builder()
+                        .setCatalog(catalog)
+                        .setDatabase(tableName.getDb())
+                        .setTable(tableName.getTbl())
+                        .build(),
+                currentUser,
+                privilegeType);
     }
 
     @Override
     public void checkAnyActionOnTable(UserIdentity currentUser, Set<Long> roleIds, TableName tableName)
             throws AccessDeniedException {
         String catalog = tableName.getCatalog() == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
-        RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.TABLE,
-                Lists.newArrayList(catalog, tableName.getDb(), tableName.getTbl()));
-        hasPermission(resource, currentUser, PrivilegeType.ANY);
+
+        hasPermission(
+                RangerStarRocksResource.builder()
+                        .setCatalog(catalog)
+                        .setDatabase(tableName.getDb())
+                        .setTable(tableName.getTbl())
+                        .build(),
+                currentUser,
+                PrivilegeType.ANY);
     }
 
     @Override
@@ -107,10 +130,15 @@ public class RangerStarRocksAccessController extends RangerAccessController {
             throws AccessDeniedException {
         Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalog, db);
         for (Table table : database.getTables()) {
-            RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.TABLE,
-                    Lists.newArrayList(catalog, database.getFullName(), table.getName()));
             try {
-                hasPermission(resource, currentUser, PrivilegeType.ANY);
+                hasPermission(
+                        RangerStarRocksResource.builder()
+                                .setCatalog(catalog)
+                                .setDatabase(database.getFullName())
+                                .setTable(table.getName())
+                                .build(),
+                        currentUser,
+                        PrivilegeType.ANY);
             } catch (AccessDeniedException e) {
                 continue;
             }
@@ -122,27 +150,42 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     @Override
     public void checkViewAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName, PrivilegeType privilegeType)
             throws AccessDeniedException {
-        RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.VIEW,
-                Lists.newArrayList(tableName.getDb(), tableName.getTbl()));
-        hasPermission(resource, currentUser, privilegeType);
+        hasPermission(
+                RangerStarRocksResource.builder()
+                        .setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                        .setDatabase(tableName.getDb())
+                        .setView(tableName.getTbl())
+                        .build(),
+                currentUser,
+                privilegeType);
     }
 
     @Override
     public void checkAnyActionOnView(UserIdentity currentUser, Set<Long> roleIds, TableName tableName)
             throws AccessDeniedException {
-        RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.VIEW,
-                Lists.newArrayList(tableName.getDb(), tableName.getTbl()));
-        hasPermission(resource, currentUser, PrivilegeType.ANY);
+        hasPermission(
+                RangerStarRocksResource.builder()
+                        .setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                        .setDatabase(tableName.getDb())
+                        .setView(tableName.getTbl())
+                        .build(),
+                currentUser,
+                PrivilegeType.ANY);
     }
 
     @Override
     public void checkAnyActionOnAnyView(UserIdentity currentUser, Set<Long> roleIds, String db) throws AccessDeniedException {
         Database database = GlobalStateMgr.getServingState().getDb(db);
         for (Table table : database.getViews()) {
-            RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.VIEW,
-                    Lists.newArrayList(database.getFullName(), table.getName()));
             try {
-                hasPermission(resource, currentUser, PrivilegeType.ANY);
+                hasPermission(
+                        RangerStarRocksResource.builder()
+                                .setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                                .setDatabase(database.getFullName())
+                                .setView(table.getName())
+                                .build(),
+                        currentUser,
+                        PrivilegeType.ANY);
             } catch (AccessDeniedException e) {
                 continue;
             }
@@ -154,17 +197,27 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     @Override
     public void checkMaterializedViewAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
                                             PrivilegeType privilegeType) throws AccessDeniedException {
-        RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.MATERIALIZED_VIEW,
-                Lists.newArrayList(tableName.getDb(), tableName.getTbl()));
-        hasPermission(resource, currentUser, privilegeType);
+        hasPermission(
+                RangerStarRocksResource.builder()
+                        .setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                        .setDatabase(tableName.getDb())
+                        .setMaterializedView(tableName.getTbl())
+                        .build(),
+                currentUser,
+                privilegeType);
     }
 
     @Override
     public void checkAnyActionOnMaterializedView(UserIdentity currentUser, Set<Long> roleIds, TableName tableName)
             throws AccessDeniedException {
-        RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.MATERIALIZED_VIEW,
-                Lists.newArrayList(tableName.getDb(), tableName.getTbl()));
-        hasPermission(resource, currentUser, PrivilegeType.ANY);
+        hasPermission(
+                RangerStarRocksResource.builder()
+                        .setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                        .setDatabase(tableName.getDb())
+                        .setMaterializedView(tableName.getTbl())
+                        .build(),
+                currentUser,
+                PrivilegeType.ANY);
     }
 
     @Override
@@ -172,10 +225,15 @@ public class RangerStarRocksAccessController extends RangerAccessController {
             throws AccessDeniedException {
         Database database = GlobalStateMgr.getServingState().getDb(db);
         for (Table table : database.getMaterializedViews()) {
-            RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.VIEW,
-                    Lists.newArrayList(database.getFullName(), table.getName()));
             try {
-                hasPermission(resource, currentUser, PrivilegeType.ANY);
+                hasPermission(
+                        RangerStarRocksResource.builder()
+                                .setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                                .setDatabase(database.getFullName())
+                                .setMaterializedView(table.getName())
+                                .build(),
+                        currentUser,
+                        PrivilegeType.ANY);
             } catch (AccessDeniedException e) {
                 continue;
             }
@@ -187,27 +245,42 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     @Override
     public void checkFunctionAction(UserIdentity currentUser, Set<Long> roleIds, Database database, Function function,
                                     PrivilegeType privilegeType) throws AccessDeniedException {
-        RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.FUNCTION,
-                Lists.newArrayList(database.getFullName(), function.getSignature()));
-        hasPermission(resource, currentUser, privilegeType);
+        hasPermission(
+                RangerStarRocksResource.builder()
+                        .setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                        .setDatabase(database.getFullName())
+                        .setFunction(function.getSignature())
+                        .build(),
+                currentUser,
+                privilegeType);
     }
 
     @Override
     public void checkAnyActionOnFunction(UserIdentity currentUser, Set<Long> roleIds, String database, Function function)
             throws AccessDeniedException {
-        RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.FUNCTION,
-                Lists.newArrayList(database, function.getSignature()));
-        hasPermission(resource, currentUser, PrivilegeType.ANY);
+        hasPermission(
+                RangerStarRocksResource.builder()
+                        .setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                        .setDatabase(database)
+                        .setFunction(function.getSignature())
+                        .build(),
+                currentUser,
+                PrivilegeType.ANY);
     }
 
     @Override
     public void checkAnyActionOnAnyFunction(UserIdentity currentUser, Set<Long> roleIds, String db) throws AccessDeniedException {
         Database database = GlobalStateMgr.getServingState().getDb(db);
         for (Function function : database.getFunctions()) {
-            RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.FUNCTION,
-                    Lists.newArrayList(database.getFullName(), function.getSignature()));
             try {
-                hasPermission(resource, currentUser, PrivilegeType.ANY);
+                hasPermission(
+                        RangerStarRocksResource.builder()
+                                .setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                                .setDatabase(database.getFullName())
+                                .setFunction(function.getSignature())
+                                .build(),
+                        currentUser,
+                        PrivilegeType.ANY);
             } catch (AccessDeniedException e) {
                 continue;
             }
@@ -219,17 +292,23 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     @Override
     public void checkGlobalFunctionAction(UserIdentity currentUser, Set<Long> roleIds, Function function,
                                           PrivilegeType privilegeType) throws AccessDeniedException {
-        RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.GLOBAL_FUNCTION,
-                Lists.newArrayList(function.getSignature()));
-        hasPermission(resource, currentUser, privilegeType);
+        hasPermission(
+                RangerStarRocksResource.builder()
+                        .setGlobalFunction(function.getSignature())
+                        .build(),
+                currentUser,
+                privilegeType);
     }
 
     @Override
     public void checkAnyActionOnGlobalFunction(UserIdentity currentUser, Set<Long> roleIds, Function function)
             throws AccessDeniedException {
-        RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.GLOBAL_FUNCTION,
-                Lists.newArrayList(function.getSignature()));
-        hasPermission(resource, currentUser, PrivilegeType.ANY);
+        hasPermission(
+                RangerStarRocksResource.builder()
+                        .setGlobalFunction(function.getSignature())
+                        .build(),
+                currentUser,
+                PrivilegeType.ANY);
     }
 
     /**
@@ -254,69 +333,110 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     @Override
     public void checkResourceAction(UserIdentity currentUser, Set<Long> roleIds, String name, PrivilegeType privilegeType)
             throws AccessDeniedException {
-        RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.RESOURCE, Lists.newArrayList(name));
-        hasPermission(resource, currentUser, privilegeType);
+        hasPermission(
+                RangerStarRocksResource.builder()
+                        .setResource(name)
+                        .build(),
+                currentUser,
+                privilegeType);
     }
 
     @Override
     public void checkAnyActionOnResource(UserIdentity currentUser, Set<Long> roleIds, String name) throws AccessDeniedException {
-        RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.RESOURCE, Lists.newArrayList(name));
-        hasPermission(resource, currentUser, PrivilegeType.ANY);
+        hasPermission(
+                RangerStarRocksResource.builder()
+                        .setResource(name)
+                        .build(),
+                currentUser,
+                PrivilegeType.ANY);
     }
 
     @Override
     public void checkResourceGroupAction(UserIdentity currentUser, Set<Long> roleIds, String name, PrivilegeType privilegeType)
             throws AccessDeniedException {
-        RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.RESOURCE_GROUP, Lists.newArrayList(name));
-        hasPermission(resource, currentUser, privilegeType);
+        hasPermission(
+                RangerStarRocksResource.builder()
+                        .setResourceGroup(name)
+                        .build(),
+                currentUser,
+                privilegeType);
     }
 
     @Override
     public void checkPipeAction(UserIdentity currentUser, Set<Long> roleIds, PipeName name, PrivilegeType privilegeType)
             throws AccessDeniedException {
-        RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.PIPE,
-                Lists.newArrayList(name.getDbName(), name.getPipeName()));
-        hasPermission(resource, currentUser, privilegeType);
+        hasPermission(
+                RangerStarRocksResource.builder()
+                        .setDatabase(name.getDbName())
+                        .setPipe(name.getPipeName())
+                        .build(),
+                currentUser,
+                privilegeType);
     }
 
     @Override
-    public void checkAnyActionOnPipe(UserIdentity currentUser, Set<Long> roleIds, PipeName pipe)
+    public void checkAnyActionOnPipe(UserIdentity currentUser, Set<Long> roleIds, PipeName pipeName)
             throws AccessDeniedException {
-        RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.PIPE,
-                Lists.newArrayList(pipe.getDbName(), pipe.getPipeName()));
-        hasPermission(resource, currentUser, PrivilegeType.ANY);
+        hasPermission(
+                RangerStarRocksResource.builder()
+                        .setDatabase(pipeName.getDbName())
+                        .setPipe(pipeName.getPipeName())
+                        .build(),
+                currentUser,
+                PrivilegeType.ANY);
     }
 
     @Override
     public void checkStorageVolumeAction(UserIdentity currentUser, Set<Long> roleIds, String storageVolume,
                                          PrivilegeType privilegeType) throws AccessDeniedException {
-        RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.STORAGE_VOLUME,
-                Lists.newArrayList(storageVolume));
-        hasPermission(resource, currentUser, privilegeType);
+        hasPermission(
+                RangerStarRocksResource.builder()
+                        .setStorageVolume(storageVolume)
+                        .build(),
+                currentUser,
+                privilegeType);
     }
 
     @Override
     public void checkAnyActionOnStorageVolume(UserIdentity currentUser, Set<Long> roleIds, String storageVolume)
             throws AccessDeniedException {
-        RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.STORAGE_VOLUME,
-                Lists.newArrayList(storageVolume));
-        hasPermission(resource, currentUser, PrivilegeType.ANY);
+        hasPermission(
+                RangerStarRocksResource.builder()
+                        .setStorageVolume(storageVolume)
+                        .build(),
+                currentUser,
+                PrivilegeType.ANY);
     }
 
-    private void hasPermission(RangerStarRocksResource resource, UserIdentity user, PrivilegeType privilegeType)
-            throws AccessDeniedException {
-        String accessType;
-        if (privilegeType.equals(PrivilegeType.ANY)) {
-            accessType = RangerPolicyEngine.ANY_ACCESS;
-        } else {
-            accessType = privilegeType.name().toLowerCase(ENGLISH);
+    @Override
+    public Map<String, Expr> getColumnMaskingPolicy(ConnectContext context, TableName tableName, List<Column> columns) {
+        Map<String, Expr> maskingExprMap = Maps.newHashMap();
+        for (Column column : columns) {
+            Expr columnMaskingExpression = getColumnMaskingExpression(RangerStarRocksResource.builder()
+                    .setCatalog(tableName.getCatalog())
+                    .setDatabase(tableName.getDb())
+                    .setTable(tableName.getTbl())
+                    .setColumn(column.getName())
+                    .build(), column, context);
+            if (columnMaskingExpression != null) {
+                maskingExprMap.put(column.getName(), columnMaskingExpression);
+            }
         }
 
-        RangerStarRocksAccessRequest request = RangerStarRocksAccessRequest.createAccessRequest(resource, user, accessType);
-        RangerAccessResult result = rangerPlugin.isAccessAllowed(request);
+        return maskingExprMap;
+    }
 
-        if (result == null || !result.getIsAllowed()) {
-            throw new AccessDeniedException();
-        }
+    @Override
+    public Expr getRowAccessPolicy(ConnectContext context, TableName tableName) {
+        return getRowAccessExpression(RangerStarRocksResource.builder()
+                .setCatalog(tableName.getCatalog())
+                .setDatabase(tableName.getDb())
+                .setTable(tableName.getTbl())
+                .build(), context);
+    }
+
+    @Override
+    public String convertToAccessType(PrivilegeType privilegeType) {
+        return privilegeType.name().toLowerCase(ENGLISH);
     }
 }

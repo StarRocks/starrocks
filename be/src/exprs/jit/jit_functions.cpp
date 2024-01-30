@@ -195,7 +195,7 @@ Status JITFunction::generate_scalar_function_ir(ExprContext* context, llvm::Modu
     // values_last[counter] = result_value;
     // null_flags_last[counter] = result_null_flag;
     b.CreateStore(result.value, b.CreateInBoundsGEP(columns.back().value_type, columns.back().values, counter_phi));
-    if (!expr->is_constant() && expr->is_nullable()) {
+    if (expr->is_nullable()) {
         b.CreateStore(result.null_flag, b.CreateInBoundsGEP(b.getInt8Ty(), columns.back().null_flags, counter_phi));
     }
 

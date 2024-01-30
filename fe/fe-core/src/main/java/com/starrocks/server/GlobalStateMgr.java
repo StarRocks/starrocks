@@ -151,9 +151,6 @@ import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
-import com.starrocks.mysql.privilege.Auth;
-import com.starrocks.mysql.privilege.AuthUpgrader;
-import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ImageHeader;
@@ -224,6 +221,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -340,15 +338,6 @@ public class GlobalStateMgr {
     private final GlobalTransactionMgr globalTransactionMgr;
 
     private final TabletStatMgr tabletStatMgr;
-
-    private Auth auth;
-
-    // We're developing a new privilege & authentication framework
-    // This is used to turned on in hard code.
-    public static final boolean USING_NEW_PRIVILEGE = true;
-
-    // change to true in UT
-    private AtomicBoolean usingNewPrivilege;
 
     private AuthenticationMgr authenticationMgr;
     private AuthorizationMgr authorizationMgr;
@@ -540,12 +529,22 @@ public class GlobalStateMgr {
         private static final GlobalStateMgr INSTANCE = new GlobalStateMgr();
     }
 
-    private GlobalStateMgr() {
-        this(false);
+    @VisibleForTesting
+    protected GlobalStateMgr() {
+        this(new NodeMgr());
+    }
+
+    @VisibleForTesting
+    protected GlobalStateMgr(NodeMgr nodeMgr) {
+        this(false, nodeMgr);
+    }
+
+    private GlobalStateMgr(boolean isCkptGlobalState) {
+        this(isCkptGlobalState, new NodeMgr());
     }
 
     // if isCkptGlobalState is true, it means that we should not collect thread pool metric
-    private GlobalStateMgr(boolean isCkptGlobalState) {
+    private GlobalStateMgr(boolean isCkptGlobalState, NodeMgr nodeMgr) {
         if (!isCkptGlobalState) {
             RunMode.detectRunMode();
         }
@@ -555,7 +554,7 @@ public class GlobalStateMgr {
         }
 
         // System Manager
-        this.nodeMgr = new NodeMgr();
+        this.nodeMgr = Objects.requireNonNullElseGet(nodeMgr, NodeMgr::new);
         this.heartbeatMgr = new HeartbeatMgr(!isCkptGlobalState);
         this.portConnectivityChecker = new PortConnectivityChecker();
 
@@ -598,7 +597,9 @@ public class GlobalStateMgr {
 
         this.globalTransactionMgr = new GlobalTransactionMgr(this);
         this.tabletStatMgr = new TabletStatMgr();
-        initAuth(USING_NEW_PRIVILEGE);
+        this.authenticationMgr = new AuthenticationMgr();
+        this.domainResolver = new DomainResolver(authenticationMgr);
+        this.authorizationMgr = new AuthorizationMgr(this, null);
 
         this.resourceGroupMgr = new ResourceGroupMgr();
 
@@ -760,16 +761,20 @@ public class GlobalStateMgr {
         return analyzeMgr;
     }
 
-    public Auth getAuth() {
-        return auth;
-    }
-
     public AuthenticationMgr getAuthenticationMgr() {
         return authenticationMgr;
     }
 
+    public void setAuthenticationMgr(AuthenticationMgr authenticationMgr) {
+        this.authenticationMgr = authenticationMgr;
+    }
+
     public AuthorizationMgr getAuthorizationMgr() {
         return authorizationMgr;
+    }
+
+    public void setAuthorizationMgr(AuthorizationMgr authorizationMgr) {
+        this.authorizationMgr = authorizationMgr;
     }
 
     public ResourceGroupMgr getResourceGroupMgr() {
@@ -948,77 +953,63 @@ public class GlobalStateMgr {
         // we already set these variables in constructor. but GlobalStateMgr is a singleton class.
         // so they may be set before Config is initialized.
         // set them here again to make sure these variables use values in fe.conf.
-
         setMetaDir();
 
-        // 0. get local node and helper node info
-        nodeMgr.initialize(args);
+        // must judge whether it is first time start here before initializing GlobalStateMgr.
+        // Possibly remove clusterId and role to ensure that the system is not left in a half-initialized state.
+        boolean isFirstTimeStart = nodeMgr.isVersionAndRoleFilesNotExist();
+        try {
+            // 0. get local node and helper node info
+            nodeMgr.initialize(args);
 
-        // 1. create dirs and files
-        if (Config.edit_log_type.equalsIgnoreCase("bdb")) {
-            File imageDir = new File(this.imageDir);
-            if (!imageDir.exists()) {
-                imageDir.mkdirs();
+            // 1. create dirs and files
+            if (Config.edit_log_type.equalsIgnoreCase("bdb")) {
+                File imageDir = new File(this.imageDir);
+                if (!imageDir.exists()) {
+                    imageDir.mkdirs();
+                }
+            } else {
+                LOG.error("Invalid edit log type: {}", Config.edit_log_type);
+                System.exit(-1);
             }
-        } else {
-            LOG.error("Invalid edit log type: {}", Config.edit_log_type);
-            System.exit(-1);
+
+            // init plugin manager
+            pluginMgr.init();
+            auditEventProcessor.start();
+
+            // 2. get cluster id and role (Observer or Follower)
+            nodeMgr.getClusterIdAndRoleOnStartup();
+
+            // 3. Load image first and replay edits
+            initJournal();
+            loadImage(this.imageDir); // load image file
+
+            // 4. create load and export job label cleaner thread
+            createLabelCleaner();
+
+            // 5. create txn timeout checker thread
+            createTxnTimeoutChecker();
+
+            // 6. start task cleaner thread
+            createTaskCleaner();
+
+            // 7. init starosAgent
+            if (RunMode.isSharedDataMode() && !starOSAgent.init(null)) {
+                LOG.error("init starOSAgent failed");
+                System.exit(-1);
+            }
+        } catch (Exception e) {
+            try {
+                if (isFirstTimeStart) {
+                    // If it is the first time we start, we remove the cluster ID and role
+                    // to prevent leaving the system in an inconsistent state.
+                    nodeMgr.removeClusterIdAndRole();
+                }
+            } catch (Throwable t) {
+                e.addSuppressed(t);
+            }
+            throw e;
         }
-
-        // init plugin manager
-        pluginMgr.init();
-        auditEventProcessor.start();
-
-        // 2. get cluster id and role (Observer or Follower)
-        nodeMgr.getClusterIdAndRoleOnStartup();
-
-        // 3. Load image first and replay edits
-        initJournal();
-        loadImage(this.imageDir); // load image file
-
-        // 4. create load and export job label cleaner thread
-        createLabelCleaner();
-
-        // 5. create txn timeout checker thread
-        createTxnTimeoutChecker();
-
-        // 6. start task cleaner thread
-        createTaskCleaner();
-
-        // 7. init starosAgent
-        if (RunMode.isSharedDataMode() && !starOSAgent.init(null)) {
-            LOG.error("init starOSAgent failed");
-            System.exit(-1);
-        }
-    }
-
-    // set usingNewPrivilege = true in UT
-    public void initAuth(boolean usingNewPrivilege) {
-        this.auth = new Auth();
-        this.usingNewPrivilege = new AtomicBoolean(usingNewPrivilege);
-        if (usingNewPrivilege) {
-            this.authenticationMgr = new AuthenticationMgr();
-            this.domainResolver = new DomainResolver(authenticationMgr);
-            this.authorizationMgr = new AuthorizationMgr(this, null);
-            LOG.info("using new privilege framework..");
-        } else {
-            this.domainResolver = new DomainResolver(auth);
-            this.authenticationMgr = null;
-            this.authorizationMgr = null;
-        }
-    }
-
-    @VisibleForTesting
-    public void setAuth(Auth auth) {
-        this.auth = auth;
-    }
-
-    public boolean isUsingNewPrivilege() {
-        return usingNewPrivilege.get();
-    }
-
-    private boolean needUpgradedToNewPrivilege() {
-        return !authorizationMgr.isLoaded() || !authenticationMgr.isLoaded();
     }
 
     protected void initJournal() throws JournalException, InterruptedException {
@@ -1037,15 +1028,6 @@ public class GlobalStateMgr {
             if (isReady()) {
                 LOG.info("globalStateMgr is ready. FE type: {}", feType);
                 feStartTime = System.currentTimeMillis();
-
-                // For follower/observer, defer setting auth to null when we have replayed all the journal,
-                // because we may encounter old auth journal when replaying log in which case we still
-                // need the auth object.
-                if (isUsingNewPrivilege() && !needUpgradedToNewPrivilege()) {
-                    // already upgraded, set auth = null
-                    auth = null;
-                }
-
                 break;
             }
 
@@ -1145,19 +1127,6 @@ public class GlobalStateMgr {
             // MUST set leader ip before starting checkpoint thread.
             // because checkpoint thread need this info to select non-leader FE to push image
             nodeMgr.setLeaderInfo();
-
-            if (USING_NEW_PRIVILEGE) {
-                if (needUpgradedToNewPrivilege()) {
-                    reInitializeNewPrivilegeOnUpgrade();
-                    AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationMgr, authorizationMgr, this);
-                    // upgrade metadata in old privilege framework to the new one
-                    upgrader.upgradeAsLeader();
-                    this.domainResolver.setAuthenticationManager(authenticationMgr);
-                }
-                LOG.info("set usingNewPrivilege to true after transfer to leader");
-                usingNewPrivilege.set(true);
-                auth = null;  // remove references to useless objects to release memory
-            }
 
             // start all daemon threads that only running on MASTER FE
             startLeaderOnlyDaemonThreads();
@@ -1379,7 +1348,6 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockID.RESOURCE_MGR, resourceMgr::loadResourcesV2)
                 .put(SRMetaBlockID.EXPORT_MGR, exportMgr::loadExportJobV2)
                 .put(SRMetaBlockID.BACKUP_MGR, backupHandler::loadBackupHandlerV2)
-                .put(SRMetaBlockID.AUTH, auth::load)
                 .put(SRMetaBlockID.GLOBAL_TRANSACTION_MGR, globalTransactionMgr::loadTransactionStateV2)
                 .put(SRMetaBlockID.COLOCATE_TABLE_INDEX, colocateTableIndex::loadColocateTableIndexV2)
                 .put(SRMetaBlockID.ROUTINE_LOAD_MGR, routineLoadMgr::loadRoutineLoadJobsV2)
@@ -1449,12 +1417,6 @@ public class GlobalStateMgr {
         } catch (SRMetaBlockException e) {
             LOG.error("load meta block failed ", e);
             throw new IOException("load meta block failed ", e);
-        }
-
-        if (isUsingNewPrivilege() && needUpgradedToNewPrivilege() && !isLeader() && !isCheckpointThread()) {
-            LOG.warn("follower has to wait for leader to upgrade the privileges, set usingNewPrivilege = false for now");
-            usingNewPrivilege.set(false);
-            domainResolver = new DomainResolver(auth);
         }
 
         try {
@@ -1554,7 +1516,6 @@ public class GlobalStateMgr {
                 resourceMgr.saveResourcesV2(dos);
                 exportMgr.saveExportJobV2(dos);
                 backupHandler.saveBackupHandlerV2(dos);
-                auth.save(dos);
                 globalTransactionMgr.saveTransactionStateV2(dos);
                 colocateTableIndex.saveColocateTableIndexV2(dos);
                 routineLoadMgr.saveRoutineLoadJobsV2(dos);
@@ -2331,26 +2292,6 @@ public class GlobalStateMgr {
 
         LOG.info("finished dumping image to {}", dumpFilePath);
         return dumpFilePath;
-    }
-
-    private void reInitializeNewPrivilegeOnUpgrade() {
-        // In the case where we upgrade again, i.e. upgrade->rollback->upgrade,
-        // we may already load the image from last upgrade, in this case we should
-        // discard the privilege data from last upgrade and only use the data from
-        // current image to upgrade, so we initialize a new AuthorizationManager and AuthenticationManger
-        // instance here
-        LOG.info("reinitialize privilege info before upgrade");
-        this.authenticationMgr = new AuthenticationMgr();
-        this.authorizationMgr = new AuthorizationMgr(this, null);
-    }
-
-    public void replayAuthUpgrade(AuthUpgradeInfo info) throws AuthUpgrader.AuthUpgradeUnrecoverableException {
-        reInitializeNewPrivilegeOnUpgrade();
-        AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationMgr, authorizationMgr, this);
-        upgrader.replayUpgrade(info.getRoleNameToId());
-        LOG.info("set usingNewPrivilege to true after auth upgrade log replayed");
-        usingNewPrivilege.set(true);
-        domainResolver.setAuthenticationManager(authenticationMgr);
     }
 
     public long getImageJournalId() {

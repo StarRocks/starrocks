@@ -156,7 +156,7 @@ public class CompactionScheduler extends Daemon {
                     job.finish();
                     failHistory.offer(CompactionRecord.build(job, errorMsg));
                     compactionManager.enableCompactionAfter(partition, MIN_COMPACTION_INTERVAL_MS_ON_FAILURE);
-                    abortTransactionIgnoreException(partition.getDbId(), job.getTxnId(), errorMsg);
+                    abortTransactionIgnoreException(job, errorMsg);
                     continue;
                 }
             }
@@ -200,11 +200,13 @@ public class CompactionScheduler extends Daemon {
         }
     }
 
-    private void abortTransactionIgnoreException(long dbId, long txnId, String reason) {
+    private void abortTransactionIgnoreException(CompactionJob job, String reason) {
         try {
-            transactionMgr.abortTransaction(dbId, txnId, reason);
+            List<TabletCommitInfo> finishedTablets = job.buildTabletCommitInfo();
+            transactionMgr.abortTransaction(job.getDb().getId(), job.getTxnId(), reason, finishedTablets,
+                    Collections.emptyList(), null);
         } catch (UserException ex) {
-            LOG.error("Fail to abort txn " + txnId, ex);
+            LOG.error("Fail to abort txn " + job.getTxnId(), ex);
         }
     }
 
@@ -312,7 +314,7 @@ public class CompactionScheduler extends Daemon {
             LOG.error(e);
             partition.setMinRetainVersion(0);
             nextCompactionInterval = MIN_COMPACTION_INTERVAL_MS_ON_FAILURE;
-            abortTransactionIgnoreError(db.getId(), txnId, e.getMessage());
+            abortTransactionIgnoreError(job, e.getMessage());
             job.finish();
             failHistory.offer(CompactionRecord.build(job, e.getMessage()));
             return null;
@@ -392,21 +394,27 @@ public class CompactionScheduler extends Daemon {
         }
 
         VisibleStateWaiter waiter;
+
+        TransactionState transactionState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getTransactionState(db.getId(), job.getTxnId());
+        List<Long> tableIdList = transactionState.getTableIdList();
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE);
         try {
             waiter = transactionMgr.commitTransaction(db.getId(), job.getTxnId(), commitInfoList,
                     Collections.emptyList(), null);
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE);
         }
         job.setVisibleStateWaiter(waiter);
         job.setCommitTs(System.currentTimeMillis());
     }
 
-    private void abortTransactionIgnoreError(long dbId, long txnId, String reason) {
+    private void abortTransactionIgnoreError(CompactionJob job, String reason) {
         try {
-            transactionMgr.abortTransaction(dbId, txnId, reason);
+            List<TabletCommitInfo> finishedTablets = job.buildTabletCommitInfo();
+            transactionMgr.abortTransaction(job.getDb().getId(), job.getTxnId(), reason, finishedTablets,
+                    Collections.emptyList(), null);
         } catch (UserException ex) {
             LOG.error(ex);
         }
