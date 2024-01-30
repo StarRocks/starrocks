@@ -176,30 +176,39 @@ StatusOr<ColumnPtr> VectorizedFunctionCallExpr::evaluate_checked(starrocks::Expr
     return result;
 }
 
-bool VectorizedFunctionCallExpr::ngram_bloom_filter(starrocks::ExprContext* context, const BloomFilter* bf,
-                                                    size_t gram_num) {
+bool VectorizedFunctionCallExpr::ngram_bloom_filter(ExprContext* context, const BloomFilter* bf,
+                                                    size_t index_gram_num) const {
     FunctionContext* fn_ctx = context->fn_context(_fn_context_index);
     std::vector<Slice>& ngram_set = fn_ctx->get_ngram_set();
 
+    const auto& gram_num_column = fn_ctx->get_constant_column(2);
+    // case like ngram_search(col,"needle", 5) when col has a 4gram bloom filter, don't use this index
+    if (gram_num_column != nullptr) {
+        size_t predicate_gram_num = ColumnHelper::get_const_value<TYPE_INT>(gram_num_column);
+        if (index_gram_num != predicate_gram_num) {
+            return true;
+        }
+    }
+
     if (UNLIKELY(ngram_set.size() == 0)) {
-        Slice target;
+        Slice needle;
         if (_fn_desc->name == "like" || _fn_desc->name == "regex") {
         } else {
-            // checked in support_ngram_bloom_filter(), so it 's safe to get const column's value
-            const auto& target_col = fn_ctx->get_constant_column(1);
-            target = ColumnHelper::get_const_value<TYPE_VARCHAR>(target_col);
+            // checked in support_ngram_bloom_filter(size_t gram_num), so it 's safe to get const column's value
+            const auto& needle_column = fn_ctx->get_constant_column(1);
+            needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(needle_column);
         }
 
         std::vector<size_t> index;
-        size_t slice_gram_num = get_utf8_index(target, &index);
-        ngram_set.reserve(slice_gram_num - gram_num + 1);
+        size_t slice_gram_num = get_utf8_index(needle, &index);
+        ngram_set.reserve(slice_gram_num - index_gram_num + 1);
 
         size_t j;
-        for (j = 0; j + gram_num <= slice_gram_num; j++) {
+        for (j = 0; j + index_gram_num <= slice_gram_num; j++) {
             // find next ngram
-            size_t cur_ngram_length =
-                    j + gram_num < slice_gram_num ? index[j + gram_num] - index[j] : target.get_size() - index[j];
-            Slice cur_ngram = Slice(target.data + index[j], cur_ngram_length);
+            size_t cur_ngram_length = j + index_gram_num < slice_gram_num ? index[j + index_gram_num] - index[j]
+                                                                          : needle.get_size() - index[j];
+            Slice cur_ngram = Slice(needle.data + index[j], cur_ngram_length);
 
             ngram_set.push_back(cur_ngram);
         }
@@ -221,7 +230,8 @@ bool VectorizedFunctionCallExpr::support_ngram_bloom_filter(ExprContext* context
         return false;
     }
 
-    return _fn_desc->name == "regex" || _fn_desc->name == "like" || _fn_desc->name == "ngram_search";
+    return _fn_desc->name == "regex" || _fn_desc->name == "like" || _fn_desc->name == "ngram_search" ||
+           _fn_desc->name == "ngram_search_case_insensitive";
 }
 
 } // namespace starrocks

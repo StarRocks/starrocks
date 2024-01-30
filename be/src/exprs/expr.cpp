@@ -191,6 +191,9 @@ Expr::Expr(const TExprNode& node, bool is_slotref)
     if (node.__isset.is_monotonic) {
         _is_monotonic = node.is_monotonic;
     }
+    if (node.__isset.is_index_only_filter) {
+        _is_index_only_filter = node.is_index_only_filter;
+    }
 }
 
 Expr::~Expr() = default;
@@ -797,7 +800,7 @@ bool Expr::support_ngram_bloom_filter(ExprContext* context) const {
     return support;
 }
 
-bool Expr::ngram_bloom_filter(ExprContext* context, const BloomFilter* bf, size_t gram_num) {
+bool Expr::ngram_bloom_filter(ExprContext* context, const BloomFilter* bf, size_t gram_num) const {
     bool no_need_to_filt = true;
     for (auto& child : _children) {
         if (!child->ngram_bloom_filter(context, bf, gram_num)) {
@@ -805,6 +808,16 @@ bool Expr::ngram_bloom_filter(ExprContext* context, const BloomFilter* bf, size_
         }
     }
     return no_need_to_filt;
+}
+
+bool Expr::is_index_only_filter() const {
+    bool is_index_only_filter = _is_index_only_filter;
+    for (auto& child : _children) {
+        if (child->is_index_only_filter()) {
+            return true;
+        }
+    }
+    return is_index_only_filter;
 }
 
 } // namespace starrocks

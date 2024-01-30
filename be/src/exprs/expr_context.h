@@ -115,8 +115,9 @@ public:
 
     [[nodiscard]] StatusOr<ColumnPtr> evaluate(Chunk* chunk, uint8_t* filter = nullptr);
     [[nodiscard]] StatusOr<ColumnPtr> evaluate(Expr* expr, Chunk* chunk, uint8_t* filter = nullptr);
-    bool evaluate_ngram_bloom_filter(const BloomFilter* bf, size_t gram_num);
-    bool support_ngram_bloom_filter() const;
+    bool ngram_bloom_filter(const BloomFilter* bf, size_t gram_num);
+    bool support_ngram_bloom_filter();
+    bool is_index_only_filter() const;
 
     bool error_if_overflow() const;
 

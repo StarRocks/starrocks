@@ -34,7 +34,7 @@ public:
 
 
     bool support_ngram_bloom_filter(ExprContext* context) const override;
-    bool ngram_bloom_filter(ExprContext* context, const BloomFilter* bf, size_t gram_num) override;
+    bool ngram_bloom_filter(ExprContext* context, const BloomFilter* bf, size_t gram_num) const override;
 
 protected:
     [[nodiscard]] Status prepare(RuntimeState* state, ExprContext* context) override;

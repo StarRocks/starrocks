@@ -288,6 +288,7 @@ public class ScalarOperatorToExpr {
                         buildExpr.build(predicate.getChild(0), context), null);
             }
             callExpr.setType(Type.BOOLEAN);
+            callExpr.setIndexOnlyFilter(predicate.isIndexOnlyFilter());
             return callExpr;
         }
 

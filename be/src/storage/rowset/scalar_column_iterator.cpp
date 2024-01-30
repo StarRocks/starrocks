@@ -391,6 +391,7 @@ Status ScalarColumnIterator::get_row_ranges_by_bloom_filter(const std::vector<co
     opts.lake_io_opts = _opts.lake_io_opts;
     opts.read_file = _opts.read_file;
     opts.stats = _opts.stats;
+    // filter data using bloom filter or ngram bloom filter
     RETURN_IF_ERROR(_reader->bloom_filter(predicates, row_ranges, opts));
     return Status::OK();
 }
