@@ -1235,6 +1235,7 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
 
     int64_t full_row_size = 0;
     int64_t full_rowset_size = 0;
+    std::unique_ptr<IOStat> iostat = std::make_unique<IOStat>();
     if (rowset->rowset_meta()->get_meta_pb_without_schema().delfile_idxes_size() == 0) {
         for (uint32_t i = 0; i < rowset->num_segments(); i++) {
             st = state.load_upserts(rowset.get(), i);
@@ -1259,7 +1260,7 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
                     return;
                 }
                 st = _do_update(rowset_id, i, conditional_column, latest_applied_version.major_number(), upserts, index,
-                                tablet_id, &new_deletes, apply_tschema);
+                                tablet_id, &new_deletes, apply_tschema, iostat.get());
                 if (!st.ok()) {
                     std::string msg =
                             strings::Substitute("_apply_rowset_commit error: apply rowset update state failed: $0 $1",
@@ -1659,7 +1660,8 @@ Status TabletUpdates::_wait_for_version(const EditVersion& version, int64_t time
 
 Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t condition_column, int64_t read_version,
                                  const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index, int64_t tablet_id,
-                                 DeletesMap* new_deletes, const TabletSchemaCSPtr& tablet_schema) {
+                                 DeletesMap* new_deletes, const TabletSchemaCSPtr& tablet_schema,
+                                 IOStat* iostat) {
     if (condition_column >= 0) {
         auto tablet_column = tablet_schema->column(condition_column);
         std::vector<uint32_t> read_column_ids;
@@ -1704,7 +1706,7 @@ Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t
                     int r = old_column->compare_at(j, j, *new_columns[0].get(), -1);
                     if (r > 0) {
                         RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], idx_begin,
-                                                     idx_begin + upsert_idx_step, new_deletes));
+                                                     idx_begin + upsert_idx_step, new_deletes, iostat));
 
                         idx_begin = j + 1;
                         upsert_idx_step = 0;
@@ -1719,13 +1721,12 @@ Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t
 
             if (idx_begin < old_column->size()) {
                 RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], idx_begin,
-                                             idx_begin + upsert_idx_step, new_deletes));
+                                             idx_begin + upsert_idx_step, new_deletes, iostat));
             }
         } else {
-            RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes));
+            RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes, iostat));
         }
     } else {
-        std::unique_ptr<IOStat> iostat = std::make_unique<IOStat>();
         MonotonicStopWatch watch;
         watch.start();
         RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes, iostat.get()));
