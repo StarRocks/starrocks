@@ -699,12 +699,18 @@ ColumnRef* Expr::get_column_ref() {
 
 StatusOr<LLVMDatum> Expr::generate_ir_impl(ExprContext* context, JITContext* jit_ctx) {
     if (is_compilable()) {
+#if BE_TEST
         throw std::runtime_error("[JIT] compilable expressions must not be here : " + debug_string());
-        return Status::NotSupported("[JIT] compilable expressions must not be here : " + debug_string());
+#else
+        return Status::NotSupported("[JIT] compilable expressions must override generate_ir_impl()");
+#endif
     }
     if (jit_ctx->input_index >= jit_ctx->columns.size() - 1) {
+#if BE_TEST
         throw std::runtime_error("[JIT] vector overflow for expr :" + debug_string());
-        return Status::RuntimeError("vector overflow");
+#else
+        return Status::RuntimeError("[JIT] vector overflow for uncompilable expr");
+#endif
     }
     LLVMDatum datum(jit_ctx->builder);
     datum.value = jit_ctx->builder.CreateLoad(
