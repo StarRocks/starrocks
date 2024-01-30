@@ -38,6 +38,7 @@ import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.common.util.ProfileManager;
+import com.starrocks.http.HttpMetricRegistry;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.loadv2.JobState;
 import com.starrocks.load.loadv2.LoadManager;
@@ -843,6 +844,9 @@ public final class MetricRepo {
         if (Config.enable_routine_load_lag_metrics) {
             collectRoutineLoadProcessMetrics(visitor);
         }
+
+        // collect http metrics
+        HttpMetricRegistry.getInstance().visit(visitor);
 
         // node info
         visitor.getNodeInfo();

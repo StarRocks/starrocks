@@ -17,6 +17,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
+#include "testutil/assert.h"
 
 namespace starrocks::vectorized {
 
@@ -1862,6 +1863,43 @@ TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {
         EXPECT_EQ("[[{3:NULL},{7:NULL}]]", result->debug_row(2));
         EXPECT_EQ("[[{4:NULL},{8:NULL}]]", result->debug_row(3));
         EXPECT_EQ("[[{5:NULL},{9:NULL}]]", result->debug_row(4));
+    }
+}
+
+TEST_F(OrcChunkReaderTest, orcStringArrayToJsonArray) {
+    TypeDescriptor type_array(PrimitiveType::TYPE_ARRAY);
+    type_array.children.emplace_back(TypeDescriptor::create_json_type());
+
+    SlotDesc slot_descs[] = {
+            {"col_int", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+            {"col_array_string", type_array},
+            {""},
+    };
+
+    static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/array_string.orc";
+    std::vector<SlotDescriptor*> src_slot_descriptors;
+    ObjectPool pool;
+    create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+
+    {
+        OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
+        auto input_stream = orc::readLocalFile(input_orc_file);
+        EXPECT_OK(reader.init(std::move(input_stream)));
+
+        EXPECT_OK(reader.read_next());
+        ChunkPtr ckptr = reader.create_chunk();
+        EXPECT_TRUE(ckptr != nullptr);
+        EXPECT_OK(reader.fill_chunk(&ckptr));
+        ChunkPtr result = reader.cast_chunk(&ckptr);
+        EXPECT_TRUE(result != nullptr);
+
+        EXPECT_EQ(result->num_rows(), 2);
+        EXPECT_EQ(result->num_columns(), 2);
+
+        for (int i = 0; i < result->num_rows(); ++i) {
+            std::cout << "row" << i << ": " << result->debug_row(i) << std::endl;
+        }
+        EXPECT_EQ(result->debug_row(0), "[1, [{\"key1\": 1},{\"key2\": 2}]]");
     }
 }
 

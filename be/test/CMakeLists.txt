@@ -239,6 +239,7 @@ set(EXEC_FILES
         ./storage/base_compaction_test.cpp
         ./storage/rowset_merger_test.cpp
         ./storage/schema_change_test.cpp
+        ./storage/segment_flush_executor_test.cpp
         ./storage/publish_version_task_test.cpp
         ./storage/publish_version_manager_test.cpp
         ./storage/get_use_pk_index_test.cpp

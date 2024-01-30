@@ -6,6 +6,10 @@ displayed_sidebar: "Chinese"
 
 本文介绍如何手动部署 StarRocks。其他安装方式请参考[部署概览](../deployment/deployment_overview.md)。
 
+:::tip
+手动部署前的准备工作在 [部署前提条件](./deployment_prerequisites.md) 以及 [检查环境配置](./environment_configurations.md) 文档中有详细说明。如果您计划部署生产集群，请参照以上两篇文档。如果您刚开始使用 StarRocks，希望按照快速入门教程进行操作，请参考 [快速入门](../quick_start/quick_start.mdx)。
+:::
+
 ## 第一步：启动 Leader FE 节点
 
 以下操作在 FE 实例上执行。

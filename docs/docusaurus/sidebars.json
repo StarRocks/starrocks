@@ -70,12 +70,6 @@
       "label": "Data Loading",
       "link": {"type": "doc", "id": "loading/Loading_intro"},
       "items": [
-        {
-          "type": "category",
-          "label": "Concepts",
-          "link": {"type": "doc", "id": "loading/load_concept/strict_mode"},
-          "items": ["loading/load_concept/strict_mode"]
-        },
         "loading/StreamLoad",
         "loading/BrokerLoad",
         {
@@ -149,13 +143,12 @@
             {
               "type": "category",
               "label": "Usage",
-              "link": {"type": "doc", "id": "cover_pages/mv_usage"},
-              "items": [ 
-                "sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW",
-                "sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW",
-                "sql-reference/sql-statements/data-definition/DROP_MATERIALIZED_VIEW",
-                "sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW",
-                { "type": "link", "label": "Information schema",  "href": "/docs/administration/information_schema#materialized_views" },
+              "link": {"type": "doc", "id": "using_starrocks/usage/intro"},
+              "items": [
+                "using_starrocks/usage/create",
+                "using_starrocks/usage/alter",
+                "using_starrocks/usage/drop",
+                "using_starrocks/usage/show",
                 "using_starrocks/troubleshooting_asynchronous_materialized_views"
               ]
             }
@@ -196,7 +189,7 @@
         {
           "type": "category",
           "label": "Management",
-          "link": {"type": "doc", "id": "cover_pages/manage_deployment"},
+          "link": {"type": "doc", "id": "cover_pages/management"},
           "items": [
             "administration/Scale_up_down",
             "administration/Backup_and_restore",
@@ -224,15 +217,8 @@
           ]
         },
         "administration/Data_recovery",
-        {
-          "type": "category",
-          "label": "User Privileges and Authentication",
-          "link": {"type": "doc", "id": "administration/User_privilege"},
-          "items": [
-            "administration/User_privilege",
-            "administration/Authentication"
-          ]
-        },
+        "administration/User_privilege",
+        "administration/Authentication",
         {
           "type": "category",
           "label": "Performance Tuning",
@@ -313,7 +299,7 @@
                 {
                   "type": "category",
                   "label": "Numeric",
-                  "link": {"type": "doc", "id": "sql-reference/sql-statements/data-types/INT"},
+                  "link": {"type": "doc", "id": "cover_pages/numeric"},
                   "items": [
                     "sql-reference/sql-statements/data-types/TINYINT",
                     "sql-reference/sql-statements/data-types/SMALLINT",
@@ -329,7 +315,7 @@
                 {
                   "type": "category",
                   "label": "String",
-                  "link": {"type": "doc", "id": "sql-reference/sql-statements/data-types/STRING"},
+                  "link": {"type": "doc", "id": "cover_pages/string"},
                   "items": [
                     "sql-reference/sql-statements/data-types/CHAR",
                     "sql-reference/sql-statements/data-types/STRING",
@@ -339,7 +325,7 @@
                 {
                   "type": "category",
                   "label": "Date",
-                  "link": {"type": "doc", "id": "sql-reference/sql-statements/data-types/DATE"},
+                  "link": {"type": "doc", "id": "cover_pages/datatype_date"},
                   "items": [
                     "sql-reference/sql-statements/data-types/DATE",
                     "sql-reference/sql-statements/data-types/DATETIME"
@@ -633,12 +619,6 @@
       "label": "导入数据",
       "link": {"type": "doc", "id": "loading/Loading_intro"},
       "items": [
-        {
-          "type": "category",
-          "label": "概念介绍",
-          "link": {"type": "doc", "id": "loading/load_concept/strict_mode"},
-          "items": ["loading/load_concept/strict_mode"]
-        },
         "loading/StreamLoad",
         "loading/BrokerLoad",
         {
@@ -712,13 +692,12 @@
             {
               "type": "category",
               "label": "Usage",
-              "link": {"type": "doc", "id": "cover_pages/mv_usage"},
-              "items": [ 
-                "sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW",
-                "sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW",
-                "sql-reference/sql-statements/data-definition/DROP_MATERIALIZED_VIEW",
-                "sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW",
-                { "type": "link", "label": "Information schema",  "href": "/docs/administration/information_schema#materialized_views" },
+              "link": {"type": "doc", "id": "using_starrocks/usage/intro"},
+              "items": [
+                "using_starrocks/usage/create",
+                "using_starrocks/usage/alter",
+                "using_starrocks/usage/drop",
+                "using_starrocks/usage/show",
                 "using_starrocks/troubleshooting_asynchronous_materialized_views"
               ]
             }
@@ -759,7 +738,7 @@
         {
           "type": "category",
           "label": "运维集群",
-          "link": {"type": "doc", "id": "cover_pages/manage_deployment"},
+          "link": {"type": "doc", "id": "cover_pages/management"},
           "items": [
             "administration/Scale_up_down",
             "administration/Backup_and_restore",
@@ -787,15 +766,8 @@
           ]
         },
         "administration/Data_recovery",
-        {
-          "type": "category",
-          "label": "管理用户权限",
-          "link": {"type": "doc", "id": "administration/User_privilege"},
-          "items": [
-            "administration/User_privilege",
-            "administration/Authentication"
-          ]
-        },
+        "administration/User_privilege",
+        "administration/Authentication",
         {
           "type": "category",
           "label": "性能调优",
@@ -876,7 +848,7 @@
                 {
                   "type": "category",
                   "label": "数值类型",
-                  "link": {"type": "doc", "id": "sql-reference/sql-statements/data-types/INT"},
+                  "link": {"type": "doc", "id": "cover_pages/numeric"},
                   "items": [
                     "sql-reference/sql-statements/data-types/TINYINT",
                     "sql-reference/sql-statements/data-types/SMALLINT",
@@ -892,7 +864,7 @@
                 {
                   "type": "category",
                   "label": "字符串类型",
-                  "link": {"type": "doc", "id": "sql-reference/sql-statements/data-types/STRING"},
+                  "link": {"type": "doc", "id": "cover_pages/string"},
                   "items": [
                     "sql-reference/sql-statements/data-types/CHAR",
                     "sql-reference/sql-statements/data-types/STRING",
@@ -902,7 +874,7 @@
                 {
                   "type": "category",
                   "label": "日期类型",
-                  "link": {"type": "doc", "id": "sql-reference/sql-statements/data-types/DATE"},
+                  "link": {"type": "doc", "id": "cover_pages/datatype_date"},
                   "items": [
                     "sql-reference/sql-statements/data-types/DATE",
                     "sql-reference/sql-statements/data-types/DATETIME"

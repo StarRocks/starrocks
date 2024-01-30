@@ -6,6 +6,10 @@ displayed_sidebar: "English"
 
 This topic describes how to manually deploy StarRocks. For other modes of installation, see [Deployment Overview](../deployment/deployment_overview.md).
 
+:::tip
+The preparations for manual deployment are outlined in the [Deployment prerequisites](./deployment_prerequisites.md) and [Check environment configurations](./environment_configurations.md) documents. Please start there if you are planning a production deployment. If you are getting started with StarRocks and would like to follow one of the Quick Starts, please refer to [Quick Starts](../quick_start/quick_start.mdx).
+:::
+
 ## Step 1: Start the Leader FE node
 
 The following procedures are performed on an FE instance.

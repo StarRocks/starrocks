@@ -15,9 +15,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.load.loadv2.dpp;
+package com.starrocks.types;
 
-import com.starrocks.common.Codec;
 import org.roaringbitmap.BitmapDataProvider;
 import org.roaringbitmap.BitmapDataProviderSupplier;
 import org.roaringbitmap.IntConsumer;
@@ -916,6 +915,24 @@ public class Roaring64Map {
 
         }
         answer.append("}");
+        return answer.toString();
+    }
+
+    /**
+     * Display Bitmap using comma separated strings.
+     *
+     * @return A string separated by ",".
+     */
+    public String serializeToString() {
+        final StringBuilder answer = new StringBuilder();
+        final LongIterator i = this.getLongIterator();
+        while (i.hasNext()) {
+            long nextValue = i.next();
+            if (answer.length() > 0) {
+                answer.append(",");
+            }
+            answer.append(signedLongs ? nextValue : toUnsignedString(nextValue));
+        }
         return answer.toString();
     }
 
