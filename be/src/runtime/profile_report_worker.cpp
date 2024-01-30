@@ -35,7 +35,7 @@ Status ProfileReportWorker::register_non_pipeline_load(const TUniqueId& fragment
 }
 
 Status ProfileReportWorker::unregister_non_pipeline_load(const TUniqueId& fragment_instance_id) {
-    VLOG(INFO) << "unregister_non_pipeline_load fragment_instance_id=" << print_id(fragment_instance_id);
+    VLOG(3) << "unregister_non_pipeline_load fragment_instance_id=" << print_id(fragment_instance_id);
     std::lock_guard lg(_non_pipeline_report_mutex);
     _non_pipeline_report_tasks.erase(fragment_instance_id);
     return Status::OK();
