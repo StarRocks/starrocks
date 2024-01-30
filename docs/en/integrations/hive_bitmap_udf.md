@@ -13,10 +13,10 @@ Applicable scenarios:
 - The amount of original data is large and directly loading these data into StarRocks for computing will cause tremendous pressure on StarRocks clusters. The desired solution is generating Bitmap data in Hive and then loading Bitmap into StarRocks.
 - Export the Bitmap data generated in StarRocks to Hive for other systems to use.
 
-Supported data types:
+Supported source and target data types:
 
-- v3.1 and later support loading and unloading data of these types: String,  Base64, and Binary.
-- v2.5 and v3.0 only support loading and unloading String and Base64 data.
+- v3.1 and later support loading and unloading data of these types: String, Base64, and Binary.
+- v2.5 and v3.0 only support loading and unloading of String and Base64 data.
 
 ## Hive Bitmap UDFs that can be generated
 
@@ -99,7 +99,7 @@ Supported data types:
 
 ## Usage examples
 
-### Generate Bitmap in Hive and load it into StarRocks in binary format
+### Generate Bitmap in Hive and load it into StarRocks in Binary format
 
 1. Create a Hive source table.
 
