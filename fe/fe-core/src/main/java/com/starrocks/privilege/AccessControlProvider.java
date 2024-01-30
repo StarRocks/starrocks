@@ -15,6 +15,7 @@
 package com.starrocks.privilege;
 
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.privilege.ranger.RangerAccessController;
 import com.starrocks.sql.analyzer.AuthorizerStmtVisitor;
 
 import java.util.Map;
@@ -52,7 +53,7 @@ public class AccessControlProvider {
         AccessController obsoleteAccessController = catalogToAccessControl.put(catalog, accessControl);
         if (obsoleteAccessController instanceof RangerAccessController) {
             // Clean up Ranger related threads and context
-            ((RangerAccessController) obsoleteAccessController).rangerPlugin.cleanup();
+            ((RangerAccessController) obsoleteAccessController).getRangerPlugin().cleanup();
         }
     }
 
@@ -66,7 +67,7 @@ public class AccessControlProvider {
 
         if (accessController instanceof RangerAccessController) {
             // Clean up Ranger related threads and context
-            ((RangerAccessController) accessController).rangerPlugin.cleanup();
+            ((RangerAccessController) accessController).getRangerPlugin().cleanup();
         }
     }
 }
