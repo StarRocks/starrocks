@@ -549,7 +549,7 @@ Status HdfsFileSystem::delete_file(const std::string& path) {
     std::shared_ptr<HdfsFsClient> hdfs_client;
     RETURN_IF_ERROR(HdfsFsCache::instance()->get_connection(namenode, hdfs_client, _options));
     int status = hdfsDelete(hdfs_client->hdfs_fs, path.c_str(), 0);
-    return status == 0 ? Status::OK() : Status::Unknown(fmt::format("Failed to delete file={}", path));
+    return status == 0 ? Status::OK() : Status::IOError(fmt::format("Failed to delete file={}", path));
 }
 
 Status HdfsFileSystem::_path_exists(hdfsFS fs, const std::string& path) {
