@@ -37,10 +37,10 @@ JITExpr* JITExpr::create(ObjectPool* pool, Expr* expr) {
     node.type = expr->type().to_thrift();
     node.output_scale = expr->output_scale();
     node.is_monotonic = expr->is_monotonic();
-    return pool->add(new JITExpr(pool, node, expr));
+    return pool->add(new JITExpr(node, expr));
 }
 
-JITExpr::JITExpr(ObjectPool* pool, const TExprNode& node, Expr* expr) : Expr(node), _pool(pool), _expr(expr) {
+JITExpr::JITExpr(const TExprNode& node, Expr* expr) : Expr(node), _expr(expr) {
     _expr->get_uncompilable_exprs(_children);
 }
 

@@ -38,7 +38,7 @@
 namespace starrocks {
 
 struct JitCacheEntry {
-    JitCacheEntry(llvm::orc::ResourceTrackerSP t, JITScalarFunction f) : tracker(t), func(f) {}
+    JitCacheEntry(llvm::orc::ResourceTrackerSP t, JITScalarFunction f) : tracker(std::move(t)), func(std::move(f)) {}
     llvm::orc::ResourceTrackerSP tracker;
     JITScalarFunction func;
 };

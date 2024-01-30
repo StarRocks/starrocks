@@ -33,7 +33,7 @@ class JITExpr final : public Expr {
 public:
     static JITExpr* create(ObjectPool* pool, Expr* expr);
 
-    JITExpr(ObjectPool* pool, const TExprNode& node, Expr* expr);
+    JITExpr(const TExprNode& node, Expr* expr);
 
     ~JITExpr() override = default;
 
@@ -55,9 +55,7 @@ protected:
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
 
 private:
-    ObjectPool* _pool;
-    // The original expression.
-    Expr* _expr;
+    Expr* _expr; // The original expression.
     bool _is_prepared = false;
     JITScalarFunction _jit_function = nullptr;
     std::string _jit_expr_name;
