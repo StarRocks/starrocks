@@ -53,18 +53,10 @@ import org.apache.logging.log4j.Logger;
 
 public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     private static final Logger LOG = LogManager.getLogger(HttpServerHandler.class);
-<<<<<<< HEAD
 
     private ActionController controller = null;
     protected FullHttpRequest fullRequest = null;
     protected HttpRequest request = null;
-=======
-    // keep connectContext when channel is open
-    private static final AttributeKey<HttpConnectContext> HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY =
-            AttributeKey.valueOf("httpContextKey");
-    protected HttpRequest request = null;
-    private final ActionController controller;
->>>>>>> 02be7213b5 ([BugFix] Fix small file related security issues (#40255))
     private BaseAction action = null;
 
     public HttpServerHandler(ActionController controller) {
@@ -122,11 +114,6 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
         HttpServerHandlerMetrics.getInstance().httpConnectionsNum.increase(1L);
-<<<<<<< HEAD
-=======
-        // create HttpConnectContext when channel is established, and store it in channel attr
-        ctx.channel().attr(HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY).setIfAbsent(new HttpConnectContext());
->>>>>>> 02be7213b5 ([BugFix] Fix small file related security issues (#40255))
         super.channelActive(ctx);
     }
 
