@@ -349,6 +349,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
       export STARLET_INSTALL_DIR
     fi
 
+<<<<<<< HEAD
     if [[ -z ${WITH_STARCACHE} ]]; then
       WITH_STARCACHE=ON
     fi
@@ -358,6 +359,8 @@ if [ ${BUILD_BE} -eq 1 ] ; then
         exit 1
     fi
 
+=======
+>>>>>>> b054af81cb ([Enhancement] Support display datacache metircs by http service. (#40220))
     ${CMAKE_CMD} -G "${CMAKE_GENERATOR}"                                \
                   -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}        \
                   -DSTARROCKS_HOME=${STARROCKS_HOME}                    \
@@ -372,7 +375,6 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                   -DWITH_CLANG_TIDY=${WITH_CLANG_TIDY}                  \
                   -DWITH_COMPRESS=${WITH_COMPRESS}                      \
                   -DWITH_CACHELIB=${WITH_CACHELIB}                      \
-                  -DWITH_STARCACHE=${WITH_STARCACHE}                    \
                   -DUSE_STAROS=${USE_STAROS}                            \
                   -DENABLE_FAULT_INJECTION=${ENABLE_FAULT_INJECTION}    \
                   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..

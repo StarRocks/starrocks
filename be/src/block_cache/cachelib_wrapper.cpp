@@ -92,12 +92,16 @@ Status CacheLibWrapper::remove(const std::string& key) {
     return Status::OK();
 }
 
+<<<<<<< HEAD
 std::unordered_map<std::string, double> CacheLibWrapper::cache_stats() {
     const auto navy_stats = _cache->getNvmCacheStatsMap().toMap();
     return navy_stats;
 }
 
 const DataCacheMetrics CacheLibWrapper::cache_metrics() {
+=======
+const DataCacheMetrics CacheLibWrapper::cache_metrics(int level) {
+>>>>>>> b054af81cb ([Enhancement] Support display datacache metircs by http service. (#40220))
     // not implemented
     DataCacheMetrics metrics{};
     return metrics;

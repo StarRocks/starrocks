@@ -170,10 +170,13 @@ if [ "${USE_STAROS}" == "ON"  ]; then
   export STARLET_INSTALL_DIR
 fi
 
+<<<<<<< HEAD
 if [[ -z ${WITH_STARCACHE} ]]; then
   WITH_STARCACHE=ON
 fi
 
+=======
+>>>>>>> b054af81cb ([Enhancement] Support display datacache metircs by http service. (#40220))
 ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}\
             -DSTARROCKS_HOME=${STARROCKS_HOME} \
@@ -184,7 +187,6 @@ ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DSTARLET_INSTALL_DIR=${STARLET_INSTALL_DIR}          \
             -DWITH_GCOV=${WITH_GCOV} \
             -DWITH_CACHELIB=${WITH_CACHELIB} \
-            -DWITH_STARCACHE=${WITH_STARCACHE} \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ../
 
 ${BUILD_SYSTEM} -j${PARALLEL}

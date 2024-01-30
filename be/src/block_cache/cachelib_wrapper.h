@@ -56,9 +56,13 @@ public:
 
     Status remove(const std::string& key) override;
 
+<<<<<<< HEAD
     std::unordered_map<std::string, double> cache_stats() override;
 
     const DataCacheMetrics cache_metrics() override;
+=======
+    const DataCacheMetrics cache_metrics(int level) override;
+>>>>>>> b054af81cb ([Enhancement] Support display datacache metircs by http service. (#40220))
 
     void record_read_remote(size_t size, int64_t lateny_us) override;
 
