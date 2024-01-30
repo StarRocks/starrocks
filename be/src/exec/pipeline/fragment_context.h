@@ -135,17 +135,10 @@ public:
     bool is_stream_pipeline() const { return _is_stream_pipeline; }
     void count_down_epoch_pipeline(RuntimeState* state, size_t val = 1);
 
-<<<<<<< HEAD
-=======
-    // for ut
-    void set_is_stream_test(bool is_stream_test) { _is_stream_test = is_stream_test; }
-    bool is_stream_test() const { return _is_stream_test; }
-
     size_t expired_log_count() { return _expired_log_count; }
 
     void set_expired_log_count(size_t val) { _expired_log_count = val; }
 
->>>>>>> 079f18b1d5 ([Enhancement] Avoid printing too many irrelevant logs when be hang (#22820))
 private:
     // Id of this query
     TUniqueId _query_id;
