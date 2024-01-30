@@ -2800,6 +2800,12 @@ public class Config extends ConfigBase {
     public static boolean enable_unlock_deadlock = false;
 
     /**
+     * Whether to use table level lock
+     */
+    @ConfField
+    public static boolean load_using_fine_granularity_lock_enabled = false;
+
+    /**
      * when a lock cannot be obtained, we cannot determine whether it is because the required
      * lock is being used normally or if a deadlock has occurred.
      * Therefore, based on the configuration parameter `dead_lock_detection_delay_time_ms`

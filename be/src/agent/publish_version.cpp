@@ -106,12 +106,6 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                 task.tablet_id = itr.first.tablet_id;
                 task.version = publish_version_req.partition_version_infos[i].version;
                 task.rowset = std::move(itr.second);
-                if (!task.rowset) {
-                    task.st = Status::NotFound(
-                            fmt::format("rowset not found  of tablet: {}, txn_id: {}", task.tablet_id, task.txn_id));
-                    LOG(WARNING) << task.st;
-                    return;
-                }
             }
         }
     }
@@ -130,7 +124,12 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                 tablet_span->SetAttribute("txn_id", transaction_id);
                 tablet_span->SetAttribute("tablet_id", task.tablet_id);
                 tablet_span->SetAttribute("version", task.version);
-
+                if (!task.rowset) {
+                    task.st = Status::NotFound(
+                            fmt::format("rowset not found  of tablet: {}, txn_id: {}", task.tablet_id, task.txn_id));
+                    LOG(WARNING) << task.st;
+                    return;
+                }
                 TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(task.tablet_id);
                 if (!tablet) {
                     // tablet may get dropped, it's ok to ignore this situation

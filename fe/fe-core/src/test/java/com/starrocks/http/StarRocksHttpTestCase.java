@@ -57,7 +57,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker.ThrowingRunnable;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.load.Load;
-import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
@@ -251,7 +250,6 @@ public abstract class StarRocksHttpTestCase {
 
     private static GlobalStateMgr newDelegateCatalog() {
         GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
-        Auth auth = new Auth();
         //EasyMock.expect(globalStateMgr.getAuth()).andReturn(starrocksAuth).anyTimes();
         Database db = new Database(testDbId, "testDb");
         OlapTable table = newTable(TABLE_NAME);
@@ -268,10 +266,6 @@ public abstract class StarRocksHttpTestCase {
 
         new Expectations(globalStateMgr) {
             {
-                globalStateMgr.getAuth();
-                minTimes = 0;
-                result = auth;
-
                 globalStateMgr.getDb(db.getId());
                 minTimes = 0;
                 result = db;
@@ -332,7 +326,6 @@ public abstract class StarRocksHttpTestCase {
 
     private static GlobalStateMgr newDelegateGlobalStateMgr() {
         GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
-        Auth auth = new Auth();
         //EasyMock.expect(globalStateMgr.getAuth()).andReturn(starrocksAuth).anyTimes();
         Database db = new Database(testDbId, "testDb");
         OlapTable table = newTable(TABLE_NAME);
@@ -349,10 +342,6 @@ public abstract class StarRocksHttpTestCase {
 
         new Expectations(globalStateMgr) {
             {
-                globalStateMgr.getAuth();
-                minTimes = 0;
-                result = auth;
-
                 globalStateMgr.getDb(db.getId());
                 minTimes = 0;
                 result = db;

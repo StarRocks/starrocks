@@ -673,8 +673,12 @@ public class PlanFragmentBuilder {
                 return scan.getColumnAccessPaths();
             }
 
+            Set<String> checkNames = scan.getColRefToColumnMetaMap().keySet().stream().map(ColumnRefOperator::getName)
+                    .collect(Collectors.toSet());
             if (scan.getPredicate() == null) {
-                return scan.getColumnAccessPaths();
+                // remove path which has pruned
+                return scan.getColumnAccessPaths().stream().filter(p -> checkNames.contains(p.getPath()))
+                        .collect(Collectors.toList());
             }
 
             SubfieldExpressionCollector collector = new SubfieldExpressionCollector(

@@ -116,6 +116,8 @@ CONF_Int32(clone_worker_count, "3");
 CONF_Int32(storage_medium_migrate_count, "3");
 // The count of thread to check consistency.
 CONF_Int32(check_consistency_worker_count, "1");
+// The count of thread to update scheam
+CONF_Int32(update_schema_worker_count, "3");
 // The count of thread to upload.
 CONF_Int32(upload_worker_count, "1");
 // The count of thread to download.
@@ -951,6 +953,8 @@ CONF_mInt64(lake_vacuum_retry_min_delay_ms, "10");
 CONF_mBool(enable_primary_key_recover, "false");
 CONF_mBool(lake_enable_compaction_async_write, "false");
 CONF_mInt64(lake_pk_compaction_max_input_rowsets, "5");
+// Used for control memory usage of update state cache and compaction state cache
+CONF_mInt32(lake_pk_preload_memory_limit_percent, "30");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
@@ -1193,4 +1197,6 @@ CONF_mInt32(dictionary_cache_refresh_threadpool_size, "8");
 // Disable when pk_dump_interval_seconds <= 0
 CONF_mInt64(pk_dump_interval_seconds, "3600"); // 1 hour
 
+// whether enable query profile for queries initiated by spark or flink
+CONF_mBool(enable_profile_for_external_plan, "false");
 } // namespace starrocks::config

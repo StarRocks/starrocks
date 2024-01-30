@@ -15,11 +15,13 @@ package com.starrocks.qe;
 
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.InformationFunction;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -70,6 +72,9 @@ public class RBACExecutorTest {
         }
 
         GlobalStateMgr globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
+
+        GlobalStateMgr.getCurrentState().setAuthorizationMgr(new AuthorizationMgr(globalStateMgr, null));
+        GlobalStateMgr.getCurrentState().setAuthenticationMgr(new AuthenticationMgr());
 
         for (int i = 0; i < 5; i++) {
             String sql = "create user u" + i;

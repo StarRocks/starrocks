@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # Unified catalog
 
-A unified catalog is a type of external catalog that is provided by StarRocks from v3.2 onwards to handle tables from various data sources, including Apache Hive™, Apache Iceberg, Apache Hudi, and Delta Lake, as a unified data source without ingestion. With unified catalogs, you can:
+A unified catalog is a type of external catalog that is provided by StarRocks from v3.2 onwards to handle tables from Apache Hive™, Apache Iceberg, Apache Hudi, and Delta Lake data sources as a unified data source without ingestion. With unified catalogs, you can:
 
 - Directly query data stored in Hive, Iceberg, Hudi, and Delta Lake without the need to manually create tables.
 - Use [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) or asynchronous materialized views (which are supported from v2.5 onwards) to process data stored in Hive, Iceberg, Hudi, and Delta Lake and load the data into StarRocks.

@@ -206,6 +206,13 @@ public:
         return _rowset_meta_pb->set_segments_overlap_pb(overlap);
     }
 
+    void set_max_compact_input_rowset_id(uint32_t max_compact_input_rowset_id) {
+        _rowset_meta_pb->set_max_compact_input_rowset_id(max_compact_input_rowset_id);
+    }
+
+    uint32_t max_compact_input_rowset_id() const { return _rowset_meta_pb->max_compact_input_rowset_id(); }
+    bool has_max_compact_input_rowset_id() const { return _rowset_meta_pb->has_max_compact_input_rowset_id(); }
+
     void set_rowset_seg_id(uint32_t id) { _rowset_meta_pb->set_rowset_seg_id(id); }
 
     uint32_t get_num_delete_files() const { return _rowset_meta_pb->num_delete_files(); }
@@ -227,10 +234,11 @@ public:
     // If not, perhaps `get_meta_pb_without_schema()` is enough.
     void get_full_meta_pb(RowsetMetaPB* rs_meta_pb) const {
         *rs_meta_pb = *_rowset_meta_pb;
-        rs_meta_pb->clear_tablet_schema();
-        TabletSchemaPB* ts_pb = rs_meta_pb->mutable_tablet_schema();
-        DCHECK(_schema != nullptr);
-        _schema->to_schema_pb(ts_pb);
+        if (_schema != nullptr) {
+            rs_meta_pb->clear_tablet_schema();
+            TabletSchemaPB* ts_pb = rs_meta_pb->mutable_tablet_schema();
+            _schema->to_schema_pb(ts_pb);
+        }
     }
 
     void get_tablet_schema_pb(TabletSchemaPB* tablet_schema_pb) {

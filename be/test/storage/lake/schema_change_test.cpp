@@ -62,9 +62,9 @@ std::string to_string_param_name(const testing::TestParamInfo<SchemaChangeParam>
 class SchemaChangeTest : public testing::Test, public testing::WithParamInterface<SchemaChangeParam> {
 public:
     SchemaChangeTest(const std::string& test_dir) {
-        _mem_tracker = std::make_unique<MemTracker>(-1);
+        _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _location_provider = std::make_unique<FixedLocationProvider>(test_dir);
-        _update_manager = std::make_unique<UpdateManager>(_location_provider.get());
+        _update_manager = std::make_unique<UpdateManager>(_location_provider.get(), _mem_tracker.get());
         _tablet_manager = std::make_unique<TabletManager>(_location_provider.get(), _update_manager.get(), 1024 * 1024);
     }
 
