@@ -55,7 +55,6 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     private static final Logger LOG = LogManager.getLogger(HttpServerHandler.class);
 
     private ActionController controller = null;
-    protected FullHttpRequest fullRequest = null;
     protected HttpRequest request = null;
     private BaseAction action = null;
 
