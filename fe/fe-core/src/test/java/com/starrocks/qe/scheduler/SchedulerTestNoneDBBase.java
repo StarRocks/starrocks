@@ -14,6 +14,7 @@
 
 package com.starrocks.qe.scheduler;
 
+import com.google.common.collect.Multimap;
 import com.starrocks.catalog.CatalogIdGenerator;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -22,7 +23,8 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.PBackendService;
 import com.starrocks.sql.plan.PlanTestNoneDBBase;
 import com.starrocks.system.Backend;
-import com.starrocks.system.SystemInfoService;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.system.NodeSelector;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.UtFrameUtils;
@@ -187,14 +189,15 @@ public class SchedulerTestNoneDBBase extends PlanTestNoneDBBase {
     }
 
     /**
-     * Mock {@link SystemInfoService#seqChooseNodeIds(int, boolean, List)}.
+     * Mock {@link com.starrocks.system.NodeSelector#seqChooseNodeIds(int, boolean, Multimap, List)}.
      */
     private static void resetChooseNodeIds() {
         AtomicInteger nextNodeIndex = new AtomicInteger(0);
-        new MockUp<SystemInfoService>() {
+        new MockUp<NodeSelector>() {
             @Mock
             public synchronized List<Long> seqChooseNodeIds(int nodeNum, boolean isCreate,
-                                                               final List<Backend> srcNodes) {
+                                                            Multimap<String, String> locReq,
+                                                            final List<ComputeNode> srcNodes) {
                 List<Long> nodeIds = new ArrayList<>(nodeNum);
                 for (int i = 0; i < nodeNum; i++) {
                     int index = nextNodeIndex.getAndIncrement();

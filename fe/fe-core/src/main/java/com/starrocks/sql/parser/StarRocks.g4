@@ -837,7 +837,7 @@ alterClause
     | addBackendClause
     | dropBackendClause
     | decommissionBackendClause
-    | modifyBackendHostClause
+    | modifyBackendClause
     | addComputeNodeClause
     | dropComputeNodeClause
     | modifyBrokerClause
@@ -906,8 +906,9 @@ decommissionBackendClause
    : DECOMMISSION BACKEND string (',' string)*
    ;
 
-modifyBackendHostClause
+modifyBackendClause
    : MODIFY BACKEND HOST string TO string
+   | MODIFY BACKEND string SET propertyList
    ;
 
 addComputeNodeClause
