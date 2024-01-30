@@ -7,7 +7,6 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '0 18 * * SUN'  # once a week on Sunday
-
 permissions:
   contents: read
   issues: write
@@ -18,14 +17,46 @@ jobs:
     runs-on: ubuntu-latest
     env:
       POSTHOG_TOKEN: ${{ secrets.POSTHOG_PERSONAL_API_KEY }}
+      ALGOLIA_TOKEN: ${{ secrets.ALGOLIA_ANALYTICS_KEY }}
     steps:
-      - name: Run script
+      - name: Run PostHog script
         run: |
+          echo "## Feedback from readers" > feedback.md
+          echo "Three sections: feedback, top working searches, and top failed searches." >> feedback.md
+          echo "Please check off the feedback and failed searches as you fix them and" >> feedback.md
+          echo "please add the `doc-feedback` label to your PRs related to this issue." >> feedback.md
+          echo " " >> feedback.md
+          echo "You do not need to edit this issue with PR numbers, as everything with" >> feedback.md
+          echo "the label will show in the GitHub project." >> feedback.md
+          echo " " >> feedback.md
           curl --silent \
             --header "Content-Type: application/json" \
             --data '{ "query": { "kind": "HogQLQuery", "query": "SELECT now() - INTERVAL 7 DAY as start_time, timestamp, properties.page, properties.text, properties.sentiment from events WHERE properties.sentiment IS NOT NULL AND timestamp > start_time ORDER BY properties.sentiment ASC"}}' \
             -H "Authorization: Bearer $POSTHOG_TOKEN" \
-            https://app.posthog.com/api/projects/48961/query | jq -r '.results | to_entries[] | "- [ ] \(.value[2])", "  feedback: \(.value[3])", "  Rating: \(.value[4])", "  timestamp: \(.value[1])"' > feedback.md
+            https://app.posthog.com/api/projects/48961/query \
+            | jq -r '.results | to_entries[] | "- [ ] \(.value[2])", "  feedback: \(.value[3])", "  Rating: \(.value[4])", "  timestamp: \(.value[1])"' >> feedback.md
+
+      - name: Run Algolia scripts
+        run: |
+          echo " " >> feedback.md
+          echo "## Algolia top successful searches" >> feedback.md
+          echo " " >> feedback.md
+          curl --silent \
+            -X GET \
+            -H "X-Algolia-API-Key: $ALGOLIA_TOKEN" \
+            -H "X-Algolia-Application-Id: ER08SJMRY1" \
+            "https://analytics.algolia.com/2/searches?index=starrocks" \
+            | jq -r '.searches | to_entries[] | "- \(.value.search)", "  count this week: \(.value.count)", "  Search hits: \(.value.nbHits)\n" ' >> feedback.md
+          echo " " >> feedback.md
+          echo "## Algolia top failed searches" >> feedback.md
+          echo " " >> feedback.md
+          curl --silent \
+            -X GET \
+            -H "X-Algolia-API-Key: $ALGOLIA_TOKEN" \
+            -H "X-Algolia-Application-Id: ER08SJMRY1" \
+           "https://analytics.algolia.com/2/searches/noResults?index=starrocks" \
+           | jq -r '.searches | to_entries[] | "- [ ] \(.value.search)", "  failures this week: \(.value.count)"' \
+           >> feedback.md
 
       - name: Create issue from file
         id: weekly-feedback-report
