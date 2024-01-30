@@ -87,6 +87,7 @@ import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.ResidualEvaluator;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.CloseableIterator;
+import org.apache.iceberg.metrics.ScanReport;
 import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
@@ -146,13 +147,14 @@ public class IcebergMetadata implements ConnectorMetadata {
     private final Map<FileScanTaskSchema, Pair<String, String>> fileScanTaskSchemas = new ConcurrentHashMap<>();
     private final ExecutorService jobPlanningExecutor;
     private final ExecutorService refreshOtherFeExecutor;
+    private final IcebergMetricsReporter metricsReporter;
 
     public IcebergMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, IcebergCatalog icebergCatalog,
                            ExecutorService jobPlanningExecutor, ExecutorService refreshOtherFeExecutor) {
         this.catalogName = catalogName;
         this.hdfsEnvironment = hdfsEnvironment;
         this.icebergCatalog = icebergCatalog;
-        new IcebergMetricsReporter().setThreadLocalReporter();
+        this.metricsReporter = new IcebergMetricsReporter();
         this.jobPlanningExecutor = jobPlanningExecutor;
         this.refreshOtherFeExecutor = refreshOtherFeExecutor;
     }
@@ -506,12 +508,14 @@ public class IcebergMetadata implements ConnectorMetadata {
         ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(schema);
         Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(scalarOperators, icebergContext);
 
-        TableScan scan = nativeTbl.newScan().useSnapshot(snapshotId);
+        TableScan scan = nativeTbl.newScan()
+                .useSnapshot(snapshotId)
+                .metricsReporter(metricsReporter)
+                .planWith(jobPlanningExecutor);
+
         if (enableCollectColumnStatistics()) {
             scan = scan.includeColumnStats();
         }
-
-        scan = scan.planWith(jobPlanningExecutor);
 
         if (icebergPredicate.op() != Expression.Operation.TRUE) {
             scan = scan.filter(icebergPredicate);
@@ -589,11 +593,12 @@ public class IcebergMetadata implements ConnectorMetadata {
             // Ignored
         }
 
-        IcebergMetricsReporter.lastReport().ifPresent(scanReportWithCounter ->
+        Optional<ScanReport> metrics = metricsReporter.getReporter(catalogName, dbName, tableName, snapshotId, icebergPredicate);
+
+        metrics.ifPresent(metric ->
                 Tracers.record(Tracers.Module.EXTERNAL, "ICEBERG.ScanMetrics." +
-                                scanReportWithCounter.getScanReport().tableName() + " / No_" +
-                                scanReportWithCounter.getCount(),
-                        scanReportWithCounter.getScanReport().scanMetrics().toString()));
+                                metric.tableName() + "["  + icebergPredicate + "]",
+                        metric.scanMetrics().toString()));
 
         splitTasks.put(key, icebergScanTasks);
         scannedTables.add(key);
@@ -909,7 +914,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         databases.clear();
         tables.clear();
         scannedTables.clear();
-        IcebergMetricsReporter.remove();
+        metricsReporter.clear();
     }
 
     interface BatchWrite {
