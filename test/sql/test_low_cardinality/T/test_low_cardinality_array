@@ -337,3 +337,119 @@ select MAX(upper(a1[1])) from s1 group by a2[1] order by a2[1] limit 2;
 select lower(MAX(upper(a1[1]))) from s1 group by a2[1] order by a2[1] limit 2;
 
 select lower(x1), upper(MIN(HEX(x2))) from (select a1[1] x1, array_max(a2) x2 from s1) y group by x1 order by x1 limit 2;
+
+-- name: test_low_array_with_dict_predicate
+
+CREATE TABLE `s3` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` int(11) NULL COMMENT "",
+  `v3` string NULL COMMENT "",
+  `a1` array<varchar(65533)> NULL COMMENT "",
+  `a2` array<varchar(65533)> NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`v1`) BUCKETS 10
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"light_schema_change" = "true",
+"compression" = "LZ4"
+);
+
+insert into s3 values
+(28222, 724, "BJ", ['Hubei', 'Ningxia', 'Sichuan', 'Zhejiang'], ['HK', 'BJ', 'GD', 'GS', 'LN']),
+(28231, 607, "SH", ['Yunnan', 'Inner Mongolia', 'Taiwan', 'Hunan'], ['JL', 'HUN', 'GZ', 'XJ', 'GZ']),
+(28316, 275, "GY", ['Anhui', 'Yunnan', 'Hainan', 'Heilongjiang', 'Hunan'], ['CQ', 'TW']),
+(28352, 371, "AH", ['Jiangsu', 'Guangdong', 'Taiwan', 'Zhejiang', 'Jilin'], ['XZ', 'QH', 'NX']),
+(28221, 241, "MO", ['Hong Kong', 'Zhejiang', 'Heilongjiang', 'Henan'], ['XZ', 'HLJ', 'AH', 'MO']),
+(28257, 447, "JS", ['Fujian', 'Jiangsu', 'Macao', 'Ningxia'], ['JS', 'GD', 'QH']),
+(28244, 834, "GD", ['Qinghai', 'Heilongjiang'], ['TJ', 'AH', 'HI']),
+(28350, 930, "QH", ['Shaanxi', 'Guangdong'], ['XJ', 'HUB', 'TW', 'HUN']),
+(28328, 495, "ZJ", ['Qinghai', 'Inner Mongolia'], ['GD', 'ZJ', 'JL', 'GS']),
+(28401, 307, "JL", ['Shandong', 'Guangxi', 'Xinjiang', 'Anhui', 'Ningxia'], ['NMG', 'ZJ', 'TW', 'HUN', 'HEN']),
+(28329, 729, "GS", ['Fujian', 'Henan', 'Chongqing', 'Zhejiang'], ['AH', 'SN', 'YN', 'CQ', 'HLJ']),
+(28342, 788, "TW", ['Qinghai', 'Jilin', 'Zhejiang'], ['HUB', 'HUB', 'HUB', 'JL']),
+(28341, 985, "HK", ['Sichuan', 'Heilongjiang', 'Shanghai', 'Tianjin'], ['XJ', 'HEN', 'XZ', 'TJ', 'AH']),
+(28389, 447, "LN", ['Hubei', 'Shandong', 'Macao', 'Liaoning', 'Guangdong'], ['JX', 'ZJ', 'SX', 'SC']),
+(28348, 349, "SX", ['Hebei', 'Hong Kong', 'Macao', 'Guangxi'], ['JX', 'XZ', 'ZJ']),
+(28220, 848, "BJ", ['Sichuan', 'Tianjin', 'Sichuan', 'Beijing', 'Xinjiang'], ['GD', 'CQ', 'HUN', 'HK', 'AH']),
+(28415, 286, "SH", ['Taiwan', 'Hong Kong', 'Fujian'], ['XZ', 'LN']),
+(28201, 171, "GY", ['Macao', 'Hubei', 'Liaoning', 'Shanghai'], ['HK', 'SN', 'HEN', 'GX', 'TW']),
+(28256, 501, "AH", ['Xinjiang', 'Hong Kong', 'Jilin'], ['ZJ', 'HUN', 'HUN', 'JX', 'SC']),
+(28250, 318, "MO", ['Heilongjiang', 'Macao', 'Hubei', 'Inner Mongolia', 'Tianjin'], ['HLJ', 'HEN']),
+(28204, 737, "JS", ['Taiwan', 'Hainan'], ['SC', 'QH', 'SH']),
+(28307, 246, "GD", ['Beijing', 'Jiangxi', 'Guizhou', 'Shaanxi'], ['SX', 'HEB', 'TW']),
+(28401, 774, "QH", ['Yunnan', 'Taiwan', 'Hunan', 'Inner Mongolia', 'Jiangsu'], ['SN', 'JS']),
+(28293, 964, "ZJ", ['Qinghai', 'Hubei', 'Hubei'], ['GX', 'HLJ', 'GD', 'AH', 'HK']),
+(28200, 302, "JL", ['Henan', 'Chongqing', 'Ningxia', 'Tibet', 'Yunnan'], ['JL', 'BJ']),
+(28212, 307, "GS", ['Jiangxi', 'Shanxi', 'Liaoning', 'Hunan'], ['TW', 'SH']),
+(28403, 874, "TW", ['Sichuan', 'Shanghai', 'Hubei', 'Chongqing'], ['MO', 'HLJ', 'SN', 'LN']),
+(28377, 723, "HK", ['Inner Mongolia', 'Gansu', 'Jiangsu'], ['YN', 'YN', 'ZJ']),
+(28320, 201, "LN", ['Shanghai', 'Shanghai', 'Guangxi'], ['JS', 'YN', 'TW', 'GZ', 'ZJ']),
+(28338, 692, "SX", ['Hainan', 'Zhejiang', 'Shanghai', 'Xinjiang', 'Henan'], ['SC', 'GS', 'SX', 'GZ', 'GD']),
+(28288, 909, "BJ", ['Fujian', 'Shandong', 'Shanxi', 'Qinghai', 'Tianjin'], ['GZ', 'HEB', 'XJ']),
+(28413, 665, "SH", ['Tianjin', 'Hunan', 'Taiwan'], ['HK', 'CQ', 'SD']),
+(28200, 947, "GY", ['Hunan', 'Henan'], ['FJ', 'MO', 'HEB', 'JL']),
+(28351, 414, "AH", ['Sichuan', 'Guangdong'], ['XZ', 'ZJ', 'ZJ', 'GS', 'SD']),
+(28278, 865, "MO", ['Shaanxi', 'Shandong', 'Gansu'], ['GZ', 'NX', 'HLJ']),
+(28424, 944, "JS", ['Liaoning', 'Chongqing', 'Jiangsu'], ['GS', 'GX', 'SH', 'GX']),
+(28329, 371, "GD", ['Inner Mongolia', 'Shandong'], ['XJ', 'NX']),
+(28388, 901, "QH", ['Gansu', 'Hong Kong', 'Chongqing', 'Beijing'], ['SH', 'JS']),
+(28233, 472, "ZJ", ['Chongqing', 'Guangdong', 'Hebei', 'Hebei'], ['XJ', 'YN', 'HEB', 'SD']),
+(28411, 373, "JL", ['Hong Kong', 'Jiangsu', 'Tibet', 'Yunnan', 'Fujian'], ['JX', 'FJ', 'FJ', 'HK', 'JL']),
+(28353, 693, "GS", ['Sichuan', 'Fujian', 'Tibet', 'Taiwan', 'Zhejiang'], ['CQ', 'SH', 'AH', 'YN']),
+(28222, 655, "TW", ['Guangxi', 'Taiwan', 'Macao', 'Tibet', 'Ningxia'], ['YN', 'HUB', 'CQ', 'SD', 'SX']),
+(28377, 233, "HK", ['Jilin', 'Guizhou', 'Taiwan', 'Macao', 'Yunnan'], ['SC', 'CQ', 'SD', 'SH', 'JL']),
+(28404, 666, "LN", ['Guizhou', 'Shandong', 'Fujian'], ['SX', 'HEB']),
+(28391, 140, "SX", ['Taiwan', 'Macao', 'Taiwan', 'Shanghai', 'Inner Mongolia'], ['AH', 'FJ', 'HEN', 'SN', 'HK']),
+(28347, 495, "HN", ['Qinghai', 'Gansu', 'Gansu', 'Guangdong'], ['HUB', 'HUN', 'LN', 'TJ']),
+(28327, 269, "SD", ['Hainan', 'Guangdong', 'Jilin'], ['SC', 'GD', 'SD', 'ZJ', 'ZJ']),
+(28263, 864, "AH", ['Yunnan', 'Jiangxi', 'Fujian'], ['SC', 'HI', 'HUB', 'SN', 'SX']),
+(28235, 711, "YN", ['Hainan', 'Hainan', 'Yunnan', 'Liaoning', 'Anhui'], ['HUN', 'SD']);
+
+insert into s3 select * from s3;
+insert into s3 select * from s3;
+insert into s3 select * from s3;
+insert into s3 select * from s3;
+insert into s3 select * from s3;
+insert into s3 select * from s3;
+insert into s3 select * from s3;
+
+[UC] analyze full table s3;
+
+function: wait_global_dict_ready('a1', 's3')
+function: wait_global_dict_ready('a2', 's3')
+
+
+select * from s3 order by v1 limit 2;
+
+select * from s3 where a1[1] = 'Jiangsu' and v3 = "BJ" order by v1 limit 2;
+select * from s3 where a1[1] = 'Jiangsu' and a2[2] = 'GD' and v3 > "AH" order by v1 limit 2;
+
+select array_length(a1), array_max(a2), array_min(a1), array_distinct(a1), array_sort(a2),
+       reverse(a1), array_slice(a2, 2, 4), cardinality(a2)
+from s3 where a1[1] = 'Jiangsu' and a2[2] = 'GD' and v3 = "MO" order by v1 limit 2;
+
+select array_length(a1), array_max(a2), array_min(a1), array_distinct(a1), array_sort(a2),
+       reverse(a1), array_slice(a2, 2, 4), cardinality(a2)
+from s3 where a1[1] = 'Jiangsu' or a2[2] = 'GD' order by v1 limit 2;
+
+select count(a1[2]) from s3 where v3 = "GS"; 
+
+select /*+SET_VAR(cbo_enable_low_cardinality_optimize=false, low_cardinality_optimize_v2=false)*/ * from s3 order by v1 limit 2;
+
+select /*+SET_VAR(cbo_enable_low_cardinality_optimize=false, low_cardinality_optimize_v2=false)*/ * from s3 where a1[1] = 'Jiangsu' and v3 = "BJ" order by v1 limit 2;
+select /*+SET_VAR(cbo_enable_low_cardinality_optimize=false, low_cardinality_optimize_v2=false)*/ * from s3 where a1[1] = 'Jiangsu' and a2[2] = 'GD' and v3 > "AH" order by v1 limit 2;
+
+select /*+SET_VAR(cbo_enable_low_cardinality_optimize=false, low_cardinality_optimize_v2=false)*/ array_length(a1), array_max(a2), array_min(a1), array_distinct(a1), array_sort(a2),
+       reverse(a1), array_slice(a2, 2, 4), cardinality(a2)
+from s3 where a1[1] = 'Jiangsu' and a2[2] = 'GD' and v3 = "MO" order by v1 limit 2;
+
+select /*+SET_VAR(cbo_enable_low_cardinality_optimize=false, low_cardinality_optimize_v2=false)*/ array_length(a1), array_max(a2), array_min(a1), array_distinct(a1), array_sort(a2),
+       reverse(a1), array_slice(a2, 2, 4), cardinality(a2)
+from s3 where a1[1] = 'Jiangsu' or a2[2] = 'GD' order by v1 limit 2;
+
+select /*+SET_VAR(cbo_enable_low_cardinality_optimize=false, low_cardinality_optimize_v2=false)*/ count(a1[2]) from s3 where v3 = "GS"; 

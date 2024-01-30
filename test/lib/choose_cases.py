@@ -178,7 +178,7 @@ class ChooseCase(object):
         tmp_res = []
 
         while line_id < len(f_lines):
-            line_content = f_lines[line_id].rstrip("\n")
+            line_content = f_lines[line_id].rstrip("\n").strip();
 
             if line_content == "" or (line_content.startswith("--") and not line_content.startswith(NAME_FLAG)):
                 # invalid line
