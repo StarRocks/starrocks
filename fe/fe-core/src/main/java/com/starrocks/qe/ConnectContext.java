@@ -873,17 +873,7 @@ public class ConnectContext {
             List<String> row = Lists.newArrayList();
             row.add("" + connectionId);
             row.add(ClusterNamespace.getNameFromFullName(qualifiedUser));
-<<<<<<< HEAD
             row.add(getMysqlChannel().getRemoteHostPortString());
-=======
-            // Ip + port
-            if (ConnectContext.this instanceof HttpConnectContext) {
-                String remoteAddress = ((HttpConnectContext) (ConnectContext.this)).getRemoteAddress();
-                row.add(remoteAddress);
-            } else {
-                row.add(getMysqlChannel().getRemoteHostPortString());
-            }
->>>>>>> 02be7213b5 ([BugFix] Fix small file related security issues (#40255))
             row.add(ClusterNamespace.getNameFromFullName(currentDb));
             // Command
             row.add(command.toString());
