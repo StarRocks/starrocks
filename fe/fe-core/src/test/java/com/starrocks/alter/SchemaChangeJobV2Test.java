@@ -128,6 +128,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
         Assert.assertEquals(1, alterJobsV2.size());
         SchemaChangeJobV2 schemaChangeJob = (SchemaChangeJobV2) alterJobsV2.values().stream().findAny().get();
+        alterJobsV2.clear();
 
         MaterializedIndex baseIndex = testPartition.getBaseIndex();
         assertEquals(IndexState.NORMAL, baseIndex.getState());
@@ -181,6 +182,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
         Assert.assertEquals(1, alterJobsV2.size());
         SchemaChangeJobV2 schemaChangeJob = (SchemaChangeJobV2) alterJobsV2.values().stream().findAny().get();
+        alterJobsV2.clear();
 
         MaterializedIndex baseIndex = testPartition.getBaseIndex();
         assertEquals(IndexState.NORMAL, baseIndex.getState());
