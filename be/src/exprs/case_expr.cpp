@@ -102,12 +102,15 @@ public:
                     ASSIGN_OR_RETURN(auto datum_i, _children[i]->generate_ir_impl(context, jit_ctx))
                     if (i == 0) { // if caseExpr is null, go to else
                         datum_0 = datum_i;
+                        llvm::Value* is_null = nullptr;
                         if (_children[i]->is_nullable()) {
-                            auto* is_null = b.CreateICmpEQ(datum_i.null_flag, llvm::ConstantInt::get(b.getInt8Ty(), 1));
-                            b.CreateCondBr(is_null, then, next);
-                            b.SetInsertPoint(then);
-                            b.CreateBr(else_block);
+                            is_null = b.CreateICmpEQ(datum_i.null_flag, llvm::ConstantInt::get(b.getInt8Ty(), 1));
+                        } else {
+                            is_null = llvm::ConstantInt::get(b.getInt1Ty(), 0);
                         }
+                        b.CreateCondBr(is_null, then, next);
+                        b.SetInsertPoint(then);
+                        b.CreateBr(else_block);
                     } else { // if (whenExpr !=null & caseExpr = whenExpr), store the result
                         llvm::Value* cmp_eq = nullptr;
                         if constexpr (lt_is_float<ResultType>) {

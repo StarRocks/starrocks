@@ -651,8 +651,7 @@ TEST_F(VectorizedCaseExprTest, whenConstantAndElseVariable) {
         expr->_children.push_back(&else1);
 
         {
-            Chunk chunk;
-            ColumnPtr ptr = expr->evaluate(nullptr, &chunk);
+            ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
             ExprsTestHelper::verify_with_jit(
                     ptr, expr.get(), &runtime_state,
                     [](ColumnPtr const& ptr) {
