@@ -18,18 +18,47 @@ UDF 定义的 Bitmap 格式与 StarRocks 里格式一致，可直接用于导入
 - 3.1 及以上版本支持 String，Base64，和 Binary 三种格式导入导出。
 - 2.5 和 3.0 版本只支持 String 和 Base64 两种格式导入导出。
 
-## UDF 函数
+## 支持生成的 Hive Bitmap UDF 函数
 
-- com.starrocks.hive.udf.UDAFBitmapAgg: 将一列中的多行非 NULL 数值合并成一行 BITMAP 值，等同于 StarRocks 的内置聚合函数 [bitmap_agg](../sql-reference/sql-functions/bitmap-functions/bitmap_agg.md)。
-- com.starrocks.hive.udf.UDAFBitmapUnion: 输入一组 Bitmap 值，求这一组 Bitmap 值的并集，等同于 StarRocks 的内置聚合函数 [bitmap_union](../sql-reference/sql-functions/bitmap-functions/bitmap_union.md)。
-- com.starrocks.hive.udf.UDFBase64ToBitmap: 将 Base64 编码的字符串转化为 Bitmap，等同于 StarRocks 的内置函数 [base64_to_bitmap](../sql-reference/sql-functions/bitmap-functions/base64_to_bitmap.md)。
-- com.starrocks.hive.udf.UDFBitmapAnd: 计算两个 Bitmap 的交集，等同于 StarRocks 的内置函数 [bitmap_and](../sql-reference/sql-functions/bitmap-functions/bitmap_and.md)。
-- com.starrocks.hive.udf.UDFBitmapCount: 统计 Bitmap 中值的个数，等同于 StarRocks 的内置函数 [bitmap_count](../sql-reference/sql-functions/bitmap-functions/bitmap_count.md)。
-- com.starrocks.hive.udf.UDFBitmapFromString: 将一个逗号分隔的字符串转化为一个 Bitmap，等同于 StarRocks 的内置函数 [bitmap_from_string](../sql-reference/sql-functions/bitmap-functions/bitmap_from_string.md)。
-- com.starrocks.hive.udf.UDFBitmapOr: 计算两个 Bitmap 的并集，等同于 StarRocks 的内置函数 [bitmap_or](../sql-reference/sql-functions/bitmap-functions/bitmap_or.md)。
-- com.starrocks.hive.udf.UDFBitmapToBase64: 将 Bitmap 转换为 Base64 字符串，等同于 StarRocks 的内置函数 [bitmap_to_base64](../sql-reference/sql-functions/bitmap-functions/bitmap_to_base64.md)。
-- com.starrocks.hive.udf.UDFBitmapToString: 将 Bitmap 转换为逗号分隔的字符串，等同于 StarRocks 的内置函数 [bitmap_to_string](../sql-reference/sql-functions/bitmap-functions/bitmap_to_string.md)。
-- com.starrocks.hive.udf.UDFBitmapXor: 计算两个 Bitmap 中不重复元素所构成的集合，等同于 StarRocks 的内置函数 [bitmap_xor](../sql-reference/sql-functions/bitmap-functions/bitmap_xor.md)。
+- com.starrocks.hive.udf.UDAFBitmapAgg
+
+  将一列中的多行非 NULL 数值合并成一行 BITMAP 值，等同于 StarRocks 的内置聚合函数 [bitmap_agg](../sql-reference/sql-functions/bitmap-functions/bitmap_agg.md)。
+
+- com.starrocks.hive.udf.UDAFBitmapUnion
+
+  输入一组 Bitmap 值，求这一组 Bitmap 值的并集，等同于 StarRocks 的内置聚合函数 [bitmap_union](../sql-reference/sql-functions/bitmap-functions/bitmap_union.md)。
+
+- com.starrocks.hive.udf.UDFBase64ToBitmap
+
+  将 Base64 编码的字符串转化为 Bitmap，等同于 StarRocks 的内置函数 [base64_to_bitmap](../sql-reference/sql-functions/bitmap-functions/base64_to_bitmap.md)。
+
+- com.starrocks.hive.udf.UDFBitmapAnd
+
+  计算两个 Bitmap 的交集，等同于 StarRocks 的内置函数 [bitmap_and](../sql-reference/sql-functions/bitmap-functions/bitmap_and.md)。
+
+- com.starrocks.hive.udf.UDFBitmapCount
+
+  统计 Bitmap 中值的个数，等同于 StarRocks 的内置函数 [bitmap_count](../sql-reference/sql-functions/bitmap-functions/bitmap_count.md)。
+
+- com.starrocks.hive.udf.UDFBitmapFromString
+
+  将一个逗号分隔的字符串转化为一个 Bitmap，等同于 StarRocks 的内置函数 [bitmap_from_string](../sql-reference/sql-functions/bitmap-functions/bitmap_from_string.md)。
+
+- com.starrocks.hive.udf.UDFBitmapOr
+
+  计算两个 Bitmap 的并集，等同于 StarRocks 的内置函数 [bitmap_or](../sql-reference/sql-functions/bitmap-functions/bitmap_or.md)。
+
+- com.starrocks.hive.udf.UDFBitmapToBase64
+
+  将 Bitmap 转换为 Base64 字符串，等同于 StarRocks 的内置函数 [bitmap_to_base64](../sql-reference/sql-functions/bitmap-functions/bitmap_to_base64.md)。
+
+- com.starrocks.hive.udf.UDFBitmapToString
+
+  将 Bitmap 转换为逗号分隔的字符串，等同于 StarRocks 的内置函数 [bitmap_to_string](../sql-reference/sql-functions/bitmap-functions/bitmap_to_string.md)。
+
+- com.starrocks.hive.udf.UDFBitmapXor
+
+  计算两个 Bitmap 中不重复元素所构成的集合，等同于 StarRocks 的内置函数 [bitmap_xor](../sql-reference/sql-functions/bitmap-functions/bitmap_xor.md)。
 
 ## 使用方法
 
@@ -39,15 +68,15 @@ UDF 定义的 Bitmap 格式与 StarRocks 里格式一致，可直接用于导入
    ./build.sh --hive-udf
    ```
 
-   会在 `fe/hive-udf/` 目录下生成一个 Jar 包 `hive-udf-1.0.0.jar`。
+   会在 `fe/hive-udf/` 目录下生成一个 JAR 包 `hive-udf-1.0.0.jar`。
 
-2. 将 Jar 包上传到 HDFS。
+2. 将 JAR 包上传到 HDFS。
 
    ```bash
    hadoop  fs -put -f ./hive-udf-1.0.0.jar hdfs://<hdfs_ip>:<hdfs_port>/hive1-udf-1.0.0.jar
    ```
 
-3. Hive 里加载 Jar 包。
+3. Hive 里加载 JAR 包。
 
    ```bash
    hive> add jar hdfs://<hdfs_ip>:<hdfs_port>/hive1-udf-1.0.0.jar;

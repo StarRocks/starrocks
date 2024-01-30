@@ -18,27 +18,47 @@ Supported data types:
 - v3.1 and later support loading and unloading data of these types: String,  Base64, and Binary.
 - v2.5 and v3.0 only support loading and unloading String and Base64 data.
 
-## UDFs
+## Hive Bitmap UDFs that can be generated
 
-- com.starrocks.hive.udf.UDAFBitmapAgg: Combines multiple rows of non-null values in a column into one row of Bitmap values, which is equivalent to StarRocks' built-in aggregate function [bitmap_agg](../sql-reference/sql-functions/bitmap-functions/bitmap_agg.md).
+- com.starrocks.hive.udf.UDAFBitmapAgg
 
-- com.starrocks.hive.udf.UDAFBitmapUnion: Calculates the union of a set of bitmaps, which is equivalent to StarRocks' built-in aggregate function [bitmap_union](../sql-reference/sql-functions/bitmap-functions/bitmap_union.md).
+  Combines multiple rows of non-null values in a column into one row of Bitmap values, which is equivalent to StarRocks' built-in aggregate function [bitmap_agg](../sql-reference/sql-functions/bitmap-functions/bitmap_agg.md).
 
-- com.starrocks.hive.udf.UDFBase64ToBitmap: Converts a base64-encoded string into a bitmap, which is equivalent to StarRocks' built-in function [base64_to_bitmap](../sql-reference/sql-functions/bitmap-functions/base64_to_bitmap.md).
+- com.starrocks.hive.udf.UDAFBitmapUnion
 
-- com.starrocks.hive.udf.UDFBitmapAnd: Calculates the intersection of two bitmaps, which is equivalent to StarRocks' built-in function [bitmap_and](../sql-reference/sql-functions/bitmap-functions/bitmap_and.md).
+  Calculates the union of a set of bitmaps, which is equivalent to StarRocks' built-in aggregate function [bitmap_union](../sql-reference/sql-functions/bitmap-functions/bitmap_union.md).
 
-- com.starrocks.hive.udf.UDFBitmapCount: Counts the number of values in the bitmap, which is equivalent to StarRocks' built-in function [bitmap_count](../sql-reference/sql-functions/bitmap-functions/bitmap_count.md).
+- com.starrocks.hive.udf.UDFBase64ToBitmap
 
-- com.starrocks.hive.udf.UDFBitmapFromString: Converts a comma-separated string to a bitmap, equivalent to StarRocks' built-in function [bitmap_from_string](../sql-reference/sql-functions/bitmap-functions/bitmap_from_string.md).
+  Converts a base64-encoded string into a bitmap, which is equivalent to StarRocks' built-in function [base64_to_bitmap](../sql-reference/sql-functions/bitmap-functions/base64_to_bitmap.md).
 
-- com.starrocks.hive.udf.UDFBitmapOr: Calculates the union of two bitmaps, equivalent to StarRocks' built-in function [bitmap_or](../sql-reference/sql-functions/bitmap-functions/bitmap_or.md).
+- com.starrocks.hive.udf.UDFBitmapAnd
 
-- com.starrocks.hive.udf.UDFBitmapToBase64: Converts Bitmap to Base64 string, equivalent to StarRocks' built-in function [bitmap_to_base64](../sql-reference/sql-functions/bitmap-functions/bitmap_to_base64.md).
+  Calculates the intersection of two bitmaps, which is equivalent to StarRocks' built-in function [bitmap_and](../sql-reference/sql-functions/bitmap-functions/bitmap_and.md).
 
-- com.starrocks.hive.udf.UDFBitmapToString: Converts a bitmap to a comma-separated string, equivalent to StarRocks' built-in function [bitmap_to_string](../sql-reference/sql-functions/bitmap-functions/bitmap_to_string.md).
+- com.starrocks.hive.udf.UDFBitmapCount
 
-- com.starrocks.hive.udf.UDFBitmapXor: Calculates the set of unique elements in two Bitmaps, which is equivalent to StarRocks' built-in function [bitmap_xor](../sql-reference/sql-functions/bitmap-functions/bitmap_xor.md).
+  Counts the number of values in the bitmap, which is equivalent to StarRocks' built-in function [bitmap_count](../sql-reference/sql-functions/bitmap-functions/bitmap_count.md).
+
+- com.starrocks.hive.udf.UDFBitmapFromString
+
+  Converts a comma-separated string to a bitmap, equivalent to StarRocks' built-in function [bitmap_from_string](../sql-reference/sql-functions/bitmap-functions/bitmap_from_string.md).
+
+- com.starrocks.hive.udf.UDFBitmapOr
+
+  Calculates the union of two bitmaps, equivalent to StarRocks' built-in function [bitmap_or](../sql-reference/sql-functions/bitmap-functions/bitmap_or.md).
+
+- com.starrocks.hive.udf.UDFBitmapToBase64
+
+  Converts Bitmap to Base64 string, equivalent to StarRocks' built-in function [bitmap_to_base64](../sql-reference/sql-functions/bitmap-functions/bitmap_to_base64.md).
+
+- com.starrocks.hive.udf.UDFBitmapToString
+
+  Converts a bitmap to a comma-separated string, equivalent to StarRocks' built-in function [bitmap_to_string](../sql-reference/sql-functions/bitmap-functions/bitmap_to_string.md).
+
+- com.starrocks.hive.udf.UDFBitmapXor
+
+  Calculates the set of unique elements in two Bitmaps, which is equivalent to StarRocks' built-in function [bitmap_xor](../sql-reference/sql-functions/bitmap-functions/bitmap_xor.md).
 
 ## How to use
 
@@ -48,15 +68,15 @@ Supported data types:
    ./build.sh --hive-udf
    ```
 
-   A Jar package will be generated in the `fe/hive-udf/` directory: `hive-udf-1.0.0.jar`.
+   A JAR package `hive-udf-1.0.0.jar` will be generated in the `fe/hive-udf/` directory.
 
-2. Upload the Jar package to HDFS.
+2. Upload the JAR package to HDFS.
 
    ```bash
    hadoop  fs -put -f ./hive-udf-1.0.0.jar hdfs://<hdfs_ip>:<hdfs_port>/hive1-udf-1.0.0.jar
    ```
 
-3. Load the Jar package to Hive.
+3. Load the JAR package to Hive.
 
    ```bash
    hive> add jar hdfs://<hdfs_ip>:<hdfs_port>/hive1-udf-1.0.0.jar;
