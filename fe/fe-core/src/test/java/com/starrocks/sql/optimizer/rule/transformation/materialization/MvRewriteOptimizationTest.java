@@ -2024,4 +2024,467 @@ public class MvRewriteOptimizationTest extends MvRewriteTestBase {
 
         starRocksAssert.dropMaterializedView("test_partition_tbl_mv3");
     }
+<<<<<<< HEAD:fe/fe-core/src/test/java/com/starrocks/sql/optimizer/rule/transformation/materialization/MvRewriteOptimizationTest.java
+=======
+
+    @Test
+    public void testPlanCache() throws Exception {
+        {
+            String mvSql = "create materialized view agg_join_mv_1" +
+                    " distributed by hash(v1) as SELECT t0.v1 as v1," +
+                    " test_all_type.t1d, sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
+                    " from t0 join test_all_type on t0.v1 = test_all_type.t1d" +
+                    " where t0.v1 < 100" +
+                    " group by v1, test_all_type.t1d";
+            starRocksAssert.withMaterializedView(mvSql);
+
+            MaterializedView mv = getMv("test", "agg_join_mv_1");
+            List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, false);
+            Assert.assertNotNull(planContexts);
+            Assert.assertNotNull(planContexts.size() == 1);
+            Assert.assertFalse(CachingMvPlanContextBuilder.getInstance().contains(mv));
+            planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, true);
+            Assert.assertNotNull(planContexts);
+            Assert.assertNotNull(planContexts.size() == 1);
+            Assert.assertTrue(CachingMvPlanContextBuilder.getInstance().contains(mv));
+            planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, false);
+            Assert.assertNotNull(planContexts);
+            Assert.assertNotNull(planContexts.size() == 1);
+            starRocksAssert.dropMaterializedView("agg_join_mv_1");
+        }
+
+        {
+            String mvSql = "create materialized view mv_with_window" +
+                    " distributed by hash(t1d) as" +
+                    " SELECT test_all_type.t1d, row_number() over (partition by t1c)" +
+                    " from test_all_type";
+            starRocksAssert.withMaterializedView(mvSql);
+
+            MaterializedView mv = getMv("test", "mv_with_window");
+            List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, true);
+            Assert.assertNotNull(planContexts);
+            Assert.assertNotNull(planContexts.size() == 1);
+            Assert.assertTrue(CachingMvPlanContextBuilder.getInstance().contains(mv));
+            starRocksAssert.dropMaterializedView("mv_with_window");
+        }
+
+        {
+            long testSize = Config.mv_plan_cache_max_size + 1;
+            for (int i = 0; i < testSize; i++) {
+                String mvName = "plan_cache_mv_" + i;
+                String mvSql = String.format("create materialized view %s" +
+                        " distributed by hash(v1) as SELECT t0.v1 as v1," +
+                        " test_all_type.t1d, sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
+                        " from t0 join test_all_type on t0.v1 = test_all_type.t1d" +
+                        " where t0.v1 < 100" +
+                        " group by v1, test_all_type.t1d", mvName);
+                starRocksAssert.withMaterializedView(mvSql);
+
+                MaterializedView mv = getMv("test", mvName);
+                List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, true);
+                Assert.assertNotNull(planContexts);
+                Assert.assertNotNull(planContexts.size() == 1);
+            }
+            for (int i = 0; i < testSize; i++) {
+                String mvName = "plan_cache_mv_" + i;
+                starRocksAssert.dropMaterializedView(mvName);
+            }
+        }
+    }
+
+    @Test
+    public void testWithSqlSelectLimit() throws Exception {
+        starRocksAssert.getCtx().getSessionVariable().setSqlSelectLimit(1000);
+        createAndRefreshMv("CREATE MATERIALIZED VIEW mv_with_select_limit " +
+                " distributed by hash(empid) " +
+                "AS " +
+                "SELECT /*+set_var(sql_select_limit=1000)*/ empid, sum(salary) as total " +
+                "FROM emps " +
+                "GROUP BY empid");
+        starRocksAssert.query("SELECT empid, sum(salary) as total " +
+                "FROM emps " +
+                "GROUP BY empid").explainContains("mv_with_select_limit");
+        starRocksAssert.getCtx().getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
+    }
+
+    @Test
+    public void testQueryIncludingExcludingMVNames() throws Exception {
+        starRocksAssert.getCtx().getSessionVariable().setOptimizerExecuteTimeout(3000000);
+        createAndRefreshMv("CREATE MATERIALIZED VIEW mv_agg_1 " +
+                " distributed by hash(empid) " +
+                "AS " +
+                "SELECT empid, sum(salary) as total " +
+                "FROM emps " +
+                "GROUP BY empid");
+        createAndRefreshMv("CREATE MATERIALIZED VIEW mv_agg_2 " +
+                " distributed by hash(empid) " +
+                "AS " +
+                "SELECT empid, sum(salary) as total " +
+                "FROM emps " +
+                "GROUP BY empid");
+        {
+            starRocksAssert.getCtx().getSessionVariable().setQueryIncludingMVNames("mv_agg_1");
+            String query = "SELECT empid, sum(salary) as total " +
+                    "FROM emps " +
+                    "GROUP BY empid";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "mv_agg_1");
+            starRocksAssert.getCtx().getSessionVariable().setQueryIncludingMVNames("");
+        }
+        {
+            starRocksAssert.getCtx().getSessionVariable().setQueryIncludingMVNames("mv_agg_2");
+            String query = "SELECT empid, sum(salary) as total " +
+                    "FROM emps " +
+                    "GROUP BY empid";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "mv_agg_2");
+            starRocksAssert.getCtx().getSessionVariable().setQueryIncludingMVNames("");
+        }
+        {
+            starRocksAssert.getCtx().getSessionVariable().setQueryIncludingMVNames("mv_agg_1, mv_agg_2");
+            String query = "SELECT empid, sum(salary) as total " +
+                    "FROM emps " +
+                    "GROUP BY empid";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "mv_agg_");
+            starRocksAssert.getCtx().getSessionVariable().setQueryIncludingMVNames("");
+        }
+        {
+            starRocksAssert.getCtx().getSessionVariable().setQueryExcludingMVNames("mv_agg_1");
+            String query = "SELECT empid, sum(salary) as total " +
+                    "FROM emps " +
+                    "GROUP BY empid";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "mv_agg_2");
+            starRocksAssert.getCtx().getSessionVariable().setQueryExcludingMVNames("");
+        }
+        {
+            starRocksAssert.getCtx().getSessionVariable().setQueryExcludingMVNames("mv_agg_2");
+            String query = "SELECT empid, sum(salary) as total " +
+                    "FROM emps " +
+                    "GROUP BY empid";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "mv_agg_1");
+            starRocksAssert.getCtx().getSessionVariable().setQueryExcludingMVNames("");
+        }
+        {
+            starRocksAssert.getCtx().getSessionVariable().setQueryExcludingMVNames("mv_agg_1, mv_agg_2");
+            String query = "SELECT empid, sum(salary) as total " +
+                    "FROM emps " +
+                    "GROUP BY empid";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "mv_agg_");
+            starRocksAssert.getCtx().getSessionVariable().setQueryExcludingMVNames("");
+        }
+        starRocksAssert.dropMaterializedView("mv_agg_1");
+        starRocksAssert.dropMaterializedView("mv_agg_2");
+    }
+
+    @Test
+    public void testIsDateRange() throws AnalysisException {
+        {
+            LocalDate date1 = LocalDate.now();
+            PartitionKey upper = PartitionKey.ofDate(date1);
+            Range<PartitionKey> upRange = Range.atMost(upper);
+            Assert.assertTrue(MvUtils.isDateRange(upRange));
+        }
+        {
+            LocalDate date1 = LocalDate.now();
+            PartitionKey low = PartitionKey.ofDate(date1);
+            Range<PartitionKey> lowRange = Range.atLeast(low);
+            Assert.assertTrue(MvUtils.isDateRange(lowRange));
+        }
+        {
+            LocalDate date1 = LocalDate.of(2023, 10, 1);
+            PartitionKey upper = PartitionKey.ofDate(date1);
+            Range<PartitionKey> upRange = Range.atMost(upper);
+            LocalDate date2 = LocalDate.of(2023, 9, 1);
+            PartitionKey low = PartitionKey.ofDate(date2);
+            Range<PartitionKey> lowRange = Range.atLeast(low);
+            Range<PartitionKey> range = upRange.intersection(lowRange);
+            Assert.assertTrue(MvUtils.isDateRange(range));
+        }
+        {
+            Range<PartitionKey> unboundRange = Range.all();
+            Assert.assertFalse(MvUtils.isDateRange(unboundRange));
+        }
+    }
+
+    @Test
+    public void testConvertToVarcharRange() throws AnalysisException {
+        {
+            LocalDate date1 = LocalDate.of(2023, 10, 10);
+            PartitionKey upper = PartitionKey.ofDate(date1);
+            Range<PartitionKey> upRange = Range.atMost(upper);
+            Range<PartitionKey> range = MvUtils.convertToVarcharRange(upRange, "%Y-%m-%d");
+            Assert.assertTrue(range.hasUpperBound());
+            Assert.assertTrue(range.upperEndpoint().getTypes().get(0).isStringType());
+            Assert.assertEquals("2023-10-10", range.upperEndpoint().getKeys().get(0).getStringValue());
+        }
+        {
+            LocalDate date1 = LocalDate.of(2023, 10, 10);
+            PartitionKey low = PartitionKey.ofDate(date1);
+            Range<PartitionKey> lowRange = Range.atLeast(low);
+            Range<PartitionKey> range = MvUtils.convertToVarcharRange(lowRange, "%Y-%m-%d");
+            Assert.assertTrue(range.hasLowerBound());
+            Assert.assertTrue(range.lowerEndpoint().getTypes().get(0).isStringType());
+            Assert.assertEquals("2023-10-10", range.lowerEndpoint().getKeys().get(0).getStringValue());
+        }
+        {
+            LocalDate date1 = LocalDate.of(2023, 10, 10);
+            PartitionKey upper = PartitionKey.ofDate(date1);
+            Range<PartitionKey> upRange = Range.atMost(upper);
+            LocalDate date2 = LocalDate.of(2023, 9, 10);
+            PartitionKey low = PartitionKey.ofDate(date2);
+            Range<PartitionKey> lowRange = Range.atLeast(low);
+            Range<PartitionKey> dateRange = upRange.intersection(lowRange);
+            Range<PartitionKey> range = MvUtils.convertToVarcharRange(dateRange, "%Y-%m-%d");
+            Assert.assertTrue(range.hasUpperBound());
+            Assert.assertTrue(range.upperEndpoint().getTypes().get(0).isStringType());
+            Assert.assertEquals("2023-10-10", range.upperEndpoint().getKeys().get(0).getStringValue());
+            Assert.assertTrue(range.hasLowerBound());
+            Assert.assertTrue(range.lowerEndpoint().getTypes().get(0).isStringType());
+            Assert.assertEquals("2023-09-10", range.lowerEndpoint().getKeys().get(0).getStringValue());
+        }
+
+        {
+            LocalDate date1 = LocalDate.of(2023, 10, 10);
+            PartitionKey upper = PartitionKey.ofDate(date1);
+            Range<PartitionKey> upRange = Range.atMost(upper);
+            Range<PartitionKey> range = MvUtils.convertToVarcharRange(upRange, "%Y%m%d");
+            Assert.assertTrue(range.hasUpperBound());
+            Assert.assertTrue(range.upperEndpoint().getTypes().get(0).isStringType());
+            Assert.assertEquals("20231010", range.upperEndpoint().getKeys().get(0).getStringValue());
+        }
+        {
+            LocalDate date1 = LocalDate.of(2023, 10, 10);
+            PartitionKey low = PartitionKey.ofDate(date1);
+            Range<PartitionKey> lowRange = Range.atLeast(low);
+            Range<PartitionKey> range = MvUtils.convertToVarcharRange(lowRange, "%Y%m%d");
+            Assert.assertTrue(range.hasLowerBound());
+            Assert.assertTrue(range.lowerEndpoint().getTypes().get(0).isStringType());
+            Assert.assertEquals("20231010", range.lowerEndpoint().getKeys().get(0).getStringValue());
+        }
+        {
+            LocalDate date1 = LocalDate.of(2023, 10, 10);
+            PartitionKey upper = PartitionKey.ofDate(date1);
+            Range<PartitionKey> upRange = Range.atMost(upper);
+            LocalDate date2 = LocalDate.of(2023, 9, 10);
+            PartitionKey low = PartitionKey.ofDate(date2);
+            Range<PartitionKey> lowRange = Range.atLeast(low);
+            Range<PartitionKey> dateRange = upRange.intersection(lowRange);
+            Range<PartitionKey> range = MvUtils.convertToVarcharRange(dateRange, "%Y%m%d");
+            Assert.assertTrue(range.hasUpperBound());
+            Assert.assertTrue(range.upperEndpoint().getTypes().get(0).isStringType());
+            Assert.assertEquals("20231010", range.upperEndpoint().getKeys().get(0).getStringValue());
+            Assert.assertTrue(range.hasLowerBound());
+            Assert.assertTrue(range.lowerEndpoint().getTypes().get(0).isStringType());
+            Assert.assertEquals("20230910", range.lowerEndpoint().getKeys().get(0).getStringValue());
+        }
+    }
+
+    @Test
+    public void testInsertMV() throws Exception {
+        String mvName = "mv_insert";
+        createAndRefreshMv("create materialized view " + mvName +
+                " distributed by hash(v1) " +
+                "refresh async as " +
+                "select * from t0");
+        String sql = "insert into t0 select * from t0";
+
+        // enable
+        {
+            starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewRewriteForInsert(true);
+            starRocksAssert.query(sql).explainContains(mvName);
+        }
+
+        // disable
+        {
+            starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewRewriteForInsert(false);
+            starRocksAssert.query(sql).explainWithout(mvName);
+        }
+
+        starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewRewriteForInsert(
+                SessionVariable.DEFAULT_SESSION_VARIABLE.isEnableMaterializedViewRewriteForInsert());
+    }
+
+    /**
+     * With many Agg MV candidates, the rewrite should prefer the one with fewer data rows
+     */
+    @Test
+    public void testCandidateOrdering_HierarchyAgg() throws Exception {
+        starRocksAssert.withTable(cluster, MSchema.T_METRICS.getTableName());
+
+        List<String> dimensions = Lists.newArrayList(
+                " c2",
+                " c2, c3",
+                " c2, c3, c4",
+                " c2, c3, c4, c5",
+                " c2, c3, c4, c5, c6"
+        );
+
+        Function<Integer, String> mvNameBuilder = (i) -> ("mv_agg_metric_" + i);
+        for (int i = 0; i < dimensions.size(); i++) {
+            String name = mvNameBuilder.apply(i);
+            starRocksAssert.withRefreshedMaterializedView("create materialized view " + name +
+                    " refresh async as " +
+                    " select sum(c1) from t_metrics group by " +
+                    dimensions.get(i));
+            MaterializedView mv = starRocksAssert.getMv("test", name);
+
+            int mockRows = i + 1;
+            mv.getPartitions().forEach(p -> p.getBaseIndex().setRowCount(mockRows));
+        }
+
+        for (int i = 0; i < dimensions.size(); i++) {
+            String query = "select sum(c1) from t_metrics group by " + dimensions.get(i);
+            String target = mvNameBuilder.apply(i);
+
+            // With candidate limit
+            starRocksAssert.getCtx().getSessionVariable().setCboMaterializedViewRewriteCandidateLimit(10);
+            starRocksAssert.query(query).explainContains(target);
+
+            // Without candidate limit
+            starRocksAssert.getCtx().getSessionVariable().setCboMaterializedViewRewriteCandidateLimit(0);
+            starRocksAssert.query(query).explainContains(target);
+        }
+    }
+
+    /**
+     * Many dimensions on a table, create many MVs on it
+     */
+    @Test
+    public void testCandidateOrdering_ManyDimensions() throws Exception {
+        final int numDimensions = 50;
+        StringBuilder createTableBuilder = new StringBuilder("create table t_many_dimensions ( ");
+        Function<Integer, String> columnNameGen = (i) -> "c" + i;
+        for (int i = 0; i < numDimensions; i++) {
+            if (i != 0) {
+                createTableBuilder.append("\n,");
+            }
+            createTableBuilder.append(columnNameGen.apply(i)).append(" int");
+        }
+        createTableBuilder.append(") distributed by hash(c0) ");
+        starRocksAssert.withTable(createTableBuilder.toString());
+
+        Function<Integer, String> mvNameGen = (i) -> "mv_dimension_" + i;
+        for (int i = 1; i < numDimensions; i++) {
+            String dimension = columnNameGen.apply(i);
+            String mvName = mvNameGen.apply(i);
+            starRocksAssert.withMaterializedView("create materialized view " + mvName + "\n" +
+                    "refresh async " +
+                    "properties('query_rewrite_consistency'='loose') " +
+                    "as select " + dimension + ", sum(c0) from t_many_dimensions group by " + dimension);
+        }
+
+        for (int i = 1; i < numDimensions; i++) {
+            String target = mvNameGen.apply(i);
+            String dimension = columnNameGen.apply(i);
+
+            // 1 candidate
+            starRocksAssert.getCtx().getSessionVariable().setCboMaterializedViewRewriteCandidateLimit(1);
+            starRocksAssert.query("select " + dimension + ", sum(c0) from t_many_dimensions group by " + dimension)
+                    .explainContains(target);
+            starRocksAssert.query("select sum(c0) from t_many_dimensions where " + dimension + "=123")
+                    .explainContains(target);
+
+            // all candidates
+            starRocksAssert.getCtx().getSessionVariable().setCboMaterializedViewRewriteCandidateLimit(0);
+            starRocksAssert.query("select " + dimension + ", sum(c0) from t_many_dimensions group by " + dimension)
+                    .explainContains(target);
+            starRocksAssert.query("select sum(c0) from t_many_dimensions where " + dimension + "=123")
+                    .explainContains(target);
+        }
+    }
+
+    @Test
+    public void testOuterJoinRewrite() throws Exception {
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `mv1` (`event_id`, `event_time`, `event_time1`)\n" +
+                "PARTITION BY (`event_time`)\n" +
+                "DISTRIBUTED BY HASH(`event_id`) BUCKETS 1\n" +
+                "REFRESH ASYNC\n" +
+                "PROPERTIES (\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"partition_refresh_number\" = \"2\",\n" +
+                "\"force_external_table_query_rewrite\" = \"CHECKED\",\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_medium\" = \"HDD\"\n" +
+                ")\n" +
+                "AS SELECT `a`.`event_id`, `a`.`event_time`, `b`.`event_time1`\n" +
+                "FROM `test`.`test10` AS `a` LEFT OUTER JOIN `test`.`test11` AS `b`" +
+                " ON (`a`.`event_id` = `b`.`event_id1`) AND (`a`.`event_time` = `b`.`event_time1`);");
+
+        connectContext.executeSql("refresh materialized view mv1 with sync mode");
+        {
+            String query = "select * from (select event_id, event_time, event_time1" +
+                    " from test10 a left outer join test11 b" +
+                    " on a.event_id = b.event_id1 and a.event_time = b.event_time1 ) xx" +
+                    " where xx.event_time >= \"2023-01-05 00:00:00\" and xx.event_time < \"2023-01-06 00:00:00\";";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "mv1");
+            PlanTestBase.assertNotContains(plan, "event_time1 >= '2023-01-05 00:00:00'");
+        }
+    }
+
+    @Test
+    public void test() throws Exception {
+        connectContext.executeSql("drop table if exists t11");
+        starRocksAssert.withTable("create table t11(\n" +
+                "shop_id int,\n" +
+                "region int,\n" +
+                "shop_type string,\n" +
+                "shop_flag string,\n" +
+                "store_id String,\n" +
+                "store_qty Double\n" +
+                ") DUPLICATE key(shop_id) distributed by hash(shop_id) buckets 1 " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+        cluster.runSql("test", "insert into\n" +
+                "t11\n" +
+                "values\n" +
+                "(1, 1, 's', 'o', '1', null),\n" +
+                "(1, 1, 'm', 'o', '2', 2),\n" +
+                "(1, 1, 'b', 'c', '3', 1);");
+        connectContext.executeSql("drop materialized view if exists mv11");
+        starRocksAssert.withMaterializedView("create MATERIALIZED VIEW mv11 (region, ct) " +
+                "DISTRIBUTED BY RANDOM buckets 1 REFRESH MANUAL as\n" +
+                "select region,\n" +
+                "count(\n" +
+                "distinct (\n" +
+                "case\n" +
+                "when store_qty > 0 then store_id\n" +
+                "else null\n" +
+                "end\n" +
+                ")\n" +
+                ")\n" +
+                "from t11\n" +
+                "group by region;");
+        cluster.runSql("test", "refresh materialized view mv11 with sync mode");
+        {
+            String query = "select region,\n" +
+                    "count(\n" +
+                    "distinct (\n" +
+                    "case\n" +
+                    "when store_qty > 0.0 then store_id\n" +
+                    "else null\n" +
+                    "end\n" +
+                    ")\n" +
+                    ") as ct\n" +
+                    "from t11\n" +
+                    "group by region\n" +
+                    "having\n" +
+                    "count(\n" +
+                    "distinct (\n" +
+                    "case\n" +
+                    "when store_qty > 0.0 then store_id\n" +
+                    "else null\n" +
+                    "end\n" +
+                    ")\n" +
+                    ") > 0\n";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "mv11", "PREDICATES: 10: ct > 0");
+        }
+    }
+>>>>>>> 5e053b8fdc (fix column not found after mv rewrite (#39639)):fe/fe-core/src/test/java/com/starrocks/sql/optimizer/rule/transformation/materialization/MvRewriteTest.java
 }
