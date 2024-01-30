@@ -240,8 +240,8 @@ message TabletMetaOpPB {
     optional EditVersionPB apply = 3;
 }
 
-message TabletMetaLogPB { 
-    repeated TabletMetaOpPB ops = 1; 
+message TabletMetaLogPB {
+    repeated TabletMetaOpPB ops = 1;
 }
 
 message TabletUpdatesPB {
@@ -309,6 +309,66 @@ message OLAPDataHeaderMessage {
     required uint32 segment = 2;
 }
 
-message OLAPRawDeltaHeaderMessage { 
+message OLAPRawDeltaHeaderMessage {
     required int32 schema_hash = 2;
+}
+
+message RowsetMetaIdPB {
+    // rowset id
+    optional uint32 rowset_id = 1;
+    optional RowsetMetaPB rowset_meta = 2;
+}
+
+message RowsetStatIdPB {
+    // rowset id
+    optional uint32 rowset_id = 1;
+    optional string rowset_stat = 2;
+}
+
+message DeltaColumnGroupListIdPB {
+    // segment id
+    optional uint32 segment_id = 1;
+    optional DeltaColumnGroupListPB dcg_list = 2;
+}
+
+message DeleteVectorStatPB {
+    // segment id
+    optional uint32 segment_id = 1;
+    optional int64 version = 2;
+    optional uint32 cardinality = 3;
+}
+
+message PartialKVsPB {
+    repeated string keys = 1;
+    repeated uint64 values = 2;
+}
+
+message PrimaryKeyColumnPB {
+    // segment id
+    optional uint32 segment_id = 1;
+    // Point to column data (segment format)
+    optional PagePointerPB page = 2;
+}
+
+message PrimaryIndexDumpPB {
+    // Point to PartialKVs
+    repeated PagePointerPB kvs = 1;
+    // filename of persitent index l1 & l2
+    // While using memory index or l0, set filename to memory
+    optional string filename = 2;
+}
+
+message PrimaryIndexMultiLevelPB {
+    // there will be multi levels in pk index, order by l2 -> l1 -> l0
+    repeated PrimaryIndexDumpPB primary_index_levels = 1;
+}
+
+message PrimaryKeyDumpPB {
+    optional TabletMetaPB tablet_meta = 1;
+    repeated RowsetMetaIdPB rowset_metas = 2;
+    repeated RowsetStatIdPB rowset_stats = 3;
+    repeated DeltaColumnGroupListIdPB dcg_lists = 4;
+    repeated DeleteVectorStatPB delvec_stats = 5;
+    repeated PrimaryKeyColumnPB primary_key_column = 6;
+    optional PrimaryIndexMultiLevelPB primary_index = 7;
 }
