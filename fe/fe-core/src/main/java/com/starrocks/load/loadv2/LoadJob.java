@@ -83,6 +83,8 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.AbstractTxnStateChangeCallback;
 import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.TableCommitInfo;
+import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionException;
 import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
@@ -346,6 +348,10 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
      * @return
      */
     public abstract Set<String> getTableNames(boolean noThrow) throws MetaNotFoundException;
+
+    protected abstract List<TabletCommitInfo> getTabletCommitInfos();
+
+    protected abstract List<TabletFailInfo> getTabletFailInfos();
 
     // return true if the corresponding transaction is done(COMMITTED, FINISHED, CANCELLED)
     public boolean isTxnDone() {
@@ -660,7 +666,9 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
                         .add("transaction_id", transactionId)
                         .add("msg", "begin to abort txn")
                         .build());
-                GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(dbId, transactionId, failMsg.getMsg());
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                        .abortTransaction(dbId, transactionId, failMsg.getMsg(),
+                                getTabletCommitInfos(), getTabletFailInfos(), null);
             } catch (UserException e) {
                 LOG.warn(new LogBuilder(LogKey.LOAD_JOB, id)
                         .add("transaction_id", transactionId)

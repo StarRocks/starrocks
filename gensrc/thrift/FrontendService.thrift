@@ -839,6 +839,7 @@ struct TLoadTxnRollbackRequest {
     9: optional i64 auth_code
     10: optional TTxnCommitAttachment txnCommitAttachment
     11: optional list<Types.TTabletFailInfo> failInfos
+    12: optional list<Types.TTabletCommitInfo> commitInfos
 }
 
 struct TGetLoadTxnStatusResult {
@@ -1149,6 +1150,9 @@ struct TAbortRemoteTxnRequest {
     2: optional i64 db_id
     3: optional string error_msg
     4: optional TAuthenticateParams auth_info
+    5: optional list<Types.TTabletCommitInfo> commit_infos
+    6: optional TTxnCommitAttachment commit_attachment
+    7: optional list<Types.TTabletFailInfo> fail_infos
 }
 
 struct TAbortRemoteTxnResponse {

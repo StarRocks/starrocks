@@ -942,6 +942,8 @@ CONF_mInt64(lake_vacuum_retry_max_attempts, "5");
 CONF_mInt64(lake_vacuum_retry_min_delay_ms, "10");
 CONF_mBool(enable_primary_key_recover, "false");
 CONF_mInt64(lake_pk_compaction_max_input_rowsets, "5");
+// Used for control memory usage of update state cache and compaction state cache
+CONF_mInt32(lake_pk_preload_memory_limit_percent, "30");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
@@ -1038,7 +1040,7 @@ CONF_mInt64(l0_snapshot_size, "16777216"); // 16MB
 CONF_mInt64(max_tmp_l1_num, "10");
 CONF_mBool(enable_parallel_get_and_bf, "true");
 // Control if using the minor compaction strategy
-CONF_Bool(enable_pindex_minor_compaction, "false");
+CONF_Bool(enable_pindex_minor_compaction, "true");
 // if l2 num is larger than this, stop doing async compaction,
 // add this config to prevent l2 grow too large.
 CONF_mInt64(max_allow_pindex_l2_num, "5");
@@ -1151,4 +1153,6 @@ CONF_mInt64(lake_local_pk_index_unused_threshold_seconds, "86400"); // 1 day
 // Disable when pk_dump_interval_seconds <= 0
 CONF_mInt64(pk_dump_interval_seconds, "3600"); // 1 hour
 
+// whether enable query profile for queries initiated by spark or flink
+CONF_mBool(enable_profile_for_external_plan, "false");
 } // namespace starrocks::config

@@ -26,7 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-public interface AccessControl {
+public interface AccessController {
     default void checkSystemAction(UserIdentity currentUser, Set<Long> roleIds, PrivilegeType privilegeType) {
         AccessDeniedException.reportAccessDenied(privilegeType.name(), ObjectType.SYSTEM, null);
     }

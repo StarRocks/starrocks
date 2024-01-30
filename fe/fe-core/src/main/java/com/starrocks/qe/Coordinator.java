@@ -107,6 +107,8 @@ import com.starrocks.thrift.TTabletFailInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUnit;
 import com.starrocks.thrift.TWorkGroup;
+import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TabletFailInfo;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -539,8 +541,16 @@ public class Coordinator {
         return commitInfos;
     }
 
+    public static List<TabletCommitInfo> getCommitInfos(Coordinator coord) {
+        return coord == null ? Collections.emptyList() : TabletCommitInfo.fromThrift(coord.getCommitInfos());
+    }
+
     public List<TTabletFailInfo> getFailInfos() {
         return failInfos;
+    }
+
+    public static List<TabletFailInfo> getFailInfos(Coordinator coord) {
+        return coord == null ? Collections.emptyList() : TabletFailInfo.fromThrift(coord.getFailInfos());
     }
 
     public List<TSinkCommitInfo> getSinkCommitInfos() {

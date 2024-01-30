@@ -596,6 +596,14 @@ TEST_P(LakePrimaryKeyPublishTest, test_abort_txn) {
     SyncPoint::GetInstance()->DisableProcessing();
 }
 
+TEST_P(LakePrimaryKeyPublishTest, test_mem_tracker) {
+    EXPECT_EQ(1024 * 1024, _mem_tracker->limit());
+    EXPECT_EQ(1024 * 1024 * config::lake_pk_preload_memory_limit_percent / 100,
+              _update_mgr->compaction_state_mem_tracker()->limit());
+    EXPECT_EQ(1024 * 1024 * config::lake_pk_preload_memory_limit_percent / 100,
+              _update_mgr->update_state_mem_tracker()->limit());
+}
+
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyPublishTest, LakePrimaryKeyPublishTest,
                          ::testing::Values(PrimaryKeyParam{true}, PrimaryKeyParam{false}));
 

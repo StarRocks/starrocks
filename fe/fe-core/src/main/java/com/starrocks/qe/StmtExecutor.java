@@ -1795,7 +1795,10 @@ public class StmtExecutor {
                                 externalTable.getSourceTableDbId(), transactionId,
                                 externalTable.getSourceTableHost(),
                                 externalTable.getSourceTablePort(),
-                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " + trackingSql
+                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " +
+                                        trackingSql,
+                                coord == null ? Collections.emptyList() : coord.getCommitInfos(),
+                                coord == null ? Collections.emptyList() : coord.getFailInfos()
                         );
                     } else if (targetTable instanceof SystemTable || targetTable instanceof IcebergTable) {
                         // schema table does not need txn
@@ -1803,9 +1806,9 @@ public class StmtExecutor {
                         GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
                                 database.getId(),
                                 transactionId,
-                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " + trackingSql,
-                                TabletFailInfo.fromThrift(coord.getFailInfos())
-                        );
+                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " +
+                                        trackingSql,
+                                Coordinator.getCommitInfos(coord), Coordinator.getFailInfos(coord), null);
                     }
                     context.getState().setError("Insert has filtered data in strict mode, txn_id = " + transactionId +
                             " tracking sql = " + trackingSql);
@@ -1824,7 +1827,8 @@ public class StmtExecutor {
                     if (!(targetTable instanceof SystemTable || targetTable instanceof IcebergTable)) {
                         // schema table and iceberg table does not need txn
                         GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
-                                database.getId(), transactionId, errorMsg);
+                                database.getId(), transactionId, errorMsg,
+                                Coordinator.getCommitInfos(coord), Coordinator.getFailInfos(coord), null);
                     }
                     context.getState().setOk();
                     insertError = true;
@@ -1905,12 +1909,14 @@ public class StmtExecutor {
                             externalTable.getSourceTableDbId(), transactionId,
                             externalTable.getSourceTableHost(),
                             externalTable.getSourceTablePort(),
-                            errMsg);
+                            errMsg,
+                            coord == null ? Collections.emptyList() : coord.getCommitInfos(),
+                            coord == null ? Collections.emptyList() : coord.getFailInfos());
                 } else {
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
                             database.getId(), transactionId,
                             errMsg,
-                            coord == null ? Lists.newArrayList() : TabletFailInfo.fromThrift(coord.getFailInfos()));
+                            Coordinator.getCommitInfos(coord), Coordinator.getFailInfos(coord), null);
                 }
             } catch (Exception abortTxnException) {
                 // just print a log if abort txn failed. This failure do not need to pass to user.

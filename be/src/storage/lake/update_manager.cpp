@@ -39,15 +39,18 @@ UpdateManager::UpdateManager(LocationProvider* location_provider, MemTracker* me
           _location_provider(location_provider),
           _pk_index_shards(config::pk_index_map_shard_size) {
     _update_mem_tracker = mem_tracker;
-    _update_state_mem_tracker = std::make_unique<MemTracker>(-1, "lake_rowset_update_state", mem_tracker);
+    const int64_t update_mem_limit = _update_mem_tracker->limit();
+    const int64_t preload_mem_limit =
+            update_mem_limit * std::max(std::min(100, config::lake_pk_preload_memory_limit_percent), 0) / 100;
+    _update_state_mem_tracker =
+            std::make_unique<MemTracker>(preload_mem_limit, "lake_rowset_update_state", mem_tracker);
     _index_cache_mem_tracker = std::make_unique<MemTracker>(-1, "lake_index_cache", mem_tracker);
-    _compaction_state_mem_tracker = std::make_unique<MemTracker>(-1, "compaction_state_cache", mem_tracker);
+    _compaction_state_mem_tracker =
+            std::make_unique<MemTracker>(preload_mem_limit, "lake_compaction_state", mem_tracker);
     _index_cache.set_mem_tracker(_index_cache_mem_tracker.get());
     _update_state_cache.set_mem_tracker(_update_state_mem_tracker.get());
 
-    int64_t byte_limits = ParseUtil::parse_mem_spec(config::mem_limit, MemInfo::physical_mem());
-    int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
-    _index_cache.set_capacity(byte_limits * update_mem_percent / 100);
+    _index_cache.set_capacity(update_mem_limit);
 }
 
 UpdateManager::~UpdateManager() {
@@ -594,7 +597,7 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     for (auto&& each : delvecs) {
         builder->append_delvec(each.second, each.first);
     }
-    builder->apply_opcompaction(op_compaction);
+    builder->apply_opcompaction(op_compaction, max_rowset_id);
     RETURN_IF_ERROR(builder->update_num_del_stat(segment_id_to_add_dels));
 
     TRACE_COUNTER_INCREMENT("rowsetid", rowset_id);

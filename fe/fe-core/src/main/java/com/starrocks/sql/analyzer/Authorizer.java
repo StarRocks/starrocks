@@ -31,7 +31,7 @@ import com.starrocks.privilege.NativeAccessControl;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivilegeType;
-import com.starrocks.privilege.ranger.starrocks.RangerStarRocksAccessControl;
+import com.starrocks.privilege.ranger.starrocks.RangerStarRocksAccessController;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -48,7 +48,7 @@ public class Authorizer {
 
     static {
         if (Config.access_control.equals("ranger")) {
-            INSTANCE = new AccessControlProvider(new AuthorizerStmtVisitor(), new RangerStarRocksAccessControl());
+            INSTANCE = new AccessControlProvider(new AuthorizerStmtVisitor(), new RangerStarRocksAccessController());
         } else {
             INSTANCE = new AccessControlProvider(new AuthorizerStmtVisitor(), new NativeAccessControl());
         }
