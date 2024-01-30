@@ -116,6 +116,8 @@ CONF_Int32(clone_worker_count, "3");
 CONF_Int32(storage_medium_migrate_count, "3");
 // The count of thread to check consistency.
 CONF_Int32(check_consistency_worker_count, "1");
+// The count of thread to update scheam
+CONF_Int32(update_schema_worker_count, "3");
 // The count of thread to upload.
 CONF_Int32(upload_worker_count, "1");
 // The count of thread to download.

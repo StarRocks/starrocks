@@ -41,6 +41,7 @@
 
 #include "column/chunk.h"
 #include "gen_cpp/Descriptors_types.h"
+#include "gen_cpp/descriptors.pb.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/aggregate_type.h"
 #include "storage/olap_define.h"
@@ -317,7 +318,7 @@ public:
 
     Schema* schema() const;
 
-    Status build_current_tablet_schema(int64_t index_id, int32_t version, const POlapTableIndexSchema& index,
+    Status build_current_tablet_schema(int64_t schema_id, int32_t version, const POlapTableColumnParam& column_param,
                                        const std::shared_ptr<const TabletSchema>& ori_tablet_schema);
 
     const std::vector<TabletIndex>* indexes() const { return &_indexes; }
