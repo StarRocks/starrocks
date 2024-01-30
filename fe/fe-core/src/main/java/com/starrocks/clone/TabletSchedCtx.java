@@ -48,6 +48,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
+import com.starrocks.catalog.Table;
 import com.starrocks.clone.DiskAndTabletLoadReBalancer.BalanceType;
 import com.starrocks.clone.SchedException.Status;
 import com.starrocks.clone.TabletScheduler.PathSlot;
@@ -58,7 +59,11 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.ReplicaPersistInfo;
+import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTaskQueue;
@@ -1222,6 +1227,42 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         result.setClone_duration(copyTimeMs / 1000.0);
         result.setError_msg(errMsg);
         return result;
+    }
+
+    public boolean checkPrivForCurrUser(UserIdentity currentUser) {
+        // For backward compatibility
+        if (currentUser == null) {
+            return true;
+        }
+
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
+            return true;
+        }
+
+        Locker locker = new Locker();
+        try {
+            locker.lockDatabase(db, LockType.READ);
+            Table table = db.getTable(tblId);
+            if (table == null) {
+                return true;
+            } else {
+                // if user has 'OPERATE' privilege, can see this tablet, for backward compatibility
+                try {
+                    Authorizer.checkSystemAction(currentUser, null, PrivilegeType.OPERATE);
+                    return true;
+                } catch (AccessDeniedException ae) {
+                    try {
+                        Authorizer.checkAnyActionOnTableLikeObject(currentUser, null, db.getFullName(), table);
+                        return true;
+                    } catch (AccessDeniedException e) {
+                        return false;
+                    }
+                }
+            }
+        } finally {
+            locker.unLockDatabase(db, LockType.READ);
+        }
     }
 
     /*
