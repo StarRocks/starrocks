@@ -96,7 +96,7 @@ public class RestBaseAction extends BaseAction {
         ActionAuthorizationInfo authInfo = getAuthorizationInfo(request);
         // check password
         UserIdentity currentUser = checkPassword(authInfo);
-        // ctx's lifetime is same as the channel
+        // ctx lifetime is the same as the channel
         HttpConnectContext ctx = request.getConnectContext();
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx.setNettyChannel(request.getContext());
@@ -147,8 +147,8 @@ public class RestBaseAction extends BaseAction {
     public void redirectTo(BaseRequest request, BaseResponse response, TNetworkAddress addr)
             throws DdlException {
         String urlStr = request.getRequest().uri();
-        URI urlObj = null;
-        URI resultUriObj = null;
+        URI urlObj;
+        URI resultUriObj;
         try {
             urlObj = new URI(urlStr);
             resultUriObj = new URI("http", null, addr.getHostname(),
