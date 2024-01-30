@@ -1394,14 +1394,8 @@ public class TabletScheduler extends FrontendDaemon {
                 continue;
             }
 
-<<<<<<< HEAD
-            Table tbl = null;
-            db.readLock();
-=======
             Table tbl;
-            Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
->>>>>>> 28d549c9e4 ([Enhancement] Refine the priv check for be_tablets and show tablet (#39762))
+            db.readLock();
             try {
                 tbl = db.getTable(tableId);
             } finally {
