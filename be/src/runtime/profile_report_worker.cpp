@@ -34,13 +34,8 @@ Status ProfileReportWorker::register_non_pipeline_load(const TUniqueId& fragment
     return Status::OK();
 }
 
-<<<<<<< HEAD
 Status ProfileReportWorker::unregister_non_pipeline_load(const TUniqueId& fragment_instance_id) {
-    LOG(INFO) << "unregister_non_pipeline_load fragment_instance_id=" << print_id(fragment_instance_id);
-=======
-void ProfileReportWorker::unregister_non_pipeline_load(const TUniqueId& fragment_instance_id) {
-    VLOG(3) << "unregister_non_pipeline_load fragment_instance_id=" << print_id(fragment_instance_id);
->>>>>>> a8791edd0b ([Enhancement] Reduce print log (#36187))
+    VLOG(INFO) << "unregister_non_pipeline_load fragment_instance_id=" << print_id(fragment_instance_id);
     std::lock_guard lg(_non_pipeline_report_mutex);
     _non_pipeline_report_tasks.erase(fragment_instance_id);
     return Status::OK();
@@ -62,15 +57,9 @@ Status ProfileReportWorker::register_pipeline_load(const TUniqueId& query_id, co
     return Status::OK();
 }
 
-<<<<<<< HEAD
 Status ProfileReportWorker::unregister_pipeline_load(const TUniqueId& query_id, const TUniqueId& fragment_instance_id) {
-    LOG(INFO) << "unregister_pipeline_load query_id=" << print_id(query_id)
-              << ", fragment_instance_id=" << print_id(fragment_instance_id);
-=======
-void ProfileReportWorker::unregister_pipeline_load(const TUniqueId& query_id, const TUniqueId& fragment_instance_id) {
-    VLOG(3) << "unregister_pipeline_load query_id=" << print_id(query_id)
+    VLOG(2) << "unregister_pipeline_load query_id=" << print_id(query_id)
             << ", fragment_instance_id=" << print_id(fragment_instance_id);
->>>>>>> a8791edd0b ([Enhancement] Reduce print log (#36187))
     std::lock_guard lg(_pipeline_report_mutex);
     _pipeline_report_tasks.erase(PipeLineReportTaskKey(query_id, fragment_instance_id));
     return Status::OK();
