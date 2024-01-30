@@ -88,9 +88,7 @@ public class ReplicasProcNode implements ProcNodeInterface {
 
     @Override
     public ProcResult fetchResult() {
-<<<<<<< HEAD
         ImmutableMap<Long, Backend> backendMap = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
-=======
         Boolean hideIpPort = false;
         if (db != null && table != null) {
             Pair<Boolean, Boolean> privResult = Authorizer.checkPrivForShowTablet(
@@ -104,9 +102,7 @@ public class ReplicasProcNode implements ProcNodeInterface {
             }
             hideIpPort = privResult.second;
         }
->>>>>>> 28d549c9e4 ([Enhancement] Refine the priv check for be_tablets and show tablet (#39762))
 
-        ImmutableMap<Long, Backend> backendMap = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
         for (Replica replica : replicas) {
