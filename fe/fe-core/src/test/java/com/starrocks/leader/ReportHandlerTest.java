@@ -17,10 +17,12 @@ package com.starrocks.leader;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
+import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -32,6 +34,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.system.Backend;
 import com.starrocks.system.Backend.BackendStatus;
 import com.starrocks.system.ComputeNode;
@@ -80,6 +83,9 @@ public class ReportHandlerTest {
                         "duplicate key(k1) distributed by hash(k1) buckets 5 properties('replication_num' = '1', " +
                         "'binlog_enable' = 'true', 'binlog_max_size' = '100');")
                 .withTable("CREATE TABLE test.primary_index_cache_expire_sec_test(k1 int, v1 int) " +
+                        "primary key(k1) distributed by hash(k1) buckets 5 properties('replication_num' = '1', " +
+                        "'primary_index_cache_expire_sec' = '3600');")
+                .withTable("CREATE TABLE test.update_schema(k1 int, v1 int) " +
                         "primary key(k1) distributed by hash(k1) buckets 5 properties('replication_num' = '1', " +
                         "'primary_index_cache_expire_sec' = '3600');");
     }
@@ -131,6 +137,41 @@ public class ReportHandlerTest {
 
         ReportHandler handler = new ReportHandler();
         handler.testHandleSetPrimaryIndexCacheExpireSec(backendId, backendTablets);
+    }
+
+    @Test 
+    public void testHandleUpdateTableSchema() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        long dbId = db.getId();
+        OlapTable olapTable = (OlapTable) db.getTable("update_schema");
+
+        String stmt = "alter table update_schema add column add_v int default '1'";
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        AlterTableStmt alterTableStmt = 
+                        (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        schemaChangeHandler.process(alterTableStmt.getOps(), db, olapTable);
+        Assert.assertEquals(OlapTableState.NORMAL, olapTable.getState());
+
+        long backendId = 10001L;
+        List<Long> tabletIds = 
+                    GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001);
+        Assert.assertFalse(tabletIds.isEmpty());
+
+        Map<Long, TTablet> backendTablets = new HashMap<Long, TTablet>();
+        List<TTabletInfo> tabletInfos = Lists.newArrayList();
+        TTablet tablet = new TTablet(tabletInfos);
+        for (Long tabletId : tabletIds) {
+            TTabletInfo tabletInfo = new TTabletInfo();
+            tabletInfo.setTablet_id(tabletId);
+            tabletInfo.setSchema_hash(60000);
+            tabletInfo.setTablet_schema_version(0);
+            tablet.tablet_infos.add(tabletInfo);
+        }
+        backendTablets.put(backendId, tablet);
+
+        ReportHandler handler = new ReportHandler();
+        handler.testHandleUpdateTableSchema(backendId, backendTablets);
     }
 
     @Test

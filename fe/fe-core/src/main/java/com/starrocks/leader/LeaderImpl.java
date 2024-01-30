@@ -245,7 +245,8 @@ public class LeaderImpl {
                         && taskType != TTaskType.CREATE && taskType != TTaskType.UPDATE_TABLET_META_INFO
                         && taskType != TTaskType.DROP_AUTO_INCREMENT_MAP
                         && taskType != TTaskType.STORAGE_MEDIUM_MIGRATE
-                        && taskType != TTaskType.REMOTE_SNAPSHOT && taskType != TTaskType.REPLICATE_SNAPSHOT) {
+                        && taskType != TTaskType.REMOTE_SNAPSHOT && taskType != TTaskType.REPLICATE_SNAPSHOT
+                        && taskType != TTaskType.UPDATE_SCHEMA) {
                     if (taskType == TTaskType.REALTIME_PUSH) {
                         PushTask pushTask = (PushTask) task;
                         if (pushTask.getPushType() == TPushType.DELETE) {
@@ -328,6 +329,9 @@ public class LeaderImpl {
                     break;
                 case REPLICATE_SNAPSHOT:
                     finishReplicateSnapshotTask(task, request);
+                    break;
+                case UPDATE_SCHEMA:
+                    finishUpdateSchemaTask(task, request);
                     break;
                 default:
                     break;
@@ -445,6 +449,33 @@ public class LeaderImpl {
         try {
             GlobalStateMgr.getCurrentState().getReplicationMgr().finishReplicateSnapshotTask(
                     (ReplicateSnapshotTask) task, request);
+        } finally {
+            AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
+        }
+    }
+
+    private void finishUpdateSchemaTask(AgentTask task, TFinishTaskRequest request) {
+        try {
+            long dbId = task.getDbId();
+            long tableId = task.getTableId();
+            long indexId = task.getIndexId();
+            long backendId = task.getBackendId();
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            if (db != null) {
+                Locker locker = new Locker();
+                locker.lockDatabase(db, LockType.READ);
+                try {
+                    OlapTable olapTable = (OlapTable) db.getTable(tableId);
+                    if (olapTable != null) {
+                        MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
+                        if (indexMeta != null) {
+                            indexMeta.removeUpdateSchemaBackend(backendId);
+                        }
+                    }
+                } finally {
+                    locker.unLockDatabase(db, LockType.READ);
+                }
+            }
         } finally {
             AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
         }

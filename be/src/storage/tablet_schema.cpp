@@ -466,11 +466,12 @@ void TabletSchema::_init_from_pb(const TabletSchemaPB& schema) {
     _schema_version = schema.schema_version();
 }
 
-Status TabletSchema::build_current_tablet_schema(int64_t index_id, int32_t version, const POlapTableIndexSchema& index,
+Status TabletSchema::build_current_tablet_schema(int64_t schema_id, int32_t version,
+                                                 const POlapTableColumnParam& column_param,
                                                  const TabletSchemaCSPtr& ori_tablet_schema) {
     // copy from ori_tablet_schema
     _keys_type = ori_tablet_schema->keys_type();
-    _num_short_key_columns = index.column_param().short_key_column_count();
+    _num_short_key_columns = column_param.short_key_column_count();
     _num_rows_per_row_block = ori_tablet_schema->num_rows_per_row_block();
     _compression_type = ori_tablet_schema->compression_type();
 
@@ -486,29 +487,27 @@ Status TabletSchema::build_current_tablet_schema(int64_t index_id, int32_t versi
     _sort_key_uids.clear();
 
     _schema_version = version;
-    _id = index.schema_id();
-    if (index.id() == index_id) {
-        for (auto& pcolumn : index.column_param().columns_desc()) {
-            TabletColumn column;
-            column.init_from_pb(pcolumn);
-            if (column.is_key()) {
-                _num_key_columns++;
-            }
-            if (column.is_bf_column()) {
-                has_bf_columns = true;
-            }
-            _unique_id_to_index[column.unique_id()] = _num_columns;
-            _cols.emplace_back(std::move(column));
-            _num_columns++;
+    _id = schema_id;
+    for (auto& pcolumn : column_param.columns_desc()) {
+        TabletColumn column;
+        column.init_from_pb(pcolumn);
+        if (column.is_key()) {
+            _num_key_columns++;
         }
-        if (ori_tablet_schema->columns().back().name() == Schema::FULL_ROW_COLUMN) {
-            _cols.emplace_back(ori_tablet_schema->columns().back());
+        if (column.is_bf_column()) {
+            has_bf_columns = true;
         }
+        _unique_id_to_index[column.unique_id()] = _num_columns;
+        _cols.emplace_back(std::move(column));
+        _num_columns++;
+    }
+    if (ori_tablet_schema->columns().back().name() == Schema::FULL_ROW_COLUMN) {
+        _cols.emplace_back(ori_tablet_schema->columns().back());
     }
 
-    if (!index.column_param().sort_key_uid().empty()) {
+    if (!column_param.sort_key_uid().empty()) {
         _sort_key_idxes.clear();
-        for (auto uid : index.column_param().sort_key_uid()) {
+        for (auto uid : column_param.sort_key_uid()) {
             auto it = _unique_id_to_index.find(uid);
             if (it == _unique_id_to_index.end()) {
                 std::string msg = strings::Substitute("sort key column uid: $0 is not exist in columns", uid);
