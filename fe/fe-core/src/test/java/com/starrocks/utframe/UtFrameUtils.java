@@ -1180,10 +1180,10 @@ public class UtFrameUtils {
         };
 
         new MockUp<StmtExecutor>() {
-            @Mock
             /**
              * {@link StmtExecutor#handleDMLStmt(ExecPlan, DmlStmt)}
              */
+            @Mock
             public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
                 if (stmt instanceof InsertStmt) {
                     InsertStmt insertStmt = (InsertStmt) stmt;
