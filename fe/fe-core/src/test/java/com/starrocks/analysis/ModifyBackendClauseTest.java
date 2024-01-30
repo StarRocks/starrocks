@@ -17,23 +17,23 @@ package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
 
-import com.starrocks.sql.ast.ModifyBackendAddressClause;
+import com.starrocks.sql.ast.ModifyBackendClause;
 import org.junit.Assert;
 import org.junit.Test;
 
 
-public class ModifyBackendAddressClauseTest {
+public class ModifyBackendClauseTest {
     
     @Test
     public void testCreateClause() {
-        ModifyBackendAddressClause clause1 = new ModifyBackendAddressClause("originalHost-test", "sandbox");
+        ModifyBackendClause clause1 = new ModifyBackendClause("originalHost-test", "sandbox");
         Assert.assertEquals("originalHost-test", clause1.getSrcHost());
         Assert.assertEquals("sandbox", clause1.getDestHost());
     }
 
     @Test
     public void testNormal() throws AnalysisException {
-        ModifyBackendAddressClause clause = new ModifyBackendAddressClause("", "");
+        ModifyBackendClause clause = new ModifyBackendClause("", "");
         Assert.assertTrue(clause.getHostPortPairs().size() == 0);
     }
 }

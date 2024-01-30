@@ -47,6 +47,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.warehouse.Warehouse;
 import io.netty.handler.codec.http.HttpHeaders;
@@ -79,7 +80,7 @@ public class LoadAction extends RestBaseAction {
         } catch (DdlException e) {
             TransactionResult resp = new TransactionResult();
             resp.status = ActionStatus.FAILED;
-            resp.msg = e.getClass().toString() + ": " + e.getMessage();
+            resp.msg = e.getClass() + ": " + e.getMessage();
             LOG.warn(e);
 
             sendResult(request, response, resp);
@@ -121,7 +122,8 @@ public class LoadAction extends RestBaseAction {
             }
             Collections.shuffle(nodeIds);
         } else {
-            nodeIds = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().seqChooseBackendIds(1, true, false);
+            SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            nodeIds = systemInfoService.getNodeSelector().seqChooseBackendIds(1, false, false, null);
         }
         
         if (CollectionUtils.isEmpty(nodeIds)) {

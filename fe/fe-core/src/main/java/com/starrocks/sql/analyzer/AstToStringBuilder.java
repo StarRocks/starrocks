@@ -1527,6 +1527,16 @@ public class AstToStringBuilder {
                         .append(olapTable.getAutomaticBucketSize()).append("\"");
             }
 
+            // locations
+            if (olapTable.getLocation() != null) {
+                String locations = PropertyAnalyzer.convertLocationMapToString(olapTable.getLocation());
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)
+                        .append("\" = \"")
+                        .append(locations)
+                        .append("\"");
+            }
+
             Map<String, String> properties = olapTable.getTableProperty().getProperties();
             if (table.isCloudNativeTable()) {
                 Map<String, String> storageProperties = olapTable.getProperties();
