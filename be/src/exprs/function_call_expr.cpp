@@ -134,7 +134,7 @@ StatusOr<ColumnPtr> VectorizedFunctionCallExpr::evaluate_checked(starrocks::Expr
     Columns args;
     args.reserve(_children.size());
     for (Expr* child : _children) {
-        ASSIGN_OR_RETURN(ColumnPtr column, context->evaluate(child, ptr));
+        ColumnPtr column = EVALUATE_NULL_IF_ERROR(context, child, ptr);
         args.emplace_back(column);
     }
 
