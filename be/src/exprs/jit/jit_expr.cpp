@@ -44,6 +44,12 @@ JITExpr::JITExpr(const TExprNode& node, Expr* expr) : Expr(node), _expr(expr) {
     _expr->get_uncompilable_exprs(_children);
 }
 
+JITExpr::~JITExpr() {
+    if (_delete_cache_handle != nullptr) {
+        _delete_cache_handle(); // release handle hold in LRU cache
+    }
+}
+
 Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
     RETURN_IF_ERROR(Expr::prepare(state, context));
 
@@ -71,10 +77,10 @@ Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
             LOG(INFO) << "JIT: JIT compile success, time cost: " << elapsed / 1000000.0 << " ms";
         }
 
-        _jit_function = function.value_or(nullptr);
-    }
+    _delete_cache_handle = function->second;
+    _jit_function = function->first;
     if (_jit_function != nullptr) {
-        _jit_expr_name = _expr->debug_string();
+        _jit_expr_name = _expr->jit_func_name();
     } else {
         _children.clear();
         _children.push_back(_expr);

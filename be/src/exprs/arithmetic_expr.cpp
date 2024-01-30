@@ -125,6 +125,11 @@ public:
 
     bool is_compilable() const override { return IRHelper::support_jit(Type); }
 
+    std::string jit_func_name() const {
+        return "{" + _children[0]->jit_func_name() + get_op_name<OP>() + _children[1]->jit_func_name() + "}" +
+               (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
+    }
+
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
                                          const std::vector<LLVMDatum>& datums) const override {
         if constexpr (lt_is_decimal<Type>) {
@@ -185,6 +190,11 @@ public:
     }
 
     bool is_compilable() const override { return Type != TYPE_LARGEINT && IRHelper::support_jit(Type); }
+
+    std::string jit_func_name() const {
+        return "{" + _children[0]->jit_func_name() + "/" + _children[1]->jit_func_name() + "}" +
+               (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
+    }
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
                                          const std::vector<LLVMDatum>& datums) const override {
@@ -256,6 +266,11 @@ public:
 
     bool is_compilable() const override { return Type != TYPE_LARGEINT && IRHelper::support_jit(Type); }
 
+    std::string jit_func_name() const {
+        return "{" + _children[0]->jit_func_name() + "%" + _children[1]->jit_func_name() + "}" +
+               (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
+    }
+
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
                                          const std::vector<LLVMDatum>& datums) const override {
         if constexpr (lt_is_decimal<Type>) {
@@ -291,6 +306,11 @@ public:
 
     bool is_compilable() const override { return IRHelper::support_jit(Type); }
 
+    std::string jit_func_name() const {
+        return "{!" + _children[0]->jit_func_name() + "}" + (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") +
+               type().debug_string();
+    }
+
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
                                          const std::vector<LLVMDatum>& datums) const override {
         auto* l = datums[0].value;
@@ -324,6 +344,11 @@ public:
     }
 
     bool is_compilable() const override { return IRHelper::support_jit(Type); }
+
+    std::string jit_func_name() const {
+        return "{" + _children[0]->jit_func_name() + get_op_name<OP>() + _children[1]->jit_func_name() + "}" +
+               (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
+    }
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
                                          const std::vector<LLVMDatum>& datums) const override {

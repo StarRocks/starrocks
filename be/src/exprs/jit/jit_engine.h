@@ -67,9 +67,10 @@ public:
     /**
      * @brief Compile the expr into LLVM IR and return the function pointer.
      */
-    static StatusOr<JITScalarFunction> compile_scalar_function(ExprContext* context, Expr* expr);
+    static StatusOr<std::pair<JITScalarFunction, std::function<void()>>> compile_scalar_function(ExprContext* context,
+                                                                                                 Expr* expr);
 
-    JITScalarFunction lookup_function(const std::string& expr_name);
+    std::pair<JITScalarFunction, std::function<void()>> lookup_function(const std::string& expr_name);
     // used in UT
     Cache* get_func_cache() const { return _func_cache; }
 
@@ -92,8 +93,9 @@ private:
     /**
      * @brief Compile the module and return the function pointer.
      */
-    JITScalarFunction compile_module(std::unique_ptr<llvm::Module> module, std::unique_ptr<llvm::LLVMContext> context,
-                                     const std::string& expr_name);
+    std::pair<JITScalarFunction, std::function<void()>> compile_module(std::unique_ptr<llvm::Module> module,
+                                                                       std::unique_ptr<llvm::LLVMContext> context,
+                                                                       const std::string& expr_name);
 
     /**
      * @brief Print the LLVM IR of the module in readable format.

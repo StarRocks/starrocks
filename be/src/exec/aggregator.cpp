@@ -28,7 +28,6 @@
 #include "exec/pipeline/operator.h"
 #include "exec/spill/spiller.hpp"
 #include "exprs/anyval_util.h"
-#include "exprs/jit/jit_engine.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"

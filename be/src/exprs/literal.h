@@ -32,6 +32,8 @@ public:
 
     bool is_compilable() const override;
 
+    std::string jit_func_name() const override;
+
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
                                          const std::vector<LLVMDatum>& datums) const override;
 

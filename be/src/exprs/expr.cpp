@@ -715,6 +715,13 @@ StatusOr<LLVMDatum> Expr::generate_ir(ExprContext* context, const llvm::Module& 
     return datum;
 }
 
+std::string Expr::jit_func_name() const {
+    DCHECK(!is_compilable());
+    // uncompilable inputs, reducing string size.
+    return std::string(" col[") + (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string() +
+           "]";
+}
+
 void Expr::get_uncompilable_exprs(std::vector<Expr*>& exprs) {
     if (!this->is_compilable()) {
         exprs.emplace_back(this);

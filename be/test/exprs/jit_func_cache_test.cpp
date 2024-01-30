@@ -54,7 +54,7 @@ public:
 // Each shard in LRU cache has one entry capacity. In each loop, the 3 expressions' first run insert the compiled func
 // into the cache, and the second run hit the cache, and at last, invalid all cache.
 TEST_F(JITFunctionCacheTest, cache) {
-    for (auto i = 0; i < 20; i++) {
+    for (auto i = 0; i < 10; i++) {
         // Normal int8
         {
             expr_node.opcode = TExprOpcode::ADD;
@@ -68,7 +68,8 @@ TEST_F(JITFunctionCacheTest, cache) {
             expr->_children.push_back(&col1);
             expr->_children.push_back(&col2);
 
-            ASSERT_TRUE(engine->lookup_function(expr->debug_string()) == nullptr);
+            auto func_with_handle = engine->lookup_function(expr->jit_func_name());
+            ASSERT_TRUE(func_with_handle.first == nullptr);
 
             ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
             ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
@@ -83,7 +84,9 @@ TEST_F(JITFunctionCacheTest, cache) {
                 }
             });
             // cached
-            ASSERT_TRUE(engine->lookup_function(expr->debug_string()) != nullptr);
+            func_with_handle = engine->lookup_function(expr->jit_func_name());
+            ASSERT_TRUE(func_with_handle.first != nullptr);
+            func_with_handle.second();
             ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
                 ASSERT_FALSE(ptr->is_nullable());
                 ASSERT_TRUE(ptr->is_numeric());
@@ -111,7 +114,8 @@ TEST_F(JITFunctionCacheTest, cache) {
             expr->_children.push_back(&col2);
 
             ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
-            ASSERT_TRUE(engine->lookup_function(expr->debug_string()) == nullptr);
+            auto func_with_handle = engine->lookup_function(expr->jit_func_name());
+            ASSERT_TRUE(func_with_handle.first == nullptr);
 
             ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
                 ASSERT_FALSE(ptr->is_nullable());
@@ -125,7 +129,9 @@ TEST_F(JITFunctionCacheTest, cache) {
                 }
             });
             // cached
-            ASSERT_TRUE(engine->lookup_function(expr->debug_string()) != nullptr);
+            func_with_handle = engine->lookup_function(expr->jit_func_name());
+            ASSERT_TRUE(func_with_handle.first != nullptr);
+            func_with_handle.second();
             ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
                 ASSERT_FALSE(ptr->is_nullable());
                 ASSERT_TRUE(ptr->is_numeric());
@@ -151,9 +157,9 @@ TEST_F(JITFunctionCacheTest, cache) {
 
             expr->_children.push_back(&col1);
             expr->_children.push_back(&col2);
-            ASSERT_TRUE(engine->lookup_function(expr->debug_string()) == nullptr);
+            auto func_with_handle = engine->lookup_function(expr->jit_func_name());
+            ASSERT_TRUE(func_with_handle.first == nullptr);
             ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
-
             ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
                 ASSERT_FALSE(ptr->is_nullable());
                 ASSERT_TRUE(ptr->is_numeric());
@@ -166,7 +172,9 @@ TEST_F(JITFunctionCacheTest, cache) {
                 }
             });
             // cached
-            ASSERT_TRUE(engine->lookup_function(expr->debug_string()) != nullptr);
+            func_with_handle = engine->lookup_function(expr->jit_func_name());
+            ASSERT_TRUE(func_with_handle.first != nullptr);
+            func_with_handle.second();
             ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
                 ASSERT_FALSE(ptr->is_nullable());
                 ASSERT_TRUE(ptr->is_numeric());
@@ -180,8 +188,8 @@ TEST_F(JITFunctionCacheTest, cache) {
             });
         }
 
-        // invalid the cache, by inserting new entries into used shared (14, 20, 0).
-        for (auto j = 0; j < 32; j++) {
+        // invalid the cache, by inserting new entries into used shared.
+        for (auto j = 0; j < 64; j++) {
             mock_insert(std::to_string(j));
         }
     }

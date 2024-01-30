@@ -35,7 +35,7 @@ public:
 
     JITExpr(const TExprNode& node, Expr* expr);
 
-    ~JITExpr() override = default;
+    ~JITExpr() override;
 
     Expr* clone(ObjectPool* pool) const override { return JITExpr::create(pool, _expr); }
 
@@ -58,6 +58,7 @@ private:
     Expr* _expr; // The original expression.
     bool _is_prepared = false;
     JITScalarFunction _jit_function = nullptr;
+    std::function<void()> _delete_cache_handle = nullptr;
     std::string _jit_expr_name;
 };
 

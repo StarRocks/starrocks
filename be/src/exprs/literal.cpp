@@ -169,6 +169,10 @@ bool VectorizedLiteral::is_compilable() const {
     return IRHelper::support_jit(_type.type);
 }
 
+std::string VectorizedLiteral::jit_func_name() const {
+    return "{" + type().debug_string() + "[" + _value->debug_string() + "]}";
+}
+
 StatusOr<LLVMDatum> VectorizedLiteral::generate_ir_impl(ExprContext* context, const llvm::Module& module,
                                                         llvm::IRBuilder<>& b,
                                                         const std::vector<LLVMDatum>& datums) const {

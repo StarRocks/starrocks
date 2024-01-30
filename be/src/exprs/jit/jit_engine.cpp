@@ -98,17 +98,18 @@ Status JITEngine::init() {
     return Status::OK();
 }
 
-StatusOr<JITScalarFunction> JITEngine::compile_scalar_function(ExprContext* context, Expr* expr) {
+StatusOr<std::pair<JITScalarFunction, std::function<void()>>> JITEngine::compile_scalar_function(ExprContext* context,
+                                                                                                 Expr* expr) {
     auto* instance = JITEngine::get_instance();
     if (!instance->initialized()) {
         return Status::JitCompileError("JIT engine is not initialized");
     }
 
     // TODO(Yueyang): optimize module name.
-    auto expr_name = expr->debug_string();
+    auto expr_name = expr->jit_func_name();
 
     auto compiled_function = instance->lookup_function(expr_name);
-    if (compiled_function != nullptr) {
+    if (compiled_function.first != nullptr) {
         return compiled_function;
     }
 
@@ -131,10 +132,9 @@ StatusOr<JITScalarFunction> JITEngine::compile_scalar_function(ExprContext* cont
     }
 
     // Compile module, return function pointer (maybe nullptr).
-    compiled_function = reinterpret_cast<JITScalarFunction>(
-            instance->compile_module(std::move(module), std::move(llvm_context), expr_name));
+    compiled_function = instance->compile_module(std::move(module), std::move(llvm_context), expr_name);
 
-    if (compiled_function == nullptr) {
+    if (compiled_function.first == nullptr) {
         return Status::JitCompileError("Failed to compile scalar function");
     }
 
@@ -166,12 +166,13 @@ void JITEngine::optimize_module(llvm::Module* module) {
     fpm.doFinalization();
 }
 
-JITScalarFunction JITEngine::compile_module(std::unique_ptr<llvm::Module> module,
-                                            std::unique_ptr<llvm::LLVMContext> context, const std::string& expr_name) {
+std::pair<JITScalarFunction, std::function<void()>> JITEngine::compile_module(
+        std::unique_ptr<llvm::Module> module, std::unique_ptr<llvm::LLVMContext> context,
+        const std::string& expr_name) {
     // print_module(*module);
-    auto* func = lookup_function(expr_name);
+    auto func = lookup_function(expr_name);
     // The function has already been compiled.
-    if (func != nullptr) {
+    if (func.first != nullptr) {
         return func;
     }
 
@@ -183,7 +184,7 @@ JITScalarFunction JITEngine::compile_module(std::unique_ptr<llvm::Module> module
         std::string error_message;
         llvm::handleAllErrors(std::move(error), [&](const llvm::ErrorInfoBase& EIB) { error_message = EIB.message(); });
         LOG(ERROR) << "JIT: Failed to add IR module to JIT: " << error_message;
-        return nullptr;
+        return std::make_pair(nullptr, nullptr);
     }
 
     // insert LRU cache
@@ -194,7 +195,7 @@ JITScalarFunction JITEngine::compile_module(std::unique_ptr<llvm::Module> module
             handleAllErrors(addr.takeError(), [&](const llvm::ErrorInfoBase& EIB) { error_message = EIB.message(); });
         }
         VLOG_ROW << "Failed to find jit function: " << error_message;
-        return nullptr;
+        return std::make_pair(nullptr, nullptr);
     }
 
     auto* cache = new JitCacheEntry(resource_tracker, addr->toPtr<JITScalarFunction>());
@@ -213,10 +214,9 @@ JITScalarFunction JITEngine::compile_module(std::unique_ptr<llvm::Module> module
     if (handle == nullptr) {
         delete cache;
         LOG(ERROR) << "JIT: Failed to insert jit func to LRU cache";
-        return nullptr;
+        return std::make_pair(nullptr, nullptr);
     } else {
-        _func_cache->release(handle);
-        return cache->func;
+        return std::make_pair(cache->func, [this, handle]() { _func_cache->release(handle); });
     }
 }
 
@@ -229,13 +229,14 @@ void JITEngine::print_module(const llvm::Module& module) {
     LOG(INFO) << "JIT: Generated IR:\n" << str;
 }
 
-JITScalarFunction JITEngine::lookup_function(const std::string& expr_name) {
+std::pair<JITScalarFunction, std::function<void()>> JITEngine::lookup_function(const std::string& expr_name) {
     auto* handle = _func_cache->lookup(expr_name);
     if (handle == nullptr) {
-        return nullptr;
+        return std::make_pair(nullptr, nullptr);
     }
-    DeferOp defer([this, handle]() { _func_cache->release(handle); });
-    return ((JitCacheEntry*)_func_cache->value(handle))->func;
+
+    return std::make_pair(((JitCacheEntry*)_func_cache->value(handle))->func,
+                     [this, handle]() { this->_func_cache->release(handle); });
 }
 
 } // namespace starrocks

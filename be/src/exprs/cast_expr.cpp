@@ -1141,10 +1141,14 @@ public:
                IRHelper::support_jit(FromType) && IRHelper::support_jit(ToType);
     }
 
+    std::string jit_func_name() const {
+        return "{cast(" + _children[0]->jit_func_name() + ")}" + (is_constant() ? "c:" : "") +
+               (is_nullable() ? "n:" : "") + type().debug_string();
+    }
+
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
                                          const std::vector<LLVMDatum>& datums) const override {
         auto* l = datums[0].value;
-
         if constexpr (FromType == TYPE_JSON || ToType == TYPE_JSON) {
             return Status::NotSupported("JIT casting does not support JSON");
         } else if constexpr (lt_is_decimal<FromType> || lt_is_decimal<ToType>) {

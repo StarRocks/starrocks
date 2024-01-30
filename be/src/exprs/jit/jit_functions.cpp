@@ -52,8 +52,8 @@ Status JITFunction::generate_scalar_function_ir(ExprContext* context, llvm::Modu
     auto* func_type = llvm::FunctionType::get(b.getVoidTy(), {size_type, data_type->getPointerTo()}, false);
 
     /// Create function in module.
-    // Pseudo code: void "expr->debug_string()"(int64_t rows_count, JITColumn* columns);
-    auto* func = llvm::Function::Create(func_type, llvm::Function::ExternalLinkage, expr->debug_string(), module);
+    // Pseudo code: void "expr->jit_func_name()"(int64_t rows_count, JITColumn* columns);
+    auto* func = llvm::Function::Create(func_type, llvm::Function::ExternalLinkage, expr->jit_func_name(), module);
     auto* func_args = func->args().begin();
     llvm::Value* rows_count_arg = func_args++;
     llvm::Value* columns_arg = func_args++;
