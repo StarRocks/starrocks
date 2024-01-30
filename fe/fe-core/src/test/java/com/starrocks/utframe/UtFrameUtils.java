@@ -45,6 +45,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -108,6 +109,7 @@ import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
+import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
 import com.starrocks.system.BackendCoreStat;
@@ -115,6 +117,8 @@ import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.warehouse.Warehouse;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.commons.codec.binary.Hex;
 import org.junit.Assert;
 
@@ -1137,7 +1141,25 @@ public class UtFrameUtils {
             connectContext.getSessionVariable().setOptimizerExecuteTimeout(300 * 1000);
             // 300s: 5min
             connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(300 * 1000);
+            // 300s: 5min
+            connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(300 * 1000);
+
             connectContext.getSessionVariable().setEnableShortCircuit(false);
+            connectContext.getSessionVariable().setEnableQueryCache(false);
+            connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
+            connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
+            connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
         }
+
+        new MockUp<PlanTestBase>() {
+            /**
+             * {@link com.starrocks.sql.plan.PlanTestNoneDBBase#isIgnoreExplicitColRefIds()}
+             */
+            @Mock
+            boolean isIgnoreExplicitColRefIds() {
+                return true;
+            }
+        };
+
     }
 }

@@ -99,34 +99,6 @@ public class MvRewriteTestBase {
 
         // set default config for async mvs
         UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
-
-        new MockUp<PlanTestBase>() {
-            /**
-             * {@link com.starrocks.sql.plan.PlanTestNoneDBBase#isIgnoreExplicitColRefIds()}
-             */
-            @Mock
-            boolean isIgnoreExplicitColRefIds() {
-                return true;
-            }
-        };
-
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
-                if (stmt instanceof InsertStmt) {
-                    InsertStmt insertStmt = (InsertStmt) stmt;
-                    TableName tableName = insertStmt.getTableName();
-                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-                    OlapTable tbl = ((OlapTable) testDb.getTable(tableName.getTbl()));
-                    if (tbl != null) {
-                        for (Long partitionId : insertStmt.getTargetPartitionIds()) {
-                            Partition partition = tbl.getPartition(partitionId);
-                            setPartitionVersion(partition, partition.getVisibleVersion() + 1);
-                        }
-                    }
-                }
-            }
-        };
     }
 
     @AfterClass
