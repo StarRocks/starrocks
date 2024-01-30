@@ -3515,6 +3515,92 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
+    public void testRandomizeStartWithStartTime() {
+        // NOTE: if the test case execute super slow, the delta would not be so stable
+        final long FIXED_DELTA = 5;
+        final long FIXED_PERIOD = 60;
+        LocalDateTime defineStartTime = LocalDateTime.parse("2023-12-29T17:50:00");
+        {
+            String sql = "create materialized view mv_test_randomize_with_start_time \n" +
+                    "distributed by hash(k1) buckets 10\n" +
+                    "refresh async start ('2023-12-29 17:50:00') every(interval 1 minute) " +
+                    "PROPERTIES (\n" +
+                    "'replication_num' = '1'" +
+                    ")\n" +
+                    "as " +
+                    "select tb1.k1, k2, " +
+                    "array<int>[1,2,3] as type_array, " +
+                    "map<int, int>{1:2} as type_map, " +
+                    "parse_json('{\"a\": 1}') as type_json, " +
+                    "row('c') as type_struct, " +
+                    "array<json>[parse_json('{}')] as type_array_json " +
+                    "from tbl1 tb1;";
+            long currentSecond = Utils.getLongFromDateTime(defineStartTime);
+            starRocksAssert.withMaterializedView(sql, (obj) -> {
+                String mvName = (String) obj;
+                MaterializedView mv = getMv(testDb.getFullName(), mvName);
+                long startTime = mv.getRefreshScheme().getAsyncRefreshContext().getStartTime();
+                long  delta = startTime - currentSecond;
+                Assert.assertTrue("delta is " + delta, delta >= 0 && delta <= FIXED_DELTA);
+            });
+        }
+
+        // manual disable it
+        {
+            String sql = "create materialized view mv_test_randomize_with_start_time \n" +
+                    "distributed by hash(k1) buckets 10\n" +
+                    "refresh async start ('2023-12-29 17:50:00') every(interval 1 minute) " +
+                    "PROPERTIES (\n" +
+                    "'replication_num' = '1', " +
+                    "'mv_randomize_start' = '0'" +
+                    ")\n" +
+                    "as " +
+                    "select tb1.k1, k2, " +
+                    "array<int>[1,2,3] as type_array, " +
+                    "map<int, int>{1:2} as type_map, " +
+                    "parse_json('{\"a\": 1}') as type_json, " +
+                    "row('c') as type_struct, " +
+                    "array<json>[parse_json('{}')] as type_array_json " +
+                    "from tbl1 tb1;";
+            final long currentSecond = Utils.getLongFromDateTime(defineStartTime);
+            starRocksAssert.withMaterializedView(sql, (obj) -> {
+                String mvName = (String) obj;
+                MaterializedView mv = getMv(testDb.getFullName(), mvName);
+                long startTime = mv.getRefreshScheme().getAsyncRefreshContext().getStartTime();
+                long  delta = startTime - currentSecond;
+                Assert.assertTrue("delta is " + delta, delta >= 0 && delta <= FIXED_DELTA);
+            });
+        }
+
+        // manual specify it
+        {
+            String sql = "create materialized view mv_test_randomize \n" +
+                    "distributed by hash(k1) buckets 10\n" +
+                    "refresh async start ('2023-12-29 17:50:00') every(interval 1 minute) " +
+                    "PROPERTIES (\n" +
+                    "'replication_num' = '1', " +
+                    "'mv_randomize_start' = '2'" +
+                    ")\n" +
+                    "as " +
+                    "select tb1.k1, k2, " +
+                    "array<int>[1,2,3] as type_array, " +
+                    "map<int, int>{1:2} as type_map, " +
+                    "parse_json('{\"a\": 1}') as type_json, " +
+                    "row('c') as type_struct, " +
+                    "array<json>[parse_json('{}')] as type_array_json " +
+                    "from tbl1 tb1;";
+            final long currentSecond = Utils.getLongFromDateTime(defineStartTime);
+            starRocksAssert.withMaterializedView(sql, (obj) -> {
+                String mvName = (String) obj;
+                MaterializedView mv = getMv(testDb.getFullName(), mvName);
+                long startTime = mv.getRefreshScheme().getAsyncRefreshContext().getStartTime();
+                long  delta = startTime - currentSecond;
+                Assert.assertTrue("delta is " + delta, delta >= 0 && delta < (2 + FIXED_DELTA));
+            });
+        }
+    }
+
+    @Test
     public void testCreateMvWithTypes() throws Exception {
         String sql = "create materialized view mv_test_types \n" +
                 "distributed by hash(k1) buckets 10\n" +
