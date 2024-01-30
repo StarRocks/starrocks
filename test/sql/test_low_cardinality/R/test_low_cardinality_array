@@ -308,11 +308,11 @@ insert into s2 select * from s2;
 -- !result
 [UC] analyze full table s1;
 -- result:
-test_db_a96cd192be7211ee849200163e04d4c2.s1	analyze	status	OK
+test_db_1333f808bf6811eea33e00163e04d4c2.s1	analyze	status	OK
 -- !result
 [UC] analyze full table s2;
 -- result:
-test_db_a96cd192be7211ee849200163e04d4c2.s2	analyze	status	OK
+test_db_1333f808bf6811eea33e00163e04d4c2.s2	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('a1', 's1')
 -- result:
@@ -380,7 +380,7 @@ select array_max(s1.a2), array_distinct(s2.a1) from s1 join s2 on s1.v1 = s2.v1 
 JL	["Henan","Chongqing","Ningxia","Tibet","Yunnan"]
 MO	["Henan","Chongqing","Ningxia","Tibet","Yunnan"]
 -- !result
-select * from 
+select * from
 (select array_max(a1) x1 from s1) t1 join
 (select array_min(a1) x2 from s2) t2 on x1 = x2
 order by x1 limit 2;
@@ -499,7 +499,7 @@ insert into s3 select * from s3;
 -- !result
 [UC] analyze full table s3;
 -- result:
-test_db_ba84e764bf3811eeb48400163e04d4c2.s3	analyze	status	OK
+test_db_133557b6bf6811eeb52600163e04d4c2.s3	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('a1', 's3')
 -- result:
@@ -532,7 +532,7 @@ from s3 where a1[1] = 'Jiangsu' or a2[2] = 'GD' order by v1 limit 2;
 4	QH	Fujian	["Fujian","Jiangsu","Macao","Ningxia"]	["GD","JS","QH"]	["Ningxia","Macao","Jiangsu","Fujian"]	["GD","QH"]	3
 4	QH	Fujian	["Fujian","Jiangsu","Macao","Ningxia"]	["GD","JS","QH"]	["Ningxia","Macao","Jiangsu","Fujian"]	["GD","QH"]	3
 -- !result
-select count(a1[2]) from s3 where v3 = "GS"; 
+select count(a1[2]) from s3 where v3 = "GS";
 -- result:
 384
 -- !result
@@ -559,7 +559,7 @@ from s3 where a1[1] = 'Jiangsu' or a2[2] = 'GD' order by v1 limit 2;
 4	QH	Fujian	["Fujian","Jiangsu","Macao","Ningxia"]	["GD","JS","QH"]	["Ningxia","Macao","Jiangsu","Fujian"]	["GD","QH"]	3
 4	QH	Fujian	["Fujian","Jiangsu","Macao","Ningxia"]	["GD","JS","QH"]	["Ningxia","Macao","Jiangsu","Fujian"]	["GD","QH"]	3
 -- !result
-select /*+SET_VAR(cbo_enable_low_cardinality_optimize=false, low_cardinality_optimize_v2=false)*/ count(a1[2]) from s3 where v3 = "GS"; 
+select /*+SET_VAR(cbo_enable_low_cardinality_optimize=false, low_cardinality_optimize_v2=false)*/ count(a1[2]) from s3 where v3 = "GS";
 -- result:
 384
 -- !result
