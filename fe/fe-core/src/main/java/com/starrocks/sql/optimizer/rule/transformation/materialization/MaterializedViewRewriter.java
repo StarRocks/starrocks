@@ -632,7 +632,7 @@ public class MaterializedViewRewriter {
         final ReplaceColumnRefRewriter mvColumnRefRewriter =
                 MvUtils.getReplaceColumnRefWriter(mvExpression, mvColumnRefFactory);
 
-        final Set<ScalarOperator> mvConjuncts = MvUtils.getAllValidPredicates(mvExpression);
+        final Set<ScalarOperator> mvConjuncts = MvUtils.getPredicateForRewrite(mvExpression);
         ScalarOperator mvPartitionCompensate = compensateMVPartitionPredicate(mvConjuncts, mvColumnRefRewriter);
         if (mvPartitionCompensate != ConstantOperator.TRUE) {
             mvConjuncts.addAll(MvUtils.getAllValidPredicates(mvPartitionCompensate));
@@ -1829,10 +1829,7 @@ public class MaterializedViewRewriter {
     protected OptExpression queryBasedRewrite(RewriteContext rewriteContext, ScalarOperator compensationPredicates,
                                               OptExpression queryExpression) {
         // query predicate and (not viewToQueryCompensationPredicate) is the final query compensation predicate
-        ScalarOperator queryCompensationPredicate = MvUtils.canonizePredicate(
-                Utils.compoundAnd(
-                        rewriteContext.getQueryPredicateSplit().toScalarOperator(),
-                        CompoundPredicateOperator.not(compensationPredicates)));
+        ScalarOperator queryCompensationPredicate = CompoundPredicateOperator.not(compensationPredicates);
         List<ScalarOperator> predicates = Utils.extractConjuncts(queryCompensationPredicate);
         predicates.removeAll(mvRewriteContext.getOnPredicates());
         queryCompensationPredicate = Utils.compoundAnd(predicates);
