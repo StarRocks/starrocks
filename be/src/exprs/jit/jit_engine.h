@@ -41,7 +41,7 @@ class JITEngine {
 public:
     JITEngine() = default;
 
-    ~JITEngine() = default;
+    ~JITEngine();
 
     JITEngine(const JITEngine&) = delete;
 
@@ -66,15 +66,12 @@ public:
 
     /**
      * @brief Compile the expr into LLVM IR and return the function pointer.
-     * TODO(Yueyang): Add a cache to speed up the compilation.
      */
     static StatusOr<JITScalarFunction> compile_scalar_function(ExprContext* context, Expr* expr);
 
-    /**
-     * @brief Remove the function and its related resources(resource tracker and module) from the JIT engine.
-     * TODO(Yueyang): Add a cache to speed up the removal.
-     */
-    static Status remove_function(const std::string& expr_name);
+    JITScalarFunction lookup_function(const std::string& expr_name);
+    // used in UT
+    Cache* get_func_cache() const { return _func_cache; }
 
 private:
     /**
@@ -95,24 +92,13 @@ private:
     /**
      * @brief Compile the module and return the function pointer.
      */
-    void* compile_module(std::unique_ptr<llvm::Module> module, std::unique_ptr<llvm::LLVMContext> context,
-                         const std::string& expr_name);
-
-    /**
-     * @brief Remove the function and its related resources(resource tracker and module) from the JIT engine.
-     */
-    Status remove_module(const std::string& expr_name);
+    JITScalarFunction compile_module(std::unique_ptr<llvm::Module> module, std::unique_ptr<llvm::LLVMContext> context,
+                                     const std::string& expr_name);
 
     /**
      * @brief Print the LLVM IR of the module in readable format.
      */
     static void print_module(const llvm::Module& module);
-
-    inline void* lookup_function(const std::string& expr_name, bool must_exist);
-
-    void* lookup_function_with_lock(const std::string& expr_name, bool must_exist);
-
-    std::mutex _mutex;
 
     bool _initialized = false;
     bool _support_jit = false;
@@ -125,10 +111,7 @@ private:
 
     std::unique_ptr<llvm::orc::LLJIT> _jit;
 
-    // TODO(Yueyang): Check whether we need to use a better data structure to store the resource tracker.
-    // because in OLAP scenarios, this might not be the performance bottleneck.
-    std::unordered_map<std::string, llvm::orc::ResourceTrackerSP> _resource_tracker_map;
-    std::unordered_map<std::string, std::atomic_int> _resource_ref_count_map;
+    Cache* _func_cache;
 };
 
 } // namespace starrocks

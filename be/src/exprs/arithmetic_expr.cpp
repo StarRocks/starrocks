@@ -140,9 +140,9 @@ public:
     std::string debug_string() const override {
         std::stringstream out;
         auto expr_debug_string = Expr::debug_string();
-        out << "VectorizedArithmeticExpr ("
-            << "lhs=" << _children[0]->type().debug_string() << ", rhs=" << _children[1]->type().debug_string()
-            << ", result=" << this->type().debug_string() << ", lhs_is_constant=" << _children[0]->is_constant()
+        out << "VectorizedArithmeticExpr [" << get_op_name<OP>() << "](lhs=" << _children[0]->type().debug_string()
+            << ", rhs=" << _children[1]->type().debug_string() << ", result=" << this->type().debug_string()
+            << ", lhs_is_constant=" << _children[0]->is_constant()
             << ", rhs_is_constant=" << _children[1]->is_constant() << ", expr (" << expr_debug_string << ") )";
         return out.str();
     }

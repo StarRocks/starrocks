@@ -35,7 +35,7 @@ public:
 
     JITExpr(ObjectPool* pool, const TExprNode& node, Expr* expr);
 
-    ~JITExpr() override;
+    ~JITExpr() override = default;
 
     Expr* clone(ObjectPool* pool) const override { return JITExpr::create(pool, _expr); }
 

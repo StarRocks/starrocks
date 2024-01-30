@@ -104,6 +104,7 @@ set(EXEC_FILES
         ./exprs/function_helper_test.cpp
         ./exprs/in_predicate_test.cpp
         ./exprs/is_null_predicate_test.cpp
+        ./exprs/jit_func_cache_test.cpp
         ./exprs/json_functions_test.cpp
         ./exprs/lambda_array_expr_test.cpp
         ./exprs/lambda_map_expr_test.cpp

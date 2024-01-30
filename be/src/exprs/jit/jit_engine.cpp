@@ -33,8 +33,19 @@
 #include "llvm/Support/Error.h"
 #include "llvm/Support/Host.h"
 #include "llvm/Support/TargetSelect.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
+
+struct JitCacheEntry {
+    JitCacheEntry(llvm::orc::ResourceTrackerSP t, JITScalarFunction f) : tracker(t), func(f) {}
+    llvm::orc::ResourceTrackerSP tracker;
+    JITScalarFunction func;
+};
+
+JITEngine::~JITEngine() {
+    delete _func_cache;
+}
 
 Status JITEngine::init() {
     if (_initialized) {
@@ -74,6 +85,11 @@ Status JITEngine::init() {
 
     _initialized = true;
     _support_jit = true;
+#if BE_TEST
+    _func_cache = new_lru_cache(32); // 1 capacity per cache of 32
+#else
+    _func_cache = new_lru_cache(3200); // 100 capacity per cache of 32
+#endif
     return Status::OK();
 }
 
@@ -86,7 +102,7 @@ StatusOr<JITScalarFunction> JITEngine::compile_scalar_function(ExprContext* cont
     // TODO(Yueyang): optimize module name.
     auto expr_name = expr->debug_string();
 
-    auto compiled_function = (JITScalarFunction)instance->lookup_function_with_lock(expr_name, false);
+    auto compiled_function = instance->lookup_function(expr_name);
     if (compiled_function != nullptr) {
         return compiled_function;
     }
@@ -117,19 +133,8 @@ StatusOr<JITScalarFunction> JITEngine::compile_scalar_function(ExprContext* cont
         return Status::JitCompileError("Failed to compile scalar function");
     }
 
-    // TODO(Yueyang): add to cache.
-
     // Return function pointer.
     return compiled_function;
-}
-
-Status JITEngine::remove_function(const std::string& expr_name) {
-    auto* instance = JITEngine::get_instance();
-    if (!instance->initialized()) {
-        return Status::JitCompileError("JIT engine is not initialized");
-    }
-
-    return instance->remove_module(expr_name);
 }
 
 void JITEngine::setup_module(llvm::Module* module) const {
@@ -156,11 +161,10 @@ void JITEngine::optimize_module(llvm::Module* module) {
     fpm.doFinalization();
 }
 
-void* JITEngine::compile_module(std::unique_ptr<llvm::Module> module, std::unique_ptr<llvm::LLVMContext> context,
-                                const std::string& expr_name) {
+JITScalarFunction JITEngine::compile_module(std::unique_ptr<llvm::Module> module,
+                                            std::unique_ptr<llvm::LLVMContext> context, const std::string& expr_name) {
     // print_module(*module);
-    std::lock_guard<std::mutex> lock(_mutex);
-    auto* func = lookup_function(expr_name, false);
+    auto* func = lookup_function(expr_name);
     // The function has already been compiled.
     if (func != nullptr) {
         return func;
@@ -177,35 +181,38 @@ void* JITEngine::compile_module(std::unique_ptr<llvm::Module> module, std::uniqu
         return nullptr;
     }
 
-    _resource_tracker_map[expr_name] = std::move(resource_tracker);
-    _resource_ref_count_map[expr_name] = 0;
-    // Lookup the function in the JIT engine, this will trigger the compilation.
-    return lookup_function(expr_name, true);
-}
-
-Status JITEngine::remove_module(const std::string& expr_name) {
-    std::lock_guard<std::mutex> lock(_mutex);
-    if (!_resource_ref_count_map.contains(expr_name)) {
-        return Status::RuntimeError("Remove a non-existing jit module");
-    }
-    if (_resource_ref_count_map[expr_name].fetch_sub(1) > 1) {
-        return Status::OK();
-    }
-    auto it = _resource_tracker_map.find(expr_name);
-    if (it == _resource_tracker_map.end()) {
-        return Status::OK();
+    // insert LRU cache
+    auto addr = _jit->lookup(expr_name);
+    if (UNLIKELY(!addr || UNLIKELY(addr->isNull()))) {
+        std::string error_message = "address is null";
+        if (!addr) {
+            handleAllErrors(addr.takeError(), [&](const llvm::ErrorInfoBase& EIB) { error_message = EIB.message(); });
+        }
+        VLOG_ROW << "Failed to find jit function: " << error_message;
+        return nullptr;
     }
 
-    auto error = it->second->remove();
-    _resource_tracker_map.erase(it);
-    _resource_ref_count_map.erase(expr_name);
-    if (UNLIKELY(error)) {
-        std::string error_message;
-        llvm::handleAllErrors(std::move(error), [&](const llvm::ErrorInfoBase& EIB) { error_message = EIB.message(); });
-        LOG(ERROR) << "JIT: Failed to remove IR module from JIT: " << error_message;
-        return Status::JitCompileError("Failed to remove IR module from JIT");
+    auto* cache = new JitCacheEntry(resource_tracker, addr->toPtr<JITScalarFunction>());
+
+    auto* handle = _func_cache->insert(expr_name, (void*)cache, 1, [](const CacheKey& key, void* value) {
+        auto* entry = ((JitCacheEntry*)value);
+        auto error = entry->tracker->remove();
+        if (UNLIKELY(error)) {
+            std::string error_message;
+            llvm::handleAllErrors(std::move(error),
+                                  [&](const llvm::ErrorInfoBase& EIB) { error_message = EIB.message(); });
+            LOG(ERROR) << "JIT: Failed to remove IR module from JIT: " << error_message;
+        }
+        delete entry;
+    });
+    if (handle == nullptr) {
+        delete cache;
+        LOG(ERROR) << "JIT: Failed to insert jit func to LRU cache";
+        return nullptr;
+    } else {
+        _func_cache->release(handle);
+        return cache->func;
     }
-    return Status::OK();
 }
 
 void JITEngine::print_module(const llvm::Module& module) {
@@ -217,27 +224,13 @@ void JITEngine::print_module(const llvm::Module& module) {
     LOG(INFO) << "JIT: Generated IR:\n" << str;
 }
 
-void* JITEngine::lookup_function(const std::string& expr_name, bool must_exist) {
-    auto addr = _jit->lookup(expr_name);
-    if (UNLIKELY(!addr || UNLIKELY(addr->isNull()))) {
-        if (!must_exist) {
-            return nullptr;
-        }
-
-        std::string error_message = "address is null";
-        if (!addr) {
-            handleAllErrors(addr.takeError(), [&](const llvm::ErrorInfoBase& EIB) { error_message = EIB.message(); });
-        }
-        VLOG_ROW << "Failed to find jit function: " << error_message;
+JITScalarFunction JITEngine::lookup_function(const std::string& expr_name) {
+    auto* handle = _func_cache->lookup(expr_name);
+    if (handle == nullptr) {
         return nullptr;
     }
-    _resource_ref_count_map[expr_name].fetch_add(1);
-    return reinterpret_cast<void*>(addr->toPtr<JITScalarFunction>());
-}
-
-void* JITEngine::lookup_function_with_lock(const std::string& expr_name, bool must_exist) {
-    std::lock_guard<std::mutex> lock(_mutex);
-    return lookup_function(expr_name, must_exist);
+    DeferOp defer([this, handle]() { _func_cache->release(handle); });
+    return ((JitCacheEntry*)_func_cache->value(handle))->func;
 }
 
 } // namespace starrocks

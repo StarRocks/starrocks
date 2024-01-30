@@ -1198,8 +1198,7 @@ public:
         std::stringstream out;
         auto expr_debug_string = Expr::debug_string();
         out << "VectorizedCastExpr ("
-            << "from=" << _children[0]->type().debug_string() << ", to=" << this->type().debug_string()
-            << ", expr=" << expr_debug_string << ")";
+            << "from=" << _children[0]->type().debug_string() << ", to expr=" << expr_debug_string << ")";
         return out.str();
     }
 };

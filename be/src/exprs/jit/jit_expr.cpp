@@ -130,17 +130,4 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
     return result_column;
 }
 
-// only unregister once
-JITExpr::~JITExpr() {
-    if (_is_prepared && _jit_function != nullptr) {
-        auto* jit_engine = JITEngine::get_instance();
-        if (jit_engine->initialized()) {
-            auto status = jit_engine->remove_function(_jit_expr_name);
-            if (!status.ok()) {
-                LOG(WARNING) << "JIT: remove function failed, reason: " << status;
-            }
-        }
-    }
-}
-
 } // namespace starrocks
