@@ -71,6 +71,7 @@ import com.starrocks.common.util.LogUtil;
 import com.starrocks.leader.ReportHandler;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.system.Backend;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -1372,8 +1373,8 @@ public class TabletScheduler extends FrontendDaemon {
      * The key idea for disk balance filter for primary key tablet is following:
      * 1. Cross nodes balance is always schedulable.
      * 2. Get the max last report tablets time of all backends.
-     * 3. For the primary key tablet, if the partition lastest visible version
-     *    time is larger than max last reported tablets, it means that the lastest
+     * 3. For the primary key tablet, if the partition latest visible version
+     *    time is larger than max last reported tablets, it means that the latest
      *    tablet info has not been reported, the tablet is unschedulable.
      * 4. For the primary key tablet, get the max rowset creation time
      *    of all replica which updated in tablets reported.
@@ -1393,8 +1394,14 @@ public class TabletScheduler extends FrontendDaemon {
                 continue;
             }
 
+<<<<<<< HEAD
             Table tbl = null;
             db.readLock();
+=======
+            Table tbl;
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
+>>>>>>> 28d549c9e4 ([Enhancement] Refine the priv check for be_tablets and show tablet (#39762))
             try {
                 tbl = db.getTable(tableId);
             } finally {
@@ -1840,6 +1847,10 @@ public class TabletScheduler extends FrontendDaemon {
         String state = request.isSetState() ? request.state : null;
         long limit = request.isSetLimit() ? request.limit : -1;
         List<TabletSchedCtx> tabletCtxs;
+        UserIdentity currentUser = null;
+        if (request.isSetCurrent_user_ident()) {
+            currentUser = UserIdentity.fromThrift(request.current_user_ident);
+        }
         synchronized (this) {
             Stream<TabletSchedCtx> all;
             if (TabletSchedCtx.State.PENDING.name().equals(state)) {
@@ -1856,6 +1867,8 @@ public class TabletScheduler extends FrontendDaemon {
                     all = all.filter(t -> t.getState().name().equals(state));
                 }
             }
+            final UserIdentity finalUser = currentUser;
+            all = all.filter(t -> t.checkPrivForCurrUser(finalUser));
             if (type != null) {
                 all = all.filter(t -> t.getType().name().equals(type));
             }
