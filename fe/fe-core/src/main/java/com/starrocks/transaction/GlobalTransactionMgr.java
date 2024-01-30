@@ -60,6 +60,7 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import org.apache.commons.lang3.time.StopWatch;
+import org.apache.hadoop.util.Preconditions;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -486,7 +487,8 @@ public class GlobalTransactionMgr implements MemoryTrackable {
 
     public boolean existCommittedTxns(Long dbId, Long tableId, Long partitionId) {
         DatabaseTransactionMgr dbTransactionMgr = dbIdToDatabaseTransactionMgrs.get(dbId);
-        if (tableId == null && partitionId == null) {
+        if (tableId == null) {
+            Preconditions.checkArgument(partitionId == null);
             return !dbTransactionMgr.getCommittedTxnList().isEmpty();
         }
 
@@ -494,8 +496,9 @@ public class GlobalTransactionMgr implements MemoryTrackable {
             if (transactionState.getTableIdList().contains(tableId)) {
                 if (partitionId == null) {
                     return true;
-                } else if (transactionState.getTableCommitInfo(tableId).getPartitionCommitInfo(partitionId) != null) {
-                    return true;
+                } else {
+                    TableCommitInfo commitInfo = transactionState.getTableCommitInfo(tableId);
+                    return commitInfo != null && commitInfo.getPartitionCommitInfo(partitionId) != null;
                 }
             }
         }
