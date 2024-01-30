@@ -325,3 +325,6 @@ select array_agg(distinct map(2,3)) from ss;
 select array_agg(null);
 select array_agg(order by 1 separator '');
 select array_agg(separator NULL);
+
+select array_agg_distinct(name order by 1 asc), array_agg(distinct name order by 1 desc), array_agg(name order by 1 desc) from ss order by 1;
+select array_agg_distinct(name order by 1), cardinality(array_agg_distinct(arr order by score)) from ss group by id order by 1;

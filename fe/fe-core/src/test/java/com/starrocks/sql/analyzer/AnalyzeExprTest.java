@@ -356,6 +356,8 @@ public class AnalyzeExprTest {
                 " (select 'a' as c1, 1 as c2, 2 as c3)t");
         analyzeFail("select array_agg(case when c1='a' then [1,3] else map(1,2) end order by c3) as arr1" +
                 " from (select 'a' as c1, 1 as c2, 2 as c3)t");
+
+        analyzeSuccess("select array_agg_distinct(v1), array_agg(distinct v1),array_agg(v1) from t0;");
     }
 
     @Test
