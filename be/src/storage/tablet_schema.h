@@ -40,6 +40,11 @@
 #include <vector>
 
 #include "column/chunk.h"
+<<<<<<< HEAD
+=======
+#include "gen_cpp/Descriptors_types.h"
+#include "gen_cpp/descriptors.pb.h"
+>>>>>>> 113d301de2 ([Enhancement] Update tablet schema after fast schema evolution (#39869))
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/aggregate_type.h"
 #include "storage/olap_define.h"
@@ -319,7 +324,7 @@ public:
 
     Schema* schema() const;
 
-    Status build_current_tablet_schema(int64_t index_id, int32_t version, const POlapTableIndexSchema& index,
+    Status build_current_tablet_schema(int64_t schema_id, int32_t version, const POlapTableColumnParam& column_param,
                                        const std::shared_ptr<const TabletSchema>& ori_tablet_schema);
 
 private:

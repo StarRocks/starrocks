@@ -252,6 +252,14 @@ struct TCompactionReq {
     2: optional bool is_base_compaction
 }
 
+struct TUpdateSchemaReq {
+    1: optional i64 index_id
+    2: optional i64 schema_id
+    3: optional i64 schema_version
+    4: optional list<i64> tablet_ids
+    5: optional Descriptors.TOlapTableColumnParam column_param
+}
+
 struct TUploadReq {
     1: required i64 job_id;
     2: required map<string, string> src_dest_map
@@ -468,6 +476,7 @@ struct TAgentTaskRequest {
     28: optional TCompactionReq compaction_req
     29: optional TRemoteSnapshotRequest remote_snapshot_req
     30: optional TReplicateSnapshotRequest replicate_snapshot_req
+    31: optional TUpdateSchemaReq update_schema_req
 }
 
 struct TAgentResult {
