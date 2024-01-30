@@ -405,7 +405,7 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                                 Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1 != 3 and k2 like 'a%'",
                                         "TABLE: mt1\n" +
                                                 "     PREAGGREGATION: ON\n" +
-                                                "     PREDICATES: 9: k1 != 3, (9: k1 < 3) OR (9: k1 > 3), 10: k2 LIKE 'a%'\n" +
+                                                "     PREDICATES: 9: k1 != 3, 10: k2 LIKE 'a%'\n" +
                                                 "     partitions=2/3")
                         );
                         for (Pair<String, String> p : sqls) {

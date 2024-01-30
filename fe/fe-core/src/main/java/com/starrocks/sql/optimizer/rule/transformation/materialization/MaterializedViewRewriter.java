@@ -569,7 +569,7 @@ public class MaterializedViewRewriter {
         final ReplaceColumnRefRewriter mvColumnRefRewriter =
                 MvUtils.getReplaceColumnRefWriter(mvExpression, mvColumnRefFactory);
 
-        final Set<ScalarOperator> mvConjuncts = MvUtils.getAllValidPredicates(mvExpression);
+        final Set<ScalarOperator> mvConjuncts = MvUtils.getPredicateForRewrite(mvExpression);
         ScalarOperator mvPartitionCompensate = compensateMVPartitionPredicate(mvConjuncts, mvColumnRefRewriter);
         if (mvPartitionCompensate != ConstantOperator.TRUE) {
             mvConjuncts.addAll(MvUtils.getAllValidPredicates(mvPartitionCompensate));
@@ -1816,10 +1816,7 @@ public class MaterializedViewRewriter {
             return null;
         }
         // query predicate and (not viewToQueryCompensationPredicate) is the final query compensation predicate
-        ScalarOperator queryCompensationPredicate = MvUtils.canonizePredicate(
-                Utils.compoundAnd(
-                        rewriteContext.getQueryPredicateSplit().toScalarOperator(),
-                        CompoundPredicateOperator.not(compensationPredicates)));
+        ScalarOperator queryCompensationPredicate = CompoundPredicateOperator.not(compensationPredicates);
         List<ScalarOperator> predicates = Utils.extractConjuncts(queryCompensationPredicate);
         predicates.removeAll(mvRewriteContext.getOnPredicates());
         queryCompensationPredicate = Utils.compoundAnd(predicates);
@@ -1893,7 +1890,6 @@ public class MaterializedViewRewriter {
                 // predicate can not be pushdown, we should add it it optExpression
                 Operator.Builder builder = OperatorBuilderFactory.build(optExpression.getOp());
                 builder.withOperator(optExpression.getOp());
-                // builder.setPredicate(Utils.compoundAnd(predicate, optExpression.getOp().getPredicate()));
                 ScalarOperator canonizePredicates = MvUtils.canonizePredicateForRewrite(
                         queryMaterializationContext, Utils.compoundAnd(predicate, optExpression.getOp().getPredicate()));
                 builder.setPredicate(canonizePredicates);
