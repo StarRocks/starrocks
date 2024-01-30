@@ -20,6 +20,8 @@ import com.google.common.collect.Sets;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TUniqueId;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -29,7 +31,15 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 
+/**
+ * Calculate proper pipeline DOP for adaptive DOP query according to the fragments and DOP of running queries.
+ *
+ * <p> It is effective only when {@link GlobalVariable#isQueryQueueDriverHighWaterEffective()} returns true
+ * and pipeline_dop is 0 for query.
+ */
 public class PipelineDriverAllocator {
+    private static final Logger LOG = LogManager.getLogger(PipelineDriverAllocator.class);
+
     private final Set<TUniqueId> allocatedSlotIds = Sets.newConcurrentHashSet();
     private final AtomicInteger numAllocatedDrivers = new AtomicInteger();
 
@@ -50,7 +60,7 @@ public class PipelineDriverAllocator {
             try {
                 doneFuture.get();
             } catch (InterruptedException | ExecutionException e) {
-                throw new RuntimeException(e);
+                LOG.warn("[Slot] wait allocation finish failed [slot={}]", slot, e);
             }
         }
 
@@ -101,6 +111,7 @@ public class PipelineDriverAllocator {
 
     private void allocateInBatch() {
         List<AllocationRequest> requests = new ArrayList<>();
+        // Use synchronized to guarantee that only one requester is handling all current allocation requests at the same time.
         synchronized (allocationRequests) {
             while (!allocationRequests.isEmpty() && requests.size() < NUM_BATCH_SLOTS) {
                 requests.add(allocationRequests.poll());
@@ -126,6 +137,7 @@ public class PipelineDriverAllocator {
             return 1;
         }
 
+        // Calculate DOP by driverHighWater.
         final int hardLimit = GlobalVariable.getQueryQueueDriverHighWater();
         int dop = calculateDopByLimit(curNumAllocatedDrivers, numFragments, hardLimit);
 
@@ -142,6 +154,7 @@ public class PipelineDriverAllocator {
             return dop;
         }
 
+        // Punish DOP by driverLowWater.
         final int softLimit = GlobalVariable.getQueryQueueDriverLowWater();
         int exceedSoftLimit = curNumAllocatedDrivers + numFragments * dop - softLimit;
         if (exceedSoftLimit > 0) {
