@@ -51,6 +51,7 @@ import com.starrocks.common.IdGenerator;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.optimizer.operator.UKFKConstraints;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TJoinDistributionMode;
 import org.apache.logging.log4j.LogManager;
@@ -80,7 +81,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     protected String colocateReason = ""; // if can not do colocate join, set reason here
     // the flag for local bucket shuffle join
     protected boolean isLocalHashBucket = false;
-    protected boolean isFKRight = false;
+    protected UKFKConstraints.JoinProperty ukfkProperty;
 
     protected final List<RuntimeFilterDescription> buildRuntimeFilters = Lists.newArrayList();
     protected final List<Integer> filter_null_value_columns = Lists.newArrayList();
@@ -397,8 +398,8 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         canLocalShuffle = v;
     }
 
-    public void setFKRight(boolean fkRight) {
-        this.isFKRight = fkRight;
+    public void setUkfkProperty(UKFKConstraints.JoinProperty ukfkProperty) {
+        this.ukfkProperty = ukfkProperty;
     }
 
     @Override

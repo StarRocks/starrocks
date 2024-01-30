@@ -354,7 +354,7 @@ public abstract class JoinOrder {
 
         UKFKConstraints.JoinProperty joinProperty = null;
         SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
-        if (sessionVariable.isEnableUKFKOpt() && sessionVariable.isEnableUKFKJoinReorder()) {
+        if (sessionVariable.isEnableUKFKOpt()) {
             UKFKConstraintsCollector.collectColumnConstraints(leftExprInfo.expr);
             UKFKConstraintsCollector.collectColumnConstraints(rightExprInfo.expr);
             UKFKConstraints constraint = UKFKConstraintsCollector.buildJoinColumnConstraint(newJoin,
@@ -369,12 +369,12 @@ public abstract class JoinOrder {
             if (joinProperty.isLeftUK) {
                 if (allowFKAsRightTable(leftExprInfo, rightExprInfo)) {
                     // Use the fk table as the right table
-                    newJoin.setFKRight(true);
                     joinExpr = OptExpression.create(newJoin, leftExprInfo.expr,
                             rightExprInfo.expr);
                 } else {
                     // If the uk table is too small or the fk table is too large, then use it as right table
                     reverse = true;
+                    joinProperty.isLeftUK = false;
                     joinExpr = OptExpression.create(newJoin, rightExprInfo.expr,
                             leftExprInfo.expr);
                 }
@@ -382,7 +382,7 @@ public abstract class JoinOrder {
                 if (allowFKAsRightTable(rightExprInfo, leftExprInfo)) {
                     // Use the fk table as the right table
                     reverse = true;
-                    newJoin.setFKRight(true);
+                    joinProperty.isLeftUK = true;
                     joinExpr = OptExpression.create(newJoin, rightExprInfo.expr,
                             leftExprInfo.expr);
                 } else {
@@ -417,6 +417,10 @@ public abstract class JoinOrder {
     }
 
     private boolean allowFKAsRightTable(ExpressionInfo ukExprInfo, ExpressionInfo fkExprInfo) {
+        SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+        if (!sessionVariable.isEnableUKFKJoinReorder()) {
+            return false;
+        }
         RowOutputInfo ukRowOutputInfo = ukExprInfo.expr.getRowOutputInfo();
         RowOutputInfo fkRowOutputInfo = fkExprInfo.expr.getRowOutputInfo();
 

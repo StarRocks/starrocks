@@ -53,7 +53,6 @@ public class LogicalJoinOperator extends LogicalOperator {
     private ScalarOperator originalOnPredicate;
 
     private int transformMask;
-    private boolean isFKRight = false;
 
     public LogicalJoinOperator(JoinOperator joinType, ScalarOperator onPredicate) {
         this(joinType, onPredicate, "", Operator.DEFAULT_LIMIT, null, false, onPredicate);
@@ -135,14 +134,6 @@ public class LogicalJoinOperator extends LogicalOperator {
 
     public int getTransformMask() {
         return transformMask;
-    }
-
-    public void setFKRight(boolean fkRight) {
-        this.isFKRight = fkRight;
-    }
-
-    public boolean isFKRight() {
-        return isFKRight;
     }
 
     public ColumnRefSet getRequiredChildInputColumns() {
@@ -265,7 +256,6 @@ public class LogicalJoinOperator extends LogicalOperator {
             builder.hasPushDownJoinOnClause = joinOperator.hasPushDownJoinOnClause;
             builder.hasDeriveIsNotNullPredicate = joinOperator.hasDeriveIsNotNullPredicate;
             builder.originalOnPredicate = joinOperator.originalOnPredicate;
-            builder.isFKRight = joinOperator.isFKRight;
             return this;
         }
 

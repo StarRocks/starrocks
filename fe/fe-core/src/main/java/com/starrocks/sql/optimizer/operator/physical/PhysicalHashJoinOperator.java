@@ -25,7 +25,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import java.util.Objects;
 
 public class PhysicalHashJoinOperator extends PhysicalJoinOperator {
-    private boolean isFKRight = false;
     public PhysicalHashJoinOperator(JoinOperator joinType,
                                     ScalarOperator onPredicate,
                                     String joinHint,
@@ -33,14 +32,6 @@ public class PhysicalHashJoinOperator extends PhysicalJoinOperator {
                                     ScalarOperator predicate,
                                     Projection projection) {
         super(OperatorType.PHYSICAL_HASH_JOIN, joinType, onPredicate, joinHint, limit, predicate, projection);
-    }
-
-    public void setFKRight(boolean fkRight) {
-        this.isFKRight = fkRight;
-    }
-
-    public boolean isFKRight() {
-        return isFKRight;
     }
 
     @Override

@@ -13,11 +13,14 @@
 // limitations under the License.
 package com.starrocks.sql.optimizer.operator;
 
+import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.sql.plan.ScalarOperatorToExpr;
 import org.apache.hadoop.shaded.com.google.common.collect.Maps;
 
 import java.util.Map;
@@ -90,7 +93,9 @@ public class UKFKConstraints {
         public final ForeignKeyConstraint fkConstraint;
         public final ColumnRefOperator ukColumnRef;
         public final ColumnRefOperator fkColumnRef;
-        public final boolean isLeftUK;
+        public boolean isLeftUK;
+        public Expr ukColumn;
+        public Expr fkColumn;
 
         public JoinProperty(BinaryPredicateOperator predicate,
                             UniqueConstraintWrapper ukConstraint,
@@ -103,6 +108,13 @@ public class UKFKConstraints {
             this.ukColumnRef = ukColumnRef;
             this.fkColumnRef = fkColumnRef;
             this.isLeftUK = isLeftUK;
+        }
+
+        public void buildExpr(ExecPlan context) {
+            ukColumn = ScalarOperatorToExpr.buildExecExpression(ukColumnRef,
+                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()));
+            fkColumn = ScalarOperatorToExpr.buildExecExpression(fkColumnRef,
+                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()));
         }
     }
 }

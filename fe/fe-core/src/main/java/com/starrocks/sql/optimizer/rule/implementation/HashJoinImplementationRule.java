@@ -55,7 +55,6 @@ public class HashJoinImplementationRule extends JoinImplementationRule {
                 joinOperator.getLimit(),
                 joinOperator.getPredicate(),
                 joinOperator.getProjection());
-        physicalHashJoin.setFKRight(joinOperator.isFKRight());
         OptExpression result = OptExpression.create(physicalHashJoin, input.getInputs());
         return Lists.newArrayList(result);
     }
