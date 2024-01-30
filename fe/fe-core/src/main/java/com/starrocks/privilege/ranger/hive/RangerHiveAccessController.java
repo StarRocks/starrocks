@@ -20,7 +20,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
-import com.starrocks.privilege.RangerAccessController;
+import com.starrocks.privilege.ranger.RangerAccessController;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.UserIdentity;
 
