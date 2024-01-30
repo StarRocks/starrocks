@@ -60,6 +60,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.IdGenerator;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.planner.AggregationNode;
@@ -1408,7 +1409,9 @@ public class PlanFragmentBuilder {
             }
 
             if (scanNode.getTableName().equalsIgnoreCase("load_tracking_logs")) {
-                scanNode.setFrontendIP(GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIp());
+                Pair<String, Integer> ipPort = GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort();
+                scanNode.setFrontendIP(ipPort.first);
+                scanNode.setFrontendPort(ipPort.second.intValue());
             }
 
             if (scanNode.getTableName().equalsIgnoreCase("fe_metrics")) {
