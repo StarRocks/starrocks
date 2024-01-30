@@ -1548,7 +1548,7 @@ Status SegmentIterator::_decode_dict_codes(ScanContext* ctx) {
         const FieldPtr& f = decode_schema.field(i);
         const ColumnId cid = f->id();
         if (!ctx->_is_dict_column[i] || ctx->_skip_dict_decode_indexes[i]) {
-            ctx->_dict_chunk->get_column_by_index(i)->swap_column(*ctx->_read_chunk->get_column_by_index(i));
+            ctx->_dict_chunk->get_column_by_index(i).swap(ctx->_read_chunk->get_column_by_index(i));
         } else {
             ColumnPtr& dict_codes = ctx->_read_chunk->get_column_by_index(i);
             ColumnPtr& dict_values = ctx->_dict_chunk->get_column_by_index(i);
