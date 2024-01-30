@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.Type;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -98,22 +99,24 @@ public class RewriteMultiDistinctRule extends TransformationRule {
             return true;
         }
 
-        // exist distinct function can be rewritten by multi distinct function
+        // all distinct one column function can be rewritten by multi distinct function
+        boolean flag = true;
         for (CallOperator distinctCall : distinctAggOperatorList) {
             String fnName = distinctCall.getFnName();
             List<ColumnRefOperator> distinctCols = distinctCall.getColumnRefs();
-
+            Type type = distinctCols.get(0).getType();
             if (distinctCols.size() == 1) {
-                if (FunctionSet.COUNT.equalsIgnoreCase(fnName)
-                        || FunctionSet.SUM.equalsIgnoreCase(fnName)
-                        || FunctionSet.AVG.equalsIgnoreCase(fnName)
-                        || (FunctionSet.ARRAY_AGG.equalsIgnoreCase(fnName)
-                        && !distinctCols.get(0).getType().isDecimalOfAnyVersion())) {
-                    return false;
-                }
+                continue;
+            }
+
+            if (type.isComplexType()
+                    || type.isJsonType()
+                    || (FunctionSet.ARRAY_AGG.equalsIgnoreCase(fnName) && type.isDecimalOfAnyVersion())) {
+                flag = false;
+                break;
             }
         }
-        return true;
+        return !flag;
     }
 
     private boolean isCTEMoreEfficient(OptExpression input, OptimizerContext context,
