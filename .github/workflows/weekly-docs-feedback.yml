@@ -1,7 +1,7 @@
 name: Reader feedback
-  # This workflow pulls reader feedback from PostHog
-  # and opens a GitHub issue with the last week of feedback.
-  # The issue will be labelled with `docs-feedback`
+   # This workflow pulls reader feedback from PostHog
+   # and opens a GitHub issue with the last week of feedback.
+   # The issue will be labelled with `docs-feedback`
 
 on:
   workflow_dispatch:
@@ -21,6 +21,7 @@ jobs:
     steps:
       - name: Run PostHog script
         run: |
+          set -eo pipefail # Ensure the script fails on any command error
           echo "## Feedback from readers" > feedback.md
           echo "Three sections: feedback, top working searches, and top failed searches." >> feedback.md
           echo "Please check off the feedback and failed searches as you fix them and" >> feedback.md
@@ -29,7 +30,7 @@ jobs:
           echo "You do not need to edit this issue with PR numbers, as everything with" >> feedback.md
           echo "the label will show in the GitHub project." >> feedback.md
           echo " " >> feedback.md
-          curl --silent \
+          curl --silent --fail \
             --header "Content-Type: application/json" \
             --data '{ "query": { "kind": "HogQLQuery", "query": "SELECT now() - INTERVAL 7 DAY as start_time, timestamp, properties.page, properties.text, properties.sentiment from events WHERE properties.sentiment IS NOT NULL AND timestamp > start_time ORDER BY properties.sentiment ASC"}}' \
             -H "Authorization: Bearer $POSTHOG_TOKEN" \
@@ -38,10 +39,11 @@ jobs:
 
       - name: Run Algolia scripts
         run: |
+          set -eo pipefail # Ensure the script fails on any command error
           echo " " >> feedback.md
           echo "## Algolia top successful searches" >> feedback.md
           echo " " >> feedback.md
-          curl --silent \
+          curl --silent --fail \
             -X GET \
             -H "X-Algolia-API-Key: $ALGOLIA_TOKEN" \
             -H "X-Algolia-Application-Id: ER08SJMRY1" \
@@ -50,7 +52,7 @@ jobs:
           echo " " >> feedback.md
           echo "## Algolia top failed searches" >> feedback.md
           echo " " >> feedback.md
-          curl --silent \
+          curl --silent --fail \
             -X GET \
             -H "X-Algolia-API-Key: $ALGOLIA_TOKEN" \
             -H "X-Algolia-Application-Id: ER08SJMRY1" \
