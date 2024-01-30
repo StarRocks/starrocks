@@ -47,15 +47,11 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.journal.JournalTask;
-import com.starrocks.mysql.privilege.Auth;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageType;
 import mockit.Expectations;
@@ -69,33 +65,6 @@ public class AccessTestUtil {
 
     public static SystemInfoService fetchSystemInfoService() {
         return new SystemInfoService();
-    }
-
-    public static Auth fetchAdminAccess() {
-        Auth auth = new Auth();
-        try {
-            new Expectations(auth) {
-                {
-                    auth.checkGlobalPriv((ConnectContext) any, (PrivPredicate) any);
-                    minTimes = 0;
-                    result = true;
-
-                    auth.checkDbPriv((ConnectContext) any, anyString, (PrivPredicate) any);
-                    minTimes = 0;
-                    result = true;
-
-                    auth.checkTblPriv((ConnectContext) any, anyString, anyString, (PrivPredicate) any);
-                    minTimes = 0;
-                    result = true;
-
-                    auth.setPassword((SetPassVar) any);
-                    minTimes = 0;
-                }
-            };
-        } catch (DdlException e) {
-            e.printStackTrace();
-        }
-        return auth;
     }
 
     public static GlobalStateMgr fetchAdminCatalog() {
@@ -120,26 +89,6 @@ public class AccessTestUtil {
         table.setBaseIndexId(baseIndex.getId());
         db.registerTableUnlocked(table);
         return globalStateMgr;
-    }
-
-    public static Auth fetchBlockAccess() {
-        Auth auth = new Auth();
-        new Expectations(auth) {
-            {
-                auth.checkGlobalPriv((ConnectContext) any, (PrivPredicate) any);
-                minTimes = 0;
-                result = false;
-
-                auth.checkDbPriv((ConnectContext) any, anyString, (PrivPredicate) any);
-                minTimes = 0;
-                result = false;
-
-                auth.checkTblPriv((ConnectContext) any, anyString, anyString, (PrivPredicate) any);
-                minTimes = 0;
-                result = false;
-            }
-        };
-        return auth;
     }
 
     public static OlapTable mockTable(String name) {
@@ -222,19 +171,10 @@ public class AccessTestUtil {
     public static GlobalStateMgr fetchBlockCatalog() {
         GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
 
-        Auth auth = fetchBlockAccess();
         Database db = mockDb("testDb");
 
         new Expectations(globalStateMgr) {
             {
-                globalStateMgr.getAuth();
-                minTimes = 0;
-                result = auth;
-
-                //globalStateMgr.changeCatalogDb((ConnectContext) any, anyString);
-                //minTimes = 0;
-                //result = new DdlException("failed");
-
                 globalStateMgr.getDb("testDb");
                 minTimes = 0;
                 result = db;

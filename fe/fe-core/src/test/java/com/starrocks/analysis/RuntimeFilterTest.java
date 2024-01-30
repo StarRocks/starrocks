@@ -112,7 +112,7 @@ public class RuntimeFilterTest {
                 "     preAggregation: on\n" +
                 "     Predicates: 16: k3 IN ('beijing', '')\n" +
                 "     partitionsRatio=1/3, tabletsRatio=3/3\n" +
-                "     tabletList=10010,10012,10014\n" +
+                "     tabletList=10008,10010,10012\n" +
                 "     actualRows=0, avgRowSize=3.0\n" +
                 "     cardinality: 1\n" +
                 "     probe runtime filters:\n" +

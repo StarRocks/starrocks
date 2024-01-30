@@ -23,7 +23,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
-import com.starrocks.mysql.privilege.Password;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -664,32 +663,12 @@ public class AuthenticationMgr {
         isLoaded = loaded;
     }
 
-    /**
-     * these public interfaces are for AuthUpgrader to upgrade from 2.x
-     */
-    public void upgradeUserUnlocked(UserIdentity userIdentity, Password password) throws AuthenticationException {
-        AuthPlugin plugin = password.getAuthPlugin();
-        if (plugin == null) {
-            plugin = AuthPlugin.MYSQL_NATIVE_PASSWORD;
-        }
-        AuthenticationProvider provider = AuthenticationProviderFactory.create(plugin.toString());
-        UserAuthenticationInfo info = provider.upgradedFromPassword(userIdentity, password);
-        userToAuthenticationInfo.put(userIdentity, info);
-        LOG.info("upgrade user {}", userIdentity);
-    }
-
     public UserAuthenticationInfo getUserAuthenticationInfoByUserIdentity(UserIdentity userIdentity) {
         return userToAuthenticationInfo.get(userIdentity);
     }
 
     public Map<UserIdentity, UserAuthenticationInfo> getUserToAuthenticationInfo() {
         return userToAuthenticationInfo;
-    }
-
-    public void upgradeUserProperty(String userName, long maxConn) {
-        UserProperty userProperty = new UserProperty();
-        userProperty.setMaxConn(maxConn);
-        userNameToProperty.put(userName, new UserProperty());
     }
 
     private Class<?> authClazz = null;
