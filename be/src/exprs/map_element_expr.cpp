@@ -78,6 +78,12 @@ public:
             auto map_idx = map_is_const ? 0 : i;
             auto key_idx = key_is_const ? 0 : i;
             bool has_equal = false;
+            bool has_null = false;
+            // For trino, null row's any element is still null
+            // We only check has_null when set _check_is_out_of_bounds = true
+            if (_check_is_out_of_bounds && map_nulls != nullptr && map_nulls->get_data()[map_idx]) {
+                has_null = true;
+            }
 
             // map is not null and not empty
             if ((map_nulls == nullptr || !map_nulls->get_data()[map_idx]) && offsets[map_idx + 1] > offsets[map_idx]) {
@@ -101,7 +107,8 @@ public:
                 }
             }
             if (!has_equal) {
-                if (_check_is_out_of_bounds) {
+                if (_check_is_out_of_bounds && !has_null) {
+                    // row is not null, and specific key not found, return error
                     return Status::InvalidArgument(
                             strings::Substitute("Key not present in map: $0", key_column->debug_item(key_idx)));
                 }
