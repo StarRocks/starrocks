@@ -36,6 +36,11 @@ package com.starrocks.common.util;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+<<<<<<< HEAD
+=======
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.TimestampArithmeticExpr;
+>>>>>>> 7c55d6f5ab ([BugFix] Fix bug dynamic partition date type does not support hour (#40256))
 import com.starrocks.analysis.TimestampArithmeticExpr.TimeUnit;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DynamicPartitionProperty;
@@ -55,6 +60,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.FeNameFormat;
+import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -68,6 +74,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAdjusters;
 import java.util.Calendar;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
 
@@ -243,6 +250,16 @@ public class DynamicPartitionUtil {
             }
             if (Strings.isNullOrEmpty(timeZone)) {
                 properties.put(DynamicPartitionProperty.TIME_ZONE, TimeUtils.getSystemTimeZone().getID());
+            }
+
+            if (timeUnit.equalsIgnoreCase(TimestampArithmeticExpr.TimeUnit.HOUR.toString())) {
+                List<Column> partitionColumns = partitionInfo.getPartitionColumns();
+                for (Column partitionColumn : partitionColumns) {
+                    if (partitionColumn.getPrimitiveType() == PrimitiveType.DATE) {
+                        throw new SemanticException("Date type partition does not support dynamic partitioning" +
+                                " granularity of hour");
+                    }
+                }
             }
 
         }

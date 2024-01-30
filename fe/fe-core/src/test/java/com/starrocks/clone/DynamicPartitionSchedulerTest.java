@@ -16,6 +16,11 @@ package com.starrocks.clone;
 
 import com.google.common.collect.Range;
 import com.starrocks.catalog.Database;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.DynamicPartitionProperty;
+>>>>>>> 7c55d6f5ab ([BugFix] Fix bug dynamic partition date type does not support hour (#40256))
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.Config;
@@ -170,6 +175,53 @@ public class DynamicPartitionSchedulerTest {
         Assert.assertTrue(rangePartitionMap.containsKey("p20230330"));
         Assert.assertTrue(rangePartitionMap.containsKey("p99991230"));
 
+    }
+
+    @Test
+    public void testPartitionColumnDateUseDynamicHour() throws Exception {
+        new MockUp<LocalDateTime>() {
+            @Mock
+            public LocalDateTime now() {
+                return  LocalDateTime.of(2023, 3, 30, 1, 1, 1);
+            }
+        };
+
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE `test_hour_partition2` (\n" +
+                        "  `event_day` date NULL COMMENT \"\",\n" +
+                        "  `site_id` int(11) NULL DEFAULT \"10\" COMMENT \"\",\n" +
+                        "  `city_code` varchar(100) NULL COMMENT \"\",\n" +
+                        "  `user_name` varchar(32) NULL DEFAULT \"\" COMMENT \"\",\n" +
+                        "  `pv` bigint(20) NULL DEFAULT \"0\" COMMENT \"\"\n" +
+                        ") ENGINE=OLAP \n" +
+                        "DUPLICATE KEY(`event_day`, `site_id`, `city_code`, `user_name`)\n" +
+                        "PARTITION BY RANGE(`event_day`)\n" +
+                        "()\n" +
+                        "DISTRIBUTED BY HASH(`event_day`, `site_id`) BUCKETS 32 \n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"dynamic_partition.enable\" = \"true\",\n" +
+                        "\"dynamic_partition.time_unit\" = \"DAY\",\n" +
+                        "\"dynamic_partition.time_zone\" = \"Asia/Shanghai\",\n" +
+                        "\"dynamic_partition.start\" = \"-1\",\n" +
+                        "\"dynamic_partition.end\" = \"10\",\n" +
+                        "\"dynamic_partition.prefix\" = \"p\",\n" +
+                        "\"dynamic_partition.buckets\" = \"3\",\n" +
+                        "\"dynamic_partition.history_partition_num\" = \"0\",\n" +
+                        "\"in_memory\" = \"false\",\n" +
+                        "\"storage_format\" = \"DEFAULT\",\n" +
+                        "\"enable_persistent_index\" = \"false\",\n" +
+                        "\"compression\" = \"LZ4\"\n" +
+                        ");");
+
+        DynamicPartitionScheduler dynamicPartitionScheduler = GlobalStateMgr.getCurrentState()
+                .getDynamicPartitionScheduler();
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        OlapTable tbl = (OlapTable) db.getTable("test_hour_partition2");
+        DynamicPartitionProperty dynamicPartitionProperty = tbl.getTableProperty().getDynamicPartitionProperty();
+        dynamicPartitionProperty.setTimeUnit("HOUR");
+        boolean result = dynamicPartitionScheduler.executeDynamicPartitionForTable(db.getId(), tbl.getId());
+        Assert.assertFalse(result);
     }
 
 }
