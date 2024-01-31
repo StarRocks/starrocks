@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <any>
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
@@ -24,6 +25,7 @@
 #include "common/statusor.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "util/blocking_priority_queue.hpp"
+#include "util/race_detect.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::workgroup {
@@ -32,6 +34,8 @@ struct ScanTaskGroup {
     int64_t runtime_ns = 0;
     int sub_queue_level = 0;
 };
+
+#define TO_NEXT_STAGE(yield_point) yield_point++;
 
 struct YieldContext {
     YieldContext() = default;
@@ -44,11 +48,19 @@ struct YieldContext {
     YieldContext& operator=(YieldContext&&) = default;
 
     bool is_finished() const { return yield_point >= total_yield_point_cnt; }
-    void set_finished() { yield_point = total_yield_point_cnt = 0; }
+    void set_finished() {
+        yield_point = total_yield_point_cnt = 0;
+        task_context_data.reset();
+    }
 
+    std::any task_context_data;
     size_t yield_point{};
     size_t total_yield_point_cnt{};
     const workgroup::WorkGroup* wg = nullptr;
+    // used to record the runtime information of a single call in order to decide whether to trigger yield.
+    // It needs to be reset every time when the task is executed.
+    int64_t time_spent_ns = 0;
+    bool need_yield = false;
 };
 
 struct ScanTask {

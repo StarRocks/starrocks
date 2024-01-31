@@ -16,6 +16,8 @@
 
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
+#include "common/status.h"
 #include "exec/exec_node.h"
 #include "exec/hdfs_scanner.h"
 #include "exprs/expr.h"
@@ -23,6 +25,7 @@
 #include "exprs/runtime_filter_bank.h"
 #include "formats/parquet/encoding_plain.h"
 #include "formats/parquet/metadata.h"
+#include "formats/parquet/utils.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
@@ -314,8 +317,14 @@ Status FileReader::_read_min_max_chunk(const tparquet::RowGroup& row_group, cons
             } else {
                 // is partition column
                 auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(ctx.partition_values[col_idx]);
-                (*min_chunk)->columns()[i]->append(*const_column->data_column(), 0, 1);
-                (*max_chunk)->columns()[i]->append(*const_column->data_column(), 0, 1);
+                ColumnPtr data_column = const_column->data_column();
+                if (data_column->is_nullable()) {
+                    (*min_chunk)->columns()[i]->append_nulls(1);
+                    (*max_chunk)->columns()[i]->append_nulls(1);
+                } else {
+                    (*min_chunk)->columns()[i]->append(*data_column, 0, 1);
+                    (*max_chunk)->columns()[i]->append(*data_column, 0, 1);
+                }
             }
         } else if (!column_meta->__isset.statistics) {
             // statistics not exist in parquet file
@@ -480,16 +489,13 @@ void FileReader::_prepare_read_columns() {
 
 bool FileReader::_select_row_group(const tparquet::RowGroup& row_group) {
     size_t row_group_start = _get_row_group_start_offset(row_group);
+    const auto* scan_range = _scanner_ctx->scan_range;
+    size_t scan_start = scan_range->offset;
+    size_t scan_end = scan_range->length + scan_start;
 
-    for (auto* scan_range : _scanner_ctx->scan_ranges) {
-        size_t scan_start = scan_range->offset;
-        size_t scan_end = scan_range->length + scan_start;
-
-        if (row_group_start >= scan_start && row_group_start < scan_end) {
-            return true;
-        }
+    if (row_group_start >= scan_start && row_group_start < scan_end) {
+        return true;
     }
-
     return false;
 }
 
@@ -507,6 +513,8 @@ Status FileReader::_init_group_readers() {
     _group_reader_param.file_metadata = _file_metadata;
     _group_reader_param.case_sensitive = fd_scanner_ctx.case_sensitive;
     _group_reader_param.lazy_column_coalesce_counter = fd_scanner_ctx.lazy_column_coalesce_counter;
+    // for pageIndex
+    _group_reader_param.min_max_conjunct_ctxs = fd_scanner_ctx.min_max_conjunct_ctxs;
 
     int64_t row_group_first_row = 0;
     // select and create row group readers.
@@ -520,7 +528,7 @@ Status FileReader::_init_group_readers() {
             StatusOr<bool> st = _filter_group(_file_metadata->t_metadata().row_groups[i]);
             if (!st.ok()) return st.status();
             if (st.value()) {
-                LOG(INFO) << "row group " << i << " of file has been filtered by min/max conjunct";
+                DLOG(INFO) << "row group " << i << " of file has been filtered by min/max conjunct";
                 continue;
             }
 
@@ -546,6 +554,16 @@ Status FileReader::_init_group_readers() {
         RETURN_IF_ERROR(r->init());
     }
 
+    // collect pageIndex io ranges.
+    if (config::parquet_coalesce_read_enable && _sb_stream != nullptr && config::parquet_page_index_enable) {
+        std::vector<io::SharedBufferedInputStream::IORange> ranges;
+        int64_t end_offset = 0;
+        for (auto& r : _row_group_readers) {
+            r->collect_io_ranges(&ranges, &end_offset, ColumnIOType::PAGE_INDEX);
+        }
+        RETURN_IF_ERROR(_sb_stream->set_io_ranges(ranges));
+    }
+
     if (!_row_group_readers.empty()) {
         // prepare first row group
         RETURN_IF_ERROR(_prepare_cur_row_group());
@@ -556,17 +574,17 @@ Status FileReader::_init_group_readers() {
 
 Status FileReader::_prepare_cur_row_group() {
     auto& r = _row_group_readers[_cur_row_group_idx];
+    // prepare row group
+    RETURN_IF_ERROR(r->prepare());
     // if coalesce read enabled, we have to
     // 0. clear last group memory
     // 1. allocate shared buffered input stream and
     // 2. collect io ranges of every row group reader.
     // 3. set io ranges to the stream.
     if (config::parquet_coalesce_read_enable && _sb_stream != nullptr) {
-        // clear last group memory;
-        _sb_stream->release();
         std::vector<io::SharedBufferedInputStream::IORange> ranges;
         int64_t end_offset = 0;
-        r->collect_io_ranges(&ranges, &end_offset);
+        r->collect_io_ranges(&ranges, &end_offset, ColumnIOType::PAGES);
         int32_t counter = _scanner_ctx->lazy_column_coalesce_counter->load(std::memory_order_relaxed);
         if (counter >= 0 || !config::io_coalesce_adaptive_lazy_active) {
             _scanner_ctx->stats->group_active_lazy_coalesce_together += 1;
@@ -578,8 +596,7 @@ Status FileReader::_prepare_cur_row_group() {
         _group_reader_param.sb_stream = _sb_stream;
     }
 
-    // prepare row group
-    return r->prepare();
+    return Status::OK();
 }
 
 Status FileReader::get_next(ChunkPtr* chunk) {

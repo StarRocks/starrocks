@@ -63,18 +63,30 @@ public:
         return !_status.ok();
     }
 
+    Status error() const {
+        std::lock_guard l(_mtx);
+        return _status;
+    }
+
     void update_status(const Status& st) {
         std::lock_guard l(_mtx);
         _status.update(st);
     }
 
+    bool timeout_exceeded() const { return butil::gettimeofday_ms() >= _timeout_deadline_ms; }
+
+    int64_t timeout_ms() const;
+
 private:
+    const static int64_t kDefaultTimeoutMs = 24L * 60 * 60 * 1000; // 1 day
+
     CompactionScheduler* _scheduler;
     mutable StackTraceMutex<bthread::Mutex> _mtx;
     const lake::CompactRequest* _request;
     lake::CompactResponse* _response;
     ::google::protobuf::Closure* _done;
     Status _status;
+    int64_t _timeout_deadline_ms;
     std::vector<std::unique_ptr<CompactionTaskContext>> _contexts;
 };
 
@@ -120,8 +132,8 @@ class CompactionScheduler {
     //  - Once Status::MemoryLimitExceeded is encountered, reduce the maximum concurrency by one until the
     //    concurrency is reduced to 1
     //  - If no Status::MemoryLimitExceeded is encountered for "kConcurrencyRestoreTimes" consecutive time,
-    //    increase the maximum concurrency by one until config::compact_threads is reached or
-    //    Status::MemoryLimitExceeded is encountered again.
+    //    increase the maximum concurrency by one until config::compact_threads is reached
+    //    or Status::MemoryLimitExceeded is encountered again.
     class Limiter {
     public:
         constexpr const static int16_t kConcurrencyRestoreTimes = 2;
@@ -140,15 +152,65 @@ class CompactionScheduler {
 
         int16_t concurrency() const;
 
+        void adapt_to_task_queue_size(int16_t new_val);
+
     private:
         mutable std::mutex _mtx;
-        const int16_t _total;
+        int16_t _total;
         // The number of tokens can be assigned to compaction tasks.
         int64_t _free;
         // The number of reserved tokens. reserved tokens cannot be assigned to compaction task.
         int16_t _reserved;
         // The number of tasks that didn't encounter the Status::MemoryLimitExceeded error.
         int64_t _success;
+    };
+
+    using CompactionContextPtr = std::unique_ptr<CompactionTaskContext>;
+
+    // Using unbounded queue for simplicity and rely on the FE to limit the number of compaction tasks.
+    //
+    // To developers: if you change this queue to bounded queue, normally you should replace std::mutex
+    // with bthread::Mutex and replace std::condition_variable with bthread::ConditionVariable:
+    // ```
+    // using TaskQueue = BlockingQueue<CompactionStatePtr,
+    //                                 std::deque<CompactionStatePtr>,
+    //                                 bthread::Mutex,
+    //                                 bthread::ConditionVariable>;
+    // ```
+    using TaskQueue = UnboundedBlockingQueue<CompactionContextPtr>;
+
+    class WrapTaskQueues {
+    public:
+        explicit WrapTaskQueues(int max_concurrency) : _target_size(max_concurrency) {
+            _task_queues_mutex.lock();
+            resize(max_concurrency);
+            _task_queues_mutex.unlock();
+        }
+
+        int task_queue_size();
+
+        int task_queue_safe_size();
+
+        void set_target_size(int32_t target_size);
+
+        int32_t target_size();
+
+        void put(int idx, std::unique_ptr<CompactionTaskContext>& context);
+
+        bool try_get(int idx, std::unique_ptr<CompactionTaskContext>* context);
+
+        void resize(int new_val);
+
+        bool modifying();
+
+        void steal_task(int start_index, std::unique_ptr<CompactionTaskContext>* context);
+
+        void resize_if_needed(Limiter& limiter);
+
+    private:
+        std::mutex _task_queues_mutex;
+        std::vector<std::shared_ptr<TaskQueue>> _internal_task_queues;
+        int16_t _target_size;
     };
 
 public:
@@ -172,22 +234,11 @@ public:
 
     int16_t concurrency() const { return _limiter.concurrency(); }
 
+    // update at runtime
+    void update_compact_threads(int32_t new_val);
+
 private:
     friend class CompactionTaskCallback;
-
-    using CompactionContextPtr = std::unique_ptr<CompactionTaskContext>;
-
-    // Using unbounded queue for simplicity and rely on the FE to limit the number of compaction tasks.
-    //
-    // To developers: if you change this queue to bounded queue, normally you should replace std::mutex
-    // with bthread::Mutex and replace std::condition_variable with bthread::ConditionVariable:
-    // ```
-    // using TaskQueue = BlockingQueue<CompactionStatePtr,
-    //                                 std::deque<CompactionStatePtr>,
-    //                                 bthread::Mutex,
-    //                                 bthread::ConditionVariable>;
-    // ```
-    using TaskQueue = UnboundedBlockingQueue<CompactionContextPtr>;
 
     void remove_states(const std::vector<std::unique_ptr<CompactionTaskContext>>& contexes);
 
@@ -195,20 +246,17 @@ private:
 
     Status do_compaction(std::unique_ptr<CompactionTaskContext> context);
 
-    void steal_task(int start_index, std::unique_ptr<CompactionTaskContext>* context);
+    int choose_task_queue_by_txn_id(int64_t txn_id) { return txn_id % _task_queues.task_queue_safe_size(); }
 
-    int choose_task_queue_by_txn_id(int64_t txn_id) const { return txn_id % _task_queue_count; }
-
-    bool txn_log_exists(int64_t tablet_id, int64_t txn_id) const;
+    bool reschedule_task_if_needed(int id);
 
     TabletManager* _tablet_mgr;
     Limiter _limiter;
     StackTraceMutex<bthread::Mutex> _contexts_lock;
     butil::LinkedList<CompactionTaskContext> _contexts;
-    int _task_queue_count;
-    TaskQueue* _task_queues;
     std::unique_ptr<ThreadPool> _threads;
     std::atomic<bool> _stopped{false};
+    WrapTaskQueues _task_queues;
 };
 
 inline bool CompactionScheduler::Limiter::acquire() {
@@ -246,6 +294,95 @@ inline void CompactionScheduler::Limiter::memory_limit_exceeded() {
 inline int16_t CompactionScheduler::Limiter::concurrency() const {
     std::lock_guard l(_mtx);
     return _total - _reserved;
+}
+
+inline void CompactionScheduler::Limiter::adapt_to_task_queue_size(int16_t new_val) {
+    std::lock_guard l(_mtx);
+    if (new_val > _total) {
+        auto diff = new_val - _total;
+        _free += diff;
+        _total += diff;
+    } else {
+        if (_reserved != 0) {
+            double percentage = static_cast<double>(_total) / new_val;
+            _reserved = static_cast<int16_t>(static_cast<double>(_reserved) * percentage);
+            _total = new_val;
+            _free = _total - _reserved;
+        } else {
+            _total = new_val;
+            _free = _total;
+        }
+    }
+    LOG(INFO) << "Update Limiter's _total value to " << _total << ", _free value to " << _free
+              << ", and _reserved value to " << _reserved;
+}
+
+inline int CompactionScheduler::WrapTaskQueues::task_queue_size() {
+    std::lock_guard<std::mutex> lock(_task_queues_mutex);
+    return _internal_task_queues.size();
+}
+
+inline int CompactionScheduler::WrapTaskQueues::task_queue_safe_size() {
+    std::lock_guard<std::mutex> lock(_task_queues_mutex);
+    if (_target_size < _internal_task_queues.size()) {
+        // Shrinking, It can prevent tasks from being placed on queues with IDs greater than it.
+        return _target_size;
+    } else {
+        // Expanding or normal state, if _internal_task_queues is expanding, it can prevent tasks
+        // from being placed to the areas that have not expanded yet.
+        return _internal_task_queues.size();
+    }
+}
+
+inline void CompactionScheduler::WrapTaskQueues::set_target_size(int32_t target_size) {
+    std::lock_guard<std::mutex> lock(_task_queues_mutex);
+    _target_size = target_size;
+}
+
+inline int32_t CompactionScheduler::WrapTaskQueues::target_size() {
+    std::lock_guard<std::mutex> lock(_task_queues_mutex);
+    return _target_size;
+}
+
+inline void CompactionScheduler::WrapTaskQueues::put(int idx, std::unique_ptr<CompactionTaskContext>& context) {
+    std::lock_guard<std::mutex> lock(_task_queues_mutex);
+    _internal_task_queues[idx]->put(std::move(context));
+}
+
+inline bool CompactionScheduler::WrapTaskQueues::try_get(int idx, std::unique_ptr<CompactionTaskContext>* context) {
+    std::lock_guard<std::mutex> lock(_task_queues_mutex);
+    return _internal_task_queues[idx]->try_get(context);
+}
+
+inline void CompactionScheduler::WrapTaskQueues::resize(int new_val) {
+    // Require external lock holding
+    auto old_val = _internal_task_queues.size();
+    if (old_val < new_val) {
+        // Memory needs to be allocated
+        for (auto i = old_val; i < new_val; i++) {
+            _internal_task_queues.push_back(std::make_shared<TaskQueue>());
+        }
+    } else if (old_val > new_val) {
+        // There is no need to clean up the memory, shared_ptr will manage its memory
+        _internal_task_queues.resize(new_val);
+    }
+}
+
+inline bool CompactionScheduler::WrapTaskQueues::modifying() {
+    std::lock_guard<std::mutex> lock(_task_queues_mutex);
+    return !(_internal_task_queues.size() == _target_size);
+}
+
+inline void CompactionScheduler::WrapTaskQueues::steal_task(int start_index,
+                                                            std::unique_ptr<CompactionTaskContext>* context) {
+    std::lock_guard<std::mutex> lock(_task_queues_mutex);
+    auto queue_count = _internal_task_queues.size();
+    for (int i = 0; i < queue_count; i++) {
+        if (_internal_task_queues[(start_index + i) % queue_count]->try_get(context)) {
+            return;
+        }
+    }
+    DCHECK(*context == nullptr);
 }
 
 } // namespace starrocks::lake

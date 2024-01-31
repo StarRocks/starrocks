@@ -31,7 +31,6 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PartitionExprAnalyzer;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.SqlParser;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -42,8 +41,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-
-import static java.util.stream.Collectors.toList;
 
 /**
  * ExprRangePartitionInfo is an enhanced version of ExpressionRangePartitionInfo
@@ -113,12 +110,12 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
             }
 
             try {
+                // The current expression partition only supports 1 column
+                slotRef.setType(sourcePartitionTypes.get(0));
                 PartitionExprAnalyzer.analyzePartitionExpr(expr, slotRef);
-            } catch (SemanticException ex) {
+            } catch (Throwable ex) {
                 LOG.warn("Failed to analyze partition expr: {}", expr.toSql(), ex);
             }
-            // The current expression partition only supports 1 column
-            slotRef.setType(sourcePartitionTypes.get(0));
         }
         serializedPartitionExprs = null;
     }
@@ -158,7 +155,15 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
         if (!automaticPartition) {
             sb.append("RANGE(");
         }
-        sb.append(Joiner.on(", ").join(partitionExprs.stream().map(Expr::toSql).collect(toList())));
+        List<String> partitionExprDesc = Lists.newArrayList();
+        for (Expr partitionExpr : partitionExprs) {
+            if (partitionExpr instanceof CastExpr && isTimestampFunction(partitionExpr)) {
+                partitionExprDesc.add(partitionExpr.getChild(0).toSql());
+            } else {
+                partitionExprDesc.add(partitionExpr.toSql());
+            }
+        }
+        sb.append(Joiner.on(", ").join(partitionExprDesc));
         if (!automaticPartition) {
             sb.append(")\n(");
             // sort range
@@ -202,6 +207,34 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
             sb.append(")");
         }
         return sb.toString();
+    }
+
+    public static boolean isTimestampFunction(Expr partitionExpr) {
+        if (partitionExpr instanceof CastExpr) {
+            CastExpr castExpr = (CastExpr) partitionExpr;
+            if (!castExpr.getChildren().isEmpty()) {
+                Expr subExpr = castExpr.getChild(0);
+                if (subExpr instanceof FunctionCallExpr) {
+                    FunctionCallExpr functionCallExpr = (FunctionCallExpr) subExpr;
+                    String functionName = functionCallExpr.getFnName().getFunction();
+                    return FunctionSet.FROM_UNIXTIME.equals(functionName)
+                            || FunctionSet.FROM_UNIXTIME_MS.equals(functionName);
+                }
+            }
+        }
+        return false;
+    }
+
+    public static boolean supportedDynamicPartition(Expr expr) {
+        if (isTimestampFunction(expr)) {
+            return true;
+        }
+        if (expr instanceof FunctionCallExpr) {
+            FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
+            String functionName = functionCallExpr.getFnName().getFunction();
+            return FunctionSet.STR2DATE.equals(functionName);
+        }
+        return false;
     }
 
     public List<Expr> getPartitionExprs() {

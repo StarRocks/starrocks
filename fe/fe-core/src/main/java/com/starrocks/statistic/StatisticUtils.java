@@ -63,6 +63,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.StringJoiner;
@@ -73,6 +74,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
+import static com.starrocks.statistic.StatsConstants.AnalyzeType.SAMPLE;
 
 public class StatisticUtils {
     private static final Logger LOG = LogManager.getLogger(StatisticUtils.class);
@@ -116,7 +118,7 @@ public class StatisticUtils {
             loadRows = ((StreamLoadTxnCommitAttachment) attachment).getNumRowsNormal();
         }
         if (loadRows != null && loadRows > Config.statistic_sample_collect_rows) {
-            return StatsConstants.AnalyzeType.SAMPLE;
+            return SAMPLE;
         }
         return StatsConstants.AnalyzeType.FULL;
     }
@@ -155,15 +157,19 @@ public class StatisticUtils {
         }
 
         StatsConstants.AnalyzeType analyzeType = parseAnalyzeType(txnState, table);
+        Map<String, String> properties = Maps.newHashMap();
+        if (SAMPLE == analyzeType) {
+            properties = StatsConstants.buildInitStatsProp();
+        }
         AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
                 db.getId(), table.getId(), null, analyzeType,
-                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.now());
+                StatsConstants.ScheduleType.ONCE, properties, LocalDateTime.now());
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
-        GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
 
         Future<?> future;
         try {
-            future = GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeTaskThreadPool()
+            future = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAnalyzeTaskThreadPool()
                     .submit(() -> {
                         StatisticExecutor statisticExecutor = new StatisticExecutor();
                         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
@@ -259,6 +265,9 @@ public class StatisticUtils {
                     .max(Long::compareTo).orElse(0L);
             return LocalDateTime.ofInstant(Instant.ofEpochMilli(maxTime), Clock.systemDefaultZone().getZone());
         } else if (table.isHiveTable()) {
+            // for external table, we get last modified time from other system, there may be a time inconsistency
+            // between the two systems, so we add 60 seconds to make sure table update time is later than
+            // statistics update time
             HiveTable hiveTable = (HiveTable) table;
             List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
                     hiveTable.getCatalogName(), hiveTable.getDbName(), hiveTable.getTableName());
@@ -267,7 +276,7 @@ public class StatisticUtils {
             long lastModifiedTime = partitions.stream().map(PartitionInfo::getModifiedTime).max(Long::compareTo).
                     orElse(0L);
             if (lastModifiedTime != 0L) {
-                return LocalDateTime.ofInstant(Instant.ofEpochSecond(lastModifiedTime),
+                return LocalDateTime.ofInstant(Instant.ofEpochSecond(lastModifiedTime).plusSeconds(60),
                         Clock.systemDefaultZone().getZone());
             } else {
                 return null;
@@ -275,8 +284,8 @@ public class StatisticUtils {
         } else if (table.isIcebergTable()) {
             IcebergTable icebergTable = (IcebergTable) table;
             Optional<Snapshot> snapshot = icebergTable.getSnapshot();
-            return snapshot.map(value -> LocalDateTime.ofInstant(Instant.ofEpochMilli(value.timestampMillis()),
-                    Clock.systemDefaultZone().getZone())).orElse(null);
+            return snapshot.map(value -> LocalDateTime.ofInstant(Instant.ofEpochMilli(value.timestampMillis()).
+                            plusSeconds(60), Clock.systemDefaultZone().getZone())).orElse(null);
         } else {
             return null;
         }
@@ -460,20 +469,20 @@ public class StatisticUtils {
     }
 
     public static void dropStatisticsAfterDropTable(Table table) {
-        GlobalStateMgr.getCurrentAnalyzeMgr().dropExternalAnalyzeStatus(table.getUUID());
-        GlobalStateMgr.getCurrentAnalyzeMgr().dropExternalBasicStatsData(table.getUUID());
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropExternalAnalyzeStatus(table.getUUID());
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropExternalBasicStatsData(table.getUUID());
 
         if (table.isHiveTable() || table.isHudiTable()) {
             HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
-            GlobalStateMgr.getCurrentAnalyzeMgr().removeExternalBasicStatsMeta(hiveMetaStoreTable.getCatalogName(),
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().removeExternalBasicStatsMeta(hiveMetaStoreTable.getCatalogName(),
                     hiveMetaStoreTable.getDbName(), hiveMetaStoreTable.getTableName());
-            GlobalStateMgr.getCurrentAnalyzeMgr().dropAnalyzeJob(hiveMetaStoreTable.getCatalogName(),
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropAnalyzeJob(hiveMetaStoreTable.getCatalogName(),
                     hiveMetaStoreTable.getDbName(), hiveMetaStoreTable.getTableName());
         } else if (table.isIcebergTable()) {
             IcebergTable icebergTable = (IcebergTable) table;
-            GlobalStateMgr.getCurrentAnalyzeMgr().removeExternalBasicStatsMeta(icebergTable.getCatalogName(),
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().removeExternalBasicStatsMeta(icebergTable.getCatalogName(),
                     icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName());
-            GlobalStateMgr.getCurrentAnalyzeMgr().dropAnalyzeJob(icebergTable.getCatalogName(),
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropAnalyzeJob(icebergTable.getCatalogName(),
                     icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName());
         } else {
             LOG.warn("drop statistics after drop table, table type is not supported, table type: {}",
@@ -481,6 +490,6 @@ public class StatisticUtils {
         }
 
         List<String> columns = table.getBaseSchema().stream().map(Column::getName).collect(Collectors.toList());
-        GlobalStateMgr.getCurrentStatisticStorage().expireConnectorTableColumnStatistics(table, columns);
+        GlobalStateMgr.getCurrentState().getStatisticStorage().expireConnectorTableColumnStatistics(table, columns);
     }
 }

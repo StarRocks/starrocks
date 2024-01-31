@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
+import com.starrocks.common.UserException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.load.pipe.PipeFileRecord;
 import com.starrocks.load.pipe.PipeId;
@@ -26,6 +27,7 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TResultBatch;
 import mockit.Expectations;
 import mockit.Mock;
@@ -196,7 +198,7 @@ public class FileListRepoTest {
     }
 
     @Test
-    public void testCreator() throws RuntimeException {
+    public void testCreator() throws RuntimeException, UserException {
         mockExecutor();
         new MockUp<RepoCreator>() {
             @Mock
@@ -219,13 +221,30 @@ public class FileListRepoTest {
         Assert.assertFalse(creator.isTableExists());
         Assert.assertFalse(creator.isTableCorrected());
 
-        // succeed
-        // failed for the first time
+        // create with 1 replica
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public int getTotalBackendNumber() {
+                return 1;
+            }
+        };
         new MockUp<RepoExecutor>() {
             @Mock
             public void executeDDL(String sql) {
             }
         };
+        creator.run();
+        Assert.assertTrue(creator.isTableExists());
+        Assert.assertFalse(creator.isTableCorrected());
+
+        // be corrected to 3 replicas
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public int getTotalBackendNumber() {
+                return 3;
+            }
+        };
+
         creator.run();
         Assert.assertTrue(creator.isDatabaseExists());
         Assert.assertTrue(creator.isTableExists());

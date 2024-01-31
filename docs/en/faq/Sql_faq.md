@@ -2,7 +2,7 @@
 displayed_sidebar: "English"
 ---
 
-# SQL
+# SQL query
 
 This topic provides answers to some frequently asked questions about SQL.
 
@@ -142,7 +142,7 @@ To improve efficiency, add the `-A` parameter when you connect to MySQL's client
 
 ## How to reduce the disk space occupied by the BE log and the FE log?
 
-Adjust the log level and corresponding parameters. For more information, see [Parameter Configuration](../administration/Configuration.md).
+Adjust the log level and corresponding parameters. For more information, see [Parameter Configuration](../administration/BE_configuration.md).
 
 ## This error "table *** is colocate table, cannot change replicationNum" occurs when I modify the replication number
 

@@ -21,9 +21,9 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.lake.StarMgrMetaSyncer;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -74,7 +74,7 @@ public class SyncCloudTableMetaAction extends RestBaseAction {
                     "both database and table should be provided.");
         }
 
-        StarMgrMetaSyncer.syncTableMeta(dbName, tableName, force);
+        GlobalStateMgr.getCurrentState().getStarMgrMetaSyncer().syncTableMeta(dbName, tableName, force);
         response.appendContent("OK");
         sendResult(request, response);
     }

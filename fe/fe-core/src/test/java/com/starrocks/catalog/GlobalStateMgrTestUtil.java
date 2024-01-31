@@ -86,6 +86,7 @@ public class GlobalStateMgrTestUtil {
     public static String testTxnLable6 = "testTxnLable6";
     public static String testTxnLable7 = "testTxnLable7";
     public static String testTxnLable8 = "testTxnLable8";
+    public static String testTxnLable9 = "testTxnLable9";
     public static String testEsTable1 = "partitionedEsTable1";
     public static long testEsTableId1 = 14;
 
@@ -96,15 +97,15 @@ public class GlobalStateMgrTestUtil {
         GlobalStateMgr globalStateMgr = constructor.newInstance();
         globalStateMgr.setEditLog(new EditLog(new ArrayBlockingQueue<>(100)));
         FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
-        GlobalStateMgr.getCurrentSystemInfo().clear();
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().clear();
         globalStateMgr.initDefaultCluster();
 
         Backend backend1 = createBackend(testBackendId1, "host1", 123, 124, 125);
         Backend backend2 = createBackend(testBackendId2, "host2", 123, 124, 125);
         Backend backend3 = createBackend(testBackendId3, "host3", 123, 124, 125);
-        GlobalStateMgr.getCurrentSystemInfo().addBackend(backend1);
-        GlobalStateMgr.getCurrentSystemInfo().addBackend(backend2);
-        GlobalStateMgr.getCurrentSystemInfo().addBackend(backend3);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend1);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend2);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend3);
         Database db = createSimpleDb(testDbId1, testTableId1, testPartitionId1, testIndexId1, testTabletId1,
                 testStartVersion);
         LocalMetastore metastore = (LocalMetastore) globalStateMgr.getMetadata();
@@ -163,7 +164,7 @@ public class GlobalStateMgrTestUtil {
 
     public static Database createSimpleDb(long dbId, long tableId, long partitionId, long indexId, long tabletId,
                                           long version) {
-        GlobalStateMgr.getCurrentInvertedIndex().clear();
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().clear();
 
         // replica
         long replicaId = 0;

@@ -47,6 +47,18 @@ public class AlterTableStmt extends DdlStmt {
         return ops;
     }
 
+    public String getCatalogName() {
+        return tbl.getCatalog();
+    }
+
+    public String getDbName() {
+        return tbl.getDb();
+    }
+
+    public String getTableName() {
+        return tbl.getTbl();
+    }
+
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitAlterTableStatement(this, context);

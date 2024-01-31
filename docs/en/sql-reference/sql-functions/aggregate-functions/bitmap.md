@@ -2,7 +2,7 @@
 displayed_sidebar: "English"
 ---
 
-# BITMAP
+# bitmap
 
 Here is a simple example to illustrate the usage of several aggregate functions in Bitmap. For detailed function definitions or more Bitmap functions, see bitmap-functions.
 

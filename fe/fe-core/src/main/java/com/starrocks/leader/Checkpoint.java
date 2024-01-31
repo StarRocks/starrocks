@@ -114,14 +114,14 @@ public class Checkpoint extends FrontendDaemon {
 
         // push image file to all the other non-leader nodes
         // DO NOT get other nodes from HaProtocol, because node may not in bdbje replication group yet.
-        List<Frontend> allFrontends = GlobalStateMgr.getServingState().getFrontends(null);
+        List<Frontend> allFrontends = GlobalStateMgr.getServingState().getNodeMgr().getFrontends(null);
         int successPushed = 0;
         int otherNodesCount = 0;
         if (!allFrontends.isEmpty()) {
             otherNodesCount = allFrontends.size() - 1; // skip master itself
             for (Frontend fe : allFrontends) {
                 String host = fe.getHost();
-                if (host.equals(GlobalStateMgr.getServingState().getLeaderIp())) {
+                if (host.equals(GlobalStateMgr.getServingState().getNodeMgr().getLeaderIp())) {
                     // skip master itself
                     continue;
                 }
@@ -150,7 +150,7 @@ public class Checkpoint extends FrontendDaemon {
             if (successPushed > 0) {
                 for (Frontend fe : allFrontends) {
                     String host = fe.getHost();
-                    if (host.equals(GlobalStateMgr.getServingState().getLeaderIp())) {
+                    if (host.equals(GlobalStateMgr.getServingState().getNodeMgr().getLeaderIp())) {
                         // skip master itself
                         continue;
                     }
@@ -187,7 +187,7 @@ public class Checkpoint extends FrontendDaemon {
                 deleteVersion = Math.min(minOtherNodesJournalId, checkpointVersion);
             }
             journal.deleteJournals(deleteVersion + 1);
-            if (MetricRepo.isInit) {
+            if (MetricRepo.hasInit) {
                 MetricRepo.COUNTER_IMAGE_PUSH.increase(1L);
             }
             LOG.info("journals <= {} with prefix [{}] are deleted. image version {}, other nodes min version {}",
@@ -216,7 +216,7 @@ public class Checkpoint extends FrontendDaemon {
             globalStateMgr.clearExpiredJobs();
             globalStateMgr.saveImage();
             replayedJournalId = globalStateMgr.getReplayedJournalId();
-            if (MetricRepo.isInit) {
+            if (MetricRepo.hasInit) {
                 MetricRepo.COUNTER_IMAGE_WRITE.increase(1L);
             }
             GlobalStateMgr.getServingState().setImageJournalId(checkPointVersion);

@@ -59,16 +59,6 @@ public class LogicalAggregationOperator extends LogicalOperator {
     // but for single distinct function, partitionByColumns are not same with groupingKeys
     private List<ColumnRefOperator> partitionByColumns;
 
-    // When generate plan fragment, we need this info.
-    // For SQL: select count(distinct id_bigint), sum(id_int) from test_basic;
-    // In the distinct local (update serialize) agg stage:
-    //|   5:AGGREGATE (update serialize)                                                      |
-    //|   |  output: count(<slot 13>), sum(<slot 16>)                                         |
-    //|   |  group by:                                                                        |
-    // count function is update function, but sum is merge function
-    // if singleDistinctFunctionPos is -1, means no single distinct function
-    private int singleDistinctFunctionPos = -1;
-
     private DataSkewInfo distinctColumnDataSkew = null;
 
     // If the AggType is not GLOBAL, it means we have split the agg hence the isSplit should be true.
@@ -77,7 +67,7 @@ public class LogicalAggregationOperator extends LogicalOperator {
     public LogicalAggregationOperator(AggType type,
                                       List<ColumnRefOperator> groupingKeys,
                                       Map<ColumnRefOperator, CallOperator> aggregations) {
-        this(type, groupingKeys, groupingKeys, aggregations, false, -1, -1, null);
+        this(type, groupingKeys, groupingKeys, aggregations, false, -1, null);
     }
 
     public LogicalAggregationOperator(
@@ -86,7 +76,6 @@ public class LogicalAggregationOperator extends LogicalOperator {
             List<ColumnRefOperator> partitionByColumns,
             Map<ColumnRefOperator, CallOperator> aggregations,
             boolean isSplit,
-            int singleDistinctFunctionPos,
             long limit,
             ScalarOperator predicate) {
         super(OperatorType.LOGICAL_AGGR, limit, predicate, null);
@@ -95,13 +84,11 @@ public class LogicalAggregationOperator extends LogicalOperator {
         this.partitionByColumns = partitionByColumns;
         this.aggregations = ImmutableMap.copyOf(aggregations);
         this.isSplit = !type.isGlobal() || isSplit;
-        this.singleDistinctFunctionPos = singleDistinctFunctionPos;
     }
 
     private LogicalAggregationOperator() {
         super(OperatorType.LOGICAL_AGGR);
         this.isSplit = false;
-        this.singleDistinctFunctionPos = -1;
     }
 
     public AggType getType() {
@@ -122,10 +109,6 @@ public class LogicalAggregationOperator extends LogicalOperator {
 
     public void setOnlyLocalAggregate() {
         isSplit = false;
-    }
-
-    public int getSingleDistinctFunctionPos() {
-        return singleDistinctFunctionPos;
     }
 
     public List<ColumnRefOperator> getPartitionByColumns() {
@@ -167,6 +150,10 @@ public class LogicalAggregationOperator extends LogicalOperator {
 
     public boolean checkGroupByCountDistinctWithSkewHint() {
         return checkGroupByCountDistinct() && hasSkew();
+    }
+
+    public boolean hasRemoveDistinctFunc() {
+        return aggregations.values().stream().anyMatch(CallOperator::isRemovedDistinct);
     }
 
     @Override
@@ -235,7 +222,7 @@ public class LogicalAggregationOperator extends LogicalOperator {
             return false;
         }
         LogicalAggregationOperator that = (LogicalAggregationOperator) o;
-        return isSplit == that.isSplit && singleDistinctFunctionPos == that.singleDistinctFunctionPos &&
+        return isSplit == that.isSplit &&
                 type == that.type && Objects.equals(aggregations, that.aggregations) &&
                 Objects.equals(groupingKeys, that.groupingKeys) &&
                 Objects.equals(partitionByColumns, that.partitionByColumns);
@@ -243,8 +230,7 @@ public class LogicalAggregationOperator extends LogicalOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), type, isSplit, aggregations, groupingKeys, partitionByColumns,
-                singleDistinctFunctionPos);
+        return Objects.hash(super.hashCode(), type, isSplit, aggregations, groupingKeys, partitionByColumns);
     }
 
     public static Builder builder() {
@@ -276,7 +262,6 @@ public class LogicalAggregationOperator extends LogicalOperator {
             builder.partitionByColumns = aggregationOperator.partitionByColumns;
             builder.aggregations = aggregationOperator.aggregations;
             builder.isSplit = aggregationOperator.isSplit;
-            builder.singleDistinctFunctionPos = aggregationOperator.singleDistinctFunctionPos;
             builder.distinctColumnDataSkew = aggregationOperator.distinctColumnDataSkew;
             return this;
         }
@@ -305,11 +290,6 @@ public class LogicalAggregationOperator extends LogicalOperator {
         public Builder setPartitionByColumns(
                 List<ColumnRefOperator> partitionByColumns) {
             builder.partitionByColumns = partitionByColumns;
-            return this;
-        }
-
-        public Builder setSingleDistinctFunctionPos(int singleDistinctFunctionPos) {
-            builder.singleDistinctFunctionPos = singleDistinctFunctionPos;
             return this;
         }
 

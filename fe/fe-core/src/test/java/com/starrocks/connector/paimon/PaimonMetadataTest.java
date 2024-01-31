@@ -45,8 +45,6 @@ import org.apache.paimon.data.BinaryRow;
 import org.apache.paimon.data.BinaryRowWriter;
 import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.io.DataFileMeta;
-import org.apache.paimon.options.CatalogOptions;
-import org.apache.paimon.options.Options;
 import org.apache.paimon.predicate.Predicate;
 import org.apache.paimon.predicate.PredicateBuilder;
 import org.apache.paimon.reader.RecordReader;
@@ -56,6 +54,7 @@ import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.ReadBuilder;
 import org.apache.paimon.table.source.Split;
 import org.apache.paimon.table.system.SchemasTable;
+import org.apache.paimon.table.system.SnapshotsTable;
 import org.apache.paimon.types.BigIntType;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
@@ -91,12 +90,7 @@ public class PaimonMetadataTest {
 
     @Before
     public void setUp() {
-
-        Options options = new Options();
-        options.set(CatalogOptions.METASTORE, "filesystem");
-        options.set(CatalogOptions.WAREHOUSE, "hdfs://127.0.0.1:9999/warehouse");
-
-        this.metadata = new PaimonMetadata("paimon_catalog", new HdfsEnvironment(), paimonNativeCatalog, options);
+        this.metadata = new PaimonMetadata("paimon_catalog", new HdfsEnvironment(), paimonNativeCatalog);
 
         BinaryRow row1 = new BinaryRow(2);
         BinaryRowWriter writer = new BinaryRowWriter(row1, 10);
@@ -160,6 +154,17 @@ public class PaimonMetadataTest {
         Assert.assertTrue(paimonTable.getBaseSchema().get(1).isAllowNull());
         Assert.assertEquals("paimon_catalog", paimonTable.getCatalogName());
         Assert.assertEquals("paimon_catalog.db1.tbl1.0", paimonTable.getUUID());
+    }
+
+    @Test
+    public void testTableExists(@Mocked AbstractFileStoreTable paimonNativeTable) {
+        new Expectations() {
+            {
+                paimonNativeCatalog.tableExists((Identifier) any);
+                result = true;
+            }
+        };
+        Assert.assertTrue(metadata.tableExists("db1", "tbl1"));
     }
 
     @Test
@@ -290,5 +295,24 @@ public class PaimonMetadataTest {
         rule0.transform(scan, new OptimizerContext(new Memo(), new ColumnRefFactory()));
         assertEquals(1, ((LogicalPaimonScanOperator) scan.getOp()).getScanOperatorPredicates()
                 .getSelectedPartitionIds().size());
+    }
+
+    @Test
+    public void testGetSnapshotsTable(@Mocked SnapshotsTable snapshotsTable) throws Catalog.TableNotExistException {
+        List<DataField> fields = new ArrayList<>();
+        fields.add(new DataField(1, "col2", new IntType(true)));
+        fields.add(new DataField(2, "col3", new DoubleType(false)));
+        new Expectations() {
+            {
+                paimonNativeCatalog.getTable((Identifier) any);
+                result = snapshotsTable;
+                snapshotsTable.name();
+                result = "snapshotsTable";
+            }
+        };
+
+        com.starrocks.catalog.Table stable = metadata.getTable("db1", "tbl1$snapshots");
+        PaimonTable spaimonTable = (PaimonTable) stable;
+        Assert.assertEquals("snapshotsTable", spaimonTable.getTableLocation());
     }
 }

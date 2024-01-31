@@ -26,6 +26,8 @@ import com.starrocks.proto.DeleteDataRequest;
 import com.starrocks.proto.DeleteDataResponse;
 import com.starrocks.proto.DeleteTabletRequest;
 import com.starrocks.proto.DeleteTabletResponse;
+import com.starrocks.proto.DeleteTxnLogRequest;
+import com.starrocks.proto.DeleteTxnLogResponse;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.DropTableResponse;
 import com.starrocks.proto.LockTabletMetadataRequest;
@@ -48,34 +50,53 @@ import com.starrocks.proto.VacuumResponse;
 
 import java.util.concurrent.Future;
 
-public interface LakeService {
-    long TIMEOUT_GET_TABLET_STATS = 15 * 60 * 1000L;
+import static org.joda.time.DateTimeConstants.MILLIS_PER_DAY;
+import static org.joda.time.DateTimeConstants.MILLIS_PER_HOUR;
+import static org.joda.time.DateTimeConstants.MILLIS_PER_MINUTE;
+import static org.joda.time.DateTimeConstants.MILLIS_PER_SECOND;
 
-    @ProtobufRPC(serviceName = "LakeService", methodName = "publish_version", onceTalkTimeout = /*1m=*/60000)
+public interface LakeService {
+    long TIMEOUT_PUBLISH_VERSION = MILLIS_PER_MINUTE;
+    long TIMEOUT_GET_TABLET_STATS = 15 * MILLIS_PER_MINUTE;
+    long TIMEOUT_COMPACT = MILLIS_PER_DAY;
+    long TIMEOUT_ABORT = 5 * MILLIS_PER_SECOND;
+    long TIMEOUT_DELETE_TABLET = 10 * MILLIS_PER_MINUTE;
+    long TIMEOUT_DELETE_DATA = 5 * MILLIS_PER_MINUTE;
+    long TIMEOUT_DROP_TABLE = 5 * MILLIS_PER_MINUTE;
+    long TIMEOUT_PUBLISH_LOG_VERSION = MILLIS_PER_MINUTE;
+    long TIMEOUT_PUBLISH_LOG_VERSION_BATCH = MILLIS_PER_MINUTE;
+    long TIMEOUT_ABORT_COMPACTION = 5 * MILLIS_PER_SECOND;
+    long TIMEOUT_VACUUM = MILLIS_PER_HOUR;
+
+    @ProtobufRPC(serviceName = "LakeService", methodName = "publish_version", onceTalkTimeout = TIMEOUT_PUBLISH_VERSION)
     Future<PublishVersionResponse> publishVersion(PublishVersionRequest request);
 
-    @ProtobufRPC(serviceName = "LakeService", methodName = "abort_txn", onceTalkTimeout = 5000)
+    @ProtobufRPC(serviceName = "LakeService", methodName = "abort_txn", onceTalkTimeout = TIMEOUT_ABORT)
     Future<AbortTxnResponse> abortTxn(AbortTxnRequest request);
 
-    @ProtobufRPC(serviceName = "LakeService", methodName = "compact", onceTalkTimeout = /*24H=*/86400000)
+    @ProtobufRPC(serviceName = "LakeService", methodName = "compact", onceTalkTimeout = TIMEOUT_COMPACT)
     Future<CompactResponse> compact(CompactRequest request);
 
-    @ProtobufRPC(serviceName = "LakeService", methodName = "delete_tablet", onceTalkTimeout = /*10m=*/600000)
+    @ProtobufRPC(serviceName = "LakeService", methodName = "delete_tablet", onceTalkTimeout = TIMEOUT_DELETE_TABLET)
     Future<DeleteTabletResponse> deleteTablet(DeleteTabletRequest request);
 
-    @ProtobufRPC(serviceName = "LakeService", methodName = "delete_data", onceTalkTimeout = 300000)
+    @ProtobufRPC(serviceName = "LakeService", methodName = "delete_data", onceTalkTimeout = TIMEOUT_DELETE_DATA)
     Future<DeleteDataResponse> deleteData(DeleteDataRequest request);
+
+    @ProtobufRPC(serviceName = "LakeService", methodName = "delete_txn_log", onceTalkTimeout = /*10m=*/600000)
+    Future<DeleteTxnLogResponse> deleteTxnLog(DeleteTxnLogRequest request);
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "get_tablet_stats", onceTalkTimeout = TIMEOUT_GET_TABLET_STATS)
     Future<TabletStatResponse> getTabletStats(TabletStatRequest request);
 
-    @ProtobufRPC(serviceName = "LakeService", methodName = "drop_table", onceTalkTimeout = /*5m=*/300000)
+    @ProtobufRPC(serviceName = "LakeService", methodName = "drop_table", onceTalkTimeout = TIMEOUT_DROP_TABLE)
     Future<DropTableResponse> dropTable(DropTableRequest request);
 
-    @ProtobufRPC(serviceName = "LakeService", methodName = "publish_log_version", onceTalkTimeout = /*1m=*/60000)
+    @ProtobufRPC(serviceName = "LakeService", methodName = "publish_log_version", onceTalkTimeout = TIMEOUT_PUBLISH_LOG_VERSION)
     Future<PublishLogVersionResponse> publishLogVersion(PublishLogVersionRequest request);
 
-    @ProtobufRPC(serviceName = "LakeService", methodName = "publish_log_version_batch", onceTalkTimeout = /*1m=*/60000)
+    @ProtobufRPC(serviceName = "LakeService", methodName = "publish_log_version_batch",
+            onceTalkTimeout = TIMEOUT_PUBLISH_LOG_VERSION_BATCH)
     Future<PublishLogVersionResponse> publishLogVersionBatch(PublishLogVersionBatchRequest request);
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "lock_tablet_metadata", onceTalkTimeout = 5000)
@@ -90,10 +111,10 @@ public interface LakeService {
     @ProtobufRPC(serviceName = "LakeService", methodName = "restore_snapshots", onceTalkTimeout = 5000)
     Future<RestoreSnapshotsResponse> restoreSnapshots(RestoreSnapshotsRequest request);
 
-    @ProtobufRPC(serviceName = "LakeService", methodName = "abort_compaction", onceTalkTimeout = 5000)
+    @ProtobufRPC(serviceName = "LakeService", methodName = "abort_compaction", onceTalkTimeout = TIMEOUT_ABORT_COMPACTION)
     Future<AbortCompactionResponse> abortCompaction(AbortCompactionRequest request);
 
-    @ProtobufRPC(serviceName = "LakeService", methodName = "vacuum", onceTalkTimeout = /*1h=*/3600000)
+    @ProtobufRPC(serviceName = "LakeService", methodName = "vacuum", onceTalkTimeout = TIMEOUT_VACUUM)
     Future<VacuumResponse> vacuum(VacuumRequest request);
 }
 

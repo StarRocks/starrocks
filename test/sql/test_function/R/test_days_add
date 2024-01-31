@@ -1,0 +1,149 @@
+-- name: test_days_add
+select days_add('2023-10-31 23:59:59', 1);
+-- result:
+2023-11-01 23:59:59
+-- !result
+select days_add('2023-10-31 23:59:59', 1000);
+-- result:
+2026-07-27 23:59:59
+-- !result
+select adddate('2023-10-31 23:59:59', INTERVAL 1 YEAR);
+-- result:
+2024-10-31 23:59:59
+-- !result
+select adddate('2023-10-31 23:59:59', INTERVAL 100 YEAR);
+-- result:
+2123-10-31 23:59:59
+-- !result
+select adddate('2023-10-31 23:59:59', INTERVAL 1 MONTH);
+-- result:
+2023-11-30 23:59:59
+-- !result
+select adddate('2023-10-31 23:59:59', INTERVAL 11 MONTH);
+-- result:
+2024-09-30 23:59:59
+-- !result
+select adddate('2023-10-31 23:59:59', INTERVAL 25 MONTH);
+-- result:
+2025-11-30 23:59:59
+-- !result
+select adddate('2023-10-31 23:59:59', INTERVAL 1 DAY);
+-- result:
+2023-11-01 23:59:59
+-- !result
+select adddate('2023-10-31 23:59:59', INTERVAL 15 DAY);
+-- result:
+2023-11-15 23:59:59
+-- !result
+select adddate('2023-10-31 23:59:59', INTERVAL 100 DAY);
+-- result:
+2024-02-08 23:59:59
+-- !result
+select adddate('2023-10-31 23:59:59', INTERVAL 1000 DAY);
+-- result:
+2026-07-27 23:59:59
+-- !result
+select adddate('2023-10-31 23:59:59', INTERVAL 1 HOUR);
+-- result:
+2023-11-01 00:59:59
+-- !result
+select adddate('2023-10-31 23:59:59', INTERVAL 12 HOUR);
+-- result:
+2023-11-01 11:59:59
+-- !result
+select adddate('2023-10-31 23:59:59', INTERVAL 25 HOUR);
+-- result:
+2023-11-02 00:59:59
+-- !result
+select adddate('2023-10-31 23:59:59', INTERVAL 900 HOUR);
+-- result:
+2023-12-08 11:59:59
+-- !result
+select adddate('2023-10-31 23:59:59', INTERVAL 10000 HOUR);
+-- result:
+2024-12-21 15:59:59
+-- !result
+select adddate('2023-10-31 23:59:59', INTERVAL 1 MINUTE);
+-- result:
+2023-11-01 00:00:59
+-- !result
+select adddate('2023-10-31 23:59:59', INTERVAL 30 MINUTE);
+-- result:
+2023-11-01 00:29:59
+-- !result
+select adddate('2023-10-31 23:59:59', INTERVAL 80 MINUTE);
+-- result:
+2023-11-01 01:19:59
+-- !result
+select adddate('2023-10-31 23:59:59', INTERVAL 1500 MINUTE);
+-- result:
+2023-11-02 00:59:59
+-- !result
+select adddate('2023-10-31 23:59:59', INTERVAL 50000 MINUTE);
+-- result:
+2023-12-05 17:19:59
+-- !result
+select adddate('2023-10-31 23:59:59', INTERVAL 600000 MINUTE);
+-- result:
+2024-12-21 15:59:59
+-- !result
+select adddate('2023-10-31 23:59:59', INTERVAL 1 SECOND);
+-- result:
+2023-11-01 00:00:00
+-- !result
+select adddate('2023-10-31 23:59:59', INTERVAL 30 SECOND);
+-- result:
+2023-11-01 00:00:29
+-- !result
+select adddate('2023-10-31 23:59:59', INTERVAL 70 SECOND);
+-- result:
+2023-11-01 00:01:09
+-- !result
+select adddate('2023-10-31 23:59:59', INTERVAL 3800 SECOND);
+-- result:
+2023-11-01 01:03:19
+-- !result
+select adddate('2023-10-31 23:59:59', INTERVAL 89900 SECOND);
+-- result:
+2023-11-02 00:58:19
+-- !result
+select adddate('2023-10-31 23:59:59', INTERVAL 1 MILLISECOND);
+-- result:
+2023-10-31 23:59:59.001000
+-- !result
+select adddate('2023-10-31 23:59:59', INTERVAL 500 MILLISECOND);
+-- result:
+2023-10-31 23:59:59.500000
+-- !result
+select adddate('2023-10-31 23:59:59', INTERVAL 3000 MILLISECOND);
+-- result:
+2023-11-01 00:00:02
+-- !result
+select adddate('2023-10-31 23:59:59', INTERVAL 80000 MILLISECOND);
+-- result:
+2023-11-01 00:01:19
+-- !result
+select adddate('2023-10-31 23:59:59', INTERVAL 4000000 MILLISECOND);
+-- result:
+2023-11-01 01:06:39
+-- !result
+select adddate('2023-10-31 23:59:59', INTERVAL 1 MICROSECOND);
+-- result:
+2023-10-31 23:59:59.000001
+-- !result
+select adddate('2023-10-31 23:59:59', INTERVAL 500 MICROSECOND);
+-- result:
+2023-10-31 23:59:59.000500
+-- !result
+select adddate('2023-10-31 23:59:59', INTERVAL 3000 MICROSECOND);
+-- result:
+2023-10-31 23:59:59.003000
+-- !result
+select adddate('2023-10-31 23:59:59', INTERVAL 5500000 MICROSECOND);
+-- result:
+2023-11-01 00:00:04.500000
+-- !result
+select adddate('2023-10-31 23:59:59', INTERVAL 80000000 MICROSECOND);
+-- result:
+2023-11-01 00:01:19
+-- !result

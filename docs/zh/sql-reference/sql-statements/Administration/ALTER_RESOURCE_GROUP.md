@@ -8,6 +8,12 @@ displayed_sidebar: "Chinese"
 
 修改资源组设置。
 
+:::tip
+
+该操作需要对应 Resource Group 的 ALTER 权限。请参考 [GRANT](../account-management/GRANT.md) 为用户赋权。
+
+:::
+
 ## 语法
 
 ```SQL

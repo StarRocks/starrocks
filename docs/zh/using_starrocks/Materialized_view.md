@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+keywords: ['wuhua']
 ---
 
 # 异步物化视图
@@ -54,7 +55,7 @@ StarRocks v2.4 之前的版本提供了一种同步更新的同步物化视图�
 
   > **说明**
   >
-  > 基于 [JDBC Catalog](../data_source/catalog/jdbc_catalog.md) 表构建的异步物化视图暂不支持查询改写。
+  > 基于 JDBC Catalog 和 Hudi Catalog 表构建的异步物化视图暂不支持查询改写。
 
 ## 使用场景
 
@@ -308,7 +309,7 @@ SHOW CREATE MATERIALIZED VIEW order_mv;
 
 ### 查看异步物化视图的执行状态
 
-您可以通过查询 StarRocks 的 [Information Schema](../reference/information_schema/information_schema.md) 中的 [`tasks`](../reference/information_schema/tasks.md) 和 [`task_runs`](../reference/information_schema/task_runs.md) 元数据视图来查看异步物化视图的执行（构建或刷新）状态。
+您可以通过查询 StarRocks 的 [Information Schema](../reference/overview-pages/information_schema.md) 中的 [`tasks`](../reference/information_schema/tasks.md) 和 [`task_runs`](../reference/information_schema/task_runs.md) 元数据视图来查看异步物化视图的执行（构建或刷新）状态。
 
 以下示例查看最新创建的异步物化视图的执行状态：
 

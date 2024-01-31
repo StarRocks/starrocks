@@ -16,15 +16,42 @@
 
 #include "fs/fs_util.h"
 #include "gutil/strings/join.h"
+#include "runtime/exec_env.h"
 #include "storage/lake/metacache.h"
+#include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/txn_log_applier.h"
+#include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h" // delete_files_async
 #include "util/lru_cache.h"
 
 namespace starrocks::lake {
+
+static void clear_remote_snapshot_async(TabletManager* tablet_mgr, int64_t tablet_id, int64_t txn_id,
+                                        std::vector<std::string>* files_to_delete) {
+    auto slog_path = tablet_mgr->txn_slog_location(tablet_id, txn_id);
+    auto txn_slog_or = tablet_mgr->get_txn_log(slog_path, false);
+
+    if (!txn_slog_or.ok()) {
+        // Not found is ok
+        if (!txn_slog_or.status().is_not_found()) {
+            LOG(WARNING) << "Fail to get txn slog " << slog_path << ": " << txn_slog_or.status();
+
+            tablet_mgr->metacache()->erase(slog_path);
+            files_to_delete->emplace_back(std::move(slog_path));
+        }
+        return;
+    }
+
+    run_clear_task_async([txn_slog = std::move(txn_slog_or.value())]() {
+        (void)ExecEnv::GetInstance()->lake_replication_txn_manager()->clear_snapshots(txn_slog);
+    });
+
+    tablet_mgr->metacache()->erase(slog_path);
+    files_to_delete->emplace_back(std::move(slog_path));
+}
 
 StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t base_version,
                                             int64_t new_version, std::span<const int64_t> txn_ids,
@@ -35,6 +62,15 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
 
     VLOG(1) << "publish version tablet_id: " << tablet_id << ", txns: " << JoinInts(txn_ids, ",")
             << ", base_version: " << base_version << ", new_version: " << new_version;
+
+    auto new_metadata_path = tablet_mgr->tablet_metadata_location(tablet_id, new_version);
+    auto cached_new_metadata = tablet_mgr->metacache()->lookup_tablet_metadata(new_metadata_path);
+    if (cached_new_metadata != nullptr) {
+        LOG(INFO) << "Skipped publish version because target metadata found in cache. tablet_id=" << tablet_id
+                  << " base_version=" << base_version << " new_version=" << new_version
+                  << " txn_ids=" << JoinInts(txn_ids, ",");
+        return std::move(cached_new_metadata);
+    }
 
     auto new_version_metadata_or_error = [=](Status error) -> StatusOr<TabletMetadataPtr> {
         auto res = tablet_mgr->get_tablet_metadata(tablet_id, new_version);
@@ -161,6 +197,11 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
         }
 
         tablet_mgr->metacache()->erase(log_path);
+
+        // Clear remote snapshot and slog for replication txn
+        if (txn_log->has_op_replication()) {
+            clear_remote_snapshot_async(tablet_mgr, tablet_id, txn_id, &files_to_delete);
+        }
     }
 
     // Apply vtxn logs for schema change
@@ -194,12 +235,6 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
 
     // Save new metadata
     RETURN_IF_ERROR(log_applier->finish());
-
-    // collect trash files, and remove them by background threads
-    auto trash_files = log_applier->trash_files();
-    if (trash_files != nullptr) {
-        files_to_delete.insert(files_to_delete.end(), trash_files->begin(), trash_files->end());
-    }
 
     delete_files_async(std::move(files_to_delete));
 
@@ -237,9 +272,18 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, const i
     return Status::OK();
 }
 
-void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const int64_t> txn_ids) {
+void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const int64_t> txn_ids,
+               std::span<const int32_t> txn_types) {
+    TEST_SYNC_POINT("transactions::abort_txn:enter");
     std::vector<std::string> files_to_delete;
-    for (auto txn_id : txn_ids) {
+    for (size_t i = 0; i < txn_ids.size(); ++i) {
+        auto txn_id = txn_ids[i];
+
+        // Clear remote snapshot and slog for replication txn
+        if (txn_types.size() > i && txn_types[i] == TxnTypePB::TXN_REPLICATION) {
+            clear_remote_snapshot_async(tablet_mgr, tablet_id, txn_id, &files_to_delete);
+        }
+
         auto log_path = tablet_mgr->txn_log_location(tablet_id, txn_id);
         auto txn_log_or = tablet_mgr->get_txn_log(log_path, false);
         if (!txn_log_or.ok()) {
@@ -269,10 +313,22 @@ void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const int
                 }
             }
         }
+        if (txn_log->has_op_replication()) {
+            for (const auto& op_write : txn_log->op_replication().op_writes()) {
+                for (const auto& segment : op_write.rowset().segments()) {
+                    files_to_delete.emplace_back(tablet_mgr->segment_location(tablet_id, segment));
+                }
+                for (const auto& del_file : op_write.dels()) {
+                    files_to_delete.emplace_back(tablet_mgr->del_location(tablet_id, del_file));
+                }
+            }
+        }
 
         files_to_delete.emplace_back(log_path);
 
         tablet_mgr->metacache()->erase(log_path);
+
+        tablet_mgr->update_mgr()->try_remove_cache(tablet_id, txn_id);
     }
 
     delete_files_async(std::move(files_to_delete));

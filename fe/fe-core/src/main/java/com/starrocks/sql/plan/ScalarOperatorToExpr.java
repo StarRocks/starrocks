@@ -57,6 +57,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.ArrayExpr;
+import com.starrocks.sql.ast.DictionaryGetExpr;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.MapExpr;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
@@ -73,6 +74,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
 import com.starrocks.sql.optimizer.operator.scalar.DictQueryOperator;
+import com.starrocks.sql.optimizer.operator.scalar.DictionaryGetOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
@@ -196,7 +198,7 @@ public class ScalarOperatorToExpr {
         public Expr visitCollectionElement(CollectionElementOperator node, FormatterContext context) {
             CollectionElementExpr expr =
                     new CollectionElementExpr(node.getType(), buildExpr.build(node.getChild(0), context),
-                            buildExpr.build(node.getChild(1), context));
+                            buildExpr.build(node.getChild(1), context), node.isCheckOutOfBounds());
             hackTypeNull(expr);
             return expr;
         }
@@ -568,14 +570,11 @@ public class ScalarOperatorToExpr {
 
         @Override
         public Expr visitDictMappingOperator(DictMappingOperator operator, FormatterContext context) {
+            // @todo: rewrite ScalarOperatorToExpr process when v1 is deprecated
             final ColumnRefOperator dictColumn = operator.getDictColumn();
             final SlotRef dictExpr = (SlotRef) dictColumn.accept(this, context);
             final ScalarOperator call = operator.getOriginScalaOperator();
-            final ColumnRefOperator key =
-                    new ColumnRefOperator(call.getUsedColumns().getFirstId(), Type.VARCHAR,
-                            operator.getDictColumn().getName(),
-                            dictExpr.isNullable());
-
+            final ColumnRefOperator key = call.getColumnRefs().get(0);
             // Because we need to rewrite the string column to PlaceHolder when we build DictExpr,
             // the PlaceHolder and the original string column have the same id,
             // so we need to save the original string column first and restore it after we build the expression
@@ -583,13 +582,25 @@ public class ScalarOperatorToExpr {
             // 1. save the previous expr, it was null or string column
             final Expr old = context.colRefToExpr.get(key);
             // 2. use a placeholder instead of string column to build DictMapping
-            context.colRefToExpr.put(key, new PlaceHolderExpr(dictColumn.getId(), dictExpr.isNullable(), Type.VARCHAR));
+            if (key.getType().isArrayType()) {
+                context.colRefToExpr.put(key, new PlaceHolderExpr(dictColumn.getId(), dictExpr.isNullable(),
+                        Type.ARRAY_VARCHAR));
+            } else {
+                context.colRefToExpr.put(key, new PlaceHolderExpr(dictColumn.getId(), dictExpr.isNullable(),
+                        Type.VARCHAR));
+            }
             final Expr callExpr = buildExpr.build(call, context);
             // 3. recover the previous column
             if (old != null) {
                 context.colRefToExpr.put(key, old);
             }
-            Expr result = new DictMappingExpr(dictExpr, callExpr);
+            Expr result;
+            if (operator.getStringProvideOperator() != null) {
+                final Expr stringExpr = buildExpr.build(operator.getStringProvideOperator(), context);
+                result = new DictMappingExpr(dictExpr, callExpr, stringExpr);
+            } else {
+                result = new DictMappingExpr(dictExpr, callExpr);
+            }
             result.setType(operator.getType());
             hackTypeNull(result);
             return result;
@@ -613,6 +624,19 @@ public class ScalarOperatorToExpr {
                     .map(expr -> buildExpr.build(expr, context))
                     .collect(Collectors.toList());
             return new DictQueryExpr(arg, operator.getDictQueryExpr(), operator.getFn());
+        }
+
+        @Override
+        public Expr visitDictionaryGetOperator(DictionaryGetOperator operator, FormatterContext context) {
+            List<Expr> arg = operator.getChildren().stream()
+                    .map(expr -> buildExpr.build(expr, context))
+                    .collect(Collectors.toList());
+            DictionaryGetExpr dictionaryGetExpr = new DictionaryGetExpr(arg);
+            dictionaryGetExpr.setType(operator.getType());
+            dictionaryGetExpr.setDictionaryId(operator.getDictionaryId());
+            dictionaryGetExpr.setDictionaryTxnId(operator.getDictionaryTxnId());
+            dictionaryGetExpr.setKeySize(operator.getKeySize());
+            return dictionaryGetExpr;
         }
     }
 

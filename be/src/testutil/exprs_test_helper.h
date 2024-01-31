@@ -14,7 +14,12 @@
 
 #pragma once
 
+#include <gtest/gtest.h>
+
 #include "column/chunk.h"
+#include "column/column_helper.h"
+#include "common/object_pool.h"
+#include "common/status.h"
 #include "exprs/array_expr.h"
 #include "exprs/map_expr.h"
 #include "exprs/mock_vectorized_expr.h"
@@ -24,6 +29,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -165,7 +171,6 @@ public:
         return expr;
     }
 };
-
 class TExprBuilder {
 public:
     TExprBuilder& operator<<(const LogicalType& slot_type) {

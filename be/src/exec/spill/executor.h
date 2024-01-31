@@ -129,6 +129,39 @@ struct SyncTaskExecutor {
         break;                                                                                  \
     }
 
+#define RETURN_IF_NEED_YIELD(wg, yield, time_spent_ns)                                          \
+    if (time_spent_ns >= workgroup::WorkGroup::YIELD_MAX_TIME_SPENT) {                          \
+        *yield = true;                                                                          \
+        return Status::Yield();                                                                 \
+    }                                                                                           \
+    if (wg != nullptr && time_spent_ns >= workgroup::WorkGroup::YIELD_PREEMPT_MAX_TIME_SPENT && \
+        wg->scan_sched_entity()->in_queue()->should_yield(wg, time_spent_ns)) {                 \
+        *yield = true;                                                                          \
+        return Status::Yield();                                                                 \
+    }
+#define RETURN_OK_IF_NEED_YIELD(wg, yield, time_spent_ns)                                       \
+    if (time_spent_ns >= workgroup::WorkGroup::YIELD_MAX_TIME_SPENT) {                          \
+        *yield = true;                                                                          \
+        return Status::OK();                                                                    \
+    }                                                                                           \
+    if (wg != nullptr && time_spent_ns >= workgroup::WorkGroup::YIELD_PREEMPT_MAX_TIME_SPENT && \
+        wg->scan_sched_entity()->in_queue()->should_yield(wg, time_spent_ns)) {                 \
+        *yield = true;                                                                          \
+        return Status::OK();                                                                    \
+    }
+#define RETURN_IF_ERROR_EXCEPT_YIELD(stmt)                                                            \
+    do {                                                                                              \
+        auto&& status__ = (stmt);                                                                     \
+        if (UNLIKELY(!status__.ok() && !status__.is_yield())) {                                       \
+            return to_status(status__).clone_and_append_context(__FILE__, __LINE__, AS_STRING(stmt)); \
+        }                                                                                             \
+    } while (false)
+
+#define RETURN_IF_YIELD(yield) \
+    if (yield) {               \
+        return Status::OK();   \
+    }
+
 #define DEFER_GUARD_END(guard) auto VARNAME_LINENUM(defer) = DeferOp([&]() { guard.scoped_end(); });
 
 #define RESOURCE_TLS_MEMTRACER_GUARD(state, ...) \

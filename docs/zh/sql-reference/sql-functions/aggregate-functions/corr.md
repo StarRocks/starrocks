@@ -2,7 +2,7 @@
 displayed_sidebar: "Chinese"
 ---
 
-# CORR
+# corr
 
 ## 功能
 

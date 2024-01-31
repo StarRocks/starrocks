@@ -29,11 +29,13 @@ import org.apache.paimon.types.DecimalType;
 import org.apache.paimon.types.DoubleType;
 import org.apache.paimon.types.FloatType;
 import org.apache.paimon.types.IntType;
+import org.apache.paimon.types.LocalZonedTimestampType;
 import org.apache.paimon.types.MapType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.SmallIntType;
 import org.apache.paimon.types.TimestampType;
 import org.apache.paimon.types.TinyIntType;
+import org.apache.paimon.types.VarBinaryType;
 import org.apache.paimon.types.VarCharType;
 import org.junit.Assert;
 import org.junit.Test;
@@ -46,6 +48,13 @@ public class PaimonColumnConverterTest {
     @Test
     public void testConvertBinary() {
         BinaryType paimonType = new BinaryType();
+        Type result = ColumnTypeConverter.fromPaimonType(paimonType);
+        Assert.assertEquals(result, Type.VARBINARY);
+    }
+
+    @Test
+    public void testConvertVarBinary() {
+        VarBinaryType paimonType = new VarBinaryType();
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
         Assert.assertEquals(result, Type.VARBINARY);
     }
@@ -135,6 +144,13 @@ public class PaimonColumnConverterTest {
     @Test
     public void testConvertDatetime() {
         TimestampType paimonType = new TimestampType();
+        Type result = ColumnTypeConverter.fromPaimonType(paimonType);
+        Assert.assertEquals(result, Type.DATETIME);
+    }
+
+    @Test
+    public void testConvertLocalZonedDatetime() {
+        LocalZonedTimestampType paimonType = new LocalZonedTimestampType();
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
         Assert.assertEquals(result, Type.DATETIME);
     }

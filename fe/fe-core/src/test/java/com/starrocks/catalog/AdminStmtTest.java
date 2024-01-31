@@ -43,6 +43,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -80,7 +81,7 @@ public class AdminStmtTest {
                 " \"replication_num\" = \"1\"\n" +
                 ");";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
     }
 
     @Test
@@ -103,7 +104,7 @@ public class AdminStmtTest {
         Assert.assertEquals(3, tabletToBackendList.size());
         long tabletId = tabletToBackendList.get(0).first;
         long backendId = tabletToBackendList.get(0).second;
-        Replica replica = GlobalStateMgr.getCurrentInvertedIndex().getReplica(tabletId, backendId);
+        Replica replica = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplica(tabletId, backendId);
         Assert.assertFalse(replica.isBad());
 
         // set replica to bad
@@ -111,16 +112,16 @@ public class AdminStmtTest {
                 + backendId + "', 'status' = 'bad');";
         AdminSetReplicaStatusStmt stmt =
                 (AdminSetReplicaStatusStmt) UtFrameUtils.parseStmtWithNewParser(adminStmt, connectContext);
-        GlobalStateMgr.getCurrentState().setReplicaStatus(stmt);
-        replica = GlobalStateMgr.getCurrentInvertedIndex().getReplica(tabletId, backendId);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().setReplicaStatus(stmt);
+        replica = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplica(tabletId, backendId);
         Assert.assertTrue(replica.isBad());
 
         // set replica to ok
         adminStmt = "admin set replica status properties ('tablet_id' = '" + tabletId + "', 'backend_id' = '"
                 + backendId + "', 'status' = 'ok');";
         stmt = (AdminSetReplicaStatusStmt) UtFrameUtils.parseStmtWithNewParser(adminStmt, connectContext);
-        GlobalStateMgr.getCurrentState().setReplicaStatus(stmt);
-        replica = GlobalStateMgr.getCurrentInvertedIndex().getReplica(tabletId, backendId);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().setReplicaStatus(stmt);
+        replica = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplica(tabletId, backendId);
         Assert.assertFalse(replica.isBad());
     }
 

@@ -14,47 +14,32 @@
 
 package com.starrocks.lake;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
-import com.staros.proto.AwsCredentialInfo;
-import com.staros.proto.AwsDefaultCredentialInfo;
-import com.staros.proto.FileCacheInfo;
-import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
-import com.staros.proto.FileStoreType;
-import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.UserException;
-import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.server.SharedDataStorageVolumeMgr;
-import com.starrocks.server.SharedNothingStorageVolumeMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
-import mockit.Mocked;
+import org.apache.commons.lang3.reflect.FieldUtils;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.Map;
 import java.util.Objects;
 
 public class CreateLakeTableTest {
@@ -62,55 +47,13 @@ public class CreateLakeTableTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster();
-
+        UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         // create database
         String createDbStmtStr = "create database lake_test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
-
-        // partial mock RoutineLoadMgr, don't do the updateBeTaskSlot in shared-data mode testing
-        RoutineLoadMgr routineLoadMgr = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
-        new Expectations(routineLoadMgr) {
-            {
-                routineLoadMgr.updateBeTaskSlot();
-                minTimes = 0;
-            }
-        };
-
-        new MockUp<RunMode>() {
-            @Mock
-            public RunMode getCurrentRunMode() {
-                return RunMode.SHARED_DATA;
-            }
-        };
-
-        new MockUp<SharedNothingStorageVolumeMgr>() {
-            S3FileStoreInfo s3FileStoreInfo = S3FileStoreInfo.newBuilder().setBucket("default-bucket")
-                    .setRegion(Config.aws_s3_region).setEndpoint(Config.aws_s3_endpoint)
-                    .setCredential(AwsCredentialInfo.newBuilder()
-                            .setDefaultCredential(AwsDefaultCredentialInfo.newBuilder().build()).build()).build();
-            FileStoreInfo fsInfo = FileStoreInfo.newBuilder().setFsName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME)
-                    .setFsKey("1").setFsType(FileStoreType.S3)
-                    .setS3FsInfo(s3FileStoreInfo).build();
-
-            @Mock
-            public StorageVolume getStorageVolumeByName(String svName) throws AnalysisException {
-                return StorageVolume.fromFileStoreInfo(fsInfo);
-            }
-
-            @Mock
-            public String getStorageVolumeIdOfTable(long tableId) {
-                return fsInfo.getFsKey();
-            }
-
-            @Mock
-            public StorageVolume getStorageVolume(String svId) {
-                return StorageVolume.fromFileStoreInfo(fsInfo);
-            }
-        };
     }
 
     @AfterClass
@@ -119,7 +62,7 @@ public class CreateLakeTableTest {
 
     private static void createTable(String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt);
     }
 
     private void checkLakeTable(String dbName, String tableName) {
@@ -135,54 +78,21 @@ public class CreateLakeTableTest {
         return (LakeTable) table;
     }
 
-    private FilePathInfo getPathInfo() {
-        FilePathInfo.Builder builder = FilePathInfo.newBuilder();
-        FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
-
-        S3FileStoreInfo.Builder s3FsBuilder = fsBuilder.getS3FsInfoBuilder();
-        s3FsBuilder.setBucket("test-bucket");
-        s3FsBuilder.setRegion("test-region");
-        S3FileStoreInfo s3FsInfo = s3FsBuilder.build();
-
-        fsBuilder.setFsType(FileStoreType.S3);
-        fsBuilder.setFsKey("test-bucket");
-        fsBuilder.setS3FsInfo(s3FsInfo);
-        FileStoreInfo fsInfo = fsBuilder.build();
-
-        builder.setFsInfo(fsInfo);
-        builder.setFullPath("s3://test-bucket/1/");
-        return builder.build();
-    }
-
-    private FileStoreInfo getFileStoreInfo() {
-        S3FileStoreInfo s3FileStoreInfo = S3FileStoreInfo.newBuilder().setBucket("default-bucket")
-                .setRegion(Config.aws_s3_region).setEndpoint(Config.aws_s3_endpoint)
-                .setCredential(AwsCredentialInfo.newBuilder()
-                        .setDefaultCredential(AwsDefaultCredentialInfo.newBuilder().build()).build()).build();
-        return FileStoreInfo.newBuilder().setFsName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME)
-                .setFsKey("1").setFsType(FileStoreType.S3)
-                .setS3FsInfo(s3FileStoreInfo).build();
+    private String getDefaultStorageVolumeFullPath() {
+        StorageVolume sv = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getDefaultStorageVolume();
+        StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+        FileStoreInfo fsInfo = sv.toFileStoreInfo();
+        String serviceId = "";
+        try {
+            serviceId = (String) FieldUtils.readField(starOSAgent, "serviceId", true);
+        } catch (IllegalAccessException e) {
+            throw new RuntimeException("Fail to access StarOSAgent.serviceId");
+        }
+        return String.format("%s/%s", fsInfo.getLocations(0), serviceId);
     }
 
     @Test
-    public void testCreateLakeTable(@Mocked StarOSAgent agent) throws UserException {
-        new Expectations(agent) {
-            {
-                agent.allocateFilePath(anyString, anyLong);
-                result = getPathInfo();
-                agent.createShardGroup(anyLong, anyLong, anyLong);
-                result = GlobalStateMgr.getCurrentState().getNextId();
-                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong, (Map<String, String>) any);
-                returns(Lists.newArrayList(20001L, 20002L, 20003L),
-                        Lists.newArrayList(20004L, 20005L), Lists.newArrayList(20006L, 20007L),
-                        Lists.newArrayList(20008L), Lists.newArrayList(20009L));
-                agent.getPrimaryComputeNodeIdByShard(anyLong, anyLong);
-                result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
-            }
-        };
-
-        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "starOSAgent", agent);
-
+    public void testCreateLakeTable() throws UserException {
         // normal
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "create table lake_test.single_partition_duplicate_key (key1 int, key2 varchar(10))\n" +
@@ -209,31 +119,17 @@ public class CreateLakeTableTest {
                         "properties('replication_num' = '1');"));
         checkLakeTable("lake_test", "multi_partition_unique_key");
 
+        Database db = GlobalStateMgr.getCurrentState().getDb("lake_test");
         LakeTable table = getLakeTable("lake_test", "multi_partition_unique_key");
-        Assert.assertEquals(getPathInfo(), table.getDefaultFilePathInfo());
-        Assert.assertEquals(getPathInfo().getFullPath() + "/100",
+        String defaultFullPath = getDefaultStorageVolumeFullPath();
+        String defaultTableFullPath = String.format("%s/db%d/%d", defaultFullPath, db.getId(), table.getId());
+        Assert.assertEquals(defaultTableFullPath, Objects.requireNonNull(table.getDefaultFilePathInfo()).getFullPath());
+        Assert.assertEquals(defaultTableFullPath + "/100",
                 Objects.requireNonNull(table.getPartitionFilePathInfo(100)).getFullPath());
     }
 
     @Test
-    public void testCreateLakeTableWithStorageCache(@Mocked StarOSAgent agent) throws UserException {
-        new Expectations() {
-            {
-                agent.allocateFilePath(anyString, anyLong);
-                result = getPathInfo();
-                agent.createShardGroup(anyLong, anyLong, anyLong);
-                result = GlobalStateMgr.getCurrentState().getNextId();
-                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong, (Map<String, String>) any);
-                returns(Lists.newArrayList(20001L, 20002L, 20003L),
-                        Lists.newArrayList(20004L, 20005L), Lists.newArrayList(20006L, 20007L),
-                        Lists.newArrayList(20008L), Lists.newArrayList(20009L));
-                agent.getPrimaryComputeNodeIdByShard(anyLong, anyLong);
-                result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
-            }
-        };
-
-        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "starOSAgent", agent);
-
+    public void testCreateLakeTableWithStorageCache() throws UserException {
         // normal
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "create table lake_test.single_partition_duplicate_key_cache (key1 int, key2 varchar(10))\n" +
@@ -248,7 +144,7 @@ public class CreateLakeTableTest {
             long partitionId = lakeTable.getPartition("single_partition_duplicate_key_cache").getId();
             DataCacheInfo partitionDataCacheInfo = lakeTable.getPartitionInfo().getDataCacheInfo(partitionId);
             Assert.assertTrue(partitionDataCacheInfo.isEnabled());
-            Assert.assertEquals(false, partitionDataCacheInfo.isAsyncWriteBack());
+            Assert.assertFalse(partitionDataCacheInfo.isAsyncWriteBack());
         }
 
         ExceptionChecker.expectThrowsNoException(() -> createTable(
@@ -273,7 +169,7 @@ public class CreateLakeTableTest {
             DataCacheInfo partition2DataCacheInfo =
                     lakeTable.getPartitionInfo().getDataCacheInfo(partition2Id);
             Assert.assertTrue(partition2DataCacheInfo.isEnabled());
-            Assert.assertEquals(false, partition2DataCacheInfo.isAsyncWriteBack());
+            Assert.assertFalse(partition2DataCacheInfo.isAsyncWriteBack());
         }
 
         ExceptionChecker.expectThrowsNoException(() -> createTable(
@@ -312,24 +208,7 @@ public class CreateLakeTableTest {
     }
 
     @Test
-    public void testCreateLakeTableEnablePersistentIndex(@Mocked StarOSAgent agent) throws Exception {
-        new Expectations() {
-            {
-                agent.allocateFilePath(anyString, anyLong);
-                result = getPathInfo();
-                agent.createShardGroup(anyLong, anyLong, anyLong);
-                result = GlobalStateMgr.getCurrentState().getNextId();
-                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong, (Map<String, String>) any);
-                returns(Lists.newArrayList(20001L, 20002L, 20003L),
-                        Lists.newArrayList(20004L, 20005L), Lists.newArrayList(20006L, 20007L),
-                        Lists.newArrayList(20008L), Lists.newArrayList(20009L));
-                agent.getPrimaryComputeNodeIdByShard(anyLong, anyLong);
-                result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
-            }
-        };
-
-        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "starOSAgent", agent);
-
+    public void testCreateLakeTableEnablePersistentIndex() throws Exception {
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "create table lake_test.table_with_persistent_index\n" +
                         "(c0 int, c1 string, c2 int, c3 bigint)\n" +
@@ -351,25 +230,12 @@ public class CreateLakeTableTest {
             ShowExecutor executor = new ShowExecutor(connectContext, showCreateTableStmt);
             ShowResultSet resultSet = executor.execute();
 
-            Assert.assertTrue(resultSet.getResultRows().size() != 0);
+            Assert.assertFalse(resultSet.getResultRows().isEmpty());
         }
     }
 
     @Test
     public void testCreateLakeTableException() {
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            public StarOSAgent getStarOSAgent() {
-                return new StarOSAgent();
-            }
-        };
-        new MockUp<StarOSAgent>() {
-            @Mock
-            public FilePathInfo allocateFilePath(String storageVolumeId, long tableId) throws DdlException {
-                return FilePathInfo.newBuilder().build();
-            }
-        };
-
         // storage_cache disabled but enable_async_write_back = true
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "enable_async_write_back is disabled since version 3.1.4",
@@ -388,22 +254,7 @@ public class CreateLakeTableTest {
     }
 
     @Test
-    public void testExplainRowCount(@Mocked StarOSAgent agent) throws Exception {
-        new Expectations(agent) {
-            {
-                agent.allocateFilePath(anyString, anyLong);
-                result = getPathInfo();
-                agent.createShardGroup(anyLong, anyLong, anyLong);
-                result = GlobalStateMgr.getCurrentState().getNextId();
-                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong, (Map<String, String>) any);
-                result = Lists.newArrayList(20001L, 20002L, 20003L);
-                agent.getPrimaryComputeNodeIdByShard(anyLong, anyLong);
-                result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
-                agent.getBackendIdsByShard(anyLong, 0);
-                result = Sets.newHashSet(GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0));
-            }
-        };
-
+    public void testExplainRowCount() throws Exception {
         new MockUp<Partition>() {
             @Mock
             public boolean hasData() {
@@ -418,8 +269,6 @@ public class CreateLakeTableTest {
             }
         };
 
-        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "starOSAgent", agent);
-
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "create table lake_test.duplicate_key_rowcount (key1 int, key2 varchar(10))\n" +
                         "distributed by hash(key1) buckets 3 properties('replication_num' = '1');"));
@@ -428,29 +277,11 @@ public class CreateLakeTableTest {
         // check explain result
         String sql = "select * from lake_test.duplicate_key_rowcount";
         String plan = UtFrameUtils.getVerboseFragmentPlan(connectContext, sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("actualRows=6"));
     }
 
     @Test
-    public void testCreateLakeTableListPartition(@Mocked StarOSAgent agent) throws UserException {
-        new Expectations() {
-            {
-                agent.allocateFilePath(anyString, anyLong);
-                result = getPathInfo();
-                agent.createShardGroup(anyLong, anyLong, anyLong);
-                result = GlobalStateMgr.getCurrentState().getNextId();
-                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong, (Map<String, String>) any);
-                returns(Lists.newArrayList(20001L, 20002L, 20003L),
-                        Lists.newArrayList(20004L, 20005L), Lists.newArrayList(20006L, 20007L),
-                        Lists.newArrayList(20008L), Lists.newArrayList(20009L));
-                agent.getPrimaryComputeNodeIdByShard(anyLong, anyLong);
-                result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
-            }
-        };
-
-        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "starOSAgent", agent);
-
+    public void testCreateLakeTableListPartition() throws UserException {
         // list partition
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "create table lake_test.list_partition (dt date not null, key2 varchar(10))\n" +
@@ -469,24 +300,7 @@ public class CreateLakeTableTest {
     }
 
     @Test
-    public void testCreateLakeTableEnableCloudNativePersistentIndex(@Mocked StarOSAgent agent) throws Exception {
-        new Expectations() {
-            {
-                agent.allocateFilePath(anyString, anyLong);
-                result = getPathInfo();
-                agent.createShardGroup(anyLong, anyLong, anyLong);
-                result = GlobalStateMgr.getCurrentState().getNextId();
-                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong, (Map<String, String>) any);
-                returns(Lists.newArrayList(20001L, 20002L, 20003L),
-                        Lists.newArrayList(20004L, 20005L), Lists.newArrayList(20006L, 20007L),
-                        Lists.newArrayList(20008L), Lists.newArrayList(20009L));
-                agent.getPrimaryComputeNodeIdByShard(anyLong, anyLong);
-                result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
-            }
-        };
-
-        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "starOSAgent", agent);
-
+    public void testCreateLakeTableEnableCloudNativePersistentIndex() throws Exception {
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "create table lake_test.table_with_cloud_native_persistent_index\n" +
                         "(c0 int, c1 string, c2 int, c3 bigint)\n" +

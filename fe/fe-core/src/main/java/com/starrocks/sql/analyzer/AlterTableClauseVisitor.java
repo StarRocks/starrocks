@@ -24,7 +24,7 @@ import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IndexDef;
-import com.starrocks.analysis.IndexFactory;
+import com.starrocks.analysis.IndexDef.IndexType;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.SlotRef;
@@ -33,6 +33,7 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -106,8 +107,17 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
     public Void visitCreateIndexClause(CreateIndexClause clause, ConnectContext context) {
         IndexDef indexDef = clause.getIndexDef();
         indexDef.analyze();
-        clause.setIndex(IndexFactory.createIndexFromDef(indexDef));
-
+        Index index;
+        // Only assign meaningful indexId for OlapTable
+        if (table.isOlapTableOrMaterializedView()) {
+            long indexId = IndexType.isCompatibleIndex(indexDef.getIndexType()) ? ((OlapTable) table).incAndGetMaxIndexId() : -1;
+            index = new Index(indexId, indexDef.getIndexName(), indexDef.getColumns(),
+                    indexDef.getIndexType(), indexDef.getComment(), indexDef.getProperties());
+        } else {
+            index = new Index(indexDef.getIndexName(), indexDef.getColumns(),
+                    indexDef.getIndexType(), indexDef.getComment(), indexDef.getProperties());
+        }
+        clause.setIndex(index);
         return null;
     }
 
@@ -131,6 +141,10 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Properties is not set");
         }
 
+        if (table.isExternalTableWithFileSystem()) {
+            return null;
+        }
+
         if (properties.size() != 1
                 && !(TableProperty.isSamePrefixProperties(properties, TableProperty.DYNAMIC_PARTITION_PROPERTY_PREFIX)
                 || TableProperty.isSamePrefixProperties(properties, TableProperty.BINLOG_PROPERTY_PREFIX))) {
@@ -140,9 +154,7 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
             clause.setNeedTableStable(false);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE)) {
-            if (!properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE).equalsIgnoreCase("column")) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Can only change storage type to COLUMN");
-            }
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Can't change storage type");
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DISTRIBUTION_TYPE)) {
             if (!properties.get(PropertyAnalyzer.PROPERTIES_DISTRIBUTION_TYPE).equalsIgnoreCase("hash")) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Can only change distribution type to HASH");
@@ -164,6 +176,14 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             }
             clause.setNeedTableStable(false);
             clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
+            try {
+                PropertyAnalyzer.analyzeLocation(properties, false);
+            } catch (SemanticException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Property " + PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + " not valid");
+            }
+            clause.setNeedTableStable(false);
         } else if (DynamicPartitionUtil.checkDynamicPartitionPropertiesExist(properties)) {
             // do nothing, dynamic properties will be analyzed in SchemaChangeHandler.process
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
@@ -205,11 +225,11 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             try {
                 int val = Integer.parseInt(valStr);
                 if (val < 0) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Property " 
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Property "
                             + PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC + " must not be less than 0");
                 }
             } catch (NumberFormatException e) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Property " 
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Property "
                         + PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC + " must be integer: " + valStr);
             }
             clause.setNeedTableStable(false);
@@ -328,6 +348,10 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Optimize table in colocate group is not supported");
         }
 
+        if (olapTable.isCloudNativeTableOrMaterializedView()) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Optimize table in cloud native is not supported");
+        }
+
         List<Integer> sortKeyIdxes = Lists.newArrayList();
         List<ColumnDef> columnDefs = olapTable.getColumns().stream().map(Column::toColumnDef).collect(Collectors.toList());
         if (clause.getSortKeys() != null) {
@@ -356,10 +380,7 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
         KeysType originalKeysType = olapTable.getKeysType();
         KeysDesc keysDesc = clause.getKeysDesc();
         if (keysDesc != null) {
-            if (keysDesc.getKeysType() != KeysType.PRIMARY_KEYS || originalKeysType != KeysType.UNIQUE_KEYS) {
-                throw new SemanticException("not support optimize %s to %s keys type",
-                        originalKeysType.toSql(), keysDesc.getKeysType().toSql());
-            }
+            throw new SemanticException("not support change keys type when optimize table");
         }
         KeysType targetKeysType = keysDesc == null ? originalKeysType : keysDesc.getKeysType();
 
@@ -418,6 +439,7 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             clause.setSourcePartitionIds(partitionIds);
         } else {
             clause.setSourcePartitionIds(olapTable.getPartitions().stream().map(Partition::getId).collect(Collectors.toList()));
+            clause.setTableOptimize(true);
         }
 
 

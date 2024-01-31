@@ -188,7 +188,7 @@ public:
                                                                    const TabletSchemaCSPtr& tablet_schema,
                                                                    KVStore* meta, int64_t version,
                                                                    OlapReaderStatistics* stats,
-                                                                   KVStore* dcg_meta = nullptr);
+                                                                   KVStore* dcg_meta = nullptr, size_t chunk_size = 0);
 
     // only used for updatable tablets' rowset in column mode partial update
     // simply get iterators to iterate all rows without complex options like predicates
@@ -216,6 +216,9 @@ public:
     // NOTE: only used for updatable tablet's rowset
     void make_commit(int64_t version, uint32_t rowset_seg_id);
 
+    // Used in commit compaction, record `max_compact_input_rowset_id` for pk recover
+    void make_commit(int64_t version, uint32_t rowset_seg_id, uint32_t max_compact_input_rowset_id);
+
     // helper class to access RowsetMeta
     int64_t start_version() const { return rowset_meta()->version().first; }
     int64_t end_version() const { return rowset_meta()->version().second; }
@@ -236,6 +239,8 @@ public:
     uint32_t num_update_files() const { return rowset_meta()->get_num_update_files(); }
     bool has_data_files() const { return num_segments() > 0 || num_delete_files() > 0 || num_update_files() > 0; }
     KeysType keys_type() const { return _keys_type; }
+
+    const TabletSchemaCSPtr tablet_schema() { return rowset_meta()->tablet_schema(); }
 
     // remove all files in this rowset
     // TODO should we rename the method to remove_files() to be more specific?
@@ -302,8 +307,6 @@ public:
     void set_is_compacting(bool flag) { is_compacting.store(flag); }
 
     bool get_is_compacting() { return is_compacting.load(); }
-
-    DeletePredicatePB* mutable_delete_predicate() { return _rowset_meta->mutable_delete_predicate(); }
 
     static bool comparator(const RowsetSharedPtr& left, const RowsetSharedPtr& right) {
         return left->end_version() < right->end_version();

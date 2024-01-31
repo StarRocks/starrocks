@@ -85,7 +85,7 @@ protected:
 
         ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
         Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
-        ctx->scan_ranges.emplace_back(_create_scan_range(filepath));
+        ctx->scan_range = (_create_scan_range(filepath));
         // --------------finish init context---------------
 
         Status status = file_reader->init(ctx);
@@ -94,7 +94,7 @@ protected:
             return;
         }
         if (!status.ok()) {
-            std::cout << status.get_error_msg() << std::endl;
+            std::cout << status.message() << std::endl;
         }
         ASSERT_TRUE(status.ok());
 
@@ -114,7 +114,7 @@ protected:
             chunk->reset();
             status = file_reader->get_next(&chunk);
             if (!status.ok() && !status.is_end_of_file()) {
-                std::cout << status.get_error_msg() << std::endl;
+                std::cout << status.message() << std::endl;
                 break;
             }
             check_chunk_values(chunk, expected_value);
@@ -272,6 +272,17 @@ TEST_F(ColumnConverterTest, Int32Test) {
         }
     }
     {
+        const std::string col_name = "date";
+        {
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATE);
+            check(file_path, col_type, col_name, "[2023-04-25]", expected_rows);
+        }
+        {
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
+            check(file_path, col_type, col_name, "[2023-04-25 00:00:00]", expected_rows);
+        }
+    }
+    {
         const std::string col_name = "decimal32";
         {
             const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL, -1, 9, 2);
@@ -357,14 +368,14 @@ TEST_F(ColumnConverterTest, Int64Test) {
         const std::string col_name = "time_micros";
         {
             const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_TIME);
-            check(file_path, col_type, col_name, "[5]", expected_rows, true);
+            check(file_path, col_type, col_name, "[3600]", expected_rows);
         }
     }
     {
         const std::string col_name = "time_nanos";
         {
             const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_TIME);
-            check(file_path, col_type, col_name, "[5]", expected_rows, true);
+            check(file_path, col_type, col_name, "[3.6e+06]", expected_rows);
         }
     }
     {

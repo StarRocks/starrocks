@@ -218,7 +218,7 @@ public class SparkLoadJobTest {
                             @Injectable LeaderTaskExecutor executor) throws Exception {
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentGlobalTransactionMgr();
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
                 result = transactionMgr;
                 transactionMgr.beginTransaction(dbId, Lists.newArrayList(), label, null,
                         (TransactionState.TxnCoordinator) any, LoadJobSourceType.FRONTEND,
@@ -398,7 +398,7 @@ public class SparkLoadJobTest {
                 replica.getLastFailedVersion();
                 result = -1;
                 AgentTaskExecutor.submit((AgentBatchTask) any);
-                GlobalStateMgr.getCurrentGlobalTransactionMgr();
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
                 result = transactionMgr;
                 transactionMgr.commitTransaction(dbId, transactionId, (List<TabletCommitInfo>) any, (List<TabletFailInfo>) any,
                         (LoadJobFinalOperation) any);
@@ -488,7 +488,7 @@ public class SparkLoadJobTest {
                 ((LakeTablet) tablet).getPrimaryComputeNodeId();
                 result = backendId;
                 AgentTaskExecutor.submit((AgentBatchTask) any);
-                GlobalStateMgr.getCurrentGlobalTransactionMgr();
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
                 result = transactionMgr;
             }
         };

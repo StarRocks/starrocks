@@ -43,6 +43,7 @@ import com.starrocks.backup.BackupJobInfo.BackupPhysicalPartitionInfo;
 import com.starrocks.backup.BackupJobInfo.BackupTableInfo;
 import com.starrocks.backup.BackupJobInfo.BackupTabletInfo;
 import com.starrocks.backup.RestoreJob.RestoreJobState;
+import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
@@ -156,7 +157,7 @@ public class RestoreJobTest {
 
         job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
                 jobInfo, false, 3, 100000,
-                globalStateMgr, repo.getId(), backupMeta);
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
 
         job.resetPartitionForRestore(localTbl, expectedRestoreTbl, CatalogMocker.TEST_PARTITION1_NAME, 3);
     }
@@ -177,7 +178,7 @@ public class RestoreJobTest {
                 minTimes = 0;
                 result = editLog;
 
-                GlobalStateMgr.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 minTimes = 0;
                 result = systemInfoService;
             }
@@ -189,7 +190,7 @@ public class RestoreJobTest {
         beIds.add(CatalogMocker.BACKEND3_ID);
         new Expectations() {
             {
-                systemInfoService.seqChooseBackendIds(anyInt, anyBoolean, anyBoolean);
+                systemInfoService.getNodeSelector().seqChooseBackendIds(anyInt, anyBoolean, anyBoolean, null);
                 minTimes = 0;
                 result = beIds;
 
@@ -289,7 +290,7 @@ public class RestoreJobTest {
         backupMeta = new BackupMeta(tbls);
         job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
                 jobInfo, false, 3, 100000,
-                globalStateMgr, repo.getId(), backupMeta);
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
         job.setRepo(repo);
         // pending
         job.run();
@@ -347,7 +348,7 @@ public class RestoreJobTest {
                 minTimes = 0;
                 result = editLog;
 
-                GlobalStateMgr.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 minTimes = 0;
                 result = systemInfoService;
             }
@@ -359,7 +360,7 @@ public class RestoreJobTest {
         beIds.add(CatalogMocker.BACKEND3_ID);
         new Expectations() {
             {
-                systemInfoService.seqChooseBackendIds(anyInt, anyBoolean, anyBoolean);
+                systemInfoService.getNodeSelector().seqChooseBackendIds(anyInt, anyBoolean, anyBoolean, null);
                 minTimes = 0;
                 result = beIds;
 
@@ -452,7 +453,7 @@ public class RestoreJobTest {
         backupMeta = new BackupMeta(tbls);
         job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
                 jobInfo, false, 3, 100000,
-                globalStateMgr, repo.getId(), backupMeta);
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
         job.setRepo(repo);
         // pending
         job.run();

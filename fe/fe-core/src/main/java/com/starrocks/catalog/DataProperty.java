@@ -85,13 +85,13 @@ public class DataProperty implements Writable {
 
     public static DataProperty getInferredDefaultDataProperty() {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        SystemInfoService infoService = globalStateMgr.getClusterInfo();
+        SystemInfoService infoService = globalStateMgr.getNodeMgr().getClusterInfo();
         List<Backend> backends = infoService.getBackends();
         Set<TStorageMedium> mediumSet = Sets.newHashSet();
         for (Backend backend : backends) {
             if (backend.hasPathHash()) {
                 mediumSet.addAll(backend.getDisks().values().stream()
-                        .filter(v -> v.getState() == DiskInfo.DiskState.ONLINE)
+                        .filter(DiskInfo::canCreateTablet)
                         .map(DiskInfo::getStorageMedium).collect(Collectors.toSet()));
             }
         }

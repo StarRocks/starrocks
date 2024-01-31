@@ -37,12 +37,15 @@ package com.starrocks.catalog;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Multimap;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -62,7 +65,6 @@ import org.apache.commons.lang3.EnumUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.parquet.Strings;
 import org.threeten.extra.PeriodDuration;
 
 import java.io.DataInput;
@@ -70,7 +72,6 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -126,7 +127,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     // This property only applies to materialized views
     // It represents the maximum number of partitions that will be refreshed by a TaskRun refresh
-    private int partitionRefreshNumber = INVALID;
+    private int partitionRefreshNumber = Config.default_mv_partition_refresh_number;
 
     // This property only applies to materialized views
     // When using the system to automatically refresh, the maximum range of the most recent partitions will be refreshed.
@@ -155,7 +156,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
     private boolean enablePersistentIndex = false;
 
     // Only meaningful when enablePersistentIndex = true.
-    TPersistentIndexType persistendIndexType;
+    TPersistentIndexType persistentIndexType;
 
     private int primaryIndexCacheExpireSec = 0;
 
@@ -195,13 +196,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
     @SerializedName(value = "hasDelete")
     private boolean hasDelete = false;
     @SerializedName(value = "hasForbitGlobalDict")
-    private boolean hasForbitGlobalDict = false;
+    private boolean hasForbiddenGlobalDict = false;
 
     @SerializedName(value = "storageInfo")
     private StorageInfo storageInfo;
 
-    // partitionId -> binlogAvailabeVersion
-    private Map<Long, Long> binlogAvailabeVersions = new HashMap<>();
+    // partitionId -> binlogAvailableVersion
+    private Map<Long, Long> binlogAvailableVersions = new HashMap<>();
 
     private BinlogConfig binlogConfig;
 
@@ -212,16 +213,24 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // foreign key constraint for mv rewrite
     private List<ForeignKeyConstraint> foreignKeyConstraints;
 
-    private Boolean useFastSchemaEvolution;
+    private boolean useFastSchemaEvolution;
 
     private PeriodDuration dataCachePartitionDuration;
 
+    private Multimap<String, String> location;
+
     public TableProperty() {
-        this.properties = new LinkedHashMap<>();
+        this(Maps.newLinkedHashMap());
     }
 
     public TableProperty(Map<String, String> properties) {
         this.properties = properties;
+        if (FeConstants.runningUnitTest) {
+            // FIXME: remove this later.
+            // Since Config.default_mv_refresh_partition_num is set to 1 by default, if not set to -1 in FE UTs,
+            // task run will only refresh 1 partition and will produce wrong result.
+            partitionRefreshNumber = INVALID;
+        }
     }
 
     public TableProperty copy() {
@@ -232,7 +241,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
             Preconditions.checkState(false, "gsonPostProcess shouldn't fail");
         }
         newTableProperty.hasDelete = this.hasDelete;
-        newTableProperty.hasForbitGlobalDict = this.hasForbitGlobalDict;
+        newTableProperty.hasForbiddenGlobalDict = this.hasForbiddenGlobalDict;
         return newTableProperty;
     }
 
@@ -284,6 +293,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
             case OperationType.OP_ALTER_TABLE_PROPERTIES:
                 buildPartitionLiveNumber();
                 buildDataCachePartitionDuration();
+                buildLocation();
+                buildStorageCoolDownTTL();
                 break;
             case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY:
                 buildConstraint();
@@ -294,6 +305,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    // TODO: refactor the postProcessing code into listener-based instead of procedure-oriented
     public TableProperty buildMvProperties() {
         buildPartitionTTL();
         buildPartitionRefreshNumber();
@@ -302,6 +314,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildResourceGroup();
         buildConstraint();
         buildMvSortKeys();
+        buildQueryRewrite();
         return this;
     }
 
@@ -335,11 +348,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public TableProperty buildBinlogAvailableVersion() {
-        binlogAvailabeVersions = new HashMap<>();
+        binlogAvailableVersions = new HashMap<>();
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             if (entry.getKey().startsWith(BINLOG_PARTITION)) {
                 long partitionId = Long.parseLong(entry.getKey().split("_")[2]);
-                binlogAvailabeVersions.put(partitionId, Long.parseLong(entry.getValue()));
+                binlogAvailableVersions.put(partitionId, Long.parseLong(entry.getValue()));
             }
         }
         return this;
@@ -389,17 +402,15 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public TableProperty buildExcludedTriggerTables() {
         String excludedRefreshConf = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES, null);
         List<TableName> tables = Lists.newArrayList();
-        if (excludedRefreshConf == null) {
-            excludedTriggerTables = tables;
-        } else {
+        if (excludedRefreshConf != null) {
             List<String> tableList = Splitter.on(",").omitEmptyStrings().trimResults()
                     .splitToList(excludedRefreshConf);
             for (String table : tableList) {
                 TableName tableName = AnalyzerUtils.stringToTableName(table);
                 tables.add(tableName);
             }
-            excludedTriggerTables = tables;
         }
+        excludedTriggerTables = tables;
         return this;
     }
 
@@ -478,7 +489,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public TableProperty buildStorageVolume() {
         storageVolume = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME,
-                RunMode.allowCreateLakeTable() ? "default" : "local");
+                RunMode.isSharedDataMode() ? "default" : "local");
         return this;
     }
 
@@ -523,9 +534,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public TableProperty buildPersistentIndexType() {
         String type = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE, "LOCAL");
         if (type.equals("LOCAL")) {
-            persistendIndexType = TPersistentIndexType.LOCAL;
+            persistentIndexType = TPersistentIndexType.LOCAL;
         } else if (type.equals("CLOUD_NATIVE")) {
-            persistendIndexType = TPersistentIndexType.CLOUD_NATIVE;
+            persistentIndexType = TPersistentIndexType.CLOUD_NATIVE;
         }
         return this;
     }
@@ -589,6 +600,22 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public TableProperty buildStorageType() {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE)) {
             storageType = properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE);
+        }
+        return this;
+    }
+
+    public TableProperty buildLocation() {
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
+            String locationStr = properties.get(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION);
+            if (locationStr.isEmpty()) {
+                properties.remove(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION);
+                location = null;
+            } else {
+                location = PropertyAnalyzer.analyzeLocationStringToMap(
+                        properties.get(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION));
+            }
+        } else {
+            location = null;
         }
         return this;
     }
@@ -698,15 +725,19 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public String getPersistentIndexTypeString() {
-        return persistentIndexTypeToString(persistendIndexType);
+        return persistentIndexTypeToString(persistentIndexType);
     }
 
     public TPersistentIndexType getPersistentIndexType() {
-        return persistendIndexType;
+        return persistentIndexType;
     }
 
     public String storageType() {
         return storageType;
+    }
+
+    public Multimap<String, String> getLocation() {
+        return location;
     }
 
     public TWriteQuorumType writeQuorum() {
@@ -737,12 +768,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
         this.hasDelete = hasDelete;
     }
 
-    public boolean hasForbitGlobalDict() {
-        return hasForbitGlobalDict;
+    public boolean hasForbiddenGlobalDict() {
+        return hasForbiddenGlobalDict;
     }
 
-    public void setHasForbitGlobalDict(boolean hasForbitGlobalDict) {
-        this.hasForbitGlobalDict = hasForbitGlobalDict;
+    public void setHasForbiddenGlobalDict(boolean hasForbiddenGlobalDict) {
+        this.hasForbiddenGlobalDict = hasForbiddenGlobalDict;
     }
 
     public void setStorageInfo(StorageInfo storageInfo) {
@@ -773,8 +804,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
         this.foreignKeyConstraints = foreignKeyConstraints;
     }
 
-    public Map<Long, Long> getBinlogAvailaberVersions() {
-        return binlogAvailabeVersions;
+    public Map<Long, Long> getBinlogAvailableVersions() {
+        return binlogAvailableVersions;
     }
 
     public PeriodDuration getDataCachePartitionDuration() {
@@ -786,7 +817,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public void clearBinlogAvailableVersion() {
-        binlogAvailabeVersions.clear();
+        binlogAvailableVersions.clear();
         for (Iterator<Map.Entry<String, String>> it = properties.entrySet().iterator(); it.hasNext(); ) {
             Map.Entry<String, String> entry = it.next();
             if (entry.getKey().startsWith(BINLOG_PARTITION)) {
@@ -801,7 +832,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
-    public Boolean getUseFastSchemaEvolution() {
+    public boolean getUseFastSchemaEvolution() {
         return useFastSchemaEvolution;
     }
 
@@ -830,19 +861,15 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildPrimaryIndexCacheExpireSec();
         buildCompressionType();
         buildWriteQuorum();
-        buildPartitionTTL();
         buildPartitionLiveNumber();
-        buildAutoRefreshPartitionsLimit();
-        buildPartitionRefreshNumber();
-        buildExcludedTriggerTables();
         buildReplicatedStorage();
-        buildQueryRewrite();
         buildBucketSize();
         buildBinlogConfig();
         buildBinlogAvailableVersion();
-        buildConstraint();
         buildDataCachePartitionDuration();
         buildUseFastSchemaEvolution();
         buildStorageType();
+        buildMvProperties();
+        buildLocation();
     }
 }

@@ -38,6 +38,8 @@ public:
     bool need_input() const override { return _acc.need_input(); }
     bool is_finished() const override { return _acc.is_finished(); }
 
+    bool ignore_empty_eos() const override { return false; }
+
     Status set_finishing(RuntimeState* state) override;
     Status set_finished(RuntimeState* state) override;
 

@@ -67,12 +67,12 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.PartitionStatistics;
 import com.starrocks.lake.compaction.Quantiles;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.server.GlobalStateMgr;
 
@@ -431,13 +431,12 @@ public class PartitionsProcDir implements ProcDirInterface {
     public ProcNodeInterface lookup(String partitionIdOrName) throws AnalysisException {
         long partitionId = -1L;
 
-
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         try {
-            Partition partition;
+            PhysicalPartition partition;
             try {
-                partition = table.getPartition(Long.parseLong(partitionIdOrName));
+                partition = table.getPhysicalPartition(Long.parseLong(partitionIdOrName));
             } catch (NumberFormatException e) {
                 partition = table.getPartition(partitionIdOrName, false);
                 if (partition == null) {

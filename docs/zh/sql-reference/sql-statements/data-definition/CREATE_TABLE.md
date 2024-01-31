@@ -45,7 +45,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 
 **col_name**：列名称
 
-注意，在一般情况下，不能直接创建以以 `__op` 或 `__row` 开头命名的列，因为此类列名被 StarRocks 保留用于特殊目的，创建这样的列可能导致未知行为。如需创建这样的列，必须将 FE 动态参数 [`allow_system_reserved_names`](../../../administration/Configuration.md#allow_system_reserved_names) 设置为 `TRUE`。
+注意，在一般情况下，不能直接创建以以 `__op` 或 `__row` 开头命名的列，因为此类列名被 StarRocks 保留用于特殊目的，创建这样的列可能导致未知行为。如需创建这样的列，必须将 FE 动态参数 [`allow_system_reserved_names`](../../../administration/FE_configuration.md#allow_system_reserved_names) 设置为 `TRUE`。
 
 **col_type**：列数据类型
 
@@ -123,9 +123,9 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 
 1. BITMAP_UNION 聚合类型列在导入时的原始数据类型必须是 `TINYINT, SMALLINT, INT, BIGINT`。
 2. 如果在建表时 `REPLACE_IF_NOT_NULL` 列指定了 NOT NULL，那么 StarRocks 仍然会将其转化 NULL，不会向用户报错。用户可以借助这个类型完成「部分列导入」的功能。
-  该类型只对聚合模型有用 (`key_desc` 的 `type` 为 `AGGREGATE KEY`)。
+  该类型只对聚合表有用 (`key_desc` 的 `type` 为 `AGGREGATE KEY`)。
 
-**NULL | NOT NULL**：列数据是否允许为 `NULL`。其中明细模型、聚合模型和更新模型表中所有列都默认指定 `NULL`。主键模型表的指标列默认指定 `NULL`，维度列默认指定 `NOT NULL`。如源数据文件中存在 `NULL` 值，可以用 `\N` 来表示，导入时 StarRocks 会将其解析为 `NULL`。
+**NULL | NOT NULL**：列数据是否允许为 `NULL`。其中明细表、聚合表和更新表中所有列都默认指定 `NULL`。主键表的指标列默认指定 `NULL`，维度列默认指定 `NOT NULL`。如源数据文件中存在 `NULL` 值，可以用 `\N` 来表示，导入时 StarRocks 会将其解析为 `NULL`。
 
 **DEFAULT "default_value"**：列数据的默认值。导入数据时，如果该列对应的源数据文件中的字段为空，则自动填充 `DEFAULT` 关键字中指定的默认值。支持以下三种指定方式：
 
@@ -139,7 +139,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 
 ### **index_definition**
 
-建表时仅支持创建 bitmap 索引，语法如下。有关参数说明和使用限制，请参见 [Bitmap 索引](../../../using_starrocks/Bitmap_index.md#创建索引)。
+建表时仅支持创建 bitmap 索引，语法如下。有关参数说明和使用限制，请参见 [Bitmap 索引](../../../table_design/indexes/Bitmap_index.md#创建索引)。
 
 ```sql
 INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
@@ -197,7 +197,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
     PROPERTIES (
         "database" = "hive_db_name",
         "table" = "hive_table_name",
-        "hive.metastore.uris" = "thrift://127.0.0.1:9083"
+        "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
     )
     ```
 
@@ -458,10 +458,10 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
 
   **注意事项**
 
-  * 不支持主键模型表、更新模型表和聚合表。
+  * 不支持主键表、更新表和聚合表。
   * 不支持指定 [Colocation Group](../../../using_starrocks/Colocate_join.md)。
   * 不支持 [Spark Load](../../../loading/SparkLoad.md)。
-  * 自 2.5.7 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[确定分桶数量](../../../table_design/Data_distribution.md#确定分桶数量)。
+  * 自 2.5.7 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[设置分桶数量](../../../table_design/Data_distribution.md#设置分桶数量)。
 
   更多随机分桶的信息，请参见[随机分桶](../../../table_design/Data_distribution.md#随机分桶自-v31)。
 
@@ -487,11 +487,11 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
   * **建表时，必须指定分桶键**。
   * 作为分桶键的列，该列的值不支持更新。
   * 分桶键指定后不支持修改。
-  * 自 2.5.7 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[确定分桶数量](../../../table_design/Data_distribution.md#确定分桶数量)。
+  * 自 2.5.7 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[设置分桶数量](../../../table_design/Data_distribution.md#设置分桶数量)。
 
 ### **ORDER BY**
 
-自 3.0 版本起，主键模型解耦了主键和排序键，排序键通过 `ORDER BY` 指定，可以为任意列的排列组合。
+自 3.0 版本起，主键表解耦了主键和排序键，排序键通过 `ORDER BY` 指定，可以为任意列的排列组合。
 > **注意**
 >
 > 如果指定了排序键，就根据排序键构建前缀索引；如果没指定排序键，就根据主键构建前缀索引。
@@ -554,7 +554,7 @@ PROPERTIES (
   * 不支持表达式分区和 List 分区。
   * 不支持分区列为非日期类型。
   * 不支持多个分区列。
-  * 不支持主键模型表。
+  * 不支持主键表。
 
 **设置分区 Tablet 副本数**
 
@@ -570,11 +570,11 @@ PROPERTIES (
 
 如果 Engine 类型为 olap, 可以指定某列使用 bloom filter 索引。bloom filter 索引使用时有如下限制：
 
-* 主键模型和明细模型中所有列都可以创建 Bloom filter 索引；聚合模型和更新模型中，只有维度列（即 Key 列）支持创建 Bloom filter 索引。
+* 主键表和明细表中所有列都可以创建 Bloom filter 索引；聚合表和更新表中，只有维度列（即 Key 列）支持创建 Bloom filter 索引。
 * 不支持为 TINYINT、FLOAT、DOUBLE 和 DECIMAL 类型的列创建 Bloom filter 索引。
 * Bloom filter 索引只能提高查询条件为 `in` 和 `=` 的查询效率，值越分散效果越好。
 
-更多信息，参见 [Bloom filter 索引](../../../using_starrocks/Bloomfilter_index.md)。
+更多信息，参见 [Bloom filter 索引](../../../table_design/indexes/Bloomfilter_index.md)。
 
 ```sql
 PROPERTIES (
@@ -618,13 +618,13 @@ PROPERTIES (
 | `dynamic_partition.prefix`    | 否       | 动态分区的前缀名，默认值为 `p`。                             |
 | dynamic_partition.buckets     | 否       | 动态分区的分桶数量。默认与 BUCKETS 保留字指定的分桶数量、或者 StarRocks 自动设置的分桶数量保持一致。 |
 
-#### 设置随机分桶的表中分桶大小
+#### 设置随机分桶表中分桶大小
 
-自 3.2 版本起，对于随机分桶的表，您可以在建表时在 `PROPERTIES` 中设置 `bucket_size` 参数来指定分桶大小。默认为 `1024 * 1024 * 1024 B`（1 GB），最大支持为 4 GB。通常情况下建议保留默认值。
+自 3.2 版本起，对于随机分桶的表，您可以在建表时在 `PROPERTIES` 中设置 `bucket_size` 参数来指定分桶大小，启用按需动态增加分桶数量。单位为 B。
 
 ``` sql
 PROPERTIES (
-    "bucket_size" = "3221225472"
+    "bucket_size" = "1073741824"
 )
 ```
 
@@ -707,14 +707,14 @@ PROPERTIES (
 > **注意**
 >
 > * `unique_constraints` 约束和 `foreign_key_constraints` 约束仅用于查询重写。导入数据时，不保证进行外键约束校验。您必须确保导入的数据满足约束条件。
-> * 主键模型表的 Primary Key 或更新模型表的 Unique Key 默认是其 `unique_constraints`，您无需手动设置。
+> * 主键表的 Primary Key 或更新表的 Unique Key 默认是其 `unique_constraints`，您无需手动设置。
 > * `foreign_key_constraints` 中的 `child_column` 必须对应另一个表的 `unique_constraints` 中的 `unique_key`。
 > * `child_column` 和 `parent_column` 的数量必须一致。
 > * `child_column` 和对应的 `parent_column` 的数据类型必须匹配。
 
 #### 为 StarRocks 存算分离集群创建云原生表
 
-为了[使用 StarRocks 存算分离集群](../../../deployment/deploy_shared_data.md#使用-starrocks-存算分离集群)，您需要通过以下 PROPERTIES 创建云原生表：
+为了[使用 StarRocks 存算分离集群](../../../deployment/shared_data/s3.md)，您需要通过以下 PROPERTIES 创建云原生表：
 
 ```SQL
 PROPERTIES (
@@ -731,7 +731,7 @@ PROPERTIES (
 
   > **说明**
   >
-  > 如需启用本地磁盘缓存，必须在 BE 配置项 `storage_root_path` 中指定磁盘目录。更多信息，请参见 [BE 配置项](../../../administration/Configuration.md#be-配置项)
+  > 如需启用本地磁盘缓存，必须在 BE 配置项 `storage_root_path` 中指定磁盘目录。更多信息，请参见 [BE 配置项](../../../administration/BE_configuration.md)。
 
 * `datacache.partition_duration`：热数据的有效期。当启用本地磁盘缓存时，所有数据都会导入至本地磁盘缓存中。当缓存满时，StarRocks 会从缓存中删除最近较少使用（Less recently used）的数据。当有查询需要扫描已删除的数据时，StarRocks 会检查该数据是否在有效期内。如果数据在有效期内，StarRocks 会再次将数据导入至缓存中。如果数据不在有效期内，StarRocks 不会将其导入至缓存中。该属性为字符串，您可以使用以下单位指定：`YEAR`、`MONTH`、`DAY` 和 `HOUR`，例如，`7 DAY` 和 `12 HOUR`。如果不指定，StarRocks 将所有数据都作为热数据进行缓存。
 
@@ -746,12 +746,12 @@ PROPERTIES (
 
 #### 设置 fast schema evolution
 
-`fast_schema_evolution`: 是否开启该表的 fast schema evolution，取值：`TRUE`（默认） 或 `FALSE`。开启后增删列时可以提高 schema change 速度并降低资源使用。目前仅支持在建表时开启该属性，建表后不支持通过 [ALTER TABLE](../data-definition/ALTER_TABLE.md) 修改该属性。自 3.2.0 版本起，支持该参数。
+`fast_schema_evolution`: 是否开启该表的 fast schema evolution，取值：`TRUE` 或 `FALSE`（默认）。开启后增删列时可以提高 schema change 速度并降低资源使用。目前仅支持在建表时开启该属性，建表后不支持通过 [ALTER TABLE](../data-definition/ALTER_TABLE.md) 修改该属性。自 3.2.0 版本起，支持该参数。
 
 > **NOTE**
 >
 > * StarRocks 存算分离集群不支持该参数。
-> * 如果您需要在集群范围内设置该配置，例如集群范围内关闭 fast schema evolution，则可以设置 FE 动态参数 [`fast_schema_evolution`](../../../administration/Configuration.md#fast_schema_evolution)。
+> * 如果您需要在集群范围内设置该配置，例如集群范围内关闭 fast schema evolution，则可以设置 FE 动态参数 [`enable_fast_schema_evolution`](../../../administration/FE_configuration.md#enable_fast_schema_evolution)。
 
 ## 示例
 
@@ -773,10 +773,6 @@ COMMENT "my first starrocks table"
 DISTRIBUTED BY HASH(k1)
 PROPERTIES ("storage_type" = "column");
 ```
-
-> **注意**
->
-> 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../../../table_design/Data_distribution.md#确定分桶数量)。
 
 ### 创建表并设置存储介质和数据自动降冷时间
 
@@ -1044,7 +1040,7 @@ PROPERTIES
 );
 ```
 
-### 创建一张主键模型的表并且指定排序键
+### 创建一张主键表并且指定排序键
 
 假设需要按地域、最近活跃时间实时分析用户情况，则可以将表示用户 ID 的 `user_id` 列作为主键，表示地域的 `address` 列和表示最近活跃时间的 `last_active` 列作为排序键。建表语句如下：
 

@@ -57,10 +57,11 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker.ThrowingRunnable;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.load.Load;
-import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.EditLog;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
@@ -137,8 +138,40 @@ public abstract class StarRocksHttpTestCase {
         }
     }
 
+    public static OlapTable newEmptyTable(String name) {
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().clear();
+        Column k1 = new Column("k1", Type.BIGINT);
+        Column k2 = new Column("k2", Type.DOUBLE);
+        Column k3 = new Column("k3", Type.DATETIME);
+        List<Column> columns = new ArrayList<>();
+        columns.add(k1);
+        columns.add(k2);
+        columns.add(k3);
+
+        // index
+        MaterializedIndex baseIndex = new MaterializedIndex(testIndexId, MaterializedIndex.IndexState.NORMAL);
+
+        // partition
+        HashDistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
+        Partition partition = new Partition(testPartitionId, "testPartition", baseIndex, distributionInfo);
+        partition.updateVisibleVersion(testStartVersion);
+        partition.setNextVersion(testStartVersion + 1);
+
+        // table
+        PartitionInfo partitionInfo = new SinglePartitionInfo();
+        partitionInfo.setDataProperty(testPartitionId, DataProperty.DEFAULT_DATA_PROPERTY);
+        partitionInfo.setReplicationNum(testPartitionId, (short) 3);
+        partitionInfo.setIsInMemory(testPartitionId, false);
+        OlapTable table = new OlapTable(testTableId, name, columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
+        table.addPartition(partition);
+        table.setIndexMeta(testIndexId, "testIndex", columns, 0, testSchemaHash, (short) 1,
+                TStorageType.COLUMN, KeysType.AGG_KEYS);
+        table.setBaseIndexId(testIndexId);
+        return table;
+    }
+
     public static OlapTable newTable(String name) {
-        GlobalStateMgr.getCurrentInvertedIndex().clear();
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().clear();
         Column k1 = new Column("k1", Type.BIGINT);
         Column k2 = new Column("k2", Type.DOUBLE);
         List<Column> columns = new ArrayList<>();
@@ -216,151 +249,160 @@ public abstract class StarRocksHttpTestCase {
     }
 
     private static GlobalStateMgr newDelegateCatalog() {
-        try {
-            GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
-            Auth auth = new Auth();
-            //EasyMock.expect(globalStateMgr.getAuth()).andReturn(starrocksAuth).anyTimes();
-            Database db = new Database(testDbId, "testDb");
-            OlapTable table = newTable(TABLE_NAME);
-            db.registerTableUnlocked(table);
-            OlapTable table1 = newTable(TABLE_NAME + 1);
-            db.registerTableUnlocked(table1);
-            EsTable esTable = newEsTable("es_table");
-            db.registerTableUnlocked(esTable);
-            ConcurrentHashMap<String, Database> nameToDb = new ConcurrentHashMap<>();
-            nameToDb.put(db.getFullName(), db);
-            new Expectations(globalStateMgr) {
-                {
-                    globalStateMgr.getAuth();
-                    minTimes = 0;
-                    result = auth;
+        GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
+        //EasyMock.expect(globalStateMgr.getAuth()).andReturn(starrocksAuth).anyTimes();
+        Database db = new Database(testDbId, "testDb");
+        OlapTable table = newTable(TABLE_NAME);
+        db.registerTableUnlocked(table);
+        OlapTable table1 = newTable(TABLE_NAME + 1);
+        db.registerTableUnlocked(table1);
+        EsTable esTable = newEsTable("es_table");
+        db.registerTableUnlocked(esTable);
+        OlapTable newEmptyTable = newEmptyTable("test_empty_table");
+        db.registerTableUnlocked(newEmptyTable);
+        ConcurrentHashMap<String, Database> nameToDb = new ConcurrentHashMap<>();
+        nameToDb.put(db.getFullName(), db);
+        LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
 
-                    globalStateMgr.getDb(db.getId());
-                    minTimes = 0;
-                    result = db;
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getDb(db.getId());
+                minTimes = 0;
+                result = db;
 
-                    globalStateMgr.getDb(DB_NAME);
-                    minTimes = 0;
-                    result = db;
+                globalStateMgr.getDb(DB_NAME);
+                minTimes = 0;
+                result = db;
 
-                    globalStateMgr.isLeader();
-                    minTimes = 0;
-                    result = true;
+                globalStateMgr.isLeader();
+                minTimes = 0;
+                result = true;
 
-                    globalStateMgr.getDb("emptyDb");
-                    minTimes = 0;
-                    result = null;
+                globalStateMgr.getDb("emptyDb");
+                minTimes = 0;
+                result = null;
 
-                    globalStateMgr.getDb(anyString);
-                    minTimes = 0;
-                    result = new Database();
+                globalStateMgr.getDb(anyString);
+                minTimes = 0;
+                result = new Database();
 
-                    globalStateMgr.getDbNames();
-                    minTimes = 0;
-                    result = Lists.newArrayList("testDb");
+                globalStateMgr.getLoadInstance();
+                minTimes = 0;
+                result = new Load();
 
-                    globalStateMgr.getLoadInstance();
-                    minTimes = 0;
-                    result = new Load();
+                globalStateMgr.getEditLog();
+                minTimes = 0;
+                result = editLog;
 
-                    globalStateMgr.getEditLog();
-                    minTimes = 0;
-                    result = editLog;
+                //globalStateMgr.changeCatalogDb((ConnectContext) any, "blockDb");
+                //minTimes = 0;
 
-                    globalStateMgr.changeCatalogDb((ConnectContext) any, "blockDb");
-                    minTimes = 0;
+                //globalStateMgr.changeCatalogDb((ConnectContext) any, anyString);
+                //minTimes = 0;
 
-                    globalStateMgr.changeCatalogDb((ConnectContext) any, anyString);
-                    minTimes = 0;
+                globalStateMgr.initDefaultCluster();
+                minTimes = 0;
 
-                    globalStateMgr.initDefaultCluster();
-                    minTimes = 0;
+                globalStateMgr.getLocalMetastore();
+                minTimes = 0;
+                result = localMetastore;
+            }
+        };
 
-                    globalStateMgr.getFullNameToDb();
-                    minTimes = 0;
-                    result = nameToDb;
-                }
-            };
+        new Expectations(localMetastore) {
+            {
+                localMetastore.listDbNames();
+                minTimes = 0;
+                result = Lists.newArrayList("testDb");
 
-            return globalStateMgr;
-        } catch (DdlException e) {
-            return null;
-        }
+                localMetastore.getFullNameToDb();
+                minTimes = 0;
+                result = nameToDb;
+            }
+        };
+
+        return globalStateMgr;
     }
 
     private static GlobalStateMgr newDelegateGlobalStateMgr() {
-        try {
-            GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
-            Auth auth = new Auth();
-            //EasyMock.expect(globalStateMgr.getAuth()).andReturn(starrocksAuth).anyTimes();
-            Database db = new Database(testDbId, "testDb");
-            OlapTable table = newTable(TABLE_NAME);
-            db.registerTableUnlocked(table);
-            OlapTable table1 = newTable(TABLE_NAME + 1);
-            db.registerTableUnlocked(table1);
-            EsTable esTable = newEsTable("es_table");
-            db.registerTableUnlocked(esTable);
-            new Expectations(globalStateMgr) {
-                {
-                    globalStateMgr.getAuth();
-                    minTimes = 0;
-                    result = auth;
+        GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
+        //EasyMock.expect(globalStateMgr.getAuth()).andReturn(starrocksAuth).anyTimes();
+        Database db = new Database(testDbId, "testDb");
+        OlapTable table = newTable(TABLE_NAME);
+        db.registerTableUnlocked(table);
+        OlapTable table1 = newTable(TABLE_NAME + 1);
+        db.registerTableUnlocked(table1);
+        EsTable esTable = newEsTable("es_table");
+        db.registerTableUnlocked(esTable);
+        OlapTable newEmptyTable = newEmptyTable("test_empty_table");
+        db.registerTableUnlocked(newEmptyTable);
 
-                    globalStateMgr.getDb(db.getId());
-                    minTimes = 0;
-                    result = db;
+        LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
+        MetadataMgr metadataMgr = new MetadataMgr(localMetastore, null, null);
 
-                    globalStateMgr.getDb(DB_NAME);
-                    minTimes = 0;
-                    result = db;
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getDb(db.getId());
+                minTimes = 0;
+                result = db;
 
-                    globalStateMgr.isLeader();
-                    minTimes = 0;
-                    result = true;
+                globalStateMgr.getDb(DB_NAME);
+                minTimes = 0;
+                result = db;
 
-                    globalStateMgr.getDb("emptyDb");
-                    minTimes = 0;
-                    result = null;
+                globalStateMgr.isLeader();
+                minTimes = 0;
+                result = true;
 
-                    globalStateMgr.getDb(anyString);
-                    minTimes = 0;
-                    result = new Database();
+                globalStateMgr.getDb("emptyDb");
+                minTimes = 0;
+                result = null;
 
-                    globalStateMgr.getDbNames();
-                    minTimes = 0;
-                    result = Lists.newArrayList("testDb");
+                globalStateMgr.getDb(anyString);
+                minTimes = 0;
+                result = new Database();
 
-                    globalStateMgr.getLoadInstance();
-                    minTimes = 0;
-                    result = new Load();
+                globalStateMgr.getLoadInstance();
+                minTimes = 0;
+                result = new Load();
 
-                    globalStateMgr.getEditLog();
-                    minTimes = 0;
-                    result = editLog;
+                globalStateMgr.getEditLog();
+                minTimes = 0;
+                result = editLog;
 
-                    globalStateMgr.changeCatalogDb((ConnectContext) any, "blockDb");
-                    minTimes = 0;
+                //globalStateMgr.changeCatalogDb((ConnectContext) any, "blockDb");
+                //minTimes = 0;
 
-                    globalStateMgr.changeCatalogDb((ConnectContext) any, anyString);
-                    minTimes = 0;
+                //globalStateMgr.changeCatalogDb((ConnectContext) any, anyString);
+                //minTimes = 0;
 
-                    globalStateMgr.initDefaultCluster();
-                    minTimes = 0;
+                globalStateMgr.initDefaultCluster();
+                minTimes = 0;
 
-                    globalStateMgr.getMetadataMgr().getDb("default_catalog", "testDb");
-                    minTimes = 0;
-                    result = db;
+                globalStateMgr.getMetadataMgr();
+                minTimes = 0;
+                result = metadataMgr;
+            }
+        };
 
-                    globalStateMgr.getMetadataMgr().getTable("default_catalog", "testDb", "testTbl");
-                    minTimes = 0;
-                    result = table;
-                }
-            };
+        new Expectations(metadataMgr) {
+            {
+                metadataMgr.getDb("default_catalog", "testDb");
+                minTimes = 0;
+                result = db;
 
-            return globalStateMgr;
-        } catch (DdlException e) {
-            return null;
-        }
+                metadataMgr.getTable("default_catalog", "testDb", "testTbl");
+                minTimes = 0;
+                result = table;
+
+                metadataMgr.getTable("default_catalog", "testDb", "test_empty_table");
+                minTimes = 0;
+                result = newEmptyTable;
+            }
+        };
+        ;
+
+        return globalStateMgr;
     }
 
     private static void assignBackends() {
@@ -370,9 +412,9 @@ public abstract class StarRocksHttpTestCase {
         backend2.setBePort(9300);
         Backend backend3 = new Backend(testBackendId3, "node-3", 9308);
         backend3.setBePort(9300);
-        GlobalStateMgr.getCurrentSystemInfo().addBackend(backend1);
-        GlobalStateMgr.getCurrentSystemInfo().addBackend(backend2);
-        GlobalStateMgr.getCurrentSystemInfo().addBackend(backend3);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend1);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend2);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend3);
     }
 
     @BeforeClass
@@ -409,6 +451,8 @@ public abstract class StarRocksHttpTestCase {
         GlobalStateMgr globalStateMgr = newDelegateCatalog();
         SystemInfoService systemInfoService = new SystemInfoService();
         TabletInvertedIndex tabletInvertedIndex = new TabletInvertedIndex();
+        NodeMgr nodeMgr = new NodeMgr();
+
         new MockUp<GlobalStateMgr>() {
             @Mock
             SchemaChangeHandler getSchemaChangeHandler() {
@@ -419,22 +463,36 @@ public abstract class StarRocksHttpTestCase {
             MaterializedViewHandler getRollupHandler() {
                 return new MaterializedViewHandler();
             }
+        };
 
-            @Mock
-            GlobalStateMgr getCurrentState() {
-                return globalStateMgr;
-            }
-
-            @Mock
-            SystemInfoService getCurrentSystemInfo() {
-                return systemInfoService;
-            }
-
-            @Mock
-            TabletInvertedIndex getCurrentInvertedIndex() {
-                return tabletInvertedIndex;
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
             }
         };
+
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getNodeMgr();
+                minTimes = 0;
+                result = nodeMgr;
+
+                globalStateMgr.getTabletInvertedIndex();
+                minTimes = 0;
+                result = tabletInvertedIndex;
+            }
+        };
+
+        new Expectations(nodeMgr) {
+            {
+                nodeMgr.getClusterInfo();
+                minTimes = 0;
+                result = systemInfoService;
+            }
+        };
+
         assignBackends();
         doSetUp();
     }
@@ -443,6 +501,8 @@ public abstract class StarRocksHttpTestCase {
         GlobalStateMgr globalStateMgr = newDelegateGlobalStateMgr();
         SystemInfoService systemInfoService = new SystemInfoService();
         TabletInvertedIndex tabletInvertedIndex = new TabletInvertedIndex();
+        NodeMgr nodeMgr = new NodeMgr();
+
         new MockUp<GlobalStateMgr>() {
             @Mock
             SchemaChangeHandler getSchemaChangeHandler() {
@@ -455,22 +515,7 @@ public abstract class StarRocksHttpTestCase {
             }
 
             @Mock
-            GlobalStateMgr getCurrentState() {
-                return globalStateMgr;
-            }
-
-            @Mock
-            SystemInfoService getCurrentSystemInfo() {
-                return systemInfoService;
-            }
-
-            @Mock
-            TabletInvertedIndex getCurrentInvertedIndex() {
-                return tabletInvertedIndex;
-            }
-
-            @Mock
-            GlobalTransactionMgr getCurrentGlobalTransactionMgr() {
+            GlobalTransactionMgr getGlobalTransactionMgr() {
                 new MockUp<GlobalTransactionMgr>() {
                     @Mock
                     TransactionStatus getLabelState(long dbId, String label) {
@@ -485,6 +530,35 @@ public abstract class StarRocksHttpTestCase {
                 return new GlobalTransactionMgr(null);
             }
         };
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+            }
+        };
+
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getNodeMgr();
+                minTimes = 0;
+                result = nodeMgr;
+
+                globalStateMgr.getTabletInvertedIndex();
+                minTimes = 0;
+                result = tabletInvertedIndex;
+            }
+        };
+
+        new Expectations(nodeMgr) {
+            {
+                nodeMgr.getClusterInfo();
+                minTimes = 0;
+                result = systemInfoService;
+            }
+        };
+
         assignBackends();
         doSetUp();
     }

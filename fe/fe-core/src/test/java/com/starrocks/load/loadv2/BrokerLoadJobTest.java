@@ -52,6 +52,7 @@ import com.starrocks.load.BrokerFileGroupAggInfo;
 import com.starrocks.load.BrokerFileGroupAggInfo.FileGroupAggKey;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.EtlStatus;
+import com.starrocks.load.FailMsg;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
@@ -60,6 +61,7 @@ import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.task.LeaderTask;
 import com.starrocks.task.LeaderTaskExecutor;
+import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.CommitRateExceededException;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TabletCommitInfo;
@@ -71,6 +73,7 @@ import mockit.Injectable;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.apache.spark.sql.AnalysisException;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -334,6 +337,103 @@ public class BrokerLoadJobTest {
     }
 
     @Test
+    public void testRetryJobAfterAborted(@Injectable TransactionState txnState,
+                                         @Injectable boolean txnOperated,
+                                         @Injectable String txnStatusChangeReason,
+                                         @Mocked LeaderTaskExecutor leaderTaskExecutor,
+                                         @Mocked GlobalTransactionMgr globalTransactionMgr) throws LoadException, UserException {
+        new Expectations() {
+            {
+                globalTransactionMgr.beginTransaction(anyLong, Lists.newArrayList(), anyString, (TUniqueId) any,
+                        (TransactionState.TxnCoordinator) any,
+                        (TransactionState.LoadJobSourceType) any, anyLong, anyLong);
+                leaderTaskExecutor.submit((LeaderTask) any);
+                minTimes = 0;
+                result = true;
+            }
+        };
+
+        GlobalStateMgr.getCurrentState().setEditLog(new EditLog(new ArrayBlockingQueue<>(100)));
+        new MockUp<EditLog>() {
+            @Mock
+            public void logSaveNextId(long nextId) {
+
+            }
+
+            @Mock
+            public void logEndLoadJob(LoadJobFinalOperation loadJobFinalOperation) {
+
+            }
+        };
+
+        new MockUp<LoadJob>() {
+            @Mock
+            public void unprotectUpdateLoadingStatus(TransactionState txnState) {
+
+            }
+        };
+
+        // test when retry limit has reached
+        BrokerLoadJob brokerLoadJob1 = new BrokerLoadJob();
+        brokerLoadJob1.retryTime = 0;
+        brokerLoadJob1.unprotectedExecuteJob();
+        txnOperated = true;
+        txnStatusChangeReason = "broker load job timeout";
+        brokerLoadJob1.afterAborted(txnState, txnOperated, txnStatusChangeReason);
+        Map<Long, LoadTask> idToTasks = Deencapsulation.getField(brokerLoadJob1, "idToTasks");
+        Assert.assertEquals(0, idToTasks.size());
+
+        // test normal retry after timeout
+        BrokerLoadJob brokerLoadJob2 = new BrokerLoadJob();
+        brokerLoadJob2.retryTime = 1;
+        brokerLoadJob2.unprotectedExecuteJob();
+        txnOperated = true;
+        txnStatusChangeReason = "broker load job timeout";
+        brokerLoadJob2.afterAborted(txnState, txnOperated, txnStatusChangeReason);
+        idToTasks = Deencapsulation.getField(brokerLoadJob2, "idToTasks");
+        Assert.assertEquals(1, idToTasks.size());
+
+        // test when txnOperated is false
+        BrokerLoadJob brokerLoadJob3 = new BrokerLoadJob();
+        brokerLoadJob3.retryTime = 1;
+        brokerLoadJob3.unprotectedExecuteJob();
+        txnOperated = false;
+        txnStatusChangeReason = "broker load job timeout";
+        brokerLoadJob3.afterAborted(txnState, txnOperated, txnStatusChangeReason);
+        idToTasks = Deencapsulation.getField(brokerLoadJob3, "idToTasks");
+        Assert.assertEquals(1, idToTasks.size());
+
+        // test when txn is finished
+        BrokerLoadJob brokerLoadJob4 = new BrokerLoadJob();
+        brokerLoadJob4.retryTime = 1;
+        brokerLoadJob4.unprotectedExecuteJob();
+        txnOperated = true;
+        txnStatusChangeReason = "broker load job timeout";
+        Deencapsulation.setField(brokerLoadJob4, "state", JobState.FINISHED);
+        brokerLoadJob4.afterAborted(txnState, txnOperated, txnStatusChangeReason);
+        idToTasks = Deencapsulation.getField(brokerLoadJob4, "idToTasks");
+        Assert.assertEquals(1, idToTasks.size());
+    }
+
+    @Test
+    public void testPendingTaskOnTaskFailed(@Injectable long taskId, @Injectable FailMsg failMsg) {
+        GlobalStateMgr.getCurrentState().setEditLog(new EditLog(new ArrayBlockingQueue<>(100)));
+        new MockUp<EditLog>() {
+            @Mock
+            public void logEndLoadJob(LoadJobFinalOperation loadJobFinalOperation) {
+
+            }
+        };
+
+        BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
+        failMsg = new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, "load_run_fail");
+        brokerLoadJob.onTaskFailed(taskId, failMsg);
+
+        Map<Long, LoadTask> idToTasks = Deencapsulation.getField(brokerLoadJob, "idToTasks");
+        Assert.assertEquals(0, idToTasks.size());
+    }
+
+    @Test
     public void testPendingTaskOnFinishedWithJobCancelled(@Injectable BrokerPendingTaskAttachment attachment) {
         BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
         Deencapsulation.setField(brokerLoadJob, "state", JobState.CANCELLED);
@@ -490,6 +590,7 @@ public class BrokerLoadJobTest {
         BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
         Map<String, String> properties = Maps.newHashMap();
         properties.put(LoadStmt.PARTIAL_UPDATE_MODE, "column");
+        properties.put(LoadStmt.MERGE_CONDITION, "v1");
         brokerLoadJob.setJobProperties(properties);
         brokerLoadJob.onTaskFinished(attachment1);
     }
@@ -579,7 +680,7 @@ public class BrokerLoadJobTest {
                 globalStateMgr.getDb(anyLong);
                 minTimes = 0;
                 result = database;
-                globalStateMgr.getCurrentGlobalTransactionMgr();
+                globalStateMgr.getCurrentState().getGlobalTransactionMgr();
                 result = transactionMgr;
                 transactionMgr.commitTransaction(anyLong, anyLong, (List<TabletCommitInfo>) any,
                         (List<TabletFailInfo>) any, (TxnCommitAttachment) any);
@@ -596,5 +697,25 @@ public class BrokerLoadJobTest {
         Assert.assertEquals("0", loadingStatus.getCounters().get(BrokerLoadJob.DPP_ABNORMAL_ALL));
         int progress = Deencapsulation.getField(brokerLoadJob, "progress");
         Assert.assertEquals(99, progress);
+    }
+
+    @Test
+    public void testSetProperties(@Injectable BrokerPendingTaskAttachment attachment1,
+                                                       @Injectable LoadTask loadTask1,
+                                                       @Mocked GlobalStateMgr globalStateMgr,
+                                  @Injectable Database database) throws AnalysisException, DdlException {
+
+        BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put(LoadStmt.JSONPATHS, "[\"$.key2\"");
+        properties.put(LoadStmt.STRIP_OUTER_ARRAY, "true");
+        properties.put(LoadStmt.JSONROOT, "$.key1");
+        brokerLoadJob.setJobProperties(properties);
+
+        LoadJob.JSONOptions options = Deencapsulation.getField(brokerLoadJob, "jsonOptions");
+
+        Assert.assertEquals("[\"$.key2\"", options.jsonPaths);
+        Assert.assertTrue(options.stripOuterArray);
+        Assert.assertEquals("$.key1", options.jsonRoot);
     }
 }

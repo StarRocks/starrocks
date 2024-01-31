@@ -60,7 +60,7 @@ public class MockTpchStatisticStorage implements StatisticStorage {
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("region");
         rowCountStats.put(t0.getId(), new TableStatistic(t0.getId(), t0.getPartition("region").getId(),
                 5L));
-        GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(database.getId(), t0.getId(), null,
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(database.getId(), t0.getId(), null,
                         StatsConstants.AnalyzeType.FULL,
                         LocalDateTime.of(2020, 1, 1, 1, 1, 1),
                         Maps.newHashMap()));
@@ -68,7 +68,7 @@ public class MockTpchStatisticStorage implements StatisticStorage {
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("nation");
         rowCountStats.put(t1.getId(), new TableStatistic(t1.getId(), t1.getPartition("nation").getId(),
                 25L));
-        GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(database.getId(), t1.getId(), null,
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(database.getId(), t1.getId(), null,
                 StatsConstants.AnalyzeType.FULL,
                 LocalDateTime.of(2020, 1, 1, 1, 1, 1),
                 Maps.newHashMap()));
@@ -76,7 +76,7 @@ public class MockTpchStatisticStorage implements StatisticStorage {
         OlapTable t2 = (OlapTable) globalStateMgr.getDb("test").getTable("supplier");
         rowCountStats.put(t2.getId(), new TableStatistic(t2.getId(), t2.getPartition("supplier").getId(),
                 10000L * scale));
-        GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(database.getId(), t2.getId(), null,
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(database.getId(), t2.getId(), null,
                 StatsConstants.AnalyzeType.FULL,
                 LocalDateTime.of(2020, 1, 1, 1, 1, 1),
                 Maps.newHashMap()));
@@ -84,7 +84,7 @@ public class MockTpchStatisticStorage implements StatisticStorage {
         OlapTable t3 = (OlapTable) globalStateMgr.getDb("test").getTable("customer");
         rowCountStats.put(t3.getId(), new TableStatistic(t3.getId(), t3.getPartition("customer").getId(),
                 150000L * scale));
-        GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(database.getId(), t3.getId(), null,
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(database.getId(), t3.getId(), null,
                 StatsConstants.AnalyzeType.FULL,
                 LocalDateTime.of(2020, 1, 1, 1, 1, 1),
                 Maps.newHashMap()));
@@ -92,7 +92,7 @@ public class MockTpchStatisticStorage implements StatisticStorage {
         OlapTable t4 = (OlapTable) globalStateMgr.getDb("test").getTable("part");
         rowCountStats.put(t4.getId(), new TableStatistic(t4.getId(), t4.getPartition("part").getId(),
                 200000L * scale));
-        GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(database.getId(), t4.getId(), null,
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(database.getId(), t4.getId(), null,
                 StatsConstants.AnalyzeType.FULL,
                 LocalDateTime.of(2020, 1, 1, 1, 1, 1),
                 Maps.newHashMap()));
@@ -100,7 +100,7 @@ public class MockTpchStatisticStorage implements StatisticStorage {
         OlapTable t5 = (OlapTable) globalStateMgr.getDb("test").getTable("partsupp");
         rowCountStats.put(t5.getId(), new TableStatistic(t5.getId(), t5.getPartition("partsupp").getId(),
                 800000L * scale));
-        GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(database.getId(), t5.getId(), null,
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(database.getId(), t5.getId(), null,
                 StatsConstants.AnalyzeType.FULL,
                 LocalDateTime.of(2020, 1, 1, 1, 1, 1),
                 Maps.newHashMap()));
@@ -108,7 +108,7 @@ public class MockTpchStatisticStorage implements StatisticStorage {
         OlapTable t6 = (OlapTable) globalStateMgr.getDb("test").getTable("orders");
         rowCountStats.put(t6.getId(), new TableStatistic(t6.getId(), t6.getPartition("orders").getId(),
                 1500000L * scale));
-        GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(database.getId(), t6.getId(), null,
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(database.getId(), t6.getId(), null,
                 StatsConstants.AnalyzeType.FULL,
                 LocalDateTime.of(2020, 1, 1, 1, 1, 1),
                 Maps.newHashMap()));
@@ -116,7 +116,7 @@ public class MockTpchStatisticStorage implements StatisticStorage {
         OlapTable t7 = (OlapTable) globalStateMgr.getDb("test").getTable("lineitem");
         rowCountStats.put(t7.getId(), new TableStatistic(t7.getId(), t7.getPartition("lineitem").getId(),
                 6000000L * scale));
-        GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(database.getId(), t7.getId(), null,
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(database.getId(), t7.getId(), null,
                 StatsConstants.AnalyzeType.FULL,
                 LocalDateTime.of(2020, 1, 1, 1, 1, 1),
                 Maps.newHashMap()));
@@ -140,6 +140,7 @@ public class MockTpchStatisticStorage implements StatisticStorage {
         tableCustomer.put("c_mktsegment", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 10, 5));
         // C_COMMENT VARCHAR(117)
         tableCustomer.put("c_comment", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 117, 149968));
+        tableCustomer.put("pad", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 1, 1));
         tableStatistics.put("customer", tableCustomer);
 
         Map<String, ColumnStatistic> tableLineitem = new CaseInsensitiveMap<>();

@@ -74,6 +74,7 @@ static const std::string REJECTED_RECORD_PREFIX = "/rejected_record"; // NOLINT
 static const std::string CLONE_PREFIX = "/clone";                     // NOLINT
 static const std::string TMP_PREFIX = "/tmp";                         // NOLINT
 static const std::string PERSISTENT_INDEX_PREFIX = "/persistent";     // NOLINT
+static const std::string REPLICATION_PREFIX = "/replication";         // NOLINT
 
 static const int32_t OLAP_DATA_VERSION_APPLIED = STARROCKS_V1;
 

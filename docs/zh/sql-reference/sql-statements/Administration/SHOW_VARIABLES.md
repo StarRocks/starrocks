@@ -8,6 +8,12 @@ displayed_sidebar: "Chinese"
 
 查看当前集群的系统变量信息。
 
+:::tip
+
+该操作不需要权限。
+
+:::
+
 ## 语法
 
 ```SQL

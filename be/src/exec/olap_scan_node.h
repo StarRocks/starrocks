@@ -170,7 +170,6 @@ private:
     std::vector<std::unique_ptr<TInternalScanRange>> _scan_ranges;
     TupleDescriptor* _tuple_desc = nullptr;
     OlapScanConjunctsManager _conjuncts_manager;
-    DictOptimizeParser _dict_optimize_parser;
     const Schema* _chunk_schema = nullptr;
 
     int32_t _num_scanners = 0;
@@ -248,6 +247,7 @@ private:
     RuntimeProfile::Counter* _rowsets_read_count = nullptr;
     RuntimeProfile::Counter* _segments_read_count = nullptr;
     RuntimeProfile::Counter* _total_columns_data_page_count = nullptr;
+    RuntimeProfile::Counter* _pushdown_access_paths_counter = nullptr;
 };
 
 } // namespace starrocks

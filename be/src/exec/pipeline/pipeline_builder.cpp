@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/pipeline_builder.h"
 
+#include "adaptive/event.h"
 #include "common/config.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/adaptive/collect_stats_context.h"
@@ -128,10 +129,6 @@ void PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange_for_si
                                                                                    OpFactoryPtr table_sink_operator,
                                                                                    int32_t source_operator_dop,
                                                                                    int32_t desired_sink_dop) {
-    if (source_operator_dop == desired_sink_dop) {
-        return;
-    }
-
     auto* source_operator =
             down_cast<SourceOperatorFactory*>(_fragment_context->pipelines().back()->source_operator_factory());
     auto mem_mgr = std::make_shared<ChunkBufferMemoryManager>(source_operator_dop,
@@ -146,7 +143,7 @@ void PipelineBuilderContext::maybe_interpolate_local_passthrough_exchange_for_si
 
     local_exchange_source->set_degree_of_parallelism(desired_sink_dop);
     local_exchange_source->set_runtime_state(state);
-    local_exchange_source->set_group_leader(source_operator);
+    local_exchange_source->add_upstream_source(source_operator);
 
     OpFactories operators_source_with_local_exchange{std::move(local_exchange_source), std::move(table_sink_operator)};
 
@@ -160,9 +157,8 @@ void PipelineBuilderContext::maybe_interpolate_local_key_partition_exchange_for_
         const std::vector<ExprContext*>& partition_expr_ctxs, int32_t source_operator_dop, int32_t desired_sink_dop) {
     auto* source_operator =
             down_cast<SourceOperatorFactory*>(_fragment_context->pipelines().back()->source_operator_factory());
-    auto mem_mgr = std::make_shared<ChunkBufferMemoryManager>(
-            source_operator_dop * state->chunk_size() * localExchangeBufferChunks(),
-            config::local_exchange_buffer_mem_limit_per_driver);
+    auto mem_mgr = std::make_shared<ChunkBufferMemoryManager>(source_operator_dop,
+                                                              config::local_exchange_buffer_mem_limit_per_driver);
     auto local_shuffle_source =
             std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), plan_node_id, mem_mgr);
     auto local_exchanger = std::make_shared<KeyPartitionExchanger>(mem_mgr, local_shuffle_source.get(),
@@ -174,7 +170,7 @@ void PipelineBuilderContext::maybe_interpolate_local_key_partition_exchange_for_
     _fragment_context->pipelines().back()->add_op_factory(local_shuffle_sink);
 
     local_shuffle_source->set_runtime_state(state);
-    local_shuffle_source->set_group_leader(source_operator);
+    local_shuffle_source->add_upstream_source(source_operator);
     local_shuffle_source->set_degree_of_parallelism(desired_sink_dop);
     OpFactories operators_source_with_local_shuffle{std::move(local_shuffle_source), std::move(table_sink_operator)};
 
@@ -305,9 +301,29 @@ OpFactories PipelineBuilderContext::maybe_gather_pipelines_to_one(RuntimeState* 
     auto local_exchange_source =
             std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), plan_node_id, mem_mgr);
     local_exchange_source->set_runtime_state(state);
-    inherit_upstream_source_properties(local_exchange_source.get(), source_operator(pred_operators_list[0]));
+    auto* first_upstream_source = source_operator(pred_operators_list[0]);
+    inherit_upstream_source_properties(local_exchange_source.get(), first_upstream_source);
     local_exchange_source->set_could_local_shuffle(true);
     local_exchange_source->set_degree_of_parallelism(degree_of_parallelism());
+
+    std::vector<EventPtr> group_blocking_events;
+    for (const auto& pred_ops : pred_operators_list) {
+        auto* source = source_operator(pred_ops);
+        if (auto event = source->group_leader()->adaptive_blocking_event(); event != nullptr) {
+            group_blocking_events.emplace_back(std::move(event));
+        }
+    }
+
+    for (int i = 1; i < pred_operators_list.size(); i++) {
+        auto* upstream_source = source_operator(pred_operators_list[i]);
+        local_exchange_source->add_upstream_source(upstream_source);
+        first_upstream_source->union_group(upstream_source);
+    }
+
+    if (!group_blocking_events.empty()) {
+        EventPtr merged_blocking_events = Event::depends_all(group_blocking_events);
+        local_exchange_source->group_leader()->set_adaptive_blocking_event(std::move(merged_blocking_events));
+    }
 
     auto exchanger = std::make_shared<PassthroughExchanger>(mem_mgr, local_exchange_source.get());
     for (auto& pred_operators : pred_operators_list) {
@@ -322,7 +338,7 @@ OpFactories PipelineBuilderContext::maybe_gather_pipelines_to_one(RuntimeState* 
 
 OpFactories PipelineBuilderContext::maybe_interpolate_collect_stats(RuntimeState* state, int32_t plan_node_id,
                                                                     OpFactories& pred_operators) {
-    if (_force_disable_adaptive_dop || !_fragment_context->enable_adaptive_dop()) {
+    if (!_fragment_context->enable_adaptive_dop()) {
         return pred_operators;
     }
 
@@ -439,10 +455,8 @@ void PipelineBuilderContext::inherit_upstream_source_properties(SourceOperatorFa
         downstream_source->set_partition_exprs(upstream_source->partition_exprs());
     }
 
-    if (downstream_source->adaptive_state() != SourceOperatorFactory::AdaptiveState::NONE) {
-        downstream_source->set_group_leader(downstream_source);
-    } else {
-        downstream_source->set_group_leader(upstream_source);
+    if (downstream_source->adaptive_initial_state() == SourceOperatorFactory::AdaptiveState::NONE) {
+        downstream_source->add_upstream_source(upstream_source);
     }
 }
 

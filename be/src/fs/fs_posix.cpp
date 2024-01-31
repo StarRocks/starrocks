@@ -29,9 +29,11 @@
 #include "gutil/strings/substitute.h"
 #include "gutil/strings/util.h"
 #include "io/fd_input_stream.h"
+#include "io/io_profiler.h"
 #include "testutil/sync_point.h"
 #include "util/errno.h"
 #include "util/slice.h"
+#include "util/stopwatch.hpp"
 
 #ifdef USE_STAROS
 #include "fslib/metric_key.h"
@@ -154,6 +156,7 @@ static Status do_writev_at(int fd, const string& filename, uint64_t offset, cons
         ssize_t w;
         RETRY_ON_EINTR(w, pwritev(fd, iov + completed_iov, iov_count, cur_offset));
         if (PREDICT_FALSE(w < 0)) {
+            perror("TRACE pwritev");
             // An error: return a non-ok status.
             return io_error(filename, errno);
         }
@@ -204,6 +207,8 @@ public:
 #ifdef USE_STAROS
         staros::starlet::metrics::TimeObserver<prometheus::Histogram> write_latency(s_sr_posix_write_iolatency);
 #endif
+        MonotonicStopWatch watch;
+        watch.start();
         size_t bytes_written = 0;
         RETURN_IF_ERROR(do_writev_at(_fd, _filename, _filesize, data, cnt, &bytes_written));
         _filesize += bytes_written;
@@ -211,6 +216,7 @@ public:
 #ifdef USE_STAROS
         s_sr_posix_write_iosize.Observe(bytes_written);
 #endif
+        IOProfiler::add_write(bytes_written, watch.elapsed_time());
         return Status::OK();
     }
 
@@ -366,6 +372,13 @@ public:
                                                               const string& fname) override {
         int fd = 0;
         RETURN_IF_ERROR(do_open(fname, opts.mode, &fd));
+
+        if (opts.direct_write) {
+            if (fcntl(fd, F_SETFL, O_DIRECT) == -1) {
+                ::close(fd);
+                return Status::InternalError("set fcntl direct error");
+            }
+        }
 
         uint64_t file_size = 0;
         if (opts.mode == MUST_EXIST) {

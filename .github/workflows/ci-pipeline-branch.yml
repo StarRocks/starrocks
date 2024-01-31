@@ -16,11 +16,12 @@ concurrency:
 
 jobs:
 
-  sync-checker:
+  basic-checker:
     runs-on: [ self-hosted, normal ]
     name: RUN CHECKER
     env:
       PR_NUMBER: ${{ github.event.number }}
+      GH_TOKEN: ${{ github.token }}
     outputs:
       PASS: ${{ steps.check.outputs.pass }}
     steps:
@@ -33,11 +34,20 @@ jobs:
         run: |
           echo "pass=true" >> $GITHUB_OUTPUT
 
+      - name: Check Blacklist
+        id: check_blacklist
+        env:
+          NO_SYNC: ${{ steps.check.outputs.pass }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
+          ./scripts/check-blacklist.sh
+
   be-checker:
     runs-on: ubuntu-latest
-    needs: sync-checker
+    needs: basic-checker
     name: BE FILTER
-    if: needs.sync-checker.outputs.PASS == 'true'
+    if: needs.basic-checker.outputs.PASS == 'true'
     outputs:
       output1: ${{ steps.be-changes-info.outputs.be }}
       output2: ${{ steps.be-changes-info.outputs.thirdparty }}
@@ -200,9 +210,9 @@ jobs:
 
   fe-checker:
     runs-on: ubuntu-latest
-    needs: sync-checker
+    needs: basic-checker
     name: FE FILTER
-    if: needs.sync-checker.outputs.PASS == 'true'
+    if: needs.basic-checker.outputs.PASS == 'true'
     outputs:
       output1: ${{ steps.fe-changes-info.outputs.fe }}
     steps:
@@ -286,6 +296,79 @@ jobs:
           fail_on_error: true
           level: error
 
+  sonarcloud-fe-checker:
+    runs-on: ubuntu-latest
+    needs: fe-checker
+    if: needs.fe-checker.outputs.output1 == 'true' && github.repository == 'StarRocks/starrocks'
+    name: FE Sonarcloud Check
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      CODE_PATH: ${{ github.workspace }}
+      BRANCH: ${{ github.base_ref }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: BRANCH INFO
+        id: branch
+        run: |
+          echo ${{github.base_ref}}
+          echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
+
+      - name: Checkout PR
+        run: |
+          BRANCH=${{steps.branch.outputs.branch}}
+          git config --global user.name "wanpengfei-git";
+          git config --global user.email "wanpengfei91@163.com";
+          git checkout $BRANCH;
+          git pull;
+          BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
+          git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME};
+          git checkout $BRANCH_NAME;
+          git checkout -b merge_pr;
+          git merge --squash --no-edit ${BRANCH} || (echo "Merge conflict, please check." && exit -1);
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: 17
+          distribution: 'adopt'
+
+      - name: Cache SonarCloud packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+
+      - name: Cache Maven packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-maven
+
+      - name: Setup thrift
+        uses: dodopizza/setup-thrift@v1
+        with:
+          version: 0.13.0
+
+      - name: Analyze FE
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
+          SONAR_TOKEN: f0fb4d25c03bae90c2e994c45c29c49dc86fc169 # ${{ secrets.SONAR_TOKEN }}
+        run: |
+          thrift --version
+          whereis thrift
+          export STARROCKS_HOME=${{ github.workspace }}
+          source env.sh
+          mkdir -p thirdparty/installed/bin/
+          cd thirdparty/installed/bin/ && ln -s /usr/local/bin/thrift thrift
+          cd ${{ github.workspace }}/fe
+          mvn -B -DskipTests verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=StarRocks_starrocks -Dsonar.pullrequest.key=${{ github.event.number }} -Dsonar.pullrequest.base=${{ github.base_ref }} -Dsonar.pullrequest.branch=${{ github.head_ref }}
+
   fe-ut:
     runs-on: [self-hosted, normal]
     needs: fe-codestyle-check
@@ -305,23 +388,6 @@ jobs:
           repo="${{ github.repository }}"
           bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'` 
           echo "bucket_prefix=${bucket_prefix}" >> $GITHUB_OUTPUT
-
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-
-      - name: Checkout PR
-        run: |
-          BRANCH=${{steps.branch.outputs.branch}}
-          git config --global user.name "wanpengfei-git";
-          git config --global user.email "wanpengfei91@163.com";
-          git checkout $BRANCH;
-          git pull;
-          BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
-          git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME};
-          git checkout $BRANCH_NAME;
-          git checkout -b merge_pr;
-          git merge --squash --no-edit ${BRANCH} || (echo "::error::Merge conflict, please check." && exit -1);
 
       - name: UPDATE ECI & RUN UT
         id: run_ut

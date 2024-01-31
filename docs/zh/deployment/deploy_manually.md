@@ -4,9 +4,13 @@ displayed_sidebar: "Chinese"
 
 # 手动部署 StarRocks
 
+:::tip
+手动部署前的准备工作在 [部署前提条件](./deployment_prerequisites.md) 以及 [检查环境配置](./environment_configurations.md) 文档中有详细说明。如果您计划部署生产集群，请参照以上两篇文档。如果您刚开始使用 StarRocks，希望按照快速入门教程进行操作，请参考 [快速入门](../quick_start/quick_start.mdx)。
+:::
+
 本文介绍如何手动部署 StarRocks 存算一体集群（BE 同时做数据存储和计算）。其他安装方式请参考[部署概览](../deployment/deployment_overview.md)。
 
-如果要部署存算分离集群，参见 [部署使用 StarRocks 存算分离集群](./deploy_shared_data.md)。
+如果要部署存算分离集群，参见 [部署使用 StarRocks 存算分离集群](./shared_data/s3.md)。
 
 ## 第一步：启动 Leader FE 节点
 
@@ -58,7 +62,7 @@ displayed_sidebar: "Chinese"
       JAVA_HOME = <path_to_JDK>
       ```
 
-   e.  更多高级配置项请参考 [参数配置 - FE 配置项](../administration/Configuration.md#fe-配置项)。
+   e.  更多高级配置项请参考 [参数配置 - FE 配置项](../administration/FE_configuration.md#fe-配置项)。
 
 3. 启动 FE 节点。
 
@@ -136,7 +140,7 @@ displayed_sidebar: "Chinese"
       JAVA_HOME = <path_to_JDK>
       ```
 
-   e.  更多高级配置项请参考 [参数配置 - BE 配置项](../administration/Configuration.md#be-配置项)。
+   e.  更多高级配置项请参考 [参数配置 - BE 配置项](../administration/BE_configuration.md#be-配置项)。
 
 3. 启动 BE 节点。
 
@@ -197,7 +201,7 @@ Compute Node（CN）是一种无状态的计算服务，本身不存储数据。
       JAVA_HOME = <path_to_JDK>
       ```
 
-   d.  由于大部分 CN 参数都继承自 BE 节点，您可以参考 [参数配置 - BE 配置项](../administration/Configuration.md#be-配置项) 了解更多 CN 高级配置项。
+   d.  由于大部分 CN 参数都继承自 BE 节点，您可以参考 [参数配置 - BE 配置项](../administration/BE_configuration.md#be-配置项) 了解更多 CN 高级配置项。
 
 2. 启动 CN 节点。
 

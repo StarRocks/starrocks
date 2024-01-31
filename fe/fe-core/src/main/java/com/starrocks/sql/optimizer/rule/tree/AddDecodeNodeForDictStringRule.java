@@ -692,7 +692,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
 
                         CallOperator newCall =
                                 new CallOperator(oldCall.getFnName(), newReturnType, newArguments, newFunction,
-                                        oldCall.isDistinct());
+                                        oldCall.isDistinct(), oldCall.isRemovedDistinct());
 
                         newAggMapEntry.add(Maps.immutableEntry(outputColumn, newCall));
                     } else {
@@ -742,7 +742,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             }
             final PhysicalHashAggregateOperator newHashAggregator =
                     new PhysicalHashAggregateOperator(aggOperator.getType(), newGroupBys, newPartitionsBy, newAggMap,
-                            aggOperator.getSingleDistinctFunctionPos(), aggOperator.isSplit(), aggOperator.getLimit(),
+                            aggOperator.isSplit(), aggOperator.getLimit(),
                             aggOperator.getPredicate(), aggOperator.getProjection());
             newHashAggregator.setMergedLocalAgg(aggOperator.isMergedLocalAgg());
             newHashAggregator.setUseSortAgg(aggOperator.isUseSortAgg());
@@ -883,7 +883,8 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
 
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
-        if (!ConnectContext.get().getSessionVariable().isEnableLowCardinalityOptimize()) {
+        if (!ConnectContext.get().getSessionVariable().isEnableLowCardinalityOptimize()
+                || taskContext.getOptimizerContext().getSessionVariable().isUseLowCardinalityOptimizeV2()) {
             return root;
         }
 
@@ -897,7 +898,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             if ((table.getKeysType().equals(KeysType.PRIMARY_KEYS))) {
                 continue;
             }
-            if (table.hasForbitGlobalDict()) {
+            if (table.hasForbiddenGlobalDict()) {
                 continue;
             }
             for (ColumnRefOperator column : scanOperator.getColRefToColumnMetaMap().keySet()) {
@@ -907,7 +908,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                 }
 
                 ColumnStatistic columnStatistic =
-                        GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistic(table, column.getName());
+                        GlobalStateMgr.getCurrentState().getStatisticStorage().getColumnStatistic(table, column.getName());
                 // Condition 2: the varchar column is low cardinality string column
                 if (!FeConstants.USE_MOCK_DICT_MANAGER && (columnStatistic.isUnknown() ||
                         columnStatistic.getDistinctValuesCount() > CacheDictManager.LOW_CARDINALITY_THRESHOLD)) {
@@ -971,7 +972,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
 
         LogicalProperty decodeProperty = new LogicalProperty(childExpr.get(0).getLogicalProperty());
         result.setLogicalProperty(
-                DecodeVisitor.rewriteLogicProperty(decodeProperty, decodeOperator.getDictToStrings()));
+                DecodeVisitor.rewriteLogicProperty(decodeProperty, decodeOperator.getDictIdToStringsId()));
         context.clear();
         return result;
     }

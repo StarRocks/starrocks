@@ -95,7 +95,7 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
         EquivalentDescriptor leftDesc = leftLocalDistributionSpec.getEquivDesc();
         EquivalentDescriptor rightDesc = rightLocalDistributionSpec.getEquivDesc();
 
-        ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
+        ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         long leftTableId = leftDesc.getTableId();
         long rightTableId = rightDesc.getTableId();
 
@@ -341,7 +341,7 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
             HashDistributionDesc rightDistributionDesc = rightDistributionSpec.getHashDistributionDesc();
 
             // 2.1 respect the hint
-            if (JoinOperator.HINT_SHUFFLE.equals(hint)) {
+            if (JoinOperator.HINT_SHUFFLE.equals(hint) || JoinOperator.HINT_SKEW.equals(hint)) {
                 if (leftDistributionDesc.isLocal()) {
                     enforceChildShuffleDistribution(leftShuffleColumns, leftChild, leftChildOutputProperty, 0);
                 }

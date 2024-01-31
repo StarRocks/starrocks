@@ -83,6 +83,11 @@ enum TExprNodeType {
   BINARY_LITERAL,
   MAP_EXPR,
   DICT_QUERY_EXPR,
+
+  // query DICTIONARY object
+  DICTIONARY_GET_EXPR,
+  
+  JIT_EXPR,
 }
 
 struct TAggregateExpr {
@@ -181,6 +186,12 @@ struct TDictQueryExpr {
   6: required bool strict_mode
 }
 
+struct TDictionaryGetExpr {
+  1: optional i64 dict_id
+  2: optional i64 txn_id
+  3: optional i32 key_size
+}
+
 // This is essentially a union over the subclasses of Expr.
 struct TExprNode {
   1: required TExprNodeType node_type
@@ -224,6 +235,9 @@ struct TExprNode {
   31: optional TBinaryLiteral binary_literal;
   32: optional bool copy_flag;
 
+  // used for CollectionElementAt
+  35: optional bool check_is_out_of_bounds
+
   // For vector query engine
   50: optional bool use_vectorized  // Deprecated
   51: optional bool has_nullable_child
@@ -232,6 +246,8 @@ struct TExprNode {
   54: optional bool is_monotonic
 
   55: optional TDictQueryExpr dict_query_expr
+
+  56: optional TDictionaryGetExpr dictionary_get_expr
 }
 
 struct TPartitionLiteral {

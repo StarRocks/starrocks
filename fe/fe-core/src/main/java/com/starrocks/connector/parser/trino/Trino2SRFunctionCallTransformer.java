@@ -76,6 +76,7 @@ public class Trino2SRFunctionCallTransformer {
         registerStringFunctionTransformer();
         registerRegexpFunctionTransformer();
         registerJsonFunctionTransformer();
+        registerURLFunctionTransformer();
         registerBitwiseFunctionTransformer();
         registerUnicodeFunctionTransformer();
         registerMapFunctionTransformer();
@@ -227,6 +228,12 @@ public class Trino2SRFunctionCallTransformer {
                 ImmutableList.of(Expr.class, Expr.class));
     }
 
+    private static void registerURLFunctionTransformer() {
+        // url_extract_path('https://www.starrocks.io/showcase') -> parse_url('https://www.starrocks.io/showcase', 'PATH')
+        registerFunctionTransformer("url_extract_path", 1, new FunctionCallExpr("parse_url",
+                ImmutableList.of(new PlaceholderExpr(1, Expr.class), new StringLiteral("PATH"))));
+    }
+
     private static void registerJsonFunctionTransformer() {
         // json_array_length -> json_length
         registerFunctionTransformer("json_array_length", 1, "json_length",
@@ -236,8 +243,8 @@ public class Trino2SRFunctionCallTransformer {
         registerFunctionTransformer("json_parse", 1, "parse_json",
                 ImmutableList.of(Expr.class));
 
-        // json_extract -> json_query
-        registerFunctionTransformer("json_extract", 2, "json_query",
+        // json_extract -> get_json_string
+        registerFunctionTransformer("json_extract", 2, "get_json_string",
                 ImmutableList.of(Expr.class, Expr.class));
 
         // json_size -> json_length

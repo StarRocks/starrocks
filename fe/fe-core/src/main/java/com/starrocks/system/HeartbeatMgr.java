@@ -98,6 +98,7 @@ public class HeartbeatMgr extends FrontendDaemon {
         tMasterInfo.setHttp_port(Config.http_port);
         long flags = HeartbeatFlags.getHeartbeatFlags();
         tMasterInfo.setHeartbeat_flags(flags);
+        tMasterInfo.setMin_active_txn_id(GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getMinActiveTxnId());
         MASTER_INFO.set(tMasterInfo);
     }
 
@@ -108,13 +109,15 @@ public class HeartbeatMgr extends FrontendDaemon {
      */
     @Override
     protected void runAfterCatalogReady() {
-        ImmutableMap<Long, Backend> idToBackendRef = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
+        ImmutableMap<Long, Backend> idToBackendRef =
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
         if (idToBackendRef == null) {
             return;
         }
 
         List<Future<HeartbeatResponse>> hbResponses = Lists.newArrayList();
 
+        long startTime = System.currentTimeMillis();
         // send backend heartbeat
         for (Backend backend : idToBackendRef.values()) {
             BackendHeartbeatHandler handler = new BackendHeartbeatHandler(backend);
@@ -122,21 +125,22 @@ public class HeartbeatMgr extends FrontendDaemon {
         }
 
         // send compute node heartbeat
-        for (ComputeNode computeNode : GlobalStateMgr.getCurrentSystemInfo().getIdComputeNode().values()) {
+        for (ComputeNode computeNode : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdComputeNode()
+                .values()) {
             BackendHeartbeatHandler handler = new BackendHeartbeatHandler(computeNode);
             hbResponses.add(executor.submit(handler));
         }
 
         // send frontend heartbeat
-        List<Frontend> frontends = GlobalStateMgr.getCurrentState().getFrontends(null);
+        List<Frontend> frontends = GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null);
         String masterFeNodeName = "";
         for (Frontend frontend : frontends) {
             if (frontend.getHost().equals(MASTER_INFO.get().getNetwork_address().getHostname())) {
                 masterFeNodeName = frontend.getNodeName();
             }
             FrontendHeartbeatHandler handler = new FrontendHeartbeatHandler(frontend,
-                    GlobalStateMgr.getCurrentState().getClusterId(),
-                    GlobalStateMgr.getCurrentState().getToken());
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId(),
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getToken());
             hbResponses.add(executor.submit(handler));
         }
 
@@ -181,13 +185,20 @@ public class HeartbeatMgr extends FrontendDaemon {
 
         // write edit log
         GlobalStateMgr.getCurrentState().getEditLog().logHeartbeat(hbPackage);
+
+        // set sleep time to (heartbeat_timeout - timeUsed),
+        // so that the frequency of calling the heartbeat rpc can be stabilized at heartbeat_timeout
+        setInterval(Math.max(1L, Config.heartbeat_timeout_second * 1000L - (System.currentTimeMillis() - startTime)));
+
+        ClientPool.beHeartbeatPool.setTimeoutMs(Config.heartbeat_timeout_second * 1000);
+        ClientPool.brokerHeartbeatPool.setTimeoutMs(Config.heartbeat_timeout_second * 1000);
     }
 
     private boolean handleHbResponse(HeartbeatResponse response, boolean isReplay) {
         switch (response.getType()) {
             case FRONTEND: {
                 FrontendHbResponse hbResponse = (FrontendHbResponse) response;
-                Frontend fe = GlobalStateMgr.getCurrentState().getFeByName(hbResponse.getName());
+                Frontend fe = GlobalStateMgr.getCurrentState().getNodeMgr().getFeByName(hbResponse.getName());
                 if (fe != null) {
                     return fe.handleHbResponse(hbResponse, isReplay);
                 }
@@ -195,9 +206,11 @@ public class HeartbeatMgr extends FrontendDaemon {
             }
             case BACKEND: {
                 BackendHbResponse hbResponse = (BackendHbResponse) response;
-                ComputeNode computeNode = GlobalStateMgr.getCurrentSystemInfo().getBackend(hbResponse.getBeId());
+                ComputeNode computeNode =
+                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(hbResponse.getBeId());
                 if (computeNode == null) {
-                    computeNode = GlobalStateMgr.getCurrentSystemInfo().getComputeNode(hbResponse.getBeId());
+                    computeNode =
+                            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNode(hbResponse.getBeId());
                 }
                 if (computeNode != null) {
                     boolean isChanged = computeNode.handleHbResponse(hbResponse, isReplay);
@@ -209,17 +222,17 @@ public class HeartbeatMgr extends FrontendDaemon {
                                     .abortTxnWhenCoordinateBeDown(computeNode.getHost(), 100);
                         }
                     } else {
-                        if (RunMode.allowCreateLakeTable() && !isReplay) {
+                        if (RunMode.isSharedDataMode() && !isReplay) {
                             // addWorker
                             int starletPort = computeNode.getStarletPort();
                             if (starletPort != 0) {
-                                Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().
+                                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().
                                         getDefaultWarehouse();
                                 long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
                                 String workerAddr = computeNode.getHost() + ":" + starletPort;
 
-                                GlobalStateMgr.getCurrentStarOSAgent().
-                                            addWorker(computeNode.getId(), workerAddr, workerGroupId);
+                                GlobalStateMgr.getCurrentState().getStarOSAgent().
+                                        addWorker(computeNode.getId(), workerAddr, workerGroupId);
                             }
                         }
                     }
@@ -262,14 +275,20 @@ public class HeartbeatMgr extends FrontendDaemon {
             TNetworkAddress beAddr = new TNetworkAddress(computeNode.getHost(), computeNode.getHeartbeatPort());
             boolean ok = false;
             try {
-                client = ClientPool.heartbeatPool.borrowObject(beAddr);
+                client = ClientPool.beHeartbeatPool.borrowObject(beAddr);
 
                 TMasterInfo copiedMasterInfo = new TMasterInfo(MASTER_INFO.get());
                 copiedMasterInfo.setBackend_ip(computeNode.getHost());
                 long flags = HeartbeatFlags.getHeartbeatFlags();
                 copiedMasterInfo.setHeartbeat_flags(flags);
                 copiedMasterInfo.setBackend_id(computeNodeId);
+                copiedMasterInfo.setMin_active_txn_id(
+                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getMinActiveTxnId());
                 copiedMasterInfo.setRun_mode(RunMode.toTRunMode(RunMode.getCurrentRunMode()));
+                if (computeNode instanceof Backend) {
+                    copiedMasterInfo.setDisabled_disks(((Backend) computeNode).getDisabledDisks());
+                    copiedMasterInfo.setDecommissioned_disks(((Backend) computeNode).getDecommissionedDisks());
+                }
                 THeartbeatResult result = client.heartbeat(copiedMasterInfo);
 
                 ok = true;
@@ -318,9 +337,9 @@ public class HeartbeatMgr extends FrontendDaemon {
                         Strings.isNullOrEmpty(e.getMessage()) ? "got exception" : e.getMessage());
             } finally {
                 if (ok) {
-                    ClientPool.heartbeatPool.returnObject(beAddr, client);
+                    ClientPool.beHeartbeatPool.returnObject(beAddr, client);
                 } else {
-                    ClientPool.heartbeatPool.invalidateObject(beAddr, client);
+                    ClientPool.beHeartbeatPool.invalidateObject(beAddr, client);
                 }
             }
         }
@@ -340,7 +359,7 @@ public class HeartbeatMgr extends FrontendDaemon {
 
         @Override
         public HeartbeatResponse call() {
-            if (fe.getHost().equals(GlobalStateMgr.getCurrentState().getSelfNode().first)) {
+            if (fe.getHost().equals(GlobalStateMgr.getCurrentState().getNodeMgr().getSelfNode().first)) {
                 // heartbeat to self
                 if (GlobalStateMgr.getCurrentState().isReady()) {
                     return new FrontendHbResponse(fe.getNodeName(), Config.query_port, Config.rpc_port,
@@ -355,7 +374,8 @@ public class HeartbeatMgr extends FrontendDaemon {
             String url = "http://" + fe.getHost() + ":" + Config.http_port
                     + "/api/bootstrap?cluster_id=" + clusterId + "&token=" + token;
             try {
-                String result = Util.getResultForUrl(url, null, 2000, 2000);
+                String result = Util.getResultForUrl(url, null,
+                        Config.heartbeat_timeout_second * 1000, Config.heartbeat_timeout_second * 1000);
                 /*
                  * return:
                  * {"replayedJournalId":191224,"queryPort":9131,"rpcPort":9121,"status":"OK","msg":"Success"}
@@ -399,7 +419,7 @@ public class HeartbeatMgr extends FrontendDaemon {
             TNetworkAddress addr = new TNetworkAddress(broker.ip, broker.port);
             boolean ok = false;
             try {
-                client = ClientPool.brokerPool.borrowObject(addr);
+                client = ClientPool.brokerHeartbeatPool.borrowObject(addr);
                 TBrokerPingBrokerRequest request = new TBrokerPingBrokerRequest(TBrokerVersion.VERSION_ONE,
                         clientId);
                 TBrokerOperationStatus status = client.ping(request);
@@ -416,9 +436,9 @@ public class HeartbeatMgr extends FrontendDaemon {
                         Strings.isNullOrEmpty(e.getMessage()) ? "got exception" : e.getMessage());
             } finally {
                 if (ok) {
-                    ClientPool.brokerPool.returnObject(addr, client);
+                    ClientPool.brokerHeartbeatPool.returnObject(addr, client);
                 } else {
-                    ClientPool.brokerPool.invalidateObject(addr, client);
+                    ClientPool.brokerHeartbeatPool.invalidateObject(addr, client);
                 }
             }
         }

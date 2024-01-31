@@ -2,9 +2,9 @@
 displayed_sidebar: "English"
 ---
 
-# Flink connector
+# Releases of StarRocks Connector for Flink
 
-## **Notifications**
+## Notifications
 
 **User guide:**
 
@@ -28,6 +28,7 @@ displayed_sidebar: "English"
 
 | Connector | Flink                    | StarRocks     | Java | Scala     |
 | --------- | ------------------------ | ------------- | ---- | --------- |
+| 1.2.9 | 1.15,1.16,1.17,1.18 | 2.1 and later| 8 | 2.11,2.12 |
 | 1.2.8     | 1.13,1.14,1.15,1.16,1.17 | 2.1 and later | 8    | 2.11,2.12 |
 | 1.2.7     | 1.11,1.12,1.13,1.14,1.15 | 2.1 and later | 8    | 2.11,2.12 |
 
@@ -35,11 +36,26 @@ displayed_sidebar: "English"
 >
 > In general, the latest version of the Flink connector only maintains compatibility with the three most recent versions of Flink.
 
-## **Release note**
+## Release notes
 
 ### 1.2
 
-**1.2.8**
+#### 1.2.9
+
+This release includes some features and bug fixes. The notable change is that the Flink connector is integrated with [Flink CDC 3.0](https://ververica.github.io/flink-cdc-connectors/master/content/overview/cdc-pipeline.html) to easily build a streaming ELT pipeline from CDC sources (such as MySQL and Kafka) to StarRocks. You can see [Flink CDC Synchronization](../loading/Flink-connector-starrocks.md#flink-cdc-synchronization-with-schema-change-supported) for details.
+
+**Features**
+
+- Implement catalog to support Flink CDC 3.0. [#295](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/295)
+- Implement new sink API in [FLP-191](https://cwiki.apache.org/confluence/display/FLINK/FLIP-191%3A+Extend+unified+Sink+interface+to+support+small+file+compaction) to support Flink CDC 3.0. [#301](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/301)
+- Support Flink 1.18. [#305](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/305)
+
+**Bug Fixes**
+
+- Fix misleading thread name and log. [#290](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/290)
+- Fix wrong stream-load-sdk configurations used for writing to multiple tables. [#298](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/298)
+
+#### 1.2.8
 
 This release includes some improvements and bug fixes. The notable changes are as follows:
 

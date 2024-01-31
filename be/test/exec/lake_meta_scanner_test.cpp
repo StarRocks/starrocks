@@ -77,10 +77,8 @@ public:
             auto st = _tablet_mgr->put_tablet_metadata(metadata);
             EXPECT_TRUE(st.ok());
 
-            auto tablet_or = _tablet_mgr->get_tablet(_tablet_id);
+            auto tablet_or = _tablet_mgr->get_tablet(_tablet_id, 2);
             EXPECT_TRUE(tablet_or.ok());
-            auto st2 = tablet_or->get_schema();
-            EXPECT_TRUE(st2.ok());
         }
 
         _state = _pool.add(new RuntimeState(TQueryGlobals()));

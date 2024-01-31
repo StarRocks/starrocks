@@ -10,6 +10,12 @@ Creates a resource group.
 
 For more information, see [Resource group](../../../administration/resource_group.md).
 
+:::tip
+
+This operation requires the SYSTEM-level CREATE RESOURCE GROUP privilege. You can follow the instructions in [GRANT](../account-management/GRANT.md) to grant this privilege.
+
+:::
+
 ## Syntax
 
 ```SQL

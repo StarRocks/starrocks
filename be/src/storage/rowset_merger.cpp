@@ -23,6 +23,7 @@
 #include "storage/empty_iterator.h"
 #include "storage/merge_iterator.h"
 #include "storage/primary_key_encoder.h"
+#include "storage/rowset/column_reader.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/tablet.h"
@@ -133,6 +134,32 @@ struct MergeEntryCmp {
     }
 };
 
+static int32_t calculate_chunk_size_for_column_group(const Schema& column_group_schema,
+                                                     const vector<RowsetSharedPtr>& rowsets) {
+    int64_t total_num_rows = 0;
+    int64_t total_mem_footprint = 0;
+    // TODO: using actual merge element count after fixing merge bug for non-overlapping rowset
+    int64_t total_input_segs = 0;
+    for (const auto& rowset : rowsets) {
+        total_num_rows += rowset->num_rows();
+        total_input_segs += rowset->num_segments();
+        const auto& segments = rowset->segments();
+        for (const auto& segment : segments) {
+            for (auto& field : column_group_schema.fields()) {
+                const auto* column_reader = segment->column_with_uid(field->uid());
+                if (column_reader == nullptr) {
+                    continue;
+                }
+                total_mem_footprint += column_reader->total_mem_footprint();
+            }
+        }
+    }
+    int32_t chunk_size =
+            CompactionUtils::get_read_chunk_size(config::compaction_memory_limit_per_worker, config::vector_chunk_size,
+                                                 total_num_rows, total_mem_footprint, total_input_segs);
+    return chunk_size;
+}
+
 // heap based rowset merger used for updatable tablet's compaction
 template <class T>
 class RowsetMergerImpl : public RowsetMerger {
@@ -226,8 +253,6 @@ public:
     Status do_merge(Tablet& tablet, const starrocks::TabletSchemaCSPtr& tablet_schema, int64_t version,
                     const Schema& schema, const vector<RowsetSharedPtr>& rowsets, RowsetWriter* writer,
                     const MergeConfig& cfg) override {
-        _chunk_size = cfg.chunk_size;
-
         size_t total_input_size = 0;
         size_t total_rows = 0;
         size_t total_chunk = 0;
@@ -235,18 +260,18 @@ public:
         vector<vector<uint32_t>> column_groups;
         MonotonicStopWatch timer;
         timer.start();
+        Status st;
         if (cfg.algorithm == VERTICAL_COMPACTION) {
             CompactionUtils::split_column_into_groups(schema.num_fields(), schema.sort_key_idxes(),
                                                       config::vertical_compaction_max_columns_per_group,
                                                       &column_groups);
-            RETURN_IF_ERROR(_do_merge_vertically(tablet, tablet_schema, version, rowsets, writer, cfg, column_groups,
-                                                 &total_input_size, &total_rows, &total_chunk, &stats));
+            st = _do_merge_vertically(tablet, tablet_schema, version, rowsets, writer, cfg, column_groups,
+                                      &total_input_size, &total_rows, &total_chunk, &stats);
         } else {
-            RETURN_IF_ERROR(_do_merge_horizontally(tablet, tablet_schema, version, schema, rowsets, writer, cfg,
-                                                   &total_input_size, &total_rows, &total_chunk, &stats));
+            st = _do_merge_horizontally(tablet, tablet_schema, version, schema, rowsets, writer, cfg, &total_input_size,
+                                        &total_rows, &total_chunk, &stats);
         }
         timer.stop();
-
         // update compaction metric
         float divided = 1000 * 1000 * 1000;
         StarRocksMetrics::instance()->update_compaction_task_cost_time_ns.set_value(timer.elapsed_time());
@@ -256,17 +281,23 @@ public:
         StarRocksMetrics::instance()->update_compaction_bytes_total.increment(total_input_size);
         StarRocksMetrics::instance()->update_compaction_outputs_total.increment(1);
         StarRocksMetrics::instance()->update_compaction_outputs_bytes_total.increment(writer->total_data_size());
-        LOG(INFO) << "compaction merge finished. tablet=" << tablet.tablet_id()
-                  << " #key=" << schema.sort_key_idxes().size()
-                  << " algorithm=" << CompactionUtils::compaction_algorithm_to_string(cfg.algorithm)
-                  << " column_group_size=" << column_groups.size() << " input("
-                  << "entry=" << _entries.size() << " rows=" << stats.raw_rows_read
-                  << " del=" << stats.rows_del_vec_filtered << " actual=" << stats.raw_rows_read
-                  << " bytes=" << PrettyPrinter::print(total_input_size, TUnit::BYTES) << ") output(rows=" << total_rows
-                  << " chunk=" << total_chunk
-                  << " bytes=" << PrettyPrinter::print(writer->total_data_size(), TUnit::BYTES)
-                  << ") duration: " << timer.elapsed_time() / 1000000 << "ms";
-        return Status::OK();
+        std::stringstream ss;
+        ss << "update compaction merge finished. tablet=" << tablet.tablet_id()
+           << " #key=" << schema.sort_key_idxes().size()
+           << " algorithm=" << CompactionUtils::compaction_algorithm_to_string(cfg.algorithm)
+           << " column_group_size=" << column_groups.size() << " chunk_size min:" << _min_chunk_size
+           << " max:" << _max_chunk_size << " input("
+           << "entry=" << _entries.size() << " rows=" << stats.raw_rows_read << " del=" << stats.rows_del_vec_filtered
+           << " actual=" << stats.raw_rows_read << " bytes=" << PrettyPrinter::print(total_input_size, TUnit::BYTES)
+           << ") output(rows=" << total_rows << " chunk=" << total_chunk
+           << " bytes=" << PrettyPrinter::print(writer->total_data_size(), TUnit::BYTES)
+           << ") duration: " << timer.elapsed_time() / 1000000 << "ms";
+        if (st.ok()) {
+            LOG(INFO) << ss.str();
+        } else {
+            LOG(WARNING) << ss.str() << ", err=" << st.message();
+        }
+        return st;
     }
 
 private:
@@ -284,6 +315,12 @@ private:
         } else if (schema.sort_key_idxes().size() == 1 && schema.field(schema.sort_key_idxes()[0])->is_nullable()) {
             sort_column = std::make_unique<BinaryColumn>();
         }
+        _chunk_size = calculate_chunk_size_for_column_group(schema, rowsets);
+        if (tablet.is_column_with_row_store() && config::update_compaction_chunk_size_for_row_store > 0) {
+            _chunk_size = config::update_compaction_chunk_size_for_row_store;
+        }
+        _min_chunk_size = std::min(_min_chunk_size, _chunk_size);
+        _max_chunk_size = std::max(_max_chunk_size, _chunk_size);
         std::vector<std::unique_ptr<vector<RowSourceMask>>> rowsets_source_masks;
         uint16_t order = 0;
         for (const auto& rowset : rowsets) {
@@ -292,7 +329,7 @@ private:
             MergeEntry<T>& entry = *_entries.back();
             entry.rowset_release_guard = std::make_unique<RowsetReleaseGuard>(rowset);
             auto res = rowset->get_segment_iterators2(schema, tablet_schema, tablet.data_dir()->get_meta(), version,
-                                                      stats);
+                                                      stats, nullptr, _chunk_size);
             if (!res.ok()) {
                 return res.status();
             }
@@ -433,6 +470,8 @@ private:
             Schema schema = tablet_schema->sort_key_idxes().empty()
                                     ? ChunkHelper::convert_schema(tablet_schema, column_groups[0])
                                     : ChunkHelper::get_sort_key_schema(tablet_schema);
+            // NOTE: although we switch to horizontal merge, the writer used is still VerticalRowsetWriter
+            // so it's important to make sure VerticalRowsetWriter can function properly when used in horizontal way
             RETURN_IF_ERROR(_do_merge_horizontally(tablet, tablet_schema, version, schema, rowsets, writer, cfg,
                                                    total_input_size, total_rows, total_chunk, stats, mask_buffer.get(),
                                                    &rowsets_mask_buffer));
@@ -450,6 +489,12 @@ private:
             iterators.reserve(rowsets.size());
             OlapReaderStatistics non_key_stats;
             Schema schema = ChunkHelper::convert_schema(tablet_schema, column_groups[i]);
+            _chunk_size = calculate_chunk_size_for_column_group(schema, rowsets);
+            if (tablet.is_column_with_row_store() && config::update_compaction_chunk_size_for_row_store > 0) {
+                _chunk_size = config::update_compaction_chunk_size_for_row_store;
+            }
+            _min_chunk_size = std::min(_min_chunk_size, _chunk_size);
+            _max_chunk_size = std::max(_max_chunk_size, _chunk_size);
             for (size_t j = 0; j < rowsets.size(); j++) {
                 const auto& rowset = rowsets[j];
                 RETURN_IF_ERROR(rowsets_mask_buffer[j]->flip_to_read());
@@ -457,7 +502,7 @@ private:
                 MergeEntry<T>& entry = *_entries.back();
                 entry.rowset_release_guard = std::make_unique<RowsetReleaseGuard>(rowset);
                 auto res = rowset->get_segment_iterators2(schema, tablet_schema, tablet.data_dir()->get_meta(), version,
-                                                          &non_key_stats);
+                                                          &non_key_stats, nullptr, _chunk_size);
                 if (!res.ok()) {
                     return res.status();
                 }
@@ -530,7 +575,11 @@ private:
         return Status::OK();
     }
 
-    size_t _chunk_size = 0;
+    int32_t _chunk_size = 0;
+    // chunk_size are constantly changing when doing vertical compaction, track the min and max value of
+    // _chunk_size and print them in log
+    int32_t _min_chunk_size = INT_MAX;
+    int32_t _max_chunk_size = INT_MIN;
     std::vector<std::unique_ptr<MergeEntry<T>>> _entries;
     using Heap = std::priority_queue<MergeEntry<T>*, std::vector<MergeEntry<T>*>, MergeEntryCmp<T>>;
     Heap _heap;
@@ -540,7 +589,7 @@ Status compaction_merge_rowsets(Tablet& tablet, int64_t version, const vector<Ro
                                 RowsetWriter* writer, const MergeConfig& cfg,
                                 const starrocks::TabletSchemaCSPtr& cur_tablet_schema) {
     auto final_tablet_schema = cur_tablet_schema == nullptr ? tablet.tablet_schema() : cur_tablet_schema;
-    Schema schema = [&final_tablet_schema, &tablet]() {
+    Schema schema = [&final_tablet_schema]() {
         if (final_tablet_schema->sort_key_idxes().empty()) {
             return ChunkHelper::get_sort_key_schema_by_primary_key(final_tablet_schema);
         } else {

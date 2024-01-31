@@ -24,6 +24,7 @@ import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DescribeStmt;
@@ -55,6 +56,7 @@ public class ShowCreateViewStmtTest {
         Config.alter_scheduler_interval_millisecond = 100;
         Config.dynamic_partition_enable = true;
         Config.dynamic_partition_check_interval_seconds = 1;
+        Config.enable_experimental_rowstore = true;
         UtFrameUtils.createMinStarRocksCluster();
 
         // create connect context
@@ -138,7 +140,7 @@ public class ShowCreateViewStmtTest {
         String dropSQL = "drop table tbl1";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         try {
-            GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
         } catch (Exception ex) {
 
         }
@@ -183,13 +185,13 @@ public class ShowCreateViewStmtTest {
         for (String[] testcase : testCases) {
             String dropViewSql = "drop view if exists " + testcase[0];
             DropTableStmt dropViewStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropViewSql, ctx);
-            GlobalStateMgr.getCurrentState().dropTable(dropViewStmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropViewStmt);
             CreateViewStmt createViewStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(testcase[1], ctx);
-            GlobalStateMgr.getCurrentState().createView(createViewStmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createView(createViewStmt);
 
             List<Table> views = GlobalStateMgr.getCurrentState().getDb(createViewStmt.getDbName()).getViews();
             List<String> res = Lists.newArrayList();
-            GlobalStateMgr.getDdlStmt(createViewStmt.getDbName(), views.get(0), res,
+            AstToStringBuilder.getDdlStmt(createViewStmt.getDbName(), views.get(0), res,
                     null, null, false, false);
 
             Assert.assertEquals(testcase[2], res.get(0));
@@ -204,11 +206,11 @@ public class ShowCreateViewStmtTest {
         String createViewSql = "create view test_view (k1 COMMENT \"dt\", k2, v1) COMMENT \"view comment\" " +
                 "as select * from tbl1";
         CreateViewStmt createViewStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(createViewSql, ctx);
-        GlobalStateMgr.getCurrentState().createView(createViewStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createView(createViewStmt);
 
         List<Table> views = GlobalStateMgr.getCurrentState().getDb(createViewStmt.getDbName()).getViews();
         List<String> res = Lists.newArrayList();
-        GlobalStateMgr.getDdlStmt(createViewStmt.getDbName(), views.get(0), res,
+        AstToStringBuilder.getDdlStmt(createViewStmt.getDbName(), views.get(0), res,
                 null, null, false, false);
         Assert.assertEquals("CREATE VIEW `test_view` (`k1` COMMENT \"dt\", `k2`, `v1`)\n" +
                 "COMMENT \"view comment\" AS SELECT `test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`, `test`.`tbl1`.`v1`\n" +
@@ -218,6 +220,7 @@ public class ShowCreateViewStmtTest {
     @Test
     public void testViewOfThreeUnionAllWithConstNullOutput() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
+        ctx.getSessionVariable().setOptimizerExecuteTimeout(30000000);
         String createViewSql = "create view v2 as \n" +
                 "select \n" +
                 "\tt0.c1 as a,\n" +
@@ -240,7 +243,7 @@ public class ShowCreateViewStmtTest {
                 "\tt0.c4 as d\n" +
                 "from t0";
         CreateViewStmt createViewStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(createViewSql, ctx);
-        GlobalStateMgr.getCurrentState().createView(createViewStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createView(createViewStmt);
 
         String descViewSql = "describe v2";
 
@@ -255,7 +258,8 @@ public class ShowCreateViewStmtTest {
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, query);
         plan = plan.replaceAll("\\[\\d+,\\s*", "")
                 .replaceAll("VARCHAR\\(\\d+\\)", "VARCHAR")
-                .replaceAll(",\\s*(true|false)]", "");
+                .replaceAll(",\\s*(true|false)]", "")
+                .replaceAll("\\[\\d+: ", "");
         String snippet = "  0:UNION\n" +
                 "  |  output exprs:\n" +
                 "  |      VARCHAR | VARCHAR | VARCHAR | VARCHAR\n" +
@@ -263,11 +267,12 @@ public class ShowCreateViewStmtTest {
                 "  |      [32: c1, VARCHAR | [33: cast, VARCHAR | [34: cast, VARCHAR | [35: cast, VARCHAR\n" +
                 "  |      [37: c1, VARCHAR | [38: c2, VARCHAR | [42: cast, VARCHAR | [40: c4, VARCHAR\n" +
                 "  |  pass-through-operands: all";
+        snippet = snippet.replaceAll("\\[\\d+: ", "");
         Assert.assertTrue(plan, plan.contains(snippet));
 
         String dropViewSql = "drop view if exists v2";
         DropTableStmt dropViewStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropViewSql, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropViewStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropViewStmt);
     }
 
     @Test
@@ -275,7 +280,7 @@ public class ShowCreateViewStmtTest {
         List<Table> tables = GlobalStateMgr.getCurrentState().getDb("test").getTables();
         Table commentTest = tables.stream().filter(table -> table.getName().equals("comment_test")).findFirst().get();
         List<String> res = Lists.newArrayList();
-        GlobalStateMgr.getDdlStmt("test", commentTest, res,
+        AstToStringBuilder.getDdlStmt("test", commentTest, res,
                 null, null, false, false);
         StatementBase stmt = SqlParser.parse(res.get(0), connectContext.getSessionVariable()).get(0);
         Assert.assertTrue(stmt instanceof CreateTableStmt);
@@ -286,7 +291,7 @@ public class ShowCreateViewStmtTest {
         List<Table> tables = GlobalStateMgr.getCurrentState().getDb("test").getTables();
         Table storageTest = tables.stream().filter(table -> table.getName().equals("storage_test")).findFirst().get();
         List<String> res = Lists.newArrayList();
-        GlobalStateMgr.getDdlStmt("storage_test", storageTest, res,
+        AstToStringBuilder.getDdlStmt("storage_test", storageTest, res,
                 null, null, false, false);
         Assert.assertTrue(storageTest.isOlapTable() &&
                 ((OlapTable) storageTest).getStorageType() == COLUMN_WITH_ROW);

@@ -37,43 +37,19 @@ package com.starrocks.sql.optimizer.rewrite;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonNull;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonPrimitive;
 import com.google.re2j.Pattern;
 import com.starrocks.analysis.DecimalLiteral;
-import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Database;
-import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.connector.PartitionInfo;
-import com.starrocks.connector.PartitionUtil;
-import com.starrocks.connector.hive.Partition;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
-import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.ObjectType;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import org.apache.commons.collections4.MapUtils;
-import org.apache.commons.collections4.SetUtils;
 import org.apache.commons.lang.StringUtils;
-import org.apache.commons.lang3.tuple.Pair;
 import org.apache.http.NameValuePair;
 import org.apache.http.client.utils.URLEncodedUtils;
 
@@ -102,7 +78,6 @@ import java.time.temporal.TemporalUnit;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 import static com.starrocks.catalog.PrimitiveType.BIGINT;
@@ -148,6 +123,9 @@ public class ScalarOperatorFunctions {
 
     private static final Map<String, TemporalUnit> TIME_SLICE_UNIT_MAPPING;
 
+    private static final int MAX_NOW_PRECISION = 6;
+    private static final Integer[] NOW_PRECISION_FACTORS = new Integer[MAX_NOW_PRECISION];
+
     static {
         for (int shiftBy = 0; shiftBy < CONSTANT_128; ++shiftBy) {
             INT_128_MASK1_ARR1[shiftBy] = INT_128_OPENER.subtract(BigInteger.ONE).shiftRight(shiftBy + 1);
@@ -163,6 +141,9 @@ public class ScalarOperatorFunctions {
                 .put("week", ChronoUnit.WEEKS)
                 .put("quarter", IsoFields.QUARTER_YEARS)
                 .build();
+        for (int i = 0, val = 100000000; i < 6; i++, val /= 10) {
+            NOW_PRECISION_FACTORS[i] = val;
+        }
     }
 
     /**
@@ -180,17 +161,33 @@ public class ScalarOperatorFunctions {
                 first.getDatetime().truncatedTo(ChronoUnit.DAYS)).toDays());
     }
 
-    @ConstantFunction(name = "years_add", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "years_add", argTypes = {DATETIME,
+                    INT}, returnType = DATETIME, isMonotonic = true),
+            @ConstantFunction(name = "years_add", argTypes = {DATE, INT}, returnType = DATE, isMonotonic = true)
+    })
     public static ConstantOperator yearsAdd(ConstantOperator date, ConstantOperator year) {
-        return ConstantOperator.createDatetimeOrNull(date.getDatetime().plusYears(year.getInt()));
+        if (date.getType().isDate()) {
+            return ConstantOperator.createDateOrNull(date.getDatetime().plusYears(year.getInt()));
+        } else {
+            return ConstantOperator.createDatetimeOrNull(date.getDatetime().plusYears(year.getInt()));
+        }
     }
 
     @ConstantFunction.List(list = {
-            @ConstantFunction(name = "months_add", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true),
-            @ConstantFunction(name = "add_months", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
+            @ConstantFunction(name = "months_add", argTypes = {DATETIME,
+                    INT}, returnType = DATETIME, isMonotonic = true),
+            @ConstantFunction(name = "add_months", argTypes = {DATETIME,
+                    INT}, returnType = DATETIME, isMonotonic = true),
+            @ConstantFunction(name = "months_add", argTypes = {DATE, INT}, returnType = DATE, isMonotonic = true),
+            @ConstantFunction(name = "add_months", argTypes = {DATE, INT}, returnType = DATE, isMonotonic = true)
     })
     public static ConstantOperator monthsAdd(ConstantOperator date, ConstantOperator month) {
-        return ConstantOperator.createDatetimeOrNull(date.getDatetime().plusMonths(month.getInt()));
+        if (date.getType().isDate()) {
+            return ConstantOperator.createDateOrNull(date.getDate().plusMonths(month.getInt()));
+        } else {
+            return ConstantOperator.createDatetimeOrNull(date.getDatetime().plusMonths(month.getInt()));
+        }
     }
 
     @ConstantFunction.List(list = {
@@ -216,7 +213,6 @@ public class ScalarOperatorFunctions {
     public static ConstantOperator secondsAdd(ConstantOperator date, ConstantOperator second) {
         return ConstantOperator.createDatetimeOrNull(date.getDatetime().plusSeconds(second.getInt()));
     }
-
 
     @ConstantFunction.List(list = {
             @ConstantFunction(name = "date_trunc", argTypes = {VARCHAR, DATETIME}, returnType = DATETIME, isMonotonic = true),
@@ -341,6 +337,13 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), Type.DATE);
     }
 
+    @ConstantFunction(name = "to_date", argTypes = {DATETIME}, returnType = DATE, isMonotonic = true)
+    public static ConstantOperator toDate(ConstantOperator dateTime) {
+        LocalDateTime dt = dateTime.getDatetime();
+        dt.truncatedTo(ChronoUnit.DAYS);
+        return ConstantOperator.createDateOrNull(dt);
+    }
+
     @ConstantFunction(name = "years_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
     public static ConstantOperator yearsSub(ConstantOperator date, ConstantOperator year) {
         return ConstantOperator.createDatetimeOrNull(date.getDatetime().minusYears(year.getInt()));
@@ -463,6 +466,22 @@ public class ScalarOperatorFunctions {
     }
 
     @ConstantFunction.List(list = {
+            @ConstantFunction(name = "from_unixtime_ms", argTypes = {BIGINT}, returnType = VARCHAR)
+    })
+    public static ConstantOperator fromUnixTimeMs(ConstantOperator unixTime) throws AnalysisException {
+        long millisecond = unixTime.getBigint();
+
+        if (millisecond < 0 || millisecond > TimeUtils.MAX_UNIX_TIMESTAMP * 1000) {
+            throw new AnalysisException(
+                    "unixtime should larger than zero and less than " + TimeUtils.MAX_UNIX_TIMESTAMP);
+        }
+        long second = millisecond / 1000;
+        ConstantOperator dl = ConstantOperator.createDatetime(
+                LocalDateTime.ofInstant(Instant.ofEpochSecond(second), TimeUtils.getTimeZone().toZoneId()));
+        return ConstantOperator.createVarchar(dl.toString());
+    }
+
+    @ConstantFunction.List(list = {
             @ConstantFunction(name = "from_unixtime", argTypes = {INT, VARCHAR}, returnType = VARCHAR),
             @ConstantFunction(name = "from_unixtime", argTypes = {BIGINT, VARCHAR}, returnType = VARCHAR)
     })
@@ -491,7 +510,7 @@ public class ScalarOperatorFunctions {
     })
     public static ConstantOperator now() {
         ConnectContext connectContext = ConnectContext.get();
-        LocalDateTime startTime = Instant.ofEpochMilli(connectContext.getStartTime())
+        LocalDateTime startTime = Instant.ofEpochMilli(connectContext.getStartTime() / 1000 * 1000)
                 .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
         return ConstantOperator.createDatetimeOrNull(startTime);
     }
@@ -509,11 +528,12 @@ public class ScalarOperatorFunctions {
         if (fspVal > 6) {
             throw new AnalysisException("Too-big precision " + fspVal + "specified for 'now'. Maximum is 6.");
         }
-        // Here only the syntax is implemented for the metabase to use.
-        // If you want to achieve a precise type, you need to change the BE code
-        // and consider the transitivity of the FE expression.
+
         ConnectContext connectContext = ConnectContext.get();
-        LocalDateTime startTime = Instant.ofEpochMilli(connectContext.getStartTime())
+        Instant instant = connectContext.getStartTimeInstant();
+        int factor = NOW_PRECISION_FACTORS[fspVal - 1];
+        LocalDateTime startTime = Instant.ofEpochSecond(
+                        instant.getEpochSecond(), instant.getNano() / factor * factor)
                 .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
         return ConstantOperator.createDatetimeOrNull(startTime);
     }
@@ -532,7 +552,7 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "utc_timestamp", argTypes = {}, returnType = DATETIME)
     public static ConstantOperator utcTimestamp() {
         // for consistency with mysql, ignore milliseconds
-        LocalDateTime utcStartTime = Instant.ofEpochMilli(ConnectContext.get().getStartTime())
+        LocalDateTime utcStartTime = Instant.ofEpochMilli(ConnectContext.get().getStartTime() / 1000 * 1000)
                 .atZone(ZoneOffset.UTC).toLocalDateTime();
         return ConstantOperator.createDatetimeOrNull(utcStartTime);
     }
@@ -1130,171 +1150,6 @@ public class ScalarOperatorFunctions {
         }
         BigInteger opened = l.subtract(INT_128_OPENER);
         return opened.shiftRight(shiftBy).and(INT_128_MASK1_ARR1[shiftBy]);
-    }
-
-    // =================================== meta functions ==================================== //
-
-    private static Table inspectExternalTable(TableName tableName) {
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName)
-                .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName));
-        ConnectContext connectContext = ConnectContext.get();
-        try {
-            Authorizer.checkAnyActionOnTable(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
-                    tableName);
-        } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(
-                    tableName.getCatalog(),
-                    connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
-                    PrivilegeType.ANY.name(), ObjectType.TABLE.name(), tableName.getTbl());
-        }
-        return table;
-    }
-
-    private static Pair<Database, Table> inspectTable(TableName tableName) {
-        Database db = GlobalStateMgr.getCurrentState().mayGetDb(tableName.getDb())
-                .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR, tableName.getDb()));
-        Table table = db.tryGetTable(tableName.getTbl())
-                .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName));
-        ConnectContext connectContext = ConnectContext.get();
-        try {
-            Authorizer.checkAnyActionOnTable(
-                    connectContext.getCurrentUserIdentity(),
-                    connectContext.getCurrentRoleIds(),
-                    tableName);
-        } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(
-                    tableName.getCatalog(),
-                    connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
-                    PrivilegeType.ANY.name(), ObjectType.TABLE.name(), tableName.getTbl());
-        }
-        return Pair.of(db, table);
-    }
-
-    /**
-     * Return verbose metadata of a materialized-view
-     */
-    @ConstantFunction(name = "inspect_mv_meta", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
-    public static ConstantOperator inspect_mv_meta(ConstantOperator mvName) {
-        TableName tableName = TableName.fromString(mvName.getVarchar());
-        Pair<Database, Table> dbTable = inspectTable(tableName);
-        Table table = dbTable.getRight();
-        if (!table.isMaterializedView()) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
-                    tableName + " is not materialized view");
-        }
-        Locker locker = new Locker();
-        try {
-            locker.lockDatabase(dbTable.getLeft(), LockType.READ);
-            MaterializedView mv = (MaterializedView) table;
-            String meta = mv.inspectMeta();
-            return ConstantOperator.createVarchar(meta);
-        } finally {
-            locker.unLockDatabase(dbTable.getLeft(), LockType.READ);
-        }
-    }
-
-    /**
-     * Return related materialized-views of a table, in JSON array format
-     */
-    @ConstantFunction(name = "inspect_related_mv", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
-    public static ConstantOperator inspect_related_mv(ConstantOperator name) {
-        TableName tableName = TableName.fromString(name.getVarchar());
-        Optional<Database> mayDb;
-        Table table = inspectExternalTable(tableName);
-        if (table.isNativeTableOrMaterializedView()) {
-            mayDb = GlobalStateMgr.getCurrentState().mayGetDb(tableName.getDb());
-        } else {
-            mayDb = Optional.empty();
-        }
-
-        Locker locker = new Locker();
-        try {
-            mayDb.ifPresent(database -> locker.lockDatabase(database, LockType.READ));
-
-            Set<MvId> relatedMvs = table.getRelatedMaterializedViews();
-            JsonArray array = new JsonArray();
-            for (MvId mv : SetUtils.emptyIfNull(relatedMvs)) {
-                String mvName = GlobalStateMgr.getCurrentState().mayGetTable(mv.getDbId(), mv.getId())
-                        .map(Table::getName)
-                        .orElse(null);
-                JsonObject obj = new JsonObject();
-                obj.add("id", new JsonPrimitive(mv.getId()));
-                obj.add("name", mvName != null ? new JsonPrimitive(mvName) : JsonNull.INSTANCE);
-
-                array.add(obj);
-            }
-
-            String json = array.toString();
-            return ConstantOperator.createVarchar(json);
-        } finally {
-            mayDb.ifPresent(database -> locker.unLockDatabase(database, LockType.READ));
-        }
-    }
-
-    /**
-     * Return the content in ConnectorTblMetaInfoMgr, which contains mapping information from base table to mv
-     */
-    @ConstantFunction(name = "inspect_mv_relationships", argTypes = {}, returnType = VARCHAR, isMetaFunction = true)
-    public static ConstantOperator inspectMvRelationships() {
-        ConnectContext context = ConnectContext.get();
-        try {
-            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.OPERATE);
-        } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(
-                    "", context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.OPERATE.name(), ObjectType.FUNCTION.name(), "inspect_mv_relationships");
-        }
-
-        String json = GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().inspect();
-        return ConstantOperator.createVarchar(json);
-    }
-
-    /**
-     * Return Hive partition info
-     */
-    @ConstantFunction(name = "inspect_hive_part_info",
-            argTypes = {VARCHAR},
-            returnType = VARCHAR,
-            isMetaFunction = true)
-    public static ConstantOperator inspect_hive_part_info(ConstantOperator name) {
-        TableName tableName = TableName.fromString(name.getVarchar());
-        Table table = inspectExternalTable(tableName);
-
-        Map<String, PartitionInfo> info = PartitionUtil.getPartitionNameWithPartitionInfo(table);
-        JsonObject obj = new JsonObject();
-        for (Map.Entry<String, PartitionInfo> entry : MapUtils.emptyIfNull(info).entrySet()) {
-            if (entry.getValue() instanceof Partition) {
-                Partition part = (Partition) entry.getValue();
-                obj.add(entry.getKey(), part.toJson());
-            }
-        }
-        String json = obj.toString();
-        return ConstantOperator.createVarchar(json);
-    }
-
-    /**
-     * Return meta data of all pipes in current database
-     */
-    @ConstantFunction(name = "inspect_all_pipes", argTypes = {}, returnType = VARCHAR, isMetaFunction = true)
-    public static ConstantOperator inspect_all_pipes() {
-        ConnectContext connectContext = ConnectContext.get();
-        try {
-            Authorizer.checkSystemAction(
-                    connectContext.getCurrentUserIdentity(),
-                    connectContext.getCurrentRoleIds(),
-                    PrivilegeType.OPERATE);
-        } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(
-                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                    connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
-                    PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
-        }
-        String currentDb = connectContext.getDatabase();
-        Database db = GlobalStateMgr.getCurrentState().mayGetDb(connectContext.getDatabase())
-                .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR, currentDb));
-        String json = GlobalStateMgr.getCurrentState().getPipeManager().getPipesOfDb(db.getId());
-        return ConstantOperator.createVarchar(json);
     }
 
     @ConstantFunction.List(list = {

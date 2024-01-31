@@ -114,6 +114,10 @@ public class ColumnType {
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DECIMAL32, 4);
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DECIMAL64, 8);
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DECIMAL128, 16);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DATE, 16);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DATETIME, 16);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DATETIME_MICROS, 16);
+        PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.DATETIME_MILLIS, 16);
     }
 
     @Override
@@ -196,6 +200,11 @@ public class ColumnType {
         if (t.startsWith("decimal")) {
             t = scanner.substr(end);
             scanner.moveTo(end);
+        } else if (t.startsWith("char") || t.startsWith("varchar")) {
+            // right now this only used in hive scanner
+            // for char(xx) and varchar(xx), we only need t to be char or varchar and skip (xx)
+            // otherwise struct<c_char:char(30),c_varchar:varchar(200)> will get wrong result
+            scanner.moveTo(end);
         } else {
             scanner.moveTo(p);
         }
@@ -256,9 +265,7 @@ public class ColumnType {
     }
 
     public boolean isByteStorageType() {
-        return typeValue == TypeValue.STRING || typeValue == TypeValue.DATE
-                || typeValue == TypeValue.BINARY || typeValue == TypeValue.DATETIME
-                || typeValue == TypeValue.DATETIME_MICROS || typeValue == TypeValue.DATETIME_MILLIS;
+        return typeValue == TypeValue.STRING || typeValue == TypeValue.BINARY;
     }
 
     public boolean isArray() {
@@ -443,9 +450,8 @@ public class ColumnType {
             String[] ps = type.substring(s + 1, e).split(",");
             precision = Integer.parseInt(ps[0].trim());
             scale = Integer.parseInt(ps[1].trim());
-            if (precision <= MAX_DECIMAL32_PRECISION) {
-                type = "decimal32";
-            } else if (precision <= MAX_DECIMAL64_PRECISION) {
+            // this logic is the same as FE's ScalarType.createUnifiedDecimalType
+            if (precision <= MAX_DECIMAL64_PRECISION) {
                 type = "decimal64";
             } else {
                 type = "decimal128";

@@ -88,7 +88,7 @@ public class DefaultWorkerProviderTest {
         id2ComputeNode.get(deadCNId).setAlive(false);
         new MockUp<SimpleScheduler>() {
             @Mock
-            public boolean isInBlacklist(long backendId) {
+            public boolean isInBlocklist(long backendId) {
                 return backendId == inBlacklistBEId || backendId == inBlacklistCNId;
             }
         };
@@ -122,8 +122,10 @@ public class DefaultWorkerProviderTest {
             // Reset nextComputeNodeIndex.
             nextComputeNodeIndex.setRef(0);
 
-            workerProvider = workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(), true,
-                    numUsedComputeNodes);
+            workerProvider =
+                    workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                            true,
+                            numUsedComputeNodes);
 
             int numAvailableComputeNodes = 0;
             for (long id = 0; id < 15; id++) {
@@ -160,7 +162,7 @@ public class DefaultWorkerProviderTest {
             id2ComputeNode.get(deadCNId).setAlive(false);
             new MockUp<SimpleScheduler>() {
                 @Mock
-                public boolean isInBlacklist(long backendId) {
+                public boolean isInBlocklist(long backendId) {
                     return backendId == inBlacklistBEId || backendId == inBlacklistCNId;
                 }
             };
@@ -190,7 +192,8 @@ public class DefaultWorkerProviderTest {
                 nextComputeNodeIndex.setRef(0);
 
                 workerProvider =
-                        workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(), false,
+                        workerProviderFactory.captureAvailableWorkers(
+                                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(), false,
                                 numUsedComputeNodes);
 
                 for (long id = 0; id < 15; id++) {

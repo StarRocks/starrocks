@@ -223,7 +223,7 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
         open_closure->cntl.http_request().set_content_type("application/proto");
         auto res = HttpBrpcStubCache::getInstance()->get_http_stub(brpc_addr);
         if (!res.ok()) {
-            LOG(ERROR) << res.status().get_error_msg();
+            LOG(ERROR) << res.status().message();
             return;
         }
         res.value()->tablet_writer_open(&open_closure->cntl, &request, &open_closure->result, open_closure);
@@ -920,7 +920,9 @@ Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPart
             auto msg = fmt::format("Not found tablet: {}", tablet.tablet_id());
             return Status::NotFound(msg);
         }
-        for (auto& node_id : location->node_ids) {
+        auto node_ids_size = location->node_ids.size();
+        for (size_t i = 0; i < node_ids_size; ++i) {
+            auto& node_id = location->node_ids[i];
             NodeChannel* channel = nullptr;
             auto it = _node_channels.find(node_id);
             if (it == std::end(_node_channels)) {
@@ -934,6 +936,9 @@ Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPart
                 channel = it->second.get();
             }
             channel->add_tablet(_index_id, tablet);
+            if (_parent->_enable_replicated_storage && i == 0) {
+                channel->set_has_primary_replica(true);
+            }
         }
     }
     for (auto& it : _node_channels) {
@@ -947,7 +952,19 @@ Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPart
     return Status::OK();
 }
 
+void IndexChannel::mark_as_failed(const NodeChannel* ch) {
+    // primary replica use for replicated storage
+    // if primary replica failed, we should mark this index as failed
+    if (ch->has_primary_replica()) {
+        _has_intolerable_failure = true;
+    }
+    _failed_channels.insert(ch->node_id());
+}
+
 bool IndexChannel::has_intolerable_failure() {
+    if (_has_intolerable_failure) {
+        return _has_intolerable_failure;
+    }
     if (_write_quorum_type == TWriteQuorumType::ALL) {
         return _failed_channels.size() > 0;
     } else if (_write_quorum_type == TWriteQuorumType::ONE) {

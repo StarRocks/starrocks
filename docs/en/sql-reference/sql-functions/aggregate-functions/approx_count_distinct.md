@@ -2,7 +2,7 @@
 displayed_sidebar: "English"
 ---
 
-# APPROX_COUNT_DISTINCT
+# approx_count_distinct
 
 ## Description
 

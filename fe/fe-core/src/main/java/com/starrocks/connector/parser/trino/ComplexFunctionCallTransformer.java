@@ -42,8 +42,8 @@ public class ComplexFunctionCallTransformer {
                 StringLiteral unit = (StringLiteral) args[0];
                 Expr interval = args[1];
                 Expr date = args[2];
-                return new TimestampArithmeticExpr(functionName, date, interval,
-                        unit.getStringValue());
+                return TrinoParserUtils.alignWithInputDatetimeType(new TimestampArithmeticExpr(functionName, date, interval,
+                        unit.getStringValue()));
             }
         } else if (functionName.equalsIgnoreCase("json_format")) {
             return new CastExpr(Type.VARCHAR, args[0]);
@@ -83,7 +83,7 @@ public class ComplexFunctionCallTransformer {
             if (args.length != 2) {
                 throw new SemanticException("element_at function must have 2 arguments");
             }
-            return new CollectionElementExpr(args[0], args[1]);
+            return new CollectionElementExpr(args[0], args[1], false);
         } else if (functionName.equalsIgnoreCase("regexp_extract")) {
             // regexp_extract(string, pattern) -> regexp_extract(str, pattern, 0)
             FunctionCallExpr regexpExtractFunc = new FunctionCallExpr("regexp_extract",

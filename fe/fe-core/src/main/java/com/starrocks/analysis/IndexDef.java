@@ -231,5 +231,10 @@ public class IndexDef implements ParseNode {
             }
             return index;
         }
+
+        // Whether the index type is compatible with the new metadata
+        public static boolean isCompatibleIndex(IndexType indexType) {
+            return indexType == GIN;
+        }
     }
 }

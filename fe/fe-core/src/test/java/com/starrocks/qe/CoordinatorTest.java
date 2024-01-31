@@ -66,7 +66,8 @@ public class CoordinatorTest extends PlanTestBase {
     CoordinatorPreprocessor coordinatorPreprocessor;
 
     @Before
-    public void setUp() throws IOException {
+    public void setUp() {
+        super.setUp();
         ctx = UtFrameUtils.createDefaultCtx();
         ctx.setExecutionId(new TUniqueId(0xdeadbeef, 0xdeadbeef));
         ConnectContext.threadLocalInfo.set(ctx);
@@ -163,7 +164,7 @@ public class CoordinatorTest extends PlanTestBase {
 
         FragmentScanRangeAssignment scanRangeMap =
                 prepare.getFragmentScanRangeAssignment(fragmentId);
-        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackends().get(0);
+        Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends().get(0);
         Assert.assertFalse(scanRangeMap.isEmpty());
         Long expectedWorkerId = backend.getId();
         Assert.assertTrue(scanRangeMap.containsKey(expectedWorkerId));

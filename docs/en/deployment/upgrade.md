@@ -12,18 +12,7 @@ Review the information in this section before upgrading, and perform any recomme
 
 ### StarRocks versions
 
-The version of StarRocks is represented by three numbers in the form **Major.Minor.Patch**, for example, `2.5.4`. The first number represents the major version of StarRocks, the second number represents the minor version, and the third number represents the patch version. StarRocks provides Long-term Support (LTS) for certain versions. Their support duration lasts more than half a year.
-
-| **StarRocks version** | **Is the LTS version** |
-| --------------------- | ---------------------- |
-| v2.0.x                | No                     |
-| v2.1.x                | No                     |
-| v2.2.x                | No                     |
-| v2.3.x                | No                     |
-| v2.4.x                | No                     |
-| v2.5.x                | Yes                    |
-| v3.0.x                | No                     |
-| v3.1.x                | No                     |
+The version of StarRocks is represented by three numbers in the form **Major.Minor.Patch**, for example, `2.5.4`. The first number represents the major version of StarRocks, the second number represents the minor version, and the third number represents the patch version.
 
 ### Upgrade paths
 
@@ -38,6 +27,15 @@ The version of StarRocks is represented by three numbers in the form **Major.Min
 - **For major version upgrade**
 
   To upgrade your StarRocks cluster to v3.0, you must first upgrade it to v2.5.
+
+> **CAUTION**
+>
+> Suppose you need to perform consecutive minor version upgrades, for example, 2.4->2.5->3.0->3.1->3.2, or you have downgraded your cluster after a failed upgrade and you want to upgrade the cluster again, for example, 2.5->3.0->2.5->3.0. To prevent metadata upgrade failure for some Follower FEs, perform the following steps between two consecutive upgrades or after the downgrade before the second trial of upgrade:
+>
+> 1. Run [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) to create a new image.
+> 2. Wait for the new image to be synchronized to all Follower FEs.
+>
+> You can check whether the image file has been synchronized by viewing the log file **fe.log** of the Leader FE. A record of log like "push image.* from subdir [] to other nodes. totally xx nodes, push successful xx nodes" suggests that the image file has been successfully synchronized.
 
 ### Upgrade procedure
 
@@ -56,8 +54,8 @@ If you want to upgrade your StarRocks cluster to a later minor or major version,
 Before upgrading your StarRocks cluster, you must disable tablet clone.
 
 ```SQL
-ADMIN SET FRONTEND CONFIG ("max_scheduling_tablets" = "0");
-ADMIN SET FRONTEND CONFIG ("max_balancing_tablets" = "0");
+ADMIN SET FRONTEND CONFIG ("tablet_sched_max_scheduling_tablets" = "0");
+ADMIN SET FRONTEND CONFIG ("tablet_sched_max_balancing_tablets" = "0");
 ADMIN SET FRONTEND CONFIG ("disable_balance"="true");
 ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="true");
 ```
@@ -65,8 +63,8 @@ ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="true");
 After the upgrade, and the status of all BE nodes is `Alive`, you can re-enable tablet clone.
 
 ```SQL
-ADMIN SET FRONTEND CONFIG ("max_scheduling_tablets" = "2000");
-ADMIN SET FRONTEND CONFIG ("max_balancing_tablets" = "100");
+ADMIN SET FRONTEND CONFIG ("tablet_sched_max_scheduling_tablets" = "10000");
+ADMIN SET FRONTEND CONFIG ("tablet_sched_max_balancing_tablets" = "500");
 ADMIN SET FRONTEND CONFIG ("disable_balance"="false");
 ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
 ```
@@ -186,12 +184,3 @@ After upgrading all BE and CN nodes, you can then upgrade the FE nodes. You must
    ```
 
 5. Repeat the above procedures to upgrade other Follower FE nodes, and finally the Leader FE node.
-
-   > **CAUTION**
-   >
-   > If you have downgraded your StarRocks cluster after upgrading it from v2.5 to v3.0, and again you upgrade it to v3.0, you must follow these steps in order to avoid metadata upgrade failure for some Follower FEs:
-   >
-   > 1. Run [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) to create a new image.
-   > 2. Wait for the new image to be synchronized to all Follower FEs.
-   >
-   > You can check whether the image file has been synchronized by viewing the log file **fe.log** of the Leader FE. A record of log like "push image.* from subdir [] to other nodes. totally xx nodes, push successful xx nodes" suggests that the image file has been successfully synchronized.

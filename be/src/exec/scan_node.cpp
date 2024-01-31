@@ -34,6 +34,7 @@
 
 #include "exec/scan_node.h"
 
+#include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/morsel.h"
 
 namespace starrocks {
@@ -59,7 +60,13 @@ Status ScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (options.__isset.scan_use_query_mem_ratio) {
         mem_ratio = options.scan_use_query_mem_ratio;
     }
-    _mem_limit = state->query_mem_tracker_ptr()->limit() * mem_ratio;
+    if (runtime_state()->query_ctx()) {
+        // Used in pipeline-engine
+        _mem_limit = state->query_ctx()->get_static_query_mem_limit() * mem_ratio;
+    } else if (runtime_state()->query_mem_tracker_ptr()) {
+        // Fallback in non-pipeline
+        _mem_limit = state->query_mem_tracker_ptr()->limit() * mem_ratio;
+    }
     return Status::OK();
 }
 
@@ -98,9 +105,21 @@ static std::map<int, pipeline::MorselQueuePtr> uniform_distribute_morsels(pipeli
         driver_seq = (driver_seq + 1) % dop;
     }
     std::map<int, pipeline::MorselQueuePtr> queue_per_driver;
-    for (auto& [operator_seq, morsels] : morsels_per_driver) {
-        queue_per_driver.emplace(operator_seq, std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels)));
+
+    auto morsel_queue_type = morsel_queue->type();
+    DCHECK(morsel_queue_type == pipeline::MorselQueue::Type::FIXED ||
+           morsel_queue_type == pipeline::MorselQueue::Type::DYNAMIC);
+
+    if (morsel_queue_type == pipeline::MorselQueue::Type::FIXED) {
+        for (auto& [operator_seq, morsels] : morsels_per_driver) {
+            queue_per_driver.emplace(operator_seq, std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels)));
+        }
+    } else {
+        for (auto& [operator_seq, morsels] : morsels_per_driver) {
+            queue_per_driver.emplace(operator_seq, std::make_unique<pipeline::DynamicMorselQueue>(std::move(morsels)));
+        }
     }
+
     return queue_per_driver;
 }
 
@@ -120,8 +139,12 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
         int scan_dop = std::min<int>(std::max<int>(1, morsel_queue->max_degree_of_parallelism()), pipeline_dop);
         int io_parallelism = scan_dop * io_tasks_per_scan_operator();
 
+        auto morsel_queue_type = morsel_queue->type();
+        bool is_fixed_or_dynamic_morsel_queue = (morsel_queue_type == pipeline::MorselQueue::Type::FIXED ||
+                                                 morsel_queue_type == pipeline::MorselQueue::Type::DYNAMIC);
+
         // If not so much morsels, try to assign morsel uniformly among operators to avoid data skew
-        if (!always_shared_scan() && scan_dop > 1 && dynamic_cast<pipeline::FixedMorselQueue*>(morsel_queue.get()) &&
+        if (!always_shared_scan() && scan_dop > 1 && is_fixed_or_dynamic_morsel_queue &&
             morsel_queue->num_original_morsels() <= io_parallelism) {
             auto morsel_queue_map = uniform_distribute_morsels(std::move(morsel_queue), scan_dop);
             return std::make_unique<pipeline::IndividualMorselQueueFactory>(std::move(morsel_queue_map),

@@ -80,6 +80,10 @@ SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile, std::atomic_in
     restore_io_task_count = ADD_CHILD_COUNTER(profile, "RestoreIOTaskCount", TUnit::UNIT, parent);
     peak_restore_io_task_count = profile->AddHighWaterMarkCounter(
             "PeakRestoreIOTaskCount", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT), parent);
+
+    mem_table_finalize_timer = ADD_CHILD_TIMER(profile, "MemTableFinalizeTime", parent);
+    flush_task_yield_times = ADD_CHILD_COUNTER(profile, "FlushIOTaskYieldCount", TUnit::UNIT, parent);
+    restore_task_yield_times = ADD_CHILD_COUNTER(profile, "RestoreIOTaskYieldCount", TUnit::UNIT, parent);
 }
 
 Status Spiller::prepare(RuntimeState* state) {

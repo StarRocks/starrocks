@@ -46,8 +46,6 @@ public class AstToSqlTest extends PlanTestBase {
         String afterSql = AstToSQLBuilder.toSQL(stmt);
         try {
             SqlParser.parse(afterSql, connectContext.getSessionVariable());
-            System.out.println(afterSql);
-            System.out.println("====");
         } catch (Exception e) {
             fail("failed to parse the sql: " + afterSql + ". errMsg: " + e.getMessage());
         }

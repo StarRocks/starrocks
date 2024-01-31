@@ -20,6 +20,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
@@ -53,6 +54,7 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
+import org.apache.commons.collections4.SetUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.roaringbitmap.RoaringBitmap;
@@ -94,7 +96,16 @@ public class Utils {
         return list;
     }
 
-    private static void extractConjunctsImpl(ScalarOperator root, List<ScalarOperator> result) {
+    public static Set<ScalarOperator> extractConjunctSet(ScalarOperator root) {
+        Set<ScalarOperator> list = Sets.newHashSet();
+        if (null == root) {
+            return list;
+        }
+        extractConjunctsImpl(root, list);
+        return list;
+    }
+
+    private static void extractConjunctsImpl(ScalarOperator root, Collection<ScalarOperator> result) {
         if (!OperatorType.COMPOUND.equals(root.getOpType())) {
             result.add(root);
             return;
@@ -388,12 +399,12 @@ public class Utils {
                                         .map(Column::getName)
                                         .collect(Collectors.toList());
                         List<ColumnStatistic> keyColumnStatisticList =
-                                GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table, keyColumnNames);
+                                GlobalStateMgr.getCurrentState().getStatisticStorage().getColumnStatistics(table, keyColumnNames);
                         return keyColumnStatisticList.stream().anyMatch(ColumnStatistic::isUnknown);
                     }
                 }
                 List<ColumnStatistic> columnStatisticList =
-                        GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table, colNames);
+                        GlobalStateMgr.getCurrentState().getStatisticStorage().getColumnStatistics(table, colNames);
                 return columnStatisticList.stream().anyMatch(ColumnStatistic::isUnknown);
             } else if (operator instanceof LogicalHiveScanOperator || operator instanceof LogicalHudiScanOperator) {
                 if (ConnectContext.get().getSessionVariable().enableHiveColumnStats()) {
@@ -605,6 +616,30 @@ public class Utils {
         return false;
     }
 
+    public static boolean isNotAlwaysNullResultWithNullScalarOperator(ScalarOperator scalarOperator) {
+        for (ScalarOperator child : scalarOperator.getChildren()) {
+            if (isNotAlwaysNullResultWithNullScalarOperator(child)) {
+                return true;
+            }
+        }
+
+        if (scalarOperator.isColumnRef() || scalarOperator.isConstantRef() || scalarOperator instanceof CastOperator) {
+            return false;
+        } else if (scalarOperator instanceof CallOperator) {
+            Function fn = ((CallOperator) scalarOperator).getFunction();
+            if (fn == null) {
+                return true;
+            }
+            if (!GlobalStateMgr.getCurrentState()
+                    .isNotAlwaysNullResultWithNullParamFunction(fn.getFunctionName().getFunction())
+                    && !fn.isUdf()
+                    && !FunctionSet.ASSERT_TRUE.equals(fn.getFunctionName().getFunction())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     // RoaringBitmap can be considered as a Set<Integer> contains only unsigned integers,
     // so getIntStream() resembles to Set<Integer>::stream()
     public static Stream<Integer> getIntStream(RoaringBitmap bitmap) {
@@ -647,19 +682,12 @@ public class Utils {
 
     public static boolean couldGenerateMultiStageAggregate(LogicalProperty inputLogicalProperty,
                                                            Operator inputOp, Operator childOp) {
-        // 1. Must do one stage aggregate If the child contains limit,
-        //    the aggregation must be a single node to ensure correctness.
-        //    eg. select count(*) from (select * table limit 2) t
-        if (childOp.hasLimit()) {
-            return false;
-        }
-
-        // 2. check if must generate multi stage aggregate.
+        // 1. check if must generate multi stage aggregate.
         if (mustGenerateMultiStageAggregate(inputOp, childOp)) {
             return true;
         }
 
-        // 3. Respect user hint
+        // 2. Respect user hint
         int aggStage = ConnectContext.get().getSessionVariable().getNewPlannerAggStage();
         if (aggStage == ONE_STAGE.ordinal() ||
                 (aggStage == AUTO.ordinal() && inputLogicalProperty.oneTabletProperty().supportOneTabletOpt)) {
@@ -696,6 +724,23 @@ public class Utils {
                     && (callOperator.getChildren().size() > 1 ||
                     callOperator.getChildren().stream().anyMatch(c -> c.getType().isComplexType())));
         }
+    }
+
+    public static Optional<List<ColumnRefOperator>> extractCommonDistinctCols(Collection<CallOperator> aggCallOperators) {
+        Set<ColumnRefOperator> distinctChildren = Sets.newHashSet();
+        for (CallOperator callOperator : aggCallOperators) {
+            if (callOperator.isDistinct()) {
+                if (distinctChildren.isEmpty()) {
+                    distinctChildren = Sets.newHashSet(callOperator.getColumnRefs());
+                } else {
+                    Set<ColumnRefOperator> nextDistinctChildren = Sets.newHashSet(callOperator.getColumnRefs());
+                    if (!SetUtils.isEqualSet(distinctChildren, nextDistinctChildren)) {
+                        return Optional.empty();
+                    }
+                }
+            }
+        }
+        return Optional.of(Lists.newArrayList(distinctChildren));
     }
 
     public static boolean hasNonDeterministicFunc(ScalarOperator operator) {

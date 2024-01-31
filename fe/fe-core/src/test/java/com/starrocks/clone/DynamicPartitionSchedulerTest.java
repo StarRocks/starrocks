@@ -16,10 +16,11 @@ package com.starrocks.clone;
 
 import com.google.common.collect.Range;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
@@ -32,6 +33,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.Map;
 
 public class DynamicPartitionSchedulerTest {
@@ -41,16 +43,15 @@ public class DynamicPartitionSchedulerTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        FeConstants.runningUnitTest = true;
-        Config.alter_scheduler_interval_millisecond = 100;
-        Config.dynamic_partition_enable = true;
-        Config.dynamic_partition_check_interval_seconds = 1;
-        Config.enable_strict_storage_medium_check = false;
         UtFrameUtils.createMinStarRocksCluster();
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
+
+        // set default config for async mvs
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
+
         starRocksAssert = new StarRocksAssert(connectContext);
     }
 
@@ -116,11 +117,10 @@ public class DynamicPartitionSchedulerTest {
                 "\"partition_ttl_number\" = \"0\"\n" +
                 ") " +
                 "as select k1, k2 from test.base;";
-        Config.enable_experimental_mv = true;
         CreateMaterializedViewStatement createMaterializedViewStatement =
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         try {
-            GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStatement);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createMaterializedViewStatement);
             Assert.fail();
         } catch (Exception ex) {
             Assert.assertTrue(ex.getMessage().contains("Illegal Partition TTL Number"));
@@ -213,6 +213,96 @@ public class DynamicPartitionSchedulerTest {
         Assert.assertTrue(rangePartitionMap.containsKey("p20230329"));
         Assert.assertTrue(rangePartitionMap.containsKey("p20230330"));
         Assert.assertTrue(rangePartitionMap.containsKey("p99991230"));
+    }
+
+    @Test
+    public void testRandomDynamicPartitionShouldMatchConfig() throws Exception {
+        new MockUp<LocalDateTime>() {
+            @Mock
+            public LocalDateTime now() {
+                return  LocalDateTime.of(2023, 3, 30, 1, 1, 1);
+            }
+        };
+
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test_random_bucket (\n" +
+                        "    uid String,\n" +
+                        "    tdbank_imp_date Date\n" +
+                        ") ENGINE=OLAP \n" +
+                        "DUPLICATE KEY(`uid`) \n" +
+                        "PARTITION BY RANGE(`tdbank_imp_date`) ()\n" +
+                        "DISTRIBUTED BY RANDOM BUCKETS 1\n" +
+                        "PROPERTIES (\n" +
+                        "     \"replication_num\" = \"1\", \n" +
+                        "     \"dynamic_partition.enable\" = \"true\", \n" +
+                        "     \"dynamic_partition.time_unit\" = \"DAY\", \n" +
+                        "     \"dynamic_partition.time_zone\" = \"Asia/Shanghai\", \n" +
+                        "     \"dynamic_partition.start\" = \"-180\", \n" +
+                        "     \"dynamic_partition.end\" = \"3\", \n" +
+                        "     \"dynamic_partition.prefix\" = \"p\", \n" +
+                        "     \"dynamic_partition.buckets\" = \"4\", \n" +
+                        "     \"dynamic_partition.history_partition_num\" = \"0\",\n" +
+                        "     \"compression\" = \"LZ4\" );");
+
+        DynamicPartitionScheduler dynamicPartitionScheduler = GlobalStateMgr.getCurrentState()
+                .getDynamicPartitionScheduler();
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        OlapTable tbl = (OlapTable) db.getTable("test_random_bucket");
+        dynamicPartitionScheduler.registerTtlPartitionTable(db.getId(), tbl.getId());
+        dynamicPartitionScheduler.runOnceForTest();
+
+        Collection<Partition> partitions = tbl.getPartitions();
+        for (Partition partition : partitions) {
+            DistributionInfo distributionInfo = partition.getDistributionInfo();
+            Assert.assertEquals(4, distributionInfo.getBucketNum());
+        }
+    }
+
+    @Test
+    public void testPartitionColumnDateUseDynamicHour() throws Exception {
+        new MockUp<LocalDateTime>() {
+            @Mock
+            public LocalDateTime now() {
+                return  LocalDateTime.of(2023, 3, 30, 1, 1, 1);
+            }
+        };
+
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE `test_hour_partition2` (\n" +
+                        "  `event_day` date NULL COMMENT \"\",\n" +
+                        "  `site_id` int(11) NULL DEFAULT \"10\" COMMENT \"\",\n" +
+                        "  `city_code` varchar(100) NULL COMMENT \"\",\n" +
+                        "  `user_name` varchar(32) NULL DEFAULT \"\" COMMENT \"\",\n" +
+                        "  `pv` bigint(20) NULL DEFAULT \"0\" COMMENT \"\"\n" +
+                        ") ENGINE=OLAP \n" +
+                        "DUPLICATE KEY(`event_day`, `site_id`, `city_code`, `user_name`)\n" +
+                        "PARTITION BY RANGE(`event_day`)\n" +
+                        "()\n" +
+                        "DISTRIBUTED BY HASH(`event_day`, `site_id`) BUCKETS 32 \n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"dynamic_partition.enable\" = \"true\",\n" +
+                        "\"dynamic_partition.time_unit\" = \"DAY\",\n" +
+                        "\"dynamic_partition.time_zone\" = \"Asia/Shanghai\",\n" +
+                        "\"dynamic_partition.start\" = \"-1\",\n" +
+                        "\"dynamic_partition.end\" = \"10\",\n" +
+                        "\"dynamic_partition.prefix\" = \"p\",\n" +
+                        "\"dynamic_partition.buckets\" = \"3\",\n" +
+                        "\"dynamic_partition.history_partition_num\" = \"0\",\n" +
+                        "\"in_memory\" = \"false\",\n" +
+                        "\"storage_format\" = \"DEFAULT\",\n" +
+                        "\"enable_persistent_index\" = \"false\",\n" +
+                        "\"compression\" = \"LZ4\"\n" +
+                        ");");
+
+        DynamicPartitionScheduler dynamicPartitionScheduler = GlobalStateMgr.getCurrentState()
+                .getDynamicPartitionScheduler();
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        OlapTable tbl = (OlapTable) db.getTable("test_hour_partition2");
+        DynamicPartitionProperty dynamicPartitionProperty = tbl.getTableProperty().getDynamicPartitionProperty();
+        dynamicPartitionProperty.setTimeUnit("HOUR");
+        boolean result = dynamicPartitionScheduler.executeDynamicPartitionForTable(db.getId(), tbl.getId());
+        Assert.assertFalse(result);
     }
 
 }

@@ -15,8 +15,8 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobMgr;
-import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.AnalysisException;
@@ -27,10 +27,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
-import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.RefreshSchemeClause;
-import com.starrocks.sql.ast.TableRenameClause;
-import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -41,11 +38,8 @@ import org.junit.Test;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
 
 public class AlterMaterializedViewTest {
     private static ConnectContext connectContext;
@@ -57,6 +51,7 @@ public class AlterMaterializedViewTest {
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
         connectContext = AnalyzeTestUtil.getConnectContext();
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
         starRocksAssert = AnalyzeTestUtil.getStarRocksAssert();
         currentState = GlobalStateMgr.getCurrentState();
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv1\n" +
@@ -75,14 +70,18 @@ public class AlterMaterializedViewTest {
 
     @Test
     public void testRename() throws Exception {
-        String alterMvSql = "alter materialized view mv1 rename mv2;";
-        AlterMaterializedViewStmt alterMvStmt =
-                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-        TableName oldMvName = alterMvStmt.getMvName();
-        String newMvName = ((TableRenameClause) alterMvStmt.getAlterTableClause()).getNewTableName();
-        Assert.assertEquals("test", oldMvName.getDb());
-        Assert.assertEquals("mv1", oldMvName.getTbl());
-        Assert.assertEquals("mv2", newMvName);
+        MaterializedView mv1 = starRocksAssert.getMv("test", "mv1");
+        String taskDefinition = mv1.getTaskDefinition();
+        starRocksAssert.ddl("alter materialized view mv1 rename mv2;");
+        MaterializedView mv2 = starRocksAssert.getMv("test", "mv2");
+        Assert.assertEquals("insert overwrite `mv2` " +
+                "SELECT `test`.`t0`.`v1`, count(`test`.`t0`.`v2`) AS `count_c2`, sum(`test`.`t0`.`v3`) AS `sum_c3`\n" +
+                "FROM `test`.`t0`\n" +
+                "GROUP BY `test`.`t0`.`v1`", mv2.getTaskDefinition());
+
+        starRocksAssert.ddl("alter materialized view mv2 rename mv1;");
+        mv1 = starRocksAssert.getMv("test", "mv1");
+        Assert.assertEquals(taskDefinition, mv1.getTaskDefinition());
     }
 
     @Test(expected = AnalysisException.class)
@@ -101,61 +100,34 @@ public class AlterMaterializedViewTest {
     }
 
     @Test
-    public void testAlterChangeRefresh() throws Exception {
-        String alterMvSql = "alter materialized view mv1 refresh async start ('2222-05-23') every (interval 1 hour)";
-        AlterMaterializedViewStmt alterMvStmt =
-                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-        new AlterMVJobExecutor().process(alterMvStmt, ConnectContext.get());
+    public void testAlterRefreshScheme() throws Exception {
+        List<String> refreshSchemes = Lists.newArrayList(
+                "ASYNC START(\"2022-05-23 00:00:00\") EVERY(INTERVAL 1 HOUR)",
+                "ASYNC",
+                "ASYNC START(\"2022-05-23 01:02:03\") EVERY(INTERVAL 1 DAY)",
+                "ASYNC EVERY(INTERVAL 1 DAY)",
+                "ASYNC",
+                "MANUAL",
+                "ASYNC EVERY(INTERVAL 1 DAY)",
+                "MANUAL",
+                "ASYNC START(\"2022-05-23 01:02:03\") EVERY(INTERVAL 1 DAY)"
+        );
 
-        alterMvSql = "alter materialized view mv1 refresh ASYNC";
-        alterMvStmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-        new AlterMVJobExecutor().process(alterMvStmt, ConnectContext.get());
-        MaterializedView mv = (MaterializedView) currentState.getDb("test").getTable("mv1");
-        String showCreateStmt = mv.getMaterializedViewDdlStmt(false);
-        Assert.assertFalse(showCreateStmt.contains("EVERY(INTERVAL 1 HOUR)"));
-    }
+        String mvName = "mv1";
+        MaterializedView mv = starRocksAssert.getMv("test", mvName);
+        String taskDefinition = mv.getTaskDefinition();
+        for (String refresh : refreshSchemes) {
+            // alter
+            String sql = String.format("alter materialized view %s refresh %s", mvName, refresh);
+            starRocksAssert.ddl(sql);
 
-    @Test
-    public void testAlterManualRefresh() throws Exception {
-        String alterMvSql = "alter materialized view mv1 refresh manual";
-        AlterMaterializedViewStmt alterMvStmt =
-                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-        RefreshSchemeClause refreshSchemeClause = (RefreshSchemeClause) alterMvStmt.getAlterTableClause();
-        Assert.assertEquals(refreshSchemeClause.getType(), MaterializedView.RefreshType.MANUAL);
-    }
-
-    @Test
-    public void testAlterAsyncRefresh() throws Exception {
-        String alterMvSql = "alter materialized view mv1 refresh async start ('2222-05-23') every (interval 1 hour)";
-        AlterMaterializedViewStmt alterMvStmt =
-                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-        final RefreshSchemeClause asyncRefreshSchemeDesc = (RefreshSchemeClause) alterMvStmt.getAlterTableClause();
-        assertTrue(asyncRefreshSchemeDesc instanceof AsyncRefreshSchemeDesc);
-        Assert.assertEquals(asyncRefreshSchemeDesc.getType(), MaterializedView.RefreshType.ASYNC);
-        assertNotNull(((AsyncRefreshSchemeDesc) asyncRefreshSchemeDesc).getStartTime());
-        assertEquals(((IntLiteral) ((AsyncRefreshSchemeDesc) asyncRefreshSchemeDesc).getIntervalLiteral()
-                .getValue()).getValue(), 1);
-        assertEquals(((AsyncRefreshSchemeDesc) asyncRefreshSchemeDesc).getIntervalLiteral().getUnitIdentifier()
-                .getDescription(), "HOUR");
-    }
-
-    @Test
-    public void testAlterAsyncRefreshMonth() {
-        String alterMvSql = "alter materialized view mv1 refresh async start ('2222-05-23') every (interval 1 MONTH)";
-        Assert.assertThrows(AnalysisException.class,
-                () -> UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext));
-    }
-
-    @Test
-    public void testAlterAsyncRefreshNormal() throws Exception {
-        String alterMvSql = "alter materialized view mv1 refresh async start ('2222-05-23') every (interval 1 DAY)";
-        UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-    }
-
-    @Test
-    public void testAlterAsyncRefreshLowercase() throws Exception {
-        String alterMvSql = "alter materialized view mv1 refresh async start ('2222-05-23') every (interval 1 day)";
-        UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+            // verify
+            mv = starRocksAssert.getMv("test", mvName);
+            String showCreateStmt = mv.getMaterializedViewDdlStmt(false);
+            Assert.assertTrue(String.format("alter to %s \nbut got \n%s", refresh, showCreateStmt),
+                    showCreateStmt.contains(refresh));
+            Assert.assertEquals(taskDefinition, mv.getTaskDefinition());
+        }
     }
 
     @Test
@@ -164,14 +136,14 @@ public class AlterMaterializedViewTest {
             String alterMvSql = "alter materialized view mv1 set (\"session.query_timeout\" = \"10000\")";
             AlterMaterializedViewStmt stmt =
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-            currentState.alterMaterializedView(stmt);
+            currentState.getLocalMetastore().alterMaterializedView(stmt);
         }
 
         {
             String alterMvSql = "alter materialized view mv1 set (\"query_timeout\" = \"10000\")";
             AlterMaterializedViewStmt stmt =
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-            Assert.assertThrows(SemanticException.class, () -> currentState.alterMaterializedView(stmt));
+            Assert.assertThrows(SemanticException.class, () -> currentState.getLocalMetastore().alterMaterializedView(stmt));
         }
     }
 
@@ -181,7 +153,7 @@ public class AlterMaterializedViewTest {
         String alterMvSql = "alter materialized view mv1 set (\"colocate_with\" = \"group1\")";
         AlterMaterializedViewStmt stmt =
                 (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-        Assert.assertThrows(SemanticException.class, () -> currentState.alterMaterializedView(stmt));
+        Assert.assertThrows(SemanticException.class, () -> currentState.getLocalMetastore().alterMaterializedView(stmt));
     }
 
     @Test
@@ -190,14 +162,14 @@ public class AlterMaterializedViewTest {
             String alterMvSql = "alter materialized view mv1 set (\"mv_rewrite_staleness_second\" = \"60\")";
             AlterMaterializedViewStmt stmt =
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-            currentState.alterMaterializedView(stmt);
+            currentState.getLocalMetastore().alterMaterializedView(stmt);
         }
 
         {
             String alterMvSql = "alter materialized view mv1 set (\"mv_rewrite_staleness_second\" = \"abc\")";
             AlterMaterializedViewStmt stmt =
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-            Assert.assertThrows(SemanticException.class, () -> currentState.alterMaterializedView(stmt));
+            Assert.assertThrows(SemanticException.class, () -> currentState.getLocalMetastore().alterMaterializedView(stmt));
         }
     }
 
@@ -219,7 +191,7 @@ public class AlterMaterializedViewTest {
         // alter the view to a different type, cause MV inactive
         connectContext.executeSql("alter view view1 as select v1, avg(v2) as k2 from t0 group by v1");
         Assert.assertFalse(mv.isActive());
-        Assert.assertEquals("base view view1 changed", mv.getInactiveReason());
+        Assert.assertEquals("base-view changed: view1", mv.getInactiveReason());
 
         // try to active the mv
         connectContext.executeSql(String.format("alter materialized view %s active", mvName));
@@ -236,9 +208,119 @@ public class AlterMaterializedViewTest {
         Assert.assertNull(mv.getInactiveReason());
     }
 
+    /**
+     * Reload procedure should work for hierarchical MV
+     */
+    @Test
+    public void testMVOnMVReload() throws Exception {
+        MVActiveChecker checker = GlobalStateMgr.getCurrentState().getMvActiveChecker();
+        checker.setStop();
+
+        String createBaseTable = "create table treload_1 (c1 int) distributed by hash(c1) " +
+                "properties('replication_num'='1')";
+        starRocksAssert.withTable(createBaseTable);
+        starRocksAssert.withMaterializedView("create materialized view mvreload_1 refresh async " +
+                "as select * from treload_1");
+        starRocksAssert.withMaterializedView("create materialized view mvreload_2 refresh async " +
+                "as select * from treload_1");
+        starRocksAssert.withMaterializedView("create materialized view mvreload_3 refresh async " +
+                "as select a.c1, b.c1 as bc1 from mvreload_1 a join mvreload_2 b");
+
+        // drop base table would inactive all related MV
+        starRocksAssert.dropTable("treload_1");
+        starRocksAssert.refreshMV("refresh materialized view mvreload_3");
+        Assert.assertFalse(starRocksAssert.getMv("test", "mvreload_1").isActive());
+        Assert.assertFalse(starRocksAssert.getMv("test", "mvreload_2").isActive());
+        Assert.assertFalse(starRocksAssert.getMv("test", "mvreload_3").isActive());
+
+        // create the table and run the AutoActive
+        starRocksAssert.withTable(createBaseTable);
+        checker.runForTest(true);
+        checker.runForTest(true);
+        Assert.assertTrue(starRocksAssert.getMv("test", "mvreload_1").isActive());
+        Assert.assertTrue(starRocksAssert.getMv("test", "mvreload_2").isActive());
+        Assert.assertTrue(starRocksAssert.getMv("test", "mvreload_3").isActive());
+
+        // create the table and refresh
+        starRocksAssert.dropTable("treload_1");
+        starRocksAssert.withTable(createBaseTable);
+        starRocksAssert.refreshMV("refresh materialized view mvreload_1");
+        starRocksAssert.refreshMV("refresh materialized view mvreload_2");
+        starRocksAssert.refreshMV("refresh materialized view mvreload_3");
+        Assert.assertTrue(starRocksAssert.getMv("test", "mvreload_1").isActive());
+        Assert.assertTrue(starRocksAssert.getMv("test", "mvreload_2").isActive());
+        Assert.assertTrue(starRocksAssert.getMv("test", "mvreload_3").isActive());
+
+        // create the table and manually active, top-down active
+        starRocksAssert.dropTable("treload_1");
+        starRocksAssert.withTable(createBaseTable);
+        starRocksAssert.ddl("alter materialized view mvreload_1 active");
+        starRocksAssert.ddl("alter materialized view mvreload_2 active");
+        starRocksAssert.ddl("alter materialized view mvreload_3 active");
+        Assert.assertTrue(starRocksAssert.getMv("test", "mvreload_1").isActive());
+        Assert.assertTrue(starRocksAssert.getMv("test", "mvreload_2").isActive());
+        Assert.assertTrue(starRocksAssert.getMv("test", "mvreload_3").isActive());
+
+        // cleanup
+        starRocksAssert.dropTable("treload_1");
+        starRocksAssert.dropMaterializedView("mvreload_1");
+        starRocksAssert.dropMaterializedView("mvreload_2");
+        starRocksAssert.dropMaterializedView("mvreload_3");
+        checker.start();
+    }
+
+    @Test
+    public void testAlterMVOnViewComment() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `tb_order` (\n" +
+                "                                 `order_id` bigint(20) NULL COMMENT \"order_id\",\n" +
+                "                                 `order_amt` double NULL COMMENT \"order_amt\",\n" +
+                "                                 `order_date` date NULL COMMENT \"order_date\",\n" +
+                "                                 `description` varchar(255) NULL COMMENT \"description\",\n" +
+                "                                 `buyer_id` bigint(20) NULL COMMENT \"buyer_id\",\n" +
+                "                                 `seller_id` bigint(20) NULL COMMENT \"seller_id\",\n" +
+                "                                 `product_id` bigint(20) NULL COMMENT \"product_id\",\n" +
+                "                                 `express_id` bigint(20) NULL COMMENT \"express_id\",\n" +
+                "                                 `region_id` bigint(20) NULL COMMENT \"region_id\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`order_id`)\n" +
+                "DISTRIBUTED BY HASH(`order_id`)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"compression\" = \"LZ4\"\n" +
+                ")");
+        starRocksAssert.withView("create or replace view pb_view as " +
+                "select order_id,order_amt,order_date,description,buyer_id,seller_id,product_id,express_id,region_id\n" +
+                "                                       from `tb_order`");
+        starRocksAssert.withMaterializedView("create Materialized View mv_pb_view\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "as select order_id,order_amt,order_date,description,buyer_id,seller_id,product_id,express_id,region_id\n" +
+                "   from pb_view");
+
+        // replace with exactly same
+        starRocksAssert.withView("create or replace view pb_view as " +
+                "select order_id,order_amt,order_date,description,buyer_id,seller_id,product_id,express_id,region_id\n" +
+                "                                       from `tb_order`");
+        starRocksAssert.ddl("ALTER MATERIALIZED VIEW mv_pb_view ACTIVE;");
+
+        MaterializedView mv = starRocksAssert.getMv("test", "mv_pb_view");
+        Map<String, String> columnMap =
+                mv.getColumns().stream().collect(Collectors.toMap(Column::getName, Column::getComment));
+        Assert.assertEquals(Map.of("order_id", "",
+                "order_amt", "",
+                "order_date", "",
+                "description", "",
+                "buyer_id", "",
+                "seller_id", "",
+                "product_id", "",
+                "express_id", "",
+                "region_id", ""), columnMap);
+    }
+
     @Test
     public void testActiveChecker() throws Exception {
-        PlanTestBase.mockDml();
         MVActiveChecker checker = GlobalStateMgr.getCurrentState().getMvActiveChecker();
         checker.setStop();
 
@@ -270,7 +352,6 @@ public class AlterMaterializedViewTest {
         starRocksAssert.dropTable(baseTableName);
         starRocksAssert.withTable(createTableSql);
         Assert.assertFalse(mv.isActive());
-        Thread.sleep(1000);
         starRocksAssert.getCtx().executeSql("refresh materialized view " + mv.getName() + " with sync mode");
         Assert.assertTrue(mv.isActive());
 
@@ -278,6 +359,10 @@ public class AlterMaterializedViewTest {
         mv.setInactiveAndReason(AlterJobMgr.MANUAL_INACTIVE_MV_REASON);
         Assert.assertFalse(mv.isActive());
         checker.runForTest(true);
+        Assert.assertFalse(mv.isActive());
+        Assert.assertEquals(AlterJobMgr.MANUAL_INACTIVE_MV_REASON, mv.getInactiveReason());
+        // manual active
+        starRocksAssert.getCtx().executeSql("refresh materialized view " + mv.getName() + " with sync mode");
         Assert.assertFalse(mv.isActive());
         Assert.assertEquals(AlterJobMgr.MANUAL_INACTIVE_MV_REASON, mv.getInactiveReason());
 
@@ -288,10 +373,10 @@ public class AlterMaterializedViewTest {
 
     @Test
     public void testActiveGracePeriod() throws Exception {
-        PlanTestBase.mockDml();
         MVActiveChecker checker = GlobalStateMgr.getCurrentState().getMvActiveChecker();
         checker.setStop();
 
+        String mvName = "mv_active";
         String baseTableName = "base_tbl_active";
         String createTableSql =
                 "create table " + baseTableName + " ( k1 int, k2 int) properties('replication_num'='1')";
@@ -319,7 +404,13 @@ public class AlterMaterializedViewTest {
             Assert.assertFalse(mv.isActive());
         }
 
+        // foreground active
+        starRocksAssert.refreshMV("refresh materialized view " + mvName);
+        Assert.assertTrue(mv.isActive());
+
         // clear the grace period and active it again
+        starRocksAssert.dropTable(baseTableName);
+        starRocksAssert.withTable(createTableSql);
         checker.runForTest(true);
         Assert.assertTrue(mv.isActive());
 

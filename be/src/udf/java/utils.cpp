@@ -21,6 +21,7 @@
 #include "common/compiler_util.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/scan_task_queue.h"
+#include "exec/workgroup/work_group.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -46,6 +47,7 @@ PromiseStatusPtr call_hdfs_scan_function_in_pthread(const std::function<Status()
     PromiseStatusPtr ms = std::make_unique<PromiseStatus>();
     if (bthread_self()) {
         ExecEnv::GetInstance()->connector_scan_executor()->submit(workgroup::ScanTask(
+                workgroup::WorkGroupManager::instance()->get_default_workgroup().get(),
                 [promise = ms.get(), func](workgroup::YieldContext&) { promise->set_value(func()); }));
     } else {
         ms->set_value(func());

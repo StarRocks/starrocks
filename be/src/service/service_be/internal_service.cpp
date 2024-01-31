@@ -47,7 +47,9 @@
 #include "runtime/routine_load/routine_load_task_executor.h"
 #include "runtime/runtime_filter_worker.h"
 #include "service/brpc.h"
+#include "storage/dictionary_cache_manager.h"
 #include "storage/local_tablet_reader.h"
+#include "storage/storage_engine.h"
 #include "util/uid_util.h"
 
 namespace starrocks {

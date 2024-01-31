@@ -1,42 +1,42 @@
+-- name: test_columm_with_row
+ADMIN SET FRONTEND CONFIG ("enable_experimental_rowstore" = "true");
 --创建行存表
-CREATE DATABASE IF NOT EXISTS demo;
-DROP TABLE IF EXISTS demo.t1;
-CREATE TABLE IF NOT EXISTS demo.t1(
-                                      k1 int,
-                                      k2 int,
-                                      v1 varchar(16),
+CREATE TABLE IF NOT EXISTS t1(
+    k1 int,
+    k2 int,
+    v1 varchar(16),
     v2 DATE NOT NULL COMMENT "YYYY-MM-DD",
     v3 TINYINT COMMENT "range [-128, 127]"
-    )
-    PRIMARY KEY (k1, k2)
-    distributed by hash(k1, k2)
-    PROPERTIES (
-                   "replication_num" = "1",
-                   "storage_type" = "column_with_row"
-               );
+)
+PRIMARY KEY (k1, k2)
+distributed by hash(k1, k2)
+PROPERTIES (
+    "replication_num" = "1",
+    "storage_type" = "column_with_row"
+);
 
 --插入
-INSERT INTO demo.t1(k1, k2, v1, v2, v3) VALUES
-                                            (1, 2, 'a', "2222-12-22", 33),
-                                            (1, 3, 'b', "2222-12-22", 34),
-                                            (1, 4, 'c', "2222-12-22", 35),
-                                            (2, 2, 'd', "2222-12-22", 36),
-                                            (2, 3, 'd', "2222-12-22", 37),
-                                            (3, 3, 'e', "2222-12-22", 100),
-                                            (4, 4, 'f', "2222-12-22", 101);
+INSERT INTO t1(k1, k2, v1, v2, v3) VALUES
+    (1, 2, 'a', "2222-12-22", 33),
+    (1, 3, 'b', "2222-12-22", 34),
+    (1, 4, 'c', "2222-12-22", 35),
+    (2, 2, 'd', "2222-12-22", 36),
+    (2, 3, 'd', "2222-12-22", 37),
+    (3, 3, 'e', "2222-12-22", 100),
+    (4, 4, 'f', "2222-12-22", 101);
 --查询
-SELECT count(*) FROM demo.t1;
-SELECT * FROM demo.t1 order by k1, k2 limit 3;
-SELECT k2, sum(k1) FROM demo.t1 group by k2 order by k2;
+SELECT count(*) FROM t1;
+SELECT * FROM t1 order by k1, k2 limit 3;
+SELECT k2, sum(k1) FROM t1 group by k2 order by k2;
 --更新
-update demo.t1 set v1 = '5' where k1 = 3 and k2 = 3;
-select * from demo.t1 where k1 = 3 and k2 = 3;
+update t1 set v1 = '5' where k1 = 3 and k2 = 3;
+select * from t1 where k1 = 3 and k2 = 3;
 --删除数据
-DELETE FROM demo.t1 WHERE k1 = 1 and k2 = 2; -- full key
-select * from demo.t1 WHERE k1 = 1 and k2 = 2; -- empty
-DELETE FROM demo.t1 WHERE k1 = 1; -- partial key, range update
-select * from demo.t1 WHERE k1 = 1;
+DELETE FROM t1 WHERE k1 = 1 and k2 = 2;
+SELECT * from t1 WHERE k1 = 1 and k2 = 2;
+DELETE FROM t1 WHERE k1 = 1;
+SELECT * from t1 WHERE k1 = 1;
 --清空
-TRUNCATE TABLE demo.t1;
+TRUNCATE TABLE t1;
 --drop表
-DROP TABLE demo.t1 FORCE;
+DROP TABLE t1 FORCE;

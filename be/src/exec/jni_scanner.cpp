@@ -24,12 +24,12 @@
 
 namespace starrocks {
 
-Status JniScanner::_check_jni_exception(JNIEnv* _jni_env, const std::string& message) {
-    if (jthrowable thr = _jni_env->ExceptionOccurred(); thr) {
+Status JniScanner::_check_jni_exception(JNIEnv* env, const std::string& message) {
+    if (jthrowable thr = env->ExceptionOccurred(); thr) {
         std::string jni_error_message = JVMFunctionHelper::getInstance().dumpExceptionString(thr);
-        _jni_env->ExceptionDescribe();
-        _jni_env->ExceptionClear();
-        _jni_env->DeleteLocalRef(thr);
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+        env->DeleteLocalRef(thr);
         return Status::InternalError(message + " java exception details: " + jni_error_message);
     }
     return Status::OK();
@@ -38,117 +38,111 @@ Status JniScanner::_check_jni_exception(JNIEnv* _jni_env, const std::string& mes
 Status JniScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
     _init_profile(scanner_params);
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
-    JNIEnv* _jni_env = JVMFunctionHelper::getInstance().getEnv();
-    if (_jni_env->EnsureLocalCapacity(_jni_scanner_params.size() * 2 + 6) < 0) {
-        RETURN_IF_ERROR(_check_jni_exception(_jni_env, "Failed to ensure the local capacity."));
+    JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
+    if (env->EnsureLocalCapacity(_jni_scanner_params.size() * 2 + 6) < 0) {
+        RETURN_IF_ERROR(_check_jni_exception(env, "Failed to ensure the local capacity."));
     }
-    RETURN_IF_ERROR(_init_jni_table_scanner(_jni_env, runtime_state));
-    RETURN_IF_ERROR(_init_jni_method(_jni_env));
+    RETURN_IF_ERROR(_init_jni_table_scanner(env, runtime_state));
+    RETURN_IF_ERROR(_init_jni_method(env));
     return Status::OK();
 }
 
 Status JniScanner::do_open(RuntimeState* state) {
-    JNIEnv* _jni_env = JVMFunctionHelper::getInstance().getEnv();
+    JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
-    _jni_env->CallVoidMethod(_jni_scanner_obj, _jni_scanner_open);
-    RETURN_IF_ERROR(_check_jni_exception(_jni_env, "Failed to open the off-heap table scanner."));
+    env->CallVoidMethod(_jni_scanner_obj, _jni_scanner_open);
+    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to open the off-heap table scanner."));
     return Status::OK();
 }
 
-void JniScanner::do_update_counter(HdfsScanProfile* profile) {}
-
 void JniScanner::do_close(RuntimeState* runtime_state) noexcept {
-    JNIEnv* _jni_env = JVMFunctionHelper::getInstance().getEnv();
+    JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
     if (_jni_scanner_obj != nullptr) {
         if (_jni_scanner_close != nullptr) {
-            _jni_env->CallVoidMethod(_jni_scanner_obj, _jni_scanner_close);
+            env->CallVoidMethod(_jni_scanner_obj, _jni_scanner_close);
         }
-        _jni_env->DeleteLocalRef(_jni_scanner_obj);
+        env->DeleteLocalRef(_jni_scanner_obj);
         _jni_scanner_obj = nullptr;
     }
     if (_jni_scanner_cls != nullptr) {
-        _jni_env->DeleteLocalRef(_jni_scanner_cls);
+        env->DeleteLocalRef(_jni_scanner_cls);
         _jni_scanner_cls = nullptr;
     }
 }
 
-void JniScanner::_init_profile(const HdfsScannerParams& scanner_params) {}
-
-Status JniScanner::_init_jni_method(JNIEnv* _jni_env) {
+Status JniScanner::_init_jni_method(JNIEnv* env) {
     // init jmethod
-    _jni_scanner_open = _jni_env->GetMethodID(_jni_scanner_cls, "open", "()V");
-    RETURN_IF_ERROR(_check_jni_exception(_jni_env, "Failed to get `open` jni method"));
+    _jni_scanner_open = env->GetMethodID(_jni_scanner_cls, "open", "()V");
+    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to get `open` jni method"));
 
-    _jni_scanner_get_next_chunk = _jni_env->GetMethodID(_jni_scanner_cls, "getNextOffHeapChunk", "()J");
-    RETURN_IF_ERROR(_check_jni_exception(_jni_env, "Failed to get `getNextOffHeapChunk` jni method"));
+    _jni_scanner_get_next_chunk = env->GetMethodID(_jni_scanner_cls, "getNextOffHeapChunk", "()J");
+    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to get `getNextOffHeapChunk` jni method"));
 
-    _jni_scanner_close = _jni_env->GetMethodID(_jni_scanner_cls, "close", "()V");
-    RETURN_IF_ERROR(_check_jni_exception(_jni_env, "Failed to get `close` jni method"));
+    _jni_scanner_close = env->GetMethodID(_jni_scanner_cls, "close", "()V");
+    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to get `close` jni method"));
 
-    _jni_scanner_release_column = _jni_env->GetMethodID(_jni_scanner_cls, "releaseOffHeapColumnVector", "(I)V");
-    RETURN_IF_ERROR(_check_jni_exception(_jni_env, "Failed to get `releaseOffHeapColumnVector` jni method"));
+    _jni_scanner_release_column = env->GetMethodID(_jni_scanner_cls, "releaseOffHeapColumnVector", "(I)V");
+    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to get `releaseOffHeapColumnVector` jni method"));
 
-    _jni_scanner_release_table = _jni_env->GetMethodID(_jni_scanner_cls, "releaseOffHeapTable", "()V");
-    RETURN_IF_ERROR(_check_jni_exception(_jni_env, "Failed to get `releaseOffHeapTable` jni method"));
+    _jni_scanner_release_table = env->GetMethodID(_jni_scanner_cls, "releaseOffHeapTable", "()V");
+    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to get `releaseOffHeapTable` jni method"));
     return Status::OK();
 }
 
-Status JniScanner::_init_jni_table_scanner(JNIEnv* _jni_env, RuntimeState* runtime_state) {
-    jclass scanner_factory_class = _jni_env->FindClass(_jni_scanner_factory_class.c_str());
-    jmethodID scanner_factory_constructor = _jni_env->GetMethodID(scanner_factory_class, "<init>", "()V");
-    jobject scanner_factory_obj = _jni_env->NewObject(scanner_factory_class, scanner_factory_constructor);
-    jmethodID get_scanner_method =
-            _jni_env->GetMethodID(scanner_factory_class, "getScannerClass", "()Ljava/lang/Class;");
-    _jni_scanner_cls = (jclass)_jni_env->CallObjectMethod(scanner_factory_obj, get_scanner_method);
-    RETURN_IF_ERROR(_check_jni_exception(_jni_env, "Failed to init the scanner class."));
-    _jni_env->DeleteLocalRef(scanner_factory_class);
-    _jni_env->DeleteLocalRef(scanner_factory_obj);
+Status JniScanner::_init_jni_table_scanner(JNIEnv* env, RuntimeState* runtime_state) {
+    jclass scanner_factory_class = env->FindClass(_jni_scanner_factory_class.c_str());
+    jmethodID scanner_factory_constructor = env->GetMethodID(scanner_factory_class, "<init>", "()V");
+    jobject scanner_factory_obj = env->NewObject(scanner_factory_class, scanner_factory_constructor);
+    jmethodID get_scanner_method = env->GetMethodID(scanner_factory_class, "getScannerClass", "()Ljava/lang/Class;");
+    _jni_scanner_cls = (jclass)env->CallObjectMethod(scanner_factory_obj, get_scanner_method);
+    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to init the scanner class."));
+    env->DeleteLocalRef(scanner_factory_class);
+    env->DeleteLocalRef(scanner_factory_obj);
 
-    jmethodID scanner_constructor = _jni_env->GetMethodID(_jni_scanner_cls, "<init>", "(ILjava/util/Map;)V");
-    RETURN_IF_ERROR(_check_jni_exception(_jni_env, "Failed to get a scanner class constructor."));
+    jmethodID scanner_constructor = env->GetMethodID(_jni_scanner_cls, "<init>", "(ILjava/util/Map;)V");
+    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to get a scanner class constructor."));
 
-    jclass hashmap_class = _jni_env->FindClass("java/util/HashMap");
-    jmethodID hashmap_constructor = _jni_env->GetMethodID(hashmap_class, "<init>", "(I)V");
-    jobject hashmap_object = _jni_env->NewObject(hashmap_class, hashmap_constructor, _jni_scanner_params.size());
+    jclass hashmap_class = env->FindClass("java/util/HashMap");
+    jmethodID hashmap_constructor = env->GetMethodID(hashmap_class, "<init>", "(I)V");
+    jobject hashmap_object = env->NewObject(hashmap_class, hashmap_constructor, _jni_scanner_params.size());
     jmethodID hashmap_put =
-            _jni_env->GetMethodID(hashmap_class, "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
-    RETURN_IF_ERROR(_check_jni_exception(_jni_env, "Failed to get the HashMap methods."));
+            env->GetMethodID(hashmap_class, "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;");
+    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to get the HashMap methods."));
 
     std::string message = "Initialize a scanner with parameters: ";
     for (const auto& it : _jni_scanner_params) {
-        if (_skipped_log_jni_scanner_params.find(it.first) != _skipped_log_jni_scanner_params.end()) {
-            continue;
+        jstring key = env->NewStringUTF(it.first.c_str());
+        jstring value = env->NewStringUTF(it.second.c_str());
+        // skip encoded object
+        if (_skipped_log_jni_scanner_params.find(it.first) == _skipped_log_jni_scanner_params.end()) {
+            message.append(it.first);
+            message.append("->");
+            message.append(it.second);
+            message.append(", ");
         }
-        jstring key = _jni_env->NewStringUTF(it.first.c_str());
-        jstring value = _jni_env->NewStringUTF(it.second.c_str());
-        message.append(it.first);
-        message.append("->");
-        message.append(it.second);
-        message.append(", ");
 
-        _jni_env->CallObjectMethod(hashmap_object, hashmap_put, key, value);
-        _jni_env->DeleteLocalRef(key);
-        _jni_env->DeleteLocalRef(value);
+        env->CallObjectMethod(hashmap_object, hashmap_put, key, value);
+        env->DeleteLocalRef(key);
+        env->DeleteLocalRef(value);
     }
-    _jni_env->DeleteLocalRef(hashmap_class);
+    env->DeleteLocalRef(hashmap_class);
     LOG(INFO) << message;
 
     int fetch_size = runtime_state->chunk_size();
-    _jni_scanner_obj = _jni_env->NewObject(_jni_scanner_cls, scanner_constructor, fetch_size, hashmap_object);
-    _jni_env->DeleteLocalRef(hashmap_object);
+    _jni_scanner_obj = env->NewObject(_jni_scanner_cls, scanner_constructor, fetch_size, hashmap_object);
+    env->DeleteLocalRef(hashmap_object);
     DCHECK(_jni_scanner_obj != nullptr);
-    RETURN_IF_ERROR(_check_jni_exception(_jni_env, "Failed to initialize a scanner instance."));
+    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to initialize a scanner instance."));
 
     return Status::OK();
 }
 
-Status JniScanner::_get_next_chunk(JNIEnv* _jni_env, long* chunk_meta) {
+Status JniScanner::_get_next_chunk(JNIEnv* env, long* chunk_meta) {
     SCOPED_RAW_TIMER(&_app_stats.column_read_ns);
     SCOPED_RAW_TIMER(&_app_stats.io_ns);
     _app_stats.io_count += 1;
-    *chunk_meta = _jni_env->CallLongMethod(_jni_scanner_obj, _jni_scanner_get_next_chunk);
-    RETURN_IF_ERROR(
-            _check_jni_exception(_jni_env, "Failed to call the nextChunkOffHeap method of off-heap table scanner."));
+    *chunk_meta = env->CallLongMethod(_jni_scanner_obj, _jni_scanner_get_next_chunk);
+    RETURN_IF_ERROR(_check_jni_exception(env, "Failed to call the nextChunkOffHeap method of off-heap table scanner."));
     return Status::OK();
 }
 
@@ -180,57 +174,6 @@ Status JniScanner::_append_string_data(const FillColumnArgs& args) {
 
     memcpy(offsets.data(), offset_ptr, (args.num_rows + 1) * sizeof(uint32_t));
     memcpy(bytes.data(), column_ptr, total_length);
-    return Status::OK();
-}
-
-Status JniScanner::_append_date_data(const FillColumnArgs& args) {
-    int* offset_ptr = static_cast<int*>(next_chunk_meta_as_ptr());
-    char* column_ptr = static_cast<char*>(next_chunk_meta_as_ptr());
-
-    using ColumnType = typename starrocks::RunTimeColumnType<TYPE_DATE>;
-    auto* runtime_column = down_cast<ColumnType*>(args.column);
-    runtime_column->resize_uninitialized(args.num_rows);
-    DateValue* runtime_data = runtime_column->get_data().data();
-
-    for (int i = 0; i < args.num_rows; i++) {
-        if (args.nulls && args.nulls[i]) {
-            // NULL
-        } else {
-            std::string date_str(column_ptr + offset_ptr[i], column_ptr + offset_ptr[i + 1]);
-            DateValue dv;
-            if (!dv.from_string(date_str.c_str(), date_str.size())) {
-                return Status::DataQualityError(fmt::format("Invalid date value occurs on column[{}], value is [{}]",
-                                                            args.slot_name, date_str));
-            }
-            runtime_data[i] = dv;
-        }
-    }
-    return Status::OK();
-}
-
-Status JniScanner::_append_datetime_data(const FillColumnArgs& args) {
-    int* offset_ptr = static_cast<int*>(next_chunk_meta_as_ptr());
-    char* column_ptr = static_cast<char*>(next_chunk_meta_as_ptr());
-
-    using ColumnType = typename starrocks::RunTimeColumnType<TYPE_DATETIME>;
-    auto* runtime_column = down_cast<ColumnType*>(args.column);
-    runtime_column->resize_uninitialized(args.num_rows);
-    TimestampValue* runtime_data = runtime_column->get_data().data();
-
-    for (int i = 0; i < args.num_rows; i++) {
-        if (args.nulls && args.nulls[i]) {
-            // NULL
-        } else {
-            std::string origin_str(column_ptr + offset_ptr[i], column_ptr + offset_ptr[i + 1]);
-            std::string datetime_str = origin_str.substr(0, origin_str.find('.'));
-            TimestampValue tsv;
-            if (!tsv.from_datetime_format_str(datetime_str.c_str(), datetime_str.size(), "%Y-%m-%d %H:%i:%s")) {
-                return Status::DataQualityError(fmt::format(
-                        "Invalid datetime value occurs on column[{}], value is [{}]", args.slot_name, origin_str));
-            }
-            runtime_data[i] = tsv;
-        }
-    }
     return Status::OK();
 }
 
@@ -375,9 +318,9 @@ Status JniScanner::_fill_column(FillColumnArgs* pargs) {
     } else if (column_type == LogicalType::TYPE_VARBINARY) {
         RETURN_IF_ERROR((_append_string_data<TYPE_VARBINARY>(args)));
     } else if (column_type == LogicalType::TYPE_DATE) {
-        RETURN_IF_ERROR((_append_date_data(args)));
+        RETURN_IF_ERROR((_append_primitive_data<TYPE_DATE>(args)));
     } else if (column_type == LogicalType::TYPE_DATETIME) {
-        RETURN_IF_ERROR((_append_datetime_data(args)));
+        RETURN_IF_ERROR((_append_primitive_data<TYPE_DATETIME>(args)));
     } else if (column_type == LogicalType::TYPE_DECIMAL32) {
         RETURN_IF_ERROR((_append_primitive_data<TYPE_DECIMAL32>(args)));
     } else if (column_type == LogicalType::TYPE_DECIMAL64) {
@@ -396,7 +339,7 @@ Status JniScanner::_fill_column(FillColumnArgs* pargs) {
     return Status::OK();
 }
 
-Status JniScanner::_fill_chunk(JNIEnv* _jni_env, ChunkPtr* chunk, const std::vector<SlotDescriptor*>& slot_desc_list) {
+Status JniScanner::_fill_chunk(JNIEnv* env, ChunkPtr* chunk, const std::vector<SlotDescriptor*>& slot_desc_list) {
     SCOPED_RAW_TIMER(&_app_stats.column_convert_ns);
 
     long num_rows = next_chunk_meta_as_long();
@@ -417,23 +360,23 @@ Status JniScanner::_fill_chunk(JNIEnv* _jni_env, ChunkPtr* chunk, const std::vec
                             .column = column.get(),
                             .must_nullable = true};
         RETURN_IF_ERROR(_fill_column(&args));
-        _jni_env->CallVoidMethod(_jni_scanner_obj, _jni_scanner_release_column, col_idx);
+        env->CallVoidMethod(_jni_scanner_obj, _jni_scanner_release_column, col_idx);
         RETURN_IF_ERROR(_check_jni_exception(
-                _jni_env, "Failed to call the releaseOffHeapColumnVector method of off-heap table scanner."));
+                env, "Failed to call the releaseOffHeapColumnVector method of off-heap table scanner."));
     }
     return Status::OK();
 }
 
-Status JniScanner::_release_off_heap_table(JNIEnv* _jni_env) {
-    _jni_env->CallVoidMethod(_jni_scanner_obj, _jni_scanner_release_table);
+Status JniScanner::_release_off_heap_table(JNIEnv* env) {
+    env->CallVoidMethod(_jni_scanner_obj, _jni_scanner_release_table);
     RETURN_IF_ERROR(
-            _check_jni_exception(_jni_env, "Failed to call the releaseOffHeapTable method of off-heap table scanner."));
+            _check_jni_exception(env, "Failed to call the releaseOffHeapTable method of off-heap table scanner."));
     return Status::OK();
 }
 
 Status JniScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     // fill chunk with all wanted column(include partition columns)
-    Status status = fill_empty_chunk(runtime_state, chunk, _scanner_params.tuple_desc->slots());
+    Status status = fill_empty_chunk(chunk, _scanner_params.tuple_desc->slots());
 
     // ====== conjunct evaluation ======
     // important to add columns before evaluation
@@ -445,21 +388,20 @@ Status JniScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     return status;
 }
 
-Status JniScanner::fill_empty_chunk(RuntimeState* runtime_state, ChunkPtr* chunk,
-                                    const std::vector<SlotDescriptor*>& slot_desc_list) {
-    JNIEnv* _jni_env = JVMFunctionHelper::getInstance().getEnv();
+Status JniScanner::fill_empty_chunk(ChunkPtr* chunk, const std::vector<SlotDescriptor*>& slot_desc_list) {
+    JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
     long chunk_meta;
-    RETURN_IF_ERROR(_get_next_chunk(_jni_env, &chunk_meta));
+    RETURN_IF_ERROR(_get_next_chunk(env, &chunk_meta));
     reset_chunk_meta(chunk_meta);
-    Status status = _fill_chunk(_jni_env, chunk, slot_desc_list);
-    RETURN_IF_ERROR(_release_off_heap_table(_jni_env));
+    Status status = _fill_chunk(env, chunk, slot_desc_list);
+    RETURN_IF_ERROR(_release_off_heap_table(env));
 
     return status;
 }
 
 Status HiveJniScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     // fill chunk with all wanted column exclude partition columns
-    Status status = fill_empty_chunk(runtime_state, chunk, _scanner_params.materialize_slots);
+    Status status = fill_empty_chunk(chunk, _scanner_params.materialize_slots);
     size_t chunk_size = (*chunk)->num_rows();
     if (!_scanner_params.materialize_slots.empty()) {
         // when the chunk has partition column and non partition column

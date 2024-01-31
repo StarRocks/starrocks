@@ -8,6 +8,12 @@ displayed_sidebar: "English"
 
 Shows the system variables of StarRocks. For details about system variables, see [System Variables](../../../reference/System_variable.md).
 
+:::tip
+
+This operation does not require privileges.
+
+:::
+
 ## Syntax
 
 ```SQL

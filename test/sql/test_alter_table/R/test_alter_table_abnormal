@@ -1,0 +1,284 @@
+-- name: test_alter_pk_table_abnormal
+CREATE TABLE t0(k0 BIGINT, k1 DATETIME, v0 INT, v1 VARCHAR(100))
+ primary key(k0, k1)
+ distributed by hash(k0)
+ buckets 1
+ order by (v0)
+ properties('replication_num'='1');
+-- result:
+-- !result
+INSERT INTO t0 VALUES(0, '2024-01-01 00:00:00', 10, '100');
+-- result:
+-- !result
+ALTER TABLE t0 ADD COLUMN k0 FLOAT;
+-- result:
+E: (1064, 'Unexpected exception: Repeatedly add same column with different definition: k0')
+-- !result
+ALTER TABLE t0 ADD COLUMN v0 BIGINT;
+-- result:
+E: (1064, 'Unexpected exception: Repeatedly add same column with different definition: v0')
+-- !result
+ALTER TABLE t0 DROP COLUMN k1;
+-- result:
+E: (1064, 'Unexpected exception: Can not drop key column in primary data model table')
+-- !result
+ALTER TABLE t0 DROP COLUMN k0;
+-- result:
+E: (1064, 'Unexpected exception: Can not drop key column in primary data model table')
+-- !result
+ALTER TABLE t0 MODIFY COLUMN k0 INT;
+-- result:
+E: (1064, 'Unexpected exception: Can not modify key column: k0 for primary key table')
+-- !result
+ALTER TABLE t0 MODIFY COLUMN k0 LARGEINT;
+-- result:
+E: (1064, 'Unexpected exception: Can not modify key column: k0 for primary key table')
+-- !result
+ALTER TABLE t0 MODIFY COLUMN v0 BIGINT;
+-- result:
+E: (1064, 'Unexpected exception: Can not modify sort column in primary data model table')
+-- !result
+ALTER TABLE t0 MODIFY COLUMN v1 VARCHAR(200), MODIFY COLUMN v0 BIGINT;
+-- result:
+E: (1064, 'Unexpected exception: Can not modify sort column in primary data model table')
+-- !result
+ALTER TABLE t0 MODIFY COLUMN v1 VARCHAR(100) MAX;
+-- result:
+-- !result
+ALTER TABLE t0 ADD column k2 SMALLINT KEY;
+-- result:
+E: (1064, "Getting analyzing error from line 1, column 26 to line 1, column 38. Detail message: Column definition is wrong. Cannot specify aggregate function 'REPLACE' for key column 'k2'.")
+-- !result
+ALTER TABLE t0 ADD COLUMN v2 BIGINT, ADD COLUMN v2 FLOAT;
+-- result:
+E: (1064, 'Unexpected exception: Repeatedly add same column with different definition: v2')
+-- !result
+ALTER TABLE t0 ADD COLUMN v2 BIGINT, ADD COLUMN v2 BIGINT KEY;
+-- result:
+E: (1064, "Getting analyzing error from line 1, column 48 to line 1, column 58. Detail message: Column definition is wrong. Cannot specify aggregate function 'REPLACE' for key column 'v2'.")
+-- !result
+ALTER TABLE t0 ADD COLUMN v2 BIGINT, ADD COLUMN k2 BIGINT KEY;
+-- result:
+E: (1064, "Getting analyzing error from line 1, column 48 to line 1, column 58. Detail message: Column definition is wrong. Cannot specify aggregate function 'REPLACE' for key column 'k2'.")
+-- !result
+ALTER TABLE t0 ADD COLUMN v2 BIGINT, DROP COLUMN v2;
+-- result:
+-- !result
+DESC t0;
+-- result:
+k0	bigint	NO	true	None	
+k1	datetime	NO	true	None	
+v0	int	YES	false	None	
+v1	varchar(100)	YES	false	None	
+-- !result
+ALTER TABLE t0 ADD COLUMN v2 BIGINT, ADD COLUMN v0 BIGINT;
+-- result:
+E: (1064, 'Unexpected exception: Repeatedly add same column with different definition: v0')
+-- !result
+ALTER TABLE t0 DROP COLUMN k0;
+-- result:
+E: (1064, 'Unexpected exception: Can not drop key column in primary data model table')
+-- !result
+ALTER TABLE t0 DROP COLUMN v1, DROP COLUMN k0;
+-- result:
+E: (1064, 'Unexpected exception: Can not drop key column in primary data model table')
+-- !result
+ALTER TABLE t0 DROP COLUMN v0;
+-- result:
+E: (1064, 'Unexpected exception: Can not drop sort column in primary data model table')
+-- !result
+ALTER TABLE t0 DROP COLUMN v1, DROP COLUMN v0;
+-- result:
+E: (1064, 'Unexpected exception: Can not drop sort column in primary data model table')
+-- !result
+ALTER TABLE t0 DROP COLUMN v1, DROP COLUMN v100;
+-- result:
+E: (1064, 'Unexpected exception: Column does not exists: v100')
+-- !result
+DESC t0;
+-- result:
+k0	bigint	NO	true	None	
+k1	datetime	NO	true	None	
+v0	int	YES	false	None	
+v1	varchar(100)	YES	false	None	
+-- !result
+SELECT * from t0;
+-- result:
+0	2024-01-01 00:00:00	10	100
+-- !result
+-- name: test_alter_unique_table_abnormal
+CREATE TABLE t1(k0 BIGINT, k1 DATETIME, v0 BIGINT, v1 VARCHAR(100))
+ unique key(k0, k1)
+ distributed by hash(k0) buckets 1
+ properties('replication_num'='1');
+-- result:
+-- !result
+INSERT INTO t1 VALUES(0, '2024-01-01 00:00:00', 10, '100');
+-- result:
+-- !result
+ALTER TABLE t1 ADD column k2 SMALLINT KEY SUM;
+-- result:
+E: (1064, "Getting analyzing error from line 1, column 26 to line 1, column 42. Detail message: Column definition is wrong. Cannot specify aggregate function 'SUM' for key column 'k2'.")
+-- !result
+ALTER TABLE t1 ADD column v2 BIGINT MIN;
+-- result:
+E: (1064, 'Unexpected exception: Can not assign aggregation method on column in Unique data model table: v2')
+-- !result
+ALTER TABLE t1 ADD COLUMN v2 BIGINT, ADD COLUMN v2 FLOAT;
+-- result:
+E: (1064, 'Unexpected exception: Repeatedly add same column with different definition: v2')
+-- !result
+ALTER TABLE t1 ADD COLUMN v2 BIGINT, ADD COLUMN v2 BIGINT KEY;
+-- result:
+E: (1064, 'Unexpected exception: Repeatedly add same column with different definition: v2')
+-- !result
+ALTER TABLE t1 ADD COLUMN v2 BIGINT, DROP COLUMN v2;
+-- result:
+-- !result
+DESC t1;
+-- result:
+k0	bigint	YES	true	None	
+k1	datetime	YES	true	None	
+v0	bigint	YES	false	None	
+v1	varchar(100)	YES	false	None	
+-- !result
+ALTER TABLE t1 ADD COLUMN v2 BIGINT, ADD COLUMN v0 BIGINT;
+-- result:
+E: (1064, 'Unexpected exception: Can not add column which already exists in base table: v0')
+-- !result
+ALTER TABLE t1 DROP COLUMN k1;
+-- result:
+E: (1064, 'Unexpected exception: Can not drop key column in Unique data model table')
+-- !result
+ALTER TABLE t1 DROP COLUMN v0, DROP COLUMN k1;
+-- result:
+E: (1064, 'Unexpected exception: Can not drop key column in Unique data model table')
+-- !result
+ALTER TABLE t1 DROP COLUMN v0, DROP COLUMN v100;
+-- result:
+E: (1064, 'Unexpected exception: Column does not exists: v100')
+-- !result
+ALTER TABLE t1 MODIFY COLUMN v1 VARCHAR(100) MAX;
+-- result:
+E: (1064, 'Unexpected exception: Can not assign aggregation method on column in Unique data model table: v1')
+-- !result
+DESC t1;
+-- result:
+k0	bigint	YES	true	None	
+k1	datetime	YES	true	None	
+v0	bigint	YES	false	None	
+v1	varchar(100)	YES	false	None	
+-- !result
+SELECT * from t1;
+-- result:
+0	2024-01-01 00:00:00	10	100
+-- !result
+-- name: test_alter_duplicate_table_abnormal
+CREATE TABLE t2(k0 BIGINT, k1 DATETIME, v0 BIGINT, v1 VARCHAR(100))
+ duplicate key(k0, k1)
+ distributed by hash(k0) buckets 1
+ properties('replication_num'='1');
+-- result:
+-- !result
+INSERT INTO t2 VALUES(0, '2024-01-01 00:00:00', 10, '100');
+-- result:
+-- !result
+ALTER TABLE t2 ADD column k2 SMALLINT KEY SUM;
+-- result:
+E: (1064, "Getting analyzing error from line 1, column 26 to line 1, column 42. Detail message: Column definition is wrong. Cannot specify aggregate function 'SUM' for key column 'k2'.")
+-- !result
+ALTER TABLE t2 ADD column v2 BIGINT MIN;
+-- result:
+E: (1064, 'Unexpected exception: Can not assign aggregation method on column in Duplicate data model table: v2')
+-- !result
+ALTER TABLE t2 ADD COLUMN v2 BIGINT, ADD COLUMN v2 FLOAT;
+-- result:
+E: (1064, 'Unexpected exception: Repeatedly add same column with different definition: v2')
+-- !result
+ALTER TABLE t2 ADD COLUMN v2 BIGINT, ADD COLUMN v2 BIGINT KEY;
+-- result:
+E: (1064, 'Unexpected exception: Repeatedly add same column with different definition: v2')
+-- !result
+ALTER TABLE t2 ADD COLUMN v2 BIGINT, DROP COLUMN v2;
+-- result:
+-- !result
+ALTER TABLE t2 ADD COLUMN v2 BIGINT, ADD COLUMN v0 BIGINT;
+-- result:
+E: (1064, 'Unexpected exception: Can not add column which already exists in base table: v0')
+-- !result
+ALTER TABLE t2 DROP COLUMN v0, DROP COLUMN v100;
+-- result:
+E: (1064, 'Unexpected exception: Column does not exists: v100')
+-- !result
+ALTER TABLE t2 MODIFY COLUMN v1 VARCHAR(100) MAX;
+-- result:
+E: (1064, 'Unexpected exception: Can not assign aggregation method on column in Duplicate data model table: v1')
+-- !result
+DESC t2;
+-- result:
+k0	bigint	YES	true	None	
+k1	datetime	YES	true	None	
+v0	bigint	YES	false	None	
+v1	varchar(100)	YES	false	None	
+-- !result
+SELECT * from t2;
+-- result:
+0	2024-01-01 00:00:00	10	100
+-- !result
+-- name: test_drop_partition_or_distribution_column
+CREATE TABLE t9 (
+c0 int(11) NULL COMMENT "",
+c1 int(11) NOT NULL COMMENT ""
+)
+DUPLICATE KEY(c0)
+PARTITION BY LIST(c1)(
+PARTITION p0 VALUES IN ('0'),
+PARTITION p1 VALUES IN ('1')
+)
+DISTRIBUTED BY HASH(c0) BUCKETS 1
+PROPERTIES ("fast_schema_evolution" = "true", "replication_num"="1");
+-- result:
+-- !result
+ALTER TABLE t9 DROP COLUMN c1;
+-- result:
+E: (1064, 'Unexpected exception: Partition column[c1] cannot be dropped. index[t9]')
+-- !result
+CREATE TABLE t10 (
+c0 int(11) NULL COMMENT "",
+c1 int(11) NOT NULL COMMENT ""
+)
+DUPLICATE KEY(c0)
+PARTITION BY LIST(c1)(
+PARTITION p0 VALUES IN ('0'),
+PARTITION p1 VALUES IN ('1')
+)
+DISTRIBUTED BY HASH(c0) BUCKETS 1
+PROPERTIES ("fast_schema_evolution" = "false", "replication_num"="1");
+-- result:
+-- !result
+ALTER TABLE t10 DROP COLUMN c1;
+-- result:
+E: (1064, 'Unexpected exception: Partition column[c1] cannot be dropped. index[t10]')
+-- !result
+CREATE TABLE site_access1 (
+    event_day DATETIME NOT NULL,
+    site_id INT DEFAULT '10',
+    city_code VARCHAR(100),
+    user_name VARCHAR(32) DEFAULT '',
+    pv BIGINT DEFAULT '0'
+)
+DUPLICATE KEY(event_day, site_id, city_code, user_name)
+PARTITION BY date_trunc('day', event_day)
+DISTRIBUTED BY HASH(event_day, site_id)
+PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+ALTER TABLE site_access1 DROP COLUMN event_day;
+-- result:
+E: (1064, 'Unexpected exception: Partition column[event_day] cannot be dropped. index[site_access1]')
+-- !result
+ALTER TABLE site_access1 DROP COLUMN site_id;
+-- result:
+E: (1064, 'Unexpected exception: Distribution column[site_id] cannot be dropped. index[site_access1]')
+-- !result
+

@@ -56,6 +56,8 @@ class WritableFile;
 
 class Column;
 
+static const size_t dictionary_min_rowcount = 256;
+
 struct ColumnWriterOptions {
     // input and output parameter:
     // - input: column_id/unique_id/type/length/encoding/compression/is_nullable members

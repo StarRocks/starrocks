@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+unlisted: true
 ---
 
 # 部署 Broker 节点

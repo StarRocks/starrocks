@@ -32,7 +32,7 @@ StarRocks 的部署通常遵循以下步骤：
 
 5. 部署 StarRocks。
 
-   - 如需部署存算分离架构的 StarRocks 集群，请参考 [部署使用 StarRocks 存算分离集群](../deployment/deploy_shared_data.md)。
+   - 如需部署存算分离架构的 StarRocks 集群，请参考 [部署使用 StarRocks 存算分离集群](../deployment/shared_data/s3.md)。
    - 如需部署存算一体架构的 StarRocks 集群，则有以下选择：
 
      - [手动部署 StarRocks](../deployment/deploy_manually.md)。

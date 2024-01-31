@@ -8,7 +8,7 @@ displayed_sidebar: "Chinese"
 
 创建物化视图。关于物化视图适用的场景请参考[同步物化视图](../../../using_starrocks/Materialized_view-single_table.md)和[异步物化视图](../../../using_starrocks/Materialized_view.md)。
 
-创建物化视图是一个异步的操作。该命令执行成功即代表创建物化视图的任务提交成功。您可以通过 [SHOW ALTER MATERIALIZED VIEW](../data-manipulation/SHOW_ALTER_MATERIALIZED_VIEW.md) 命令查看当前数据库中同步物化视图的构建状态，或通过查询 [Information Schema](../../../reference/information_schema/information_schema.md) 中的 [`tasks`](../../../reference/information_schema/tasks.md) 和 [`task_runs`](../../../reference/information_schema/task_runs.md) 来查看异步物化视图的构建状态。
+创建物化视图是一个异步的操作。该命令执行成功即代表创建物化视图的任务提交成功。您可以通过 [SHOW ALTER MATERIALIZED VIEW](../data-manipulation/SHOW_ALTER_MATERIALIZED_VIEW.md) 命令查看当前数据库中同步物化视图的构建状态，或通过查询 [Information Schema](../../../reference/overview-pages/information_schema.md) 中的 [`tasks`](../../../reference/information_schema/tasks.md) 和 [`task_runs`](../../../reference/information_schema/task_runs.md) 来查看异步物化视图的构建状态。
 
 > **注意**
 >
@@ -136,7 +136,7 @@ CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]<mv_name>
 -- refresh_moment
     [IMMEDIATE | DEFERRED]
 -- refresh_scheme
-    [ASYNC [START (<start_time>)] [EVERY (INTERVAL <refresh_interval>)] | MANUAL]
+    [ASYNC | ASYNC [START (<start_time>)] EVERY (INTERVAL <refresh_interval>) | MANUAL]
 ]
 -- partition_expression
 [PARTITION BY 
@@ -187,7 +187,7 @@ AS
 
   > **说明**
   >
-  > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../../../table_design/Data_distribution.md#确定分桶数量)。
+  > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../../../table_design/Data_distribution.md#设置分桶数量)。
 
 - **随机分桶**：
 
@@ -218,8 +218,9 @@ AS
 
 物化视图的刷新方式。该参数支持如下值：
 
-- `ASYNC`：异步刷新模式。每当基表数据发生变化，物化视图将根据预定义的刷新间隔自动进行刷新。您可以进一步指定刷新开始时间 `START('yyyy-MM-dd hh:mm:ss')` 和刷新间隔  `EVERY (interval n day/hour/minute/second)`。刷新间隔仅支持：`DAY`、`HOUR`、`MINUTE` 以及 `SECOND`。例如：`ASYNC START ('2023-09-12 16:30:25') EVERY (INTERVAL 5 MINUTE)`。如不指定刷新间隔，将使用默认值 `10 MINUTE`。
-- `MANUAL`：手动刷新模式。物化视图不会自动刷新。刷新任务只能由用户手动触发。
+- `ASYNC`: 自动刷新模式。每当基表数据发生变化时，物化视图会自动刷新。
+- `ASYNC [START (<start_time>)] EVERY(INTERVAL <interval>)`: 定时刷新模式。物化视图将按照定义的间隔定时刷新。您可以使用 `DAY`（天）、`HOUR`（小时）、`MINUTE`（分钟）和 `SECOND`（秒）作为单位指定间隔，格式为 `EVERY (interval n day/hour/minute/second)`。默认值为 `10 MINUTE`（10 分钟）。您还可以进一步指定刷新起始时间，格式为 `START('yyyy-MM-dd hh:mm:ss')`。如未指定起始时间，默认使用当前时间。示例：`ASYNC START ('2023-09-12 16:30:25') EVERY (INTERVAL 5 MINUTE)`。
+- `MANUAL`: 手动刷新模式。除非手动触发刷新任务，否则物化视图不会刷新。
 
 如果不指定该参数，则默认使用 MANUAL 方式。
 
@@ -279,7 +280,7 @@ AS
 
 **query_statement**（必填）
 
-创建异步物化视图的查询语句，其结果即为异步物化视图中的数据。
+创建异步物化视图的查询语句，其结果即为异步物化视图中的数据。从 v3.1.6 版本开始，StarRocks 支持使用 Common Table Expression (CTE) 创建异步物化视图。
 
 > **注意**
 >
@@ -335,7 +336,7 @@ AS
   - 同步物化视图仅支持单列聚合函数，不支持形如 `sum(a+b)` 的查询语句。
   - 同步物化视图仅支持对同一列数据使用一种聚合函数，不支持形如 `select sum(a), min(a) from table` 的查询语句。
   - 同步物化视图中使用聚合函数需要与 GROUP BY 语句一起使用，且 SELECT 的列中至少包含一个分组列。
-  - 同步物化视图创建语句不支持 JOIN、WHERE 以及 GROUP BY 的 HAVING 子句。
+  - 同步物化视图创建语句不支持 JOIN 以及 GROUP BY 的 HAVING 子句。
   - 使用 ALTER TABLE DROP COLUMN 删除基表中特定列时，需要保证该基表所有同步物化视图中不包含被删除列，否则无法进行删除操作。如果必须删除该列，则需要将所有包含该列的同步物化视图删除，然后进行删除列操作。
   - 为一张表创建过多的同步物化视图会影响导入的效率。导入数据时，同步物化视图和基表数据将同步更新，如果一张基表包含 n 个物化视图，向基表导入数据时，其导入效率大约等同于导入 n 张表，数据导入的速度会变慢。
 
@@ -486,6 +487,7 @@ mysql> desc duplicate_table;
     |                | k7    | VARCHAR(20)  | Yes  | false | N/A     | NONE  |
     +----------------+-------+--------------+------+-------+---------+-------+
     ```
+
 6. 使用 WHERE 子句和复杂表达式创建同步物化视图。
 
   ```sql

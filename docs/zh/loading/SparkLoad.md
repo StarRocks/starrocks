@@ -11,7 +11,7 @@ Spark Load 通过外部的 Spark 资源实现对导入数据的预处理，提�
 > **注意**
 >
 > * Spark Load 操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
-> * Spark Load 不支持导入至主键模型表。
+> * Spark Load 不支持导入至主键表。
 
 ## 背景信息
 
@@ -278,7 +278,7 @@ PROPERTIES
    PROPERTIES
     ( 
         "type" = "hive",
-        "hive.metastore.uris" = "thrift://0.0.0.0:8080"
+        "hive.metastore.uris" = "thrift://xx.xx.xx.xx:8080"
     );
     ~~~
 
@@ -354,6 +354,10 @@ WITH RESOURCE 'spark0'
 * **导入流程构建全局字典**
   
 适用于 StarRocks 表聚合列的数据类型为 bitmap 类型。 在 load 命令中指定需要构建全局字典的字段即可，格式为：`StarRocks字段名称=bitmap_dict(hive表字段名称)` 需要注意的是目前 **只有在上游数据源为 hive 表** 时才支持全局字典的构建。
+
+* **导入 binary 类型的数据**
+
+从 2.5.17 版本开始，Spark Load 支持在导入时使用 bitmap_from_binary 函数，可以将 binary 类型转为 bitmap 类型。当 Hive 表或 HDFS 文件中列的数据类型为 binary 类型， 而 StarRocks 表中相应的列是 bitmap 类型的聚合列时，您无需构建全局字典，只需在导入命令中指定相应的字段即可。格式为：`StarRocks字段名=bitmap_from_binary(Hive表字段名)`。
 
 ### 查看导入任务
 

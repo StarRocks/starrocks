@@ -50,7 +50,7 @@ protected:
     void _create_runtime_state(const std::string& timezone);
     void _create_runtime_profile();
     Status _init_datacache(size_t mem_size, const std::string& engine);
-    HdfsScannerParams* _create_param(const std::string& file, THdfsScanRange* range, const TupleDescriptor* tuple_desc);
+    HdfsScannerParams* _create_param(const std::string& file, THdfsScanRange* range, TupleDescriptor* tuple_desc);
     void build_hive_column_names(HdfsScannerParams* params, const TupleDescriptor* tuple_desc,
                                  bool diff_case_sensitive = false);
 
@@ -106,13 +106,13 @@ THdfsScanRange* HdfsScannerTest::_create_scan_range(const std::string& file, uin
 }
 
 HdfsScannerParams* HdfsScannerTest::_create_param(const std::string& file, THdfsScanRange* range,
-                                                  const TupleDescriptor* tuple_desc) {
+                                                  TupleDescriptor* tuple_desc) {
     auto* param = _pool.add(new HdfsScannerParams());
     auto* lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
     param->fs = FileSystem::Default();
     param->path = file;
     param->file_size = range->file_length;
-    param->scan_ranges.emplace_back(range);
+    param->scan_range = range;
     param->tuple_desc = tuple_desc;
     std::vector<int> materialize_index_in_chunk;
     std::vector<int> partition_index_in_chunk;
@@ -310,7 +310,7 @@ static ExprContext* create_expr_context(ObjectPool* pool, const std::vector<TExp
     texpr.__set_nodes(nodes);
     ExprContext* ctx;
     Status st = Expr::create_expr_tree(pool, texpr, &ctx, nullptr);
-    DCHECK(st.ok()) << st.get_error_msg();
+    DCHECK(st.ok()) << st.message();
     return ctx;
 }
 
@@ -338,7 +338,7 @@ static void extend_partition_values(ObjectPool* pool, HdfsScannerParams* params,
             chunk->reset();                                                               \
             status = scanner->get_next(_runtime_state, &chunk);                           \
             if (!status.ok() && !status.is_end_of_file()) {                               \
-                std::cout << "status not ok: " << status.get_error_msg() << std::endl;    \
+                std::cout << "status not ok: " << status.message() << std::endl;          \
                 break;                                                                    \
             }                                                                             \
             chunk->check_or_die();                                                        \
@@ -1413,10 +1413,10 @@ TEST_F(HdfsScannerTest, TestParquetCoalesceReadAcrossRowGroup) {
     auto* param = _create_param(parquet_file, range, tuple_desc);
 
     Status status = scanner->init(_runtime_state, *param);
-    ASSERT_TRUE(status.ok()) << status.get_error_msg();
+    ASSERT_TRUE(status.ok()) << status.message();
 
     status = scanner->open(_runtime_state);
-    ASSERT_TRUE(status.ok()) << status.get_error_msg();
+    ASSERT_TRUE(status.ok()) << status.message();
 
     READ_SCANNER_ROWS(scanner, 100000);
 
@@ -1456,9 +1456,9 @@ TEST_F(HdfsScannerTest, TestParquetRuntimeFilter) {
         ExprContext probe_expr_ctx(&c1ref);
 
         status = probe_expr_ctx.prepare(_runtime_state);
-        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+        ASSERT_TRUE(status.ok()) << status.message();
         status = probe_expr_ctx.open(_runtime_state);
-        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+        ASSERT_TRUE(status.ok()) << status.message();
 
         // build runtime filter.
         JoinRuntimeFilter* f = RuntimeFilterHelper::create_join_runtime_filter(&_pool, LogicalType::TYPE_BIGINT);
@@ -1475,10 +1475,10 @@ TEST_F(HdfsScannerTest, TestParquetRuntimeFilter) {
         param->runtime_filter_collector = &rf_collector;
 
         status = scanner->init(_runtime_state, *param);
-        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+        ASSERT_TRUE(status.ok()) << status.message();
 
         status = scanner->open(_runtime_state);
-        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+        ASSERT_TRUE(status.ok()) << status.message();
 
         READ_SCANNER_ROWS(scanner, tc.exp_rows);
 
@@ -1587,10 +1587,10 @@ TEST_F(HdfsScannerTest, TestCSVCompressed) {
         auto scanner = std::make_shared<HdfsTextScanner>();
 
         status = scanner->init(_runtime_state, *param);
-        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+        ASSERT_TRUE(status.ok()) << status.message();
 
         status = scanner->open(_runtime_state);
-        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+        ASSERT_TRUE(status.ok()) << status.message();
 
         READ_SCANNER_ROWS(scanner, 100);
         scanner->close();
@@ -1603,10 +1603,10 @@ TEST_F(HdfsScannerTest, TestCSVCompressed) {
         auto scanner = std::make_shared<HdfsTextScanner>();
 
         status = scanner->init(_runtime_state, *param);
-        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+        ASSERT_TRUE(status.ok()) << status.message();
 
         status = scanner->open(_runtime_state);
-        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+        ASSERT_TRUE(status.ok()) << status.message();
 
         READ_SCANNER_ROWS(scanner, 100);
         scanner->close();
@@ -1621,10 +1621,10 @@ TEST_F(HdfsScannerTest, TestCSVCompressed) {
         auto scanner = std::make_shared<HdfsTextScanner>();
 
         status = scanner->init(_runtime_state, *param);
-        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+        ASSERT_TRUE(status.ok()) << status.message();
 
         status = scanner->open(_runtime_state);
-        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+        ASSERT_TRUE(status.ok()) << status.message();
 
         uint64_t records = 0;
         READ_SCANNER_RETURN_ROWS(scanner, records);
@@ -1652,10 +1652,10 @@ TEST_F(HdfsScannerTest, TestCSVWithDifferentLineDelimiter) {
         auto scanner = std::make_shared<HdfsTextScanner>();
 
         status = scanner->init(_runtime_state, *param);
-        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+        ASSERT_TRUE(status.ok()) << status.message();
 
         status = scanner->open(_runtime_state);
-        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+        ASSERT_TRUE(status.ok()) << status.message();
 
         READ_SCANNER_ROWS(scanner, 5);
         scanner->close();
@@ -1670,10 +1670,10 @@ TEST_F(HdfsScannerTest, TestCSVWithDifferentLineDelimiter) {
         auto scanner = std::make_shared<HdfsTextScanner>();
 
         status = scanner->init(_runtime_state, *param);
-        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+        ASSERT_TRUE(status.ok()) << status.message();
 
         status = scanner->open(_runtime_state);
-        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+        ASSERT_TRUE(status.ok()) << status.message();
 
         READ_SCANNER_ROWS(scanner, 5);
         scanner->close();
@@ -1703,33 +1703,40 @@ TEST_F(HdfsScannerTest, TestCSVSmall) {
         auto scanner = std::make_shared<HdfsTextScanner>();
 
         status = scanner->init(_runtime_state, *param);
-        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+        ASSERT_TRUE(status.ok()) << status.message();
 
         status = scanner->open(_runtime_state);
-        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+        ASSERT_TRUE(status.ok()) << status.message();
 
         READ_SCANNER_ROWS(scanner, 2);
         scanner->close();
     }
+
     for (int offset = 10; offset < 20; offset++) {
-        auto* range0 = _create_scan_range(small_file, 0, offset);
-        // at '\n'
-        auto* range1 = _create_scan_range(small_file, offset, 0);
-        auto* tuple_desc = _create_tuple_desc(csv_descs);
-        auto* param = _create_param(small_file, range0, tuple_desc);
-        param->scan_ranges.emplace_back(range1);
-        build_hive_column_names(param, tuple_desc);
-        auto scanner = std::make_shared<HdfsTextScanner>();
+        // read two scan range ranges and # of records = 2
+        int records = 0;
 
-        status = scanner->init(_runtime_state, *param);
-        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+        auto read_range = [&](int start, int end) {
+            auto* range0 = _create_scan_range(small_file, start, end);
+            auto* tuple_desc = _create_tuple_desc(csv_descs);
+            auto* param = _create_param(small_file, range0, tuple_desc);
+            build_hive_column_names(param, tuple_desc);
+            auto scanner = std::make_shared<HdfsTextScanner>();
 
-        status = scanner->open(_runtime_state);
-        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+            status = scanner->init(_runtime_state, *param);
+            ASSERT_TRUE(status.ok()) << status.message();
 
-        READ_SCANNER_ROWS(scanner, 2);
+            status = scanner->open(_runtime_state);
+            ASSERT_TRUE(status.ok()) << status.message();
 
-        scanner->close();
+            READ_SCANNER_RETURN_ROWS(scanner, records);
+
+            scanner->close();
+        };
+
+        read_range(0, offset);
+        read_range(offset, 0);
+        ASSERT_EQ(records, 2);
     }
 }
 
@@ -1749,10 +1756,10 @@ TEST_F(HdfsScannerTest, TestCSVCaseIgnore) {
         auto scanner = std::make_shared<HdfsTextScanner>();
 
         status = scanner->init(_runtime_state, *param);
-        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+        ASSERT_TRUE(status.ok()) << status.message();
 
         status = scanner->open(_runtime_state);
-        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+        ASSERT_TRUE(status.ok()) << status.message();
 
         READ_SCANNER_ROWS(scanner, 2);
         scanner->close();
@@ -1774,21 +1781,21 @@ TEST_F(HdfsScannerTest, TestCSVWithoutEndDelemeter) {
         auto* param = _create_param(small_file, range, tuple_desc);
 #if defined(WITH_STARCACHE)
         status = _init_datacache(50 * 1024 * 1024, "starcache"); // 50MB
-        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+        ASSERT_TRUE(status.ok()) << status.message();
         param->use_datacache = true;
 #elif defined(WITH_CACHELIB)
         status = _init_datacache(50 * 1024 * 1024, "cachelib"); // 50MB
-        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+        ASSERT_TRUE(status.ok()) << status.message();
         param->use_datacache = true;
 #endif
         build_hive_column_names(param, tuple_desc, true);
         auto scanner = std::make_shared<HdfsTextScanner>();
 
         status = scanner->init(_runtime_state, *param);
-        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+        ASSERT_TRUE(status.ok()) << status.message();
 
         status = scanner->open(_runtime_state);
-        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+        ASSERT_TRUE(status.ok()) << status.message();
 
         READ_SCANNER_ROWS(scanner, 3);
         scanner->close();
@@ -1809,10 +1816,10 @@ TEST_F(HdfsScannerTest, TestCSVWithWindowsEndDelemeter) {
         auto scanner = std::make_shared<HdfsTextScanner>();
 
         status = scanner->init(_runtime_state, *param);
-        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+        ASSERT_TRUE(status.ok()) << status.message();
 
         status = scanner->open(_runtime_state);
-        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+        ASSERT_TRUE(status.ok()) << status.message();
 
         ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 4096);
 
@@ -1841,10 +1848,10 @@ TEST_F(HdfsScannerTest, TestCSVWithUTFBOM) {
         auto scanner = std::make_shared<HdfsTextScanner>();
 
         status = scanner->init(_runtime_state, *param);
-        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+        ASSERT_TRUE(status.ok()) << status.message();
 
         status = scanner->open(_runtime_state);
-        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+        ASSERT_TRUE(status.ok()) << status.message();
 
         ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 4096);
 
@@ -1994,7 +2001,7 @@ TEST_F(HdfsScannerTest, TestCSVWithBlankDelimiter) {
     {
         auto* range = _create_scan_range(small_file, 0, 0);
         range->text_file_desc.field_delim = "";
-        param->scan_ranges[0] = range;
+        param->scan_range = range;
         auto scanner = std::make_shared<HdfsTextScanner>();
         auto status = scanner->init(_runtime_state, *param);
         EXPECT_FALSE(status.ok());
@@ -2002,7 +2009,7 @@ TEST_F(HdfsScannerTest, TestCSVWithBlankDelimiter) {
     {
         auto* range = _create_scan_range(small_file, 0, 0);
         range->text_file_desc.collection_delim = "";
-        param->scan_ranges[0] = range;
+        param->scan_range = range;
         auto scanner = std::make_shared<HdfsTextScanner>();
         auto status = scanner->init(_runtime_state, *param);
         EXPECT_FALSE(status.ok());
@@ -2010,7 +2017,7 @@ TEST_F(HdfsScannerTest, TestCSVWithBlankDelimiter) {
     {
         auto* range = _create_scan_range(small_file, 0, 0);
         range->text_file_desc.mapkey_delim = "";
-        param->scan_ranges[0] = range;
+        param->scan_range = range;
         auto scanner = std::make_shared<HdfsTextScanner>();
         auto status = scanner->init(_runtime_state, *param);
         EXPECT_FALSE(status.ok());
@@ -2018,7 +2025,7 @@ TEST_F(HdfsScannerTest, TestCSVWithBlankDelimiter) {
     {
         auto* range = _create_scan_range(small_file, 0, 0);
         range->text_file_desc.line_delim = "";
-        param->scan_ranges[0] = range;
+        param->scan_range = range;
         auto scanner = std::make_shared<HdfsTextScanner>();
         auto status = scanner->init(_runtime_state, *param);
         EXPECT_FALSE(status.ok());
@@ -2067,7 +2074,7 @@ TEST_F(HdfsScannerTest, TestParqueTypeMismatchInt96String) {
 
     status = scanner->open(_runtime_state);
     // parquet column reader: not supported convert from parquet `INT96` to `VARCHAR`
-    EXPECT_TRUE(!status.ok()) << status.get_error_msg();
+    EXPECT_TRUE(!status.ok()) << status.message();
     scanner->close();
 }
 
@@ -2093,10 +2100,10 @@ TEST_F(HdfsScannerTest, TestCSVSingleColumnNullAndEmpty) {
         auto scanner = std::make_shared<HdfsTextScanner>();
 
         status = scanner->init(_runtime_state, *param);
-        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+        ASSERT_TRUE(status.ok()) << status.message();
 
         status = scanner->open(_runtime_state);
-        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+        ASSERT_TRUE(status.ok()) << status.message();
 
         READ_SCANNER_ROWS(scanner, 3);
         scanner->close();

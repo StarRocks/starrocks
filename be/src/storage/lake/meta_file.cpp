@@ -37,9 +37,7 @@ static std::string delvec_cache_key(int64_t tablet_id, const DelvecPagePB& page)
 }
 
 MetaFileBuilder::MetaFileBuilder(Tablet tablet, std::shared_ptr<TabletMetadata> metadata)
-        : _tablet(tablet), _tablet_meta(std::move(metadata)), _update_mgr(_tablet.update_mgr()) {
-    _trash_files = std::make_shared<std::vector<std::string>>();
-}
+        : _tablet(tablet), _tablet_meta(std::move(metadata)), _update_mgr(_tablet.update_mgr()) {}
 
 void MetaFileBuilder::append_delvec(const DelVectorPtr& delvec, uint32_t segment_id) {
     if (delvec->cardinality() > 0) {
@@ -54,29 +52,47 @@ void MetaFileBuilder::append_delvec(const DelVectorPtr& delvec, uint32_t segment
     }
 }
 
-void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write,
-                                    const std::map<int, std::string>& replace_segments,
+void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
                                     const std::vector<std::string>& orphan_files) {
     auto rowset = _tablet_meta->add_rowsets();
     rowset->CopyFrom(op_write.rowset());
+
+    auto segment_size_size = rowset->segment_size_size();
+    auto segment_file_size = rowset->segments_size();
+    bool upgrage_from_old_version = (segment_size_size != segment_file_size);
+    LOG_IF(ERROR, segment_size_size > 0 && segment_size_size != segment_file_size)
+            << "segment_size size != segment file size, tablet: " << _tablet.id() << ", rowset: " << rowset->id()
+            << ", segment file size: " << segment_file_size << ", segment_size size: " << segment_size_size;
+
     for (const auto& replace_seg : replace_segments) {
         // when handle partial update, replace old segments with new rewrite segments
-        rowset->set_segments(replace_seg.first, replace_seg.second);
+        rowset->set_segments(replace_seg.first, replace_seg.second.path);
+
+        // update new rewrite segments size
+        if (LIKELY(!upgrage_from_old_version)) {
+            rowset->set_segment_size(replace_seg.first, replace_seg.second.size.value());
+        }
     }
+
     rowset->set_id(_tablet_meta->next_rowset_id());
     // if rowset don't contain segment files, still inc next_rowset_id
     _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + std::max(1, rowset->segments_size()));
     // collect trash files
     for (const auto& orphan_file : orphan_files) {
         DCHECK(is_segment(orphan_file));
-        _trash_files->push_back(_tablet.segment_location(orphan_file));
+        FileMetaPB file_meta;
+        file_meta.set_name(orphan_file);
+        _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
     }
     for (const auto& del_file : op_write.dels()) {
-        _trash_files->push_back(_tablet.del_location(del_file));
+        FileMetaPB file_meta;
+        file_meta.set_name(del_file);
+        _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
     }
 }
 
-void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction) {
+void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction,
+                                         uint32_t max_compact_input_rowset_id) {
     // delete input rowsets
     std::stringstream del_range_ss;
     std::vector<std::pair<uint32_t, uint32_t>> delete_delvec_sid_range;
@@ -123,6 +139,7 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
         auto rowset = _tablet_meta->add_rowsets();
         rowset->CopyFrom(op_compaction.output_rowset());
         rowset->set_id(_tablet_meta->next_rowset_id());
+        rowset->set_max_compact_input_rowset_id(max_compact_input_rowset_id);
         _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + rowset->segments_size());
     }
 
@@ -146,6 +163,7 @@ Status MetaFileBuilder::update_num_del_stat(const std::map<uint32_t, size_t>& se
                     fmt::format("unexpected segment id: {} tablet id: {}", each.first, _tablet_meta->id());
             LOG(ERROR) << err_msg;
             if (!config::experimental_lake_ignore_pk_consistency_check) {
+                set_recover_flag(RecoverFlag::RECOVER_WITHOUT_PUBLISH);
                 return Status::InternalError(err_msg);
             }
         } else {
@@ -317,15 +335,24 @@ bool is_primary_key(const TabletMetadata& metadata) {
 }
 
 void rowset_rssid_to_path(const TabletMetadata& metadata, const TxnLogPB_OpWrite& op_write,
-                          std::unordered_map<uint32_t, std::string>& rssid_to_path) {
-    for (auto& rs : metadata.rowsets()) {
-        for (int i = 0; i < rs.segments_size(); i++) {
-            rssid_to_path[rs.id() + i] = rs.segments(i);
+                          std::unordered_map<uint32_t, FileInfo>& rssid_to_file_info) {
+    auto get_file_info_from_rowset = [&](const RowsetMetadataPB& meta, const uint32_t rowset_id) -> void {
+        bool has_segment_size = (meta.segments_size() == meta.segment_size_size());
+        for (int i = 0; i < meta.segments_size(); i++) {
+            FileInfo segment_info{.path = meta.segments(i)};
+            if (LIKELY(has_segment_size)) {
+                segment_info.size = meta.segment_size(i);
+            }
+            rssid_to_file_info[rowset_id + i] = segment_info;
         }
+    };
+
+    for (auto& rs : metadata.rowsets()) {
+        get_file_info_from_rowset(rs, rs.id());
     }
     const uint32_t rowset_id = metadata.next_rowset_id();
     for (int i = 0; i < op_write.rowset().segments_size(); i++) {
-        rssid_to_path[rowset_id + i] = op_write.rowset().segments(i);
+        get_file_info_from_rowset(op_write.rowset(), rowset_id);
     }
 }
 

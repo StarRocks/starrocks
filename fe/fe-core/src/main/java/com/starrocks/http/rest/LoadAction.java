@@ -47,6 +47,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.warehouse.Warehouse;
 import io.netty.handler.codec.http.HttpHeaders;
@@ -79,7 +80,7 @@ public class LoadAction extends RestBaseAction {
         } catch (DdlException e) {
             TransactionResult resp = new TransactionResult();
             resp.status = ActionStatus.FAILED;
-            resp.msg = e.getClass().toString() + ": " + e.getMessage();
+            resp.msg = e.getClass() + ": " + e.getMessage();
             LOG.warn(e);
 
             sendResult(request, response, resp);
@@ -112,16 +113,17 @@ public class LoadAction extends RestBaseAction {
         // Choose a backend sequentially, or choose a cn in shared_data mode
         List<Long> nodeIds = new ArrayList<>();
         if (RunMode.isSharedDataMode()) {
-            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
             for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
-                ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
+                ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
                 if (node != null && node.isAvailable()) {
                     nodeIds.add(nodeId);
                 }
             }
             Collections.shuffle(nodeIds);
         } else {
-            nodeIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
+            SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            nodeIds = systemInfoService.getNodeSelector().seqChooseBackendIds(1, false, false, null);
         }
         
         if (CollectionUtils.isEmpty(nodeIds)) {
@@ -129,7 +131,7 @@ public class LoadAction extends RestBaseAction {
         }
 
         // TODO: need to refactor after be split into cn + dn
-        ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeIds.get(0));
+        ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeIds.get(0));
         if (node == null) {
             throw new DdlException("No backend or compute node alive.");
         }

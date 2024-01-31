@@ -28,7 +28,6 @@ import com.starrocks.sql.common.MetaNotFoundException;
 
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 
 public class TablePEntryObject implements PEntryObject {
     @SerializedName(value = "ci")
@@ -123,7 +122,7 @@ public class TablePEntryObject implements PEntryObject {
                     throw new PrivObjNotFoundException("cannot find table " +
                             tokens.get(1) + " in db " + tokens.get(0) + ", msg: " + e.getMessage());
                 }
-                if (table == null || table.isView() || table.isMaterializedView()) {
+                if (table == null || table.isOlapView() || table.isMaterializedView()) {
                     throw new PrivObjNotFoundException("cannot find table " +
                             tokens.get(1) + " in db " + tokens.get(0));
                 }
@@ -170,26 +169,15 @@ public class TablePEntryObject implements PEntryObject {
 
     @Override
     public boolean validate(GlobalStateMgr globalStateMgr) {
-        Database db;
         if (catalogId == InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID) {
-            db = globalStateMgr.getDbIncludeRecycleBin(Long.parseLong(this.databaseUUID));
+            Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(Long.parseLong(this.databaseUUID));
             if (db == null) {
                 return false;
             }
-            return globalStateMgr.getTableIncludeRecycleBin(db, Long.parseLong(this.tableUUID)) != null;
-        } else {
-            Optional<Catalog> catalog = globalStateMgr.getCatalogMgr().getCatalogById(catalogId);
-            if (!catalog.isPresent()) {
-                return false;
-            }
-            String dbName = ExternalCatalog.getDbNameFromUUID(databaseUUID);
-            String tblName = ExternalCatalog.getTableNameFromUUID(tableUUID);
-            db = globalStateMgr.getMetadataMgr().getDb(catalog.get().getName(), dbName);
-            if (db == null) {
-                return false;
-            }
-            return globalStateMgr.getMetadataMgr().getTable(catalog.get().getName(), dbName, tblName) != null;
+            return globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, Long.parseLong(this.tableUUID)) != null;
         }
+        // do not validate privilege of external table
+        return true;
     }
 
     @Override
@@ -261,7 +249,8 @@ public class TablePEntryObject implements PEntryObject {
             String dbName;
             Database database = null;
             if (CatalogMgr.isInternalCatalog(catalogId)) {
-                database = GlobalStateMgr.getCurrentState().getDb(Long.parseLong(getDatabaseUUID()));
+                database = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                        .getDb(Long.parseLong(getDatabaseUUID()));
                 if (database == null) {
                     throw new MetaNotFoundException("Cannot find database : " + databaseUUID);
                 }
@@ -275,7 +264,8 @@ public class TablePEntryObject implements PEntryObject {
             } else {
                 String tblName = null;
                 if (CatalogMgr.isInternalCatalog(catalogId)) {
-                    Table table = database.getTable(Long.parseLong(getTableUUID()));
+                    Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
+                            Long.parseLong(getDatabaseUUID()), Long.parseLong(getTableUUID()));
                     if (table == null) {
                         throw new MetaNotFoundException("Cannot find table : " + tableUUID);
                     }

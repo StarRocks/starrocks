@@ -224,7 +224,6 @@ public class FilePipeSource implements GsonPostProcessable {
      */
     public static String buildInsertSql(Pipe pipe, FilePipePiece piece, String label) {
         String originalSql = pipe.getOriginSql();
-        Map<String, String> originalProperties = pipe.getProperties();
         StatementBase sqlStmt = SqlParser.parse(originalSql, new SessionVariable()).get(0);
         sqlStmt.setOrigStmt(new OriginStatement(originalSql, 0));
         Preconditions.checkState(sqlStmt instanceof InsertStmt);

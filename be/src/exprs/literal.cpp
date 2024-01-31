@@ -18,6 +18,8 @@
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/statusor.h"
+#include "exprs/jit/ir_helper.h"
 #include "gutil/port.h"
 #include "gutil/strings/fastmem.h"
 #include "types/constexpr.h"
@@ -161,6 +163,18 @@ StatusOr<ColumnPtr> VectorizedLiteral::evaluate_checked(ExprContext* context, Ch
         column->resize(ptr->num_rows());
     }
     return column;
+}
+
+bool VectorizedLiteral::is_compilable() const {
+    return IRHelper::support_jit(_type.type);
+}
+
+StatusOr<LLVMDatum> VectorizedLiteral::generate_ir_impl(ExprContext* context, const llvm::Module& module,
+                                                        llvm::IRBuilder<>& b,
+                                                        const std::vector<LLVMDatum>& datums) const {
+    LLVMDatum datum(b, _value->only_null());
+    ASSIGN_OR_RETURN(datum.value, IRHelper::create_ir_number(b, _type.type, _value->raw_data()));
+    return datum;
 }
 
 std::string VectorizedLiteral::debug_string() const {

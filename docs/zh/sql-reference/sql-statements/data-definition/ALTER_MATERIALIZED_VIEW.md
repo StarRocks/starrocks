@@ -27,6 +27,11 @@ displayed_sidebar: "Chinese"
   - `colocate_with`
   - 所有 Session 变量属性。有关 Session 变量，详细信息请见 [系统变量](../../../reference/System_variable.md)。
 
+:::tip
+- 该操作需要对应物化视图的 ALTER 权限。请参考 [GRANT](../account-management/GRANT.md) 为用户赋权。
+- ALTER MATERIALIZED VIEW 不支持直接修改构建物化视图的查询语句。您可以重新构建物化视图，并通过 ALTER MATERIALIZED VIEW SWAP WITH 将其与原始物化视图替换。
+:::
+
 ## 语法
 
 ```SQL

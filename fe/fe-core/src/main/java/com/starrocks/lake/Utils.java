@@ -30,7 +30,6 @@ import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
-import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -52,13 +51,14 @@ public class Utils {
     // Returns null if no backend available.
     public static Long chooseBackend(LakeTablet tablet) {
         try {
-            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
             long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
             return tablet.getPrimaryComputeNodeId(workerGroupId);
         } catch (UserException ex) {
             LOG.info("Ignored error {}", ex.getMessage());
             try {
-                return GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendOrComputeId();
+                return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                         .getNodeSelector().seqChooseBackendOrComputeId();
             } catch (UserException e) {
                 return null;
             }
@@ -70,7 +70,7 @@ public class Utils {
         if (nodeId == null) {
             return null;
         }
-        return GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
+        return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
     }
 
     // Preconditions: Has required the database's reader lock.
@@ -105,35 +105,32 @@ public class Utils {
 
     public static void publishVersionBatch(@NotNull List<Tablet> tablets, List<Long> txnIds,
                                       long baseVersion, long newVersion, long commitTimeInSecond,
-                                      Map<Long, Double> compactionScores)
+                                      Map<Long, Double> compactionScores, Map<ComputeNode, List<Long>> nodeToTablets)
             throws NoAliveBackendException, RpcException {
-        Map<Long, List<Long>> beToTablets = new HashMap<>();
-        for (Tablet tablet : tablets) {
-            Long beId = Utils.chooseBackend((LakeTablet) tablet);
-            if (beId == null) {
-                throw new NoAliveBackendException("No alive backend or computeNode for " +
-                        "handle publish version request");
-            }
-            beToTablets.computeIfAbsent(beId, k -> Lists.newArrayList()).add(tablet.getId());
+        if (nodeToTablets == null) {
+            nodeToTablets = new HashMap<>();
         }
 
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
-        List<Future<PublishVersionResponse>> responseList = Lists.newArrayListWithCapacity(beToTablets.size());
-        List<ComputeNode> backendList = Lists.newArrayListWithCapacity(beToTablets.size());
-        for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
-            // TODO: need to refactor after be split into cn + dn
-            ComputeNode node = systemInfoService.getBackendOrComputeNode(entry.getKey());
+        for (Tablet tablet : tablets) {
+            ComputeNode node = Utils.chooseNode((LakeTablet) tablet);
             if (node == null) {
-                throw new NoAliveBackendException("Backend or computeNode been " +
-                        "dropped while building publish version request");
+                throw new NoAliveBackendException("No alive node for handle publish version request");
             }
+            nodeToTablets.computeIfAbsent(node, k -> Lists.newArrayList()).add(tablet.getId());
+        }
+
+        List<Future<PublishVersionResponse>> responseList = Lists.newArrayListWithCapacity(nodeToTablets.size());
+        List<ComputeNode> backendList = Lists.newArrayListWithCapacity(nodeToTablets.size());
+        for (Map.Entry<ComputeNode, List<Long>> entry : nodeToTablets.entrySet()) {
             PublishVersionRequest request = new PublishVersionRequest();
             request.baseVersion = baseVersion;
             request.newVersion = newVersion;
-            request.tabletIds = entry.getValue();
+            request.tabletIds = entry.getValue(); // todo: limit the number of Tablets sent to a single node
             request.txnIds = txnIds;
             request.commitTime = commitTimeInSecond;
+            request.timeoutMs = LakeService.TIMEOUT_PUBLISH_VERSION;
 
+            ComputeNode node = entry.getKey();
             LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
             Future<PublishVersionResponse> future = lakeService.publishVersion(request);
             responseList.add(future);
@@ -144,7 +141,8 @@ public class Utils {
             try {
                 PublishVersionResponse response = responseList.get(i).get();
                 if (response != null && response.failedTablets != null && !response.failedTablets.isEmpty()) {
-                    throw new RpcException("Fail to publish version for tablets " + response.failedTablets);
+                    throw new RpcException("Fail to publish version for tablets " + response.failedTablets + ": " +
+                            response.status.errorMsgs.get(0));
                 }
                 if (compactionScores != null && response != null && response.compactionScores != null) {
                     compactionScores.putAll(response.compactionScores);
@@ -160,7 +158,7 @@ public class Utils {
                                       long commitTimeInSecond, Map<Long, Double> compactionScores)
             throws NoAliveBackendException, RpcException {
         List<Long> txnIds = Lists.newArrayList(txnId);
-        publishVersionBatch(tablets, txnIds, baseVersion, newVersion, commitTimeInSecond, compactionScores);
+        publishVersionBatch(tablets, txnIds, baseVersion, newVersion, commitTimeInSecond, compactionScores, null);
     }
 
     public static void publishLogVersion(@NotNull List<Tablet> tablets, long txnId, long version)
@@ -174,29 +172,23 @@ public class Utils {
 
     public static void publishLogVersionBatch(@NotNull List<Tablet> tablets, List<Long> txnIds, List<Long> versions)
             throws NoAliveBackendException, RpcException {
-        Map<Long, List<Long>> beToTablets = new HashMap<>();
+        Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
         for (Tablet tablet : tablets) {
-            Long beId = Utils.chooseBackend((LakeTablet) tablet);
-            if (beId == null) {
-                throw new NoAliveBackendException("No alive backend or computeNode " +
-                        "for handle publish version request");
-            }
-            beToTablets.computeIfAbsent(beId, k -> Lists.newArrayList()).add(tablet.getId());
-        }
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
-        List<Future<PublishLogVersionResponse>> responseList = Lists.newArrayListWithCapacity(beToTablets.size());
-        List<ComputeNode> nodeList = Lists.newArrayListWithCapacity(beToTablets.size());
-        for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
-            ComputeNode node = systemInfoService.getBackendOrComputeNode(entry.getKey());
+            ComputeNode node = Utils.chooseNode((LakeTablet) tablet);
             if (node == null) {
-                throw new NoAliveBackendException("Backend or computeNode been dropped " +
-                        "while building publish version request");
+                throw new NoAliveBackendException("No alive node for handle publish version request");
             }
+            nodeToTablets.computeIfAbsent(node, k -> Lists.newArrayList()).add(tablet.getId());
+        }
+        List<Future<PublishLogVersionResponse>> responseList = Lists.newArrayListWithCapacity(nodeToTablets.size());
+        List<ComputeNode> nodeList = Lists.newArrayListWithCapacity(nodeToTablets.size());
+        for (Map.Entry<ComputeNode, List<Long>> entry : nodeToTablets.entrySet()) {
             PublishLogVersionBatchRequest request = new PublishLogVersionBatchRequest();
             request.tabletIds = entry.getValue();
             request.txnIds = txnIds;
             request.versions = versions;
 
+            ComputeNode node = entry.getKey();
             LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
             Future<PublishLogVersionResponse> future = lakeService.publishLogVersionBatch(request);
             responseList.add(future);

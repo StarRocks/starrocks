@@ -21,6 +21,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryDetailQueue;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.service.FrontendOptions;
 
 import java.util.Arrays;
 import java.util.List;
@@ -47,10 +48,11 @@ public class LogUtil {
                 .setAuthorizedUser(ctx.getCurrentUserIdentity() == null
                         ? "null" : ctx.getCurrentUserIdentity().toString())
                 .setClientIp(ctx.getMysqlChannel().getRemoteHostPortString())
+                .setFeIp(FrontendOptions.getLocalHostAddress())
                 .setDb(authPacket == null ? "null" : authPacket.getDb())
                 .setState(ctx.getState().toString())
                 .setErrorCode(ctx.getState().getErrorMessage());
-        GlobalStateMgr.getCurrentAuditEventProcessor().handleAuditEvent(builder.build());
+        GlobalStateMgr.getCurrentState().getAuditEventProcessor().handleAuditEvent(builder.build());
 
         QueryDetail queryDetail = new QueryDetail();
         queryDetail.setQueryId(DebugUtil.printId(UUIDUtil.genUUID()));

@@ -15,9 +15,11 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <chrono>
 #include <filesystem>
 #include <iterator>
 #include <memory>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -37,6 +39,8 @@
 #include "exec/sorting/sorting.h"
 #include "exec/spill/executor.h"
 #include "exec/spill/log_block_manager.h"
+#include "exec/spill/mem_table.h"
+#include "exec/spill/spill_components.h"
 #include "exec/spill/spiller.h"
 #include "exec/spill/spiller.hpp"
 #include "exec/spill/spiller_factory.h"
@@ -46,6 +50,7 @@
 #include "fs/fs.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "testutil/assert.h"
 #include "types/logical_type.h"
@@ -214,13 +219,16 @@ struct SpillTestContext {
 };
 
 StatusOr<SpillTestContext*> no_partition_context(ObjectPool* pool, RuntimeState* runtime_state,
-                                                 std::vector<TExpr>& order_bys, std::vector<TExpr>& tuple) {
+                                                 const std::vector<TExpr>& order_bys, std::vector<TExpr>& tuple) {
     auto context = pool->add(new SpillTestContext());
     context->partition_nums = 1;
     //
-    RETURN_IF_ERROR(context->sort_exprs.init(order_bys, &tuple, &context->pool, runtime_state));
-    RETURN_IF_ERROR(context->sort_exprs.prepare(runtime_state, {}, {}));
-    RETURN_IF_ERROR(context->sort_exprs.open(runtime_state));
+    if (!order_bys.empty()) {
+        RETURN_IF_ERROR(context->sort_exprs.init(order_bys, &tuple, &context->pool, runtime_state));
+        RETURN_IF_ERROR(context->sort_exprs.prepare(runtime_state, {}, {}));
+        RETURN_IF_ERROR(context->sort_exprs.open(runtime_state));
+    }
+
     //
     std::vector<bool> ascs(order_bys.size());
     std::fill_n(ascs.begin(), order_bys.size(), true);
@@ -268,6 +276,23 @@ struct SpillerCaller {
     bool acquire_once = false;
     spill::Spiller* _spiller;
 };
+
+bool chunk_equals(const ChunkPtr& l, const ChunkPtr& r) {
+    if (l->columns() != r->columns() || l->num_columns() != r->num_columns() ||
+        l->get_slot_id_to_index_map() != r->get_slot_id_to_index_map()) {
+        return false;
+    }
+    size_t num_rows = l->num_rows();
+    auto& lcolumns = l->columns();
+    auto& rcolumns = r->columns();
+    for (size_t i = 0; i < lcolumns.size(); ++i) {
+        if (!lcolumns[i]->equals(num_rows, *rcolumns[i], num_rows)) {
+            return false;
+        }
+    }
+
+    return true;
+}
 
 TEST_F(SpillTest, unsorted_process) {
     ObjectPool pool;
@@ -363,6 +388,28 @@ TEST_F(SpillTest, unsorted_process) {
             }
         }
     }
+
+    {
+        // dummy_rt_st
+        // test schedule_mem_table_flush
+        size_t max_buffer_size = 1024 * 1024 * 1024;
+        std::shared_ptr<spill::SpillableMemTable> mem_table =
+                std::make_shared<spill::UnorderedMemTable>(&dummy_rt_st, max_buffer_size, nullptr, spiller.get());
+        std::vector<ChunkPtr> input;
+        for (size_t i = 0; i < 500; ++i) {
+            auto chunk = chunk_builder.gen(tuple, nullables);
+            input.emplace_back(chunk->clone_unique());
+            ASSERT_OK(mem_table->append(std::move(chunk)));
+        }
+        ASSERT_OK(mem_table->done());
+        //
+        workgroup::YieldContext yield_ctx;
+        do {
+            yield_ctx.time_spent_ns = 0;
+            yield_ctx.need_yield = false;
+            ASSERT_OK(mem_table->finalize(yield_ctx));
+        } while (yield_ctx.need_yield);
+    }
 }
 
 TEST_F(SpillTest, order_by_process) {
@@ -444,6 +491,81 @@ TEST_F(SpillTest, order_by_process) {
         }
         ASSERT_EQ(contain_rows, restored_rows);
     }
+}
+
+TEST_F(SpillTest, partition_process) {
+    ObjectPool pool;
+
+    // order by id_int
+    // full data id_int, id_smallint
+    std::vector<bool> nullables = {false, false};
+    TExprBuilder tuple_slots_builder;
+    tuple_slots_builder << TYPE_INT;
+    auto tuple_slots = tuple_slots_builder.get_res();
+
+    auto ctx_st = no_partition_context(&pool, &dummy_rt_st, {}, tuple_slots);
+    ASSERT_OK(ctx_st.status());
+    auto ctx = ctx_st.value();
+    (void)ctx;
+
+    std::vector<ExprContext*> tuple;
+    ASSERT_OK(Expr::create_expr_trees(&pool, tuple_slots, &tuple, &dummy_rt_st));
+
+    // create chunk
+    RandomChunkBuilder chunk_builder;
+
+    // create spilled factory
+    // auto factory_options = SpilledFactoryOptions(ctx->partition_nums, ctx->parition_exprs, ctx->sort_exprs, ctx->sort_descs, false);
+    auto factory = spill::make_spilled_factory();
+
+    // create spiller
+    SpilledOptions spill_options(4);
+    // 4 buffer chunk
+    spill_options.mem_table_pool_size = 1;
+    // file size: 1M
+    spill_options.spill_mem_table_bytes_size = 1 * 1024 * 1024;
+    // spill format type
+    spill_options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
+
+    spill_options.block_manager = dummy_block_mgr.get();
+
+    auto chunk_empty = chunk_builder.gen(tuple, nullables);
+
+    auto spiller = factory->create(spill_options);
+    spiller->set_metrics(metrics);
+    SpillerCaller<spill::PartitionedSpillerWriter*, spill::SpillerReader*> caller(spiller.get());
+    ASSERT_OK(spiller->prepare(&dummy_rt_st));
+
+    size_t test_loop = 1024;
+    std::vector<ChunkPtr> holder;
+    {
+        for (size_t i = 0; i < test_loop; ++i) {
+            auto chunk = chunk_builder.gen(tuple, nullables);
+            auto hash_column = spill::SpillHashColumn::create(chunk->num_rows());
+            chunk->append_column(std::move(hash_column), -1);
+            ASSERT_OK(spiller->spill(&dummy_rt_st, chunk, SyncExecutor{}, EmptyMemGuard{}));
+            ASSERT_OK(spiller->_spilled_task_status);
+            holder.push_back(chunk);
+        }
+        ASSERT_OK(spiller->flush(&dummy_rt_st, SyncExecutor{}, EmptyMemGuard{}));
+    }
+}
+
+TEST_F(SpillTest, aligned_buffer) {
+    spill::AlignedBuffer buffer;
+    ASSERT_EQ(buffer.data(), nullptr);
+    auto is_aligned = [](void* ptr, std::size_t alignment) {
+        return reinterpret_cast<uintptr_t>(ptr) % alignment == 0;
+    };
+    buffer.resize(1);
+    buffer.data()[0] = '@';
+    ASSERT_TRUE(is_aligned(buffer.data(), 4096));
+    buffer.resize(8192);
+    ASSERT_EQ(buffer.data()[0], '@');
+    ASSERT_TRUE(is_aligned(buffer.data(), 4096));
+    buffer.resize(1);
+    ASSERT_EQ(buffer.data()[0], '@');
+    ASSERT_TRUE(is_aligned(buffer.data(), 4096));
 }
 
 /*

@@ -43,6 +43,7 @@ import org.apache.commons.lang.NotImplementedException;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.List;
 
 public abstract class DistributionInfo implements Writable {
 
@@ -76,6 +77,8 @@ public abstract class DistributionInfo implements Writable {
     }
 
     public abstract boolean supportColocate();
+
+    public abstract List<Column> getDistributionColumns();
 
     public String getDistributionKey() {
         return "";

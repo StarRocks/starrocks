@@ -8,6 +8,10 @@ displayed_sidebar: "Chinese"
 
 该特性从 StarRocks 2.5 版本开始支持。
 
+:::tip
+自 v3.1 起，StarRocks 支持使用 [INSERT INTO SELECT](../loading/InsertInto.md#通过-insert-into-select-以及表函数-files-导入外部数据文件) 语句和 [FILES](../sql-reference/sql-functions/table-functions/files.md) 表函数直接导入云存储或 HDFS 中的文件，无需提前创建 External Catalog 或文件外部表。除此之外，FILES() 支持自动推断 Table Schema，大大简化了导入过程。
+:::
+
 ## 使用限制
 
 - 当前仅支持在 [default_catalog](../data_source/catalog/default_catalog.md) 下的数据库内创建文件外部表，不支持 external catalog。您可以通过 [SHOW CATALOGS](../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) 来查询集群下的 catalog。

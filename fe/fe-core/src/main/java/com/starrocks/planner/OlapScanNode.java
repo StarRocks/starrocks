@@ -425,7 +425,7 @@ public class OlapScanNode extends ScanNode {
             boolean tabletIsNull = true;
             for (Replica replica : replicas) {
                 ComputeNode node =
-                        GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(replica.getBackendId());
+                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(replica.getBackendId());
                 if (node == null) {
                     LOG.debug("replica {} not exists", replica.getBackendId());
                     continue;
@@ -535,7 +535,7 @@ public class OlapScanNode extends ScanNode {
             for (Replica replica : replicas) {
                 // TODO: need to refactor after be split into cn + dn
                 ComputeNode node =
-                        GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(replica.getBackendId());
+                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(replica.getBackendId());
                 if (node == null) {
                     LOG.debug("replica {} not exists", replica.getBackendId());
                     continue;
@@ -615,7 +615,7 @@ public class OlapScanNode extends ScanNode {
     private void computeTabletInfo() throws UserException {
         long localBeId = -1;
         if (Config.enable_local_replica_selection) {
-            localBeId = GlobalStateMgr.getCurrentSystemInfo().getBackendIdByHost(FrontendOptions.getLocalHostAddress());
+            localBeId = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIdByHost(FrontendOptions.getLocalHostAddress());
         }
         /**
          * The tablet info could be computed only once.
@@ -1273,13 +1273,44 @@ public class OlapScanNode extends ScanNode {
         return true;
     }
 
+    @Override
+    protected boolean canEliminateNull(SlotDescriptor slot) {
+        return super.canEliminateNull(slot) ||
+                prunedPartitionPredicates.stream().anyMatch(expr -> canEliminateNull(expr, slot));
+    }
+
     public void computePointScanRangeLocations() {
-        List<String> keyColumns = olapTable.getKeyColumns().stream().map(Column::getName).collect(Collectors.toList());
+        // must order in create table
+        List<String> keyColumns = olapTable.getKeyColumnsInOrder().stream().map(Column::getName)
+                .collect(Collectors.toList());
         Optional<List<List<LiteralExpr>>> points = RowStoreUtils.extractPointsLiteral(conjuncts, keyColumns);
 
         if (points.isPresent()) {
             rowStoreKeyLiterals = points.get();
-            return;
         }
+    }
+
+    public List<List<LiteralExpr>> getRowStoreKeyLiterals() {
+        return rowStoreKeyLiterals;
+    }
+
+    // clear scan node， reduce body size
+    public void clearScanNodeForThriftBuild() {
+        sortColumn = null;
+        this.selectedIndexId = -1;
+        selectedPartitionNames.clear();
+        selectedPartitionVersions.clear();
+        result.clear();
+        scanBackendIds.clear();
+        appliedDictStringColumns.clear();
+        unUsedOutputStringColumns.clear();
+        bucketSeq2locations.clear();
+        prunedPartitionPredicates.clear();
+        selectedPartitionIds.clear();
+        hintsReplicaIds.clear();
+        tabletId2BucketSeq.clear();
+        bucketExprs.clear();
+        bucketColumns.clear();
+        rowStoreKeyLiterals = Lists.newArrayList();
     }
 }

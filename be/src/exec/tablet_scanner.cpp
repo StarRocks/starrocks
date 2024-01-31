@@ -27,6 +27,7 @@
 #include "storage/projection_iterator.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
+#include "util/runtime_profile.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
@@ -58,6 +59,7 @@ Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParam
         for (const auto& column_desc : _parent->_olap_scan_node.columns_desc) {
             _tablet_schema->append_column(TabletColumn(column_desc));
         }
+        _tablet_schema->generate_sort_key_idxes();
     }
 
     RETURN_IF_ERROR(_init_unused_output_columns(*params.unused_output_columns));
@@ -83,7 +85,7 @@ Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParam
 
     Status st = _reader->prepare();
     if (!st.ok()) {
-        std::string msg = strings::Substitute("Fail to scan tablet. error: $0, backend: $1", st.get_error_msg(),
+        std::string msg = strings::Substitute("Fail to scan tablet. error: $0, backend: $1", st.message(),
                                               BackendOptions::get_localhost());
         LOG(WARNING) << msg;
         return Status::InternalError(msg);
@@ -99,7 +101,7 @@ Status TabletScanner::open([[maybe_unused]] RuntimeState* runtime_state) {
         _is_open = true;
         Status st = _reader->open(_params);
         if (!st.ok()) {
-            auto msg = strings::Substitute("Fail to scan tablet. error: $0, backend: $1", st.get_error_msg(),
+            auto msg = strings::Substitute("Fail to scan tablet. error: $0, backend: $1", st.message(),
                                            BackendOptions::get_localhost());
             st = Status::InternalError(msg);
             LOG(WARNING) << st;
@@ -150,7 +152,7 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
     // to avoid the unnecessary SerDe and improve query performance
     _params.need_agg_finalize = _need_agg_finalize;
     _params.use_page_cache = _runtime_state->use_page_cache();
-    auto parser = _pool.add(new PredicateParser(_tablet->tablet_schema()));
+    auto parser = _pool.add(new PredicateParser(_tablet_schema));
     std::vector<PredicatePtr> preds;
     RETURN_IF_ERROR(_parent->_conjuncts_manager.get_column_predicates(parser, &preds));
 
@@ -398,6 +400,21 @@ void TabletScanner::update_counter() {
         RuntimeProfile::Counter* c2 = ADD_COUNTER(_parent->_scan_profile, "DeleteFilterRows", TUnit::UNIT);
         COUNTER_UPDATE(c1, _reader->stats().del_filter_ns);
         COUNTER_UPDATE(c2, _reader->stats().rows_del_filtered);
+    }
+    if (_reader->stats().flat_json_hits.size() > 0) {
+        auto path_profile = _parent->_scan_profile->create_child("AccessPathHits");
+
+        for (auto& [k, v] : _reader->stats().flat_json_hits) {
+            RuntimeProfile::Counter* path_counter = ADD_COUNTER(path_profile, k, TUnit::UNIT);
+            COUNTER_SET(path_counter, v);
+        }
+    }
+    if (_reader->stats().dynamic_json_hits.size() > 0) {
+        auto path_profile = _parent->_scan_profile->create_child("AccessPathUnhits");
+        for (auto& [k, v] : _reader->stats().dynamic_json_hits) {
+            RuntimeProfile::Counter* path_counter = ADD_COUNTER(path_profile, k, TUnit::UNIT);
+            COUNTER_SET(path_counter, v);
+        }
     }
     _has_update_counter = true;
 }

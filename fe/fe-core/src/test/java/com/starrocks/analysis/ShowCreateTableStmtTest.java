@@ -25,7 +25,7 @@ import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
@@ -130,12 +130,33 @@ public class ShowCreateTableStmtTest {
 
         HiveTable table = new HiveTable(100, "test", fullSchema, "aa", "bb", "cc", "dd", "hdfs://xxx",
                 0, new ArrayList<>(), fullSchema.stream().map(x -> x.getName()).collect(Collectors.toList()),
-                props, HiveStorageFormat.ORC, HiveTable.HiveTableType.MANAGED_TABLE);
+                props, new HashMap<>(),  HiveStorageFormat.ORC, HiveTable.HiveTableType.MANAGED_TABLE);
         List<String> result = new ArrayList<>();
-        GlobalStateMgr.getDdlStmt(table, result, null, null, false, true);
+        AstToStringBuilder.getDdlStmt(table, result, null, null, false, true);
         Assert.assertEquals(result.size(), 1);
         String value = result.get(0);
         System.out.println(value);
         Assert.assertTrue(value.contains("\"COLUMN_STATS_ACCURATE\"  =  \"{\\\"BASIC_STATS\\\":\\\"true\\\"}\""));
+    }
+
+    @Test
+    public void testShowPartitionLiveNumber() throws Exception {
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE `aaa` (\n" +
+                        "  `id` int(11) NOT NULL COMMENT \"\",\n" +
+                        "  `city` varchar(20) NOT NULL COMMENT \"\"\n" +
+                        ") ENGINE=OLAP \n" +
+                        "DUPLICATE KEY(`id`)\n" +
+                        "PARTITION BY (`city`) \n" +
+                        "DISTRIBUTED BY HASH(`id`) BUCKETS 5 \n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"partition_live_number\" = \"1\"\n" +
+                        ");");
+        String sql = "show create table test.aaa";
+        ShowCreateTableStmt showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        ShowExecutor executor = new ShowExecutor(ctx, showCreateTableStmt);
+        ShowResultSet resultSet = executor.execute();
+        Assert.assertTrue(resultSet.getResultRows().get(0).get(1).contains("partition_live_number"));
     }
 }

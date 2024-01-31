@@ -42,6 +42,7 @@ You can find a function based on the following categories:
 - [covar_pop](./aggregate-functions/covar_pop.md)
 - [covar_samp](./aggregate-functions/covar_samp.md)
 - [count](./aggregate-functions/count.md)
+- [count_if](./aggregate-functions/count_if.md)
 - [group_concat](./aggregate-functions/group_concat.md)
 - [grouping](./aggregate-functions/grouping.md)
 - [grouping_id](./aggregate-functions/grouping_id.md)
@@ -96,6 +97,7 @@ You can find a function based on the following categories:
 - [array_sum](./array-functions/array_sum.md)
 - [arrays_overlap](./array-functions/arrays_overlap.md)
 - [array_to_bitmap](./array-functions/array_to_bitmap.md)
+- [array_unique_agg](./array-functions/array_unique_agg.md)
 - [cardinality](./array-functions/cardinality.md)
 - [element_at](./array-functions/element_at.md)
 - [reverse](./array-functions/reverse.md)
@@ -143,8 +145,10 @@ You can find a function based on the following categories:
 - [bitmap_union_int](./bitmap-functions/bitmap_union_int.md)
 - [bitmap_xor](./bitmap-functions/bitmap_xor.md)
 - [intersect_count](./bitmap-functions/intersect_count.md)
+- [subdivide_bitmap](./bitmap-functions/subdivide_bitmap.md)
 - [sub_bitmap](./bitmap-functions/sub_bitmap.md)
 - [to_bitmap](./bitmap-functions/to_bitmap.md)
+- [unnest_bitmap](./bitmap-functions/unnest_bitmap.md)
 
 ## Conditional functions
 
@@ -171,13 +175,13 @@ You can find a function based on the following categories:
 ## Date functions
 
 - [add_months](./date-time-functions/add_months.md)
-- [adddate, days_ad](./date-time-functions/adddate.md)
+- [adddate](./date-time-functions/adddate.md)
 - [convert_tz](./date-time-functions/convert_tz.md)
 - [current_date，curdate](./date-time-functions/curdate.md)
 - [current_time，curtime](./date-time-functions/curtime.md)
 - [current_timestamp](./date-time-functions/current_timestamp.md)
 - [date](./date-time-functions/date.md)
-- [date_add](./date-time-functions/date_add.md)
+- [date_add, adddate](./date-time-functions/date_add.md)
 - [date_diff](./date-time-functions/date_diff.md)
 - [date_format](./date-time-functions/date_format.md)
 - [date_slice](./date-time-functions/date_slice.md)
@@ -185,12 +189,12 @@ You can find a function based on the following categories:
 - [date_trunc](./date-time-functions/date_trunc.md)
 - [datediff](./date-time-functions/datediff.md)
 - [day](./date-time-functions/day.md)
-- [day_of_week_iso](./date-time-functions/day_of_week_iso.md)
+- [dayofweek_iso](./date-time-functions/day_of_week_iso.md)
 - [dayname](./date-time-functions/dayname.md)
 - [dayofmonth](./date-time-functions/dayofmonth.md)
 - [dayofweek](./date-time-functions/dayofweek.md)
 - [dayofyear](./date-time-functions/dayofyear.md)
-- [days_add](./date-time-functions/adddate.md)
+- [days_add](./date-time-functions/days_add.md)
 - [days_diff](./date-time-functions/days_diff.md)
 - [days_sub](./date-time-functions/days_sub.md)
 - [from_days](./date-time-functions/from_days.md)
@@ -275,7 +279,7 @@ You can find a function based on the following categories:
 - [cast](./json-functions/json-query-and-processing-functions/cast.md)
 - [get_json_double](./json-functions/json-query-and-processing-functions/get_json_double.md)
 - [get_json_int](./json-functions/json-query-and-processing-functions/get_json_int.md)
-- [get_json_string](./json-functions/json-query-and-processing-functions/get_json_string.md)
+- [get_json_string, get_json_object](./json-functions/json-query-and-processing-functions/get_json_string.md)
 - [json_each](./json-functions/json-query-and-processing-functions/json_each.md)
 - [json_exists](./json-functions/json-query-and-processing-functions/json_exists.md)
 - [json_length](./json-functions/json-query-and-processing-functions/json_length.md)
@@ -293,6 +297,7 @@ You can find a function based on the following categories:
 - [character_length](./string-functions/character_length.md)
 - [concat](./string-functions/concat.md)
 - [concat_ws](./string-functions/concat_ws.md)
+- [crc32](./string-functions/crc32.md)
 - [ends_with](./string-functions/ends_with.md)
 - [find_in_set](./string-functions/find_in_set.md)
 - [group_concat](./string-functions/group_concat.md)
@@ -324,12 +329,15 @@ You can find a function based on the following categories:
 - [strright](./string-functions/strright.md)
 - [str_to_map](./string-functions/str_to_map.md)
 - [substr, substring](./string-functions/substring.md)
+- [substring_index](./string-functions/substring_index.md)
+- [translate](./string-functions/translate.md)
 - [trim](./string-functions/trim.md)
 - [ucase](./string-functions/ucase.md)
 - [unhex](./string-functions/unhex.md)
 - [upper](./string-functions/upper.md)
 - [url_decode](./string-functions/url_decode.md)
 - [url_encode](./string-functions/url_encode.md)
+- [url_extract_parameter](./string-functions/url_extract_parameter.md)
 
 ## Map functions
 
@@ -398,6 +406,7 @@ You can find a function based on the following categories:
 - [like](./like-predicate-functions/like.md)
 - [regexp](./like-predicate-functions/regexp.md)
 - [regexp_extract](./like-predicate-functions/regexp_extract.md)
+- [regexp_extract_all](./like-predicate-functions/regexp_extract_all.md)
 - [regexp_replace](./like-predicate-functions/regexp_replace.md)
 
 ## Percentile functions
@@ -421,7 +430,9 @@ You can find a function based on the following categories:
 - [files](./table-functions/files.md)
 - [generate_series](./table-functions/generate_series.md)
 - [json_each](./json-functions/json-query-and-processing-functions/json_each.md)
+- [subdivide_bitmap](./bitmap-functions/subdivide_bitmap.md)
 - [unnest](./array-functions/unnest.md)
+- [unnest_bitmap](./bitmap-functions/unnest_bitmap.md)
 
 ## Utility functions
 
@@ -429,6 +440,7 @@ You can find a function based on the following categories:
 - [current_role](./utility-functions/current_role.md)
 - [current_version](./utility-functions/current_version.md)
 - [database](./utility-functions/database.md)
+- [get_query_profile](./utility-functions/get_query_profile.md)
 - [host_name](./utility-functions/host_name.md)
 - [isnull](./utility-functions/isnull.md)
 - [isnotnull](./utility-functions/isnotnull.md)

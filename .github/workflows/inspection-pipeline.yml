@@ -7,10 +7,19 @@ on:
     - cron: "30 8 * * 1-5"
     - cron: "30 10 * * 1-5"
   workflow_dispatch:
-
-concurrency:
-  group: 'INSPECTION-MAIN'
-  cancel-in-progress: false
+    inputs:
+      BRANCH:
+        description: 'BRANCH'
+        required: true
+        type: string
+      COMMIT_ID:
+        description: 'COMMIT ID'
+        required: true
+        type: string
+      TAR_PATH:
+        description: 'TAR PATH'
+        required: true
+        type: string
 
 permissions:
   checks: write
@@ -30,7 +39,7 @@ jobs:
 
   be-ut:
     runs-on: [self-hosted, normal]
-    if: github.repository == 'StarRocks/starrocks'
+    if: github.event_name == 'schedule' && github.repository == 'StarRocks/starrocks'
     timeout-minutes: 180
     name: BE UT
     env:
@@ -68,10 +77,11 @@ jobs:
   fe-ut:
     runs-on: [self-hosted, normal]
     name: FE UT
-    if: github.repository == 'StarRocks/starrocks'
+    if: github.event_name == 'schedule' && github.repository == 'StarRocks/starrocks'
     env:
       BRANCH: 'main'
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      INSPECTION: true
     steps:
       - name: clean
         run: |
@@ -147,7 +157,7 @@ jobs:
   build:
     runs-on: [self-hosted, normal]
     name: BUILD
-    if: github.repository == 'StarRocks/starrocks'
+    if: github.event_name == 'schedule' && github.repository == 'StarRocks/starrocks'
     env:
       BRANCH: 'main'
     outputs:
@@ -187,7 +197,10 @@ jobs:
 
   deploy:
     runs-on: [self-hosted, normal]
-    if: always() && needs.build.result == 'success'
+    if: >
+      always() && 
+      ((github.event_name == 'schedule' && needs.build.result == 'success') ||
+      github.event_name != 'schedule')
     needs: build
     name: DEPLOY SR
     env:
@@ -198,12 +211,31 @@ jobs:
       fe: ${{steps.deploy_sr.outputs.fe}}
       be: ${{steps.deploy_sr.outputs.be}}
       deploy_conf_file: ${{steps.apply_resource.outputs.deploy_conf_file}}
+      pr_number: ${{steps.init_params.outputs.PR_NUMBER}}
+      base_version: ${{steps.init_params.outputs.BASE_VERSION}}
+      branch: ${{steps.init_params.outputs.BRANCH}}
     steps:
       - name: Clean Workspace
         uses: AutoModality/action-clean@v1.1.0
 
+      - name: init params
+        id: init_params
+        run: |
+          if [[ "${{ github.event_name }}" == "schedule" ]]; then
+            echo "PR_NUMBER=${{ needs.build.outputs.pr_number }}" >> $GITHUB_OUTPUT
+            echo "BRANCH=main" >> $GITHUB_OUTPUT
+            echo "BASE_VERSION=${{ needs.build.outputs.base_version }}" >> $GITHUB_OUTPUT
+          else
+            echo "PR_NUMBER=${{ inputs.COMMIT_ID }}" >> $GITHUB_OUTPUT
+            echo "BRANCH=${{ inputs.BRANCH }}" >> $GITHUB_OUTPUT
+            echo "TAR_PATH=${{ inputs.TAR_PATH }}" >> $GITHUB_OUTPUT
+            echo "BASE_VERSION=${{ inputs.COMMIT_ID }}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Apply for resources
         id: apply_resource
+        env:
+          PR_NUMBER: ${{ steps.init_params.outputs.PR_NUMBER }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/elastic-cluster.sh --template ci-admit
@@ -212,13 +244,24 @@ jobs:
 
       - name: Deploy SR
         id: deploy_sr
+        env:
+          PR_NUMBER: ${{ steps.init_params.outputs.PR_NUMBER }}
+          BRANCH: ${{ steps.init_params.outputs.BRANCH }}
+          TAR_PATH: ${{ steps.init_params.outputs.TAR_PATH }}
         run: |
           cd ci-tool && source lib/init.sh
-          repo="${{ github.repository }}"
-          bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'`
-          tar_path="oss://${bucket_prefix}-ci-release/$BRANCH/Release/pr/${{needs.build.outputs.build_output_tar}}"
+          
+          if [[ "${{ github.event_name }}" == "schedule" ]]; then
+            repo="${{ github.repository }}"
+            bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'`
+            tar_path="oss://${bucket_prefix}-ci-release/$BRANCH/Release/pr/${{needs.build.outputs.build_output_tar}}"
+            with_cov="--with-coverage"
+          else
+            tar_path=${TAR_PATH}
+          fi
+          
           echo ${tar_path}
-          ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --output ${tar_path} --with-coverage
+          ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --output ${tar_path} ${with_cov}
 
       - run: |
           echo "FE: ${{ steps.deploy_sr.outputs.fe }}, BE: ${{ steps.deploy_sr.outputs.be }}"
@@ -231,16 +274,17 @@ jobs:
   SQL-Tester:
     runs-on: [self-hosted, normal]
     name: SQL-Tester
-    needs: [ build, deploy ]
+    needs: [ deploy ]
     if: always() && needs.deploy.result == 'success'
     timeout-minutes: 60
     env:
-      PR_NUMBER: ${{ needs.build.outputs.pr_number }}
+      PR_NUMBER: ${{ needs.deploy.outputs.pr_number }}
       CLUSTER_NAME: ci-admit
       FE_NODE: ${{ needs.deploy.outputs.fe }}
       BE_NODE: ${{ needs.deploy.outputs.be }}
-      BASE_VERSION: ${{needs.build.outputs.base_version}}
-      BRANCH: 'main'
+      BASE_VERSION: ${{needs.deploy.outputs.base_version}}
+      BRANCH: ${{needs.deploy.outputs.branch}}
+      INSPECTION: true
     outputs:
       MYSQL_ECI_ID: ${{ steps.run_case.outputs.MYSQL_ECI_ID }}
     steps:
@@ -306,7 +350,7 @@ jobs:
     runs-on: [self-hosted, normal]
     name: ADMIT TEST
     needs: [ build, deploy, SQL-Tester ]
-    if: always() && needs.deploy.result == 'success'
+    if: always() && github.event_name == 'schedule' && needs.deploy.result == 'success'
     timeout-minutes: 40
     env:
       PR_NUMBER: ${{ needs.build.outputs.pr_number }}
@@ -314,6 +358,7 @@ jobs:
       FE_NODE: ${{ needs.deploy.outputs.fe }}
       BE_NODE: ${{ needs.deploy.outputs.be }}
       BRANCH: 'main'
+      INSPECTION: true
     steps:
       - name: CLEAN
         run: |
@@ -364,12 +409,13 @@ jobs:
   Teardown:
     runs-on: [self-hosted, normal]
     name: Teardown
-    needs: [ deploy, SQL-Tester, admit ]
+    needs: [ deploy, SQL-Tester, admit, be-ut, fe-ut ]
     if: always()
     env:
-      BRANCH: ${{ github.base_ref }}
+      BRANCH: ${{ needs.deploy.outputs.branch }}
       CONF_FILE: ${{ needs.deploy.outputs.deploy_conf_file }}
       GH_TOKEN: ${{ github.token }}
+      PR_NUMBER: ${{ needs.deploy.outputs.pr_number }}
     steps:
       - name: Backup SR Info
         if: needs.deploy.outputs.deploy_conf_file != ''
@@ -379,6 +425,7 @@ jobs:
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           cp -f $CONF_FILE ./conf/starrocks_deploy.conf
           cat ./conf/starrocks_deploy.conf
+          ./bin/backup_log_cores.sh --branch "$BRANCH" --pr "$PR_NUMBER" --build Release --conf "$CONF_FILE" --repository ${{ github.repository }}
 
       - name: Clean ECS
         if: steps.backup.outcome == 'success'
@@ -387,10 +434,10 @@ jobs:
           ADMIT_RESULT: ${{ needs.admit.result }}
         run: |
           cd ci-tool && source lib/init.sh
-          ./bin/elastic-cluster.sh --renew 0.5
+          ./bin/elastic-cluster.sh --delete
 
       - name: save unstable cases
-        if: always()
+        if: always() && github.event_name == 'schedule' && steps.backup.outcome == 'success'
         run: |
           cd ci-tool && source lib/init.sh
           ./bin/save_unstable_cases.sh

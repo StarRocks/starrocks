@@ -16,16 +16,20 @@
 
 #include <optional>
 
+#include "column/type_traits.h"
 #include "common/object_pool.h"
+#include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/arithmetic_operation.h"
 #include "exprs/binary_function.h"
 #include "exprs/decimal_binary_function.h"
 #include "exprs/decimal_cast_expr.h"
+#include "exprs/jit/ir_helper.h"
 #include "exprs/overflow.h"
 #include "exprs/unary_function.h"
-#include "runtime/decimalv3.h"
-#include "util/pred_guard.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/Value.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
 
@@ -118,6 +122,21 @@ public:
             return VectorizedStrictBinaryFunction<ArithmeticOp>::template evaluate<Type>(l, r);
         }
     }
+
+    bool is_compilable() const override { return IRHelper::support_jit(Type); }
+
+    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
+                                         const std::vector<LLVMDatum>& datums) const override {
+        if constexpr (lt_is_decimal<Type>) {
+            // TODO(yueyang): Implement decimal arithmetic in LLVM IR.
+            return Status::NotSupported("JIT of decimal arithmetic not support");
+        } else {
+            using ArithmeticOp = ArithmeticBinaryOperator<OP, Type>;
+            using CppType = RunTimeCppType<Type>;
+            return ArithmeticOp::template generate_ir<CppType>(context, module, b, datums);
+        }
+    }
+
     std::string debug_string() const override {
         std::stringstream out;
         auto expr_debug_string = Expr::debug_string();
@@ -165,6 +184,30 @@ public:
         }
     }
 
+    bool is_compilable() const override { return Type != TYPE_LARGEINT && IRHelper::support_jit(Type); }
+
+    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
+                                         const std::vector<LLVMDatum>& datums) const override {
+        if constexpr (lt_is_decimal<Type>) {
+            // TODO(yueyang): Implement decimal arithmetic in LLVM IR.
+            return Status::NotSupported("JIT of decimal arithmetic not support");
+        } else {
+            using ArithmeticOp = ArithmeticBinaryOperator<DivOp, Type>;
+            using CppType = RunTimeCppType<Type>;
+            return ArithmeticOp::template generate_ir<CppType>(context, module, b, datums);
+        }
+    }
+
+    std::string debug_string() const override {
+        std::stringstream out;
+        auto expr_debug_string = Expr::debug_string();
+        out << "VectorizedArithmeticExpr ("
+            << "lhs=" << _children[0]->type().debug_string() << ", rhs=" << _children[1]->type().debug_string()
+            << ", result=" << this->type().debug_string() << ", lhs_is_constant=" << _children[0]->is_constant()
+            << ", rhs_is_constant=" << _children[1]->is_constant() << ", expr (" << expr_debug_string << ") )";
+        return out.str();
+    }
+
 private:
     template <LogicalType LType>
     StatusOr<ColumnPtr> evaluate_internal(ExprContext* context, Chunk* ptr) {
@@ -210,6 +253,30 @@ public:
             return VectorizedMod::template evaluate<Type>(l, r);
         }
     }
+
+    bool is_compilable() const override { return Type != TYPE_LARGEINT && IRHelper::support_jit(Type); }
+
+    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
+                                         const std::vector<LLVMDatum>& datums) const override {
+        if constexpr (lt_is_decimal<Type>) {
+            // TODO(yueyang): Implement decimal arithmetic in LLVM IR.
+            return Status::NotSupported("JIT of decimal arithmetic not support");
+        } else {
+            using ArithmeticOp = ArithmeticBinaryOperator<ModOp, Type>;
+            using CppType = RunTimeCppType<Type>;
+            return ArithmeticOp::template generate_ir<CppType>(context, module, b, datums);
+        }
+    }
+
+    std::string debug_string() const override {
+        std::stringstream out;
+        auto expr_debug_string = Expr::debug_string();
+        out << "VectorizedArithmeticExpr ("
+            << "lhs=" << _children[0]->type().debug_string() << ", rhs=" << _children[1]->type().debug_string()
+            << ", result=" << this->type().debug_string() << ", lhs_is_constant=" << _children[0]->is_constant()
+            << ", rhs_is_constant=" << _children[1]->is_constant() << ", expr (" << expr_debug_string << ") )";
+        return out.str();
+    }
 };
 
 template <LogicalType Type>
@@ -220,6 +287,27 @@ public:
         ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
         using ArithmeticBitNot = ArithmeticUnaryOperator<BitNotOp, Type>;
         return VectorizedStrictUnaryFunction<ArithmeticBitNot>::template evaluate<Type>(l);
+    }
+
+    bool is_compilable() const override { return IRHelper::support_jit(Type); }
+
+    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
+                                         const std::vector<LLVMDatum>& datums) const override {
+        auto* l = datums[0].value;
+
+        using ArithmeticBitNot = ArithmeticUnaryOperator<BitNotOp, Type>;
+        LLVMDatum datum(b);
+        datum.value = ArithmeticBitNot::generate_ir(b, l);
+        return datum;
+    }
+
+    std::string debug_string() const override {
+        std::stringstream out;
+        auto expr_debug_string = Expr::debug_string();
+        out << "VectorizedArithmeticExpr ("
+            << "lhs=" << _children[0]->type().debug_string() << ", result=" << this->type().debug_string()
+            << ", lhs_is_constant=" << _children[0]->is_constant() << ", expr (" << expr_debug_string << ") )";
+        return out.str();
     }
 };
 
@@ -233,6 +321,27 @@ public:
 
         using ArithmeticOp = ArithmeticBinaryOperator<OP, Type>;
         return VectorizedStrictBinaryFunction<ArithmeticOp>::template evaluate<Type, TYPE_BIGINT, Type>(l, r);
+    }
+
+    bool is_compilable() const override { return IRHelper::support_jit(Type); }
+
+    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
+                                         const std::vector<LLVMDatum>& datums) const override {
+        using ArithmeticOp = ArithmeticBinaryOperator<OP, Type>;
+        using CppType = RunTimeCppType<Type>;
+        // TODO(Yueyang): handle TYPE_BIGINT.
+        return ArithmeticOp::template generate_ir<CppType, RunTimeCppType<TYPE_BIGINT>, CppType>(context, module, b,
+                                                                                                 datums);
+    }
+
+    std::string debug_string() const override {
+        std::stringstream out;
+        auto expr_debug_string = Expr::debug_string();
+        out << "VectorizedArithmeticExpr ("
+            << "lhs=" << _children[0]->type().debug_string() << ", rhs=" << _children[1]->type().debug_string()
+            << ", result=" << this->type().debug_string() << ", lhs_is_constant=" << _children[0]->is_constant()
+            << ", rhs_is_constant=" << _children[1]->is_constant() << ", expr (" << expr_debug_string << ") )";
+        return out.str();
     }
 };
 
@@ -305,7 +414,6 @@ Expr* VectorizedArithmeticExprFactory::from_thrift(const starrocks::TExprNode& n
         SWITCH_INT_TYPE(BitOrOp);
     case TExprOpcode::BITXOR:
         SWITCH_INT_TYPE(BitXorOp);
-
 #undef CASE_FN
 
 #define CASE_FN(TYPE, OP) return new VectorizedDivArithmeticExpr<TYPE, OP>(node);

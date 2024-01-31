@@ -118,4 +118,8 @@ public abstract class ScalarOperatorVisitor<R, C> {
     public R visitDictQueryOperator(DictQueryOperator operator, C context) {
         return visit(operator, context);
     }
+
+    public R visitDictionaryGetOperator(DictionaryGetOperator operator, C context) {
+        return visit(operator, context);
+    }
 }

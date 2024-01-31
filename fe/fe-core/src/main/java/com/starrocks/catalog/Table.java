@@ -118,7 +118,11 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         @SerializedName("PAIMON")
         PAIMON,
         @SerializedName("HIVE_VIEW")
-        HIVE_VIEW;
+        HIVE_VIEW,
+        @SerializedName("ODPS")
+        ODPS,
+        @SerializedName("BLACKHOLE")
+        BLACKHOLE;
 
         public static String serialize(TableType type) {
             if (type == CLOUD_NATIVE) {
@@ -255,7 +259,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
     }
 
     public String getCatalogName() {
-        return "default";
+        return InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
     }
 
     public String getName() {
@@ -290,12 +294,16 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return type == TableType.MATERIALIZED_VIEW;
     }
 
-    public boolean isView() {
+    public boolean isOlapView() {
         return type == TableType.VIEW;
     }
 
     public boolean isHiveView() {
         return type == TableType.HIVE_VIEW;
+    }
+
+    public boolean isView() {
+        return isOlapView() || isHiveView();
     }
 
     public boolean isOlapTableOrMaterializedView() {
@@ -350,12 +358,20 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return type == TableType.PAIMON;
     }
 
+    public boolean isOdpsTable() {
+        return type == TableType.ODPS;
+    }
+
     public boolean isJDBCTable() {
         return type == TableType.JDBC;
     }
 
     public boolean isTableFunctionTable() {
         return type == TableType.TABLE_FUNCTION;
+    }
+
+    public boolean isBlackHoleTable() {
+        return type == TableType.BLACKHOLE;
     }
 
     // for create table
@@ -457,6 +473,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
             table = LakeMaterializedView.read(in);
             table.setTypeRead(true);
             return table;
+        } else if (type == TableType.ODPS) {
+            table = new OdpsTable();
         } else {
             throw new IOException("Unknown table type: " + type.name());
         }
@@ -544,6 +562,9 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
     }
 
     public Partition getPartition(String partitionName) {
+        return null;
+    }
+    public Partition getPartition(String partitionName, boolean isTempPartition) {
         return null;
     }
 
@@ -650,7 +671,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
             return false;
         }
 
-        ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
+        ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         if (colocateIndex.isColocateTable(getId())) {
             boolean isGroupUnstable = colocateIndex.isGroupUnstable(colocateIndex.getGroup(getId()));
             if (!isLocalBalance || isGroupUnstable) {
@@ -756,6 +777,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return false;
     }
 
+    public boolean supportPreCollectMetadata() {
+        return false;
+    }
+
     public boolean hasUniqueConstraints() {
         List<UniqueConstraint> uniqueConstraint = getUniqueConstraints();
         return uniqueConstraint != null;
@@ -775,6 +800,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     public List<ForeignKeyConstraint> getForeignKeyConstraints() {
         return this.foreignKeyConstraints;
+    }
+
+    public boolean hasForeignKeyConstraints() {
+        return this.foreignKeyConstraints != null && !this.foreignKeyConstraints.isEmpty();
     }
 
     public synchronized List<Long> allocatePartitionIdByKey(List<PartitionKey> keys) {

@@ -249,7 +249,8 @@ Status SpillableHashJoinProbeOperator::_load_partition_build_side(workgroup::Yie
     auto builder = _builders[idx];
     bool finish = false;
     int64_t hash_table_mem_usage = builder->hash_table_mem_usage();
-    ctx.total_yield_point_cnt = 1;
+    enum SpillLoadPartitionStage { BEGIN = 0, FINISH = 1 };
+    ctx.total_yield_point_cnt = FINISH;
     auto wg = ctx.wg;
     int64_t time_spent_ns = 0;
     while (!finish && !_is_finished) {

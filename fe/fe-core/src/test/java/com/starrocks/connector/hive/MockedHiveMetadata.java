@@ -347,6 +347,13 @@ public class MockedHiveMetadata implements ConnectorMetadata {
                                   "(select * from tpch.customer)", "VIRTUAL_VIEW");
         HiveView view3 = HiveMetastoreApiConverter.toHiveView(hmsView3, MOCKED_HIVE_CATALOG_NAME);
         mockTables.put(hmsView3.getTableName(), new HiveTableInfo(view3));
+        // mock trino view which do not have db name
+        Table hmsView4 =
+                new Table("customer_view_without_db", "tpch", null, 0, 0, 0, sd, Lists.newArrayList(), Maps.newHashMap(), null,
+                        "select c_custkey,c_name, c_address, c_nationkey, c_phone, c_mktsegment, c_comment from customer",
+                        "VIRTUAL_VIEW");
+        HiveView view4 = HiveMetastoreApiConverter.toHiveView(hmsView4, MOCKED_HIVE_CATALOG_NAME);
+        mockTables.put(hmsView4.getTableName(), new HiveTableInfo(view4));
     }
 
     private static void mockSubfieldTable() {
@@ -1092,7 +1099,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
                         "", false, -1, null, Lists.newArrayList(), Lists.newArrayList(),
                         Maps.newHashMap());
         Table lineItemPar = new Table("single_partition_table", MOCKED_DATACACHE_DB, null, 0, 0, 0, sd,
-                ImmutableList.of(new FieldSchema("l_shipdate", "Date", null)), Maps.newHashMap(),
+                ImmutableList.of(new FieldSchema("l_shipdate", "string", null)), Maps.newHashMap(),
                 null, null, "EXTERNAL_TABLE");
 
         Column partitionColumn1 = new Column("l_shipdate", Type.DATE);

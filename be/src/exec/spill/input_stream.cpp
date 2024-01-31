@@ -30,14 +30,13 @@ namespace starrocks::spill {
 
 static const int chunk_buffer_max_size = 2;
 
-Status YieldableRestoreTask::do_read(workgroup::YieldContext& ctx, SerdeContext& context, int* yield) {
-    int64_t time_spent_ns = 0;
+Status YieldableRestoreTask::do_read(workgroup::YieldContext& ctx, SerdeContext& context) {
     size_t num_eos = 0;
     ctx.total_yield_point_cnt = _sub_stream.size();
     auto wg = ctx.wg;
     while (ctx.yield_point < ctx.total_yield_point_cnt) {
         {
-            SCOPED_RAW_TIMER(&time_spent_ns);
+            SCOPED_RAW_TIMER(&ctx.time_spent_ns);
             size_t i = ctx.yield_point++;
             if (!_sub_stream[i]->eof()) {
                 DCHECK(_sub_stream[i]->enable_prefetch());
@@ -49,7 +48,7 @@ Status YieldableRestoreTask::do_read(workgroup::YieldContext& ctx, SerdeContext&
             num_eos += _sub_stream[i]->eof();
         }
 
-        BREAK_IF_YIELD(wg, yield, time_spent_ns);
+        BREAK_IF_YIELD(wg, &ctx.need_yield, ctx.time_spent_ns);
     }
 
     if (num_eos == _sub_stream.size()) {
@@ -251,9 +250,11 @@ private:
     std::shared_ptr<BlockReader> _current_reader;
     size_t _current_idx = 0;
     SerdePtr _serde;
+    DECLARE_RACE_DETECTOR(detect_get_next)
 };
 
 StatusOr<ChunkUniquePtr> UnorderedInputStream::get_next(SerdeContext& ctx) {
+    RACE_DETECT(detect_get_next, var1);
     if (_current_idx >= _input_blocks.size()) {
         return Status::EndOfFile("end of reading spilled UnorderedInputStream");
     }

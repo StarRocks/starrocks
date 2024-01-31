@@ -135,6 +135,8 @@ public:
     // for determining whether the rowset is in column partial update is whether it contains the .upt files
     bool is_column_mode_partial_update() const { return _rowset_meta_pb->num_update_files() > 0; }
 
+    const RowsetTxnMetaPB& txn_meta() const { return _rowset_meta_pb->txn_meta(); }
+
     void clear_txn_meta() { _rowset_meta_pb->clear_txn_meta(); }
 
     bool empty() const { return _rowset_meta_pb->empty(); }
@@ -152,14 +154,6 @@ public:
     void set_num_segments(int64_t num_segments) { _rowset_meta_pb->set_num_segments(num_segments); }
 
     void set_empty(bool empty) { _rowset_meta_pb->set_empty(empty); }
-
-    void to_rowset_pb(RowsetMetaPB* rs_meta_pb) const { *rs_meta_pb = *_rowset_meta_pb; }
-
-    RowsetMetaPB to_rowset_pb() const {
-        RowsetMetaPB meta_pb;
-        to_rowset_pb(&meta_pb);
-        return meta_pb;
-    }
 
     bool is_singleton_delta() const {
         return has_version() && _rowset_meta_pb->start_version() == _rowset_meta_pb->end_version();
@@ -212,23 +206,56 @@ public:
         return _rowset_meta_pb->set_segments_overlap_pb(overlap);
     }
 
+    void set_max_compact_input_rowset_id(uint32_t max_compact_input_rowset_id) {
+        _rowset_meta_pb->set_max_compact_input_rowset_id(max_compact_input_rowset_id);
+    }
+
+    uint32_t max_compact_input_rowset_id() const { return _rowset_meta_pb->max_compact_input_rowset_id(); }
+    bool has_max_compact_input_rowset_id() const { return _rowset_meta_pb->has_max_compact_input_rowset_id(); }
+
     void set_rowset_seg_id(uint32_t id) { _rowset_meta_pb->set_rowset_seg_id(id); }
 
     uint32_t get_num_delete_files() const { return _rowset_meta_pb->num_delete_files(); }
 
     uint32_t get_num_update_files() const { return _rowset_meta_pb->num_update_files(); }
 
-    const RowsetMetaPB& get_meta_pb() const { return *_rowset_meta_pb; }
+    // rowset_meta_pb keep `tablet_schema_pb` right now and it will use more memory.
+    // But it is not necessary always hold tablet schema pb in memory. The access frequency of
+    // tablet_schema_pb is very low and it could be generated from `_schema` temporarily.
+    // So we will remove `tablet_scheam_pb` from rowset_meta_pb in memory. But when we persistent
+    // rowset_meta_pb to disk, we will generated a new full rowset_meta_pb.
+    const RowsetMetaPB& get_meta_pb_without_schema() const { return *_rowset_meta_pb; }
+
+    // This function will copy a new rowset_meta_pb with tablet_schema_pb.
+    //
+    // Most of the time when this function is called, it's during the persistence of `rowset_meta` or create a
+    // new rowset.
+    // Before calling it, please confirm if you need a complete `rowset_meta` that includes `tablet_schema_pb`.
+    // If not, perhaps `get_meta_pb_without_schema()` is enough.
+    void get_full_meta_pb(RowsetMetaPB* rs_meta_pb) const {
+        *rs_meta_pb = *_rowset_meta_pb;
+        if (_schema != nullptr) {
+            rs_meta_pb->clear_tablet_schema();
+            TabletSchemaPB* ts_pb = rs_meta_pb->mutable_tablet_schema();
+            _schema->to_schema_pb(ts_pb);
+        }
+    }
+
+    void get_tablet_schema_pb(TabletSchemaPB* tablet_schema_pb) {
+        DCHECK(_schema != nullptr);
+        _schema->to_schema_pb(tablet_schema_pb);
+    }
 
     void set_tablet_schema(const TabletSchemaCSPtr& tablet_schema_ptr) {
         _rowset_meta_pb->clear_tablet_schema();
-        TabletSchemaPB* ts_pb = _rowset_meta_pb->mutable_tablet_schema();
-        tablet_schema_ptr->to_schema_pb(ts_pb);
-        if (ts_pb->has_id() && ts_pb->id() != TabletSchema::invalid_id()) {
-            _schema = GlobalTabletSchemaMap::Instance()->emplace(*ts_pb).first;
+        TabletSchemaPB ts_pb;
+        tablet_schema_ptr->to_schema_pb(&ts_pb);
+        if (ts_pb.has_id() && ts_pb.id() != TabletSchema::invalid_id()) {
+            _schema = GlobalTabletSchemaMap::Instance()->emplace(ts_pb).first;
         } else {
             _schema = TabletSchemaCSPtr(TabletSchema::copy(tablet_schema_ptr));
         }
+        _has_tablet_schema_pb = true;
     }
 
     const TabletSchemaCSPtr tablet_schema() { return _schema; }
@@ -238,6 +265,8 @@ public:
     }
 
     bool partial_schema_change() { return _rowset_meta_pb->partial_schema_change(); }
+
+    bool has_tablet_schema_pb() { return _has_tablet_schema_pb; }
 
 private:
     bool _deserialize_from_pb(std::string_view value) {
@@ -259,6 +288,12 @@ private:
                 _schema = TabletSchema::create(_rowset_meta_pb->tablet_schema());
             }
         }
+        _has_tablet_schema_pb = _rowset_meta_pb->has_tablet_schema();
+
+        // clear does not release memory but only set it to default value, so we need to copy a new _rowset_meta_pb
+        _rowset_meta_pb->clear_tablet_schema();
+        std::unique_ptr<RowsetMetaPB> ptr = std::make_unique<RowsetMetaPB>(*_rowset_meta_pb);
+        _rowset_meta_pb = std::move(ptr);
     }
 
     int64_t _calc_mem_usage() const {
@@ -287,6 +322,7 @@ private:
     RowsetId _rowset_id;
     bool _is_removed_from_rowset_meta = false;
     TabletSchemaCSPtr _schema = nullptr;
+    bool _has_tablet_schema_pb = false;
 };
 
 } // namespace starrocks

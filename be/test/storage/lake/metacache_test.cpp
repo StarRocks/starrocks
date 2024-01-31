@@ -40,7 +40,7 @@ using namespace starrocks;
 class LakeMetacacheTest : public TestBase {
 public:
     LakeMetacacheTest() : TestBase(kTestDirectory) {
-        _tablet_metadata = std::make_unique<TabletMetadata>();
+        _tablet_metadata = std::make_shared<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
         //
@@ -84,7 +84,7 @@ public:
 protected:
     constexpr static const char* const kTestDirectory = "test_lake_metadata_cache";
 
-    std::unique_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
 };
@@ -208,7 +208,7 @@ TEST_F(LakeMetacacheTest, test_segment_cache) {
         rowset->set_id(1);
         auto* segs = rowset->mutable_segments();
         for (auto& file : writer->files()) {
-            segs->Add(std::move(file));
+            segs->Add(std::move(file.path));
         }
 
         writer->close();
@@ -220,7 +220,7 @@ TEST_F(LakeMetacacheTest, test_segment_cache) {
     // no segment
     auto sz0 = metacache->memory_usage();
 
-    ASSIGN_OR_ABORT(auto reader, tablet.new_reader(2, *_schema));
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
     ASSERT_OK(reader->prepare());
     TabletReaderParams params;
     ASSERT_OK(reader->open(params));
@@ -283,7 +283,7 @@ TEST_F(LakeMetacacheTest, test_cache_segment_if_absent) {
     std::string segment_path("test_cache_segment_if_absent.dat");
 
     EXPECT_EQ(nullptr, metacache->lookup_segment(segment_path));
-    auto seg1 = std::make_shared<Segment>(fs, segment_path, segment_id, schema, _tablet_mgr.get());
+    auto seg1 = std::make_shared<Segment>(fs, FileInfo{segment_path}, segment_id, schema, _tablet_mgr.get());
 
     {
         // cache seg1, since there is no segment cached before, cache_segment_if_absent will cache the seg1 and return it.
@@ -293,7 +293,7 @@ TEST_F(LakeMetacacheTest, test_cache_segment_if_absent) {
         EXPECT_EQ(seg1, metacache->lookup_segment(segment_path));
     }
 
-    auto seg2 = std::make_shared<Segment>(fs, segment_path, segment_id, schema, _tablet_mgr.get());
+    auto seg2 = std::make_shared<Segment>(fs, FileInfo{segment_path}, segment_id, schema, _tablet_mgr.get());
     {
         auto seg = metacache->cache_segment_if_absent(segment_path, seg2);
         EXPECT_TRUE(seg != nullptr);
@@ -342,7 +342,7 @@ TEST_F(LakeMetacacheTest, test_cache_segment_if_absent_concurrency) {
     for (int i = 0; i < kConcurrency; ++i) {
         TestCacheSegmentConcurrency ctx;
         ctx.pending_count = &pending_count;
-        ctx.segment = std::make_shared<Segment>(fs, segment_path, segment_id, schema, _tablet_mgr.get());
+        ctx.segment = std::make_shared<Segment>(fs, FileInfo{segment_path}, segment_id, schema, _tablet_mgr.get());
         ctx.mutex = &m;
         ctx.cv = &cv;
         ctx.cache = metacache;

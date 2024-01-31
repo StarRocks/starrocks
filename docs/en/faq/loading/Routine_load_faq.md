@@ -25,7 +25,7 @@ Parameter description:
 - `desired_concurrent_number`: the desired load task parallelism for a Routine Load job. The default value is `3`. You can set a higher value for this parameter to increase the actual load task parallelism.
   - If you have not created a Routine Load job, you need to set this parameter when using [CREATE ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md) to create a Routine Load job.
   - If you have already created a Routine Load job, you need to use [ALTER ROUTINE LOAD](../../sql-reference/sql-statements/data-manipulation/ALTER_ROUTINE_LOAD.md) to modify this parameter.
-- `max_routine_load_task_concurrent_num`: the default maximum task parallelism for a Routine Load job. The default value is `5`. This parameter is a an FE dynamic parameter. For more information and the configuration method, see [Parameter configuration](../../administration/Configuration.md#loading-and-unloading).
+- `max_routine_load_task_concurrent_num`: the default maximum task parallelism for a Routine Load job. The default value is `5`. This parameter is a an FE dynamic parameter. For more information and the configuration method, see [Parameter configuration](../../administration/FE_configuration.md#loading-and-unloading).
 
 Therefore, when the number of partitions to be consumed and the number of BE nodes alive are greater than the other two parameters, you can increase the values of `desired_concurrent_number` and `max_routine_load_task_concurrent_num` parameters to increase the actual load task parallelism.
 
@@ -39,7 +39,7 @@ For more parameter descriptions, see [CREATE ROUTINE LOAD](../../sql-reference/s
 >
 > This method may cause delay in data loading.
 
-The upper limit of the number of messages that a Routine Load task can consume is determined by either the parameter `max_routine_load_batch_size` which means the maximum number of messages that a load task can consume or the parameter `routine_load_task_consume_second` which means the maximum duration of message consumption. Once an load task consumes enough data that meets either requirement, the consumption is complete. These two parameters are FE dynamic parameters. For more information and the configuration method, see [Parameter configuration](../../administration/Configuration.md#loading-and-unloading).
+The upper limit of the number of messages that a Routine Load task can consume is determined by either the parameter `max_routine_load_batch_size` which means the maximum number of messages that a load task can consume or the parameter `routine_load_task_consume_second` which means the maximum duration of message consumption. Once an load task consumes enough data that meets either requirement, the consumption is complete. These two parameters are FE dynamic parameters. For more information and the configuration method, see [Parameter configuration](../../administration/FE_configuration.md#loading-and-unloading).
 
 You can analyze which parameter determines the upper limit of the amount of data consumed by a load task by viewing the log in **be/log/be.INFO**. By increasing that parameter, you can increase the amount of data consumed by a load task.
 

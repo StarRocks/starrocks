@@ -43,7 +43,7 @@ Status OlapScanPrepareOperator::prepare(RuntimeState* state) {
     auto* capture_tablet_rowsets_timer = ADD_TIMER(_unique_metrics, "CaptureTabletRowsetsTime");
     {
         SCOPED_TIMER(capture_tablet_rowsets_timer);
-        RETURN_IF_ERROR(_ctx->capture_tablet_rowsets(_morsel_queue->olap_scan_ranges()));
+        RETURN_IF_ERROR(_ctx->capture_tablet_rowsets(_morsel_queue->prepare_olap_scan_ranges()));
     }
 
     return Status::OK();
@@ -94,6 +94,7 @@ Status OlapScanPrepareOperatorFactory::prepare(RuntimeState* state) {
 
     DictOptimizeParser::rewrite_descriptor(state, conjunct_ctxs, tolap_scan_node.dict_string_id_to_int_ids,
                                            &(tuple_desc->decoded_slots()));
+    DictOptimizeParser::disable_open_rewrite(&conjunct_ctxs);
 
     RETURN_IF_ERROR(Expr::prepare(conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::open(conjunct_ctxs, state));

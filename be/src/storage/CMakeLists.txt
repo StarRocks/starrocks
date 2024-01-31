@@ -47,6 +47,9 @@ add_library(Storage STATIC
     primary_index.cpp
     primary_key_encoder.cpp
     protobuf_file.cpp
+    replication_txn_manager.cpp
+    replication_utils.cpp
+    segment_stream_converter.cpp
     rowset_update_state.cpp
     rowset_column_update_state.cpp
     update_compaction_state.cpp
@@ -60,6 +63,7 @@ add_library(Storage STATIC
     tablet_manager.cpp
     tablet_meta.cpp
     tablet_meta_manager.cpp
+    tablet_index.cpp
     tablet_schema.cpp
     tablet_schema_map.cpp
     tablet_updates.cpp
@@ -76,6 +80,7 @@ add_library(Storage STATIC
     rowset/bitshuffle_page.cpp
     rowset/bitshuffle_wrapper.cpp
     rowset/column_iterator.cpp
+    rowset/json_column_iterator.cpp
     rowset/column_reader.cpp
     rowset/column_writer.cpp
     rowset/column_decoder.cpp
@@ -94,6 +99,7 @@ add_library(Storage STATIC
     rowset/ordinal_page_index.cpp
     rowset/page_io.cpp
     rowset/binary_dict_page.cpp
+    rowset/dict_page.cpp
     rowset/binary_prefix_page.cpp
     rowset/segment.cpp
     rowset/segment_writer.cpp
@@ -171,6 +177,8 @@ add_library(Storage STATIC
     size_tiered_compaction_policy.cpp
     cluster_id_mgr.cpp
     push_utils.cpp
+    primary_key_recover.cpp
+    local_primary_key_recover.cpp
     lake/async_delta_writer.cpp
     lake/compaction_policy.cpp
     lake/compaction_scheduler.cpp
@@ -180,6 +188,7 @@ add_library(Storage STATIC
     lake/vacuum.cpp
     lake/general_tablet_writer.cpp
     lake/pk_tablet_writer.cpp
+    lake/replication_txn_manager.cpp
     lake/rowset.cpp
     lake/schema_change.cpp
     lake/starlet_location_provider.cpp
@@ -196,6 +205,7 @@ add_library(Storage STATIC
     lake/versioned_tablet.cpp
     lake/vertical_compaction_task.cpp
     lake/metacache.cpp
+    lake/lake_primary_key_recover.cpp
     binlog_util.cpp
     binlog_file_writer.cpp
     binlog_file_reader.cpp
@@ -206,5 +216,10 @@ add_library(Storage STATIC
     lake/txn_log_applier.cpp
     lake/lake_local_persistent_index.cpp
     persistent_index_compaction_manager.cpp
+    persistent_index_tablet_loader.cpp
+    lake/lake_local_persistent_index_tablet_loader.cpp
     lake/lake_persistent_index.cpp
-    lake/persistent_index_memtable.cpp)
+    lake/persistent_index_memtable.cpp
+    lake/local_pk_index_manager.cpp
+    primary_key_dump.cpp
+    dictionary_cache_manager.cpp)

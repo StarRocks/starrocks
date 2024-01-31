@@ -18,11 +18,12 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.statistics.TableStatistic;
+import org.apache.commons.collections4.MapUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -51,6 +52,9 @@ public class BasicStatsMeta implements Writable {
     @SerializedName("properties")
     private Map<String, String> properties;
 
+    // The old semantics indicated the increment of ingestion tasks after last statistical collect job.
+    // Since manually collecting sampled job would reset it to zero, affecting the incremental information,
+    // it is now changed to record the total number of rows in the table.
     @SerializedName("updateRows")
     private long updateRows;
 
@@ -58,13 +62,21 @@ public class BasicStatsMeta implements Writable {
                           StatsConstants.AnalyzeType type,
                           LocalDateTime updateTime,
                           Map<String, String> properties) {
+        this(dbId, tableId, columns, type, updateTime, properties, 0);
+    }
+
+    public BasicStatsMeta(long dbId, long tableId, List<String> columns,
+                          StatsConstants.AnalyzeType type,
+                          LocalDateTime updateTime,
+                          Map<String, String> properties,
+                          long updateRows) {
         this.dbId = dbId;
         this.tableId = tableId;
         this.columns = columns;
         this.type = type;
         this.updateTime = updateTime;
         this.properties = properties;
-        this.updateRows = 0;
+        this.updateRows = updateRows;
     }
 
     @Override
@@ -111,29 +123,25 @@ public class BasicStatsMeta implements Writable {
         Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
         OlapTable table = (OlapTable) database.getTable(tableId);
         long totalPartitionCount = table.getPartitions().size();
-        long updatePartitionRowCount = 0;
-        long updatePartitionCount = 0;
+
+        long tableRowCount = 1L;
+        long cachedTableRowCount = 1L;
+        long updatePartitionRowCount = 0L;
+        long updatePartitionCount = 0L;
         for (Partition partition : table.getPartitions()) {
-            if (!partition.hasData()) {
-                // skip init empty partition
-                continue;
+            tableRowCount += partition.getRowCount();
+            TableStatistic tableStatistic = GlobalStateMgr.getCurrentState().getStatisticStorage()
+                    .getTableStatistic(table.getId(), partition.getId());
+            if (tableStatistic != null) {
+                cachedTableRowCount += tableStatistic.getRowCount();
             }
+            LocalDateTime loadTime = StatisticUtils.getPartitionLastUpdateTime(partition);
 
-            LocalDateTime loadTimes = StatisticUtils.getPartitionLastUpdateTime(partition);
-            if (updateTime.isAfter(loadTimes)) {
-                continue;
+            if (partition.hasData() && !isUpdatedAfterLoad(loadTime)) {
+                updatePartitionCount++;
             }
-
-            updatePartitionCount++;
-            updatePartitionRowCount += partition.getRowCount();
         }
-
-        // promise new partitions row count
-        LocalDateTime updateRowCountTimes = GlobalStateMgr.getCurrentTabletStatMgr().getLastWorkTimestamp();
-        if (StatisticUtils.getTableLastUpdateTime(table).plusSeconds(Config.tablet_stat_update_interval_second)
-                .isAfter(updateRowCountTimes)) {
-            updatePartitionRowCount += updateRows;
-        }
+        updatePartitionRowCount = Math.max(1, Math.max(tableRowCount, updateRows) - cachedTableRowCount);
 
         double updateRatio;
         // 1. If none updated partitions, health is 1
@@ -155,7 +163,26 @@ public class BasicStatsMeta implements Writable {
         return updateRows;
     }
 
+    public void setUpdateRows(Long updateRows) {
+        this.updateRows = updateRows;
+    }
+
     public void increaseUpdateRows(Long delta) {
         updateRows += delta;
+    }
+
+    public boolean isInitJobMeta() {
+        return MapUtils.isNotEmpty(properties) && properties.containsKey(StatsConstants.INIT_SAMPLE_STATS_JOB);
+    }
+
+    public boolean isUpdatedAfterLoad(LocalDateTime loadTime) {
+        if (isInitJobMeta()) {
+            // We update the updateTime of a partition then we may do an init sample collect job, these auto init
+            // sample may return a wrong healthy value which may block the auto full collect job.
+            // so we return false to regard it like a manual collect job before load.
+            return false;
+        } else {
+            return updateTime.isAfter(loadTime);
+        }
     }
 }

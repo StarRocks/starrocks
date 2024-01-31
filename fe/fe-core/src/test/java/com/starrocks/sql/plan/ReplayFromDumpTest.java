@@ -63,7 +63,8 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 getCostPlanFragment(getDumpInfoFromFile("query_dump/join_eliminate_nulls"), sessionVariable);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("11:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
-                "  |  other join predicates: CASE 174: type WHEN '1' THEN concat('ocms_', 90: name) = 'ocms_fengyang56' " +
+                "  |  other join predicates: CASE 174: type WHEN '1' THEN concat('ocms_', 90: name) = " +
+                "'ocms_fengyang56' " +
                 "WHEN '0' THEN TRUE ELSE FALSE END\n" +
                 "  |  limit: 10"));
         Assert.assertTrue(replayPair.second, replayPair.second.contains("  4:HASH JOIN\n" +
@@ -117,7 +118,8 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         // Check the size of the left and right tables
         Assert.assertTrue(replayPair.second, replayPair.second.contains("51:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
-                "  |  other join predicates: cast([208: d_month_seq, INT, true] as BIGINT) <= [291: expr, BIGINT, true]\n" +
+                "  |  other join predicates: cast([208: d_month_seq, INT, true] as BIGINT) <= [291: expr, BIGINT, " +
+                "true]\n" +
                 "  |  cardinality: 18262\n" +
                 "  |  column statistics: \n" +
                 "  |  * d_date_sk-->[2415022.0, 2488070.0, 0.0, 4.0, 18262.25] ESTIMATE\n" +
@@ -200,7 +202,8 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         // check ANTI JOIN cardinality is not 0
         Assert.assertTrue(replayPair.second, replayPair.second.contains("21:HASH JOIN\n" +
                 "  |    |  join op: RIGHT ANTI JOIN (PARTITIONED)\n" +
-                "  |    |  equal join conjunct: [138: wr_order_number, INT, false] = [2: ws_order_number, INT, false]\n" +
+                "  |    |  equal join conjunct: [138: wr_order_number, INT, false] = [2: ws_order_number, INT, " +
+                "false]\n" +
                 "  |    |  build runtime filters:\n" +
                 "  |    |  - filter_id = 3, build_expr = (2: ws_order_number), remote = true\n" +
                 "  |    |  output columns: 2, 17, 29, 34\n" +
@@ -371,8 +374,8 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/select_sbuquery_with_multi_join"), null,
                         TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  20:Project\n" +
-                "  |  <slot 33> : bitmap_and(21: bitmap_union, 29: bitmap_union)\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("20:Project\n" +
+                "  |  <slot 31> : bitmap_and(20: bitmap_agg, 27: bitmap_agg)\n" +
                 "  |  \n" +
                 "  19:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
@@ -381,7 +384,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |----18:EXCHANGE\n" +
                 "  |    \n" +
                 "  11:Project\n" +
-                "  |  <slot 21> : 18: bitmap_union"));
+                "  |  <slot 20> : 17: bitmap_agg"));
     }
 
     @Test
@@ -397,9 +400,9 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     public void testInsertWithView() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/insert_view"), null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains(" 2:Project\n" +
+        Assert.assertTrue(replayPair.second, UtFrameUtils.matchPlanWithoutId(" 2:Project\n" +
                 "  |  <slot 2> : 2: t2_c2\n" +
-                "  |  <slot 11> : CAST(CAST(1: t2_c1 AS BIGINT) + 1 AS INT)"));
+                "  |  <slot 11> : CAST(CAST(1: t2_c1 AS BIGINT) + 1 AS INT)", replayPair.second));
         Assert.assertTrue(replayPair.second, replayPair.second.contains("OLAP TABLE SINK"));
     }
 
@@ -457,7 +460,8 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: if(19: c_0_0 != 1: c_0_0, 4: c_0_3, 20: c_0_3) = '1969-12-28', " +
                 "CASE WHEN (21: countRows IS NULL) OR (21: countRows = 0) THEN FALSE WHEN 1: c_0_0 IS NULL THEN NULL " +
-                "WHEN 16: c_0_0 IS NOT NULL THEN TRUE WHEN 22: countNotNulls < 21: countRows THEN NULL ELSE FALSE END IS NULL"));
+                "WHEN 16: c_0_0 IS NOT NULL THEN TRUE WHEN 22: countNotNulls < 21: countRows THEN NULL ELSE FALSE END" +
+                " IS NULL"));
         Assert.assertTrue(replayPair.second, replayPair.second.contains("  20:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (PARTITIONED)\n" +
                 "  |  colocate: false, reason: \n" +
@@ -469,14 +473,14 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     public void testGatherWindowCTE2() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/gather_window_cte"), null, TExplainLevel.COSTS);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  0:UNION\n" +
+        Assert.assertTrue(replayPair.second, UtFrameUtils.matchPlanWithoutId("  0:UNION\n" +
                 "  |  output exprs:\n" +
                 "  |      [16, DATE, false] | [17, BIGINT, true] | [18, DECIMAL128(27,19), true]\n" +
                 "  |  child exprs:\n" +
                 "  |      [2: c_0_0, DATE, false] | [7: row_number(), BIGINT, true] " +
                 "| [8: last_value(4: c_0_2), DECIMAL128(27,19), true]\n" +
                 "  |      [9: c_0_0, DATE, false] | [14: row_number(), BIGINT, true] " +
-                "| [15: last_value(11: c_0_2), DECIMAL128(27,19), true]"));
+                "| [15: last_value(11: c_0_2), DECIMAL128(27,19), true]", replayPair.second));
     }
 
     @Test
@@ -551,10 +555,10 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/pushdown_distinct_agg_below_window"), null,
                         TExplainLevel.COSTS);
-        Assert.assertTrue(replayPair.second.contains("  1:AGGREGATE (update finalize)\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  1:AGGREGATE (update finalize)\n" +
                 "  |  aggregate: sum[([3: gross, DECIMAL128(10,2), false]); args: DECIMAL128; " +
                 "result: DECIMAL128(38,2); args nullable: false; result nullable: true]\n" +
-                "  |  group by: [2: trans_date, DATE, false], [1: country, VARCHAR, true]\n" +
+                "  |  group by: [1: country, VARCHAR, true], [2: trans_date, DATE, false]\n" +
                 "  |  cardinality: 49070\n"));
     }
 
@@ -648,20 +652,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 52: n_regionkey = 58: r_regionkey"));
         FeConstants.isReplayFromQueryDump = false;
-    }
-
-    @Test
-    public void testTPCH11() throws Exception {
-        try {
-            FeConstants.USE_MOCK_DICT_MANAGER = true;
-            Pair<QueryDumpInfo, String> replayPair =
-                    getCostPlanFragment(getDumpInfoFromFile("query_dump/tpch_query11_mv_rewrite"));
-            Assert.assertTrue(replayPair.second, replayPair.second.contains(
-                    "n_name,[<place-holder> = 'GERMANY'])\n" +
-                            "     dict_col=n_name"));
-        } finally {
-            FeConstants.USE_MOCK_DICT_MANAGER = false;
-        }
     }
 
     @Test
@@ -795,4 +785,24 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Assert.assertTrue(replayPair.second, replayPair.second.contains("0:OlapScanNode\n" +
                 "     table: lineorder_2, rollup: lineorder_2"));
     }
+
+    @Test
+    public void testPushDistinctAggDownWindow() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/pushdown_distinct_agg_below_window2"),
+                        null, TExplainLevel.NORMAL);
+        System.out.println(replayPair.second);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  3:ANALYTIC\n" +
+                "  |  functions: [, sum(5: sum), ]\n" +
+                "  |  partition by: 1: TIME\n" +
+                "  |  \n" +
+                "  2:SORT\n" +
+                "  |  order by: <slot 1> 1: TIME ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(2: NUM)\n" +
+                "  |  group by: 1: TIME"));
+    }
+
 }

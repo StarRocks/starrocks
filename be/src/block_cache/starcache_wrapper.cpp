@@ -33,6 +33,7 @@ Status StarCacheWrapper::init(const CacheOptions& options) {
     opt.enable_disk_checksum = options.enable_checksum;
     opt.max_concurrent_writes = options.max_concurrent_inserts;
     opt.enable_os_page_cache = !options.enable_direct_io;
+    opt.instance_name = "dla_cache";
     if (options.enable_cache_adaptor) {
         _cache_adaptor.reset(starcache::create_default_adaptor(options.skip_read_factor));
         opt.cache_adaptor = _cache_adaptor.get();
@@ -77,6 +78,9 @@ Status StarCacheWrapper::read_buffer(const std::string& key, size_t off, size_t 
         return to_status(_cache->read(key, off, size, &buffer->raw_buf(), nullptr));
     }
     starcache::ReadOptions opts;
+    if (_cache_adaptor) {
+        opts.use_adaptor = true;
+    }
     auto st = to_status(_cache->read(key, off, size, &buffer->raw_buf(), &opts));
     if (st.ok()) {
         options->stats.read_mem_bytes = opts.stats.read_mem_bytes;
@@ -102,10 +106,8 @@ Status StarCacheWrapper::remove(const std::string& key) {
     return Status::OK();
 }
 
-std::unordered_map<std::string, double> StarCacheWrapper::cache_stats() {
-    // TODO: fill some statistics information
-    std::unordered_map<std::string, double> stats;
-    return stats;
+const DataCacheMetrics StarCacheWrapper::cache_metrics(int level) {
+    return _cache->metrics(level);
 }
 
 void StarCacheWrapper::record_read_remote(size_t size, int64_t lateny_us) {

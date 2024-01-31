@@ -47,6 +47,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TTransactionStatus;
 import mockit.Mock;
@@ -272,6 +273,17 @@ public class DatabaseTransactionMgrTest {
     }
 
     @Test
+    public void testAbortTransactionWithAttachment() throws UserException {
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        long txnId1 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable1);
+        expectedEx.expect(UserException.class);
+        expectedEx.expectMessage("transaction not found");
+        TxnCommitAttachment txnCommitAttachment = new RLTaskTxnCommitAttachment();
+        masterDbTransMgr.abortTransaction(txnId1, "test abort transaction", txnCommitAttachment);
+    }
+
+    @Test
     public void testAbortTransaction() throws UserException {
         DatabaseTransactionMgr masterDbTransMgr =
                 masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
@@ -402,15 +414,37 @@ public class DatabaseTransactionMgrTest {
                 () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK));
         ExceptionChecker.expectThrowsNoException(
                 () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.LAKE_COMPACTION));
-        ExceptionChecker.expectThrows(BeginTransactionException.class,
+        ExceptionChecker.expectThrows(RunningTxnExceedException.class,
                 () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.BACKEND_STREAMING));
     }
 
+    @Test
     public void testGetReadyToPublishTxnListBatch() throws AnalysisException {
         DatabaseTransactionMgr masterDbTransMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
         List<TransactionStateBatch> stateBatchesList = masterDbTransMgr.getReadyToPublishTxnListBatch();
         assertEquals(1, stateBatchesList.size());
         assertEquals(3, stateBatchesList.get(0).size());
+
+        // Table was dropped before committing the txn 'testTxnLabel8'
+        masterDbTransMgr.getLabelTransactionState(GlobalStateMgrTestUtil.testTxnLable8)
+                .removeTable(GlobalStateMgrTestUtil.testTableId1);
+        stateBatchesList = masterDbTransMgr.getReadyToPublishTxnListBatch();
+        assertEquals(1, stateBatchesList.size());
+        assertEquals(2, stateBatchesList.get(0).size());
+
+        // Table was dropped before committing the txn 'testTxnLabel7'
+        masterDbTransMgr.getLabelTransactionState(GlobalStateMgrTestUtil.testTxnLable7)
+                .removeTable(GlobalStateMgrTestUtil.testTableId1);
+        stateBatchesList = masterDbTransMgr.getReadyToPublishTxnListBatch();
+        assertEquals(1, stateBatchesList.size());
+        assertEquals(1, stateBatchesList.get(0).size());
+
+        // Table was dropped before committing the txn 'testTxnLabel6'
+        masterDbTransMgr.getLabelTransactionState(GlobalStateMgrTestUtil.testTxnLable6)
+                .removeTable(GlobalStateMgrTestUtil.testTableId1);
+        stateBatchesList = masterDbTransMgr.getReadyToPublishTxnListBatch();
+        assertEquals(1, stateBatchesList.size());
+        assertEquals(1, stateBatchesList.get(0).size());
     }
 
     @Test
@@ -447,5 +481,33 @@ public class DatabaseTransactionMgrTest {
         FakeGlobalStateMgr.setGlobalStateMgr(slaveGlobalStateMgr);
         slaveTransMgr.replayUpsertTransactionStateBatch(stateBatch);
         assertEquals(4, masterDbTransMgr.getFinishedTxnNums());
+    }
+
+    @Test
+    public void testPublishVersionMissing() throws UserException {
+        TransactionIdGenerator idGenerator = masterTransMgr.getTransactionIDGenerator();
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+
+        // begin transaction
+        long transactionId1 = masterTransMgr
+                .beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                        Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                        GlobalStateMgrTestUtil.testTxnLable9,
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+
+        // commit a transaction
+        TabletCommitInfo tabletCommitInfo1 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
+                GlobalStateMgrTestUtil.testBackendId1);
+        TabletCommitInfo tabletCommitInfo2 = new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1,
+                GlobalStateMgrTestUtil.testBackendId2);
+        // skip replica 3
+        List<TabletCommitInfo> transTablets = Lists.newArrayList();
+        transTablets.add(tabletCommitInfo1);
+        transTablets.add(tabletCommitInfo2);
+        masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId1, transTablets,
+                Lists.newArrayList(), null);
+        masterTransMgr.finishTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId1, null);
     }
 }

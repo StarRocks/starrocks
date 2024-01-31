@@ -12,7 +12,7 @@ Routine Load 支持持续消费 Apache Kafka® 的消息并导入至 StarRocks �
 
 > **说明**
 >
-> - Routine Load 的应用场景、基本原理和基本操作，请参见 [从 Apache Kafka® 持续导入](../../../loading/RoutineLoad.md)。
+> - Routine Load 的应用场景、基本原理和基本操作，请参见 [使用 Routine Load 导入数据](../../../loading/RoutineLoad.md)。
 > - Routine Load 操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../account-management/GRANT.md) 给用户赋权。
 
 ## 语法
@@ -108,14 +108,15 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 
 | **参数**                  | **是否必选** | **说明**                                                     |
 | ------------------------- | ------------ | ------------------------------------------------------------ |
-| desired_concurrent_number | 否           | 单个 Routine Load 导入作业的**期望**任务并发度，表示期望一个导入作业最多被分成多少个任务并行执行。默认值为 `3`。 但是**实际**任务并行度由如下多个参数组成的公式决定，并且实际任务并行度的上限为 BE 节点的数量或者消费分区的数量。`min(alive_be_number, partition_number, desired_concurrent_number, max_routine_load_task_concurrent_num)`。<ul> <li>`alive_be_number`：存活的 BE 节点数量。</li><li>`partition_number`：消费分区数量。</li><li>`desired_concurrent_number`：单个Routine Load 导入作业的期望任务并发度。默认值为 `3`。</li><li>`max_routine_load_task_concurrent_num`：Routine Load 导入作业的默认最大任务并行度，默认值为 `5`。该参数为 [FE 动态参数](../../../administration/Configuration.md)。</li></ul> |
+| desired_concurrent_number | 否           | 单个 Routine Load 导入作业的**期望**任务并发度，表示期望一个导入作业最多被分成多少个任务并行执行。默认值为 `3`。 但是**实际**任务并行度由如下多个参数组成的公式决定，并且实际任务并行度的上限为 BE 节点的数量或者消费分区的数量。`min(alive_be_number, partition_number, desired_concurrent_number, max_routine_load_task_concurrent_num)`。<ul> <li>`alive_be_number`：存活的 BE 节点数量。</li><li>`partition_number`：消费分区数量。</li><li>`desired_concurrent_number`：单个Routine Load 导入作业的期望任务并发度。默认值为 `3`。</li><li>`max_routine_load_task_concurrent_num`：Routine Load 导入作业的默认最大任务并行度，默认值为 `5`。该参数为 [FE 动态参数](../../../administration/FE_configuration.md)。</li></ul> |
 | max_batch_interval        | 否           | 任务的调度间隔，即任务多久执行一次。单位：秒。取值范围：`5`～`60`。默认值：`10`。建议取值为导入间隔 10s 以上，否则会因为导入频率过高可能会报错版本数过多。 |
 | max_batch_rows            | 否           | 该参数只用于定义错误检测窗口范围，错误检测窗口范围为单个 Routine Load 导入任务所消费的 `10 * max-batch-rows` 行数据，默认为 `10 * 200000 = 2000000`。导入任务时会检测窗口中数据是否存在错误。错误数据是指 StarRocks 无法解析的数据，比如非法的 JSON。 |
-| max_error_number          | 否           | 错误检测窗口范围内允许的错误数据行数的上限。当错误数据行数超过该值时，导入作业会暂停，此时您需要执行 [SHOW ROUTINE LOAD](../data-manipulation/SHOW_ROUTINE_LOAD.md)，根据 `ErrorLogUrls`，检查 Kafka 中的消息并且更正错误。默认为 `0`，表示不允许有错误行。错误行不包括通过 WHERE 子句过滤掉的数据。 |
+| max_error_number          | 否           | 错误检测窗口范围内允许的数据行数的上限。当错误数据行数超过该值时，导入作业会暂停，此时您需要执行 [SHOW ROUTINE LOAD](../data-manipulation/SHOW_ROUTINE_LOAD.md)，根据 `ErrorLogUrls`，检查 Kafka 中的消息并且更正错误。默认为 `0`，表示不允许有错误行。<br />**注意**<br /><ul><li>错误行不包括通过 WHERE 子句过滤掉的数据。</li><li>该参数与下个参数 `max_filter_ratio` 都用于控制错误行数阈值。如果没有设置 `max_filter_ratio` 时，则本参数生效，如果设置了 `max_filter_ratio`，则错误行数只要达到本参数或 `max_filter_ratio` 参数其中任何一个阈值，则导入作业暂停。</li></ul> |
+| max_filter_ratio	         | 否           |  用于指定导入作业的最大容错率，即导入作业能够容忍的因数据质量不合格而过滤掉的数据行所占的最大比例。取值范围：`0`~`1`。默认值：`0` 。<br />建议您保留默认值 `0`。这样的话，当导入的数据行中有错误时，导入作业会暂停，从而保证数据的正确性。<br />如果希望忽略错误的数据行，可以设置该参数的取值大于 `0`。这样的话，即使导入的数据行中有错误，导入作业也能成功。<br />**注意**<br /><ul><li>这里因数据质量不合格而过滤掉的数据行，不包括通过 WHERE 子句过滤掉的数据行。</li><li>该参数与上个参数 `max_error_number` 都用于控制错误行数阈值。当该参数保持默认值 `0` 时，`max_error_number` 生效，如果设置了本参数，则错误行数只要达到本参数或 `max_error_number` 参数其中任何一个阈值，则导入作业暂停。</li></ul> |
 | strict_mode               | 否           | 是否开启严格模式。取值范围：`TRUE` 或者 `FALSE`。默认值：`FALSE`。开启后，如果源数据某列的值为 `NULL`，但是目标表中该列不允许为 `NULL`，则该行数据会被过滤掉。<br />关于该模式的介绍，参见[严格模式](../../../loading/load_concept/strict_mode.md)。|
 | log_rejected_record_num | 否 | 指定最多允许记录多少条因数据质量不合格而过滤掉的数据行数。该参数自 3.1 版本起支持。取值范围：`0`、`-1`、大于 0 的正整数。默认值：`0`。<ul><li>取值为 `0` 表示不记录过滤掉的数据行。</li><li>取值为 `-1` 表示记录所有过滤掉的数据行。</li><li>取值为大于 0 的正整数（比如 `n`）表示每个 BE 节点上最多可以记录 `n` 条过滤掉的数据行。</li></ul> |
 | timezone                  | 否           | 该参数的取值会影响所有导入涉及的、跟时区设置有关的函数所返回的结果。受时区影响的函数有 strftime、alignment_timestamp 和 from_unixtime 等，具体请参见[设置时区](../../../administration/timezone.md)。导入参数 `timezone` 设置的时区对应[设置时区](../../../administration/timezone.md)中所述的会话级时区。 |
-| merge_condition           | 否           | 用于指定作为更新生效条件的列名。这样只有当导入的数据中该列的值大于等于当前值的时候，更新才会生效。参见[通过导入实现数据变更](../../../loading/Load_to_Primary_Key_tables.md)。指定的列必须为非主键列，且仅主键模型表支持条件更新。 |
+| merge_condition           | 否           | 用于指定作为更新生效条件的列名。这样只有当导入的数据中该列的值大于等于当前值的时候，更新才会生效。参见[通过导入实现数据变更](../../../loading/Load_to_Primary_Key_tables.md)。指定的列必须为非主键列，且仅主键表支持条件更新。 |
 | format                    | 否           | 源数据的格式，取值范围：`CSV`、`JSON` 或者 `Avro`（自 v3.0.1）。默认值：`CSV`。|
 | trim_space                | 否           | 用于指定是否去除 CSV 文件中列分隔符前后的空格。取值类型：BOOLEAN。默认值：`false`。<br />有些数据库在导出数据为 CSV 文件时，会在列分隔符的前后添加一些空格。根据位置的不同，这些空格可以称为“前导空格”或者“尾随空格”。通过设置该参数，可以使 StarRocks 在导入数据时删除这些不必要的空格。<br />需要注意的是，StarRocks 不会去除被 `enclose` 指定字符括起来的字段内的空格（包括字段的前导空格和尾随空格）。例如，列分隔符是竖线 (<code class="language-text">&#124;</code>)，`enclose` 指定的字符是双引号 (`"`)：<code class="language-text">&#124; "Love StarRocks" &#124;</code>。如果设置 trim_space 为 true，则 StarRocks 处理后的结果数据为 <code class="language-text">&#124;"Love StarRocks"&#124;</code>。|
 | enclose                   | 否           | 根据 [RFC4180](https://www.rfc-editor.org/rfc/rfc4180)，用于指定把 CSV 文件中的字段括起来的字符。取值类型：单字节字符。默认值：`NONE`。最常用 `enclose` 字符为单引号 (`'`) 或双引号 (`"`)。<br />被 `enclose` 指定字符括起来的字段内的所有特殊字符（包括行分隔符、列分隔符等）均看做是普通符号。比 RFC4180 标准更进一步的是，StarRocks 提供的 `enclose` 属性支持设置任意单个字节的字符。<br />如果一个字段内包含了 `enclose` 指定字符，则可以使用同样的字符对 `enclose` 指定字符进行转义。例如，在设置了`enclose` 为双引号 (`"`) 时，字段值 `a "quoted" c` 在 CSV 文件中应该写作 `"a ""quoted"" c"`。 |
@@ -123,8 +124,8 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 | strip_outer_array         | 否           | 是否裁剪 JSON 数据最外层的数组结构。取值范围：`TRUE` 或者 `FALSE`。默认值：`FALSE`。真实业务场景中，待导入的 JSON 数据可能在最外层有一对表示数组结构的中括号 `[]`。这种情况下，一般建议您指定该参数取值为 `true`，这样 StarRocks 会剪裁掉外层的中括号 `[]`，并把中括号 `[]` 里的每个内层数组都作为一行单独的数据导入。如果您指定该参数取值为 `false`，则 StarRocks 会把整个 JSON 数据解析成一个数组，并作为一行数据导入。例如，待导入的 JSON 数据为 `[ {"category" : 1, "author" : 2}, {"category" : 3, "author" : 4} ]`，如果指定该参数取值为 `true`，则 StarRocks 会把 `{"category" : 1, "author" : 2}` 和 `{"category" : 3, "author" : 4}` 解析成两行数据，并导入到目标表中对应的数据行。 |
 | jsonpaths                 | 否           | 用于指定待导入的字段的名称。仅在使用匹配模式导入 JSON 数据时需要指定该参数。参数取值为 JSON 格式。参见[目标表存在衍生列，其列值通过表达式计算生成](#目标表存在衍生列其列值通过表达式计算生成)。|
 | json_root                 | 否           | 如果不需要导入整个 JSON 数据，则指定实际待导入 JSON 数据的根节点。参数取值为合法的 JsonPath。默认值为空，表示会导入整个 JSON 数据。具体请参见本文提供的示例[指定实际待导入 JSON 数据的根节点](#指定实际待导入-json-数据的根节点)。 |
-| task_consume_second                 | 否           |单个 Routine Load 导入作业中每个 Routine Load 导入任务消费数据的最大时长，单位为秒。相较于[FE 动态参数](../../../administration/Configuration.md) `routine_load_task_consume_second`（作用于集群内部所有 Routine Load 导入作业），该参数仅针对单个 Routine Load 导入作业，更加灵活。该参数自 v3.1.0 起新增。 <ul><li>当未配置 `task_consume_second` 和 `task_timeout_second` 时，StarRocks 则使用 FE 动态参数 `routine_load_task_consume_second` 和`routine_load_task_timeout_second` 来控制导入行为。</li><li>当只配置 `task_consume_second` 时，默认 `task_timeout_second` = `task_consume_second` * 4。</li><li>当只配置 `task_timeout_second` 时，默认 `task_consume_second` = `task_timeout_second` /4。</li></ul>|
-| task_timeout_second                 | 否           | Routine Load 导入作业中每个 Routine Load 导入任务超时时间，单位为秒。相较于[FE 动态参数](../../../administration/Configuration.md) `routine_load_task_timeout_second`（作用于集群内部所有 Routine Load 导入作业），该参数仅针对单个 Routine Load 导入作业，更加灵活。该参数自 v3.1.0 起新增。<ul><li>当未配置 `task_consume_second` 和 `task_timeout_second` 时，StarRocks 则使用 FE 动态参数 `routine_load_task_consume_second` 和 `routine_load_task_timeout_second` 来控制导入行为。</li><li>当只配置 `task_timeout_second` 时，默认 `task_consume_second` = `task_timeout_second` /4。</li><li>当只配置 `task_consume_second` 时，默认 `task_timeout_second` = `task_consume_second` * 4。</li></ul>|
+| task_consume_second                 | 否           |单个 Routine Load 导入作业中每个 Routine Load 导入任务消费数据的最大时长，单位为秒。相较于[FE 动态参数](../../../administration/FE_configuration.md) `routine_load_task_consume_second`（作用于集群内部所有 Routine Load 导入作业），该参数仅针对单个 Routine Load 导入作业，更加灵活。该参数自 v3.1.0 起新增。 <ul><li>当未配置 `task_consume_second` 和 `task_timeout_second` 时，StarRocks 则使用 FE 动态参数 `routine_load_task_consume_second` 和`routine_load_task_timeout_second` 来控制导入行为。</li><li>当只配置 `task_consume_second` 时，默认 `task_timeout_second` = `task_consume_second` * 4。</li><li>当只配置 `task_timeout_second` 时，默认 `task_consume_second` = `task_timeout_second` /4。</li></ul>|
+| task_timeout_second                 | 否           | Routine Load 导入作业中每个 Routine Load 导入任务超时时间，单位为秒。相较于[FE 动态参数](../../../administration/FE_configuration.md) `routine_load_task_timeout_second`（作用于集群内部所有 Routine Load 导入作业），该参数仅针对单个 Routine Load 导入作业，更加灵活。该参数自 v3.1.0 起新增。<ul><li>当未配置 `task_consume_second` 和 `task_timeout_second` 时，StarRocks 则使用 FE 动态参数 `routine_load_task_consume_second` 和 `routine_load_task_timeout_second` 来控制导入行为。</li><li>当只配置 `task_timeout_second` 时，默认 `task_consume_second` = `task_timeout_second` /4。</li><li>当只配置 `task_consume_second` 时，默认 `task_timeout_second` = `task_consume_second` * 4。</li></ul>|
 
 ### `data_source`、`data_source_properties`
 
@@ -188,30 +189,57 @@ FROM <data_source>
 - PLAIN
 - SCRAM-SHA-256 和 SCRAM-SHA-512
 - OAUTHBEARER
+- GSSAPI (Kerberos)
 
-- **访问 Kafka 时，使用安全协议 SSL**
+示例：
 
-```sql
-"property.security.protocol" = "ssl", -- 指定安全协议为 SSL
-"property.ssl.ca.location" = "FILE:ca-cert", -- CA 证书的位置
---如果 Kafka server 端开启了 client 认证，则还需设置如下三个参数：
-"property.ssl.certificate.location" = "FILE:client.pem", -- Client 的 public key 的位置
-"property.ssl.key.location" = "FILE:client.key", -- Client 的 private key 的位置
-"property.ssl.key.password" = "abcdefg" -- Client 的 private key 的密码
-```
+- 访问 Kafka 时，使用安全协议 SSL
 
-- **访问 Kafka 时，使用 SASL_PLAINTEXT 安全协议和 SASL/PLAIN 认证机制
+    ```sql
+    "property.security.protocol" = "ssl", -- 指定安全协议为 SSL
+    "property.ssl.ca.location" = "FILE:ca-cert", -- CA 证书的位置
+    --如果 Kafka server 端开启了 client 认证，则还需设置如下三个参数：
+    "property.ssl.certificate.location" = "FILE:client.pem", -- Client 的 public key 的位置
+    "property.ssl.key.location" = "FILE:client.key", -- Client 的 private key 的位置
+    "property.ssl.key.password" = "abcdefg" -- Client 的 private key 的密码
+    ```
 
-```sql
-"property.security.protocol"="SASL_PLAINTEXT", -- 指定安全协议为 SASL_PLAINTEXT
-"property.sasl.mechanism"="PLAIN", -- 指定 SASL 认证机制为 PLAIN
-"property.sasl.username"="admin", -- SASL 的用户名
-"property.sasl.password"="admin" -- SASL 的密码
-```
+- 访问 Kafka 时，使用 SASL_PLAINTEXT 安全协议和 SASL/PLAIN 认证机制
+
+    ```sql
+    "property.security.protocol" = "SASL_PLAINTEXT", -- 指定安全协议为 SASL_PLAINTEXT
+    "property.sasl.mechanism" = "PLAIN", -- 指定 SASL 认证机制为 PLAIN
+    "property.sasl.username" = "admin", -- SASL 的用户名
+    "property.sasl.password" = "admin" -- SASL 的密码
+    ```
+
+- 访问 Kafka 时，使用 SASL_PLAINTEXT 安全协议和 SASL/GSSAPI (Kerberos) 认证机制
+
+  ```sql
+  "property.security.protocol" = "SASL_PLAINTEXT", -- 指定安全协议为 SASL_PLAINTEXT
+  "property.sasl.mechanism" = "GSSAPI", -- 指定 SASL 认证机制为 GSSAPI, 默认是 GSSAPI
+  "property.sasl.kerberos.service.name" = "kafka", -- 指定 broker service name，默认是 Kafka
+  "property.sasl.kerberos.keytab" = "/home/starrocks/starrocks.keytab", -- 指定 client keytab 的位置
+  "property.sasl.kerberos.principal" = "starrocks@YOUR.COM" -- 指定 kerberos principal
+  ```
+
+  :::note
+
+  - 自 StarRocks 3.1.4 版本起，支持 SASL/GSSAPI (Kerberos) 认证。
+  - 需要在 BE 机器上安装 SASL 相关模块。
+
+    ```bash
+    # Debian/Ubuntu:
+    sudo apt-get install libsasl2-modules-gssapi-mit libsasl2-dev
+    # CentOS/Redhat:
+    sudo yum install cyrus-sasl-gssapi cyrus-sasl-devel
+    ```
+
+  :::
 
 ### FE 和 BE 配置项
 
-Routine Load 相关配置项，请参见[配置参数](../../../administration/Configuration.md)。
+Routine Load 相关配置项，请参见[配置参数](../../../administration/FE_configuration.md)。
 
 ## 列映射和转换关系
 

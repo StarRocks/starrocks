@@ -37,7 +37,10 @@ import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.thrift.TTabletCommitInfo;
 import com.starrocks.thrift.TTabletFailInfo;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TabletFailInfo;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -72,6 +75,10 @@ public abstract class Coordinator {
                                                 List<ScanNode> scanNodes, String timezone, long startTime,
                                                 Map<String, String> sessionVariables,
                                                 long execMemLimit);
+
+        Coordinator createRefreshDictionaryCacheScheduler(ConnectContext context, TUniqueId queryId,
+                                                DescriptorTable descTable, List<PlanFragment> fragments,
+                                                List<ScanNode> scanNodes);
     }
 
     // ------------------------------------------------------------------------------------
@@ -171,7 +178,15 @@ public abstract class Coordinator {
 
     public abstract List<TTabletFailInfo> getFailInfos();
 
+    public static List<TabletFailInfo> getFailInfos(Coordinator coord) {
+        return coord == null ? Collections.emptyList() : TabletFailInfo.fromThrift(coord.getFailInfos());
+    }
+
     public abstract List<TTabletCommitInfo> getCommitInfos();
+
+    public static List<TabletCommitInfo> getCommitInfos(Coordinator coord) {
+        return coord == null ? Collections.emptyList() : TabletCommitInfo.fromThrift(coord.getCommitInfos());
+    }
 
     public abstract List<TSinkCommitInfo> getSinkCommitInfos();
 

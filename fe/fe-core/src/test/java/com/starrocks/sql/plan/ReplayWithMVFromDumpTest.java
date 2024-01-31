@@ -17,7 +17,6 @@ package com.starrocks.sql.plan;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
-import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TExplainLevel;
@@ -37,8 +36,12 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         ReplayFromDumpTestBase.beforeClass();
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
 
         new MockUp<MaterializedView>() {
+            /**
+             * {@link MaterializedView#getPartitionNamesToRefreshForMv(Set, boolean)}
+             */
             @Mock
             public boolean getPartitionNamesToRefreshForMv(Set<String> toRefreshPartitions,
                                                            boolean isQueryRewrite) {
@@ -47,6 +50,9 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         };
 
         new MockUp<UtFrameUtils>() {
+            /**
+             * {@link UtFrameUtils#isPrintPlanTableNames()}
+             */
             @Mock
             boolean isPrintPlanTableNames() {
                 return true;
@@ -55,7 +61,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Before
-    public void before() {
+    public void before() throws Exception {
         super.before();
     }
 
@@ -87,13 +93,9 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
     public void testMV_JoinAgg2() throws Exception {
         FeConstants.isReplayFromQueryDump = true;
         String jsonStr = getDumpInfoFromFile("query_dump/materialized-view/join_agg2");
-        Tracers.register(connectContext);
-        Tracers.init(connectContext, Tracers.Mode.LOGS, "MV");
         connectContext.getSessionVariable()
                 .setMaterializedViewRewriteMode(SessionVariable.MaterializedViewRewriteMode.FORCE.toString());
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(jsonStr, connectContext.getSessionVariable());
-        String pr = Tracers.printLogs();
-        Tracers.close();
         Assert.assertTrue(replayPair.second.contains("table: mv1, rollup: mv1"));
         FeConstants.isReplayFromQueryDump = false;
     }
@@ -147,6 +149,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mv_on_mv2"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
         Assert.assertTrue(replayPair.second.contains("test_mv2"));
     }
 
@@ -186,15 +189,24 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
     public void testMock_MV_CostBug() throws Exception {
         FeConstants.isReplayFromQueryDump = true;
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
-        Tracers.register(connectContext);
-        Tracers.init(connectContext, Tracers.Mode.LOGS, "ALL");
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mv_with_cost_bug1"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("mv_35"));
-        String pr = Tracers.printLogs();
-        System.out.println(pr);
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
         FeConstants.isReplayFromQueryDump = false;
+    }
+
+    @Test
+    public void testMVWithDictRewrite() throws Exception {
+        try {
+            FeConstants.USE_MOCK_DICT_MANAGER = true;
+            Pair<QueryDumpInfo, String> replayPair =
+                    getCostPlanFragment(getDumpInfoFromFile("query_dump/tpch_query11_mv_rewrite"));
+            Assert.assertTrue(replayPair.second, replayPair.second.contains(
+                    "DictDecode(78: n_name, [<place-holder> = 'GERMANY'])"));
+        } finally {
+            FeConstants.USE_MOCK_DICT_MANAGER = false;
+        }
     }
 }

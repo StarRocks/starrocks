@@ -4,12 +4,16 @@ displayed_sidebar: "Chinese"
 
 # 数据分布
 
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
 建表时，您可以通过设置合理的分区和分桶，实现数据均匀分布和查询性能提升。数据均匀分布是指数据按照一定规则划分为子集，并且均衡地分布在不同节点上。查询时能够有效裁剪数据扫描量，最大限度地利用集群的并发性能，从而提升查询性能。
 
 > **说明**
 >
+> - 您在建表时设置数据分布后，如果业务场景查询模式和数据特点发生变化，则自 3.2 版本起，StarRocks 支持您[在建表后修改一些数据分布相关属性](#建表后优化数据分布自-32)，以满足最新业务场景对查询性能的要求。
 > - 自 3.1 版本起，您在建表和新增分区时可以不设置分桶键（即 DISTRIBUTED BY 子句）。StarRocks 默认使用随机分桶，将数据随机地分布在分区的所有分桶中。更多信息，请参见[随机分桶](#随机分桶自-v31)。
-> - 自 2.5.7 版本起，您在建表和新增分区时可以不设置分桶数量 (BUCKETS)。StarRocks 默认自动设置分桶数量，如果自动设置分桶数量后性能未能达到预期，并且您比较熟悉分桶机制，则您也可以[手动设置分桶数量](#确定分桶数量)。
+> - 自 2.5.7 版本起，您在建表和新增分区时可以不设置分桶数量 (BUCKETS)。StarRocks 默认自动设置分桶数量，如果自动设置分桶数量后性能未能达到预期，并且您比较熟悉分桶机制，则您也可以[手动设置分桶数量](#设置分桶数量)。
 
 ## 数据分布概览
 
@@ -63,7 +67,7 @@ StarRocks 支持单独和组合使用数据分布方式。
         user_name VARCHAR(32) DEFAULT ''
     )
     DUPLICATE KEY (event_day,site_id,pv);
-    -- 没有设置任何分区和分桶方式，默认为 Random 分布（目前仅支持明细模型的表）
+    -- 没有设置任何分区和分桶方式，默认为 Random 分布（目前仅支持明细表）
     ```
 
 - Hash 分布
@@ -94,7 +98,7 @@ StarRocks 支持单独和组合使用数据分布方式。
     DUPLICATE KEY(event_day,site_id,pv)
     -- 设为分区方式为表达式分区，并且使用时间函数的分区表达式（当然您也可以设置分区方式为 Range 分区）
     PARTITION BY date_trunc('day', event_day);
-    -- 没有设置分桶方式，默认为随机分桶（目前仅支持明细模型的表）
+    -- 没有设置分桶方式，默认为随机分桶（目前仅支持明细表）
     ```
 
 - Range + Hash 分布
@@ -127,7 +131,7 @@ StarRocks 支持单独和组合使用数据分布方式。
     DUPLICATE KEY(id)
     -- 设为分区方式为表达式分区，并且使用列分区表达式（当然您也可以设置分区方式为 List 分区）
     PARTITION BY (city);
-    -- 没有设置分桶方式，默认为随机分桶（目前仅支持明细模型的表）
+    -- 没有设置分桶方式，默认为随机分桶（目前仅支持明细表）
     ```
 
 - List + Hash 分布
@@ -174,7 +178,7 @@ StarRocks 支持单独和组合使用数据分布方式。
 - 随机分桶，建表和新增分区时无需设置分桶键。在同一分区内，数据随机分布到不同的分桶中。
 - 哈希分桶，建表和新增分区时需要指定分桶键。在同一分区内，数据按照分桶键划分分桶后，所有分桶键的值相同的行会唯一分配到对应的一个分桶。
 
-分桶数量：默认由 StarRocks 自动设置分桶数量（自 v2.5.7）。同时也支持您手动设置分桶数量。更多信息，请参见[确定分桶数量](#确定分桶数量)。
+分桶数量：默认由 StarRocks 自动设置分桶数量（自 v2.5.7）。同时也支持您手动设置分桶数量。更多信息，请参见[设置分桶数量](#设置分桶数量)。
 
 ## 创建和管理分区
 
@@ -184,7 +188,7 @@ StarRocks 支持单独和组合使用数据分布方式。
 
 > **注意**
 >
-> 3.1 版本起，StarRocks [存算分离模式](../deployment/deploy_shared_data.md)支持时间函数的分区表达式。
+> 3.1 版本起，StarRocks [存算分离模式](../deployment/shared_data/s3.md)支持时间函数的分区表达式。
 
 [表达式分区](./expression_partitioning.md)，原称自动创建分区，更加灵活易用，适用于大多数场景，比如按照连续日期范围或者枚举值来查询和管理数据。
 
@@ -410,7 +414,7 @@ SHOW PARTITIONS FROM site_access;
 
 **使用限制**
 
-- 仅支持明细模型表。
+- 仅支持明细表。
 - 不支持指定 [Colocation Group](../using_starrocks/Colocate_join.md)。
 - 不支持 [Spark Load](../loading/SparkLoad.md)。
 
@@ -443,7 +447,7 @@ DISTRIBUTED BY RANDOM BUCKETS 8; -- 手动设置分桶数量为 8
 
 ### 哈希分桶
 
-对每个分区的数据，StarRocks 会根据分桶键和[分桶数量](#确定分桶数量)进行哈希分桶。在哈希分桶中，使用特定的列值作为输入，通过哈希函数计算出一个哈希值，然后将数据根据该哈希值分配到相应的桶中。
+对每个分区的数据，StarRocks 会根据分桶键和[分桶数量](#设置分桶数量)进行哈希分桶。在哈希分桶中，使用特定的列值作为输入，通过哈希函数计算出一个哈希值，然后将数据根据该哈希值分配到相应的桶中。
 
 **优点**
 
@@ -463,7 +467,7 @@ DISTRIBUTED BY RANDOM BUCKETS 8; -- 手动设置分桶数量为 8
 
 - **建表时，如果使用哈希分桶，则必须指定分桶键**。
 - 组成分桶键的列仅支持整型、DECIMAL、DATE/DATETIME、CHAR/VARCHAR/STRING 数据类型。
-- 分桶键指定后不支持修改。
+- 自 3.2 起，建表后支持通过 ALTER TABLE 修改分桶键。
 
 如下示例中，`site_access` 表采用 `site_id` 作为分桶键，其原因在于 `site_id` 为高基数列。此外，针对 `site_access` 表的查询请求，基本上都以站点作为查询过滤条件，采用 `site_id` 作为分桶键，还可以在查询时裁剪掉大量无关分桶。
 
@@ -514,120 +518,268 @@ DISTRIBUTED BY HASH(site_id,city_code);
 >
 > - 长查询是指扫描数据量大、多机并行扫描能显著提升性能的查询。
 
-### 确定分桶数量
+### 设置分桶数量
 
 在 StarRocks 中，分桶是实际物理文件组织的单元。
 
-- 建表时如何设置分区中分桶数量
+#### 建表时
+
+- 自动设置（推荐）
+
+  自 2.5.7 版本起，StarRocks 支持根据机器资源和数据量自动设置分区中分桶数量。
+
+  :::tip
+
+  如果表单个分区原始数据规模预计超过 100 GB，建议您手动设置分区中分桶数量。
+
+  :::
+
+  <Tabs groupId="automaticexamples1">
+  <TabItem value="example1" label="哈希分桶表" default>
+  建表示例：
+
+  ```sql
+  CREATE TABLE site_access (
+      site_id INT DEFAULT '10',
+      city_code SMALLINT,
+      user_name VARCHAR(32) DEFAULT '',
+      event_day DATE,
+      pv BIGINT SUM DEFAULT '0')
+  AGGREGATE KEY(site_id, city_code, user_name,event_day)
+  PARTITION BY date_trunc('day', event_day)
+  DISTRIBUTED BY HASH(site_id,city_code); -- 无需手动设置分区中分桶数量
+  ```
+
+  </TabItem>
+  <TabItem value="example2" label="随机分桶表">
+
+  针对随机分桶表，StarRocks 在支持自动设置分区中分桶数量的基础上，自 3.2 版本起，还进一步优化了自动设置分桶数量的逻辑，支持了**在导入数据至分区的过程中**根据集群能力和导入数据量等**按需动态增加**分区中分桶数量。在提高建表易用性的同时，还能提升大数据集的导入性能。
+
+  :::warning
+
+  - 如果需要启用按需动态增加分桶数量，您需要设置表属性 `PROPERTIES("bucket_size"="xxx")`，指定单个分桶的大小。如果分区的数据量不大，则可以设置 `bucket_size` 为 1 GB，如果分区的数据量大，则可以设置 `bucket_size` 为 4 GB。
+  - 启用后，如果需要回滚至 3.1 版本，则需要删除启用按需动态增加分桶数量的表，并且手动执行元数据 checkpoint [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) 成功后才能回滚。
+
+  :::
+
+  建表示例：
+
+  ```sql
+  CREATE TABLE details1 (
+      event_day DATE,
+      site_id INT DEFAULT '10', 
+      pv BIGINT DEFAULT '0',
+      city_code VARCHAR(100),
+      user_name VARCHAR(32) DEFAULT '')
+  DUPLICATE KEY (event_day,site_id,pv)
+  PARTITION BY date_trunc('day', event_day)
+  -- 该表分区中的分桶数量由 StarRocks 自动设置，并且因为指定单个分桶的大小为 1 GB，分桶数量会按需动态增加。
+  PROPERTIES("bucket_size"="1073741824")
+  ;
   
-  - 方式一：自动设置分区中分桶数量（推荐）
+  CREATE TABLE details2 (
+      event_day DATE,
+      site_id INT DEFAULT '10',
+      pv BIGINT DEFAULT '0' ,
+      city_code VARCHAR(100),
+      user_name VARCHAR(32) DEFAULT '')
+  DUPLICATE KEY (event_day,site_id,pv)
+  PARTITION BY date_trunc('day', event_day)
+  -- 该表分区中的分桶数量由 StarRocks 自动设置，并且由于没有指定单个分桶的大小，分桶数量不会按需动态增加。
+  ;
+  ```
 
-    - 哈希分桶表
+  </TabItem>
+  </Tabs>
 
-      自 2.5.7 版本起，建表时您无需手动设置分区中分桶数量。StarRocks 会根据机器资源和数据量自动设置分区中分桶数量。
-      > **注意**
-      >
-      > 如果表单个分区原始数据规模预计超过 100 GB，建议您手动设置分区中分桶数量。
+- 手动设置
 
-      建表示例：
+  自 2.4 版本起，StarRocks 提供了自适应的 Tablet 并行扫描能力，即一个查询中涉及到的任意一个 Tablet 可能是由多个线程并行地分段扫描，减少了 Tablet 数量对查询能力的限制，从而可以简化对分区中分桶数量的设置。简化后，确定分区中分桶数量方式可以是：首先预估每个分区的数据量，然后按照每 10 GB 原始数据一个 Tablet 计算，从而确定分区中分桶数量。
 
-      ```sql
-      CREATE TABLE site_access (
-          site_id INT DEFAULT '10',
-          city_code SMALLINT,
-          user_name VARCHAR(32) DEFAULT '',
-          pv BIGINT SUM DEFAULT '0')
-      AGGREGATE KEY(site_id, city_code, user_name)
-      DISTRIBUTED BY HASH(site_id,city_code); --无需手动设置分区中分桶数量
-      ```
+  如果需要开启并行扫描 Tablet，则您需要确保系统变量 `enable_tablet_internal_parallel` 全局生效 `SET GLOBAL enable_tablet_internal_parallel = true;`。
 
-    - 随机分桶表
+  <Tabs groupId="manualexamples1">
+  <TabItem value="example1" label="哈希分桶表" default>
 
-      自 2.5.7 版本起，建表时您无需手动设置分区中分桶数量。StarRocks 会根据机器资源和数据量自动设置分区中分桶数量。并且自 3.2 版本起，StarRocks 进一步优化了自动设置分桶数量的逻辑，除了支持在**创建分区时**自动设置分区中分桶数量，还支持**在导入数据至分区的过程中**根据集群能力和导入数据量等**按需动态增加**分区中分桶数量。在提高建表易用性的同时，还能提升大数据集的导入性能。
+  ```sql
+  CREATE TABLE site_access (
+      site_id INT DEFAULT '10',
+      city_code SMALLINT,
+      user_name VARCHAR(32) DEFAULT '',
+      event_day DATE,
+      pv BIGINT SUM DEFAULT '0')
+  AGGREGATE KEY(site_id, city_code, user_name,event_day)
+  PARTITION BY date_trunc('day', event_day)
+  DISTRIBUTED BY HASH(site_id,city_code) BUCKETS 30; -- 假设导入一个分区的原始数据量为 300 GB，则按照每 10 GB 原始数据一个 Tablet，则分区中分桶数量可以设置为 30。
+  ```
 
-      > **说明**
-      >
-      > 单个分桶的大小默认为 `1024 * 1024 * 1024 B`（1 GB），在建表时您可以在 `PROPERTIES("bucket_size"="xxx")` 中指定单个分桶的大小，最大支持为 4 GB。
+  </TabItem>
+  <TabItem value="example2" label="随机分桶表">
 
-      建表示例：
-
-      ```sql
-      CREATE TABLE site_access1 (
-          event_day DATE,
-          site_id INT DEFAULT '10', 
-          pv BIGINT DEFAULT '0' ,
-          city_code VARCHAR(100),
-          user_name VARCHAR(32) DEFAULT '')
-      DUPLICATE KEY (event_day,site_id,pv)
-      ;--无需手动设置分区中分桶数量，并且随机分桶，无需设置分桶键
-      ```
-
-    建表后，您可以执行 [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) 来查看 StarRocks 为分区设置的分桶数量。如果是哈希分桶表，建表后分区的分桶数量**固定**。
-
-    如果是随机分桶表，建表后在导入过程中，分区的分桶数量会**动态增加**，返回结果显示分区**当前**的分桶数量。
-    > **注意**
-    >
-    > 对于随机分桶表，分区内部实际的划分层次为：分区 > 子分区 > 分桶，为了增加分桶数量，StarRocks 实际上是新增一个子分区，子分区包括一定数量的分桶，因此 SHOW PARTITIONS 返回结果中会显示分区名称相同的多条数据行，表示同一分区中子分区的情况。
-
-  - 方式二：手动设置分区中分桶数量
-
-    自 2.4 版本起，StarRocks 提供了自适应的 Tablet 并行扫描能力，即一个查询中涉及到的任意一个 Tablet 可能是由多个线程并行地分段扫描，减少了 Tablet 数量对查询能力的限制，从而可以简化对分区中分桶数量的设置。简化后，确定分区中分桶数量方式可以是：首先预估每个分区的数据量，然后按照每 10 GB 原始数据一个 Tablet 计算，从而确定分区中分桶数量。
-
-    如果需要开启并行扫描 Tablet，则您需要确保系统变量 `enable_tablet_internal_parallel` 全局生效 `SET GLOBAL enable_tablet_internal_parallel = true;`。
-
-    ```SQL
-    CREATE TABLE site_access (
-        site_id INT DEFAULT '10',
-        city_code SMALLINT,
-        user_name VARCHAR(32) DEFAULT '',
-        pv BIGINT SUM DEFAULT '0')
-    AGGREGATE KEY(site_id, city_code, user_name)
-    DISTRIBUTED BY HASH(site_id,city_code) BUCKETS 30; -- 假设导入一个分区的原始数据量为 300 GB，则按照每 10 GB 原始数据一个 Tablet，则分区中分桶数量可以设置为 30。
+    ```sql
+  CREATE TABLE details (
+      site_id INT DEFAULT '10', 
+      city_code VARCHAR(100),
+      user_name VARCHAR(32) DEFAULT '',
+      event_day DATE,
+      pv BIGINT DEFAULT '0'
+  )
+  DUPLICATE KEY (site_id,city_code)
+  PARTITION BY date_trunc('day', event_day)
+  DISTRIBUTED BY RANDOM BUCKETS 30
+  ; 
     ```
 
-- 新增分区时如何设置分区中分桶数量
+    </TabItem>
+    </Tabs>
 
-  - 方式一：自动设置分区中分桶数量（推荐）
+#### 建表后
 
-    - 哈希分桶表
+- 自动设置（推荐）
 
-      自 2.5.7 版本起，新增分区时您无需手动设置分区中分桶数量。StarRocks 会根据机器资源和数据量自动设置分区中分桶数量。
-      > **注意**
-      >
-      > 如果表单个分区原始数据规模预计超过 100 GB，建议您手动设置分区中分桶数量。
+  自 2.5.7 版本起，StarRocks 支持根据机器资源和数据量自动设置分区中分桶数量。
 
-    - 随机分桶表
+  :::tip
 
-       自 2.5.7 版本起，新增分区时您无需手动设置分区中分桶数量。StarRocks 会根据机器资源和数据量自动设置分区中分桶数量。并且自 3.2 版本起，StarRocks 进一步优化了自动设置分桶数量的逻辑，除了支持**在创建新分区时**自动设置分区中分桶数量，还支持**在导入数据至分区过程中**根据集群能力和导入数据量等**按需动态增加**分区中分桶数量。在提高新增分区易用性的同时，还能提升大数据集的导入性能。
-       > **说明**
-       >
-       > 单个分桶的大小默认为 `1024 * 1024 * 1024 B`（1 GB），在新增分区时您可以在 `PROPERTIES("bucket_size"="xxx")` 中指定单个分桶的大小，最大支持为 4 GB。
+  如果表单个分区原始数据规模预计超过 100 GB，建议您手动设置分区中分桶数量。
 
-    新增分区后，您可以执行 [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) 来查看 StarRocks 为新分区设置的分桶数量。如果是哈希分桶表，新分区的分桶数量**固定**。
+  :::
 
-    如果是随机分桶表，在导入数据至新分区的过程中，新分区的分桶数量会**动态增加**，返回结果显示新分区**当前**的分桶数量。
-    > **注意**
-    >
-    > 对于随机分桶表，分区内部实际的划分层次为：分区 > 子分区 > 分桶，为了增加分桶数量，StarRocks 实际上是新增一个子分区，子分区包括一定数量的分桶，因此 SHOW PARTITIONS 返回结果中会显示分区名称相同的多条数据行，表示同一分区中子分区的情况。
+  <Tabs groupId="automaticexamples2">
+  <TabItem value="example1" label="哈希分桶表" default>
 
-  - 方式二：手动设置分区中分桶数量
-
-    您新增分区的时候，也可以手动指定分桶数量。新增分区的分桶数量的计算方式可以参考如上建表时手动设置分区中分桶数量。
-
-    ```SQL
-    -- 手动创建分区
-    ALTER TABLE <table_name> 
-    ADD PARTITION <partition_name>
-        [DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]];
-        
-    -- 手动设置动态分区的默认分桶数量
-    ALTER TABLE <table_name> 
-    SET ("dynamic_partition.buckets"="xxx");
+    ```sql
+  -- 自动设置所有分区的分桶数量
+  ALTER TABLE site_access DISTRIBUTED BY HASH(site_id,city_code);
+  
+  -- 自动设置指定分区的分桶数量
+  ALTER TABLE site_access PARTITIONS (p20230101, p20230102)
+  DISTRIBUTED BY HASH(site_id,city_code);
+  
+  -- 自动设置新增分区中分桶数量
+  ALTER TABLE site_access ADD PARTITION p20230106 VALUES [('2023-01-06'), ('2023-01-07'))
+  DISTRIBUTED BY HASH(site_id,city_code);
     ```
+
+    </TabItem>
+    <TabItem value="example2" label="随机分桶表">
+
+  针对随机分桶表，StarRocks 在支持自动设置分区中分桶数量的基础上，自 3.2 版本起，还进一步优化了自动设置分桶数量的逻辑，支持了**在导入数据至分区的过程中**根据集群能力和导入数据量等**按需动态增加**分区中分桶数量。
+
+  :::warning
+
+  - 如果需要启用按需动态增加分桶数量，您需要设置表属性 `PROPERTIES("bucket_size"="xxx")`，指定单个分桶的大小。如果分区的数据量不大，则可以设置 `bucket_size` 为 1 GB，如果分区的数据量大，则可以设置 `bucket_size` 为 4 GB。
+  - 启用后，如果需要回滚至 3.1 版本，则需要删除启用按需动态增加分桶数量的表，并且手动执行元数据 checkpoint [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) 成功后才能回滚。
+
+  :::
+
+    ```sql
+  -- 自动设置所有分区的分桶数量，并且不开启按需动态增加分桶数量，分桶数量固定。
+  ALTER TABLE details DISTRIBUTED BY RANDOM;
+  -- 自动设置所有分区的分桶数量，并且开启按需动态增加分桶数量。
+  ALTER TABLE details SET("bucket_size"="1073741824");
+  
+  -- 自动设置指定分区的分桶数量
+  ALTER TABLE details PARTITIONS (p20230103, p20230104)
+  DISTRIBUTED BY RANDOM;
+  
+  -- 自动设置新增分区中分桶数量
+  ALTER TABLE details ADD PARTITION  p20230106 VALUES [('2023-01-06'), ('2023-01-07'))
+  DISTRIBUTED BY RANDOM;
+    ```
+
+    </TabItem>
+    </Tabs>
+
+- 手动设置
+
+  手动指定分区中分桶数量。分区的分桶数量的计算方式可以参考如上[建表时手动设置分区中分桶数量](#建表时)。
+
+  <Tabs groupId="manualexamples2">
+  <TabItem value="example1" label="哈希分桶表" default>
+
+  ```sql
+  -- 手动指定所有分区中分桶数量
+  ALTER TABLE site_access
+  DISTRIBUTED BY HASH(site_id,city_code) BUCKETS 30;
+  -- 手动指定部分分区中分桶数量
+  ALTER TABLE site_access
+  partitions p20230104
+  DISTRIBUTED BY HASH(site_id,city_code)  BUCKETS 30;
+  -- 手动指定新增分区中分桶数量
+  ALTER TABLE site_access
+  ADD PARTITION p20230106 VALUES [('2023-01-06'), ('2023-01-07'))
+  DISTRIBUTED BY HASH(site_id,city_code) BUCKETS 30;
+  ```
+
+  </TabItem>
+  <TabItem value="example2" label="随机分桶表">
+
+  ```sql
+  -- 手动指定所有分区中分桶数量
+  ALTER TABLE details
+  DISTRIBUTED BY RANDOM BUCKETS 30;
+  -- 手动指定部分分区中分桶数量
+  ALTER TABLE details
+  partitions p20230104
+  DISTRIBUTED BY RANDOM BUCKETS 30;
+  -- 手动指定新增分区中分桶数量
+  ALTER TABLE details
+  ADD PARTITION p20230106 VALUES [('2023-01-06'), ('2023-01-07'))
+  DISTRIBUTED BY RANDOM BUCKETS 30;
+  ```
+
+  手动设置动态分区的默认分桶数量。
+
+  ```sql
+  ALTER TABLE details_dynamic
+  SET ("dynamic_partition.buckets"="xxx");
+  ```
+
+  </TabItem>
+  </Tabs>
+
+#### 查看分桶数量
+
+如果查看分区中分桶数量，您可以执行 [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md)。
+
+:::info
+
+- 如果是随机分桶表并且开启按需动态增加分桶数量，建表后在导入过程中，分区的分桶数量会**动态增加**，返回结果显示的是分区**当前**的分桶数量。
+
+- 如果是随机分桶表，分区内部实际的划分层次为：分区 > 子分区 > 分桶，为了增加分桶数量，StarRocks 实际上是新增一个子分区，子分区包括一定数量的分桶，因此  [SHOW PARTITIONS](../sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS.md) 返回结果中会显示分区名称相同的多条数据行，表示同一分区中子分区的情况。
+
+:::
+
+## 建表后优化数据分布（自 3.2）
 
 > **注意**
 >
-> 不支持修改已创建分区的分桶数量。
+> StarRocks [存算分离模式](../deployment/shared_data/s3.md)暂不支持该特性。
+
+随着业务场景中查询模式和数据量变化，建表时设置的分桶方式和分桶数量，以及排序键可能不再能适应新的业务场景，导致查询性能下降，此时可以通过 `ALTER TABLE` 调整分桶方式和分桶数量，以及排序键，优化数据分布。比如：
+
+- **分区中数据量增多，增加分桶数量**
+
+  当按天分区的分区数据量相比原来变大很多，原本的分桶数量不再合适时，可以加大分桶数量，以让每个 Tablet 的大小一般控制在 1 GB ~ 10 GB。
+
+- **通过调整分桶键，来避免数据倾斜**
+
+  当发现原有分桶键会导致数据倾斜（比如原来的分桶键只有 `k1` 一列），可以设置更合适的列、或者加入更多一些列到分桶键中。如下：
+
+    ```SQL
+    ALTER TABLE t DISTRIBUTED BY HASH(k1, k2) BUCKETS 20;
+    -- 如果是 StarRocks 的版本是 3.1及以上，并且使用的是明细表，则建议直接改成默认分桶设置，即随机分桶并且由 StarRocks 自动设置分桶数量
+    ALTER TABLE t DISTRIBUTED BY RANDOM;
+    ```
+
+- 如果表为主键表，当业务的查询模式有较大变化，经常需要用到表中另外几个列作为条件列时，则可以调整排序键。如下：
+
+    ```SQL
+    ALTER TABLE t ORDER BY k2, k1;
+    ```
+
+更多信息，参见 [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md) 。
 
 ## 最佳实践
 

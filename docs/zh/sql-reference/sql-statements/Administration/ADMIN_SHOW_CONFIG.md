@@ -8,9 +8,15 @@ displayed_sidebar: "Chinese"
 
 该语句用于展示当前集群的配置（当前仅支持展示 FE 的配置项）。
 
-关于每个配置项的含义，参见[FE 配置项](../../../administration/Configuration.md#fe-配置项)。
+关于每个配置项的含义，参见[FE 配置项](../../../administration/FE_configuration.md)。
 
 如果要动态设置或修改集群的配置项，参见 [ADMIN SET CONFIG](ADMIN_SET_CONFIG.md)。
+
+:::tip
+
+该操作需要 SYSTEM 级 OPERATE 权限。请参考 [GRANT](../account-management/GRANT.md) 为用户赋权。
+
+:::
 
 ## 语法
 

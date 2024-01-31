@@ -24,7 +24,6 @@
 #include "block_cache/block_cache.h"
 #include "common/config.h"
 #include "common/daemon.h"
-#include "common/logging.h"
 #include "common/status.h"
 #include "exec/pipeline/query_context.h"
 #include "runtime/exec_env.h"
@@ -277,19 +276,6 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     brpc_server->Stop(0);
     thrift_server->stop();
 
-    http_server->join();
-    LOG(INFO) << process_name << " exit step " << exit_step++ << ": http server exit successfully";
-
-    brpc_server->Join();
-    LOG(INFO) << process_name << " exit step " << exit_step++ << ": brpc server exit successfully";
-
-    thrift_server->join();
-    LOG(INFO) << process_name << " exit step " << exit_step++ << ": thrift server exit successfully";
-
-    http_server.reset();
-    brpc_server.reset();
-    thrift_server.reset();
-
     daemon->stop();
     daemon.reset();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": daemon threads exit successfully";
@@ -312,7 +298,21 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     }
 #endif
 
+    http_server->join();
+    http_server.reset();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": http server exit successfully";
+
+    brpc_server->Join();
+    brpc_server.reset();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": brpc server exit successfully";
+
+    thrift_server->join();
+    thrift_server.reset();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": thrift server exit successfully";
+
     exec_env->destroy();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": exec env destroy successfully";
+
     delete storage_engine;
 
     // Unbind with MemTracker

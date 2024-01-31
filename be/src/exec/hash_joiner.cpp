@@ -28,7 +28,6 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "simd/simd.h"
-#include "util/debug_util.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -68,8 +67,10 @@ HashJoiner::HashJoiner(const HashJoinerParam& param)
           _build_node_type(param._build_node_type),
           _probe_node_type(param._probe_node_type),
           _build_conjunct_ctxs_is_empty(param._build_conjunct_ctxs_is_empty),
-          _output_slots(param._output_slots),
-          _build_runtime_filters(param._build_runtime_filters.begin(), param._build_runtime_filters.end()) {
+          _build_output_slots(param._build_output_slots),
+          _probe_output_slots(param._probe_output_slots),
+          _build_runtime_filters(param._build_runtime_filters.begin(), param._build_runtime_filters.end()),
+          _mor_reader_mode(param._mor_reader_mode) {
     _is_push_down = param._hash_join_node.is_push_down;
     if (_join_type == TJoinOp::LEFT_ANTI_JOIN && param._hash_join_node.is_rewritten_from_not_in) {
         _join_type = TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN;
@@ -139,7 +140,10 @@ void HashJoiner::_init_hash_table_param(HashTableParam* param) {
     param->row_desc = &_row_descriptor;
     param->build_row_desc = &_build_row_descriptor;
     param->probe_row_desc = &_probe_row_descriptor;
-    param->output_slots = _output_slots;
+    param->build_output_slots = _build_output_slots;
+    param->probe_output_slots = _probe_output_slots;
+    param->mor_reader_mode = _mor_reader_mode;
+
     std::set<SlotId> predicate_slots;
     for (ExprContext* expr_context : _conjunct_ctxs) {
         std::vector<SlotId> expr_slots;

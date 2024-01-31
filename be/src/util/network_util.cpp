@@ -124,7 +124,7 @@ std::string hostname_to_ip(const std::string& host) {
     std::vector<std::string> addresses;
     Status status = hostname_to_ip_addrs(host, &addresses);
     if (!status.ok()) {
-        LOG(WARNING) << "status of hostname_to_ip_addrs was not ok, err is " << status.get_error_msg();
+        LOG(WARNING) << "status of hostname_to_ip_addrs was not ok, err is " << status.message();
         return "";
     }
     if (addresses.size() != 1) {

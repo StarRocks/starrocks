@@ -39,9 +39,11 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -69,20 +71,20 @@ public class CreateTableLikeTest {
 
     private static void createTable(String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
     }
 
     private static void createTableLike(String sql) throws Exception {
         CreateTableLikeStmt createTableLikeStmt =
                 (CreateTableLikeStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().createTableLike(createTableLikeStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableLikeStmt.getCreateTableStmt());
     }
 
     private static void checkTableEqual(Table newTable, Table existedTable) {
         List<String> newCreateTableStmt = Lists.newArrayList();
-        GlobalStateMgr.getDdlStmt(newTable, newCreateTableStmt, null, null, false, true /* hide password */);
+        AstToStringBuilder.getDdlStmt(newTable, newCreateTableStmt, null, null, false, true /* hide password */);
         List<String> existedTableStmt = Lists.newArrayList();
-        GlobalStateMgr.getDdlStmt(existedTable, existedTableStmt, null, null, false, true /* hide password */);
+        AstToStringBuilder.getDdlStmt(existedTable, existedTableStmt, null, null, false, true /* hide password */);
         Assert.assertEquals(newCreateTableStmt.get(0).replace(newTable.getName(), existedTable.getName()),
                 existedTableStmt.get(0));
     }

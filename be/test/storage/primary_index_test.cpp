@@ -16,17 +16,54 @@
 
 #include <gtest/gtest.h>
 
+#include <random>
+
 #include "column/binary_column.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
+#include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "storage/chunk_helper.h"
+#include "storage/primary_key_dump.h"
 #include "storage/primary_key_encoder.h"
 #include "testutil/parallel_test.h"
 
 using namespace starrocks;
 
 namespace starrocks {
+
+template <typename DatumType>
+void test_pk_dump(PrimaryIndex* pk_index, const std::map<std::string, uint64_t>& current_index_stat) {
+    std::srand(static_cast<unsigned int>(time(nullptr)));
+    std::string kPrimaryIndexDumpDir = "./PrimaryIndexTest_test_index_dump_" + std::to_string(std::rand()) + "_" +
+                                       std::to_string(static_cast<int64_t>(pthread_self()));
+    std::string kPrimaryIndexDumpFile = kPrimaryIndexDumpDir + "/111.pkdump";
+    bool created;
+    FileSystem* fs = FileSystem::Default();
+    ASSERT_TRUE(fs->create_dir_if_missing(kPrimaryIndexDumpDir, &created).ok());
+    PrimaryKeyDumpPB dump_pb;
+    {
+        // dump primary index
+        PrimaryKeyDump dump(kPrimaryIndexDumpFile);
+        ASSERT_TRUE(dump.init_dump_file().ok());
+        ASSERT_TRUE(pk_index->pk_dump(&dump, dump_pb.mutable_primary_index()).ok());
+    }
+    {
+        // read primary index dump
+        ASSERT_TRUE(PrimaryKeyDump::deserialize_pkcol_pkindex_from_meta(
+                            kPrimaryIndexDumpFile, dump_pb, [&](const starrocks::Chunk& chunk) {},
+                            [&](const std::string& filename, const starrocks::PartialKVsPB& kvs) {
+                                for (int i = 0; i < kvs.keys_size(); i++) {
+                                    auto search =
+                                            current_index_stat.find(hexdump(kvs.keys(i).data(), kvs.keys(i).size()));
+                                    ASSERT_TRUE(search != current_index_stat.end());
+                                    ASSERT_TRUE(search->second == kvs.values(i));
+                                }
+                            })
+                            .ok());
+    }
+    ASSERT_TRUE(fs::remove_all(kPrimaryIndexDumpDir).ok());
+}
 
 template <LogicalType field_type, typename DatumType>
 void test_integral_pk() {
@@ -43,22 +80,28 @@ void test_integral_pk() {
     pk_col->resize(kSegmentSize);
     auto pk_data = pk_col->get_data().data();
     DatumType pk_value = 0;
+    std::map<std::string, uint64_t> current_index_stat;
 
     // [0, kSegmentSize)
     for (int i = 0; i < kSegmentSize; i++) {
         pk_data[i] = pk_value++;
+        current_index_stat[hexdump(reinterpret_cast<const char*>(&pk_data[i]), sizeof(DatumType))] = i;
     }
     ASSERT_TRUE(pk_index->insert(0, 0, *pk_col).ok());
 
     // [kSegmentSize, 2*kSegmentSize)
     for (int i = 0; i < kSegmentSize; i++) {
         pk_data[i] = pk_value++;
+        current_index_stat[hexdump(reinterpret_cast<const char*>(&pk_data[i]), sizeof(DatumType))] =
+                (((uint64_t)1) << 32) + i;
     }
     ASSERT_TRUE(pk_index->insert(1, 0, *pk_col).ok());
 
     // [2*kSegmentSize, 3*kSegmentSize)
     for (int i = 0; i < kSegmentSize; i++) {
         pk_data[i] = pk_value++;
+        current_index_stat[hexdump(reinterpret_cast<const char*>(&pk_data[i]), sizeof(DatumType))] =
+                (((uint64_t)2) << 32) + i;
     }
     ASSERT_TRUE(pk_index->insert(2, 0, *pk_col).ok());
 
@@ -75,6 +118,8 @@ void test_integral_pk() {
             }
         }
     }
+
+    test_pk_dump<DatumType>(pk_index.get(), current_index_stat);
 
     PrimaryIndex::DeletesMap deletes;
 
@@ -175,12 +220,22 @@ void test_binary_pk() {
     }
     ASSERT_TRUE(pk_index->insert(0, 0, *pk_col).ok());
 
+    std::map<std::string, uint64_t> current_index_stat;
+    auto* keys = reinterpret_cast<const Slice*>(pk_col->raw_data());
+    for (int i = 0; i < pk_col->size(); i++) {
+        current_index_stat[hexdump(keys[i].data, keys[i].size)] = i;
+    }
+
     // [kSegmentSize, 2*kSegmentSize)
     pk_col->resize(0);
     for (int i = 0; i < kSegmentSize; i++) {
         pk_col->append(strings::Substitute("binary_pk_$0", pk_value++));
     }
     ASSERT_TRUE(pk_index->insert(1, 0, *pk_col).ok());
+    keys = reinterpret_cast<const Slice*>(pk_col->raw_data());
+    for (int i = 0; i < pk_col->size(); i++) {
+        current_index_stat[hexdump(keys[i].data, keys[i].size)] = (((uint64_t)1) << 32) + i;
+    }
 
     // [2*kSegmentSize, 3*kSegmentSize)
     pk_col->resize(0);
@@ -188,6 +243,10 @@ void test_binary_pk() {
         pk_col->append(strings::Substitute("binary_pk_$0", pk_value++));
     }
     ASSERT_TRUE(pk_index->insert(2, 0, *pk_col).ok());
+    keys = reinterpret_cast<const Slice*>(pk_col->raw_data());
+    for (int i = 0; i < pk_col->size(); i++) {
+        current_index_stat[hexdump(keys[i].data, keys[i].size)] = (((uint64_t)2) << 32) + i;
+    }
 
     {
         std::vector<uint64_t> rowids(pk_col->size());

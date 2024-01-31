@@ -35,11 +35,11 @@ class mg_connection;
 
 namespace starrocks {
 
-extern void (*s_injected_send_reply)(HttpRequest*, HttpStatus, const std::string&);
+extern void (*s_injected_send_reply)(HttpRequest*, HttpStatus, std::string_view);
 
 namespace {
 static std::string k_response_str;
-static void inject_send_reply(HttpRequest* request, HttpStatus status, const std::string& content) {
+static void inject_send_reply(HttpRequest* request, HttpStatus status, std::string_view content) {
     k_response_str = content;
 }
 } // namespace

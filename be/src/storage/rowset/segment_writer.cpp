@@ -71,7 +71,7 @@ SegmentWriter::SegmentWriter(std::unique_ptr<WritableFile> wfile, uint32_t segme
 
 SegmentWriter::~SegmentWriter() = default;
 
-std::string SegmentWriter::segment_path() const {
+const std::string& SegmentWriter::segment_path() const {
     return _wfile->filename();
 }
 
@@ -215,7 +215,7 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         _index_builder = std::make_unique<ShortKeyIndexBuilder>(_segment_id, _opts.num_rows_per_block);
     }
     const auto& column = _tablet_schema->columns().back();
-    if (column.name() == "__row") {
+    if (column.name() == Schema::FULL_ROW_COLUMN) {
         std::vector<ColumnId> cids(_tablet_schema->num_columns() - 1);
         for (int i = 0; i < _tablet_schema->num_columns() - 1; i++) {
             cids[i] = i;
@@ -237,6 +237,10 @@ uint64_t SegmentWriter::estimate_segment_size() {
     }
     size += _index_builder->size();
     return size;
+}
+
+uint64_t SegmentWriter::current_filesz() const {
+    return _wfile->size();
 }
 
 Status SegmentWriter::finalize(uint64_t* segment_file_size, uint64_t* index_size, uint64_t* footer_position) {
@@ -354,7 +358,12 @@ Status SegmentWriter::append_chunk(const Chunk& chunk) {
         RETURN_IF_ERROR(_column_writers[i]->append(*col));
     }
 
-    if (chunk_num_columns + 1 == _tablet_schema->num_columns() && _tablet_schema->columns().back().name() == "__row") {
+    // TODO(cbl): put the fill full row column logic here is a bit hacky, this segment writer is used in many other
+    //            situations(compaction etc.), so better to put it into somewhere early in the write pipeline
+    //            likely in _sink->flush_chunk at MemTable::flush
+    if (_column_writers.size() == _tablet_schema->num_columns() &&
+        _tablet_schema->columns().back().name() == Schema::FULL_ROW_COLUMN &&
+        chunk_num_columns + 1 == _column_writers.size()) {
         // just missing full row column, generate it and write to file
         auto full_row_col = std::make_unique<BinaryColumn>();
         auto row_encoder = RowStoreEncoderFactory::instance()->get_or_create_encoder(SIMPLE);

@@ -12,6 +12,10 @@ StarRocks 中的同步物化视图仅能基于 [Default Catalog](../data_source/
 
 自 2.4 版本起，StarRocks 支持**异步物化视图**，可以基于多个基表创建，且支持更丰富的聚合函数。详细信息，请参阅 [异步物化视图](../using_starrocks/Materialized_view.md)。
 
+:::note
+目前， StarRocks 存算分离集群暂不支持同步物化视图。
+:::
+
 下表从支持的特性角度比较了 StarRocks 2.5、2.4 中的异步物化视图以及同步物化视图（Rollup）：
 
 |                              | **单表聚合** | **多表关联** | **查询改写** | **刷新策略** | **基表** |
@@ -25,7 +29,7 @@ StarRocks 中的同步物化视图仅能基于 [Default Catalog](../data_source/
 
   物化视图的驱动表。
 
-  对于 StarRocks 的同步物化视图，基表仅可以是 [Default catalog](../data_source/catalog/default_catalog.md) 中的单个内部表。StarRocks 支持在明细模型 (Duplicate Key type)、聚合模型 (Aggregate Key type) 和更新模型 (Unique Key type) 上创建同步物化视图。
+  对于 StarRocks 的同步物化视图，基表仅可以是 [Default catalog](../data_source/catalog/default_catalog.md) 中的单个内部表。StarRocks 支持在明细表、聚合表和更新表上创建同步物化视图。
 
 - **刷新（Refresh）**
 
@@ -152,10 +156,11 @@ GROUP BY store_id;
 > - 在同步物化视图中使用聚合函数时，查询语句必须使用 GROUP BY 语句，且 SELECT LIST 中至少包含一个分组列。
 > - 同步物化视图不支持对多列数据使用单个聚合函数，不支持形如 `sum(a+b)` 的查询语句。
 > - 同步物化视图不支持对同列数据使用多个聚合函数，不支持形如 `select sum(a), min(a) from table` 的查询语句。
-> - 同步物化视图创建语句不支持 JOIN、WHERE 子句。
+> - 同步物化视图创建语句不支持 JOIN。
 > - 使用 ALTER TABLE DROP COLUMN 删除基表中特定列时，需要保证该基表所有同步物化视图中都不包含被删除列，否则无法进行删除操作。如需删除该列，则需要将所有包含该列的同步物化视图删除，然后删除该列。
 > - 为一张表创建过多的同步物化视图会影响导入的效率。导入数据时，同步物化视图和基表数据将同步更新，如果一张基表包含 `n` 个同步物化视图，向基表导入数据时，其导入效率大约等同于导入 `n` 张表，数据导入的速度会变慢。
 > - 当前不支持同时创建多个同步物化视图。仅当当前创建任务完成时，方可执行下一个创建任务。
+> - StarRocks 存算分离集群暂不支持同步物化视图。
 
 ## 查看同步物化视图构建状态
 

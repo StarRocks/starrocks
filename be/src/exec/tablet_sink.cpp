@@ -320,6 +320,9 @@ Status OlapTableSink::_init_node_channels(RuntimeState* state, IndexIdToTabletBE
                             node_channel = it->second.get();
                         }
                         node_channel->add_tablet(index->index_id, tablet_info);
+                        if (_enable_replicated_storage && i == 0) {
+                            node_channel->set_has_primary_replica(true);
+                        }
                     }
                 }
 
@@ -374,14 +377,28 @@ Status OlapTableSink::_automatic_create_partition() {
     request.__set_table_id(_vectorized_partition->table_id());
     request.__set_partition_values(_partition_not_exist_row_values);
 
-    VLOG(1) << "automatic partition rpc begin request " << request;
+    LOG(INFO) << "load_id=" << print_id(_load_id) << ", txn_id: " << std::to_string(_txn_id)
+              << "automatic partition rpc begin request " << request;
     TNetworkAddress master_addr = get_master_address();
     auto timeout_ms = _runtime_state->query_options().query_timeout * 1000 / 2;
-    RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
-            master_addr.hostname, master_addr.port,
-            [&request, &result](FrontendServiceConnection& client) { client->createPartition(result, request); },
-            timeout_ms));
-    VLOG(1) << "automatic partition rpc end response " << result;
+    int retry_times = 0;
+    int64_t start_ts = butil::gettimeofday_s();
+
+    do {
+        if (retry_times++ > 1) {
+            SleepFor(MonoDelta::FromMilliseconds(std::min(5000, timeout_ms)));
+            VLOG(1) << "load_id=" << print_id(_load_id) << ", txn_id: " << std::to_string(_txn_id)
+                    << "automatic partition rpc retry " << retry_times;
+        }
+        RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
+                master_addr.hostname, master_addr.port,
+                [&request, &result](FrontendServiceConnection& client) { client->createPartition(result, request); },
+                timeout_ms));
+    } while (result.status.status_code == TStatusCode::SERVICE_UNAVAILABLE &&
+             butil::gettimeofday_s() - start_ts < timeout_ms / 1000);
+
+    LOG(INFO) << "load_id=" << print_id(_load_id) << ", txn_id: " << std::to_string(_txn_id)
+              << "automatic partition rpc end response " << result;
     if (result.status.status_code == TStatusCode::OK) {
         // add new created partitions
         RETURN_IF_ERROR(_vectorized_partition->add_partitions(result.partitions));
@@ -514,7 +531,7 @@ Status OlapTableSink::_incremental_open_node_channel(const std::vector<TOlapTabl
             if (!st.ok()) {
                 LOG(WARNING) << ch->name() << ", tablet open failed, " << ch->print_load_info()
                              << ", node=" << ch->node_info()->host << ":" << ch->node_info()->brpc_port
-                             << ", errmsg=" << st.get_error_msg();
+                             << ", errmsg=" << st.message();
                 err_st = st.clone_and_append(string(" be:") + ch->node_info()->host);
                 channel->mark_as_failed(ch);
             }
@@ -766,6 +783,9 @@ Status OlapTableSink::_fill_auto_increment_id_internal(Chunk* chunk, SlotDescrip
 }
 
 bool OlapTableSink::is_close_done() {
+    if (_tablet_sink_sender == nullptr) {
+        return true;
+    }
     return _tablet_sink_sender->is_close_done();
 }
 
@@ -794,9 +814,12 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
     COUNTER_SET(_ts_profile->convert_chunk_timer, _convert_batch_ns);
     COUNTER_SET(_ts_profile->validate_data_timer, _validate_data_ns);
 
+    if (_tablet_sink_sender == nullptr) {
+        return close_status;
+    }
     Status status = _tablet_sink_sender->close_wait(state, close_status, _ts_profile);
     if (!status.ok()) {
-        _span->SetStatus(trace::StatusCode::kError, status.get_error_msg());
+        _span->SetStatus(trace::StatusCode::kError, std::string(status.message()));
     }
     return status;
 }

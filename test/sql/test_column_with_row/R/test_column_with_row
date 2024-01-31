@@ -1,12 +1,86 @@
-count(*)
+-- name: test_columm_with_row
+ADMIN SET FRONTEND CONFIG ("enable_experimental_rowstore" = "true");
+-- result:
+[]
+-- !result
+CREATE DATABASE IF NOT EXISTS demo;
+-- result:
+[]
+-- !result
+DROP TABLE IF EXISTS demo.t1;
+-- result:
+[]
+-- !result
+CREATE TABLE IF NOT EXISTS demo.t1(
+                                      k1 int,
+                                      k2 int,
+                                      v1 varchar(16),
+    v2 DATE NOT NULL COMMENT "YYYY-MM-DD",
+    v3 TINYINT COMMENT "range [-128, 127]"
+    )
+    PRIMARY KEY (k1, k2)
+    distributed by hash(k1, k2)
+    PROPERTIES (
+                   "replication_num" = "1",
+                   "storage_type" = "column_with_row"
+               );
+-- result:
+[]
+-- !result
+INSERT INTO demo.t1(k1, k2, v1, v2, v3) VALUES
+                                            (1, 2, 'a', "2222-12-22", 33),
+                                            (1, 3, 'b', "2222-12-22", 34),
+                                            (1, 4, 'c', "2222-12-22", 35),
+                                            (2, 2, 'd', "2222-12-22", 36),
+                                            (2, 3, 'd', "2222-12-22", 37),
+                                            (3, 3, 'e', "2222-12-22", 100),
+                                            (4, 4, 'f', "2222-12-22", 101);
+-- result:
+[]
+-- !result
+SELECT count(*) FROM demo.t1;
+-- result:
 7
-k1	k2	v1	v2	v3
+-- !result
+SELECT * FROM demo.t1 order by k1, k2 limit 3;
+-- result:
 1	2	a	2222-12-22	33
 1	3	b	2222-12-22	34
 1	4	c	2222-12-22	35
-k2	sum(k1)
+-- !result
+SELECT k2, sum(k1) FROM demo.t1 group by k2 order by k2;
+-- result:
 2	3
 3	6
 4	5
-k1	k2	v1	v2	v3
+-- !result
+update demo.t1 set v1 = '5' where k1 = 3 and k2 = 3;
+-- result:
+[]
+-- !result
+select * from demo.t1 where k1 = 3 and k2 = 3;
+-- result:
 3	3	5	2222-12-22	100
+-- !result
+DELETE FROM demo.t1 WHERE k1 = 1 and k2 = 2;
+-- result:
+[]
+-- !result
+SELECT * from demo.t1 WHERE k1 = 1 and k2 = 2;
+-- result:
+-- !result
+DELETE FROM demo.t1 WHERE k1 = 1;
+-- result:
+[]
+-- !result
+SELECT * from demo.t1 WHERE k1 = 1;
+-- result:
+-- !result
+TRUNCATE TABLE demo.t1;
+-- result:
+[]
+-- !result
+DROP TABLE demo.t1 FORCE;
+-- result:
+[]
+-- !result

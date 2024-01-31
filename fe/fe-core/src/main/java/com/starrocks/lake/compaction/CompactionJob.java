@@ -15,7 +15,7 @@
 package com.starrocks.lake.compaction;
 
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.VisibleStateWaiter;
@@ -23,12 +23,13 @@ import com.starrocks.transaction.VisibleStateWaiter;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 public class CompactionJob {
     private final Database db;
     private final Table table;
-    private final Partition partition;
+    private final PhysicalPartition partition;
     private final long txnId;
     private final long startTs;
     private volatile long commitTs;
@@ -36,12 +37,16 @@ public class CompactionJob {
     private VisibleStateWaiter visibleStateWaiter;
     private List<CompactionTask> tasks;
 
-    public CompactionJob(Database db, Table table, Partition partition, long txnId) {
+    public CompactionJob(Database db, Table table, PhysicalPartition partition, long txnId) {
         this.db = Objects.requireNonNull(db, "db is null");
         this.table = Objects.requireNonNull(table, "table is null");
         this.partition = Objects.requireNonNull(partition, "partition is null");
         this.txnId = txnId;
         this.startTs = System.currentTimeMillis();
+    }
+
+    Database getDb() {
+        return db;
     }
 
     public long getTxnId() {
@@ -82,7 +87,7 @@ public class CompactionJob {
     }
 
     public int getNumTabletCompactionTasks() {
-        return tasks.stream().mapToInt(CompactionTask::tabletCount).sum();
+        return tasks.stream().filter(Predicate.not(CompactionTask::isDone)).mapToInt(CompactionTask::tabletCount).sum();
     }
 
     public long getStartTs() {
@@ -109,12 +114,12 @@ public class CompactionJob {
         tasks.forEach(CompactionTask::abort);
     }
 
-    public Partition getPartition() {
+    public PhysicalPartition getPartition() {
         return partition;
     }
 
     public String getFullPartitionName() {
-        return String.format("%s.%s.%s", db.getFullName(), table.getName(), partition.getName());
+        return String.format("%s.%s.%s", db.getFullName(), table.getName(), partition.getId());
     }
 
     public String getDebugString() {

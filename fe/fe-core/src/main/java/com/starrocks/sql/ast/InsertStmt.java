@@ -20,10 +20,12 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.BlackHoleTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
@@ -57,6 +59,8 @@ import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
  */
 public class InsertStmt extends DmlStmt {
     public static final String STREAMING = "STREAMING";
+
+    private static final String PARQUET_FORMAT = "parquet";
 
     private final TableName tblName;
     private PartitionNames targetPartitionNames;
@@ -94,6 +98,7 @@ public class InsertStmt extends DmlStmt {
 
     // tableFunctionAsTargetTable is true if insert statement is parsed from INSERT INTO FILES(..)
     private final boolean tableFunctionAsTargetTable;
+    private final boolean blackHoleTableAsTargetTable;
     private final Map<String, String> tableFunctionProperties;
 
     public InsertStmt(TableName tblName, PartitionNames targetPartitionNames, String label, List<String> cols,
@@ -112,6 +117,7 @@ public class InsertStmt extends DmlStmt {
         this.isOverwrite = isOverwrite;
         this.tableFunctionAsTargetTable = false;
         this.tableFunctionProperties = null;
+        this.blackHoleTableAsTargetTable = false;
     }
 
     // Ctor for CreateTableAsSelectStmt
@@ -125,6 +131,7 @@ public class InsertStmt extends DmlStmt {
         this.forCTAS = true;
         this.tableFunctionAsTargetTable = false;
         this.tableFunctionProperties = null;
+        this.blackHoleTableAsTargetTable = false;
     }
 
     // Ctor for INSERT INTO FILES(...)
@@ -136,6 +143,19 @@ public class InsertStmt extends DmlStmt {
         this.queryStatement = queryStatement;
         this.tableFunctionAsTargetTable = true;
         this.tableFunctionProperties = tableFunctionProperties;
+        this.blackHoleTableAsTargetTable = false;
+    }
+
+    // Ctor for INSERT INTO blackhole() SELECT ...
+    public InsertStmt(QueryStatement queryStatement, NodePosition pos) {
+        super(pos);
+        this.tblName = new TableName("black_hole_catalog", "black_hole_db", "black_hole_table");
+        this.targetColumnNames = null;
+        this.targetPartitionNames = null;
+        this.queryStatement = queryStatement;
+        this.tableFunctionAsTargetTable = false;
+        this.tableFunctionProperties = null;
+        this.blackHoleTableAsTargetTable = true;
     }
 
     public Table getTargetTable() {
@@ -271,19 +291,29 @@ public class InsertStmt extends DmlStmt {
         return tableFunctionAsTargetTable;
     }
 
+    public boolean useBlackHoleTableAsTargetTable() {
+        return blackHoleTableAsTargetTable;
+    }
+
     public Map<String, String> getTableFunctionProperties() {
         return tableFunctionProperties;
     }
 
-    public Table makeTableFunctionTable() {
-        checkState(tableFunctionAsTargetTable, "tableFunctionAsTargetTable is false");
-        // fetch schema from query
+    private List<Column> collectSelectedFieldsFromQueryStatement() {
         QueryRelation query = getQueryStatement().getQueryRelation();
-        List<Column> columns = query.getRelationFields().getAllFields().stream()
+        return query.getRelationFields().getAllFields().stream()
                 .filter(Field::isVisible)
                 .map(field -> new Column(field.getName(), field.getType(), field.isNullable()))
                 .collect(Collectors.toList());
+    }
 
+    public Table makeBlackHoleTable() {
+        return new BlackHoleTable(collectSelectedFieldsFromQueryStatement());
+    }
+
+    public Table makeTableFunctionTable(SessionVariable sessionVariable) {
+        checkState(tableFunctionAsTargetTable, "tableFunctionAsTargetTable is false");
+        List<Column> columns = collectSelectedFieldsFromQueryStatement();
         List<String> columnNames = columns.stream()
                 .map(Column::getName)
                 .collect(Collectors.toList());
@@ -317,17 +347,16 @@ public class InsertStmt extends DmlStmt {
 
         if (format == null) {
             throw new SemanticException("format is a mandatory property. " +
-                    "Use \"path\" = \"parquet\" as only parquet format is supported now");
+                    "Use \"format\" = \"parquet\" as only parquet format is supported now");
         }
 
-        if (!format.equalsIgnoreCase("parquet")) {
-            throw new SemanticException("use \"path\" = \"parquet\", as only parquet format is supported now");
+        if (!PARQUET_FORMAT.equalsIgnoreCase(format)) {
+            throw new SemanticException("use \"format\" = \"parquet\", as only parquet format is supported now");
         }
 
+        // if compression codec is not specified, use compression codec from session
         if (compressionType == null) {
-            throw new SemanticException("compression is a mandatory property. " +
-                    "Use \"compression\" = \"your_chosen_compression_type\". Supported compression types are" +
-                    "(uncompressed, gzip, brotli, zstd, lz4).");
+            compressionType = sessionVariable.getConnectorSinkCompressionCodec();
         }
 
         if (!PARQUET_COMPRESSION_TYPE_MAP.containsKey(compressionType)) {

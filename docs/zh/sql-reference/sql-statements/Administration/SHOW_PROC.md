@@ -8,6 +8,10 @@ displayed_sidebar: "Chinese"
 
 查看当前集群中的特定指标。
 
+> **注意**
+>
+> 该操作需要 SYSTEM 级 OPERATE 权限。
+
 ## 语法
 
 ```SQL
@@ -204,8 +208,8 @@ mysql> show proc '/statistic/10002';
 | UnhealthyTabletNum    | 数据重分布过程中还未完成的 Tablet 数量。      |
 | InconsistentTabletNum | 数据库中不一致的 Tablet 数量。              |
 | CloningTabletNum      | 数据库中正在进行 Clone 操作的 Tablet 数量。   |
-| ErrorStateTabletNum   | 主键模型表中错误状态的 Tablet 数量。          |
-| ErrorStateTablets     | 主键模型表中错误状态的 Tablet 的 ID。         |
+| ErrorStateTabletNum   | 主键表中错误状态的 Tablet 数量。          |
+| ErrorStateTablets     | 主键表中错误状态的 Tablet 的 ID。         |
 
 示例五：查看当前集群各种任务类型的总数和失败总数。
 

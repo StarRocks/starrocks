@@ -54,7 +54,7 @@ The following table compares the asynchronous materialized views (ASYNC MV) and 
 
   > **NOTE**
   >
-  > Asynchronous materialized views created on base tables in a [JDBC catalog](../data_source/catalog/jdbc_catalog.md) do not support query rewrite.
+  > Asynchronous materialized views created on base tables in a JDBC catalog or a Hudi catalog do not support query rewrite.
 
 ## Decide when to create a materialized view
 
@@ -309,7 +309,7 @@ SHOW CREATE MATERIALIZED VIEW order_mv;
 
 ### Check the execution status of asynchronous materialized view
 
-You can check the execution (building or refreshing) status of an asynchronous materialized view by querying the [`tasks`](../reference/information_schema/tasks.md) and [`task_runs`](../reference/information_schema/task_runs.md) in [Information Schema](../reference/information_schema/information_schema.md).
+You can check the execution (building or refreshing) status of an asynchronous materialized view by querying the [`tasks`](../reference/information_schema/tasks.md) and [`task_runs`](../reference/information_schema/task_runs.md) in [Information Schema](../reference/overview-pages/information_schema.md).
 
 The following example checks the execution status of the materialized view that was created most recently:
 

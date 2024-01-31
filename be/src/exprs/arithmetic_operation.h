@@ -15,6 +15,11 @@
 #pragma once
 
 #include "column/type_traits.h"
+#include "common/status.h"
+#include "exprs/expr_context.h"
+#include "exprs/jit/ir_helper.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/Value.h"
 #include "runtime/decimalv3.h"
 #include "types/logical_type.h"
 #include "util/guard.h"
@@ -147,7 +152,13 @@ struct ArithmeticBinaryOperator {
                 return l / (r + (r == 0));
             }
         } else if constexpr (is_mod_op<Op>) {
-            if constexpr (may_cause_fpe<ResultType>) {
+            if constexpr (lt_is_float<Type>) {
+                auto result = fmod(l, (r + (r == 0)));
+                if (UNLIKELY(result == -0)) {
+                    return 0;
+                }
+                return result;
+            } else if constexpr (may_cause_fpe<ResultType>) {
                 if (UNLIKELY(check_fpe_of_min_div_by_minus_one(l, r))) {
                     return 0;
                 } else {
@@ -182,6 +193,154 @@ struct ArithmeticBinaryOperator {
             static_assert(is_binary_op<Op>, "Invalid binary operators");
         }
     }
+
+    template <typename ResultType>
+    static StatusOr<LLVMDatum> generate_ir(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
+                                           const std::vector<LLVMDatum>& datums) {
+        return generate_ir<ResultType, ResultType, ResultType>(context, module, b, datums);
+    }
+
+    template <typename LType, typename RType, typename ResultType>
+    static StatusOr<LLVMDatum> generate_ir(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
+                                           const std::vector<LLVMDatum>& datums) {
+        auto* l = datums[0].value;
+        auto* r = datums[1].value;
+
+        LLVMDatum result(b);
+        result.null_flag = b.CreateOr(datums[0].null_flag, datums[1].null_flag);
+        if constexpr (is_add_op<Op>) {
+            if constexpr (lt_is_float<Type>) {
+                result.value = b.CreateFAdd(l, r);
+            } else {
+                result.value = b.CreateAdd(l, r);
+            }
+        } else if constexpr (is_sub_op<Op>) {
+            if constexpr (lt_is_float<Type>) {
+                result.value = b.CreateFSub(l, r);
+            } else {
+                result.value = b.CreateSub(l, r);
+            }
+        } else if constexpr (is_mul_op<Op>) {
+            // TODO(Yueyang): implement float type * 0.
+            if constexpr (lt_is_float<Type>) {
+                result.value = b.CreateFMul(l, r);
+            } else {
+                result.value = b.CreateMul(l, r);
+            }
+        } else if constexpr (is_div_op<Op>) {
+            llvm::Value* r_is_zero = nullptr;
+            if constexpr (lt_is_float<Type>) {
+                // return 0 when div by 0.
+                // adjusted_r = r == 0.0 ? r + 1.0 : r;
+                r_is_zero = b.CreateFCmpOEQ(r, llvm::ConstantFP::get(r->getType(), 0));
+                auto* l_is_zero = b.CreateFCmpOEQ(l, llvm::ConstantFP::get(r->getType(), 0));
+                auto* sum = b.CreateFAdd(r, llvm::ConstantFP::get(r->getType(), 1));
+                auto* adjusted_r = b.CreateSelect(r_is_zero, sum, r);
+                result.value = b.CreateFDiv(l, adjusted_r);
+                result.value =
+                        b.CreateSelect(l_is_zero, llvm::ConstantFP::get(r->getType(), 0), b.CreateFDiv(l, adjusted_r));
+            } else {
+                // TODO(Yueyang): avoid 0 div a negative num, make result -0
+                // adjusted_r = r == 0 ? r + 1 : r;
+                bool is_signed;
+                if constexpr (lt_is_boolean<Type>) {
+                    is_signed = false;
+                } else if constexpr (lt_is_integer<Type>) {
+                    is_signed = true;
+                } else {
+                    DCHECK(false) << "Invalid type";
+                }
+
+                r_is_zero = b.CreateICmpEQ(r, llvm::ConstantInt::get(r->getType(), 0, is_signed));
+                auto* sum = b.CreateAdd(r, llvm::ConstantInt::get(r->getType(), 1, is_signed));
+                auto* adjusted_r = b.CreateSelect(r_is_zero, sum, r);
+                if constexpr (may_cause_fpe<ResultType> && may_cause_fpe<LType> && may_cause_fpe<RType>) {
+                    // fpe = l == signed_minimum<LType> && r == -1;
+                    auto* cond_left =
+                            b.CreateICmpEQ(l, llvm::ConstantInt::get(l->getType(), signed_minimum<LType>, is_signed));
+                    auto* cond_right = b.CreateICmpEQ(r, llvm::ConstantInt::get(r->getType(), -1, is_signed));
+                    auto* fpe = b.CreateAnd(cond_left, cond_right);
+                    // It is difficult to create an if statement here, so we use ternary expressions as an alternative.
+                    // In a ternary expression, the last two expressions are evaluated regardless of the condition.
+                    // modify r to prevent overflow.
+                    adjusted_r = b.CreateSelect(fpe, llvm::ConstantInt::get(l->getType(), 1, is_signed), adjusted_r);
+                    result.value = b.CreateSelect(
+                            fpe, llvm::ConstantInt::get(l->getType(), signed_minimum<ResultType>, is_signed),
+                            b.CreateSDiv(l, adjusted_r));
+                } else {
+                    result.value = b.CreateSDiv(l, adjusted_r);
+                }
+            }
+            result.null_flag =
+                    b.CreateSelect(r_is_zero, llvm::ConstantInt::get(result.null_flag->getType(), 1), result.null_flag);
+        } else if constexpr (is_mod_op<Op>) {
+            // TODO(Yueyang): Support JIT compile of mod operator.
+            llvm::Value* r_is_zero = nullptr;
+            if constexpr (lt_is_float<Type>) {
+                // return 0 when mod by -0.
+                // adjusted_r = r == 0.0 ? r + 1.0 : r;
+                r_is_zero = b.CreateFCmpOEQ(r, llvm::ConstantFP::get(r->getType(), 0));
+                auto* r_is_negative_zero = b.CreateFCmpOEQ(r, llvm::ConstantFP::get(r->getType(), -0));
+                auto* sum = b.CreateFAdd(r, llvm::ConstantFP::get(r->getType(), 1));
+                auto* adjusted_r = b.CreateSelect(r_is_zero, sum, r);
+                result.value = b.CreateSelect(r_is_negative_zero, llvm::ConstantFP::get(r->getType(), 0),
+                                              b.CreateFRem(l, adjusted_r));
+            } else {
+                // TODO(Yueyang): avoid 0 mod a negative num, make result -0
+                // adjusted_r = r == 0 ? r + 1 : r;
+                bool is_signed;
+                if constexpr (lt_is_boolean<Type>) {
+                    is_signed = false;
+                } else if constexpr (lt_is_integer<Type>) {
+                    is_signed = true;
+                } else {
+                    DCHECK(false) << "Invalid type";
+                }
+
+                r_is_zero = b.CreateICmpEQ(r, llvm::ConstantInt::get(r->getType(), 0, is_signed));
+                auto* sum = b.CreateAdd(r, llvm::ConstantInt::get(r->getType(), 1, is_signed));
+                auto* adjusted_r = b.CreateSelect(r_is_zero, sum, r);
+                llvm::Value* fpe = b.getInt1(false);
+                if constexpr (may_cause_fpe<ResultType> && may_cause_fpe<LType> && may_cause_fpe<RType>) {
+                    // fpe = l == signed_minimum<LType> && r == -1;
+                    auto* cond_left =
+                            b.CreateICmpEQ(l, llvm::ConstantInt::get(l->getType(), signed_minimum<LType>, is_signed));
+                    auto* cond_right = b.CreateICmpEQ(r, llvm::ConstantInt::get(r->getType(), -1, is_signed));
+                    fpe = b.CreateAnd(cond_left, cond_right);
+                    // It is difficult to create an if statement here, so we use ternary expressions as an alternative.
+                    // In a ternary expression, the last two expressions are evaluated regardless of the condition.
+                    // modify r to prevent overflow.
+                    adjusted_r = b.CreateSelect(fpe, llvm::ConstantInt::get(l->getType(), 1, is_signed), adjusted_r);
+                    result.value = b.CreateSelect(fpe, llvm::ConstantInt::get(l->getType(), 0, is_signed),
+                                                  b.CreateSRem(l, adjusted_r));
+                } else {
+                    result.value = b.CreateSRem(l, adjusted_r);
+                }
+            }
+            result.null_flag =
+                    b.CreateSelect(r_is_zero, llvm::ConstantInt::get(result.null_flag->getType(), 1), result.null_flag);
+        } else if constexpr (is_bitand_op<Op>) {
+            result.value = b.CreateAnd(l, r);
+        } else if constexpr (is_bitor_op<Op>) {
+            result.value = b.CreateOr(l, r);
+        } else if constexpr (is_bitxor_op<Op>) {
+            result.value = b.CreateXor(l, r);
+        } else if constexpr (is_bit_shift_left_op<Op>) {
+            result.value = b.CreateShl(l, r);
+        } else if constexpr (is_bit_shift_right_op<Op>) {
+            if constexpr (lt_is_unsigned<Type>) {
+                result.value = b.CreateLShr(l, r);
+            } else {
+                result.value = b.CreateAShr(l, r);
+            }
+        } else if constexpr (is_bit_shift_right_logical_op<Op>) {
+            result.value = b.CreateLShr(l, r);
+        } else {
+            static_assert(is_binary_op<Op>, "Invalid binary operators");
+        }
+
+        return result;
+    }
 };
 
 TYPE_GUARD(DivModOpGuard, is_divmod_op, DivOp, ModOp)
@@ -204,17 +363,18 @@ struct ArithmeticBinaryOperator<Op, TYPE_DECIMALV2, DivModOpGuard<Op>, guard::Gu
             static_assert(is_divmod_op<Op>, "Invalid float operators");
         }
     }
-};
 
-template <LogicalType Type>
-struct ArithmeticBinaryOperator<ModOp, Type, guard::Guard, FloatLTGuard<Type>> {
+    template <typename ResultType>
+    static StatusOr<LLVMDatum> generate_ir(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
+                                           const std::vector<LLVMDatum>& datums) {
+        return generate_ir<ResultType, ResultType, ResultType>(context, module, b, datums);
+    }
+
     template <typename LType, typename RType, typename ResultType>
-    static inline ReturnType<Type, ResultType> apply(const LType& l, const RType& r) {
-        auto result = fmod(l, (r + (r == 0)));
-        if (UNLIKELY(result == -0)) {
-            return 0;
-        }
-        return result;
+    static StatusOr<LLVMDatum> generate_ir(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
+                                           const std::vector<LLVMDatum>& datums) {
+        // JIT compile of DecimalV2 type is not supported.
+        return Status::NotSupported("JIT compile of DecimalV2 type is not supported.");
     }
 };
 
@@ -256,7 +416,7 @@ static inline std::tuple<int, int, int> compute_decimal_result_type(int lhs_scal
 }
 
 template <typename T>
-T decimal_div_integer(const T& dividend, const T& divisor, int dividend_scale) {
+T decimal_div_integer(const T& dividend, const T& adjusted_r, int dividend_scale) {
     // compute adjust_scale_factor
     auto [_1, _2, adjust_scale] = compute_decimal_result_type<T, DivOp>(dividend_scale, 0);
     T adjust_scale_factor = get_scale_factor<T>(adjust_scale);
@@ -265,7 +425,7 @@ T decimal_div_integer(const T& dividend, const T& divisor, int dividend_scale) {
     DecimalV3Cast::to_decimal<T, T, T, true, false>(dividend, adjust_scale_factor, &scaled_dividend);
     // compute the quotient
     T quotient = 0;
-    DecimalV3Arithmetics<T, false>::div_round(scaled_dividend, divisor, &quotient);
+    DecimalV3Arithmetics<T, false>::div_round(scaled_dividend, adjusted_r, &quotient);
     return quotient;
 }
 
@@ -419,6 +579,12 @@ struct ArithmeticBinaryOperator<Op, Type, DecimalOpGuard<Op>, DecimalLTGuard<Typ
             return apply<check_overflow, LType, RType, ResultType>(l, r, result);
         }
     }
+
+    llvm::Value* generate_ir(llvm::IRBuilder<>& b, const std::vector<llvm::Value*>& args) const {
+        // TODO(Yueyang): Support JIT compile of DecimalV3 type.
+        LOG(WARNING) << "JIT compile of DecimalV3 type is not supported.";
+        return nullptr;
+    }
 };
 
 template <typename Op, LogicalType Type>
@@ -441,6 +607,14 @@ struct ArithmeticUnaryOperator {
     static inline ReturnType<Type, ResultType> apply(const UType& l) {
         if constexpr (is_bitnot_op<Op>) {
             return ~l;
+        } else {
+            static_assert(is_bitnot_op<Op>, "Invalid unary operators");
+        }
+    }
+
+    static llvm::Value* generate_ir(llvm::IRBuilder<>& b, llvm::Value* l) {
+        if constexpr (is_bitnot_op<Op>) {
+            return b.CreateNot(l);
         } else {
             static_assert(is_bitnot_op<Op>, "Invalid unary operators");
         }

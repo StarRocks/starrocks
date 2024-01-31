@@ -25,8 +25,10 @@
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/strings/substitute.h"
 #include "http/action/compaction_action.h"
+#include "io/io_profiler.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
+#include "storage/primary_key_dump.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
@@ -163,6 +165,10 @@ static std::string exec_whitelist(const std::string& cmd) {
     return exec(cmd);
 }
 
+static std::string io_profile_and_get_topn_stats(const std::string& mode, int seconds, size_t topn) {
+    return IOProfiler::profile_and_get_topn_stats_str(mode, seconds, topn);
+}
+
 void bind_exec_env(ForeignModule& m) {
     {
         auto& cls = m.klass<MemTracker>("MemTracker");
@@ -188,6 +194,7 @@ void bind_exec_env(ForeignModule& m) {
         cls.funcStaticExt<&get_stack_trace_for_threads>("get_stack_trace_for_threads");
         cls.funcStaticExt<&get_stack_trace_for_all_threads>("get_stack_trace_for_all_threads");
         cls.funcStaticExt<&get_stack_trace_for_function>("get_stack_trace_for_function");
+        cls.funcStaticExt<&io_profile_and_get_topn_stats>("io_profile_and_get_topn_stats");
         cls.funcStaticExt<&grep_log_as_string>("grep_log_as_string");
         cls.funcStaticExt<&get_file_write_history>("get_file_write_history");
         cls.funcStaticExt<&unix_seconds>("unix_seconds");
@@ -214,6 +221,8 @@ void bind_exec_env(ForeignModule& m) {
         REG_METHOD(GlobalEnv, chunk_allocator_mem_tracker);
         REG_METHOD(GlobalEnv, clone_mem_tracker);
         REG_METHOD(GlobalEnv, consistency_mem_tracker);
+        REG_METHOD(GlobalEnv, connector_scan_pool_mem_tracker);
+        REG_METHOD(GlobalEnv, datacache_mem_tracker);
 
         // level 2
         REG_METHOD(GlobalEnv, tablet_metadata_mem_tracker);
@@ -268,7 +277,7 @@ public:
     static std::shared_ptr<TabletBasicInfo> get_tablet_info(int64_t tablet_id) {
         std::vector<TabletBasicInfo> tablet_infos;
         auto manager = StorageEngine::instance()->tablet_manager();
-        manager->get_tablets_basic_infos(-1, -1, tablet_id, tablet_infos);
+        manager->get_tablets_basic_infos(-1, -1, tablet_id, tablet_infos, nullptr);
         if (tablet_infos.empty()) {
             return nullptr;
         } else {
@@ -279,7 +288,7 @@ public:
     static std::vector<TabletBasicInfo> get_tablet_infos(int64_t table_id, int64_t partition_id) {
         std::vector<TabletBasicInfo> tablet_infos;
         auto manager = StorageEngine::instance()->tablet_manager();
-        manager->get_tablets_basic_infos(table_id, partition_id, -1, tablet_infos);
+        manager->get_tablets_basic_infos(table_id, partition_id, -1, tablet_infos, nullptr);
         return tablet_infos;
     }
 
@@ -292,6 +301,30 @@ public:
      */
     static Status do_compaction(int64_t tablet_id, const string& type) {
         return CompactionAction::do_compaction(tablet_id, type, "");
+    }
+
+    static std::string set_error_state(int64_t tablet_id) {
+        auto tablet = get_tablet(tablet_id);
+        if (!tablet) {
+            return "tablet not found";
+        }
+        if (tablet->updates() == nullptr) {
+            return "not support set error state";
+        }
+        tablet->updates()->set_error("error by script");
+        return "set error state success";
+    }
+
+    static std::string recover_tablet(int64_t tablet_id) {
+        auto tablet = get_tablet(tablet_id);
+        if (!tablet) {
+            return "tablet not found";
+        }
+        if (tablet->updates() == nullptr) {
+            return "not support recover";
+        }
+        Status st = tablet->updates()->recover();
+        return strings::Substitute("recover tablet:$0 status:$1", std::to_string(tablet_id), st.message());
     }
 
     static std::string get_tablet_meta_json(int64_t tablet_id) {
@@ -338,6 +371,24 @@ public:
             return "tablet not found";
         }
         return exec_whitelist(strings::Substitute("ls -al $0", tablet->schema_hash_path()));
+    }
+
+    static std::string pk_dump(int64_t tablet_id) {
+        auto tablet = get_tablet(tablet_id);
+        if (!tablet) {
+            return "tablet not found";
+        }
+        if (tablet->updates() == nullptr) {
+            return "non-pk tablet no support set error";
+        }
+        PrimaryKeyDump pkd(tablet.get());
+        auto st = pkd.dump();
+        if (st.ok()) {
+            return "print primary key dump success";
+        } else {
+            LOG(ERROR) << "print primary key dump fail, " << st;
+            return "print primary key dump fail";
+        }
     }
 
     static void bind(ForeignModule& m) {
@@ -494,7 +545,10 @@ public:
             REG_STATIC_METHOD(StorageEngineRef, submit_manual_compaction_task_for_partition);
             REG_STATIC_METHOD(StorageEngineRef, submit_manual_compaction_task_for_tablet);
             REG_STATIC_METHOD(StorageEngineRef, get_manual_compaction_status);
+            REG_STATIC_METHOD(StorageEngineRef, pk_dump);
             REG_STATIC_METHOD(StorageEngineRef, ls_tablet_dir);
+            REG_STATIC_METHOD(StorageEngineRef, set_error_state);
+            REG_STATIC_METHOD(StorageEngineRef, recover_tablet);
         }
     }
 };
