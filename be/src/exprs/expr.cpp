@@ -718,7 +718,7 @@ StatusOr<LLVMDatum> Expr::generate_ir(ExprContext* context, const llvm::Module& 
 std::string Expr::jit_func_name() const {
     DCHECK(!is_compilable());
     // uncompilable inputs, reducing string size.
-    return std::string(" col[") + (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string() +
+    return std::string("col[") + (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string() +
            "]";
 }
 
