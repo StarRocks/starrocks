@@ -225,6 +225,7 @@ jobs:
         run: |
           rm -rf ${{ github.workspace }}
           mkdir -p ${{ github.workspace }}
+          exit 1
 
       - name: BRANCH INFO
         id: branch

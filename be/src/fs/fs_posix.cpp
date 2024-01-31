@@ -427,9 +427,11 @@ public:
     Status iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) override {
         DIR* d = opendir(dir.c_str());
         if (d == nullptr) {
+            PLOG(ERROR) << "Fail to open " << dir;
             return io_error(dir, errno);
         }
         errno = 0;
+        Status ret;
         struct dirent* entry;
         while ((entry = readdir(d)) != nullptr) {
             std::string_view name(entry->d_name);
@@ -439,6 +441,8 @@ public:
             struct stat child_stat;
             std::string child_path = fmt::format("{}/{}", dir, name);
             if (stat(child_path.c_str(), &child_stat) != 0) {
+                PLOG(ERROR) << "Fail to stat " << child_path;
+                ret.update(io_error(child_path, errno));
                 break;
             }
             DirEntry de;
@@ -446,14 +450,24 @@ public:
             de.is_dir = S_ISDIR(child_stat.st_mode);
             de.mtime = static_cast<int64_t>(child_stat.st_mtime);
             de.size = child_stat.st_size;
+            auto saved_errno = errno;
             // callback returning false means to terminate iteration
             if (!cb(de)) {
                 break;
             }
+            if (errno != saved_errno) {
+                PLOG(ERROR) << "errno changed by callback";
+            }
         }
-        closedir(d);
-        if (errno != 0) return io_error(dir, errno);
-        return Status::OK();
+        if (errno != 0) {
+            PLOG(ERROR) << "Fail to read " << dir;
+            ret.update(io_error(dir, errno));
+        }
+        if (closedir(d) != 0) {
+            PLOG(ERROR) << "Fail to close " << dir;
+            ret.update(io_error(dir, errno));
+        }
+        return ret;
     }
 
     Status delete_file(const std::string& fname) override {
