@@ -155,7 +155,7 @@ public class Config extends ConfigBase {
     @ConfField
     public static int internal_log_roll_num = 90;
     @ConfField
-    public static String[] internal_log_modules = {"mv", "statistics"};
+    public static String[] internal_log_modules = {"mv", "statistic"};
     @ConfField
     public static String internal_log_roll_interval = "DAY";
     @ConfField
