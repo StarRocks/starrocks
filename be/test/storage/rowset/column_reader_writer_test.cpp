@@ -491,17 +491,10 @@ protected:
         return col;
     }
 
-<<<<<<< HEAD
     vectorized::ColumnPtr date_values(int null_ratio) {
-        size_t count = 4 * 1024 * 1024 / sizeof(vectorized::DateValue);
+        size_t count = 4 * 1024 / sizeof(vectorized::DateValue);
         auto col = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_DATE_V2, true);
         vectorized::DateValue value = vectorized::DateValue::create(2020, 10, 1);
-=======
-    ColumnPtr date_values(int null_ratio) {
-        size_t count = 4 * 1024 / sizeof(DateValue);
-        auto col = ChunkHelper::column_from_field_type(TYPE_DATE, true);
-        DateValue value = DateValue::create(2020, 10, 1);
->>>>>>> e89575c506 ([UT] Make ut run faster (#39465))
         for (size_t i = 0; i < count; i++) {
             CHECK_EQ(1, col->append_numbers(&value, sizeof(value)));
             value = value.add<vectorized::TimeUnit::DAY>(1);
