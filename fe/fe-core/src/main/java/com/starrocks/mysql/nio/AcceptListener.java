@@ -108,6 +108,7 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
                         // do not need to print log for this kind of exception.
                         // just clean up the context;
                         context.cleanup();
+                        context.getState().setError(e.getMessage());
                     } catch (Throwable e) {
                         if (e instanceof Error) {
                             LOG.error("connect processor exception because ", e);
@@ -116,6 +117,7 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
                             LOG.warn("connect processor exception because ", e);
                         }
                         context.cleanup();
+                        context.getState().setError(e.getMessage());
                     } finally {
                         LogUtil.logConnectionInfoToAuditLogAndQueryQueue(context,
                                 result == null ? null : result.getAuthPacket());
