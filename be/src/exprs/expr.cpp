@@ -705,13 +705,6 @@ StatusOr<LLVMDatum> Expr::generate_ir(ExprContext* context, const llvm::Module& 
     }
 
     ASSIGN_OR_RETURN(auto datum, generate_ir_impl(context, module, b, datums))
-    // Unoin null.
-    if (this->is_nullable()) {
-        // TODO(Yueyang): Check this.
-        for (auto& input : datums) {
-            datum.null_flag = b.CreateOr(datum.null_flag, input.null_flag);
-        }
-    }
     return datum;
 }
 

@@ -1152,7 +1152,7 @@ public:
         } else {
             LLVMDatum datum(b);
             ASSIGN_OR_RETURN(datum.value, IRHelper::cast_to_type(b, l, FromType, ToType));
-
+            datum.null_flag = datums[0].null_flag;
             if constexpr ((lt_is_integer<FromType> || lt_is_float<FromType>)&&(lt_is_integer<ToType> ||
                                                                                lt_is_float<ToType>)) {
                 typedef RunTimeCppType<FromType> FromCppType;
