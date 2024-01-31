@@ -26,6 +26,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.sql.ast.AddPartitionClause;
@@ -167,6 +168,10 @@ public interface ConnectorMetadata {
                                           ScalarOperator predicate,
                                           long limit) {
         return Statistics.builder().build();
+    }
+
+    default boolean prepareMetadata(MetaPreparationItem item, Tracers tracers) {
+        return true;
     }
 
     default List<PartitionKey> getPrunedPartitions(Table table, ScalarOperator predicate, long limit) {
