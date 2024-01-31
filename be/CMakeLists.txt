@@ -464,6 +464,7 @@ if ("${USE_STAROS}" STREQUAL "ON")
     add_library(CURL::libcurl ALIAS curl)
     add_library(rocksdb::rocksdb ALIAS rocksdb)
     add_library(starcache::starcache ALIAS starcache)
+    add_library(Snappy::snappy ALIAS snappy)
 
     set(absl_DIR "${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl" CACHE PATH "absl search path" FORCE)
     find_package(absl CONFIG REQUIRED)
