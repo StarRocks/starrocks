@@ -32,6 +32,7 @@
 #include "io/io_profiler.h"
 #include "util/errno.h"
 #include "util/slice.h"
+#include "util/stopwatch.hpp"
 
 namespace starrocks {
 
@@ -181,11 +182,26 @@ public:
     Status append(const Slice& data) override { return appendv(&data, 1); }
 
     Status appendv(const Slice* data, size_t cnt) override {
+<<<<<<< HEAD
+=======
+#ifdef USE_STAROS
+        staros::starlet::metrics::TimeObserver<prometheus::Histogram> write_latency(s_sr_posix_write_iolatency);
+#endif
+        MonotonicStopWatch watch;
+        watch.start();
+>>>>>>> 5de7d8b23d ([Enhancement] Add io time stat for memtable/segment flush (#40173))
         size_t bytes_written = 0;
         RETURN_IF_ERROR(do_writev_at(_fd, _filename, _filesize, data, cnt, &bytes_written));
         _filesize += bytes_written;
         _pending_sync = true;
+<<<<<<< HEAD
         IOProfiler::add_write(bytes_written);
+=======
+#ifdef USE_STAROS
+        s_sr_posix_write_iosize.Observe(bytes_written);
+#endif
+        IOProfiler::add_write(bytes_written, watch.elapsed_time());
+>>>>>>> 5de7d8b23d ([Enhancement] Add io time stat for memtable/segment flush (#40173))
         return Status::OK();
     }
 

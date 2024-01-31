@@ -11,7 +11,6 @@
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "service/brpc.h"
 #include "storage/delta_writer.h"
@@ -65,7 +64,6 @@ public:
 
         auto st = Status::OK();
         if (_request->has_segment() && _cntl->request_attachment().size() > 0) {
-            auto scope = IOProfiler::scope(IOProfiler::TAG_LOAD, _writer->tablet()->tablet_id());
             auto& segment_pb = _request->segment();
             st = _writer->write_segment(segment_pb, _cntl->request_attachment());
         } else if (!_request->eos()) {

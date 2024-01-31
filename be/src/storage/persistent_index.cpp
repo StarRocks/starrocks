@@ -27,7 +27,11 @@
 #include "util/faststring.h"
 #include "util/filesystem_util.h"
 #include "util/raw_container.h"
+<<<<<<< HEAD
 #include "util/threadpool.h"
+=======
+#include "util/stopwatch.hpp"
+>>>>>>> 5de7d8b23d ([Enhancement] Add io time stat for memtable/segment flush (#40173))
 #include "util/xxh3.h"
 
 namespace starrocks {
@@ -1790,10 +1794,18 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         WritableFileOptions wblock_opts;
         wblock_opts.mode = FileSystem::MUST_EXIST;
         ASSIGN_OR_RETURN(_index_file, fs->new_writable_file(wblock_opts, file_name));
+<<<<<<< HEAD
+=======
+        // open l0 to calc checksum
+        std::unique_ptr<RandomAccessFile> l0_rfile;
+        ASSIGN_OR_RETURN(l0_rfile, fs->new_random_access_file(file_name));
+        MonotonicStopWatch watch;
+        watch.start();
+>>>>>>> 5de7d8b23d ([Enhancement] Add io time stat for memtable/segment flush (#40173))
         size_t snapshot_size = _index_file->size();
         // special case, snapshot file was written by phmap::BinaryOutputArchive which does not use system profiled API
         // so add write stats manually
-        IOProfiler::add_write(snapshot_size);
+        IOProfiler::add_write(snapshot_size, watch.elapsed_time());
         meta->clear_wals();
         IndexSnapshotMetaPB* snapshot = meta->mutable_snapshot();
         version.to_pb(snapshot->mutable_version());
@@ -1851,6 +1863,27 @@ Status ShardByLengthMutableIndex::load(const MutableIndexMetaPB& meta) {
     ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(_path));
     phmap::BinaryInputArchive ar(index_file_name.data());
     if (snapshot_size > 0) {
+<<<<<<< HEAD
+=======
+        // check snapshot's crc32 checksum
+        const uint32_t expected_checksum = snapshot_meta.checksum();
+        // If expected crc32 is 0, which means no crc32 here, skip check.
+        // This may happen when upgrade from old version.
+        if (expected_checksum > 0) {
+            uint32_t current_checksum = 0;
+            RETURN_IF_ERROR(checksum_of_file(read_file.get(), snapshot_off, snapshot_size, &current_checksum));
+            if (current_checksum != expected_checksum) {
+                std::string error_msg = fmt::format(
+                        "persistent index l0 crc checksum fail. filename: {} offset: {} cur_crc: {} expect_crc: {}",
+                        index_file_name, snapshot_off, current_checksum, expected_checksum);
+                LOG(ERROR) << error_msg;
+                return Status::Corruption(error_msg);
+            }
+        }
+        MonotonicStopWatch watch;
+        watch.start();
+        // do load snapshot
+>>>>>>> 5de7d8b23d ([Enhancement] Add io time stat for memtable/segment flush (#40173))
         if (!load_snapshot(ar, dumped_shard_idxes)) {
             std::string err_msg = strings::Substitute("failed load snapshot from file $0", index_file_name);
             LOG(WARNING) << err_msg;
@@ -1858,7 +1891,7 @@ Status ShardByLengthMutableIndex::load(const MutableIndexMetaPB& meta) {
         }
         // special case, snapshot file was written by phmap::BinaryOutputArchive which does not use system profiled API
         // so add read stats manually
-        IOProfiler::add_read(snapshot_size);
+        IOProfiler::add_read(snapshot_size, watch.elapsed_time());
     }
     ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(index_file_name));
     // if mutable index is empty, set _offset as 0, otherwise set _offset as snapshot size

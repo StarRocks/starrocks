@@ -10,6 +10,7 @@
 #include "gutil/macros.h"
 #include "io/io_error.h"
 #include "io_profiler.h"
+#include "util/stopwatch.hpp"
 
 namespace starrocks::io {
 
@@ -40,6 +41,8 @@ Status FdInputStream::close() {
 
 StatusOr<int64_t> FdInputStream::read(void* data, int64_t count) {
     CHECK_IS_CLOSED(_is_closed);
+    MonotonicStopWatch watch;
+    watch.start();
     ssize_t res;
     RETRY_ON_EINTR(res, ::pread(_fd, static_cast<char*>(data), count, _offset));
     if (UNLIKELY(res < 0)) {
@@ -47,7 +50,7 @@ StatusOr<int64_t> FdInputStream::read(void* data, int64_t count) {
         return io_error("read", _errno);
     }
     _offset += res;
-    IOProfiler::add_read(res);
+    IOProfiler::add_read(res, watch.elapsed_time());
     return res;
 }
 

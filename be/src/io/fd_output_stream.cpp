@@ -10,6 +10,7 @@
 #include "gutil/macros.h"
 #include "io/io_error.h"
 #include "io/io_profiler.h"
+#include "util/stopwatch.hpp"
 
 namespace starrocks::io {
 
@@ -44,6 +45,8 @@ Status FdOutputStream::write(const void* data, int64_t count) {
     if (UNLIKELY(count < 0)) {
         return Status::InvalidArgument(fmt::format("negative count: {}", count));
     }
+    MonotonicStopWatch watch;
+    watch.start();
     int64_t bytes_written = 0;
     while (bytes_written < count) {
         ssize_t r = ::write(_fd, static_cast<const char*>(data) + bytes_written, count - bytes_written);
@@ -57,7 +60,7 @@ Status FdOutputStream::write(const void* data, int64_t count) {
             }
         }
     }
-    IOProfiler::add_write(bytes_written);
+    IOProfiler::add_write(bytes_written, watch.elapsed_time());
     return Status::OK();
 }
 
