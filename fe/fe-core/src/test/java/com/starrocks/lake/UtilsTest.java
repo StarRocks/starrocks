@@ -18,6 +18,7 @@ package com.starrocks.lake;
 import com.starrocks.common.UserException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
+import com.starrocks.system.NodeSelector;
 import com.starrocks.system.SystemInfoService;
 import mockit.Mock;
 import mockit.MockUp;
@@ -35,6 +36,9 @@ public class UtilsTest {
 
     @Mocked
     SystemInfoService systemInfoService;
+
+    @Mocked
+    NodeSelector nodeSelector;
 
     @Test
     public void testChooseBackend() {
@@ -60,7 +64,7 @@ public class UtilsTest {
             }
         };
 
-        new MockUp<SystemInfoService>() {
+        new MockUp<NodeSelector>() {
             @Mock
             public Long seqChooseBackendOrComputeId() throws UserException {
                 throw new UserException("No backend or compute node alive.");

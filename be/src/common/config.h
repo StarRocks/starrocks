@@ -937,7 +937,6 @@ CONF_mInt32(starlet_fslib_s3client_connect_timeout_ms, "1000");
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
 CONF_mBool(lake_print_delete_log, "true");
-CONF_mBool(lake_compaction_check_txn_log_first, "false");
 CONF_mInt64(lake_compaction_stream_buffer_size_bytes, "1048576"); // 1MB
 // Used to ensure service availability in extreme situations by sacrificing a certain degree of correctness
 CONF_mBool(experimental_lake_ignore_lost_segment, "false");
@@ -1020,7 +1019,7 @@ CONF_Int64(max_length_for_to_base64, "200000");
 CONF_Int64(max_length_for_bitmap_function, "1000000");
 
 // Configuration items for datacache
-CONF_mBool(datacache_enable, "false");
+CONF_Bool(datacache_enable, "false");
 CONF_mString(datacache_mem_size, "10%");
 CONF_mString(datacache_disk_size, "0");
 CONF_mString(datacache_disk_path, "${STARROCKS_HOME}/datacache/");

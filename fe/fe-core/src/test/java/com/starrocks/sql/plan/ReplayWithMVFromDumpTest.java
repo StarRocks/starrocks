@@ -36,8 +36,12 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         ReplayFromDumpTestBase.beforeClass();
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
 
         new MockUp<MaterializedView>() {
+            /**
+             * {@link MaterializedView#getPartitionNamesToRefreshForMv(Set, boolean)}
+             */
             @Mock
             public boolean getPartitionNamesToRefreshForMv(Set<String> toRefreshPartitions,
                                                            boolean isQueryRewrite) {
@@ -46,6 +50,9 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         };
 
         new MockUp<UtFrameUtils>() {
+            /**
+             * {@link UtFrameUtils#isPrintPlanTableNames()}
+             */
             @Mock
             boolean isPrintPlanTableNames() {
                 return true;
@@ -188,5 +195,18 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Assert.assertTrue(replayPair.second, replayPair.second.contains("mv_35"));
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
         FeConstants.isReplayFromQueryDump = false;
+    }
+
+    @Test
+    public void testMVWithDictRewrite() throws Exception {
+        try {
+            FeConstants.USE_MOCK_DICT_MANAGER = true;
+            Pair<QueryDumpInfo, String> replayPair =
+                    getCostPlanFragment(getDumpInfoFromFile("query_dump/tpch_query11_mv_rewrite"));
+            Assert.assertTrue(replayPair.second, replayPair.second.contains(
+                    "DictDecode(78: n_name, [<place-holder> = 'GERMANY'])"));
+        } finally {
+            FeConstants.USE_MOCK_DICT_MANAGER = false;
+        }
     }
 }

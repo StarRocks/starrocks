@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/clone/BalanceStatus.java
+//   https://github.com/apache/incubator-doris/blob/master/fe/fe-core/src/main/java/org/apache/doris/StarRocksFE.java
 
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
@@ -32,62 +32,28 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.clone;
+package com.starrocks.data.load.stream.exception;
 
-import com.google.common.collect.Lists;
+import com.starrocks.data.load.stream.StreamLoadResponse;
 
-import java.util.List;
+public class StreamLoadFailException
+        extends RuntimeException
+{
+    private final StreamLoadResponse.StreamLoadResponseBody responseBody;
 
-public class BalanceStatus {
-    public enum ErrCode {
-        OK,
-        META_NOT_FOUND,
-        STATE_NOT_NORMAL,
-        COMMON_ERROR
+    public StreamLoadFailException(StreamLoadResponse.StreamLoadResponseBody responseBody)
+    {
+        this(responseBody.toString(), responseBody);
     }
 
-    private ErrCode errCode;
-    private List<String> errMsgs = Lists.newArrayList();
-
-    public static final BalanceStatus OK = new BalanceStatus(ErrCode.OK, "");
-
-    public BalanceStatus(ErrCode errCode) {
-        this.errCode = errCode;
+    public StreamLoadFailException(String message)
+    {
+        this(message, null);
     }
 
-    public BalanceStatus(ErrCode errCode, String errMsg) {
-        this.errCode = errCode;
-        this.errMsgs.add(errMsg);
-    }
-
-    public ErrCode getErrCode() {
-        return errCode;
-    }
-
-    public List<String> getErrMsgs() {
-        return errMsgs;
-    }
-
-    public void addErrMsgs(List<String> errMsgs) {
-        this.errMsgs.addAll(errMsgs);
-    }
-
-    public void addErrMsg(String errMsg) {
-        this.errMsgs.add(errMsg);
-    }
-
-    public boolean ok() {
-        return errCode == ErrCode.OK;
-    }
-
-    @Override
-    public String toString() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("[").append(errCode.name());
-        if (!ok()) {
-            sb.append(", msg: ").append(errMsgs);
-        }
-        sb.append("]");
-        return sb.toString();
+    public StreamLoadFailException(String message, StreamLoadResponse.StreamLoadResponseBody responseBody)
+    {
+        super(message);
+        this.responseBody = responseBody;
     }
 }

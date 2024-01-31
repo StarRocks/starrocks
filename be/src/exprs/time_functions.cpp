@@ -1962,6 +1962,11 @@ StatusOr<ColumnPtr> TimeFunctions::parse_jodatime(FunctionContext* context, cons
 
             DateTimeValue date_time_value;
             if (!formatter->parse(str, &date_time_value)) {
+                if (context->state() && context->state()->get_sql_dialect() == "trino") {
+                    std::string_view format_str =
+                            ColumnHelper::get_const_value<TYPE_VARCHAR>(context->get_constant_column(1));
+                    return Status::InvalidArgument(fmt::format("Invalid format '{}' for '{}'", format_str, str));
+                }
                 result.append_null();
             } else {
                 TimestampValue ts = TimestampValue::create(
