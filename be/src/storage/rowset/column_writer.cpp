@@ -160,6 +160,8 @@ public:
                 LOG(ERROR) << "bitshuffle compress failed: " << bitshuffle_error_msg(r);
                 return {};
             }
+            // before build(), update buffer length to the actual compressed size
+            _encode_buf.resize(r);
             return _encode_buf.build();
         } else if (_null_encoding == NullEncodingPB::LZ4_NULL) {
             const BlockCompressionCodec* codec = nullptr;
