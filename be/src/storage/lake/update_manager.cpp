@@ -687,6 +687,16 @@ void UpdateManager::update_primary_index_data_version(const Tablet& tablet, int6
     }
 }
 
+int64_t UpdateManager::get_primary_index_data_version(int64_t tablet_id) {
+    auto index_entry = _index_cache.get(tablet_id);
+    if (index_entry != nullptr) {
+        int64_t version = index_entry->value().data_version();
+        _index_cache.release(index_entry);
+        return version;
+    }
+    return 0;
+}
+
 void UpdateManager::_print_memory_stats() {
     static std::atomic<int64_t> last_print_ts;
     if (time(nullptr) > last_print_ts.load() + kPrintMemoryStatsInterval && _update_mem_tracker != nullptr) {

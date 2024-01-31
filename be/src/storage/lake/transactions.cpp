@@ -27,6 +27,24 @@
 #include "storage/lake/vacuum.h" // delete_files_async
 #include "util/lru_cache.h"
 
+namespace {
+
+template <class T>
+using ParallelSet = phmap::parallel_flat_hash_set<T, phmap::priv::hash_default_hash<T>, phmap::priv::hash_default_eq<T>,
+                                                  phmap::priv::Allocator<T>, 4, std::mutex, true>;
+ParallelSet<int64_t> tablet_txns;
+
+bool add_tablet(int64_t tablet_id) {
+    auto [_, ok] = tablet_txns.insert(tablet_id);
+    return ok;
+}
+
+void remove_tablet(int64_t tablet_id) {
+    tablet_txns.erase(tablet_id);
+}
+
+} // namespace
+
 namespace starrocks::lake {
 
 static void clear_remote_snapshot_async(TabletManager* tablet_mgr, int64_t tablet_id, int64_t txn_id,
@@ -53,9 +71,37 @@ static void clear_remote_snapshot_async(TabletManager* tablet_mgr, int64_t table
     files_to_delete->emplace_back(std::move(slog_path));
 }
 
+void adjust_base_version(int64_t tablet_id, TabletManager* tablet_mgr, int64_t* base_version) {
+    int64_t version = *base_version;
+    auto metadata = tablet_mgr->get_latest_cached_tablet_metadata(tablet_id);
+    if (metadata != nullptr) {
+        version = std::max(version, metadata->version());
+    }
+
+    auto index_version = tablet_mgr->update_mgr()->get_primary_index_data_version(tablet_id);
+    if (index_version > version) {
+        auto res = tablet_mgr->get_tablet_metadata(tablet_id, index_version);
+        if (res.ok()) {
+            version = std::max(version, index_version);
+        } else {
+            tablet_mgr->update_mgr()->remove_primary_index_cache(tablet_id);
+        }
+    }
+
+    if (version > *base_version) {
+        *base_version = version;
+        LOG(INFO) << "base version has been adjusted to " << *base_version;
+    }
+}
+
 StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t base_version,
                                             int64_t new_version, std::span<const int64_t> txn_ids,
                                             int64_t commit_time) {
+    if (!add_tablet(tablet_id)) {
+        return Status::ResourceBusy(fmt::format("Does not support concurrent publishing, tablet {}", tablet_id));
+    }
+    DeferOp remove_tablet_txn([&] { remove_tablet(tablet_id); });
+
     if (txn_ids.size() > 1) {
         CHECK_EQ(new_version, base_version + txn_ids.size());
     }
@@ -77,6 +123,14 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
         if (res.ok()) return res;
         return error;
     };
+
+    int64_t ori_base_version = base_version;
+    adjust_base_version(tablet_id, tablet_mgr, &base_version);
+    if (base_version > new_version) {
+        LOG(ERROR) << "base version should be less than or equal to new version, "
+                   << "base version=" << base_version << ", new version=" << new_version << ", tablet_id=" << tablet_id;
+        return Status::InternalError("base version is larger than new version");
+    }
 
     // Read base version metadata
     auto base_version_path = tablet_mgr->tablet_metadata_location(tablet_id, base_version);
@@ -109,7 +163,8 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
     // 5. txn4 will be published in later publish task, but we can't judge what's the latest_version in BE and we can not reapply txn_log if
     // txn logs have been deleted.
     bool delete_txn_log = (txn_ids.size() == 1);
-    for (int i = 0; i < txn_ids.size(); i++) {
+    int txn_offset = ori_base_version < base_version ? base_version - ori_base_version : 0;
+    for (size_t i = txn_offset; i < txn_ids.size(); i++) {
         auto txn_id = txn_ids[i];
         auto log_path = tablet_mgr->txn_log_location(tablet_id, txn_id);
         auto txn_log_st = tablet_mgr->get_txn_log(log_path, false);

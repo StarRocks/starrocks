@@ -31,11 +31,6 @@
 
 namespace starrocks::lake {
 class PrimaryKeyTxnLogApplier : public TxnLogApplier {
-    template <class T>
-    using ParallelSet =
-            phmap::parallel_flat_hash_set<T, phmap::priv::hash_default_hash<T>, phmap::priv::hash_default_eq<T>,
-                                          phmap::priv::Allocator<T>, 4, std::mutex, true>;
-
 public:
     PrimaryKeyTxnLogApplier(Tablet tablet, MutableTabletMetadataPtr metadata, int64_t new_version)
             : _tablet(tablet),
@@ -46,22 +41,9 @@ public:
         _metadata->set_version(_new_version);
     }
 
-    ~PrimaryKeyTxnLogApplier() override {
-        handle_failure();
-        if (_inited) {
-            _s_schema_change_set.erase(_tablet.id());
-        }
-    }
+    ~PrimaryKeyTxnLogApplier() override { handle_failure(); }
 
-    Status init() override {
-        auto [iter, ok] = _s_schema_change_set.insert(_tablet.id());
-        if (ok) {
-            _inited = true;
-            return check_meta_version();
-        } else {
-            return Status::ResourceBusy("primary key does not support concurrent log applying");
-        }
-    }
+    Status init() override { return check_meta_version(); }
 
     Status check_meta_version() {
         // check tablet meta
@@ -303,8 +285,6 @@ private:
         return Status::OK();
     }
 
-    static inline ParallelSet<int64_t> _s_schema_change_set;
-
     Tablet _tablet;
     MutableTabletMetadataPtr _metadata;
     int64_t _base_version{0};
@@ -312,7 +292,6 @@ private:
     int64_t _max_txn_id{0}; // Used as the file name prefix of the delvec file
     MetaFileBuilder _builder;
     DynamicCache<uint64_t, LakePrimaryIndex>::Entry* _index_entry{nullptr};
-    bool _inited{false};
     std::unique_ptr<std::lock_guard<std::mutex>> _guard{nullptr};
     // True when finalize meta file success.
     bool _has_finalized = false;
