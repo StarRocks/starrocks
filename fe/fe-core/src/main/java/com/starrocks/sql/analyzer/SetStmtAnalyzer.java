@@ -233,6 +233,22 @@ public class SetStmtAnalyzer {
             }
         }
 
+        // cbo_materialized_view_rewrite_candidate_limit
+        if (variable.equalsIgnoreCase(SessionVariable.CBO_MATERIALIZED_VIEW_REWRITE_CANDIDATE_LIMIT)) {
+            checkRangeIntVariable(resolvedExpression, SessionVariable.CBO_MATERIALIZED_VIEW_REWRITE_CANDIDATE_LIMIT,
+                    1, null);
+        }
+        // cbo_materialized_view_rewrite_rule_output_limit
+        if (variable.equalsIgnoreCase(SessionVariable.CBO_MATERIALIZED_VIEW_REWRITE_RULE_OUTPUT_LIMIT)) {
+            checkRangeIntVariable(resolvedExpression, SessionVariable.CBO_MATERIALIZED_VIEW_REWRITE_RULE_OUTPUT_LIMIT,
+                    1, null);
+        }
+        // cbo_materialized_view_rewrite_related_mvs_limit
+        if (variable.equalsIgnoreCase(SessionVariable.CBO_MATERIALIZED_VIEW_REWRITE_RELATED_MVS_LIMIT)) {
+            checkRangeIntVariable(resolvedExpression, SessionVariable.CBO_MATERIALIZED_VIEW_REWRITE_RELATED_MVS_LIMIT,
+                    1, null);
+        }
+
         var.setResolvedExpression(resolvedExpression);
     }
 
@@ -240,6 +256,21 @@ public class SetStmtAnalyzer {
         String value = resolvedExpression.getStringValue();
         try {
             long num = Long.parseLong(value);
+            if (min != null && num < min) {
+                throw new SemanticException(String.format("%s must be equal or greater than %d", field, min));
+            }
+            if (max != null && num > max) {
+                throw new SemanticException(String.format("%s must be equal or smaller than %d", field, max));
+            }
+        } catch (NumberFormatException ex) {
+            throw new SemanticException(field + " is not a number");
+        }
+    }
+
+    private static void checkRangeIntVariable(LiteralExpr resolvedExpression, String field, Integer min, Integer max) {
+        String value = resolvedExpression.getStringValue();
+        try {
+            int num = Integer.parseInt(value);
             if (min != null && num < min) {
                 throw new SemanticException(String.format("%s must be equal or greater than %d", field, min));
             }

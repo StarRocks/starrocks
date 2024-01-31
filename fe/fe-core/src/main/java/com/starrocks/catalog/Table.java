@@ -292,12 +292,16 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return type == TableType.MATERIALIZED_VIEW;
     }
 
-    public boolean isView() {
+    public boolean isOlapView() {
         return type == TableType.VIEW;
     }
 
     public boolean isHiveView() {
         return type == TableType.HIVE_VIEW;
+    }
+
+    public boolean isView() {
+        return isOlapView() || isHiveView();
     }
 
     public boolean isOlapTableOrMaterializedView() {
@@ -782,6 +786,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     public List<ForeignKeyConstraint> getForeignKeyConstraints() {
         return this.foreignKeyConstraints;
+    }
+
+    public boolean hasForeignKeyConstraints() {
+        return this.foreignKeyConstraints != null && !this.foreignKeyConstraints.isEmpty();
     }
 
     public synchronized List<Long> allocatePartitionIdByKey(List<PartitionKey> keys) {

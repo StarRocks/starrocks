@@ -957,7 +957,7 @@ public class ShowExecutor {
                     continue;
                 }
                 try {
-                    if (table.isView()) {
+                    if (table.isOlapView()) {
                         Authorizer.checkAnyActionOnView(
                                 connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
                                 new TableName(db.getFullName(), table.getName()));

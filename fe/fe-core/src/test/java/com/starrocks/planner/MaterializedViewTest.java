@@ -4703,7 +4703,8 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ")\n" +
                 "As select * from hive0.tpch.customer_view;");
         String query = "select * from hive0.tpch.customer_view";
-        String plan = getFragmentPlan(query);
+        setTracLogModule("MV");
+        String plan = getFragmentPlan(query, "MV");
         PlanTestBase.assertContains(plan, "mv_on_hive_view_1");
         starRocksAssert.dropMaterializedView("mv_on_hive_view_1");
     }

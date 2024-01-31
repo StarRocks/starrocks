@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.optimizer.rule.transformation.materialization;
+package com.starrocks.benchmark;
 
 import com.carrotsearch.junitbenchmarks.BenchmarkOptions;
 import com.carrotsearch.junitbenchmarks.BenchmarkRule;
 import com.starrocks.common.Config;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteTestBase;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
@@ -26,6 +27,8 @@ import org.junit.Test;
 import org.junit.rules.TestRule;
 
 public class MvRewritePerfTest extends MvRewriteTestBase {
+
+    private static final int MV_NUM = 40;
 
     @Rule
     public TestRule benchRun = new BenchmarkRule();
@@ -45,8 +48,8 @@ public class MvRewritePerfTest extends MvRewriteTestBase {
         cluster.runSql("test", "insert into t0 values(1, 1, 1), (2,2,2)");
         cluster.runSql("test", "insert into t1 values(1, 1, 1), (2,2,2)");
 
-        // 100 MV with same schema
-        for (int i = 0; i < 40; i++) {
+        // MV_NUM msv with same schema
+        for (int i = 0; i < MV_NUM; i++) {
             // join MV
             String joinMV = "mv_candidate_join_" + i;
             starRocksAssert.withRefreshedMaterializedView("create materialized view " + joinMV +
@@ -61,7 +64,7 @@ public class MvRewritePerfTest extends MvRewriteTestBase {
                     " group by t0.v1");
         }
 
-        LOG.info("prepared 40 materialized views");
+        LOG.info("prepared {} materialized views", MV_NUM);
     }
 
     @Before

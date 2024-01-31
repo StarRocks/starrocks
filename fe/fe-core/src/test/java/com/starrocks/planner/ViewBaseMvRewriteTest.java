@@ -441,6 +441,7 @@ public class ViewBaseMvRewriteTest extends MaterializedViewTestBase {
                     "FROM view_1 v1\n" +
                     "JOIN view_2 v2 ON v1.l_partkey = v2.l_partkey\n" +
                     "AND v1.l_suppkey = v2.l_suppkey;";
+            setTracLogModule("MV");
             testRewriteOK(mv, query);
             starRocksAssert.dropMaterializedView("mv_2");
         }
