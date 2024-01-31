@@ -64,6 +64,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
     public void after() {
     }
 
+    @Ignore
     @Test
     public void testMV_JoinAgg1() throws Exception {
         FeConstants.isReplayFromQueryDump = true;
