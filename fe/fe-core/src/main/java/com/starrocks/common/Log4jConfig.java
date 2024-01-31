@@ -138,18 +138,18 @@ public class Log4jConfig extends XmlConfiguration {
             "        </Delete>\n" +
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
-            "    <RollingFile name=\"InternalQueryFile\" fileName=\"${internal_query_log_dir}/fe.internal.log\" filePattern=\"${internal_query_log_dir}/fe.internal.log.${internal_query_file_pattern}-%i\">\n" +
+            "    <RollingFile name=\"InternalFile\" fileName=\"${internal_log_dir}/fe.internal.log\" filePattern=\"${internal_log_dir}/fe.internal.log.${internal_file_pattern}-%i\">\n" +
             "      <PatternLayout charset=\"UTF-8\">\n" +
             "        <Pattern>%d{yyyy-MM-dd HH:mm:ss,SSS} %p (%t|%tid) [%C{1}.%M():%L] %m%n</Pattern>\n" +
             "      </PatternLayout>\n" +
             "      <Policies>\n" +
             "        <TimeBasedTriggeringPolicy/>\n" +
-            "        <SizeBasedTriggeringPolicy size=\"${internal_query_roll_maxsize}MB\"/>\n" +
+            "        <SizeBasedTriggeringPolicy size=\"${internal_roll_maxsize}MB\"/>\n" +
             "      </Policies>\n" +
             "      <DefaultRolloverStrategy max=\"${sys_roll_num}\" fileIndex=\"min\">\n" +
-            "        <Delete basePath=\"${internal_query_log_dir}/\" maxDepth=\"1\" followLinks=\"true\">\n" +
+            "        <Delete basePath=\"${internal_log_dir}/\" maxDepth=\"1\" followLinks=\"true\">\n" +
             "          <IfFileName glob=\"fe.internal.log.*\" />\n" +
-            "          <IfLastModified age=\"${internal_query_log_delete_age}\" />\n" +
+            "          <IfLastModified age=\"${internal_log_delete_age}\" />\n" +
             "        </Delete>\n" +
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
@@ -232,11 +232,11 @@ public class Log4jConfig extends XmlConfiguration {
                 getIntervalPattern("big_query_log_roll_interval", Config.big_query_log_roll_interval));
 
         // internal log config
-        properties.put("internal_query_log_dir", Config.internal_log_dir);
-        properties.put("internal_query_roll_maxsize", String.valueOf(Config.log_roll_size_mb));
-        properties.put("internal_query_roll_num", String.valueOf(Config.internal_log_roll_num));
-        properties.put("internal_query_log_delete_age", String.valueOf(Config.internal_log_delete_age));
-        properties.put("internal_query_file_pattern",
+        properties.put("internal_log_dir", Config.internal_log_dir);
+        properties.put("internal_roll_maxsize", String.valueOf(Config.log_roll_size_mb));
+        properties.put("internal_roll_num", String.valueOf(Config.internal_log_roll_num));
+        properties.put("internal_log_delete_age", String.valueOf(Config.internal_log_delete_age));
+        properties.put("internal_file_pattern",
                 getIntervalPattern("big_query_log_roll_interval", Config.internal_log_roll_interval));
 
         String xmlConfTemplate = generateXmlConfTemplate();
@@ -264,8 +264,8 @@ public class Log4jConfig extends XmlConfiguration {
         StringBuilder sb = new StringBuilder();
 
         for (String s : internalModules) {
-            sb.append("<Logger name=')").append(s).append("' level=\"INFO\"> \n");
-            sb.append("   <AppenderRef ref=\"InternalQueryFile\"/>\n");
+            sb.append("<Logger name=internal.')").append(s).append("' level=\"INFO\"> \n");
+            sb.append("   <AppenderRef ref=\"InternalFile\"/>\n");
             sb.append("</Logger>\n");
         }
 
