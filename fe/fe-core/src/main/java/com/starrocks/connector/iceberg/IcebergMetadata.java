@@ -30,6 +30,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileDesc;
@@ -122,7 +123,19 @@ public class IcebergMetadata implements ConnectorMetadata {
     // catalog level cache
     private final Cache<TableIdentifier, IcebergTable> catalogLevelTableCache;
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
+<<<<<<< HEAD
     private final Map<IcebergFilter, List<FileScanTask>> tasks = new ConcurrentHashMap<>();
+=======
+    private final Map<IcebergFilter, List<FileScanTask>> splitTasks = new ConcurrentHashMap<>();
+    private final Set<IcebergFilter> scannedTables = new HashSet<>();
+    private final Set<IcebergFilter> preparedTables = ConcurrentHashMap.newKeySet();
+
+    // FileScanTaskSchema -> Pair<schema_string, partition_string>
+    private final Map<FileScanTaskSchema, Pair<String, String>> fileScanTaskSchemas = new ConcurrentHashMap<>();
+    private final ExecutorService jobPlanningExecutor;
+    private final ExecutorService refreshOtherFeExecutor;
+    private final IcebergMetricsReporter metricsReporter;
+>>>>>>> 26916e8ce9 ([Enhancement] parallel prepare  metadata (#40280))
 
     public IcebergMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, IcebergCatalog icebergCatalog,
                            Cache<TableIdentifier, IcebergTable> catalogLevelTableCache) {
@@ -371,6 +384,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         return partitions.build();
     }
 
+<<<<<<< HEAD
     private IcebergSplitScanTask makeIcebergSplitScanTask(FileScanTask fileScanTask, Expression icebergPredicate) {
         long offset = fileScanTask.start();
         long length = fileScanTask.length();
@@ -390,6 +404,285 @@ public class IcebergMetadata implements ConnectorMetadata {
                 partitionString,
                 residualEvaluator);
         return new IcebergSplitScanTask(offset, length, baseFileScanTask);
+=======
+    @Override
+    public boolean prepareMetadata(MetaPreparationItem item, Tracers tracers) {
+        IcebergFilter key;
+        IcebergTable icebergTable;
+        icebergTable = (IcebergTable) item.getTable();
+        String dbName = icebergTable.getRemoteDbName();
+        String tableName = icebergTable.getRemoteTableName();
+        Optional<Snapshot> snapshot = icebergTable.getSnapshot();
+        if (snapshot.isEmpty()) {
+            return true;
+        }
+
+        key = IcebergFilter.of(dbName, tableName, snapshot.get().snapshotId(), item.getPredicate());
+        if (!preparedTables.add(key)) {
+            return true;
+        }
+
+        triggerIcebergPlanFilesIfNeeded(key, icebergTable, item.getPredicate(), item.getLimit(), tracers);
+        return true;
+    }
+
+    private void triggerIcebergPlanFilesIfNeeded(IcebergFilter key, IcebergTable table, ScalarOperator predicate, long limit) {
+        triggerIcebergPlanFilesIfNeeded(key, table, predicate, limit, null);
+    }
+
+    private void triggerIcebergPlanFilesIfNeeded(IcebergFilter key, IcebergTable table, ScalarOperator predicate,
+                                                 long limit, Tracers tracers) {
+        if (!scannedTables.contains(key)) {
+            try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.processSplit." + key)) {
+                collectTableStatisticsAndCacheIcebergSplit(table, predicate, limit, tracers);
+            }
+        }
+    }
+
+    public List<PartitionKey> getPrunedPartitions(Table table, ScalarOperator predicate, long limit) {
+        IcebergTable icebergTable = (IcebergTable) table;
+        String dbName = icebergTable.getRemoteDbName();
+        String tableName = icebergTable.getRemoteTableName();
+        Optional<Snapshot> snapshot = icebergTable.getSnapshot();
+        if (!snapshot.isPresent()) {
+            return new ArrayList<>();
+        }
+
+        IcebergFilter key = IcebergFilter.of(dbName, tableName, snapshot.get().snapshotId(), predicate);
+        triggerIcebergPlanFilesIfNeeded(key, icebergTable, predicate, limit);
+
+        List<PartitionKey> partitionKeys = new ArrayList<>();
+        List<FileScanTask> icebergSplitTasks = splitTasks.get(key);
+        if (icebergSplitTasks == null) {
+            throw new StarRocksConnectorException("Missing iceberg split task for table:[{}.{}]. predicate:[{}]",
+                    dbName, tableName, predicate);
+        }
+
+        Set<List<String>> scannedPartitions = new HashSet<>();
+        PartitionSpec spec = icebergTable.getNativeTable().spec();
+        List<Column> partitionColumns = icebergTable.getPartitionColumnsIncludeTransformed();
+        for (FileScanTask fileScanTask : icebergSplitTasks) {
+            org.apache.iceberg.PartitionData partitionData = (org.apache.iceberg.PartitionData) fileScanTask.file().partition();
+            List<String> values = PartitionUtil.getIcebergPartitionValues(spec, partitionData);
+
+            if (values.size() != partitionColumns.size()) {
+                // ban partition evolution and non-identify column.
+                continue;
+            }
+
+            if (scannedPartitions.contains(values)) {
+                continue;
+            } else {
+                scannedPartitions.add(values);
+            }
+
+            try {
+                List<com.starrocks.catalog.Type> srTypes = new ArrayList<>();
+                for (PartitionField partitionField : spec.fields()) {
+                    if (partitionField.transform().isVoid()) {
+                        continue;
+                    }
+
+                    if (!partitionField.transform().isIdentity()) {
+                        Type sourceType = spec.schema().findType(partitionField.sourceId());
+                        Type resultType = partitionField.transform().getResultType(sourceType);
+                        if (resultType == Types.DateType.get()) {
+                            resultType = Types.IntegerType.get();
+                        }
+                        srTypes.add(fromIcebergType(resultType));
+                        continue;
+                    }
+
+                    srTypes.add(icebergTable.getColumn(icebergTable.getPartitionSourceName(spec.schema(),
+                            partitionField)).getType());
+                }
+
+                if (icebergTable.hasPartitionTransformedEvolution()) {
+                    srTypes = partitionColumns.stream()
+                            .map(Column::getType)
+                            .collect(Collectors.toList());
+                }
+
+                partitionKeys.add(createPartitionKeyWithType(values, srTypes, table.getType()));
+            } catch (Exception e) {
+                LOG.error("create partition key failed.", e);
+                throw new StarRocksConnectorException(e.getMessage());
+            }
+        }
+
+        return partitionKeys;
+    }
+
+    private void collectTableStatisticsAndCacheIcebergSplit(Table table, ScalarOperator predicate, long limit, Tracers tracers) {
+        IcebergTable icebergTable = (IcebergTable) table;
+        Optional<Snapshot> snapshot = icebergTable.getSnapshot();
+        // empty table
+        if (!snapshot.isPresent()) {
+            return;
+        }
+
+        long snapshotId = snapshot.get().snapshotId();
+        String dbName = icebergTable.getRemoteDbName();
+        String tableName = icebergTable.getRemoteTableName();
+        IcebergFilter key = IcebergFilter.of(dbName, tableName, snapshotId, predicate);
+
+        org.apache.iceberg.Table nativeTbl = icebergTable.getNativeTable();
+        Types.StructType schema = nativeTbl.schema().asStruct();
+
+        Map<String, MetricsModes.MetricsMode> fieldToMetricsMode = getIcebergMetricsConfig(icebergTable);
+        Tracers.record(Tracers.Module.EXTERNAL, "ICEBERG.MetricsConfig." + nativeTbl + ".write_metrics_mode_default",
+                DEFAULT_WRITE_METRICS_MODE_DEFAULT);
+        Tracers.record(Tracers.Module.EXTERNAL, "ICEBERG.MetricsConfig." + nativeTbl + ".non-default.size",
+                String.valueOf(fieldToMetricsMode.size()));
+        Tracers.record(Tracers.Module.EXTERNAL, "ICEBERG.MetricsConfig." + nativeTbl + ".non-default.columns",
+                fieldToMetricsMode.toString());
+
+        List<ScalarOperator> scalarOperators = Utils.extractConjuncts(predicate);
+        ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(schema);
+        Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(scalarOperators, icebergContext);
+
+        TableScan scan = nativeTbl.newScan()
+                .useSnapshot(snapshotId)
+                .metricsReporter(metricsReporter)
+                .planWith(jobPlanningExecutor);
+
+        if (enableCollectColumnStatistics()) {
+            scan = scan.includeColumnStats();
+        }
+
+        if (icebergPredicate.op() != Expression.Operation.TRUE) {
+            scan = scan.filter(icebergPredicate);
+        }
+
+        CloseableIterable<FileScanTask> fileScanTaskIterable = TableScanUtil.splitFiles(
+                scan.planFiles(), scan.targetSplitSize());
+        CloseableIterator<FileScanTask> fileScanTaskIterator = fileScanTaskIterable.iterator();
+        Iterator<FileScanTask> fileScanTasks;
+
+        // Under the condition of ensuring that the data is correct, we disabled the limit optimization when table has
+        // partition evolution because this may cause data diff.
+        boolean canPruneManifests = limit != -1 && !icebergTable.isV2Format() && onlyHasPartitionPredicate(table, predicate)
+                && limit < Integer.MAX_VALUE && nativeTbl.spec().specId() == 0 && enablePruneManifest();
+
+        if (canPruneManifests) {
+            // After iceberg uses partition predicate plan files, each manifests entry must have at least one row of data.
+            fileScanTasks = Iterators.limit(fileScanTaskIterator, (int) limit);
+        } else {
+            fileScanTasks = fileScanTaskIterator;
+        }
+
+        List<FileScanTask> icebergScanTasks = Lists.newArrayList();
+        long totalReadCount = 0;
+
+        // FileScanTask are splits of file. Avoid calculating statistics for a file multiple times.
+        Set<String> filePaths = new HashSet<>();
+        while (fileScanTasks.hasNext()) {
+            FileScanTask scanTask = fileScanTasks.next();
+
+            FileScanTask icebergSplitScanTask = scanTask;
+            if (enableCollectColumnStatistics()) {
+                try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.buildSplitScanTask")) {
+                    icebergSplitScanTask = buildIcebergSplitScanTask(scanTask, icebergPredicate, key);
+                }
+
+                List<Types.NestedField> fullColumns = nativeTbl.schema().columns();
+                Map<Integer, Type.PrimitiveType> idToTypeMapping = fullColumns.stream()
+                        .filter(column -> column.type().isPrimitiveType())
+                        .collect(Collectors.toMap(Types.NestedField::fieldId, column -> column.type().asPrimitiveType()));
+
+                Set<Integer> identityPartitionIds = nativeTbl.spec().fields().stream()
+                        .filter(x -> x.transform().isIdentity())
+                        .map(PartitionField::sourceId)
+                        .collect(Collectors.toSet());
+
+                List<Types.NestedField> nonPartitionPrimitiveColumns = fullColumns.stream()
+                        .filter(column -> !identityPartitionIds.contains(column.fieldId()) &&
+                                column.type().isPrimitiveType())
+                        .collect(toImmutableList());
+
+                try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.updateIcebergFileStats")) {
+                    statisticProvider.updateIcebergFileStats(
+                            icebergTable, scanTask, idToTypeMapping, nonPartitionPrimitiveColumns, key);
+                }
+            }
+
+            icebergScanTasks.add(icebergSplitScanTask);
+
+            String filePath = icebergSplitScanTask.file().path().toString();
+            if (!filePaths.contains(filePath)) {
+                filePaths.add(filePath);
+                totalReadCount += scanTask.file().recordCount();
+            }
+
+            if (canPruneManifests && totalReadCount >= limit) {
+                break;
+            }
+        }
+
+        try {
+            fileScanTaskIterable.close();
+            fileScanTaskIterator.close();
+        } catch (IOException e) {
+            // Ignored
+        }
+
+        Optional<ScanReport> metrics = metricsReporter.getReporter(catalogName, dbName, tableName, snapshotId, icebergPredicate);
+
+        if (metrics.isPresent()) {
+            Tracers.Module module = Tracers.Module.EXTERNAL;
+            String name = "ICEBERG.ScanMetrics." + metrics.get().tableName() + "["  + icebergPredicate + "]";
+            String value = metrics.get().scanMetrics().toString();
+            if (tracers == null) {
+                Tracers.record(module, name, value);
+            } else {
+                synchronized (this) {
+                    Tracers.record(tracers, module, name, value);
+                }
+            }
+        }
+
+        splitTasks.put(key, icebergScanTasks);
+        scannedTables.add(key);
+    }
+
+    /**
+     * To optimize the MetricsModes of the Iceberg tables, it's necessary to display the columns MetricsMode in the
+     * ICEBERG query profile.
+     * <br>
+     * None:
+     * <p>
+     * Under this mode, value_counts, null_value_counts, nan_value_counts, lower_bounds, upper_bounds
+     * are not persisted.
+     * </p>
+     * Counts:
+     * <p>
+     * Under this mode, only value_counts, null_value_counts, nan_value_counts are persisted.
+     * </p>
+     * Truncate:
+     * <p>
+     * Under this mode, value_counts, null_value_counts, nan_value_counts and truncated lower_bounds,
+     * upper_bounds are persisted.
+     * </p>
+     * Full:
+     * <p>
+     * Under this mode, value_counts, null_value_counts, nan_value_counts and full lower_bounds,
+     * upper_bounds are persisted.
+     * </p>
+     */
+    public static Map<String, MetricsModes.MetricsMode> getIcebergMetricsConfig(IcebergTable table) {
+        MetricsModes.MetricsMode defaultMode = MetricsModes.fromString(DEFAULT_WRITE_METRICS_MODE_DEFAULT);
+        MetricsConfig metricsConf = MetricsConfig.forTable(table.getNativeTable());
+        Map<String, MetricsModes.MetricsMode> filedToMetricsMode = Maps.newHashMap();
+        for (Types.NestedField field : table.getNativeTable().schema().columns()) {
+            MetricsModes.MetricsMode mode = metricsConf.columnMode(field.name());
+            // To reduce printing, only print specific metrics that are not in the
+            // DEFAULT_WRITE_METRICS_MODE_DEFAULT: truncate(16) mode
+            if (!mode.equals(defaultMode)) {
+                filedToMetricsMode.put(field.name(), mode);
+            }
+        }
+        return filedToMetricsMode;
+>>>>>>> 26916e8ce9 ([Enhancement] parallel prepare  metadata (#40280))
     }
 
     @Override

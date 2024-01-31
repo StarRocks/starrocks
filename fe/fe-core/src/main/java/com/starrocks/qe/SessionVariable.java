@@ -323,6 +323,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             "enable_rewrite_groupingsets_to_union_all";
 
     public static final String CBO_USE_DB_LOCK = "cbo_use_lock_db";
+<<<<<<< HEAD
+=======
+    public static final String CBO_PREDICATE_SUBFIELD_PATH = "cbo_enable_predicate_subfield_path";
+    public static final String CBO_PREPARE_METADATA_THREAD_POOL_SIZE = "cbo_prepare_metadata_thread_pool_size";
+
+    public static final String CBO_ENABLE_PARALLEL_PREPARE_METADATA = "enable_parallel_prepare_metadata";
+>>>>>>> 26916e8ce9 ([Enhancement] parallel prepare  metadata (#40280))
 
     public static final String CBO_DERIVE_RANGE_JOIN_PREDICATE = "cbo_derive_range_join_predicate";
 
@@ -1475,6 +1482,62 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     private int exprChildrenLimit = -1;
 
+<<<<<<< HEAD
+=======
+    @VarAttr(name = CBO_PREDICATE_SUBFIELD_PATH, flag = VariableMgr.INVISIBLE)
+    private boolean cboPredicateSubfieldPath = true;
+
+    @VarAttr(name = CROSS_JOIN_COST_PENALTY, flag = VariableMgr.INVISIBLE)
+    private long crossJoinCostPenalty = 1000000;
+
+    @VarAttr(name = CBO_PREPARE_METADATA_THREAD_POOL_SIZE)
+    private int prepareMetadataPoolSize = 16;
+
+    @VarAttr(name = CBO_ENABLE_PARALLEL_PREPARE_METADATA)
+    private boolean enableParallelPrepareMetadata = false;
+
+    public int getPrepareMetadataPoolSize() {
+        return prepareMetadataPoolSize;
+    }
+
+    public void setPrepareMetadataPoolSize(int prepareMetadataPoolSize) {
+        this.prepareMetadataPoolSize = prepareMetadataPoolSize;
+    }
+
+    public boolean enableParallelPrepareMetadata() {
+        return enableParallelPrepareMetadata;
+    }
+
+    public void setEnableParallelPrepareMetadata(boolean enableParallelPrepareMetadata) {
+        this.enableParallelPrepareMetadata = enableParallelPrepareMetadata;
+    }
+
+    public String getHiveTempStagingDir() {
+        return hiveTempStagingDir;
+    }
+
+    public boolean enableWriteHiveExternalTable() {
+        return enableWriteHiveExternalTable;
+    }
+
+    public SessionVariable setHiveTempStagingDir(String hiveTempStagingDir) {
+        this.hiveTempStagingDir = hiveTempStagingDir;
+        return this;
+    }
+
+    @VarAttr(name = ENABLE_PRUNE_ICEBERG_MANIFEST)
+    private boolean enablePruneIcebergManifest = true;
+
+    @VarAttr(name = ENABLE_READ_ICEBERG_PUFFIN_NDV)
+    private boolean enableReadIcebergPuffinNdv = true;
+
+    @VarAttr(name = ENABLE_ICEBERG_COLUMN_STATISTICS)
+    private boolean enableIcebergColumnStatistics = false;
+
+    @VarAttr(name = SKEW_JOIN_RAND_RANGE, flag = VariableMgr.INVISIBLE)
+    private int skewJoinRandRange = 1000;
+
+>>>>>>> 26916e8ce9 ([Enhancement] parallel prepare  metadata (#40280))
     @VarAttr(name = LARGE_DECIMAL_UNDERLYING_TYPE)
     private String largeDecimalUnderlyingType = SessionVariableConstants.PANIC;
 

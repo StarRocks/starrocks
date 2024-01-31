@@ -37,10 +37,17 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
 import com.starrocks.connector.Connector;
+=======
+import com.starrocks.common.UserException;
+import com.starrocks.common.profile.Tracers;
+import com.starrocks.connector.CatalogConnector;
+>>>>>>> 26916e8ce9 ([Enhancement] parallel prepare  metadata (#40280))
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
+import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -101,16 +108,37 @@ public class MetadataMgr {
         this.connectorTblMetaInfoMgr = connectorTblMetaInfoMgr;
     }
 
+<<<<<<< HEAD
+=======
+    // get query id from thread local context if possible
+    private Optional<String> getOptionalQueryID() {
+        if (ConnectContext.get() != null && ConnectContext.get().getQueryId() != null) {
+            return Optional.of(ConnectContext.get().getQueryId().toString());
+        }
+        return Optional.empty();
+    }
+
+    public Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
+        Optional<String> queryId = getOptionalQueryID();
+        return getOptionalMetadata(queryId, catalogName);
+    }
+
+>>>>>>> 26916e8ce9 ([Enhancement] parallel prepare  metadata (#40280))
     /** get ConnectorMetadata by catalog name
      * if catalog is null or empty will return localMetastore
      * @param catalogName catalog's name
      * @return ConnectorMetadata
      */
+<<<<<<< HEAD
     public Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
         if (Strings.isNullOrEmpty(catalogName)) {
             catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         }
         if (CatalogMgr.isInternalCatalog(catalogName)) {
+=======
+    public Optional<ConnectorMetadata> getOptionalMetadata(Optional<String> queryId, String catalogName) {
+        if (Strings.isNullOrEmpty(catalogName) || CatalogMgr.isInternalCatalog(catalogName)) {
+>>>>>>> 26916e8ce9 ([Enhancement] parallel prepare  metadata (#40280))
             return Optional.of(localMetastore);
         } else {
             String queryId = ConnectContext.get() != null && ConnectContext.get().getQueryId() != null ?
@@ -128,6 +156,22 @@ public class MetadataMgr {
                 }
             }
         }
+<<<<<<< HEAD
+=======
+
+        CatalogConnector connector = connectorMgr.getConnector(catalogName);
+        if (connector == null) {
+            LOG.error("Failed to get {} catalog", catalogName);
+            return Optional.empty();
+        }
+
+        if (queryId.isPresent()) { // use query-level cache if from query
+            QueryMetadatas queryMetadatas = metadataCacheByQueryId.getUnchecked(queryId.get());
+            return Optional.ofNullable(queryMetadatas.getConnectorMetadata(catalogName, queryId.get()));
+        }
+
+        return Optional.ofNullable(connector.getMetadata());
+>>>>>>> 26916e8ce9 ([Enhancement] parallel prepare  metadata (#40280))
     }
 
     public void removeQueryMetadata() {
@@ -360,6 +404,19 @@ public class MetadataMgr {
             }
         }
         return partitions.build();
+    }
+
+    public boolean prepareMetadata(String queryId, String catalogName, MetaPreparationItem item, Tracers tracers) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(Optional.of(queryId), catalogName);
+        if (connectorMetadata.isPresent()) {
+            try {
+                return connectorMetadata.get().prepareMetadata(item, tracers);
+            } catch (Exception e) {
+                LOG.error("prepare metadata failed on [{}]", item, e);
+                return true;
+            }
+        }
+        return true;
     }
 
     public void refreshTable(String catalogName, String srDbName, Table table,
