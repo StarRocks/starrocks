@@ -31,11 +31,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-<<<<<<< HEAD
-import com.starrocks.common.UserException;
-=======
-import com.starrocks.common.profile.Tracers;
->>>>>>> 9b3d4861cf ([Refactor] record error code (#38948))
 import com.starrocks.common.util.AuditStatisticsUtil;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogUtil;
@@ -55,12 +50,7 @@ import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
-<<<<<<< HEAD
 import com.starrocks.sql.ast.KillStmt;
-=======
-import com.starrocks.sql.ast.ExecuteStmt;
-import com.starrocks.sql.ast.PrepareStmt;
->>>>>>> 9b3d4861cf ([Refactor] record error code (#38948))
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.SqlDigestBuilder;
@@ -370,16 +360,11 @@ public class ConnectProcessor {
             // If reach here, maybe StarRocks bug.
             LOG.warn("Process one query failed. SQL: " + originStmt + ", because unknown reason: ", e);
             ctx.getState().setError("Unexpected exception: " + e.getMessage());
-<<<<<<< HEAD
             if (parsedStmt instanceof KillStmt) {
                 // ignore kill stmt execute err(not monitor it)
                 ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
             }
-=======
             ctx.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
-        } finally {
-            Tracers.close();
->>>>>>> 9b3d4861cf ([Refactor] record error code (#38948))
         }
         
         // audit after exec
