@@ -727,7 +727,7 @@ public class Utils {
                 } else if (FunctionSet.ARRAY_AGG.equalsIgnoreCase(fnName))  {
                     AggregateFunction aggregateFunction = (AggregateFunction) callOperator.getFunction();
                     if (CollectionUtils.isNotEmpty(aggregateFunction.getIsAscOrder()) ||
-                            (!distinctCols.isEmpty() &&distinctCols.get(0).getType().isDecimalOfAnyVersion())) {
+                            (!distinctCols.isEmpty() && distinctCols.get(0).getType().isDecimalOfAnyVersion())) {
                         return true;
                     }
                 }
