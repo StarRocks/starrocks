@@ -63,10 +63,8 @@ public class OrRangePredicate extends RangePredicate {
             children.add(rangePredicate.toScalarOperator());
         }
 
-        ScalarOperator orPredicate = Utils.compoundOr(children);
-        List<ScalarOperator> childPredicates = Utils.extractDisjunctive(orPredicate);
         Map<String, List<ScalarOperator>> columnPredicatesMap = Maps.newHashMap();
-        for (ScalarOperator rangePredicate : childPredicates) {
+        for (ScalarOperator rangePredicate : children) {
             if (ScalarOperator.isColumnEqualConstant(rangePredicate)) {
                 BinaryPredicateOperator binaryEqPredicate = (BinaryPredicateOperator) rangePredicate;
                 ColumnRefOperator columnRef = binaryEqPredicate.getChild(0).cast();
@@ -82,7 +80,7 @@ public class OrRangePredicate extends RangePredicate {
         }
         for (List<ScalarOperator> value : columnPredicatesMap.values()) {
             if (value.size() > 1) {
-                childPredicates.removeAll(value);
+                children.removeAll(value);
                 // add InPredicateOperator
                 List<ScalarOperator> arguments = Lists.newArrayList();
                 arguments.add(value.get(0).getChild(0));
@@ -96,11 +94,11 @@ public class OrRangePredicate extends RangePredicate {
                     }
                 }
                 InPredicateOperator inPredicateOperator = new InPredicateOperator(false, arguments);
-                childPredicates.add(inPredicateOperator);
+                children.add(inPredicateOperator);
             }
         }
 
-        return Utils.compoundOr(childPredicates);
+        return Utils.compoundOr(children);
     }
 
     // for

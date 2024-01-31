@@ -100,7 +100,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     "     partitions=1/1");
             PlanTestBase.assertContains(plan, "1:IcebergScanNode\n" +
                     "     TABLE: part_tbl1\n" +
-                    "     PREDICATES: 14: d != '2023-08-01', 14: d >= '2023-08-01'");
+                    "     PREDICATES: 13: d != '2023-08-01', 13: d >= '2023-08-01'");
         }
         {
             String query = "select a, b, d, count(distinct t1.c)\n" +
@@ -694,8 +694,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
             PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
                     "     TABLE: test_mv1\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: ((16: d < '2023-08-01') OR ((16: d > '2023-08-01') AND " +
-                    "(16: d < '2023-08-02'))) OR (16: d > '2023-08-02')\n" +
+                    "     PREDICATES: 16: d != '2023-08-01', 16: d != '2023-08-02'\n" +
                     "     partitions=3/3");
         }
 
