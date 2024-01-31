@@ -71,7 +71,7 @@ public:
             c1->set_name("c1");
             c1->set_type("INT");
             c1->set_is_key(false);
-            c1->set_is_nullable(false);
+            c1->set_is_nullable(true);
             c1->set_aggregation("REPLACE");
         }
         auto c2 = schema->add_column();
@@ -80,7 +80,7 @@ public:
             c2->set_name("c2");
             c2->set_type("INT");
             c2->set_is_key(false);
-            c2->set_is_nullable(false);
+            c2->set_is_nullable(true);
             c2->set_aggregation("REPLACE");
             c2->set_default_value("10");
         }
@@ -939,6 +939,88 @@ TEST_F(LakeIncompleteSortKeyPartialUpdateTest, test_incomplete_sort_key) {
                                                .build());
     ASSERT_OK(delta_writer->open());
     ASSERT_ERROR(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+}
+
+TEST_P(LakePartialUpdateTest, test_partial_update_retry_rewrite_check) {
+    if (GetParam().enable_persistent_index) return;
+    auto chunk0 = generate_data(kChunkSize, 0, false, 3);
+    auto chunk1 = generate_data(kChunkSize, 0, true, 5);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    // normal write
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_index_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish());
+        delta_writer->close();
+        // Publish version
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
+    ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
+
+    // partial update
+    auto txn_id = next_id();
+    {
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_index_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish());
+        delta_writer->close();
+    }
+    // retry publish again
+    std::string md5_val = "";
+    for (int i = 0; i < 5; i++) {
+        TEST_ENABLE_ERROR_POINT("TabletManager::put_tablet_metadata",
+                                Status::IOError("injected put tablet metadata error"));
+
+        SyncPoint::GetInstance()->EnableProcessing();
+
+        DeferOp defer([]() {
+            TEST_DISABLE_ERROR_POINT("TabletManager::put_tablet_metadata");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+        _tablet_mgr->prune_metacache();
+        ASSERT_ERROR(publish_single_version(tablet_id, version + 1, txn_id));
+        auto txn_log_st = _tablet_mgr->get_txn_log(tablet_id, txn_id);
+        EXPECT_TRUE(txn_log_st.ok());
+        auto& txn_log = txn_log_st.value();
+        auto segment = txn_log->op_write().rewrite_segments(0);
+        std::string filename = _tablet_mgr->segment_location(tablet_id, segment);
+        ASSIGN_OR_ABORT(auto cur_md5_val, fs::md5sum(filename));
+        if (md5_val.empty()) {
+            md5_val = cur_md5_val;
+        } else {
+            // make sure each rewrite will generate same file
+            EXPECT_TRUE(md5_val == cur_md5_val);
+        }
+    }
 }
 
 } // namespace starrocks::lake
