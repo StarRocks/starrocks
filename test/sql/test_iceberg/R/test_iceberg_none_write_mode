@@ -1,0 +1,39 @@
+-- name: test_iceberg_none_write_mode
+create external catalog ice_cat_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+-- result:
+[]
+-- !result
+create database ice_cat_${uuid0}.ice_db_${uuid0};
+-- result:
+[]
+-- !result
+create table ice_cat_${uuid0}.ice_db_${uuid0}.ice_tbl_${uuid0} (k1 int) properties("write.metadata.metrics.default"="none");
+-- result:
+[]
+-- !result
+insert into ice_cat_${uuid0}.ice_db_${uuid0}.ice_tbl_${uuid0} select 1;
+-- result:
+[]
+-- !result
+select * from ice_cat_${uuid0}.ice_db_${uuid0}.ice_tbl_${uuid0};
+-- result:
+1
+-- !result
+drop table ice_cat_${uuid0}.ice_db_${uuid0}.ice_tbl_${uuid0} force;
+-- result:
+[]
+-- !result
+drop database ice_cat_${uuid0}.ice_db_${uuid0};
+-- result:
+[]
+-- !result
+drop catalog ice_cat_${uuid0};
+-- result:
+[]
+-- !result
