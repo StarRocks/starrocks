@@ -31,8 +31,10 @@
 
 #include "column/chunk.h"
 #include "column/nullable_column.h"
+#include "formats/column_evaluator.h"
 #include "formats/file_writer.h"
 #include "formats/parquet/chunk_writer.h"
+#include "formats/utils.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
 #include "util/priority_thread_pool.hpp"
@@ -238,25 +240,26 @@ private:
 
 namespace starrocks::formats {
 
+struct FileColumnId {
+    int32_t field_id = -1;
+    std::vector<FileColumnId> children;
+};
+
+struct ParquetWriterOptions : FileWriterOptions {
+    int64_t dictionary_pagesize = 1024 * 1024; // 1MB
+    int64_t page_size = 1024 * 1024;           // 1MB
+    int64_t write_batch_size = 4096;
+    int64_t rowgroup_size = 1 << 27; // 128MB
+    std::optional<std::vector<FileColumnId>> column_ids = std::nullopt;
+};
+
 class ParquetFileWriter final : public FileWriter {
 public:
-    struct FileColumnId {
-        int32_t field_id = -1;
-        std::vector<FileColumnId> children;
-    };
-
-    struct ParquetWriterOptions : FileWriterOptions {
-        int64_t dictionary_pagesize = 1024 * 1024; // 1MB
-        int64_t page_size = 1024 * 1024;           // 1MB
-        int64_t write_batch_size = 4096;
-        int64_t rowgroup_size = 1 << 27; // 128MB
-        std::optional<std::vector<FileColumnId>> column_ids = std::nullopt;
-    };
-
-    ParquetFileWriter(std::unique_ptr<parquet::ParquetOutputStream> output_stream,
-                      const std::vector<std::string>& column_names, const std::vector<TExpr>& output_exprs,
+    ParquetFileWriter(const std::string& location, std::unique_ptr<parquet::ParquetOutputStream> output_stream,
+                      const std::vector<std::string>& column_names, const std::vector<TypeDescriptor>& type_descs,
+                      std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                       const std::shared_ptr<ParquetWriterOptions>& writer_options,
-                      const std::function<void()> rollback_action, RuntimeState* state, PriorityThreadPool* executors);
+                      const std::function<void()> rollback_action, PriorityThreadPool* executors);
 
     ~ParquetFileWriter() override;
 
@@ -285,19 +288,40 @@ private:
     std::shared_ptr<::parquet::WriterProperties> _properties;
     std::shared_ptr<::parquet::schema::GroupNode> _schema;
 
-    std::vector<std::string> _column_names;
-    std::vector<TExpr> _output_exprs;
-    std::vector<ExprContext*> _output_expr_ctxs;
-    std::vector<TypeDescriptor> _type_descs;
+    const std::string _location;
+    std::shared_ptr<parquet::ParquetOutputStream> _output_stream;
+    const std::vector<std::string> _column_names;
+    const std::vector<TypeDescriptor> _type_descs;
+    std::vector<std::unique_ptr<ColumnEvaluator>> _column_evaluators;
     std::shared_ptr<ParquetWriterOptions> _writer_options;
     std::function<StatusOr<ColumnPtr>(Chunk*, size_t)> _eval_func;
-    std::shared_ptr<::parquet::FileMetaData> _file_metadata;
 
     std::shared_ptr<::parquet::ParquetFileWriter> _writer;
     std::shared_ptr<parquet::ChunkWriter> _rowgroup_writer;
-    std::shared_ptr<parquet::ParquetOutputStream> _output_stream;
     const std::function<void()> _rollback_action;
-    RuntimeState* _state;
+    PriorityThreadPool* _executors;
+};
+
+class ParquetFileWriterFactory : public FileWriterFactory {
+public:
+    ParquetFileWriterFactory(std::shared_ptr<FileSystem> fs, const std::string& format,
+                             const std::map<std::string, std::string>& options,
+                             const std::vector<std::string>& column_names,
+                             std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
+                             PriorityThreadPool* executors = nullptr);
+
+    StatusOr<std::shared_ptr<FileWriter>> create(const std::string& path) override;
+
+private:
+    Status _init();
+
+    std::shared_ptr<FileSystem> _fs;
+    std::string _format;
+    std::map<std::string, std::string> _options;
+    std::shared_ptr<ParquetWriterOptions> _parsed_options;
+
+    std::vector<std::string> _column_names;
+    std::vector<std::unique_ptr<ColumnEvaluator>> _column_evaluators;
     PriorityThreadPool* _executors;
 };
 

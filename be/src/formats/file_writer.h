@@ -17,6 +17,7 @@
 #include <future>
 
 #include "column/chunk.h"
+#include "column_evaluator.h"
 #include "common/status.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
@@ -24,26 +25,13 @@
 
 namespace starrocks::formats {
 
+struct FileWriterOptions {
+    virtual ~FileWriterOptions() = default;
+};
+
 class FileWriter {
 public:
-    enum class FileFormat {
-        PARQUET,
-        ORC,
-        CSV,
-        UNKNOWN,
-    };
-
-    enum class Compression {
-        NONE,
-    };
-
-    struct FileWriterOptions {
-        virtual ~FileWriterOptions() = default;
-    };
-
     struct FileMetrics {
-        std::string file_location;
-        std::string partition_location;
         int64_t record_count;
         int64_t file_size;
         std::optional<std::vector<int64_t>> split_offsets;
@@ -57,6 +45,7 @@ public:
     struct CommitResult {
         Status io_status;
         FileMetrics file_metrics;
+        std::string location;
         std::function<void()> rollback_action;
     };
 
@@ -69,21 +58,9 @@ public:
 
 class FileWriterFactory {
 public:
-    FileWriterFactory(std::shared_ptr<FileSystem> fs, FileWriter::FileFormat format,
-                      std::shared_ptr<FileWriter::FileWriterOptions> options,
-                      const std::vector<std::string>& column_names, const std::vector<TExpr>& output_exprs,
-                      RuntimeState* runtime_state, PriorityThreadPool* executors = nullptr);
+    virtual ~FileWriterFactory() = default;
 
-    StatusOr<std::shared_ptr<FileWriter>> create(const std::string& path) const;
-
-private:
-    std::shared_ptr<FileWriter::FileWriterOptions> _options;
-    std::shared_ptr<FileSystem> _fs;
-    FileWriter::FileFormat _format;
-    std::vector<std::string> _column_names;
-    std::vector<TExpr> _output_exprs;
-    RuntimeState* _runtime_state;
-    PriorityThreadPool* _executors;
+    virtual StatusOr<std::shared_ptr<FileWriter>> create(const std::string& path) = 0;
 };
 
 } // namespace starrocks::formats

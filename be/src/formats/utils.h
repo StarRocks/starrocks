@@ -41,4 +41,11 @@ std::future<T> make_ready_future(const T& t) {
     return p.get_future();
 }
 
+namespace formats {
+
+inline static const std::string PARQUET = "parquet";
+inline static const std::string ORC = "orc";
+inline static const std::string CSV = "csv";
+
+} // namespace formats
 } // namespace starrocks

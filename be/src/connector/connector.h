@@ -158,19 +158,6 @@ protected:
 };
 using DataSourceProviderPtr = std::unique_ptr<DataSourceProvider>;
 
-struct ConnectorChunkSinkContext {
-public:
-    virtual ~ConnectorChunkSinkContext() = default;
-};
-
-class ConnectorChunkSinkProvider {
-public:
-    virtual ~ConnectorChunkSinkProvider() = default;
-
-    virtual std::unique_ptr<ConnectorChunkSink> create_chunk_sink(std::shared_ptr<ConnectorChunkSinkContext> context,
-                                                                  int32_t driver_id) = 0;
-};
-
 enum ConnectorType {
     HIVE = 0,
     ES = 1,

@@ -6,32 +6,33 @@
 
 #include <fmt/format.h>
 
-#include "formats/utils.h"
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
+#include "formats/utils.h"
 
 namespace starrocks::formats {
 
-ORCFileWriter::ORCFileWriter(std::unique_ptr<OrcOutputStream> output_stream,
+ORCFileWriter::ORCFileWriter(const std::string& location, std::unique_ptr<OrcOutputStream> output_stream,
                              const std::vector<std::string>& column_names,
-                             const std::vector<ExprContext*>& output_exprs,
-                             const std::shared_ptr<ORCWriterOptions>& writer_options, PriorityThreadPool* executors)
-        : _output_stream(std::move(output_stream)),
+                             const std::vector<TypeDescriptor>& type_descs,
+                             std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
+                             const std::shared_ptr<ORCWriterOptions>& writer_options,
+                             const std::function<void()> rollback_action, PriorityThreadPool* executors)
+        : _location(location),
+          _output_stream(std::move(output_stream)),
           _column_names(column_names),
-          _output_exprs(output_exprs),
+          _type_descs(type_descs),
+          _column_evaluators(std::move(column_evaluators)),
           _writer_options(writer_options),
-          _executors(executors) {
-    for (auto expr : _output_exprs) {
-        _type_descs.push_back(expr->root()->type());
-    }
-}
+          _rollback_action(rollback_action),
+          _executors(executors) {}
 
 Status ORCFileWriter::init() {
-    ASSIGN_OR_RETURN(auto schema, make_schema(_column_names, _type_descs));
-
-    _writer = orc::createWriter(*schema, _output_stream.get(), orc::WriterOptions());
+    RETURN_IF_ERROR(ColumnEvaluator::init(_column_evaluators));
+    ASSIGN_OR_RETURN(_schema, _make_schema(_column_names, _type_descs));
+    _writer = orc::createWriter(*_schema, _output_stream.get(), orc::WriterOptions());
     return Status::OK();
 }
 
@@ -48,26 +49,36 @@ std::future<Status> ORCFileWriter::write(ChunkPtr chunk) {
 
     // TODO(letian-jiang): aware of flush operations and execute async
     _writer->add(*cvb.value());
+    _row_counter += chunk->num_rows();
     return make_ready_future(Status::OK());
 }
 
 std::future<FileWriter::CommitResult> ORCFileWriter::commit() {
-    auto promise = std::make_shared<std::promise<CommitResult>>();
-    std::future<CommitResult> future = promise->get_future();
+    auto promise = std::make_shared<std::promise<FileWriter::CommitResult>>();
+    std::future<FileWriter::CommitResult> future = promise->get_future();
 
-    auto task = [writer = _writer, p = promise] {
-        // TODO: make sure previous io tasks have been done
+    auto task = [writer = _writer, output_stream = _output_stream, p = promise, rollback = _rollback_action,
+                 row_counter = _row_counter, location = _location] {
+        // TODO(letian-jiang): check if there are any outstanding io task
+        FileWriter::CommitResult result{.io_status = Status::OK(), .location = location, .rollback_action = rollback};
         try {
             writer->close();
         } catch (const std::exception& e) {
-            Status exception = Status::IOError(fmt::format("{}: {}", "close file error", e.what()));
-            LOG(WARNING) << exception;
-            p->set_value(CommitResult{.io_status = exception});
-            return;
+            result.io_status.update(Status::IOError(fmt::format("{}: {}", "close file error", e.what())));
         }
 
-        // TODO(letian-jiang): close output stream?
-        p->set_value(CommitResult{.io_status = Status::OK()});
+        try {
+            output_stream->close();
+        } catch (const std::exception& e) {
+            result.io_status.update(Status::IOError(fmt::format("{}: {}", "close output stream error", e.what())));
+        }
+
+        if (result.io_status.ok()) {
+            result.file_metrics.record_count = row_counter;
+            result.file_metrics.file_size = output_stream->getLength();
+        }
+
+        p->set_value(result);
     };
 
     if (_executors) {
@@ -75,12 +86,13 @@ std::future<FileWriter::CommitResult> ORCFileWriter::commit() {
         if (!ok) {
             Status exception = Status::ResourceBusy("submit close file task fails");
             LOG(WARNING) << exception;
-            promise->set_value(CommitResult{.io_status = exception});
+            promise->set_value(FileWriter::CommitResult{.io_status = exception, .rollback_action = _rollback_action});
         }
     } else {
         task();
     }
 
+    _writer = nullptr;
     return future;
 }
 
@@ -88,11 +100,12 @@ StatusOr<std::unique_ptr<orc::ColumnVectorBatch>> ORCFileWriter::_convert(ChunkP
     auto cvb = _writer->createRowBatch(chunk->num_rows());
     auto root = down_cast<orc::StructVectorBatch*>(cvb.get());
 
-    for (size_t i = 0; i < _output_exprs.size(); ++i) {
-        ASSIGN_OR_RETURN(auto column, _output_exprs[i]->evaluate(chunk.get()));
+    for (size_t i = 0; i < _column_evaluators.size(); ++i) {
+        ASSIGN_OR_RETURN(auto column, _column_evaluators[i]->evaluate(chunk.get()));
         _write_column(*root->fields[i], column, _type_descs[i]);
     }
 
+    root->numElements = chunk->num_rows();
     return cvb;
 }
 
@@ -394,7 +407,7 @@ void ORCFileWriter::_write_datetime(orc::ColumnVectorBatch& orc_column, ColumnPt
 }
 
 void ORCFileWriter::_write_array_column(orc::ColumnVectorBatch& orc_column, ColumnPtr& column,
-                                          const TypeDescriptor& type) {
+                                        const TypeDescriptor& type) {
     auto& array_orc_column = dynamic_cast<orc::ListVectorBatch&>(orc_column);
     auto column_size = column->size();
 
@@ -511,8 +524,8 @@ void ORCFileWriter::_write_map_column(orc::ColumnVectorBatch& orc_column, Column
     map_orc_column.numElements = column->size();
 }
 
-StatusOr<std::unique_ptr<orc::Type>> ORCFileWriter::make_schema(const std::vector<std::string>& column_names,
-                                                                const std::vector<TypeDescriptor>& type_descs) {
+StatusOr<std::unique_ptr<orc::Type>> ORCFileWriter::_make_schema(const std::vector<std::string>& column_names,
+                                                                 const std::vector<TypeDescriptor>& type_descs) {
     auto schema = orc::createStructType();
     for (size_t i = 0; i < type_descs.size(); ++i) {
         ASSIGN_OR_RETURN(std::unique_ptr<orc::Type> field_type, _make_schema_node(type_descs[i]));
@@ -591,6 +604,42 @@ StatusOr<std::unique_ptr<orc::Type>> ORCFileWriter::_make_schema_node(const Type
         return Status::NotSupported(
                 fmt::format("ORC writer does not support to write {} type yet", type_desc.debug_string()));
     }
+}
+
+ORCFileWriterFactory::ORCFileWriterFactory(std::shared_ptr<FileSystem> fs, const string& format,
+                                           const std::map<std::string, std::string>& options,
+                                           const vector<std::string>& column_names,
+                                           vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
+                                           PriorityThreadPool* executors)
+        : _fs(std::move(fs)),
+          _format(format),
+          _options(options),
+          _column_names(column_names),
+          _column_evaluators(std::move(column_evaluators)),
+          _executors(executors) {}
+
+Status ORCFileWriterFactory::_init() {
+    for (auto& e : _column_evaluators) {
+        RETURN_IF_ERROR(e->init());
+    }
+    _parsed_options = std::make_shared<ORCWriterOptions>();
+    return Status::OK();
+}
+
+StatusOr<std::shared_ptr<FileWriter>> ORCFileWriterFactory::create(const string& path) {
+    if (_parsed_options == nullptr) {
+        RETURN_IF_ERROR(_init());
+    }
+
+    ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(path));
+    auto rollback_action = [fs = _fs, path = path]() {
+        WARN_IF_ERROR(ignore_not_found(fs->delete_file(path)), "fail to delete file");
+    };
+    auto column_evaluators = ColumnEvaluator::clone(_column_evaluators);
+    auto types = ColumnEvaluator::types(_column_evaluators);
+    auto output_stream = std::make_unique<OrcOutputStream>(std::move(file));
+    return std::make_shared<ORCFileWriter>(path, std::move(output_stream), _column_names, types,
+                                           std::move(column_evaluators), _parsed_options, rollback_action, _executors);
 }
 
 } // namespace starrocks::formats

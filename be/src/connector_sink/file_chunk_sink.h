@@ -21,7 +21,9 @@
 
 #include "column/chunk.h"
 #include "common/status.h"
+#include "connector/connector.h"
 #include "connector_chunk_sink.h"
+#include "formats/column_evaluator.h"
 #include "formats/file_writer.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
@@ -32,12 +34,13 @@ namespace starrocks::connector {
 
 class FileChunkSink : public ConnectorChunkSink {
 public:
-    FileChunkSink(const std::vector<std::string>& partition_columns, const std::vector<TExpr>& partition_exprs,
+    FileChunkSink(const std::vector<std::string>& partition_columns,
+                  std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
                   std::unique_ptr<LocationProvider> location_provider,
                   std::unique_ptr<formats::FileWriterFactory> file_writer_factory, int64_t max_file_size,
-                  RuntimeState* runtime_state);
+                  RuntimeState* state);
 
-    ~FileChunkSink() override;
+    ~FileChunkSink() override = default;
 
     Status init() override;
 
@@ -48,18 +51,39 @@ public:
     std::function<void(const formats::FileWriter::CommitResult& result)> callback_on_success() override;
 
 private:
-    std::vector<TExpr> _partition_exprs;
-    std::vector<ExprContext*> _partition_expr_ctxs;
-    std::vector<std::string> _partition_column_names;
-
+    const std::vector<std::string> _partition_column_names;
+    std::vector<std::unique_ptr<ColumnEvaluator>> _partition_column_evaluators;
     std::unique_ptr<LocationProvider> _location_provider;
     std::unique_ptr<formats::FileWriterFactory> _file_writer_factory;
-    std::map<std::string, std::shared_ptr<formats::FileWriter>> _partition_writers;
-    int64_t _max_file_size;
+    const int64_t _max_file_size;
+    RuntimeState* _state;
 
-    RuntimeState* _runtime_state;
+    std::map<std::string, std::shared_ptr<formats::FileWriter>> _partition_writers;
 
     inline static std::string DEFAULT_PARTITION = "__DEFAULT_PARTITION__";
+};
+
+struct FileChunkSinkContext : public ConnectorChunkSinkContext {
+    ~FileChunkSinkContext() override = default;
+
+    std::string path;
+    std::vector<std::string> column_names;
+    std::vector<std::unique_ptr<ColumnEvaluator>> column_evaluators;
+    std::vector<int32_t> partition_column_indices;
+    int64_t max_file_size;
+    std::string format;
+    std::map<std::string, std::string> options;
+    PriorityThreadPool* executor;
+    TCloudConfiguration cloud_conf;
+    pipeline::FragmentContext* fragment_context;
+};
+
+class FileDataSinkProvider : public ConnectorChunkSinkProvider {
+public:
+    ~FileDataSinkProvider() override = default;
+
+    std::unique_ptr<ConnectorChunkSink> create_chunk_sink(std::shared_ptr<ConnectorChunkSinkContext> context,
+                                                          int32_t driver_id) override;
 };
 
 } // namespace starrocks::connector

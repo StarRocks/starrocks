@@ -60,14 +60,13 @@ void OrcOutputStream::write(const void* buf, size_t length) {
 
 void OrcOutputStream::close() {
     if (_is_closed) {
-        throw "The output stream is already closed";
-    }
-    Status st = _wfile->close();
-    if (!st.ok()) {
-        throw "close orc output stream failed: " + st.to_string();
+        return;
     }
     _is_closed = true;
-    return;
+
+    if (auto st = _wfile->close(); !st.ok()) {
+        throw std::runtime_error("close orc output stream failed: " + st.to_string());
+    }
 }
 
 OrcChunkWriter::OrcChunkWriter(std::unique_ptr<WritableFile> writable_file,

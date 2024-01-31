@@ -10,14 +10,16 @@
 #include "common/statusor.h"
 #include "exprs/expr_context.h"
 #include "fmt/format.h"
+#include "formats/column_evaluator.h"
 #include "runtime/types.h"
 
 namespace starrocks::connector {
 
 class HiveUtils {
 public:
-    static StatusOr<std::string> make_partition_name(const std::vector<std::string>& column_names,
-                                                     const std::vector<ExprContext*>& exprs, ChunkPtr chunk);
+    static StatusOr<std::string> make_partition_name(
+            const std::vector<std::string>& column_names,
+            const std::vector<std::unique_ptr<ColumnEvaluator>>& column_evaluators, ChunkPtr chunk);
 
 private:
     static StatusOr<std::string> column_value(const TypeDescriptor& type_desc, const ColumnPtr& column);

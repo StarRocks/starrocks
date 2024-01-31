@@ -20,9 +20,9 @@
 
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
-#include "formats/file_writer.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "formats/file_writer.h"
 #include "formats/orc/utils.h"
 #include "fs/fs.h"
 #include "runtime/descriptors.h"

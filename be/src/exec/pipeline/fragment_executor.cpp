@@ -71,6 +71,7 @@
 #include "connector/file_connector.h"
 #include "connector/connector.h"
 #include "exec/pipeline/sink/connector_sink_operator.h"
+#include "connector_sink/file_chunk_sink.h"
 
 namespace starrocks::pipeline {
 
@@ -1028,7 +1029,6 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
     } else if (typeid(*datasink) == typeid(starrocks::TableFunctionTableSink)) {
         DCHECK(thrift_sink.table_function_table_sink.__isset.target_table);
         DCHECK(thrift_sink.table_function_table_sink.__isset.cloud_configuration);
-
         const auto& target_table = thrift_sink.table_function_table_sink.target_table;
         DCHECK(target_table.__isset.path);
         DCHECK(target_table.__isset.file_format);
@@ -1041,26 +1041,19 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
             column_names.push_back(column.column_name);
         }
 
-        std::vector<TExpr> partition_exprs;
-        std::vector<std::string> partition_column_names;
-        if (target_table.__isset.partition_column_ids) {
-            for (auto id : target_table.partition_column_ids) {
-                partition_exprs.push_back(output_exprs[id]);
-                partition_column_names.push_back(target_table.columns[id].column_name);
-            }
-        }
-
+        // prepare sink context
         auto sink_ctx = std::make_shared<connector::FileChunkSinkContext>();
         sink_ctx->path = target_table.path;
         sink_ctx->cloud_conf = thrift_sink.table_function_table_sink.cloud_configuration;
         sink_ctx->column_names = column_names;
-        sink_ctx->partition_columns = partition_column_names;
+        if (target_table.__isset.partition_column_ids) {
+            sink_ctx->partition_column_indices = target_table.partition_column_ids;
+        }
         sink_ctx->executor = ExecEnv::GetInstance()->pipeline_sink_io_pool();
-        sink_ctx->format = formats::FileWriter::FileFormat::PARQUET;
-        sink_ctx->options = std::make_shared<formats::ParquetFileWriter::ParquetWriterOptions>();
+        sink_ctx->format = target_table.file_format;
+        sink_ctx->options = {}; // default for now
         sink_ctx->max_file_size = target_table.write_single_file ? INT64_MAX : 1 << 30;
-        sink_ctx->output_exprs = output_exprs;
-        sink_ctx->partition_exprs = partition_exprs;
+        sink_ctx->column_evaluators = ColumnExprEvaluator::from_exprs(output_exprs, runtime_state);
         sink_ctx->fragment_context = fragment_ctx;
 
         auto connector = connector::ConnectorManager::default_instance()->get(connector::Connector::FILE);
@@ -1070,14 +1063,20 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         size_t source_dop = fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
         size_t sink_dop = target_table.write_single_file ? 1 : _calc_sink_dop(ExecEnv::GetInstance(), request);
 
-        if (partition_exprs.empty()) {
+        if (sink_ctx->partition_column_indices.empty()) {
             context->maybe_interpolate_local_passthrough_exchange_for_sink(
                     runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, std::move(op), source_dop, sink_dop);
         } else {
-            // TODO: partition
-//            context->maybe_interpolate_local_key_partition_exchange_for_sink(
-//                    runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, op, partition_expr_ctxs, source_dop,
-//                    sink_dop);
+            std::vector<TExpr> partition_exprs;
+            for (auto id : target_table.partition_column_ids) {
+                partition_exprs.push_back(output_exprs[id]);
+            }
+            std::vector<ExprContext*> partition_expr_ctxs;
+            RETURN_IF_ERROR(Expr::create_expr_trees(runtime_state->obj_pool(), partition_exprs, &partition_expr_ctxs,
+                                                    runtime_state));
+            context->maybe_interpolate_local_key_partition_exchange_for_sink(
+                    runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, op, partition_expr_ctxs, source_dop,
+                    sink_dop);
         }
     } else if (typeid(*datasink) == typeid(starrocks::DictionaryCacheSink)) {
         OpFactoryPtr op = std::make_shared<DictionaryCacheSinkOperatorFactory>(

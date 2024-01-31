@@ -22,18 +22,17 @@
 
 namespace starrocks::formats {
 
+class ORCWriterOptions : public FileWriterOptions {
+    int64_t stripe_size = 1 << 27; // 128MB
+};
+
 class ORCFileWriter final : public FileWriter {
 public:
-    class ORCWriterOptions : public FileWriterOptions {
-        int64_t stripe_size = 1 << 27; // 128MB
-    };
-
-    static StatusOr<std::unique_ptr<orc::Type>> make_schema(const std::vector<std::string>& column_names,
-                                                            const std::vector<TypeDescriptor>& type_descs);
-
-    ORCFileWriter(std::unique_ptr<OrcOutputStream> output_stream, const std::vector<std::string>& column_names,
-                  const std::vector<ExprContext*>& output_exprs, const std::shared_ptr<ORCWriterOptions>& options,
-                  PriorityThreadPool* executors = nullptr);
+    ORCFileWriter(const std::string& location, std::unique_ptr<OrcOutputStream> output_stream,
+                  const std::vector<std::string>& column_names, const std::vector<TypeDescriptor>& type_descs,
+                  std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
+                  const std::shared_ptr<ORCWriterOptions>& writer_options, const std::function<void()> rollback_action,
+                  PriorityThreadPool* executors);
 
     ~ORCFileWriter() override = default;
 
@@ -46,6 +45,9 @@ public:
     std::future<CommitResult> commit() override;
 
 private:
+    static StatusOr<std::unique_ptr<orc::Type>> _make_schema(const std::vector<std::string>& column_names,
+                                                             const std::vector<TypeDescriptor>& type_descs);
+
     static StatusOr<std::unique_ptr<orc::Type>> _make_schema_node(const TypeDescriptor& type_desc);
 
     StatusOr<std::unique_ptr<orc::ColumnVectorBatch>> _convert(ChunkPtr chunk);
@@ -72,14 +74,42 @@ private:
 
     void _write_map_column(orc::ColumnVectorBatch& orc_column, ColumnPtr& column, const TypeDescriptor& type);
 
-    std::unique_ptr<OrcOutputStream> _output_stream;
-    std::vector<std::string> _column_names;
-    std::vector<ExprContext*> _output_exprs;
-    std::vector<TypeDescriptor> _type_descs;
+    const std::string _location;
+    std::shared_ptr<OrcOutputStream> _output_stream;
+    const std::vector<std::string> _column_names;
+    const std::vector<TypeDescriptor> _type_descs;
+    std::vector<std::unique_ptr<ColumnEvaluator>> _column_evaluators;
+
+    std::unique_ptr<orc::Type> _schema;
     std::shared_ptr<orc::Writer> _writer;
     std::shared_ptr<ORCWriterOptions> _writer_options;
+    int64_t _row_counter{0};
 
+    std::function<void()> _rollback_action;
     // If provided, submit task to executors and return future to the caller. Otherwise execute synchronously.
+    PriorityThreadPool* _executors;
+};
+
+class ORCFileWriterFactory : public FileWriterFactory {
+public:
+    ORCFileWriterFactory(std::shared_ptr<FileSystem> fs, const std::string& format,
+                         const std::map<std::string, std::string>& options,
+                         const std::vector<std::string>& column_names,
+                         std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
+                         PriorityThreadPool* executors = nullptr);
+
+    StatusOr<std::shared_ptr<FileWriter>> create(const std::string& path) override;
+
+private:
+    Status _init();
+
+    std::shared_ptr<FileSystem> _fs;
+    std::string _format;
+    std::map<std::string, std::string> _options;
+    std::shared_ptr<ORCWriterOptions> _parsed_options;
+
+    std::vector<std::string> _column_names;
+    std::vector<std::unique_ptr<ColumnEvaluator>> _column_evaluators;
     PriorityThreadPool* _executors;
 };
 

@@ -11,13 +11,14 @@
 
 namespace starrocks::connector {
 
-StatusOr<std::string> HiveUtils::make_partition_name(const std::vector<std::string>& column_names,
-                                                     const std::vector<ExprContext*>& exprs, ChunkPtr chunk) {
-    DCHECK_EQ(column_names.size(), exprs.size());
+StatusOr<std::string> HiveUtils::make_partition_name(
+        const std::vector<std::string>& column_names,
+        const std::vector<std::unique_ptr<ColumnEvaluator>>& column_evaluators, ChunkPtr chunk) {
+    DCHECK_EQ(column_names.size(), column_evaluators.size());
     std::stringstream ss;
-    for (size_t i = 0; i < exprs.size(); i++) {
-        ASSIGN_OR_RETURN(auto column, exprs[i]->evaluate(chunk.get()));
-        auto type = exprs[i]->root()->type();
+    for (size_t i = 0; i < column_evaluators.size(); i++) {
+        ASSIGN_OR_RETURN(auto column, column_evaluators[i]->evaluate(chunk.get()));
+        auto type = column_evaluators[i]->type();
         ASSIGN_OR_RETURN(auto value, column_value(type, column));
         ss << column_names[i] << "=" << value << "/";
     }

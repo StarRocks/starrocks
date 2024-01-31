@@ -557,8 +557,10 @@ std::future<FileWriter::CommitResult> ParquetFileWriter::commit() {
     std::future<FileWriter::CommitResult> future = promise->get_future();
 
     auto task = [writer = _writer, output_stream = _output_stream, p = promise,
-                 has_field_id = _writer_options->column_ids.has_value(), rollback = _rollback_action] {
-        FileWriter::CommitResult result{.io_status = Status::OK(), .rollback_action = rollback};
+                 has_field_id = _writer_options->column_ids.has_value(), rollback = _rollback_action,
+                 location = _location] {
+        // TODO(letian-jiang): check if there are any outstanding io task
+        FileWriter::CommitResult result{.io_status = Status::OK(), .location = location, .rollback_action = rollback};
         try {
             writer->Close();
         } catch (const ::parquet::ParquetStatusException& e) {
@@ -723,18 +725,20 @@ FileWriter::FileMetrics ParquetFileWriter::_metrics(const ::parquet::FileMetaDat
     return file_metrics;
 }
 
-ParquetFileWriter::ParquetFileWriter(std::unique_ptr<parquet::ParquetOutputStream> output_stream,
+ParquetFileWriter::ParquetFileWriter(const std::string& location,
+                                     std::unique_ptr<parquet::ParquetOutputStream> output_stream,
                                      const std::vector<std::string>& column_names,
-                                     const std::vector<TExpr>& output_exprs,
+                                     const std::vector<TypeDescriptor>& type_descs,
+                                     std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
                                      const std::shared_ptr<ParquetWriterOptions>& writer_options,
-                                     const std::function<void()> rollback_action, RuntimeState* state,
-                                     PriorityThreadPool* executors)
-        : _column_names(column_names),
-          _output_exprs(output_exprs),
-          _writer_options(writer_options),
+                                     const std::function<void()> rollback_action, PriorityThreadPool* executors)
+        : _location(location),
           _output_stream(std::move(output_stream)),
+          _column_names(column_names),
+          _type_descs(type_descs),
+          _column_evaluators(std::move(column_evaluators)),
+          _writer_options(writer_options),
           _rollback_action(std::move(rollback_action)),
-          _state(state),
           _executors(executors) {}
 
 arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> ParquetFileWriter::_make_schema(
@@ -868,14 +872,10 @@ arrow::Result<::parquet::schema::NodePtr> ParquetFileWriter::_make_schema_node(c
 }
 
 Status ParquetFileWriter::init() {
-    RETURN_IF_ERROR(Expr::create_expr_trees(_state->obj_pool(), _output_exprs, &_output_expr_ctxs, _state));
-    RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, _state));
-    RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, _state));
-
-    for (auto expr : _output_expr_ctxs) {
-        _type_descs.push_back(expr->root()->type());
+    for (auto& e : _column_evaluators) {
+        RETURN_IF_ERROR(e->init());
     }
-    _eval_func = [&](Chunk* chunk, size_t col_idx) { return _output_expr_ctxs[col_idx]->evaluate(chunk); };
+    _eval_func = [&](Chunk* chunk, size_t col_idx) { return _column_evaluators[col_idx]->evaluate(chunk); };
 
     auto status = [&]() {
         if (_writer_options->column_ids.has_value()) {
@@ -903,11 +903,47 @@ Status ParquetFileWriter::init() {
 }
 
 ParquetFileWriter::~ParquetFileWriter() {
-    Expr::close(_output_expr_ctxs, _state);
     try {
         _output_stream->Close();
     } catch (...) {
     }
+}
+
+ParquetFileWriterFactory::ParquetFileWriterFactory(std::shared_ptr<FileSystem> fs, const string& format,
+                                                   const std::map<std::string, std::string>& options,
+                                                   const vector<std::string>& column_names,
+                                                   vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
+                                                   PriorityThreadPool* executors)
+        : _fs(std::move(fs)),
+          _format(format),
+          _options(options),
+          _column_names(column_names),
+          _column_evaluators(std::move(column_evaluators)),
+          _executors(executors) {}
+
+Status ParquetFileWriterFactory::_init() {
+    for (auto& e : _column_evaluators) {
+        RETURN_IF_ERROR(e->init());
+    }
+    _parsed_options = std::make_shared<ParquetWriterOptions>();
+    return Status::OK();
+}
+
+StatusOr<std::shared_ptr<FileWriter>> ParquetFileWriterFactory::create(const string& path) {
+    if (_parsed_options == nullptr) {
+        RETURN_IF_ERROR(_init());
+    }
+
+    ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(path));
+    auto rollback_action = [fs = _fs, path = path]() {
+        WARN_IF_ERROR(ignore_not_found(fs->delete_file(path)), "fail to delete file");
+    };
+    auto column_evaluators = ColumnEvaluator::clone(_column_evaluators);
+    auto types = ColumnEvaluator::types(_column_evaluators);
+    auto output_stream = std::make_unique<parquet::ParquetOutputStream>(std::move(file));
+    return std::make_shared<ParquetFileWriter>(path, std::move(output_stream), _column_names, types,
+                                               std::move(column_evaluators), _parsed_options, rollback_action,
+                                               _executors);
 }
 
 } // namespace starrocks::formats

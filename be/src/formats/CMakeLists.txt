@@ -40,6 +40,7 @@ add_library(Formats STATIC
         avro/binary_column.cpp
         orc/orc_chunk_reader.cpp
         orc/orc_chunk_writer.cpp
+        orc/orc_file_writer.cpp
         orc/orc_input_stream.cpp
         orc/orc_mapping.cpp
         orc/orc_memory_pool.cpp
@@ -70,6 +71,7 @@ add_library(Formats STATIC
         parquet/column_chunk_writer.cpp
         parquet/column_read_order_ctx.cpp
         utils.h
+        column_evaluator.cpp
         orc/orc_file_writer.cpp
         orc/orc_file_writer.h
         csv/csv_file_writer.cpp
