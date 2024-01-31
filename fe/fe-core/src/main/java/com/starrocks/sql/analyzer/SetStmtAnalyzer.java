@@ -248,7 +248,7 @@ public class SetStmtAnalyzer {
             checkRangeIntVariable(resolvedExpression, SessionVariable.CBO_MATERIALIZED_VIEW_REWRITE_RELATED_MVS_LIMIT,
                     1, null);
         }
-        
+
         var.setResolvedExpression(resolvedExpression);
     }
 
