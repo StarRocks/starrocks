@@ -50,6 +50,7 @@ public class ScalarOperatorRewriter {
             new ArithmeticCommutativeRule()
     );
 
+<<<<<<< HEAD
     public static final List<ScalarOperatorRewriteRule> MV_SCALAR_REWRITE_RULES = Lists.newArrayList(
             // required
             new ImplicitCastRule(),
@@ -61,6 +62,11 @@ public class ScalarOperatorRewriter {
             new ExtractCommonPredicateRule(),
             new ArithmeticCommutativeRule()
     );
+=======
+    public static final List<ScalarOperatorRewriteRule> MV_SCALAR_REWRITE_RULES = DEFAULT_REWRITE_SCAN_PREDICATE_RULES.stream()
+            .map(rule -> rule instanceof NormalizePredicateRule ? new MvNormalizePredicateRule() : rule)
+            .collect(Collectors.toList());
+>>>>>>> 37b8aa5a55 ([BugFix] fix left outer join to inner join bug and string not equal rewrite bug (#39331))
 
     private final ScalarOperatorRewriteContext context;
 

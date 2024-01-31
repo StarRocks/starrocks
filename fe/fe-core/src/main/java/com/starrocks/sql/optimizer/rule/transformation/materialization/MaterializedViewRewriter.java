@@ -1703,8 +1703,14 @@ public class MaterializedViewRewriter {
 
     private OptExpression doPushdownPredicate(OptExpression joinOptExpression, ScalarOperator predicate) {
         Preconditions.checkState(joinOptExpression.getOp() instanceof LogicalJoinOperator);
+        optimizerContext.reset();
         JoinPredicatePushdown joinPredicatePushdown = new JoinPredicatePushdown(joinOptExpression,
+<<<<<<< HEAD
                 false, true, materializationContext.getQueryRefFactory());
+=======
+                false, true, materializationContext.getQueryRefFactory(),
+                true, optimizerContext);
+>>>>>>> 37b8aa5a55 ([BugFix] fix left outer join to inner join bug and string not equal rewrite bug (#39331))
         return joinPredicatePushdown.pushdown(predicate);
     }
 

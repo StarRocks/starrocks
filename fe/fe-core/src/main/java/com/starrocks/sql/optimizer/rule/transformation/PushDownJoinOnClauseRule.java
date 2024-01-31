@@ -36,7 +36,12 @@ public class PushDownJoinOnClauseRule extends TransformationRule {
         LogicalJoinOperator join = (LogicalJoinOperator) input.getOp();
         ScalarOperator on = join.getOnPredicate();
         JoinPredicatePushdown joinPredicatePushdown = new JoinPredicatePushdown(
+<<<<<<< HEAD
                 input, true, false, context.getColumnRefFactory());
+=======
+                input, true, false, context.getColumnRefFactory(),
+                context.isEnableLeftRightJoinEquivalenceDerive(), context);
+>>>>>>> 37b8aa5a55 ([BugFix] fix left outer join to inner join bug and string not equal rewrite bug (#39331))
         OptExpression root = joinPredicatePushdown.pushdown(join.getOnPredicate());
         ((LogicalJoinOperator) root.getOp()).setHasPushDownJoinOnClause(true);
         if (root.getOp().equals(input.getOp()) && on.equals(join.getOnPredicate()) &&

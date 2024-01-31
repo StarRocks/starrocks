@@ -17,7 +17,13 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.TreeRangeSet;
+<<<<<<< HEAD
 import com.starrocks.catalog.FunctionSet;
+=======
+import com.starrocks.analysis.BinaryType;
+import com.starrocks.catalog.Type;
+import com.starrocks.sql.optimizer.Utils;
+>>>>>>> 37b8aa5a55 ([BugFix] fix left outer join to inner join bug and string not equal rewrite bug (#39331))
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -113,8 +119,23 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
         if (!func.getFnName().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
             return false;
         }
+<<<<<<< HEAD
         if (!(func.getChild(1) instanceof ColumnRefOperator)) {
             return false;
+=======
+
+        TreeRangeSet<ConstantOperator> range = range(predicate.getBinaryType(), op2);
+        if (DateTruncEquivalent.INSTANCE.isEquivalent(op1, op2)) {
+            TreeRangeSet<ConstantOperator> rangeSet = TreeRangeSet.create();
+            rangeSet.addAll(range);
+            return new ColumnRangePredicate(op1.getChild(1).cast(), rangeSet);
+        } else if (TimeSliceRewriteEquivalent.INSTANCE.isEquivalent(op1, op2)) {
+            TreeRangeSet<ConstantOperator> rangeSet = TreeRangeSet.create();
+            rangeSet.addAll(range);
+            return new ColumnRangePredicate(op1.getChild(0).cast(), rangeSet);
+        } else {
+            return null;
+>>>>>>> 37b8aa5a55 ([BugFix] fix left outer join to inner join bug and string not equal rewrite bug (#39331))
         }
         ConstantOperator sliced = ScalarOperatorFunctions.dateTrunc(
                 ((ConstantOperator) op1.getChild(0)),
@@ -257,6 +278,13 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
                 rangeSet.add(Range.lessThan(value));
                 return rangeSet;
             case NE:
+<<<<<<< HEAD
+=======
+                Type valueType = value.getType();
+                if (!valueType.isNumericType() && !valueType.isDateType()) {
+                    return null;
+                }
+>>>>>>> 37b8aa5a55 ([BugFix] fix left outer join to inner join bug and string not equal rewrite bug (#39331))
                 rangeSet.add(Range.greaterThan(value));
                 rangeSet.add(Range.lessThan(value));
                 return rangeSet;

@@ -26,7 +26,12 @@ public class PushDownPredicateJoinRule extends TransformationRule {
         LogicalFilterOperator filter = (LogicalFilterOperator) input.getOp();
         OptExpression joinOpt = input.getInputs().get(0);
         JoinPredicatePushdown joinPredicatePushdown = new JoinPredicatePushdown(
+<<<<<<< HEAD
                 joinOpt, false, false, context.getColumnRefFactory());
+=======
+                joinOpt, false, false, context.getColumnRefFactory(),
+                context.isEnableLeftRightJoinEquivalenceDerive(), context);
+>>>>>>> 37b8aa5a55 ([BugFix] fix left outer join to inner join bug and string not equal rewrite bug (#39331))
         return Lists.newArrayList(joinPredicatePushdown.pushdown(filter.getPredicate()));
     }
 }
