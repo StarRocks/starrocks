@@ -43,7 +43,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 
 说明：
 
-**col_name**：列名称
+**col_name**：列名称，命名要求参见[系统限制](../../../reference/System_limit.md)。
 
 注意，在一般情况下，不能直接创建以以 `__op` 或 `__row` 开头命名的列，因为此类列名被 StarRocks 保留用于特殊目的，创建这样的列可能导致未知行为。如需创建这样的列，必须将 FE 动态参数 [`allow_system_reserved_names`](../../../administration/FE_configuration.md#allow_system_reserved_names) 设置为 `TRUE`。
 
@@ -293,7 +293,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
 
     使用指定的 key 列和指定的数值范围进行分区。
 
-    * 分区名称仅支持字母开头，由字母、数字和下划线组成。
+    * 分区名称的命名要求，参见[系统限制](../../../reference/System_limit.md)。
     * 仅支持以下类型的列作为 Range 分区列：`TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, DATETIME`。
     * 分区为左闭右开区间，首个分区的左边界为最小值。
     * NULL 值只会存放在包含 **最小值** 的分区中。当包含最小值的分区被删除后，NULL 值将无法导入。

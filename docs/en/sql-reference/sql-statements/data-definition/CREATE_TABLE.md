@@ -39,7 +39,7 @@ Syntax:
 col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_INCREMENT] [AS generation_expr]
 ```
 
-**col_name**: Column name.
+**col_name**: column name. For the naming conventions, see [System limits](../../../reference/System_limit.md).
 
 Note that normally you cannot create a column whose name is initiated with `__op` or `__row` because these name formats are reserved for special purposes in StarRocks and creating such columns may result in undefined behavior. If you do need to create such column, set the FE dynamic parameter [`allow_system_reserved_names`](../../../administration/FE_configuration.md#allow_system_reserved_names) to `TRUE`.
 
@@ -250,7 +250,7 @@ Note:
 
 Please use specified key columns and specified value ranges for partitioning.
 
-- Partition name only supports [A-z0-9_]
+- For the naming conventions of partition name, see [System limits](../../../reference/System_limit.md).
 - Columns in Range partition only support the following types: TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, and DATETIME.
 - Partitions are left closed and right open. The left boundary of the first partition is of minimum value.
 - NULL value is stored only in partitions that contain minimum values. When the partition containing the minimum value is deleted, NULL values can no longer be imported.

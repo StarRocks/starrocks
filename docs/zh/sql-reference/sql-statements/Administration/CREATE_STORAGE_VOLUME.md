@@ -30,7 +30,7 @@ PROPERTIES
 
 | **参数**            | **说明**                                                     |
 | ------------------- | ------------------------------------------------------------ |
-| storage_volume_name | 存储卷的名称。请注意，您无法创建名为 `builtin_storage_volume` 的存储卷，因为该名称被用于创建内置存储卷。 |
+| storage_volume_name | 存储卷的名称。请注意，您无法创建名为 `builtin_storage_volume` 的存储卷，因为该名称被用于创建内置存储卷。有关 storage volume 的命名要求，参见[系统限制](../../../reference/System_limit.md)。 |
 | TYPE                | 远程存储系统的类型。有效值：`S3` 、`AZBLOB` 和 `HDFS`。`S3` 代表AWS S3 或与 S3 协议兼容的存储系统。`AZBLOB` 代表 Azure Blob Storage（自 v3.1.1 起支持）。`HDFS` 代表 HDFS 集群。 |
 | LOCATIONS           | 远程存储系统的位置。格式如下：<ul><li>AWS S3 或与 S3 协议兼容的存储系统：`s3://<s3_path>`。`<s3_path>` 必须为绝对路径，如 `s3://testbucket/subpath`。</li><li>Azure Blob Storage: `azblob://<azblob_path>`。`<azblob_path>` 必须为绝对路径，如 `azblob://testcontainer/subpath`。</li><li>HDFS：`hdfs://<host>:<port>/<hdfs_path>`。`<hdfs_path>` 必须为绝对路径，如 `hdfs://127.0.0.1:9000/user/xxx/starrocks`。</li><li>WebHDFS：`webhdfs://<host>:<http_port>/<hdfs_path>`，其中 `<http_port>` 为 NameNode 的 HTTP 端口。`<hdfs_path>` 必须为绝对路径，如 `webhdfs://127.0.0.1:50070/user/xxx/starrocks`。</li><li>ViewFS：`viewfs://<ViewFS_cluster>/<viewfs_path>`，其中 `<ViewFS_cluster>` 为 ViewFS 集群名。`<viewfs_path>` 必须为绝对路径，如 `viewfs://myviewfscluster/user/xxx/starrocks`。</li></ul> |
 | COMMENT             | 存储卷的注释。                                               |
