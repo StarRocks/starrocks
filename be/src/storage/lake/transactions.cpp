@@ -80,9 +80,11 @@ void adjust_base_version(int64_t tablet_id, TabletManager* tablet_mgr, int64_t* 
 
     auto index_version = tablet_mgr->update_mgr()->get_primary_index_data_version(tablet_id);
     if (index_version > version) {
+        // There is a possibility that the index version is newer than the version in remote storage.
+        // Check whether the index version exists in remote storage. If not, clear and rebuild the index.
         auto res = tablet_mgr->get_tablet_metadata(tablet_id, index_version);
         if (res.ok()) {
-            version = std::max(version, index_version);
+            version = index_version;
         } else {
             tablet_mgr->update_mgr()->remove_primary_index_cache(tablet_id);
         }
