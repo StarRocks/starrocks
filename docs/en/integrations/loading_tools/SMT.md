@@ -188,7 +188,7 @@ As shown in the image, SMT can automatically generate CREATE TABLE statements of
     bin/flink list 
     ```
 
-   If the job execution encounters an error, you can view detailed error information in the Flink logs. Also, you can modify the Flink configurations in the file **conf/flink-conf.yaml**, such as memory and slot.
+    If the job execution encounters an error, you can view detailed error information in the Flink logs. Also, you can modify the Flink configurations in the file **conf/flink-conf.yaml**, such as memory and slot.
 
 ### Notes
 
@@ -303,7 +303,7 @@ Flink CDC connector reads the WAL of PostgreSQL and Flink-connector-starrocks wr
     bin/flink list 
     ```
 
-​    If the job execution encounters an error, you can view detailed error information in the Flink logs. Also, you can modify the Flink configurations in the file **conf/flink-conf.yaml**, such as memory and slot.
+    If the job execution encounters an error, you can view detailed error information in the Flink logs. Also, you can modify the Flink configurations in the file **conf/flink-conf.yaml**, such as memory and slot.
 
 ### Notes
 
@@ -338,7 +338,7 @@ Flink CDC connector reads the WAL of PostgreSQL and Flink-connector-starrocks wr
     ALTER TABLE schema_name.table_name REPLICA IDENTITY FULL
     ```
 
-​    After making these changes, restart PostgreSQL .
+    After making these changes, restart PostgreSQL .
 
 ## Synchronize Oracle to StarRocks
 
@@ -402,7 +402,7 @@ Flink CDC connector reads the logminer of Oracle and Flink-connector-starrocks w
    flink.starrocks.sink.properties.strip_outer_array=true
    ```
 
-7. Execute `starrocks-migrate-tool`. All SQL scripts are generated in the result directory.
+7. Execute **starrocks-migrate-tool**. All SQL scripts are generated in the result directory.
 
    ```Bash
    $./starrocks-migrate-tool
@@ -512,12 +512,12 @@ authentication = kerberos
 
 #### Data synchronization
 
-1. Execute `./starrocks-migrate-tool`.
-2. In StarRocks, execute `result/starrocks-create.all.sql` to create the table.
+1. Execute **starrocks-migrate-tool**.
+2. Use a SQL script whose prefix is **starrocks-create** to generate the table in StarRocks.
 
-​    ```bash
-​    mysql -hxx.xx.xx.x -P9030 -uroot -p < starrocks-create.all.sql
-​    ```
+   ```Bash
+   mysql -hxx.xx.xx.x -P9030 -uroot -p < starrocks-create.all.sql
+   ```
 
 3. In **flink/conf/**, create and edit the file **sql-client-defaults.yaml**:
 
@@ -593,7 +593,7 @@ Flink CDC connector captures and records row-level changes that occur in the SQL
     flink.starrocks.sink.properties.strip_outer_array=true
     ```
 
-7. Execute `starrocks-migrate-tool`. All SQL scripts are generated in the `result` directory.
+7. Execute *starrocks-migrate-tool**. All SQL scripts are generated in the `result` directory.
 
 ​    ```Bash
     $./starrocks-migrate-tool
@@ -614,7 +614,7 @@ Flink CDC connector captures and records row-level changes that occur in the SQL
     bin/sql-client.sh embedded < flink-create.all.sql     
     ```
 
-​    After the above command is successfully executed, the Flink job to synchronize data keeps running.
+    After the above command is successfully executed, the Flink job to synchronize data keeps running.
 
 10. Observe the status of the Flink job. 
 
@@ -627,14 +627,14 @@ Flink CDC connector captures and records row-level changes that occur in the SQL
 
 1. Make sure that the Server Agent Service is enabled.
 
-​  Check if the Server Agent Service is running normally.
+    Check if the Server Agent Service is running normally.
     
     ```sql
     EXEC master.dbo.xp_servicecontrol N'QUERYSTATE', N'SQLSERVERAGENT'
     GO
     ```
   
-  Enable the Server Agent Service.
+    Enable the Server Agent Service.
 
 
     ```Bash
@@ -643,27 +643,28 @@ Flink CDC connector captures and records row-level changes that occur in the SQL
 
 2. Make sure that CDC for the corresponding database is enabled.
 
-​    Check if CDC for the corresponding database is enabled.
+    ​    Check if CDC for the corresponding database is enabled.
 
-    ```sql
-    select is_cdc_enabled, name from sys.databases where name = 'XXX_databases'
-    GO
-    ```
+        ```sql
+        select is_cdc_enabled, name from sys.databases where name = 'XXX_databases'
+        GO
+        ```
 
-​    Enable CDC.
+    ​    Enable CDC.
 
-​    :::note
+    ​    :::note
 
-​    When executing this command, make sure that the user `serverRole` is `sysadmin`.
+    ​    When executing this command, make sure that the user `serverRole` is `sysadmin`.
 
-​    :::
+    ​    :::
 
-    ```SQL
-    USE XXX_databases
-    GO
-    EXEC sys.sp_cdc_enable_db
-    GO
-    ```
+
+        ```SQL
+        USE XXX_databases
+        GO
+        EXEC sys.sp_cdc_enable_db
+        GO
+        ```
 
 3. Make sure that CDC for the corresponding table is enabled.
 
@@ -744,7 +745,7 @@ The Flink CDC connector captures data by directly reading full and incremental d
     # flink.cdc.pd-addresses = 127.0.0.1:2379
     ```
 
-7. Execute `starrocks-migrate-tool`. All SQL scripts are generated in the `result` directory.
+7. Execute *starrocks-migrate-tool**. All SQL scripts are generated in the `result` directory.
     
     ```Bash
     $./starrocks-migrate-tool
