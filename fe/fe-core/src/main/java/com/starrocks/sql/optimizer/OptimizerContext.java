@@ -28,6 +28,7 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.task.SeriallyTaskScheduler;
@@ -65,6 +66,16 @@ public class OptimizerContext {
     // TODO: refactor materialized view's variables/contexts into this.
     private QueryMaterializationContext queryMaterializationContext;
 
+<<<<<<< HEAD
+=======
+    private boolean isShortCircuit = false;
+    private boolean inMemoPhase = false;
+
+    // Is not null predicate can be derived from inner join or semi join,
+    // which should be kept to be used to convert outer join into inner join.
+    private List<IsNullPredicateOperator> pushdownNotNullPredicates = Lists.newArrayList();
+
+>>>>>>> 37b8aa5a55 ([BugFix] fix left outer join to inner join bug and string not equal rewrite bug (#39331))
     @VisibleForTesting
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
         this.memo = memo;
@@ -241,4 +252,28 @@ public class OptimizerContext {
             this.queryMaterializationContext.clear();
         }
     }
+<<<<<<< HEAD
+=======
+
+    public void setInMemoPhase(boolean inMemoPhase) {
+        this.inMemoPhase = inMemoPhase;
+    }
+
+    public boolean isInMemoPhase() {
+        return this.inMemoPhase;
+    }
+
+    public List<IsNullPredicateOperator> getPushdownNotNullPredicates() {
+        return pushdownNotNullPredicates;
+    }
+
+    public void addPushdownNotNullPredicates(IsNullPredicateOperator notNullPredicate) {
+        pushdownNotNullPredicates.add(notNullPredicate);
+    }
+
+    // Should clear pushdownNotNullPredicates after each call of PUSH_DOWN_PREDICATE rule set
+    public void reset() {
+        pushdownNotNullPredicates.clear();
+    }
+>>>>>>> 37b8aa5a55 ([BugFix] fix left outer join to inner join bug and string not equal rewrite bug (#39331))
 }
