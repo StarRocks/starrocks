@@ -71,29 +71,30 @@ static void clear_remote_snapshot_async(TabletManager* tablet_mgr, int64_t table
     files_to_delete->emplace_back(std::move(slog_path));
 }
 
-void adjust_base_version(int64_t tablet_id, TabletManager* tablet_mgr, int64_t* base_version, int64_t new_version) {
-    int64_t version = *base_version;
+int64_t cal_new_base_version(int64_t tablet_id, TabletManager* tablet_mgr, int64_t base_version, int64_t new_version) {
+    int64_t version = base_version;
     auto metadata = tablet_mgr->get_latest_cached_tablet_metadata(tablet_id);
-    if (metadata != nullptr && metadata->version() < new_version) {
+    if (metadata != nullptr && metadata->version() <= new_version) {
         version = std::max(version, metadata->version());
     }
 
     auto index_version = tablet_mgr->update_mgr()->get_primary_index_data_version(tablet_id);
+    if (index_version > new_version) {
+        tablet_mgr->update_mgr()->try_remove_primary_index_cache(tablet_id);
+        return version;
+    }
     if (index_version > version) {
         // There is a possibility that the index version is newer than the version in remote storage.
         // Check whether the index version exists in remote storage. If not, clear and rebuild the index.
         auto res = tablet_mgr->get_tablet_metadata(tablet_id, index_version);
-        if (res.ok() && index_version < new_version) {
+        if (res.ok()) {
             version = index_version;
         } else {
-            tablet_mgr->update_mgr()->remove_primary_index_cache(tablet_id);
+            tablet_mgr->update_mgr()->try_remove_primary_index_cache(tablet_id);
         }
     }
 
-    if (version > *base_version) {
-        *base_version = version;
-        LOG(INFO) << "base version has been adjusted to " << *base_version;
-    }
+    return version;
 }
 
 StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t base_version,
@@ -130,11 +131,22 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
     };
 
     int64_t ori_base_version = base_version;
-    adjust_base_version(tablet_id, tablet_mgr, &base_version, new_version);
+    int64_t new_base_version = cal_new_base_version(tablet_id, tablet_mgr, base_version, new_version);
+    if (new_base_version > base_version) {
+        LOG(INFO) << "Base version has been adjusted. tablet_id=" << tablet_id << " base_version=" << base_version
+                  << " new_base_version=" << new_base_version << " new_version=" << new_version
+                  << " txn_ids=" << JoinInts(txn_ids, ",");
+        base_version = new_base_version;
+    }
+
     if (base_version > new_version) {
         LOG(ERROR) << "base version should be less than or equal to new version, "
                    << "base version=" << base_version << ", new version=" << new_version << ", tablet_id=" << tablet_id;
         return Status::InternalError("base version is larger than new version");
+    }
+
+    if (base_version == new_version) {
+        return tablet_mgr->get_tablet_metadata(tablet_id, base_version);
     }
 
     // Read base version metadata
