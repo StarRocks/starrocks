@@ -94,8 +94,6 @@ public:
     }
 
 private:
-<<<<<<< HEAD
-=======
     // StubPool is used to store all stubs with a single endpoint, and the client in the same BE process maintains up to
     // brpc_max_connections_per_server single connections with each server.
     // These connections will be created during the first few accesses and will be reused later.
@@ -138,7 +136,6 @@ private:
         int64_t _idx = -1;
     };
 
->>>>>>> 35cbd7085c ([BugFix] reuse http brpc stub and config rpc_connect_timeout_ms (#33494))
     SpinLock _lock;
     butil::FlatMap<butil::EndPoint, doris::PBackendService_Stub*> _stub_map;
 };
