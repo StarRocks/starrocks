@@ -31,7 +31,7 @@ PROPERTIES ("key"="value", ...)
 
 | 参数         | 必选 | 说明                                                         |
 | ------------ | ---- | ------------------------------------------------------------ |
-| catalog_name | 是   | External catalog 的名称，命名要求如下：<ul><li>必须由字母 (a-z 或 A-Z)、数字 (0-9) 或下划线 (_) 组成，可以以字母或下划线开头。</li><li>总长度不能超过 64 个字符。</li><li>名称大小写敏感。</li></ul> |
+| catalog_name | 是   | External catalog 的名称，命名要求参见[系统限制](../../../reference/System_limit.md)。 |
 | comment      | 否   | External catalog 的描述。 |
 | PROPERTIES   | 是   | External catalog 的属性，不同的 external catalog 需要设置不同属性。详细配置信息，请参见 [Hive catalog](../../../data_source/catalog/hive_catalog.md)、[Iceberg catalog](../../../data_source/catalog/iceberg_catalog.md)、[Hudi catalog](../../../data_source/catalog/hudi_catalog.md)、[Delta Lake catalog](../../../data_source/catalog/deltalake_catalog.md) 和 [JDBC Catalog](../../../data_source/catalog/jdbc_catalog.md)。 |
 
