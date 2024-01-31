@@ -100,7 +100,10 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
                                             int64_t new_version, std::span<const int64_t> txn_ids,
                                             int64_t commit_time) {
     if (!add_tablet(tablet_id)) {
-        return Status::ResourceBusy(fmt::format("Does not support concurrent publishing, tablet {}", tablet_id));
+        return Status::ResourceBusy(
+                fmt::format("The previous publish version task for tablet {} has not finished. You can ignore this "
+                            "error and the task will retry later.",
+                            tablet_id));
     }
     DeferOp remove_tablet_txn([&] { remove_tablet(tablet_id); });
 
@@ -165,14 +168,14 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
     // 5. txn4 will be published in later publish task, but we can't judge what's the latest_version in BE and we can not reapply txn_log if
     // txn logs have been deleted.
     bool delete_txn_log = (txn_ids.size() == 1);
-    int txn_offset = ori_base_version < base_version ? base_version - ori_base_version : 0;
+    int txn_offset = base_version - ori_base_version;
     for (size_t i = txn_offset; i < txn_ids.size(); i++) {
         auto txn_id = txn_ids[i];
         auto log_path = tablet_mgr->txn_log_location(tablet_id, txn_id);
         auto txn_log_st = tablet_mgr->get_txn_log(log_path, false);
 
         if (txn_log_st.status().is_not_found()) {
-            if (i == 0) {
+            if (i == txn_offset) {
                 // this may happen in two situations
                 // 1. duplicate publish in mode single
                 if (txn_ids.size() == 1) {
