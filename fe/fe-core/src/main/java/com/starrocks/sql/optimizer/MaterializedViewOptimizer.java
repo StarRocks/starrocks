@@ -37,6 +37,10 @@ public class MaterializedViewOptimizer {
         OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
         optimizerConfig.disableRuleSet(RuleSetType.PARTITION_PRUNE);
         optimizerConfig.disableRuleSet(RuleSetType.SINGLE_TABLE_MV_REWRITE);
+        // INTERSECT_REWRITE is used for INTERSECT related plan optimize, which can not be SPJG;
+        // And INTERSECT_REWRITE should be based on PARTITION_PRUNE rule set.
+        // So exclude it
+        optimizerConfig.disableRuleSet(RuleSetType.INTERSECT_REWRITE);
         optimizerConfig.disableRule(RuleType.TF_REWRITE_GROUP_BY_COUNT_DISTINCT);
         optimizerConfig.disableRule(RuleType.TF_PRUNE_EMPTY_SCAN);
         // For sync mv, no rewrite query by original sync mv rule to avoid useless rewrite.

@@ -207,7 +207,7 @@ struct ArithmeticBinaryOperator {
         auto* r = datums[1].value;
 
         LLVMDatum result(b);
-
+        result.null_flag = b.CreateOr(datums[0].null_flag, datums[1].null_flag);
         if constexpr (is_add_op<Op>) {
             if constexpr (lt_is_float<Type>) {
                 result.value = b.CreateFAdd(l, r);

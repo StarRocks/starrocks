@@ -96,14 +96,24 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
         return _expr->evaluate_checked(context, ptr);
     }
 
+    std::vector<JITColumn> jit_columns;
+    jit_columns.reserve(_children.size() + 1);
     Columns args;
     args.reserve(_children.size() + 1);
+    auto unfold_ptr = [&](const ColumnPtr& column) {
+        DCHECK(!column->is_constant());
+        auto [un_col, un_col_null] = ColumnHelper::unpack_nullable_column(column);
+        auto data_col_ptr = reinterpret_cast<const int8_t*>(un_col->raw_data());
+        const int8_t* null_flags_ptr = nullptr;
+        if (un_col_null != nullptr) {
+            null_flags_ptr = reinterpret_cast<const int8_t*>(un_col_null->raw_data());
+        }
+        jit_columns.emplace_back(JITColumn{data_col_ptr, null_flags_ptr});
+    };
     size_t num_rows = 0;
     for (Expr* child : _children) {
+        // unfolding const columns.
         ColumnPtr column = EVALUATE_NULL_IF_ERROR(context, child, ptr);
-        if (column->only_null()) { // TODO(Yueyang): remove this when support ifnull expr.
-            return ColumnHelper::align_return_type(column, type(), column->size(), true);
-        }
         args.emplace_back(column);
         num_rows = std::max<size_t>(num_rows, column->size());
     }
@@ -114,26 +124,39 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
     } else {
         num_rows = ptr->num_rows();
     }
+    Columns backup_args;
+    backup_args.reserve(_children.size() + 1);
+    for (auto i = 0; i < _children.size(); i++) {
+        auto column = args[i];
+        auto child = _children[i];
 
-#ifdef DEBUG
-    if (ptr != nullptr) {
-        size_t size = ptr->num_rows();
-        // Ensure all columns have the same size
-        for (const ColumnPtr& c : args) {
-            CHECK_EQ(size, c->size());
+        if (UNLIKELY((column->is_constant() ^ child->is_constant()) ||
+                     (column->is_nullable() ^ child->is_nullable()))) {
+            LOG(INFO) << "[JIT INPUT] expr const = " << child->is_constant() << " null= " << child->is_nullable()
+                      << " but col const = " << column->is_constant() << " null = " << column->is_nullable()
+                      << " expr= " << child->debug_string() << " col= " << column->get_name();
         }
+
+        if (column->is_constant()) {
+            column = ColumnHelper::unfold_const_column(child->type(), num_rows, column);
+        }
+        DCHECK(num_rows == column->size());
+
+        if (child->is_nullable() && !column->is_nullable()) {
+            column = NullableColumn::create(column, NullColumn::create(column->size(), 0));
+        } else if (!child->is_nullable() && column->is_nullable()) {
+            if (column->has_null()) {
+                return Status::RuntimeError("[JIT]a non-nullable column has null values");
+            }
+        }
+
+        unfold_ptr(column);
+        backup_args.emplace_back(column);
     }
-#endif
 
     auto result_column = ColumnHelper::create_column(type(), is_nullable(), false, num_rows, false);
-    args.emplace_back(result_column);
-
-    RETURN_IF_ERROR(JITFunction::llvm_function(_jit_function, args));
-
-    if (result_column->is_constant() && ptr != nullptr) {
-        result_column->resize(ptr->num_rows());
-    }
-
+    unfold_ptr(result_column);
+    _jit_function(num_rows, jit_columns.data());
     return result_column;
 }
 
