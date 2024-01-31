@@ -97,11 +97,11 @@ This aggregation type applies ONLY to the Aggregate table whose key_desc type is
 
 ### index_definition
 
-You can only create bitmap indexes when you create tables. For more information about parameter descriptions and usage notes, see [Bitmap indexing](../../../table_design/indexes/Bitmap_index.md#create-a-bitmap-index).
-
 ```SQL
 INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] COMMENT 'xxxxxx'
 ```
+
+For more information about parameter descriptions and usage notes, see [Bitmap indexing](../../../table_design/indexes/Bitmap_index.md#create-a-bitmap-index).
 
 ### ENGINE type
 

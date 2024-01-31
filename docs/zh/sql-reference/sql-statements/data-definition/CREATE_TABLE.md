@@ -139,7 +139,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 
 ### **index_definition**
 
-建表时仅支持创建 bitmap 索引，语法如下。有关参数说明和使用限制，请参见 [Bitmap 索引](../../../table_design/indexes/Bitmap_index.md#创建索引)。
+创建 bitmap 索引的语法如下。有关参数说明和使用限制，请参见 [Bitmap 索引](../../../table_design/indexes/Bitmap_index.md#创建索引)。
 
 ```sql
 INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']
