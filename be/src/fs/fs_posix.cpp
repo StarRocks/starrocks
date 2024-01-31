@@ -33,6 +33,7 @@
 #include "testutil/sync_point.h"
 #include "util/errno.h"
 #include "util/slice.h"
+#include "util/stopwatch.hpp"
 
 #ifdef USE_STAROS
 #include "fslib/metric_key.h"
@@ -205,6 +206,8 @@ public:
 #ifdef USE_STAROS
         staros::starlet::metrics::TimeObserver<prometheus::Histogram> write_latency(s_sr_posix_write_iolatency);
 #endif
+        MonotonicStopWatch watch;
+        watch.start();
         size_t bytes_written = 0;
         RETURN_IF_ERROR(do_writev_at(_fd, _filename, _filesize, data, cnt, &bytes_written));
         _filesize += bytes_written;
@@ -212,7 +215,7 @@ public:
 #ifdef USE_STAROS
         s_sr_posix_write_iosize.Observe(bytes_written);
 #endif
-        IOProfiler::add_write(bytes_written);
+        IOProfiler::add_write(bytes_written, watch.elapsed_time());
         return Status::OK();
     }
 
