@@ -79,61 +79,62 @@ Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
 
         _delete_cache_handle = function->second;
         _jit_function = function->first;
-        if (_jit_function != nullptr) {
-            _jit_expr_name = _expr->jit_func_name();
-        } else {
-            _children.clear();
-            _children.push_back(_expr);
-            RETURN_IF_ERROR(Expr::prepare(state, context)); // jitExpr becomes an empty node, fallback to original expr.
-        }
-        return Status::OK();
+    }
+    if (_jit_function != nullptr) {
+        _jit_expr_name = _expr->jit_func_name();
+    } else {
+        _children.clear();
+        _children.push_back(_expr);
+        RETURN_IF_ERROR(Expr::prepare(state, context)); // jitExpr becomes an empty node, fallback to original expr.
+    }
+    return Status::OK();
+}
+
+StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, Chunk* ptr) {
+    // If the expr fails to compile, evaluate using the original expr.
+    if (UNLIKELY(_jit_function == nullptr)) {
+        return _expr->evaluate_checked(context, ptr);
     }
 
-    StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext * context, Chunk * ptr) {
-        // If the expr fails to compile, evaluate using the original expr.
-        if (UNLIKELY(_jit_function == nullptr)) {
-            return _expr->evaluate_checked(context, ptr);
+    Columns args;
+    args.reserve(_children.size() + 1);
+    size_t num_rows = 0;
+    for (Expr* child : _children) {
+        ColumnPtr column = EVALUATE_NULL_IF_ERROR(context, child, ptr);
+        if (column->only_null()) { // TODO(Yueyang): remove this when support ifnull expr.
+            return ColumnHelper::align_return_type(column, type(), column->size(), true);
         }
-
-        Columns args;
-        args.reserve(_children.size() + 1);
-        size_t num_rows = 0;
-        for (Expr* child : _children) {
-            ColumnPtr column = EVALUATE_NULL_IF_ERROR(context, child, ptr);
-            if (column->only_null()) { // TODO(Yueyang): remove this when support ifnull expr.
-                return ColumnHelper::align_return_type(column, type(), column->size(), true);
-            }
-            args.emplace_back(column);
-            num_rows = std::max<size_t>(num_rows, column->size());
+        args.emplace_back(column);
+        num_rows = std::max<size_t>(num_rows, column->size());
+    }
+    if (ptr == nullptr) {
+        if (is_constant() && num_rows == 0) {
+            num_rows = 1;
         }
-        if (ptr == nullptr) {
-            if (is_constant() && num_rows == 0) {
-                num_rows = 1;
-            }
-        } else {
-            num_rows = ptr->num_rows();
-        }
+    } else {
+        num_rows = ptr->num_rows();
+    }
 
 #ifdef DEBUG
-        if (ptr != nullptr) {
-            size_t size = ptr->num_rows();
-            // Ensure all columns have the same size
-            for (const ColumnPtr& c : args) {
-                CHECK_EQ(size, c->size());
-            }
+    if (ptr != nullptr) {
+        size_t size = ptr->num_rows();
+        // Ensure all columns have the same size
+        for (const ColumnPtr& c : args) {
+            CHECK_EQ(size, c->size());
         }
+    }
 #endif
 
-        auto result_column = ColumnHelper::create_column(type(), is_nullable(), false, num_rows, false);
-        args.emplace_back(result_column);
+    auto result_column = ColumnHelper::create_column(type(), is_nullable(), false, num_rows, false);
+    args.emplace_back(result_column);
 
-        RETURN_IF_ERROR(JITFunction::llvm_function(_jit_function, args));
+    RETURN_IF_ERROR(JITFunction::llvm_function(_jit_function, args));
 
-        if (result_column->is_constant() && ptr != nullptr) {
-            result_column->resize(ptr->num_rows());
-        }
-
-        return result_column;
+    if (result_column->is_constant() && ptr != nullptr) {
+        result_column->resize(ptr->num_rows());
     }
+
+    return result_column;
+}
 
 } // namespace starrocks
