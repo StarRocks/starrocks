@@ -69,10 +69,14 @@ public class OptimizerContext {
     private List<LogicalViewScanOperator> viewScans;
 
     private boolean isShortCircuit = false;
+<<<<<<< HEAD
     // QueryMaterializationContext is different from MaterializationContext that it keeps the context during the query
     // lifecycle instead of per materialized view.
     // TODO: refactor materialized view's variables/contexts into this.
     private QueryMaterializationContext queryMaterializationContext;
+=======
+    private boolean inMemoPhase = false;
+>>>>>>> de66428ad0 ([Enhancement] optimize range predicate rewrite (#39421))
 
     @VisibleForTesting
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
@@ -280,5 +284,13 @@ public class OptimizerContext {
         if (this.queryMaterializationContext != null) {
             this.queryMaterializationContext.clear();
         }
+    }
+
+    public void setInMemoPhase(boolean inMemoPhase) {
+        this.inMemoPhase = inMemoPhase;
+    }
+
+    public boolean isInMemoPhase() {
+        return this.inMemoPhase;
     }
 }
