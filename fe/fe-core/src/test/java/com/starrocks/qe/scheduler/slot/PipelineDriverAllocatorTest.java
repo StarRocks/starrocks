@@ -202,7 +202,7 @@ public class PipelineDriverAllocatorTest {
         }
 
         for (LogicalSlot slot : slots) {
-            assertThat(slot.getPipelineDop()).isGreaterThanOrEqualTo(1);
+            assertThat(slot.getPipelineDop()).isPositive();
         }
     }
 

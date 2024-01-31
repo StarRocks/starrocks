@@ -61,6 +61,7 @@ public class PipelineDriverAllocator {
                 doneFuture.get();
             } catch (InterruptedException | ExecutionException e) {
                 LOG.warn("[Slot] wait allocation finish failed [slot={}]", slot, e);
+                Thread.currentThread().interrupt();
             }
         }
 
