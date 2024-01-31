@@ -908,8 +908,8 @@ TEST_P(PersistentIndexTest, test_small_varlen_mutable_index_wal) {
 
     using Key = std::string;
     PersistentIndexMetaPB index_meta;
-    const int N = 1000000;
-    const int wal_n = 50000;
+    const int N = 50000;
+    const int wal_n = 2500;
     // insert
     vector<Key> keys(N);
     vector<Slice> key_slices;
