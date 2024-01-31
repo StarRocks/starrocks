@@ -4620,4 +4620,729 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             starRocksAssert.dropTable("test_sr_table_join");
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testMvOnHiveView() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view mv_on_hive_view_1 " +
+                "DISTRIBUTED by hash(c_custkey) buckets 10" +
+                " properties (" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"force_external_table_query_rewrite\" = \"TRUE\"\n" +
+                ")\n" +
+                "As select * from hive0.tpch.customer_view;");
+        String query = "select * from hive0.tpch.customer_view";
+        String plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "mv_on_hive_view_1");
+        starRocksAssert.dropMaterializedView("mv_on_hive_view_1");
+    }
+
+    @Test
+    public void testHiveViewDeltaJoinUKFK_Constraint_CaseInsensitive1() {
+        // constraints are upper case.
+        String mv = "select a.c1, a.c2 from\n"
+                + "(select * from hive0.partitioned_db.t1 where c1 = 1) a\n"
+                + "join hive0.partitioned_db2.t2 using (c2)";
+        String query = "select c2 from hive0.partitioned_db.t1 where c1 = 1";
+        // catalog name is case-sensitive.
+        String constraint = "\"unique_constraints\" = \"hive0.PARTITIONED_DB2.T2.C2\"," +
+                "\"foreign_key_constraints\" = \"hive0.PARTITIONED_DB.T1(C2) references hive0.PARTITIONED_DB2.T2(C2)\" ";
+        testRewriteOK(mv, query, constraint)
+                .contains("0:OlapScanNode\n" +
+                        "     TABLE: mv0\n" +
+                        "     PREAGGREGATION: ON\n");
+    }
+
+    @Test
+    public void testHiveViewDeltaJoinUKFK_Constraint_CaseInsensitive2() {
+        // MV and sql are both upper case.
+        String mv = "SELECT T1.C1, L.C2 AS C2_1, R.C2 AS C2_2, R.C3 FROM hive0.PARTITIONED_DB.T1 " +
+                "JOIN hive0.PARTITIONED_DB2.T2 L ON T1.C2= L.C2 " +
+                "JOIN hive0.PARTITIONED_DB2.T2 R ON T1.C3 = R.C2";
+        String query = "SELECT T1.C1, T2.C2 FROM hive0.PARTITIONED_DB.T1 JOIN hive0.PARTITIONED_DB2.T2 ON T1.C2 = T2.C2";
+        String constraint = "\"unique_constraints\" = \"hive0.PARTITIONED_DB2.T2.C2\"," +
+                "\"foreign_key_constraints\" = \"hive0.PARTITIONED_DB.T1(C2) references hive0.PARTITIONED_DB2.T2(C2); " +
+                "hive0.PARTITIONED_DB.T1(C3) references hive0.PARTITIONED_DB2.T2(C2)\" ";
+        testRewriteOK(mv, query, constraint)
+                .contains("0:OlapScanNode\n" +
+                        "     TABLE: mv0\n" +
+                        "     PREAGGREGATION: ON\n");
+    }
+
+    @Test
+    public void testHiveViewDeltaJoinUKFK_Constraint_CaseInsensitive3() {
+        // MV is upper case, but sql is lower case.
+        String mv = "SELECT T1.C1, L.C2 AS C2_1, R.C2 AS C2_2, R.C3 FROM hive0.PARTITIONED_DB.T1 " +
+                "JOIN hive0.PARTITIONED_DB2.T2 L ON T1.C2= L.C2 " +
+                "JOIN hive0.PARTITIONED_DB2.T2 R ON T1.C3 = R.C2";
+        String query = "select t1.c1, t2.c2 from hive0.partitioned_db.t1 join hive0.partitioned_db2.t2 on t1.c2 = t2.c2";
+        String constraint = "\"unique_constraints\" = \"hive0.PARTITIONED_DB2.T2.C2\"," +
+                "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2); " +
+                "hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2)\" ";
+        testRewriteOK(mv, query, constraint)
+                .contains("0:OlapScanNode\n" +
+                        "     TABLE: mv0\n" +
+                        "     PREAGGREGATION: ON\n");
+    }
+
+    @Test
+    public void testHiveViewDeltaJoinUKFK_Constraint_CaseInsensitive4() {
+        // sql is upper case, but MV is lower case.
+        String mv = "select t1.c1, l.c2 as c2_1, r.c2 as c2_2, r.c3 from hive0.partitioned_db.t1 " +
+                "join hive0.partitioned_db2.t2 l on t1.c2= l.c2 " +
+                "join hive0.partitioned_db2.t2 r on t1.c3 = r.c2";
+        String query = "SELECT T1.C1, T2.C2 FROM hive0.PARTITIONED_DB.T1 JOIN hive0.PARTITIONED_DB2.T2 ON T1.C2 = T2.C2";
+        String constraint = "\"unique_constraints\" = \"hive0.PARTITIONED_DB2.T2.C2\"," +
+                "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2); " +
+                "hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2)\" ";
+        testRewriteOK(mv, query, constraint)
+                .contains("0:OlapScanNode\n" +
+                        "     TABLE: mv0\n" +
+                        "     PREAGGREGATION: ON\n");
+    }
+
+    @Test
+    public void testOlapTable_ViewDeltaJoin_CaseSensitive1() {
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps_no_constraint emps\n"
+                + "join dependents using (empid)"
+                + "inner join depts b on (emps.deptno=b.deptno)\n"
+                + "where emps.empid = 1";
+        String query = "select empid, emps.deptno from emps_no_constraint emps join depts b on (emps.deptno=b.deptno) \n"
+                + "where empid = 1";
+        // Olap Table doesn't support case-insensitive.
+        String constraint = "\"unique_constraints\" = \"DEPENDENTS.empid\"," +
+                "\"foreign_key_constraints\" = \"emps_no_constraint(empid) references dependents(empid)\" ";
+        try {
+            rewrite(mv, query, constraint);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("test_mv.DEPENDENTS does not exist."));
+        }
+    }
+
+    @Test
+    public void testOlapTable_ViewDeltaJoin_CaseSensitive2() {
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps_no_constraint emps\n"
+                + "join dependents using (empid)"
+                + "inner join depts b on (emps.deptno=b.deptno)\n"
+                + "where emps.empid = 1";
+        String query = "select empid, emps.deptno from emps_no_constraint emps join depts b on (emps.deptno=b.deptno) \n"
+                + "where empid = 1";
+        // Olap Table doesn't support case-insensitive.
+        String constraint = "\"unique_constraints\" = \"dependents.empid\"," +
+                "\"foreign_key_constraints\" = \"EMPS_NO_CONSTRAINT(empid) references DEPENDENTS(empid)\" ";
+        try {
+            rewrite(mv, query, constraint);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("table:DEPENDENTS do not exist."));
+        }
+    }
+
+    @Test
+    public void testOlapTable_ViewDeltaJoin_CaseSensitive3() {
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps_no_constraint emps\n"
+                + "join dependents using (empid)"
+                + "inner join depts b on (emps.deptno=b.deptno)\n"
+                + "where emps.empid = 1";
+        String query = "SELECT EMPID, EMPS.DEPTNO FROM EMPS_NO_CONSTRAINT EMPS JOIN DEPTS B ON (EMPS.DEPTNO=B.DEPTNO) \n"
+                + "WHERE EMPID = 1";
+        // Olap Table doesn't support case-insensitive.
+        String constraint = "\"unique_constraints\" = \"dependents.empid\"," +
+                "\"foreign_key_constraints\" = \"emps_no_constraint(empid) references dependents(empid)\" ";
+        try {
+            rewrite(mv, query, constraint);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Unknown table 'test_mv.EMPS_NO_CONSTRAINT'."));
+        }
+    }
+
+    @Test
+    public void testOlapTable_ViewDeltaJoin_CaseSensitive4() {
+        try {
+            String mv = "SELECT EMPS.EMPID, EMPS.DEPTNO, DEPENDENTS.NAME FROM EMPS_NO_CONSTRAINT EMPS\n"
+                    + "JOIN DEPENDENTS USING (EMPID)"
+                    + "INNER JOIN DEPTS B ON (EMPS.DEPTNO=B.DEPTNO)\n"
+                    + "WHERE EMPS.EMPID = 1";
+            String query = "SELECT EMPID, EMPS.DEPTNO FROM EMPS_NO_CONSTRAINT EMPS JOIN DEPTS B ON (EMPS.DEPTNO=B.DEPTNO) \n"
+                    + "WHERE EMPID = 1";
+            // Olap Table doesn't support case-insensitive.
+            String constraint = "\"unique_constraints\" = \"dependents.empid\"," +
+                    "\"foreign_key_constraints\" = \"emps_no_constraint(empid) references dependents(empid)\" ";
+            rewrite(mv, query, constraint);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Unknown table 'test_mv.EMPS_NO_CONSTRAINT'."));
+        }
+    }
+
+    @Test
+    public void testViewDeltaJoinOnSubquery() throws Exception {
+        // test bushy join view delta join rewrite
+        starRocksAssert.withTable("CREATE TABLE `table_a` (\n" +
+                "  `strategy_id` varchar(65533) DEFAULT NULL,\n" +
+                "  `trace_id` varchar(65533) DEFAULT NULL,\n" +
+                "  `becif_no` varchar(65533) DEFAULT NULL,\n" +
+                "  `pv` int(11) DEFAULT NULL,\n" +
+                "  `dt` varchar(65533) DEFAULT NULL\n" +
+                ")");
+        starRocksAssert.withTable("CREATE TABLE `table_b` (\n" +
+                "  `becif_no` varchar(65533) DEFAULT NULL,\n" +
+                "  `payroll_flag` varchar(65533) DEFAULT NULL,\n" +
+                "  `dt` varchar(65533) DEFAULT NULL\n" +
+                ")");
+        starRocksAssert.withTable("CREATE TABLE `table_c` (\n" +
+                "  `strategy_id` varchar(65533) DEFAULT NULL,\n" +
+                "  `cust_group_name` varchar(65533) DEFAULT NULL,\n" +
+                "  `strategy_type` varchar(65533) DEFAULT NULL,\n" +
+                "  `dt` varchar(65533) DEFAULT NULL\n" +
+                ")");
+        starRocksAssert.withTable("CREATE TABLE `table_d` (\n" +
+                "  `cust_group_name` varchar(65533) DEFAULT NULL,\n" +
+                "  `custgroup_title` varchar(65533) DEFAULT NULL,\n" +
+                "  `dt` varchar(65533) DEFAULT NULL\n" +
+                ")");
+        starRocksAssert.withTable("CREATE TABLE `table_e` (\n" +
+                "  `trace_id` varchar(65533) DEFAULT NULL,\n" +
+                "  `strategy_id_pdl` varchar(65533) DEFAULT NULL,\n" +
+                "  `dt` varchar(65533) DEFAULT NULL\n" +
+                ")");
+
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `mv_view_delta_1`\n" +
+                "DISTRIBUTED BY HASH(`PAYROLL_FLAG`)\n" +
+                "REFRESH ASYNC START(\"2023-10-29 17:30:00\") EVERY(INTERVAL 60 MINUTE)\n" +
+                "PROPERTIES (\n" +
+                "\"force_external_table_query_rewrite\" = \"true\",\n" +
+                "\"unique_constraints\" = \"table_e.trace_id;\n" +
+                "table_b.becif_no;\n" +
+                "table_c.strategy_id;\n" +
+                "table_d.cust_group_name\n" +
+                "\",\n" +
+                "\"foreign_key_constraints\" = \"\n" +
+                "table_a(trace_id) REFERENCES table_e(trace_id);\n" +
+                "table_a(becif_no) REFERENCES table_b(becif_no);\n" +
+                "table_a(strategy_id) REFERENCES table_c(strategy_id);\n" +
+                "table_c(cust_group_name) REFERENCES table_d(cust_group_name)\n" +
+                "\"\n" +
+                ")\n" +
+                "AS\n" +
+                "SELECT\n" +
+                "            f1.PAYROLL_FLAG,\n" +
+                "            f2.STRATEGY_TYPE,\n" +
+                "            f2.CUSTGROUP_TITLE,\n" +
+                "            sum(f.pv) AS pv\n" +
+                "   FROM\n" +
+                "            table_a f\n" +
+                "   LEFT JOIN table_e dim1 ON f.TRACE_ID = dim1.TRACE_ID AND f.dt = dim1.dt\n" +
+                "   left join (select dt,BECIF_NO,PAYROLL_FLAG from  table_b ) f1 on f.BECIF_NO=f1.BECIF_NO and f.dt=f1.dt\n" +
+                "    left join (select dim0.dt,dim0.STRATEGY_ID,dim0.STRATEGY_TYPE,dim1.CUSTGROUP_TITLE from  table_c dim0\n" +
+                "           left join table_d dim1 on dim0.CUST_GROUP_NAME=dim1.CUST_GROUP_NAME and dim0.dt=dim1.dt ) f2\n" +
+                "       on  f.STRATEGY_ID=f2.STRATEGY_ID AND f.dt = f2.dt\n" +
+                "        WHERE\n" +
+                "            f.dt IN ('20230924')\n" +
+                "        GROUP BY\n" +
+                "            f1.PAYROLL_FLAG,\n" +
+                "            f2.STRATEGY_TYPE,\n" +
+                "            f2.CUSTGROUP_TITLE\n" +
+                "            ;");
+
+        String query = "explain logical SELECT\n" +
+                "            f1.PAYROLL_FLAG,\n" +
+                "            sum(f.pv) AS pv\n" +
+                "   from table_a f\n" +
+                "   left join table_e dim1 ON f.TRACE_ID = dim1.TRACE_ID AND f.dt = dim1.dt\n" +
+                "   left join (select dt,BECIF_NO,PAYROLL_FLAG from  table_b ) f1 on f.BECIF_NO=f1.BECIF_NO and f.dt=f1.dt\n" +
+                "   where f.dt='20230924'\n" +
+                "group by f1.PAYROLL_FLAG;";
+        String plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "mv_view_delta_1");
+        starRocksAssert.dropTable("table_a");
+        starRocksAssert.dropTable("table_b");
+        starRocksAssert.dropTable("table_c");
+        starRocksAssert.dropTable("table_d");
+        starRocksAssert.dropTable("table_e");
+        starRocksAssert.dropMaterializedView("mv_view_delta_1");
+    }
+
+    @Test
+    public void testJoinDeriveRewriteOnNestedMv() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `IDX_BASE_DIM_TRACEID` (\n" +
+                "  `trace_id` varchar(65533) DEFAULT NULL,\n" +
+                "  `strategy_id_pdl` varchar(65533) DEFAULT NULL,\n" +
+                "  `dt` date DEFAULT NULL\n" +
+                ") PARTITION BY range(dt) (\n" +
+                "PARTITION p1 VALUES [ (\"20230702\"),(\"20230703\")),\n" +
+                "PARTITION p2 VALUES [ (\"20230703\"),(\"20230704\")),\n" +
+                "PARTITION p3 VALUES [ (\"20230704\"),(\"20230705\")),\n" +
+                "PARTITION p4 VALUES [ (\"20230705\"),(\"20230706\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(trace_id)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");\n" +
+                "\n");
+
+        starRocksAssert.withTable("CREATE TABLE `IDX_BASE_OBJ_STRATEGY` (\n" +
+                "  `strategy_id` varchar(65533) DEFAULT NULL,\n" +
+                "  `strategy_type` varchar(65533) DEFAULT NULL,\n" +
+                "  `cust_group_name` varchar(65533) DEFAULT NULL,\n" +
+                "  `dt` date DEFAULT NULL\n" +
+                ") PARTITION BY range(dt) (\n" +
+                "PARTITION p1 VALUES [ (\"20230702\"),(\"20230703\")),\n" +
+                "PARTITION p2 VALUES [ (\"20230703\"),(\"20230704\")),\n" +
+                "PARTITION p3 VALUES [ (\"20230704\"),(\"20230705\")),\n" +
+                "PARTITION p4 VALUES [ (\"20230705\"),(\"20230706\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(strategy_id)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");\n" +
+                "\n");
+
+        starRocksAssert.withTable("CREATE TABLE `IDX_COMMON_EV_BANKAPP_EXP_CLICK_INFO` (\n" +
+                "  `strategy_id_pdl` varchar(65533) DEFAULT NULL,\n" +
+                "  `becif_no` varchar(65533) DEFAULT NULL,\n" +
+                "  `trace_id` varchar(65533) DEFAULT NULL,\n" +
+                "  `pv` int(11) DEFAULT NULL,\n" +
+                "  `dt` date DEFAULT NULL\n" +
+                ") PARTITION BY range(dt) (\n" +
+                "PARTITION p1 VALUES [ (\"20230702\"),(\"20230703\")),\n" +
+                "PARTITION p2 VALUES [ (\"20230703\"),(\"20230704\")),\n" +
+                "PARTITION p3 VALUES [ (\"20230704\"),(\"20230705\")),\n" +
+                "PARTITION p4 VALUES [ (\"20230705\"),(\"20230706\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(trace_id)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");\n" +
+                "\n");
+
+        starRocksAssert.withTable("CREATE TABLE `IDX_COMMON_EV_BANKAPP_CLICK_INFO` (\n" +
+                "  `strategy_id_pdl` varchar(65533) DEFAULT NULL,\n" +
+                "  `becif_no` varchar(65533) DEFAULT NULL,\n" +
+                "  `trace_id` varchar(65533) DEFAULT NULL,\n" +
+                "  `pv` int(11) DEFAULT NULL,\n" +
+                "  `dt` date DEFAULT NULL\n" +
+                ") PARTITION BY range(dt) (\n" +
+                "PARTITION p1 VALUES [ (\"20230702\"),(\"20230703\")),\n" +
+                "PARTITION p2 VALUES [ (\"20230703\"),(\"20230704\")),\n" +
+                "PARTITION p3 VALUES [ (\"20230704\"),(\"20230705\")),\n" +
+                "PARTITION p4 VALUES [ (\"20230705\"),(\"20230706\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(trace_id)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");\n" +
+                "\n");
+
+        starRocksAssert.withTable("CREATE TABLE `IDX_CUST_COMMON_DIM` (\n" +
+                "  `sales_new_cust` varchar(65533) DEFAULT NULL,\n" +
+                "  `payroll_flag` varchar(65533) DEFAULT NULL,\n" +
+                "  `becif_no` varchar(65533) DEFAULT NULL,\n" +
+                "  `dt` date DEFAULT NULL\n" +
+                ") PARTITION BY range(dt) (\n" +
+                "PARTITION p1 VALUES [ (\"20230702\"),(\"20230703\")),\n" +
+                "PARTITION p2 VALUES [ (\"20230703\"),(\"20230704\")),\n" +
+                "PARTITION p3 VALUES [ (\"20230704\"),(\"20230705\")),\n" +
+                "PARTITION p4 VALUES [ (\"20230705\"),(\"20230706\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(becif_no)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");\n" +
+                "\n");
+
+        starRocksAssert.withTable("CREATE TABLE `D_OPERATION_ORDER_CUST_DETAIL_PDL_ID3` (\n" +
+                "  `strategy_id_pdl` varchar(65533) DEFAULT NULL,\n" +
+                "  `trace_id` varchar(65533) DEFAULT NULL,\n" +
+                "  `page_name_gy` varchar(65533) DEFAULT NULL,\n" +
+                "  `becif_no` varchar(65533) DEFAULT NULL,\n" +
+                "  `dt` date DEFAULT NULL\n" +
+                ") PARTITION BY range(dt) (\n" +
+                "PARTITION p1 VALUES [ (\"20230702\"),(\"20230703\")),\n" +
+                "PARTITION p2 VALUES [ (\"20230703\"),(\"20230704\")),\n" +
+                "PARTITION p3 VALUES [ (\"20230704\"),(\"20230705\")),\n" +
+                "PARTITION p4 VALUES [ (\"20230705\"),(\"20230706\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(trace_id)\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");\n" +
+                "\n");
+
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `test_perf_mv_pv1`\n" +
+                "PARTITION BY dt\n" +
+                "DISTRIBUTED BY HASH(`TRACE_ID`) BUCKETS 8\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"force_external_table_query_rewrite\" = \"true\"\n" +
+                ")\n" +
+                "AS\n" +
+                " SELECT\n" +
+                "                 f.DT,\n" +
+                "                f.TRACE_ID AS TRACE_ID,\n" +
+                "                f.BECIF_NO AS BECIF_NO,\n" +
+                "                SUM(f.PV) AS pv1\n" +
+                "            FROM\n" +
+                "                IDX_COMMON_EV_BANKAPP_CLICK_INFO f\n" +
+                "            GROUP BY\n" +
+                "                f.DT,\n" +
+                "                f.BECIF_NO,\n" +
+                "                f.TRACE_ID;");
+
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `test_perf_mv_pv2`\n" +
+                "PARTITION BY dt\n" +
+                "DISTRIBUTED BY HASH(`BECIF_NO`) BUCKETS 8\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"force_external_table_query_rewrite\" = \"true\"\n" +
+                ")\n" +
+                "AS\n" +
+                " SELECT\n" +
+                "                 f.DT,\n" +
+                "                dim0.STRATEGY_ID_PDL AS STRATEGY_ID_PDL,\n" +
+                "                f.BECIF_NO AS BECIF_NO,\n" +
+                "                SUM(f.PV) AS pv2\n" +
+                "            FROM\n" +
+                "                IDX_COMMON_EV_BANKAPP_EXP_CLICK_INFO f\n" +
+                "            LEFT JOIN IDX_BASE_DIM_TRACEID dim0 ON\n" +
+                "                f.TRACE_ID = dim0.TRACE_ID\n" +
+                "                AND f.DT = dim0.DT\n" +
+                "            GROUP BY\n" +
+                "                f.DT,\n" +
+                "                f.BECIF_NO,\n" +
+                "                dim0.STRATEGY_ID_PDL;");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `test_perf_mv_pv3`\n" +
+                "PARTITION BY dt \n" +
+                "DISTRIBUTED BY HASH(`BECIF_NO`) BUCKETS 8\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"force_external_table_query_rewrite\" = \"true\"\n" +
+                ")\n" +
+                "AS\n" +
+                " SELECT\n" +
+                "                 f.DT,\n" +
+                "                dim0.STRATEGY_ID_PDL AS STRATEGY_ID_PDL,\n" +
+                "                f.BECIF_NO AS BECIF_NO,\n" +
+                "                                COUNT(f.PAGE_NAME_GY) AS cnt1\n" +
+                "            FROM\n" +
+                "                D_OPERATION_ORDER_CUST_DETAIL_PDL_ID3 f\n" +
+                "            LEFT JOIN IDX_BASE_DIM_TRACEID dim0 ON\n" +
+                "                f.TRACE_ID = dim0.TRACE_ID\n" +
+                "                AND f.DT = dim0.DT\n" +
+                "            GROUP BY\n" +
+                "                f.DT,\n" +
+                "                f.BECIF_NO,\n" +
+                "                dim0.STRATEGY_ID_PDL;");
+        starRocksAssert.withMaterializedView("\n" +
+                "CREATE MATERIALIZED VIEW `test_perf_mv_pv4`\n" +
+                "PARTITION BY dt\n" +
+                "DISTRIBUTED BY HASH(DT, SALES_NEW_CUST, PAYROLL_FLAG, STRATEGY_TYPE, CUST_GROUP_NAME)\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"force_external_table_query_rewrite\" = \"true\"\n" +
+                ")\n" +
+                "AS\n" +
+                "SELECT q.DT, f1.SALES_NEW_CUST AS SALES_NEW_CUST, f1.PAYROLL_FLAG AS PAYROLL_FLAG," +
+                " f7.STRATEGY_TYPE AS STRATEGY_TYPE, f7.CUST_GROUP_NAME AS CUST_GROUP_NAME\n" +
+                "        , SUM(q.cnt1) AS cnt1, SUM(q.pv1) AS pv1\n" +
+                "        , SUM(q.pv2) AS pv2\n" +
+                "FROM (\n" +
+                "        SELECT t0.pv1 AS pv1, t1.pv2 AS pv2, t2.cnt1 AS cnt1\n" +
+                "                , t0.DT AS DT\n" +
+                "                , COALESCE(t0.BECIF_NO, t1.BECIF_NO, t2.BECIF_NO) AS pk1\n" +
+                "                , COALESCE(t0.TRACE_ID, t1.STRATEGY_ID_PDL, t2.STRATEGY_ID_PDL) AS pk7\n" +
+                "        FROM (\n" +
+                "                SELECT f.pv1, f.TRACE_ID, f.BECIF_NO, f.DT\n" +
+                "                FROM test_perf_mv_pv1 f\n" +
+                "        ) t0\n" +
+                "                FULL JOIN (\n" +
+                "                        SELECT f.STRATEGY_ID_PDL, f.BECIF_NO, f.pv2, f.DT\n" +
+                "                        FROM test_perf_mv_pv2 f\n" +
+                "                ) t1\n" +
+                "                ON t1.DT = t0.DT\n" +
+                "                        AND t1.BECIF_NO = t0.BECIF_NO\n" +
+                "                        AND t1.STRATEGY_ID_PDL = t0.TRACE_ID\n" +
+                "                FULL JOIN (\n" +
+                "                        SELECT f.STRATEGY_ID_PDL, f.cnt1, f.BECIF_NO, f.DT\n" +
+                "                        FROM test_perf_mv_pv3 f\n" +
+                "                ) t2\n" +
+                "                ON t2.DT = COALESCE(t0.DT , t1.DT)\n" +
+                "                        AND t2.BECIF_NO = COALESCE(t0.BECIF_NO, t1.BECIF_NO)\n" +
+                "                        AND t2.STRATEGY_ID_PDL = COALESCE(t0.TRACE_ID, t1.STRATEGY_ID_PDL)\n" +
+                ") q\n" +
+                "        LEFT JOIN (\n" +
+                "                SELECT f.SALES_NEW_CUST AS SALES_NEW_CUST," +
+                " f.PAYROLL_FLAG AS PAYROLL_FLAG, f.BECIF_NO AS BECIF_NO, f.DT\n" +
+                "                FROM IDX_CUST_COMMON_DIM f\n" +
+                "        ) f1\n" +
+                "        ON f1.BECIF_NO = q.pk1\n" +
+                "                AND f1.DT = q.DT\n" +
+                "        LEFT JOIN (\n" +
+                "                SELECT f.STRATEGY_ID AS STRATEGY_ID, f.STRATEGY_TYPE AS STRATEGY_TYPE," +
+                " f.CUST_GROUP_NAME AS CUST_GROUP_NAME, f.DT\n" +
+                "                FROM IDX_BASE_OBJ_STRATEGY f\n" +
+                "        ) f7\n" +
+                "        ON f7.STRATEGY_ID = q.pk7\n" +
+                "                AND f7.DT = q.DT\n" +
+                "GROUP BY q.DT, f1.PAYROLL_FLAG, f7.CUST_GROUP_NAME, f7.STRATEGY_TYPE, f1.SALES_NEW_CUST;");
+        String query = "SELECT SUM(q.pv1) AS pv1,\n" +
+                "       f1.SALES_NEW_CUST AS SALES_NEW_CUST,\n" +
+                "       SUM(q.cnt1) AS cnt1,\n" +
+                "       f1.PAYROLL_FLAG AS PAYROLL_FLAG,\n" +
+                "       f7.STRATEGY_TYPE AS STRATEGY_TYPE,\n" +
+                "       f7.CUST_GROUP_NAME AS CUST_GROUP_NAME,\n" +
+                "       SUM(q.pv2) AS pv2\n" +
+                "FROM\n" +
+                "  ( SELECT t0.pv1 AS pv1,\n" +
+                "           t1.pv2 AS pv2,\n" +
+                "           t2.cnt1 AS cnt1,\n" +
+                "           t0.DT AS DT ,\n" +
+                "           COALESCE(t0.BECIF_NO , t1.BECIF_NO , t2.BECIF_NO) AS pk1 ,\n" +
+                "           COALESCE(t0.TRACE_ID , t1.STRATEGY_ID_PDL , t2.STRATEGY_ID_PDL) AS pk7\n" +
+                "   FROM\n" +
+                "     ( SELECT SUM(f.PV) AS pv1,\n" +
+                "              f.TRACE_ID AS TRACE_ID,\n" +
+                "              f.BECIF_NO AS BECIF_NO,\n" +
+                "              f.DT\n" +
+                "      FROM IDX_COMMON_EV_BANKAPP_CLICK_INFO f\n" +
+                "      GROUP BY f.DT,\n" +
+                "               f.BECIF_NO,\n" +
+                "               f.TRACE_ID) AS t0\n" +
+                "   FULL JOIN\n" +
+                "     ( SELECT dim0.STRATEGY_ID_PDL AS STRATEGY_ID_PDL,\n" +
+                "              f.BECIF_NO AS BECIF_NO,\n" +
+                "              SUM(f.PV) AS pv2,\n" +
+                "              f.DT\n" +
+                "      FROM IDX_COMMON_EV_BANKAPP_EXP_CLICK_INFO f\n" +
+                "      LEFT JOIN IDX_BASE_DIM_TRACEID dim0 ON f.TRACE_ID = dim0.TRACE_ID\n" +
+                "      AND f.DT = dim0.DT\n" +
+                "      GROUP BY f.DT,\n" +
+                "               f.BECIF_NO,\n" +
+                "               dim0.STRATEGY_ID_PDL) AS t1 \n" +
+                "   ON t1.DT = t0.DT\n" +
+                "   AND t1.BECIF_NO = t0.BECIF_NO\n" +
+                "   AND t1.STRATEGY_ID_PDL = t0.TRACE_ID\n" +
+                "   FULL JOIN\n" +
+                "     ( SELECT dim0.STRATEGY_ID_PDL AS STRATEGY_ID_PDL,\n" +
+                "              COUNT(f.PAGE_NAME_GY) AS cnt1,\n" +
+                "              f.BECIF_NO AS BECIF_NO,\n" +
+                "              f.DT\n" +
+                "      FROM D_OPERATION_ORDER_CUST_DETAIL_PDL_ID3 f\n" +
+                "      LEFT JOIN IDX_BASE_DIM_TRACEID dim0 ON f.TRACE_ID = dim0.TRACE_ID\n" +
+                "      AND f.DT = dim0.DT\n" +
+                "      GROUP BY f.DT,\n" +
+                "               f.BECIF_NO,\n" +
+                "               dim0.STRATEGY_ID_PDL) AS t2\n" +
+                "   ON t2.DT = COALESCE(t0.DT , t1.DT)\n" +
+                "   AND t2.BECIF_NO = COALESCE(t0.BECIF_NO , t1.BECIF_NO)\n" +
+                "   AND t2.STRATEGY_ID_PDL = COALESCE(t0.TRACE_ID , t1.STRATEGY_ID_PDL)) AS q\n" +
+                "LEFT JOIN\n" +
+                "  ( SELECT f.SALES_NEW_CUST AS SALES_NEW_CUST,\n" +
+                "           f.PAYROLL_FLAG AS PAYROLL_FLAG,\n" +
+                "           f.BECIF_NO AS BECIF_NO,\n" +
+                "           f.DT\n" +
+                "   FROM IDX_CUST_COMMON_DIM f) AS f1 ON f1.BECIF_NO = q.pk1\n" +
+                "AND f1.DT = q.DT\n" +
+                "LEFT JOIN\n" +
+                "  ( SELECT f.STRATEGY_ID AS STRATEGY_ID,\n" +
+                "           f.STRATEGY_TYPE AS STRATEGY_TYPE,\n" +
+                "           f.CUST_GROUP_NAME AS CUST_GROUP_NAME,\n" +
+                "           f.DT\n" +
+                "   FROM IDX_BASE_OBJ_STRATEGY f) AS f7 ON f7.STRATEGY_ID = q.pk7\n" +
+                "AND f7.DT = q.DT\n" +
+                "WHERE q.DT IN ('20230924')\n" +
+                "  AND f1.PAYROLL_FLAG IN ('Y')\n" +
+                "GROUP BY f1.PAYROLL_FLAG,\n" +
+                "         f7.CUST_GROUP_NAME,\n" +
+                "         f7.STRATEGY_TYPE,\n" +
+                "         f1.SALES_NEW_CUST";
+        String plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "test_perf_mv_pv4");
+        starRocksAssert.dropMaterializedView("test_perf_mv_pv1");
+        starRocksAssert.dropMaterializedView("test_perf_mv_pv2");
+        starRocksAssert.dropMaterializedView("test_perf_mv_pv3");
+        starRocksAssert.dropMaterializedView("test_perf_mv_pv4");
+        starRocksAssert.dropTable("IDX_BASE_DIM_TRACEID");
+        starRocksAssert.dropTable("IDX_BASE_OBJ_STRATEGY");
+        starRocksAssert.dropTable("IDX_COMMON_EV_BANKAPP_EXP_CLICK_INFO");
+        starRocksAssert.dropTable("IDX_COMMON_EV_BANKAPP_CLICK_INFO");
+        starRocksAssert.dropTable("IDX_CUST_COMMON_DIM");
+        starRocksAssert.dropTable("D_OPERATION_ORDER_CUST_DETAIL_PDL_ID3");
+    }
+
+    @Test
+    public void testForceRewriteWithRandomInput() {
+        String mv = "SELECT count(lo_linenumber)\n" +
+                "FROM lineorder inner join customer on lo_custkey = c_custkey\n" +
+                "WHERE `c_name` != 'name'; ";
+        String query = "SELECT count(lo_linenumber)\n" +
+                "FROM lineorder inner join customer on lo_custkey = c_custkey";
+        Table table1 = getTable(MATERIALIZED_DB_NAME, "lineorder");
+        Table table2 = getTable(MATERIALIZED_DB_NAME, "customer");
+
+        PlanTestBase.setTableStatistics((OlapTable) table1, 1000000);
+        PlanTestBase.setTableStatistics((OlapTable) table2, 1000000);
+
+        {
+            testRewriteFail(mv, query);
+        }
+
+        // For enforce-columns changed which also changed mv's cost model, use force rewrite to force the result.
+        connectContext.getSessionVariable()
+                .setMaterializedViewRewriteMode(SessionVariable.MaterializedViewRewriteMode.FORCE.toString());
+        {
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("UNION");
+        }
+
+        {
+            Random rand = new Random();
+            for (int i = 0; i < 10; i++) {
+                long rowCount1 = rand.nextLong();
+                long rowCount2 = rand.nextLong();
+
+                PlanTestBase.setTableStatistics((OlapTable) table1, rowCount1);
+                PlanTestBase.setTableStatistics((OlapTable) table2, rowCount2);
+                MVRewriteChecker checker = testRewriteOK(mv, query);
+                checker.contains("UNION");
+            }
+        }
+
+        connectContext.getSessionVariable()
+                .setMaterializedViewRewriteMode(SessionVariable.MaterializedViewRewriteMode.DEFAULT.toString());
+    }
+
+    private void createMaterializedViewWithInput(String mvName, long mvRowCount) throws Exception {
+        String mv = String.format("CREATE MATERIALIZED VIEW %s" +
+                " DISTRIBUTED BY HASH(c1) " +
+                " REFRESH DEFERRED MANUAL " +
+                " AS SELECT count(lo_linenumber) as c1\n" +
+                " FROM lineorder inner join customer on lo_custkey = c_custkey\n" +
+                " WHERE `c_name` != 'name'; ", mvName);
+        starRocksAssert.withMaterializedView(mv);
+        Table mvTable = getTable(MATERIALIZED_DB_NAME, mvName);
+        PlanTestBase.setTableStatistics((OlapTable) mvTable, mvRowCount);
+    }
+
+    @Test
+    public void testForceRewriteForBestCost() throws Exception {
+        String query = "SELECT count(lo_linenumber)\n" +
+                "FROM lineorder inner join customer on lo_custkey = c_custkey";
+        Table table1 = getTable(MATERIALIZED_DB_NAME, "lineorder");
+        Table table2 = getTable(MATERIALIZED_DB_NAME, "customer");
+
+        PlanTestBase.setTableStatistics((OlapTable) table1, 1000000);
+        PlanTestBase.setTableStatistics((OlapTable) table2, 1000000);
+
+        connectContext.getSessionVariable()
+                .setMaterializedViewRewriteMode(SessionVariable.MaterializedViewRewriteMode.FORCE.toString());
+
+        // prepare mvs
+        List<String> mvNames = Lists.newArrayList();
+        for (int i = 0; i < 10; i++) {
+            long rowCount = 1000 * (i + 1);
+            String mvName = String.format("test_mv_%s", i);
+            createMaterializedViewWithInput(mvName, rowCount);
+            mvNames.add(mvName);
+        }
+        MVRewriteChecker checker = sql(query);
+        checker.contains("UNION");
+        // must contain the lowest cost mv.
+        checker.contains("test_mv_0");
+        connectContext.getSessionVariable()
+                .setMaterializedViewRewriteMode(SessionVariable.MaterializedViewRewriteMode.DEFAULT.toString());
+        mvNames.stream().forEach(x -> {
+            try {
+                starRocksAssert.dropMaterializedView(x);
+            } catch (Exception e) {
+                // ignore
+            }
+        });
+    }
+
+    @Test
+    public void testMvRestoreUpdater1() {
+        String mvName = "test0";
+        String mv = String.format("CREATE MATERIALIZED VIEW %s" +
+                " REFRESH DEFERRED MANUAL " +
+                " AS SELECT *  FROM lineorder", mvName);
+        starRocksAssert.withMaterializedView(mv,
+                () -> {
+                    MaterializedView mvTable = (MaterializedView) getTable(MATERIALIZED_DB_NAME, mvName);
+                    Pair<Status, Boolean> result = MVRestoreUpdater.checkMvDefinedQuery(mvTable, Maps.newHashMap(), Pair.create("", ""));
+                    Assert.assertTrue(result.first.ok());
+                });
+
+    }
+
+    @Test
+    public void testMvRestoreUpdater2() {
+        String mvName = "test0";
+        String mv = String.format("CREATE MATERIALIZED VIEW %s" +
+                " REFRESH DEFERRED MANUAL " +
+                " AS SELECT * FROM lineorder", mvName);
+
+        starRocksAssert.withMaterializedView(mv,
+                () -> {
+                    MaterializedView mvTable = (MaterializedView) getTable(MATERIALIZED_DB_NAME, mvName);
+                    Pair<String, String> newDefinedQueries = Pair.create("", "");
+                    Map<TableName, TableName> remoteToLocalTableName = Maps.newHashMap();
+                    remoteToLocalTableName.put(TableName.fromString("test.lineorder"),
+                            TableName.fromString("test.lineorder"));
+                    boolean result = MVRestoreUpdater.renewMvBaseTableNames(mvTable,
+                            remoteToLocalTableName, connectContext, newDefinedQueries);
+                    Assert.assertTrue(result);
+                    Assert.assertTrue(!Strings.isNullOrEmpty(newDefinedQueries.first));
+                    Assert.assertTrue(!Strings.isNullOrEmpty(newDefinedQueries.second));
+                });
+
+    }
+
+    @Test
+    public void testAggregateWithHave() {
+        String mv = "select empid, deptno,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid, deptno having sum(salary) > 1";
+        testRewriteOK(mv, "select empid, deptno,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid, deptno having sum(salary) > 1");
+        testRewriteOK(mv, "select empid, deptno,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid, deptno having sum(salary) > 10");
+        testRewriteOK(mv, "select empid,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid having sum(salary) > 10");
+    }
+
+    @Test
+    public void testMultiLeftOuterJoin() {
+        {
+            String mv = "select t1a, t1b, v5, v8 " +
+                    "from test.test_all_type left outer join test.t1 on t1d = v4 " +
+                    "left outer join test.t2 on v5 = v7 where v9 = 10";
+            String query = "select t1a, t1b, v5, v8 " +
+                    "from test.test_all_type left outer join test.t1 on t1d = v4 " +
+                    "left outer join test.t2 on v5 = v7 where v9 = 10 and t1a != 'xxx'";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("t1a != 'xxx'");
+        }
+
+        {
+            String mv = "select v1, v2, v3, v5, v8 " +
+                    "from test.t0 left outer join test.t1 on v1 = v4 " +
+                    "left outer join test.t2 on v5 = v7 where v9 = 10";
+            String query = "select v1, v2, v3, v5, v8 " +
+                    "from test.t0 left outer join test.t1 on v1 = v4 " +
+                    "left outer join test.t2 on v5 = v7 where v9 = 10 and v3 = 1";
+            testRewriteOK(mv, query);
+        }
+    }
+>>>>>>> 37b8aa5a55 ([BugFix] fix left outer join to inner join bug and string not equal rewrite bug (#39331))
 }

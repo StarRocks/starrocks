@@ -17,6 +17,12 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.TreeRangeSet;
+<<<<<<< HEAD
+=======
+import com.starrocks.analysis.BinaryType;
+import com.starrocks.catalog.Type;
+import com.starrocks.sql.optimizer.Utils;
+>>>>>>> 37b8aa5a55 ([BugFix] fix left outer join to inner join bug and string not equal rewrite bug (#39331))
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -83,6 +89,74 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
         return null;
     }
 
+<<<<<<< HEAD
+=======
+    private boolean isSupportedRangeExpr(ScalarOperator op) {
+        List<ColumnRefOperator> columns = Utils.collect(op, ColumnRefOperator.class);
+        return op.isVariable() && columns.size() == 1;
+    }
+
+    private RangePredicate rewriteBinaryPredicate(BinaryPredicateOperator predicate) {
+        ScalarOperator left = predicate.getChild(0);
+        ScalarOperator right = predicate.getChild(1);
+        ScalarOperator op1 = null;
+        ConstantOperator op2 = null;
+        if (isSupportedRangeExpr(left) && right instanceof ConstantOperator) {
+            op1 = left;
+            op2 = (ConstantOperator) right;
+        } else if (isSupportedRangeExpr(right) && left instanceof ConstantOperator) {
+            op1 = right;
+            op2 = (ConstantOperator) left;
+        } else {
+            return null;
+        }
+
+        // rewrite to column ref by equivalent
+        if (!(op1 instanceof ColumnRefOperator)) {
+            RangePredicate rangePredicate = rewriteByEquivalent(predicate);
+            if (rangePredicate != null) {
+                return rangePredicate;
+            }
+        }
+
+        // by default
+        TreeRangeSet<ConstantOperator> rangeSet = range(predicate.getBinaryType(), op2);
+        if (rangeSet == null) {
+            return null;
+        }
+        return new ColumnRangePredicate(op1, rangeSet);
+    }
+
+    private static RangePredicate rewriteByEquivalent(BinaryPredicateOperator predicate) {
+        ScalarOperator left = predicate.getChild(0);
+        ScalarOperator right = predicate.getChild(1);
+        ScalarOperator op1 = null;
+        ConstantOperator op2 = null;
+        if (left instanceof CallOperator && right instanceof ConstantOperator) {
+            op1 = left;
+            op2 = (ConstantOperator) right;
+        } else if (right instanceof CallOperator && left instanceof ConstantOperator) {
+            op1 = right;
+            op2 = (ConstantOperator) left;
+        } else {
+            return null;
+        }
+
+        TreeRangeSet<ConstantOperator> range = range(predicate.getBinaryType(), op2);
+        if (DateTruncEquivalent.INSTANCE.isEquivalent(op1, op2)) {
+            TreeRangeSet<ConstantOperator> rangeSet = TreeRangeSet.create();
+            rangeSet.addAll(range);
+            return new ColumnRangePredicate(op1.getChild(1).cast(), rangeSet);
+        } else if (TimeSliceRewriteEquivalent.INSTANCE.isEquivalent(op1, op2)) {
+            TreeRangeSet<ConstantOperator> rangeSet = TreeRangeSet.create();
+            rangeSet.addAll(range);
+            return new ColumnRangePredicate(op1.getChild(0).cast(), rangeSet);
+        } else {
+            return null;
+        }
+    }
+
+>>>>>>> 37b8aa5a55 ([BugFix] fix left outer join to inner join bug and string not equal rewrite bug (#39331))
     @Override
     public RangePredicate visitCompoundPredicate(
             CompoundPredicateOperator predicate, PredicateExtractorContext context) {
@@ -218,6 +292,13 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
                 rangeSet.add(Range.lessThan(value));
                 return rangeSet;
             case NE:
+<<<<<<< HEAD
+=======
+                Type valueType = value.getType();
+                if (!valueType.isNumericType() && !valueType.isDateType()) {
+                    return null;
+                }
+>>>>>>> 37b8aa5a55 ([BugFix] fix left outer join to inner join bug and string not equal rewrite bug (#39331))
                 rangeSet.add(Range.greaterThan(value));
                 rangeSet.add(Range.lessThan(value));
                 return rangeSet;
