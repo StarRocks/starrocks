@@ -49,7 +49,7 @@ INSERT INTO SELECT FROM FILES 语句，用于从指定的源数据文件导入�
 
 ## 示例
 
-在当前数据库下，创建一个名为 `user_behavior_replica` 的 Pipe，用于把 `s3://starrocks-datasets/user_behavior_ten_million_rows.parquet` 中的数据导入到表 `user_behavior_replica` 中：
+在当前数据库下，创建一个名为 `user_behavior_replica` 的 Pipe，用于把 `s3://starrocks-examples/user_behavior_ten_million_rows.parquet` 中的数据导入到表 `user_behavior_replica` 中：
 
 ```SQL
 CREATE PIPE user_behavior_replica
@@ -61,7 +61,7 @@ AS
 INSERT INTO user_behavior_replica
 SELECT * FROM FILES
 (
-    "path" = "s3://starrocks-datasets/user_behavior_ten_million_rows.parquet",
+    "path" = "s3://starrocks-examples/user_behavior_ten_million_rows.parquet",
     "format" = "parquet",
     "aws.s3.region" = "us-east-1",
     "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
