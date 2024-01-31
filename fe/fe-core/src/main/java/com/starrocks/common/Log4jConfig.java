@@ -264,7 +264,7 @@ public class Log4jConfig extends XmlConfiguration {
         StringBuilder sb = new StringBuilder();
 
         for (String s : internalModules) {
-            sb.append("<Logger name=internal.')").append(s).append("' level=\"INFO\"> \n");
+            sb.append("<Logger name='internal.").append(s).append("' level=\"INFO\"> \n");
             sb.append("   <AppenderRef ref=\"InternalFile\"/>\n");
             sb.append("</Logger>\n");
         }
