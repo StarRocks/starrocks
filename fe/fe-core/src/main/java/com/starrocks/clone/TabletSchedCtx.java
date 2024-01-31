@@ -1234,9 +1234,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             return true;
         }
 
-        Locker locker = new Locker();
         try {
-            locker.lockDatabase(db, LockType.READ);
+            db.readLock();
             Table table = db.getTable(tblId);
             if (table == null) {
                 return true;
@@ -1255,7 +1254,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 }
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            db.readUnlock();
         }
     }
 
