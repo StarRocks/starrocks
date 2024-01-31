@@ -250,7 +250,7 @@ Note:
 
 Please use specified key columns and specified value ranges for partitioning.
 
-- For the naming conventions of partition name, see [System limits](../../../reference/System_limit.md).
+- For the naming conventions of partition names, see [System limits](../../../reference/System_limit.md).
 - Columns in Range partition only support the following types: TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, and DATETIME.
 - Partitions are left closed and right open. The left boundary of the first partition is of minimum value.
 - NULL value is stored only in partitions that contain minimum values. When the partition containing the minimum value is deleted, NULL values can no longer be imported.
