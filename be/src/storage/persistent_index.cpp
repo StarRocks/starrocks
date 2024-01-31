@@ -41,6 +41,7 @@
 #include "util/faststring.h"
 #include "util/filesystem_util.h"
 #include "util/raw_container.h"
+#include "util/stopwatch.hpp"
 #include "util/xxh3.h"
 
 namespace starrocks {
@@ -1946,10 +1947,12 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         // open l0 to calc checksum
         std::unique_ptr<RandomAccessFile> l0_rfile;
         ASSIGN_OR_RETURN(l0_rfile, fs->new_random_access_file(file_name));
+        MonotonicStopWatch watch;
+        watch.start();
         size_t snapshot_size = _index_file->size();
         // special case, snapshot file was written by phmap::BinaryOutputArchive which does not use system profiled API
         // so add write stats manually
-        IOProfiler::add_write(snapshot_size);
+        IOProfiler::add_write(snapshot_size, watch.elapsed_time());
         meta->clear_wals();
         IndexSnapshotMetaPB* snapshot = meta->mutable_snapshot();
         version.to_pb(snapshot->mutable_version());
@@ -2029,6 +2032,8 @@ Status ShardByLengthMutableIndex::load(const MutableIndexMetaPB& meta) {
                 return Status::Corruption(error_msg);
             }
         }
+        MonotonicStopWatch watch;
+        watch.start();
         // do load snapshot
         if (!load_snapshot(ar, dumped_shard_idxes)) {
             std::string err_msg = strings::Substitute("failed load snapshot from file $0", index_file_name);
@@ -2037,7 +2042,7 @@ Status ShardByLengthMutableIndex::load(const MutableIndexMetaPB& meta) {
         }
         // special case, snapshot file was written by phmap::BinaryOutputArchive which does not use system profiled API
         // so add read stats manually
-        IOProfiler::add_read(snapshot_size);
+        IOProfiler::add_read(snapshot_size, watch.elapsed_time());
     }
     // if mutable index is empty, set _offset as 0, otherwise set _offset as snapshot size
     _offset = snapshot_off + snapshot_size;
