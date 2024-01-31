@@ -50,6 +50,39 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                 "as select a, b, d, bitmap_union(to_bitmap(t1.c))" +
                 " from iceberg0.partitioned_db.part_tbl1 as t1 " +
                 " group by a, b, d;");
+<<<<<<< HEAD
+=======
+
+        testSingleTableWithMVRewrite(mvName);
+
+        starRocksAssert.dropMaterializedView(mvName);
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
+    }
+
+    @Test
+    public void testStr2DateMVRefreshRewriteSingleTableWithView() throws Exception {
+        String mvName = "test_mv1";
+        starRocksAssert.withView("CREATE VIEW view1 as select a, b, d, bitmap_union(to_bitmap(t1.c))\n" +
+                " from iceberg0.partitioned_db.part_tbl1 as t1 \n" +
+                " group by a, b, d;");
+        starRocksAssert.withMaterializedView("create materialized view " + mvName + " " +
+                "partition by str2date(d,'%Y-%m-%d') " +
+                "distributed by hash(a) " +
+                "REFRESH DEFERRED MANUAL " +
+                "PROPERTIES (\n" +
+                "'replication_num' = '1'" +
+                ") " +
+                "as select * from view1");
+
+        testSingleTableWithMVRewrite(mvName);
+
+        starRocksAssert.dropMaterializedView(mvName);
+        starRocksAssert.dropView("view1");
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
+    }
+
+    private void testSingleTableWithMVRewrite(String mvName) throws Exception {
+>>>>>>> de66428ad0 ([Enhancement] optimize range predicate rewrite (#39421))
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable(mvName));
 
@@ -100,7 +133,11 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     "     partitions=1/1");
             PlanTestBase.assertContains(plan, "1:IcebergScanNode\n" +
                     "     TABLE: part_tbl1\n" +
+<<<<<<< HEAD
                     "     PREDICATES: 14: d != '2023-08-01', 14: d >= '2023-08-01'");
+=======
+                    "     PREDICATES: 13: d != '2023-08-01', 13: d >= '2023-08-01'");
+>>>>>>> de66428ad0 ([Enhancement] optimize range predicate rewrite (#39421))
         }
         {
             String query = "select a, b, d, count(distinct t1.c)\n" +
@@ -694,8 +731,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
             PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
                     "     TABLE: test_mv1\n" +
                     "     PREAGGREGATION: ON\n" +
-                    "     PREDICATES: ((16: d < '2023-08-01') OR ((16: d > '2023-08-01') AND " +
-                    "(16: d < '2023-08-02'))) OR (16: d > '2023-08-02')\n" +
+                    "     PREDICATES: 16: d != '2023-08-01', 16: d != '2023-08-02'\n" +
                     "     partitions=3/3");
         }
 

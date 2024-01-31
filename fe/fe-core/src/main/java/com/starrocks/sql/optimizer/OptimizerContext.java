@@ -65,6 +65,12 @@ public class OptimizerContext {
     // TODO: refactor materialized view's variables/contexts into this.
     private QueryMaterializationContext queryMaterializationContext;
 
+<<<<<<< HEAD
+=======
+    private boolean isShortCircuit = false;
+    private boolean inMemoPhase = false;
+
+>>>>>>> de66428ad0 ([Enhancement] optimize range predicate rewrite (#39421))
     @VisibleForTesting
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
         this.memo = memo;
@@ -240,5 +246,13 @@ public class OptimizerContext {
         if (this.queryMaterializationContext != null) {
             this.queryMaterializationContext.clear();
         }
+    }
+
+    public void setInMemoPhase(boolean inMemoPhase) {
+        this.inMemoPhase = inMemoPhase;
+    }
+
+    public boolean isInMemoPhase() {
+        return this.inMemoPhase;
     }
 }
