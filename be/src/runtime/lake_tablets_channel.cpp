@@ -434,6 +434,10 @@ int LakeTabletsChannel::_close_sender(const int64_t* partitions, size_t partitio
     return n - 1;
 }
 
+static void null_callback(const Status& status) {
+    (void)status;
+}
+
 void LakeTabletsChannel::_flush_stale_memtables() {
     bool high_mem_usage = false;
     if (_mem_tracker->limit_exceeded_by_ratio(70) ||
@@ -449,15 +453,15 @@ void LakeTabletsChannel::_flush_stale_memtables() {
             if (_immutable_partition_ids.count(writer->partition_id()) > 0) {
                 if (high_mem_usage) {
                     log_flushed = true;
-                    writer->flush(nullptr);
+                    writer->flush(null_callback);
                 } else if (now - last_write_ts > 1) {
                     log_flushed = true;
-                    writer->flush(nullptr);
+                    writer->flush(null_callback);
                 }
             } else {
                 if (high_mem_usage && now - last_write_ts > config::stale_memtable_flush_time_sec) {
                     log_flushed = true;
-                    writer->flush(nullptr);
+                    writer->flush(null_callback);
                 }
             }
             if (log_flushed) {
