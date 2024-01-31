@@ -50,7 +50,6 @@ import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
-import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.SqlDigestBuilder;
@@ -360,10 +359,6 @@ public class ConnectProcessor {
             // If reach here, maybe StarRocks bug.
             LOG.warn("Process one query failed. SQL: " + originStmt + ", because unknown reason: ", e);
             ctx.getState().setError("Unexpected exception: " + e.getMessage());
-            if (parsedStmt instanceof KillStmt) {
-                // ignore kill stmt execute err(not monitor it)
-                ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
-            }
             ctx.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
         }
         
