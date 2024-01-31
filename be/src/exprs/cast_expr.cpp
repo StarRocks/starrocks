@@ -1141,7 +1141,7 @@ public:
                IRHelper::support_jit(FromType) && IRHelper::support_jit(ToType);
     }
 
-    std::string jit_func_name() const {
+    std::string jit_func_name() const override {
         return "{cast(" + _children[0]->jit_func_name() + ")}" + (is_constant() ? "c:" : "") +
                (is_nullable() ? "n:" : "") + type().debug_string();
     }
