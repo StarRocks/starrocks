@@ -1,0 +1,42 @@
+-- name: test case when and cmp jit
+Create table t ( int0 int not null, int1 int not null, nint0 int , nint1 int) ENGINE=OLAP DUPLICATE KEY(int0)  DISTRIBUTED BY HASH(int0) BUCKETS 4 PROPERTIES("replication_num" = "1");
+
+insert into t values (0,0,0,0),(1,1,1,1),(2,2,null,null),(3,3,30,null),(4,4,null,40),(0,1,null,null),(0,0,null,1),(10,10,null,10);
+ set enable_jit = true;
+-- set jit_level = -1;
+-- case when
+select case when int0 is null then null when int1 >2 then 2 else 0 end as cc from t order by 1;
+select case when nint0 is null then null when nint1 >2 then 2 else int0 end as cc from t order by 1;
+select case when int0 < 2 then -2 when nint0 is null then 1 else nint1 end as cc from t order by 1;
+select case when null then -2 when int0 then int1 when nint0 then nint1 else false end as cc from t order by 1;
+select case when null then -2 when 0 then 0 when 1 then 1 else false end as cc from t order by 1;
+select case when 2 then -2 when 0 then 0 when 1 then 1 else null end as cc from t order by 1;
+select case when null then -2 when 0 then 0 when 1 then 1 else null end as cc from t order by 1;
+select case when null then null when 0 then null when 1 then null else null end as cc from t order by 1;
+-- nested cases
+select case when case when int0 < 2 then -2 when nint0 is null then 1 else nint1 end then -2 when int0 then int1 when nint0 then nint1 else false end as cc from t order by 1;
+select case when null then -2 when int0 then int1 when nint0 then case when nint0 is null then null when nint1 >2 then 2 else int0 end else false end as cc from t order by 1;
+select case when int0 < 2 then -2 when nint0 is null then 1 else case nint0 when null then int0 when 1 then int1 when 2 then null when 3 then null end end as cc from t order by 1;
+select case when case nint0 when null then int0 when 1 then int1 when 2 then null when 3 then null end then -2 when int0 then int1 when nint0 then nint1 else false end as cc from t order by 1;
+
+-- case
+select case int0 when 0 then nint0 when 1 then nint1 when 2 then null when 3 then null end as cc from t order by 1;
+select case nint0 when 0 then int0 when 1 then int1 when 2 then null when 3 then null end as cc from t order by 1;
+select case nint0 when null then int0 when 1 then int1 when 2 then null when 3 then null end as cc from t order by 1;
+select case null when 0 then int0 when 1 then int1 when 2 then null when 3 then null end as cc from t order by 1;
+select case null when 0 then int0 when 1 then int1 when 2 then null when 3 then null else 0 end as cc from t order by 1;
+select case nint0 when case int0 when 0 then nint0 when 1 then nint1 when 2 then null when 3 then null end then int0 when 1 then int1 when 2 then null when 3 then null end as cc from t order by 1;
+select case nint0 when null then null when 1 then null when 2 then null when 3 then null end as cc from t order by 1;
+select case null when null then null when 1 then null when 2 then null when 3 then 3 else -1 end as cc from t order by 1;
+select case nint1 when null then null when 1 then null when 2 then null when 3 then 3 else -1 end as cc from t order by 1;
+
+--nested cases
+select case nint1 when 0 then int0 when 1 then case nint0 when null then int0 when 1 then int1 when 2 then null when 3 then null end when 2 then null when 3 then null end as cc from t order by 1;
+select case case when case when int0 < 2 then -2 when nint0 is null then 1 else nint1 end then -2 when int0 then int1 when nint0 then nint1 else false end when null then int0 when 1 then int1 when 2 then null when 3 then null end as cc from t order by 1;
+select case nint0 when case int0 when case when case when int0 < 2 then -2 when nint0 is null then 1 else nint1 end then -2 when int0 then int1 when nint0 then nint1 else false end then nint0 when 1 then nint1 when 2 then null when 3 then null end then int0 when 1 then int1 when 2 then null when 3 then null end as cc from t order by 1;
+
+
+select int0 > int1 and nint0 < nint1 or int0 = nint0 and nint1 != int1 as c, int0 < nint1 and int0 > 1 or nint0 >0 as c1 from t order by 1,2;
+select int0 + int1 > 2, nint0/nint1 > int1, null + nint1 > int0 - int1, 2+ int1 < nint1, null > int0 from t order by 1,2,3,4,5;
+select int0 >= int1, nint0 >= int1, int0 <= int1, int0 = int1, nint0 = nint1 from t order by 1,2,3,4,5;
+select int0 <=> int1, int0 <=> null, nint0 <=> null, nint0 <=> nint1 from t order by 1,2,3,4;

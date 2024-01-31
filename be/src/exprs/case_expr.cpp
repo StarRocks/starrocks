@@ -128,9 +128,7 @@ public:
                         b.SetInsertPoint(then);
                         ASSIGN_OR_RETURN(auto datum_i_1, _children[i + 1]->generate_ir_impl(context, jit_ctx))
                         b.CreateStore(datum_i_1.value, res);
-                        if (_children[i + 1]->is_nullable()) {
-                            b.CreateStore(datum_i_1.null_flag, res_null);
-                        }
+                        b.CreateStore(datum_i_1.null_flag, res_null);
                         b.CreateBr(join);
                     }
                     b.SetInsertPoint(next);
@@ -153,16 +151,14 @@ public:
 
                     ASSIGN_OR_RETURN(auto datum_i_1, _children[i + 1]->generate_ir_impl(context, jit_ctx))
                     b.CreateStore(datum_i_1.value, res);
-                    if (_children[i + 1]->is_nullable()) {
-                        b.CreateStore(datum_i_1.null_flag, res_null);
-                    }
+                    b.CreateStore(datum_i_1.null_flag, res_null);
                     b.CreateBr(join);
                     b.SetInsertPoint(next);
                 }
             }
             b.CreateBr(else_block);
             b.SetInsertPoint(else_block);
-            LLVMDatum else_val(b);
+            LLVMDatum else_val;
             if (_has_else_expr) {
                 ASSIGN_OR_RETURN(else_val, _children.back()->generate_ir_impl(context, jit_ctx))
             } else {

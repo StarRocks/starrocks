@@ -768,7 +768,7 @@ bool Expr::should_compile() const {
         }
     }
 
-    return false;
+    return true;
 }
 
 } // namespace starrocks

@@ -140,6 +140,10 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
                 return Status::RuntimeError("[JIT]a non-nullable column has null values");
             }
         }
+        LOG(INFO) << i << "[JIT INPUT] expr const = " << child->is_constant() << " null= " << child->is_nullable()
+                  << " col const = " << column->is_constant() << " null = " << column->is_nullable() << " th expr "
+                  << child->debug_string() << " col name " << column->get_name()
+                  << " values = " << column->debug_string() <<"  original expr " << _expr->debug_string();
 
         unfold_ptr(column);
         backup_args.emplace_back(column);
