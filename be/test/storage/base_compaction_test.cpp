@@ -95,7 +95,7 @@ public:
         column_3->set_aggregation("SUM");
 
         ColumnPB* column_4 = tablet_schema_pb.add_column();
-        column_4->set_unique_id(3);
+        column_4->set_unique_id(4);
         column_4->set_name("j1");
         column_4->set_type("JSON");
         column_4->set_length(65535);
