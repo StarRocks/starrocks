@@ -181,7 +181,6 @@ public class IcebergTable extends Table {
         return null;
     }
 
-
     public long nextPartitionId() {
         return partitionIdGen.getAndIncrement();
     }

@@ -14,7 +14,6 @@
 
 package com.starrocks.connector.iceberg;
 
-import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
@@ -22,18 +21,13 @@ import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.apache.iceberg.ChangelogOperation;
-import org.apache.iceberg.PartitionData;
 import org.apache.iceberg.PartitionField;
-import org.apache.iceberg.PartitionSpec;
-import org.apache.iceberg.types.Types;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
-import java.util.Set;
 import java.util.TimeZone;
 
 public class IcebergPartitionUtilsTest extends TableTestBase {
@@ -46,34 +40,6 @@ public class IcebergPartitionUtilsTest extends TableTestBase {
         UtFrameUtils.createMinStarRocksCluster();
         connectContext = UtFrameUtils.createDefaultCtx();
         ConnectorPlanTestBase.mockAllCatalogs(connectContext, temp.newFolder().toURI().toString());
-    }
-
-    @Test
-    public void testIcebergPartition() {
-        PartitionSpec spec = PartitionSpec.unpartitioned();
-        Types.StructType structType1 = Types.StructType.of(
-                Types.NestedField.required(1, "id", Types.IntegerType.get()),
-                Types.NestedField.required(2, "name", Types.StringType.get())
-        );
-        PartitionData data1 = new PartitionData(structType1);
-        IcebergPartitionUtils.IcebergPartition partition1 =
-                new IcebergPartitionUtils.IcebergPartition(spec, data1, ChangelogOperation.INSERT);
-
-        Types.StructType structType2 = Types.StructType.of(
-                Types.NestedField.required(1, "id", Types.IntegerType.get()),
-                Types.NestedField.required(2, "name", Types.StringType.get()),
-                Types.NestedField.required(3, "age", Types.IntegerType.get())
-        );
-        PartitionData data2 = new PartitionData(structType2);
-        IcebergPartitionUtils.IcebergPartition partition2 =
-                new IcebergPartitionUtils.IcebergPartition(spec, data2, ChangelogOperation.INSERT);
-
-        IcebergPartitionUtils.IcebergPartition partition3 = partition1;
-        Assert.assertEquals(partition3, partition1);
-        Assert.assertNotEquals(partition1, partition2);
-
-        Set<IcebergPartitionUtils.IcebergPartition> set = ImmutableSet.of(partition1, partition2, partition3);
-        Assert.assertEquals(2, set.size());
     }
 
     @Test
