@@ -271,8 +271,6 @@ public enum ErrorCode {
             "Only support like 'function_pattern' syntax."),
     ERR_WRONG_LABEL_NAME(5082, new byte[] {'4', '2', '0', '0', '0'},
             "Incorrect label name '%s'"),
-    ERR_CHANGE_TO_SSL_CONNECTION_FAILED(5083, new byte[] {'4', '2', '0', '0', '0'},
-            "Change to ssl connection failed"),
     ERR_PRIVILEGE_TABLE_NOT_FOUND(5085, new byte[] {'4', '2', '0', '0', '0'},
             "Table not found when checking privilege"),
     ERR_PRIVILEGE_DB_NOT_FOUND(5086, new byte[] {'4', '2', '0', '0', '0'},
@@ -319,7 +317,21 @@ public enum ErrorCode {
     /**
      * 5300 - 5399: Lock and Transaction
      */
-    ERR_LOCK_ERROR(5300, new byte[] {'5', '5', 'P', '0', '3'}, "Attempt to acquire lock fail : %s");
+    ERR_LOCK_ERROR(5300, new byte[] {'5', '5', 'P', '0', '3'}, "Failed to acquire lock: %s"),
+
+    /**
+     * 5400 - 5499: Internal error
+     */
+    ERR_CHANGE_TO_SSL_CONNECTION_FAILED(5400, new byte[] {'X', 'X', '0', '0', '0'},
+            "Failed to change to SSL connection"),
+    ERR_FORWARD_TOO_MANY_TIMES(5401, new byte[] {'X', 'X', '0', '0', '0'}, "forward too many times %d"),
+
+    /**
+     * 5500 - 5599: DDL operation failure
+     */
+    ERR_LOC_AWARE_UNSUPPORTED_FOR_COLOCATE_TBL(5500, new byte[] {'4', '2', '0', '0', '0'},
+            "table '%s' has location property and cannot be colocated")
+    ;
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {
         this.code = code;

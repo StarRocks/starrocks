@@ -45,12 +45,14 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Table;
+import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.ColocateTableIndex;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
-import com.starrocks.catalog.LocalTablet.TabletStatus;
+import com.starrocks.catalog.LocalTablet.TabletHealthStatus;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -61,6 +63,7 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.clone.TabletChecker;
 import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -98,10 +101,13 @@ import com.starrocks.task.PublishVersionTask;
 import com.starrocks.task.StorageMediaMigrationTask;
 import com.starrocks.task.TabletMetadataUpdateAgentTask;
 import com.starrocks.task.TabletMetadataUpdateAgentTaskFactory;
+import com.starrocks.task.UpdateSchemaTask;
 import com.starrocks.thrift.TBackend;
+import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TDataCacheMetrics;
 import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TMasterResult;
+import com.starrocks.thrift.TOlapTableColumnParam;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TReportRequest;
 import com.starrocks.thrift.TResourceUsage;
@@ -505,6 +511,9 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
 
         // 13. send primary index cache expire sec to be
         handleSetPrimaryIndexCacheExpireSec(backendId, backendTablets);
+
+        // 14. send update tablet schema to be
+        handleUpdateTableSchema(backendId, backendTablets);
 
         final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         Backend reportBackend = currentSystemInfo.getBackend(backendId);
@@ -1476,6 +1485,131 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         }
     }
 
+    public static void testHandleUpdateTableSchema(long backendId, Map<Long, TTablet> backendTablets) {
+        handleUpdateTableSchema(backendId, backendTablets);
+    }
+
+    private static void handleUpdateTableSchema(long backendId, Map<Long, TTablet> backendTablets) {
+        Table<Long, Long, List<Long>> tableToIndexTabletMap = HashBasedTable.create();
+        Map<Long, Long> tableToDb = Maps.newHashMap();
+
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        // split tablets by db, table and index
+        for (TTablet backendTablet : backendTablets.values()) {
+            for (TTabletInfo tabletInfo : backendTablet.tablet_infos) {
+                if (!tabletInfo.isSetTablet_schema_version()) {
+                    continue;
+                }
+                long tabletId = tabletInfo.getTablet_id();
+                TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
+                if (tabletMeta == null) {
+                    continue;
+                }
+
+                long dbId = tabletMeta.getDbId();
+                long tableId = tabletMeta.getTableId();
+                long indexId = tabletMeta.getIndexId();
+
+                Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+                if (db == null) {
+                    continue;
+                }
+                Locker locker = new Locker();
+                locker.lockDatabase(db, LockType.READ);
+                try {
+                    OlapTable olapTable = (OlapTable) db.getTable(tableId);
+                    if (olapTable == null) {
+                        continue;
+                    }
+                    MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
+                    if (indexMeta == null) {
+                        continue;
+                    }
+                    int schemaVersion = tabletInfo.tablet_schema_version;
+                    int latestSchemaVersion = indexMeta.getSchemaVersion();
+                    if (schemaVersion < latestSchemaVersion) {
+                        List<Long> tabletsList = tableToIndexTabletMap.get(tableId, indexId);
+                        if (tabletsList != null) {
+                            tabletsList.add(Long.valueOf(tabletId));
+                        } else {
+                            tabletsList = Lists.newArrayList();
+                            tabletsList.add(Long.valueOf(tabletId));
+                            tableToIndexTabletMap.put(tableId, indexId, tabletsList);
+                        }
+                        tableToDb.put(tableId, dbId);
+                    }
+                } finally {
+                    locker.unLockDatabase(db, LockType.READ);
+                }
+            }
+        }
+
+        // create AgentBatch Task
+        AgentBatchTask updateSchemaBatchTask = new AgentBatchTask();
+        for (Table.Cell<Long, Long, List<Long>> cell : tableToIndexTabletMap.cellSet()) {
+            Long tableId = cell.getRowKey();
+            Long indexId = cell.getColumnKey();
+            List<Long> tablets = cell.getValue();
+            Long dbId = tableToDb.get(tableId);
+
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            if (db == null) {
+                continue;
+            }
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
+            try {
+                OlapTable olapTable = (OlapTable) db.getTable(tableId);
+                if (olapTable == null) {
+                    continue;
+                }
+                MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
+                if (indexMeta == null) {
+                    continue;
+                }
+                
+                // already has one update scheam task, ignore to prevent send too many task
+                if (indexMeta.hasUpdateSchemaTask(backendId)) {
+                    continue;
+                }
+
+                List<String> columns = Lists.newArrayList();
+                List<TColumn> columnsDesc = Lists.newArrayList();
+                List<Integer> columnSortKeyUids = Lists.newArrayList();
+
+                for (Column column : indexMeta.getSchema()) {
+                    TColumn tColumn = column.toThrift();
+                    tColumn.setColumn_name(
+                            column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX, tColumn.column_name));
+                    column.setIndexFlag(tColumn, olapTable.getIndexes(), olapTable.getBfColumns());
+                    columnsDesc.add(tColumn);
+                }
+                if (indexMeta.getSortKeyUniqueIds() != null) {
+                    columnSortKeyUids.addAll(indexMeta.getSortKeyUniqueIds());
+                }
+                TOlapTableColumnParam columnParam = new TOlapTableColumnParam(columnsDesc, columnSortKeyUids,
+                                            indexMeta.getShortKeyColumnCount());
+
+                UpdateSchemaTask task = new UpdateSchemaTask(backendId, db.getId(), olapTable.getId(),
+                            indexId, tablets, indexMeta.getSchemaId(), indexMeta.getSchemaVersion(),
+                            columnParam);
+                updateSchemaBatchTask.addTask(task);
+                indexMeta.addUpdateSchemaBackend(backendId);
+
+            } finally {
+                locker.unLockDatabase(db, LockType.READ);
+            }
+        }
+        // send agent batch task
+        if (updateSchemaBatchTask.getTaskNum() > 0) {
+            for (AgentTask task : updateSchemaBatchTask.getAllTasks()) {
+                AgentTaskQueue.addTask(task);
+            }
+            AgentTaskExecutor.submit(updateSchemaBatchTask);
+        }
+
+    }
+
     private static void handleSetTabletBinlogConfig(long backendId, Map<Long, TTablet> backendTablets) {
         List<Pair<Long, BinlogConfig>> tabletToBinlogConfig = Lists.newArrayList();
 
@@ -1631,9 +1765,9 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 int tabletOrderIdx = materializedIndex.getTabletOrderIdx(tabletId);
                 Preconditions.checkState(tabletOrderIdx != -1);
                 Set<Long> backendsSet = colocateTableIndex.getTabletBackendsByGroup(groupId, tabletOrderIdx);
-                TabletStatus status =
-                        tablet.getColocateHealthStatus(visibleVersion, replicationNum, backendsSet);
-                if (status == TabletStatus.HEALTHY) {
+                TabletHealthStatus status =
+                        TabletChecker.getColocateTabletHealthStatus(tablet, visibleVersion, replicationNum, backendsSet);
+                if (status == TabletHealthStatus.HEALTHY) {
                     throw new MetaNotFoundException("colocate tablet [" + tabletId + "] is healthy");
                 } else {
                     return;
@@ -1641,10 +1775,10 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             }
 
             List<Long> aliveBeIdsInCluster = infoService.getBackendIds(true);
-            Pair<TabletStatus, TabletSchedCtx.Priority> status = tablet.getHealthStatusWithPriority(infoService,
-                    visibleVersion, replicationNum, aliveBeIdsInCluster);
+            Pair<TabletHealthStatus, TabletSchedCtx.Priority> status = TabletChecker.getTabletHealthStatusWithPriority(
+                    tablet, infoService, visibleVersion, replicationNum, aliveBeIdsInCluster, olapTable.getLocation());
 
-            if (status.first == TabletStatus.VERSION_INCOMPLETE || status.first == TabletStatus.REPLICA_MISSING) {
+            if (status.first == TabletHealthStatus.VERSION_INCOMPLETE || status.first == TabletHealthStatus.REPLICA_MISSING) {
                 long lastFailedVersion = -1L;
 
                 boolean initPartitionCreateByOldVersionStarRocks =

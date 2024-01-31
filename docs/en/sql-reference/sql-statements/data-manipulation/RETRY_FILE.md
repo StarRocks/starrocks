@@ -28,10 +28,10 @@ The following example retries to load all data files in a pipe named `user_behav
 ALTER PIPE [ IF EXISTS ] user_behavior_replica RETRY ALL;
 ```
 
-The following example retries to load the data file `s3://starrocks-datasets/user_behavior_ten_million_rows.parquet` in a pipe named `user_behavior_replica`:
+The following example retries to load the data file `s3://starrocks-examples/user_behavior_ten_million_rows.parquet` in a pipe named `user_behavior_replica`:
 
 ```SQL
-ALTER PIPE [ IF EXISTS ] user_behavior_replica RETRY FILE 's3://starrocks-datasets/user_behavior_ten_million_rows.parquet';
+ALTER PIPE [ IF EXISTS ] user_behavior_replica RETRY FILE 's3://starrocks-examples/user_behavior_ten_million_rows.parquet';
 ```
 
 ## References

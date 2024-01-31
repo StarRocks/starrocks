@@ -39,78 +39,84 @@ public class LockRandomTest {
 
     @Test
     public void testOnlyXWithX() throws InterruptedException {
-        int runTimes = 10000;
+        int threadNums = 32;
+        int runTimes = 100;
 
         List<Thread> threadList = new ArrayList<>();
-        for (int i = 0; i < runTimes; ++i) {
+        for (int i = 0; i < threadNums; ++i) {
             Thread t = new Thread(() -> {
-                Locker locker = new Locker();
-                try {
+                for (int j = 0; j < runTimes; ++j) {
+                    Locker locker = new Locker();
                     try {
-                        locker.lock(1L, LockType.WRITE);
-                        counter++;
-                    } finally {
-                        locker.release(1L, LockType.WRITE);
+                        try {
+                            locker.lock(1L, LockType.WRITE);
+                            counter++;
+                        } finally {
+                            locker.release(1L, LockType.WRITE);
+                        }
+                    } catch (IllegalLockStateException ie) {
+                        Assert.fail();
                     }
-                } catch (IllegalLockStateException ie) {
-                    Assert.fail();
                 }
             });
 
             threadList.add(t);
         }
 
-        for (int i = 0; i < runTimes; ++i) {
+        for (int i = 0; i < threadNums; ++i) {
             threadList.get(i).start();
         }
 
-        for (int i = 0; i < runTimes; ++i) {
+        for (int i = 0; i < threadNums; ++i) {
             threadList.get(i).join();
         }
 
-        Assert.assertEquals(runTimes, counter);
+        Assert.assertEquals(threadNums * runTimes, counter);
     }
 
     @Test
     public void testOnlyXWithS() throws InterruptedException {
-        int runTimes = 10000;
+        int threadNums = 32;
+        int runTimes = 100;
         AtomicInteger atomicInteger = new AtomicInteger(0);
 
         List<Thread> threadList = new ArrayList<>();
-        for (int i = 0; i < runTimes; ++i) {
+        for (int i = 0; i < threadNums; ++i) {
             Thread t = new Thread(() -> {
-                Random random = new Random();
-                Locker locker = new Locker();
-                try {
-                    if (random.nextInt(10) % 2 == 0) {
-                        try {
-                            locker.lock(1L, LockType.WRITE);
-                            counter++;
-                            atomicInteger.incrementAndGet();
-                        } finally {
-                            locker.release(1L, LockType.WRITE);
+                for (int j = 0; j < runTimes; ++j) {
+                    Random random = new Random();
+                    Locker locker = new Locker();
+                    try {
+                        if (random.nextInt(10) % 2 == 0) {
+                            try {
+                                locker.lock(1L, LockType.WRITE);
+                                counter++;
+                                atomicInteger.incrementAndGet();
+                            } finally {
+                                locker.release(1L, LockType.WRITE);
+                            }
+                        } else {
+                            try {
+                                locker.lock(1L, LockType.READ);
+                                Assert.assertEquals(counter, atomicInteger.get());
+                            } finally {
+                                locker.release(1L, LockType.READ);
+                            }
                         }
-                    } else {
-                        try {
-                            locker.lock(1L, LockType.READ);
-                            Assert.assertEquals(counter, atomicInteger.get());
-                        } finally {
-                            locker.release(1L, LockType.READ);
-                        }
+                    } catch (IllegalLockStateException ie) {
+                        Assert.fail();
                     }
-                } catch (IllegalLockStateException ie) {
-                    Assert.fail();
                 }
             });
 
             threadList.add(t);
         }
 
-        for (int i = 0; i < runTimes; ++i) {
+        for (int i = 0; i < threadNums; ++i) {
             threadList.get(i).start();
         }
 
-        for (int i = 0; i < runTimes; ++i) {
+        for (int i = 0; i < threadNums; ++i) {
             threadList.get(i).join();
         }
 
@@ -119,44 +125,47 @@ public class LockRandomTest {
 
     @Test
     public void testOnlyXWithIS() throws InterruptedException {
-        int runTimes = 10000;
+        int threadNums = 32;
+        int runTimes = 100;
         AtomicInteger atomicInteger = new AtomicInteger(0);
 
         List<Thread> threadList = new ArrayList<>();
-        for (int i = 0; i < runTimes; ++i) {
+        for (int i = 0; i < threadNums; ++i) {
             Thread t = new Thread(() -> {
-                Random random = new Random();
-                Locker locker = new Locker();
-                try {
-                    if (random.nextInt(10) % 2 == 0) {
-                        try {
-                            locker.lock(1L, LockType.WRITE);
-                            counter++;
-                            atomicInteger.incrementAndGet();
-                        } finally {
-                            locker.release(1L, LockType.WRITE);
+                for (int j = 0; j < runTimes; ++j) {
+                    Random random = new Random();
+                    Locker locker = new Locker();
+                    try {
+                        if (random.nextInt(10) % 2 == 0) {
+                            try {
+                                locker.lock(1L, LockType.WRITE);
+                                counter++;
+                                atomicInteger.incrementAndGet();
+                            } finally {
+                                locker.release(1L, LockType.WRITE);
+                            }
+                        } else {
+                            try {
+                                locker.lock(1L, LockType.INTENTION_SHARED);
+                                Assert.assertEquals(counter, atomicInteger.get());
+                            } finally {
+                                locker.release(1L, LockType.INTENTION_SHARED);
+                            }
                         }
-                    } else {
-                        try {
-                            locker.lock(1L, LockType.INTENTION_SHARED);
-                            Assert.assertEquals(counter, atomicInteger.get());
-                        } finally {
-                            locker.release(1L, LockType.INTENTION_SHARED);
-                        }
+                    } catch (IllegalLockStateException ie) {
+                        Assert.fail();
                     }
-                } catch (IllegalLockStateException ie) {
-                    Assert.fail();
                 }
             });
 
             threadList.add(t);
         }
 
-        for (int i = 0; i < runTimes; ++i) {
+        for (int i = 0; i < threadNums; ++i) {
             threadList.get(i).start();
         }
 
-        for (int i = 0; i < runTimes; ++i) {
+        for (int i = 0; i < threadNums; ++i) {
             threadList.get(i).join();
         }
 
@@ -165,44 +174,47 @@ public class LockRandomTest {
 
     @Test
     public void testOnlyXWithIX() throws InterruptedException {
-        int runTimes = 10000;
+        int threadNums = 32;
+        int runTimes = 100;
         AtomicInteger atomicInteger = new AtomicInteger(0);
 
         List<Thread> threadList = new ArrayList<>();
-        for (int i = 0; i < runTimes; ++i) {
+        for (int i = 0; i < threadNums; ++i) {
             Thread t = new Thread(() -> {
-                Random random = new Random();
-                Locker locker = new Locker();
-                try {
-                    if (random.nextInt(10) % 2 == 0) {
-                        try {
-                            locker.lock(1L, LockType.WRITE);
-                            counter++;
-                            atomicInteger.incrementAndGet();
-                        } finally {
-                            locker.release(1L, LockType.WRITE);
+                for (int j = 0; j < runTimes; ++j) {
+                    Random random = new Random();
+                    Locker locker = new Locker();
+                    try {
+                        if (random.nextInt(10) % 2 == 0) {
+                            try {
+                                locker.lock(1L, LockType.WRITE);
+                                counter++;
+                                atomicInteger.incrementAndGet();
+                            } finally {
+                                locker.release(1L, LockType.WRITE);
+                            }
+                        } else {
+                            try {
+                                locker.lock(1L, LockType.INTENTION_EXCLUSIVE);
+                                Assert.assertEquals(counter, atomicInteger.get());
+                            } finally {
+                                locker.release(1L, LockType.INTENTION_EXCLUSIVE);
+                            }
                         }
-                    } else {
-                        try {
-                            locker.lock(1L, LockType.INTENTION_EXCLUSIVE);
-                            Assert.assertEquals(counter, atomicInteger.get());
-                        } finally {
-                            locker.release(1L, LockType.INTENTION_EXCLUSIVE);
-                        }
+                    } catch (IllegalLockStateException ie) {
+                        Assert.fail();
                     }
-                } catch (IllegalLockStateException ie) {
-                    Assert.fail();
                 }
             });
 
             threadList.add(t);
         }
 
-        for (int i = 0; i < runTimes; ++i) {
+        for (int i = 0; i < threadNums; ++i) {
             threadList.get(i).start();
         }
 
-        for (int i = 0; i < runTimes; ++i) {
+        for (int i = 0; i < threadNums; ++i) {
             threadList.get(i).join();
         }
 

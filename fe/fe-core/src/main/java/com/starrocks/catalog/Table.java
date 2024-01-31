@@ -777,6 +777,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return false;
     }
 
+    public boolean supportPreCollectMetadata() {
+        return false;
+    }
+
     public boolean hasUniqueConstraints() {
         List<UniqueConstraint> uniqueConstraint = getUniqueConstraints();
         return uniqueConstraint != null;

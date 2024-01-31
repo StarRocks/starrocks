@@ -146,7 +146,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String MAX_ALLOWED_PACKET = "max_allowed_packet";
     public static final String AUTO_INCREMENT_INCREMENT = "auto_increment_increment";
     public static final String QUERY_CACHE_TYPE = "query_cache_type";
-    public static final String INTERACTIVE_TIMTOUT = "interactive_timeout";
+    public static final String INTERACTIVE_TIMEOUT = "interactive_timeout";
     public static final String WAIT_TIMEOUT = "wait_timeout";
     public static final String WAREHOUSE = "warehouse";
     public static final String NET_WRITE_TIMEOUT = "net_write_timeout";
@@ -319,6 +319,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CBO_USE_DB_LOCK = "cbo_use_lock_db";
     public static final String CBO_PREDICATE_SUBFIELD_PATH = "cbo_enable_predicate_subfield_path";
+    public static final String CBO_PREPARE_METADATA_THREAD_POOL_SIZE = "cbo_prepare_metadata_thread_pool_size";
+
+    public static final String CBO_ENABLE_PARALLEL_PREPARE_METADATA = "enable_parallel_prepare_metadata";
 
     public static final String SKEW_JOIN_RAND_RANGE = "skew_join_rand_range";
 
@@ -817,7 +820,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int queryCacheType = 0;
 
     // The number of seconds the server waits for activity on an interactive connection before closing it
-    @VariableMgr.VarAttr(name = INTERACTIVE_TIMTOUT)
+    @VariableMgr.VarAttr(name = INTERACTIVE_TIMEOUT)
     private int interactiveTimeout = 3600;
 
     // The number of seconds the server waits for activity on a noninteractive connection before closing it.
@@ -1627,6 +1630,28 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CROSS_JOIN_COST_PENALTY, flag = VariableMgr.INVISIBLE)
     private long crossJoinCostPenalty = 1000000;
+
+    @VarAttr(name = CBO_PREPARE_METADATA_THREAD_POOL_SIZE)
+    private int prepareMetadataPoolSize = 16;
+
+    @VarAttr(name = CBO_ENABLE_PARALLEL_PREPARE_METADATA)
+    private boolean enableParallelPrepareMetadata = false;
+
+    public int getPrepareMetadataPoolSize() {
+        return prepareMetadataPoolSize;
+    }
+
+    public void setPrepareMetadataPoolSize(int prepareMetadataPoolSize) {
+        this.prepareMetadataPoolSize = prepareMetadataPoolSize;
+    }
+
+    public boolean enableParallelPrepareMetadata() {
+        return enableParallelPrepareMetadata;
+    }
+
+    public void setEnableParallelPrepareMetadata(boolean enableParallelPrepareMetadata) {
+        this.enableParallelPrepareMetadata = enableParallelPrepareMetadata;
+    }
 
     public String getHiveTempStagingDir() {
         return hiveTempStagingDir;
@@ -3211,6 +3236,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         TQueryOptions tResult = new TQueryOptions();
         tResult.setMem_limit(maxExecMemByte);
         tResult.setQuery_mem_limit(queryMemLimit);
+        tResult.setSql_dialect(sqlDialect.toLowerCase());
 
         // Avoid integer overflow
         tResult.setQuery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryTimeoutS));

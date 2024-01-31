@@ -77,6 +77,8 @@ public class JDBCMetadata implements ConnectorMetadata {
             schemaResolver = new MysqlSchemaResolver();
         } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("postgresql")) {
             schemaResolver = new PostgresSchemaResolver();
+        } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("mariadb")) {
+            schemaResolver = new MysqlSchemaResolver();
         } else {
             LOG.warn("{} not support yet", properties.get(JDBCResource.DRIVER_CLASS));
             throw new StarRocksConnectorException(properties.get(JDBCResource.DRIVER_CLASS) + " not support yet");

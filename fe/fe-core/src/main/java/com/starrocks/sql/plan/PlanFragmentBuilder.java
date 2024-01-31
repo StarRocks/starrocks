@@ -60,6 +60,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.IdGenerator;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.planner.AggregationNode;
@@ -1409,6 +1410,12 @@ public class PlanFragmentBuilder {
             if (scanNode.getTableName().equalsIgnoreCase("load_tracking_logs") && scanNode.getLabel() == null
                     && scanNode.getJobId() == null) {
                 throw UnsupportedException.unsupportedException("load_tracking_logs must specify label or job_id");
+            }
+
+            if (scanNode.getTableName().equalsIgnoreCase("load_tracking_logs")) {
+                Pair<String, Integer> ipPort = GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort();
+                scanNode.setFrontendIP(ipPort.first);
+                scanNode.setFrontendPort(ipPort.second.intValue());
             }
 
             if (scanNode.getTableName().equalsIgnoreCase("fe_metrics")) {

@@ -1362,18 +1362,18 @@ public class Config extends ConfigBase {
      * k8s control place will schedule a new pod and attach the pvc to it which will
      * restore the replica to a {@link Replica.ReplicaState#NORMAL} state immediately. But normally
      * the {@link com.starrocks.clone.TabletScheduler} of Starrocks will start to schedule
-     * {@link LocalTablet.TabletStatus#REPLICA_MISSING} tasks and create new replicas in a short time.
+     * {@link LocalTablet.TabletHealthStatus#REPLICA_MISSING} tasks and create new replicas in a short time.
      * After new pod scheduling is completed, {@link com.starrocks.clone.TabletScheduler} has
      * to delete the redundant healthy replica which cause resource waste and may also affect
      * the loading process.
      *
      * <p>When a backend is considered to be dead, this configuration specifies how long the
      * {@link com.starrocks.clone.TabletScheduler} should wait before starting to schedule
-     * {@link LocalTablet.TabletStatus#REPLICA_MISSING} tasks. It is intended to leave some time for
+     * {@link LocalTablet.TabletHealthStatus#REPLICA_MISSING} tasks. It is intended to leave some time for
      * the external scheduler like k8s to handle the repair process before internal scheduler kicks in
      * or for the system administrator to restart and put the backend online in time.
      * To be noticed, it only affects the dead backend situation, the scheduler
-     * may still schedule {@link LocalTablet.TabletStatus#REPLICA_MISSING} tasks because of
+     * may still schedule {@link LocalTablet.TabletHealthStatus#REPLICA_MISSING} tasks because of
      * other reasons, like manually setting a replica as bad, actively decommission a backend etc.
      *
      * <p>Currently this configuration only works for non-colocate tables, for colocate tables,
@@ -2798,6 +2798,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_unlock_deadlock = false;
+
+    /**
+     * Whether to use table level lock
+     */
+    @ConfField
+    public static boolean load_using_fine_granularity_lock_enabled = false;
 
     /**
      * when a lock cannot be obtained, we cannot determine whether it is because the required

@@ -862,8 +862,10 @@ public class GlobalTransactionMgrTest {
         Database db = new Database(10, "db0");
         GlobalTransactionMgr globalTransactionMgr = spy(new GlobalTransactionMgr(GlobalStateMgr.getCurrentState()));
         DatabaseTransactionMgr dbTransactionMgr = spy(new DatabaseTransactionMgr(10L, GlobalStateMgr.getCurrentState()));
+        TransactionState transactionState = spy(new TransactionState());
 
         long now = System.currentTimeMillis();
+        doReturn(transactionState).when(globalTransactionMgr).getTransactionState(db.getId(), 1001);
         doReturn(dbTransactionMgr).when(globalTransactionMgr).getDatabaseTransactionMgr(db.getId());
         doThrow(new CommitRateExceededException(1001, now + 50))
                 .when(dbTransactionMgr)
@@ -878,9 +880,11 @@ public class GlobalTransactionMgrTest {
         Database db = new Database(10, "db0");
         GlobalTransactionMgr globalTransactionMgr = spy(new GlobalTransactionMgr(GlobalStateMgr.getCurrentState()));
         DatabaseTransactionMgr dbTransactionMgr = spy(new DatabaseTransactionMgr(10L, GlobalStateMgr.getCurrentState()));
+        TransactionState transactionState = spy(new TransactionState());
 
         long now = System.currentTimeMillis();
         doReturn(dbTransactionMgr).when(globalTransactionMgr).getDatabaseTransactionMgr(db.getId());
+        doReturn(transactionState).when(globalTransactionMgr).getTransactionState(db.getId(), 1001);
         doReturn(new VisibleStateWaiter(new TransactionState()))
                 .when(dbTransactionMgr)
                 .commitTransaction(1001L, Collections.emptyList(), Collections.emptyList(), null);
@@ -908,6 +912,11 @@ public class GlobalTransactionMgrTest {
             throws UserException {
         Database db = new Database(10L, "db0");
         GlobalTransactionMgr globalTransactionMgr = spy(new GlobalTransactionMgr(GlobalStateMgr.getCurrentState()));
+        TransactionState transactionState = new TransactionState();
+        doReturn(transactionState)
+                .when(globalTransactionMgr)
+                .getTransactionState(10L, 1001L);
+
         doThrow(LockTimeoutException.class)
                 .when(globalTransactionMgr)
                 .commitTransaction(10L, 1001L, Collections.emptyList(), Collections.emptyList(), null);

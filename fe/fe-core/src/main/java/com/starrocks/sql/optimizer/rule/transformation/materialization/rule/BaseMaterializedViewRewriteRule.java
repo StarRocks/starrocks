@@ -139,6 +139,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         QueryMaterializationContext queryMaterializationContext = context.getQueryMaterializationContext();
         onPredicates = onPredicates.stream()
                 .map(p -> MvUtils.canonizePredicateForRewrite(queryMaterializationContext, p))
+                .map(predicate -> queryColumnRefRewriter.rewrite(predicate))
                 .collect(Collectors.toList());
         List<Table> queryTables = MvUtils.getAllTables(queryExpression);
         ConnectContext connectContext = ConnectContext.get();
@@ -210,7 +211,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             return null;
         }
         // only add valid predicates into query split predicate
-        Set<ScalarOperator> queryConjuncts = MvUtils.getAllValidPredicates(queryExpression);
+        Set<ScalarOperator> queryConjuncts = MvUtils.getPredicateForRewrite(queryExpression);
         if (!ConstantOperator.TRUE.equals(queryPartitionPredicate)) {
             logMVRewrite(mvContext.getOptimizerContext(), this, "Query compensate partition predicate:{}",
                     queryPartitionPredicate);

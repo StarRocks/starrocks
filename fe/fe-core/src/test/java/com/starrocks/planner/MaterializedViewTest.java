@@ -2720,12 +2720,12 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     @Test
     public void testArrayAggDistinctWithRollup() {
-        String mv = "select user_id, array_agg_distinct(tag_id) from user_tags group by user_id, time;";
-        testRewriteOK(mv, "select user_id, array_agg_distinct(tag_id) from user_tags group by user_id, time;")
+        String mv = "select user_id, array_distinct(array_agg(tag_id)) from user_tags group by user_id, time;";
+        testRewriteOK(mv, "select user_id, array_distinct(array_agg(tag_id)) from user_tags group by user_id, time;")
                 .notContain("array_unique_agg");
-        testRewriteOK(mv, "select user_id, array_agg_distinct(tag_id) from user_tags group by user_id")
+        testRewriteOK(mv, "select user_id, array_distinct(array_agg(tag_id)) from user_tags group by user_id")
                 .contains("array_unique_agg");
-        testRewriteOK(mv, "select array_agg_distinct(tag_id) from user_tags")
+        testRewriteOK(mv, "select array_distinct(array_agg(tag_id)) from user_tags")
                 .contains("array_unique_agg");
     }
 
@@ -5384,5 +5384,29 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         testRewriteOK(mv, "select empid,\n" +
                 " sum(salary) as total, count(salary)  as cnt\n" +
                 " from emps group by empid having sum(salary) > 10");
+    }
+
+    @Test
+    public void testMultiLeftOuterJoin() {
+        {
+            String mv = "select t1a, t1b, v5, v8 " +
+                    "from test.test_all_type left outer join test.t1 on t1d = v4 " +
+                    "left outer join test.t2 on v5 = v7 where v9 = 10";
+            String query = "select t1a, t1b, v5, v8 " +
+                    "from test.test_all_type left outer join test.t1 on t1d = v4 " +
+                    "left outer join test.t2 on v5 = v7 where v9 = 10 and t1a != 'xxx'";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("t1a != 'xxx'");
+        }
+
+        {
+            String mv = "select v1, v2, v3, v5, v8 " +
+                    "from test.t0 left outer join test.t1 on v1 = v4 " +
+                    "left outer join test.t2 on v5 = v7 where v9 = 10";
+            String query = "select v1, v2, v3, v5, v8 " +
+                    "from test.t0 left outer join test.t1 on v1 = v4 " +
+                    "left outer join test.t2 on v5 = v7 where v9 = 10 and v3 = 1";
+            testRewriteOK(mv, query);
+        }
     }
 }

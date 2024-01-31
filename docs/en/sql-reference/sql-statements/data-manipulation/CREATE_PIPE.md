@@ -49,7 +49,7 @@ A set of optional parameters that specify how to execute the pipe. Format: `"key
 
 ## Examples
 
-Create a pipe named `user_behavior_replica` in the current database to load the data of the sample dataset `s3://starrocks-datasets/user_behavior_ten_million_rows.parquet` to the `user_behavior_replica` table:
+Create a pipe named `user_behavior_replica` in the current database to load the data of the sample dataset `s3://starrocks-examples/user_behavior_ten_million_rows.parquet` to the `user_behavior_replica` table:
 
 ```SQL
 CREATE PIPE user_behavior_replica
@@ -61,7 +61,7 @@ AS
 INSERT INTO user_behavior_replica
 SELECT * FROM FILES
 (
-    "path" = "s3://starrocks-datasets/user_behavior_ten_million_rows.parquet",
+    "path" = "s3://starrocks-examples/user_behavior_ten_million_rows.parquet",
     "format" = "parquet",
     "aws.s3.region" = "us-east-1",
     "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
