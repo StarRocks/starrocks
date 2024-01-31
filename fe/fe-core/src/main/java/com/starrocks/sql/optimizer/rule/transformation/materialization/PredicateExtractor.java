@@ -20,6 +20,7 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.google.common.collect.TreeRangeSet;
 import com.starrocks.analysis.BinaryType;
+import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -139,13 +140,14 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
             return null;
         }
 
+        TreeRangeSet<ConstantOperator> range = range(predicate.getBinaryType(), op2);
         if (DateTruncEquivalent.INSTANCE.isEquivalent(op1, op2)) {
             TreeRangeSet<ConstantOperator> rangeSet = TreeRangeSet.create();
-            rangeSet.addAll(range(predicate.getBinaryType(), op2));
+            rangeSet.addAll(range);
             return new ColumnRangePredicate(op1.getChild(1).cast(), rangeSet);
         } else if (TimeSliceRewriteEquivalent.INSTANCE.isEquivalent(op1, op2)) {
             TreeRangeSet<ConstantOperator> rangeSet = TreeRangeSet.create();
-            rangeSet.addAll(range(predicate.getBinaryType(), op2));
+            rangeSet.addAll(range);
             return new ColumnRangePredicate(op1.getChild(0).cast(), rangeSet);
         } else {
             return null;
@@ -276,8 +278,8 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
                 rangeSet.add(Range.lessThan(value));
                 return rangeSet;
             case NE:
-                if (value.getType().isStringType()) {
-                    // for str != '2023-10-01', treat it as original
+                Type valueType = value.getType();
+                if (!valueType.isNumericType() && !valueType.isDateType()) {
                     return null;
                 }
                 rangeSet.add(Range.greaterThan(value));

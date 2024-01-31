@@ -60,6 +60,7 @@ public class ScalarOperatorRewriter {
             new ExtractCommonPredicateRule(),
             new ArithmeticCommutativeRule()
     );
+
     public static final List<ScalarOperatorRewriteRule> MV_SCALAR_REWRITE_RULES = DEFAULT_REWRITE_SCAN_PREDICATE_RULES.stream()
             .map(rule -> rule instanceof NormalizePredicateRule ? new MvNormalizePredicateRule() : rule)
             .collect(Collectors.toList());

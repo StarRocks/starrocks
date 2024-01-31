@@ -5385,4 +5385,28 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 " sum(salary) as total, count(salary)  as cnt\n" +
                 " from emps group by empid having sum(salary) > 10");
     }
+
+    @Test
+    public void testMultiLeftOuterJoin() {
+        {
+            String mv = "select t1a, t1b, v5, v8 " +
+                    "from test.test_all_type left outer join test.t1 on t1d = v4 " +
+                    "left outer join test.t2 on v5 = v7 where v9 = 10";
+            String query = "select t1a, t1b, v5, v8 " +
+                    "from test.test_all_type left outer join test.t1 on t1d = v4 " +
+                    "left outer join test.t2 on v5 = v7 where v9 = 10 and t1a != 'xxx'";
+            MVRewriteChecker checker = testRewriteOK(mv, query);
+            checker.contains("t1a != 'xxx'");
+        }
+
+        {
+            String mv = "select v1, v2, v3, v5, v8 " +
+                    "from test.t0 left outer join test.t1 on v1 = v4 " +
+                    "left outer join test.t2 on v5 = v7 where v9 = 10";
+            String query = "select v1, v2, v3, v5, v8 " +
+                    "from test.t0 left outer join test.t1 on v1 = v4 " +
+                    "left outer join test.t2 on v5 = v7 where v9 = 10 and v3 = 1";
+            testRewriteOK(mv, query);
+        }
+    }
 }

@@ -41,7 +41,7 @@ public class PushDownPredicateJoinRule extends TransformationRule {
         OptExpression joinOpt = input.getInputs().get(0);
         JoinPredicatePushdown joinPredicatePushdown = new JoinPredicatePushdown(
                 joinOpt, false, false, context.getColumnRefFactory(),
-                context.isEnableLeftRightJoinEquivalenceDerive());
+                context.isEnableLeftRightJoinEquivalenceDerive(), context);
         return Lists.newArrayList(joinPredicatePushdown.pushdown(filter.getPredicate()));
     }
 }
