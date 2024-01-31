@@ -25,11 +25,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-<<<<<<< HEAD:fe/fe-core/src/test/java/com/starrocks/sql/optimizer/rule/transformation/materialization/NormalizePredicateBench.java
-=======
-import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
->>>>>>> d1b122f5d4 ([Enhancement] Add cbo_materialized_view_rewrite_related_mvs_limit parameter to limit mv related mv number (#39461)):fe/fe-core/src/test/java/com/starrocks/benchmark/NormalizePredicateBench.java
 import org.apache.commons.lang3.NotImplementedException;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.openjdk.jmh.annotations.Benchmark;

@@ -52,7 +52,6 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
-import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -101,19 +100,7 @@ public class MvRewriteTestBase {
         // set default config for async mvs
         UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
 
-<<<<<<< HEAD
         ConnectorPlanTestBase.mockAllCatalogs(connectContext, temp.newFolder().toURI().toString());
-=======
-        new MockUp<PlanTestBase>() {
-            /**
-             * {@link com.starrocks.sql.plan.PlanTestNoneDBBase#isIgnoreExplicitColRefIds()}
-             */
-            @Mock
-            boolean isIgnoreExplicitColRefIds() {
-                return true;
-            }
-        };
->>>>>>> d1b122f5d4 ([Enhancement] Add cbo_materialized_view_rewrite_related_mvs_limit parameter to limit mv related mv number (#39461))
 
         new MockUp<StmtExecutor>() {
             @Mock
