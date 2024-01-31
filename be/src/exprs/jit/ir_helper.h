@@ -56,10 +56,6 @@ struct JITColumn {
  */
 using JITScalarFunction = void (*)(int64_t, JITColumn*);
 
-struct JITFunctionState {
-    JITScalarFunction _function;
-};
-
 /**
  * @brief The LLVMDatum struct is utilized to store the column's values and nullity flags within LLVM IR.
  */

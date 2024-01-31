@@ -738,17 +738,6 @@ void Expr::get_uncompilable_exprs(std::vector<Expr*>& exprs) {
     }
 }
 
-void Expr::get_jit_exprs(std::vector<Expr*>& exprs) {
-    if (!this->is_compilable()) {
-        exprs.emplace_back(this);
-        return;
-    }
-    for (auto child : this->children()) {
-        child->get_jit_exprs(exprs);
-    }
-    exprs.emplace_back(this);
-}
-
 // This method attempts to traverse the entire expression tree from the current expression downwards, seeking to replace expressions with JITExprs.
 // This method searches from top to bottom for compilable expressions.
 // Once a compilable expression is found, it skips over its compilable subexpressions and continues the search downwards.
