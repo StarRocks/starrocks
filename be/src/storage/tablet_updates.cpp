@@ -1593,7 +1593,8 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
               << " #op(upsert:" << rowset->num_rows() << " del:" << delete_op << ") #del:" << old_total_del << "+"
               << new_del << "=" << total_del << " #dv:" << ndelvec << " duration:" << t_write - t_start << "ms"
               << strings::Substitute("($0/$1/$2/$3) ", t_apply - t_start, t_index - t_apply, t_delvec - t_index,
-                                     t_write - t_delvec) << iostat->print_str();
+                                     t_write - t_delvec)
+              << iostat->print_str();
     VLOG(1) << "rowset commit apply " << delvec_change_info << " " << _debug_string(true, true);
 }
 
