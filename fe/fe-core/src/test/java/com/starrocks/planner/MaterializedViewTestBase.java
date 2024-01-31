@@ -161,7 +161,11 @@ public class MaterializedViewTestBase extends PlanTestBase {
                     String properties = this.properties != null ? "PROPERTIES (\n" +
                             this.properties + ")" : "";
                     String mvSQL = "CREATE MATERIALIZED VIEW mv0 \n" +
+<<<<<<< HEAD
                             "   DISTRIBUTED BY HASH(`" + outputNames.get(0) + "`) BUCKETS 12\n" +
+=======
+                            " REFRESH MANUAL " +
+>>>>>>> 8e7742069c ([BugFix] Fix view based mv rewrite (#39826))
                             properties + " AS " +
                             mv;
                     starRocksAssert.withMaterializedView(mvSQL);
