@@ -41,6 +41,7 @@ under the License.
         <starrocks.home>${basedir}/../../</starrocks.home>
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
         <jacoco.version>0.8.8</jacoco.version>
+        <paimon.ali.dlf.version>0.8-ali-1-SNAPSHOT</paimon.ali.dlf.version>
         <python>python</python>
     </properties>
 
@@ -653,6 +654,30 @@ under the License.
         <dependency>
             <groupId>org.apache.paimon</groupId>
             <artifactId>paimon-oss</artifactId>
+        </dependency>
+
+        <dependency>
+            <artifactId>paimon-ali-dlf-catalog</artifactId>
+            <groupId>org.apache.paimon</groupId>
+            <version>${paimon.ali.dlf.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.aliyun.datalake</groupId>
+                    <artifactId>metastore-client-hive2</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.hive</groupId>
+                    <artifactId>hive-metastore</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.hive</groupId>
+                    <artifactId>hive-exec</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.paimon</groupId>
+                    <artifactId>paimon-core</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>

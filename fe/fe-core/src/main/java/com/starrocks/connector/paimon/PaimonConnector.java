@@ -89,6 +89,10 @@ public class PaimonConnector implements Connector {
             throw new StarRocksConnectorException("The property %s must be set.", PAIMON_CATALOG_WAREHOUSE);
         }
         if (!Strings.isNullOrEmpty(warehousePath)) {
+            // use only for oss-hdfs
+            if (warehousePath.charAt(warehousePath.length() - 1) != '/') {
+                warehousePath += "/";
+            }
             paimonOptions.setString(WAREHOUSE.key(), warehousePath);
         }
         initFsOption(cloudConfiguration);
