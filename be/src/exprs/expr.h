@@ -239,10 +239,6 @@ public:
     // The uncompiled expressions are those expressions which are not supported by JIT, it will become the input of JIT function.
     void get_uncompilable_exprs(std::vector<Expr*>& exprs);
 
-    // This function collects all JIT-related expressions in this expression tree in post-order.
-    // JIT-related expressions include all compilable expressions and the non-compilable expressions that serve as inputs.
-    void get_jit_exprs(std::vector<Expr*>& exprs);
-
     // This method attempts to traverse the entire expression tree from the current expression downwards, seeking to replace expressions with JITExprs.
     // This method searches from top to bottom for compilable expressions.
     // Once a compilable expression is found, it skips over its compilable subexpressions and continues the search downwards.
