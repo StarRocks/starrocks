@@ -90,17 +90,25 @@ bool TabletSchemaMap::contains(SchemaId id) const {
 TabletSchemaMap::Stats TabletSchemaMap::stats() const {
     Stats stats;
     for (const auto& shard : _map_shards) {
-        std::lock_guard l(shard.mtx);
-        stats.num_items += shard.map.size();
-        for (const auto& [_, weak_ptr] : shard.map) {
-            if (auto schema_ptr = weak_ptr.lock(); schema_ptr) {
-                auto use_cnt = schema_ptr.use_count();
-                auto schema_size = schema_ptr->mem_usage();
-                // The temporary variable schema_ptr took one reference, should exclude it.
-                stats.memory_usage += use_cnt >= 2 ? schema_size : 0;
-                stats.saved_memory_usage += (use_cnt >= 2) ? (use_cnt - 2) * schema_size : 0;
+        std::vector<std::shared_ptr<const TabletSchema>> tmp_shared_ptrs;
+        {
+            std::lock_guard l(shard.mtx);
+            stats.num_items += shard.map.size();
+            for (const auto& [_, weak_ptr] : shard.map) {
+                if (auto schema_ptr = weak_ptr.lock(); schema_ptr) {
+                    auto use_cnt = schema_ptr.use_count();
+                    auto schema_size = schema_ptr->mem_usage();
+                    // The temporary variable schema_ptr took one reference, should exclude it.
+                    stats.memory_usage += use_cnt >= 2 ? schema_size : 0;
+                    stats.saved_memory_usage += (use_cnt >= 2) ? (use_cnt - 2) * schema_size : 0;
+                    // save the `schema_ptr` into the vector, prevent it to be the last reference and be destroyed under the lock
+                    // which will be a dead lock.
+                    tmp_shared_ptrs.push_back(std::move(schema_ptr));
+                }
             }
         }
+        // release all the shared_ptr instances under no lock
+        tmp_shared_ptrs.clear();
     }
     return stats;
 }
