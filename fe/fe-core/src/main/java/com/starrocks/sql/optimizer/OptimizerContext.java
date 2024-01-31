@@ -74,6 +74,8 @@ public class OptimizerContext {
     // TODO: refactor materialized view's variables/contexts into this.
     private QueryMaterializationContext queryMaterializationContext;
 
+    private boolean inMemoPhase = false;
+
     @VisibleForTesting
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
         this.memo = memo;
@@ -280,5 +282,13 @@ public class OptimizerContext {
         if (this.queryMaterializationContext != null) {
             this.queryMaterializationContext.clear();
         }
+    }
+
+    public void setInMemoPhase(boolean inMemoPhase) {
+        this.inMemoPhase = inMemoPhase;
+    }
+
+    public boolean isInMemoPhase() {
+        return this.inMemoPhase;
     }
 }
