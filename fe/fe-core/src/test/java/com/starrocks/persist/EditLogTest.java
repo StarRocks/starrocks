@@ -18,6 +18,7 @@ package com.starrocks.persist;
 import com.starrocks.common.io.Text;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalEntity;
+import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
@@ -171,4 +172,17 @@ public class EditLogTest {
         Assert.assertTrue(updatedfFe.getEditLogPort() == 1000);
     }
 
+    @Test
+    public void testLoadJournalException() {
+        JournalEntity journal = new JournalEntity();
+        journal.setOpCode(OperationType.OP_SAVE_NEXTID);
+        // set data to null, and it will throw NPE in loadJournal()
+        journal.setData(null);
+
+        try {
+            EditLog.loadJournal(GlobalStateMgr.getCurrentState(), journal);
+        } catch (JournalInconsistentException e) {
+            Assert.assertEquals(OperationType.OP_SAVE_NEXTID, e.getOpCode());
+        }
+    }
 }
