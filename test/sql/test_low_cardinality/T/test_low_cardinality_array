@@ -452,4 +452,4 @@ select /*+SET_VAR(cbo_enable_low_cardinality_optimize=false, low_cardinality_opt
        reverse(a1), array_slice(a2, 2, 4), cardinality(a2)
 from s3 where a1[1] = 'Jiangsu' or a2[2] = 'GD' order by v1 limit 2;
 
-select /*+SET_VAR(cbo_enable_low_cardinality_optimize=false, low_cardinality_optimize_v2=false)*/ count(a1[2]) from s3 where v3 = "GS"; 
+select /*+SET_VAR(cbo_enable_low_cardinality_optimize=false, low_cardinality_optimize_v2=false)*/ count(a1[2]) from s3 where v3 = "GS";
