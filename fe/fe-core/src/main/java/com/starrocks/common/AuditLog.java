@@ -48,12 +48,12 @@ public class AuditLog {
         return CONNECTION_AUDIT;
     }
 
-    public static AuditLog getStatisticAudit() {
-        return STATISTIC_AUDIT;
+    public static Logger getStatisticAudit() {
+        return STATISTIC_AUDIT.logger;
     }
 
-    public static AuditLog getMVAudit() {
-        return MV_AUDIT;
+    public static Logger getMVAudit() {
+        return MV_AUDIT.logger;
     }
 
     public AuditLog(String auditName) {

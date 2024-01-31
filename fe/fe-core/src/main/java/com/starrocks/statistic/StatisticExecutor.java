@@ -340,12 +340,12 @@ public class StatisticExecutor {
         context.getSessionVariable().setEnableMaterializedViewRewrite(false);
         Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
         if (!sqlResult.second.ok()) {
-            AuditLog.getStatisticAudit().log("statistic query success | QueryId [{}] | SQL: {}",
+            AuditLog.getStatisticAudit().info("statistic query success | QueryId [{}] | SQL: {}",
                     DebugUtil.printId(context.getQueryId()), sql);
             throw new SemanticException("Statistics query fail | Error Message [%s] | QueryId [%s] | SQL [%s]",
                     context.getState().getErrorMessage(), DebugUtil.printId(context.getQueryId()), sql);
         } else {
-            AuditLog.getStatisticAudit().log("statistic query fail | QueryId [{}] | SQL: {}",
+            AuditLog.getStatisticAudit().info("statistic query fail | QueryId [{}] | SQL: {}",
                     DebugUtil.printId(context.getQueryId()), sql);
             return sqlResult.first;
         }
@@ -359,11 +359,11 @@ public class StatisticExecutor {
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
             executor.execute();
-            AuditLog.getStatisticAudit().log("statistic DML success | QueryId [{}] | SQL: {}",
+            AuditLog.getStatisticAudit().info("statistic DML success | QueryId [{}] | SQL: {}",
                     DebugUtil.printId(context.getQueryId()), sql);
             return true;
         } catch (Exception e) {
-            AuditLog.getStatisticAudit().log("statistic DML fail | QueryId [{}] | SQL: {}",
+            AuditLog.getStatisticAudit().info("statistic DML fail | QueryId [{}] | SQL: {}",
                     DebugUtil.printId(context.getQueryId()), sql);
             LOG.warn("statistic DML fail | {} | SQL {}", DebugUtil.printId(context.getQueryId()), sql, e);
             return false;

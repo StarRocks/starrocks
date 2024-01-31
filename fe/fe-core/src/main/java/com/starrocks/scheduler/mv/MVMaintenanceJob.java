@@ -320,7 +320,7 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
     private void deployTasks() throws Exception {
         QeProcessorImpl.QueryInfo queryInfo = QeProcessorImpl.QueryInfo.fromMVJob(getView().getMvId(), connectContext);
         QeProcessorImpl.INSTANCE.registerQuery(connectContext.getExecutionId(), queryInfo);
-        AuditLog.getMVAudit().log("MV maintenance job started | execute_id [{}] | mv_id [{}] ",
+        AuditLog.getMVAudit().info("MV maintenance job started | execute_id [{}] | mv_id [{}] ",
                 DebugUtil.printId(connectContext.getExecutionId()),
                 getView().getMvId());
 
