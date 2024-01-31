@@ -186,6 +186,8 @@ vectorized_functions = [
 
     [10322, "square", "DOUBLE", ["DOUBLE"], "MathFunctions::square"],
 
+    [10330, "cbrt", "DOUBLE", ["DOUBLE"], "MathFunctions::cbrt"],
+
     # 20xxx: bit functions
     [20010, 'bitand', 'TINYINT', ['TINYINT', 'TINYINT'], "BitFunctions::bitAnd<TYPE_TINYINT>"],
     [20011, 'bitand', 'SMALLINT', ['SMALLINT', 'SMALLINT'], "BitFunctions::bitAnd<TYPE_SMALLINT>"],
