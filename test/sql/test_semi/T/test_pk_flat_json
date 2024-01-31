@@ -1,8 +1,8 @@
 -- name: test_normal_flat_json @system
 
 CREATE TABLE `pjs1` (
-  `v1` bigint(20) NULL COMMENT "",
-  `v2` int(11) NULL COMMENT "",
+  `v1` bigint(20) NOT NULL COMMENT "",
+  `v2` int(11) NOT NULL COMMENT "",
   `j1` json NULL COMMENT "",
   `j2` json NULL COMMENT ""
 ) ENGINE=OLAP 

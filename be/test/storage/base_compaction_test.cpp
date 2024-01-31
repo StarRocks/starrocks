@@ -93,6 +93,16 @@ public:
         column_3->set_is_bf_column(false);
         column_3->set_aggregation("SUM");
 
+        ColumnPB* column_4 = tablet_schema_pb.add_column();
+        column_4->set_unique_id(3);
+        column_4->set_name("j1");
+        column_4->set_type("JSON");
+        column_4->set_length(65535);
+        column_4->set_is_key(false);
+        column_4->set_is_nullable(true);
+        column_4->set_is_bf_column(false);
+        column_4->set_aggregation("REPLACE");
+
         _tablet_schema = std::make_unique<TabletSchema>(tablet_schema_pb);
     }
 

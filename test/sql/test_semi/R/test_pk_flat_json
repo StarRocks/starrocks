@@ -1,7 +1,7 @@
 -- name: test_normal_flat_json @system
 CREATE TABLE `pjs1` (
-  `v1` bigint(20) NULL COMMENT "",
-  `v2` int(11) NULL COMMENT "",
+  `v1` bigint(20) NOT NULL COMMENT "",
+  `v2` int(11) NOT NULL COMMENT "",
   `j1` json NULL COMMENT "",
   `j2` json NULL COMMENT ""
 ) ENGINE=OLAP 
@@ -17,7 +17,6 @@ PROPERTIES (
 "compression" = "LZ4"
 );
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: primary key column[v1] cannot be nullable.')
 -- !result
 INSERT INTO `pjs1` (`v1`, `v2`, `j1`, `j2`) VALUES
 (1, 28, parse_json('{"key1": "value11", "key2": "value12", "key3": "value13", "key4": "value14", "key5": "value15", "key6": "value16", "key7": "value17", "key8": "value18"}'), parse_json('{"key1": "value11", "key2": "value12", "key3": "value13", "key4": "value14", "key5": "value15", "key6": "value16"}')),
@@ -30,7 +29,6 @@ INSERT INTO `pjs1` (`v1`, `v2`, `j1`, `j2`) VALUES
 (8, 54, parse_json('{"key1": "value81", "key2": "value82", "key3": "value83", "key4": "value84", "key5": "value85", "key6": "value86"}'), parse_json('{"key1": "value81", "key2": "value82", "key3": "value83", "key4": "value84", "key5": "value85", "key6": "value86", "key7": "value87", "key8": "value88"}')),
 (9, 67, parse_json('{"key1": "value91", "key2": "value92", "key3": "value93", "key4": "value94", "key5": "value95", "key6": "value96"}'), parse_json('{"key1": "value91", "key2": "value92", "key3": "value93", "key4": "value94", "key5": "value95", "key6": "value96", "key7": "value97", "key8": "value98", "key9": "value99"}'));
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Table pjs1 is not found.')
 -- !result
 INSERT INTO `pjs1` (`v1`, `v2`, `j1`, `j2`) VALUES
 (10, 79, parse_json('{"key1": "value101", "key2": "value102", "key3": "value103", "key4": "value104", "key5": "value105", "key6": "value106", "key7": "value107"}'), parse_json('{"key1": "value101", "key2": "value102", "key3": "value103", "key4": "value104", "key5": "value105", "key6": "value106", "key7": "value107"}')),
@@ -51,7 +49,6 @@ INSERT INTO `pjs1` (`v1`, `v2`, `j1`, `j2`) VALUES
 (25, 39, parse_json('{"key1": "value251", "key2": "value252", "key3": "value253", "key4": "value254", "key5": "value255", "key6": "value256", "key7": "value257", "key8": "value258"}'), parse_json('{"key1": "value251", "key2": "value252", "key3": "value253", "key4": "value254", "key5": "value255", "key6": "value256", "key7": "value257"}')),
 (26, 28, parse_json('{"key1": "value261", "key2": "value262", "key3": "value263", "key4": "value264", "key5": "value265", "key6": "value266", "key7": "value267", "key8": "value268", "key9": "value269"}'), parse_json('{"key1": "value261", "key2": "value262", "key3": "value263", "key4": "value264", "key5": "value265", "key6": "value266"}'));
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Table pjs1 is not found.')
 -- !result
 INSERT INTO `pjs1` (`v1`, `v2`, `j1`, `j2`) VALUES
 (27, 45, parse_json('{"key1": "value271", "key2": "value272", "key3": "value273", "key4": "value274", "key5": "value275"}'), parse_json('{"key1": "value271", "key2": "value272", "key3": "value273", "key4": "value274", "key5": "value275", "key6": "value276"}')),
@@ -68,7 +65,6 @@ INSERT INTO `pjs1` (`v1`, `v2`, `j1`, `j2`) VALUES
 (38, 78, parse_json('{"key1": "value381", "key2": "value382", "key3": "value383", "key4": "value384", "key5": "value385", "key6": "value386", "key7": "value387", "key8": "value388"}'), parse_json('{"key1": "value381", "key2": "value382", "key3": "value383", "key4": "value384", "key5": "value385", "key6": "value386", "key7": "value387", "key8": "value388", "key9": "value389"}')),
 (39, 9, parse_json('{"key1": "value391", "key2": "value392", "key3": "value393", "key4": "value394", "key5": "value395", "key6": "value396", "key7": "value397"}'), parse_json('{"key1": "value391", "key2": "value392", "key3": "value393", "key4": "value394", "key5": "value395", "key6": "value396", "key7": "value397"}'));
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Table pjs1 is not found.')
 -- !result
 INSERT INTO `pjs1` (`v1`, `v2`, `j1`, `j2`) VALUES
 (40, 65, parse_json('{"key1": "value401", "key2": "value402", "key3": "value403", "key4": "value404", "key5": "value405", "key6": "value406"}'), parse_json('{"key1": "value401", "key2": "value402", "key3": "value403", "key4": "value404", "key5": "value405", "key6": "value406", "key7": "value407", "key8": "value408"}')),
@@ -83,229 +79,246 @@ INSERT INTO `pjs1` (`v1`, `v2`, `j1`, `j2`) VALUES
 (49, 5, parse_json('{"key1": "value491", "key2": "value492", "key3": "value493", "key4": "value494", "key5": "value495", "key6": "value496", "key7": "value497"}'), parse_json('{"key1": "value491", "key2": "value492", "key3": "value493", "key4": "value494", "key5": "value495", "key6": "value496", "key7": "value497"}')),
 (50, 76, parse_json('{"key1": "value501", "key2": "value502", "key3": "value503", "key4": "value504", "key5": "value505", "key6": "value506", "key7": "value507", "key8": "value508"}'), parse_json('{"key1": "value501", "key2": "value502", "key3": "value503", "key4": "value504", "key5": "value505", "key6": "value506", "key7": "value507"}'));
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Table pjs1 is not found.')
 -- !result
-select get_json_int(j1, "$.key2"), get_json_double(j2, "$.key3"), get_json_string(j2, "$.key4") from pjs1 order by v1 limit 2;
+select get_json_string(j1, "$.key2"), get_json_double(j2, "$.key3"), get_json_string(j2, "$.key4") from pjs1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+value12	None	value14
+value22	None	value24
 -- !result
-select get_json_int(j1, "$.key8"), get_json_double(j2, "$.key9"), get_json_string(j2, "$.key10") from pjs1 order by v1 limit 2;
+select get_json_string(j1, "$.key8"), get_json_double(j2, "$.key9"), get_json_string(j2, "$.key10") from pjs1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+value18	None	None
+None	None	None
 -- !result
-select get_json_int(j1, "$.key12"), get_json_double(j2, "$.key13"), get_json_string(j2, "$") from pjs1 order by v1 limit 2;
+select get_json_string(j1, "$.key12"), get_json_double(j2, "$.key13"), get_json_string(j2, "$") from pjs1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+None	None	{"key1": "value11", "key2": "value12", "key3": "value13", "key4": "value14", "key5": "value15", "key6": "value16"}
+None	None	{"key1": "value21", "key2": "value22", "key3": "value23", "key4": "value24", "key5": "value25", "key6": "value26", "key7": "value27", "key8": "value28"}
 -- !result
-select get_json_int(j1, "asdf"), get_json_double(j2, "$13"), get_json_string(j2, "$.key3") from pjs1 order by v1 limit 2;
+select get_json_string(j1, "asdf"), get_json_double(j2, "$13"), get_json_string(j2, "$.key3") from pjs1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+None	None	value13
+None	None	value23
 -- !result
-select get_json_int(j1, "$.key2"), get_json_double(j2, "$.key2.key3") from pjs1 order by v1 limit 2;
+select get_json_string(j1, "$.key2"), get_json_double(j2, "$.key2.key3") from pjs1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+value12	None
+value22	None
 -- !result
 select JSON_EXISTS(j1, "$.key2"), JSON_EXISTS(j2, "$.key2.key3") from pjs1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+1	0
+1	0
 -- !result
 select JSON_EXISTS(j1, "$.key2"), JSON_EXISTS(j2, "$.key3"), JSON_EXISTS(j2, "$.key4") from pjs1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+1	1	1
+1	1	1
 -- !result
 select JSON_EXISTS(j1, "$.key8"), JSON_EXISTS(j2, "$.key9"), JSON_EXISTS(j2, "$.key10") from pjs1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+1	0	0
+0	0	0
 -- !result
 select JSON_EXISTS(j1, "$.key12"), JSON_EXISTS(j2, "$.key13"), JSON_EXISTS(j2, "$") from pjs1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+0	0	1
+0	0	1
 -- !result
 select JSON_EXISTS(j1, "asdf"), JSON_EXISTS(j2, "$13"), JSON_EXISTS(j2, "$.key3") from pjs1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+0	0	1
+0	0	1
 -- !result
 select JSON_EXISTS(j1, "$.key2"), JSON_EXISTS(j2, "$.key2.key3") from pjs1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+1	0
+1	0
 -- !result
 select JSON_LENGTH(j1, "$.key2"), JSON_LENGTH(j2, "$.key2.key3") from pjs1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+1	0
+1	0
 -- !result
 select JSON_LENGTH(j1, "$.key2"), JSON_LENGTH(j2, "$.key3"), JSON_LENGTH(j2, "$.key4") from pjs1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+1	1	1
+1	1	1
 -- !result
 select JSON_LENGTH(j1, "$.key8"), JSON_LENGTH(j2, "$.key9"), JSON_LENGTH(j2, "$.key10") from pjs1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+1	0	0
+0	0	0
 -- !result
 select JSON_LENGTH(j1, "$.key12"), JSON_LENGTH(j2, "$.key13"), JSON_LENGTH(j2, "$") from pjs1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+0	0	6
+0	0	8
 -- !result
 select JSON_LENGTH(j1, "asdf"), JSON_LENGTH(j2, "$13"), JSON_LENGTH(j2, "$.key3") from pjs1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+0	0	1
+0	0	1
 -- !result
 select JSON_LENGTH(j1, "$.key2"), JSON_LENGTH(j2, "$.key2.key3") from pjs1 where v2 = 2 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+1	0
 -- !result
 select JSON_LENGTH(j1, "$.key2"), JSON_LENGTH(j2, "$.key3"), JSON_LENGTH(j2, "$.key4") from pjs1 where v2 > 1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+1	1	1
+1	1	1
 -- !result
 select JSON_LENGTH(j1, "$.key8"), JSON_LENGTH(j2, "$.key9"), JSON_LENGTH(j2, "$.key10") from pjs1 where v1 < 1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
 -- !result
 select JSON_LENGTH(j1, "$.key12"), JSON_LENGTH(j2, "$.key13"), JSON_LENGTH(j2, "$") from pjs1 where v1 = -1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
 -- !result
 select JSON_LENGTH(j1, "asdf"), JSON_LENGTH(j2, "$13"), JSON_LENGTH(j2, "$.key3") from pjs1 where v1 = 10 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+0	0	1
 -- !result
 delete from pjs1 where v1 = 1;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Table pjs1 is not found.')
 -- !result
 delete from pjs1 where v1 = 2;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Table pjs1 is not found.')
 -- !result
 delete from pjs1 where v1 = 3;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Table pjs1 is not found.')
 -- !result
 select JSON_EXISTS(j1, "$.key12"), JSON_EXISTS(j2, "$.key13"), JSON_EXISTS(j2, "$") from pjs1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+0	0	1
+0	0	1
 -- !result
 select JSON_LENGTH(j1, "$.key8"), JSON_LENGTH(j2, "$.key9"), JSON_LENGTH(j2, "$.key10") from pjs1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+0	0	0
+0	1	0
 -- !result
-select get_json_int(j1, "asdf"), get_json_double(j2, "$13"), get_json_string(j2, "$.key3") from pjs1 order by v1 limit 2;
+select get_json_string(j1, "asdf"), get_json_double(j2, "$13"), get_json_string(j2, "$.key3") from pjs1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+None	None	value43
+None	None	value53
 -- !result
 select JSON_LENGTH(j1, "$.key12"), JSON_LENGTH(j2, "$.key13"), JSON_LENGTH(j2, "$") from pjs1 where v1 = -1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
 -- !result
 ALTER TABLE pjs1 ADD COLUMN j3 JSON DEFAULT NULL AFTER j2;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Table test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1 is not found.')
 -- !result
 ALTER TABLE pjs1 ADD COLUMN j4 JSON DEFAULT NULL AFTER j1;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Table test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1 is not found.')
 -- !result
-select get_json_int(j1, "$.key2"), get_json_double(j3, "$.key3"), get_json_string(j3, "$.key4") from pjs1 order by v1 limit 2;
+select get_json_string(j1, "$.key2"), get_json_double(j3, "$.key3"), get_json_string(j3, "$.key4") from pjs1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+value42	None	None
+value52	None	None
 -- !result
-select get_json_int(j1, "$.key2"), get_json_double(j3, "$.key2.key3") from pjs1 order by v1 limit 2;
+select get_json_string(j1, "$.key2"), get_json_double(j3, "$.key2.key3") from pjs1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+value42	None
+value52	None
 -- !result
 select JSON_EXISTS(j1, "$.key12"), JSON_EXISTS(j3, "$.key13"), JSON_EXISTS(j3, "$") from pjs1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+0	None	None
+0	None	None
 -- !result
 select JSON_EXISTS(j1, "asdf"), JSON_EXISTS(j3, "$13"), JSON_EXISTS(j3, "$.key3") from pjs1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+0	None	None
+0	None	None
 -- !result
 select JSON_LENGTH(j1, "$.key2"), JSON_LENGTH(j3, "$.key2.key3") from pjs1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+1	None
+1	None
 -- !result
 select JSON_LENGTH(j1, "asdf"), JSON_LENGTH(j3, "$13"), JSON_LENGTH(j3, "$.key3") from pjs1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+0	None	None
+0	None	None
 -- !result
 select JSON_LENGTH(j1, "$.key2"), JSON_LENGTH(j3, "$.key2.key3") from pjs1 where v2 = 2 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+1	None
 -- !result
 select JSON_LENGTH(j1, "$.key12"), JSON_LENGTH(j3, "$.key13"), JSON_LENGTH(j3, "$") from pjs1 where v1 = -1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
 -- !result
 select JSON_LENGTH(j1, "$.key12"), JSON_LENGTH(j3, "$.key13"), JSON_LENGTH(j3, "$") from pjs1 where v1 = -1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
 -- !result
 select JSON_LENGTH(j1, "$.key12"), JSON_LENGTH(j3, "$.key13"), JSON_LENGTH(j3, "$") from pjs1 where v1 = -1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
 -- !result
-select get_json_int(j4, "$.key2"), get_json_double(j3, "$.key3"), get_json_string(j3, "$.key4") from pjs1 order by v1 limit 2;
+select get_json_string(j4, "$.key2"), get_json_double(j3, "$.key3"), get_json_string(j3, "$.key4") from pjs1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+None	None	None
+None	None	None
 -- !result
-select get_json_int(j4, "$.key2"), get_json_double(j3, "$.key2.key3") from pjs1 order by v1 limit 2;
+select get_json_string(j4, "$.key2"), get_json_double(j3, "$.key2.key3") from pjs1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+None	None
+None	None
 -- !result
 select JSON_EXISTS(j4, "$.key12"), JSON_EXISTS(j3, "$.key13"), JSON_EXISTS(j3, "$") from pjs1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+None	None	None
+None	None	None
 -- !result
 select JSON_EXISTS(j4, "asdf"), JSON_EXISTS(j3, "$13"), JSON_EXISTS(j2, "$.key3") from pjs1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+None	None	1
+None	None	1
 -- !result
 select JSON_LENGTH(j4, "$.key2"), JSON_LENGTH(j2, "$.key2.key3") from pjs1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+None	0
+None	0
 -- !result
 select JSON_LENGTH(j4, "asdf"), JSON_LENGTH(j2, "$13"), JSON_LENGTH(j2, "$.key3") from pjs1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+None	0	1
+None	0	1
 -- !result
 select JSON_LENGTH(j4, "$.key2"), JSON_LENGTH(j2, "$.key2.key3") from pjs1 where v2 = 2 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+None	0
 -- !result
 select JSON_LENGTH(j4, "$.key12"), JSON_LENGTH(j2, "$.key13"), JSON_LENGTH(j3, "$") from pjs1 where v1 = -1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
 -- !result
 select JSON_LENGTH(j4, "$.key12"), JSON_LENGTH(j3, "$.key13"), JSON_LENGTH(j3, "$") from pjs1 where v1 = -1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
 -- !result
 select JSON_LENGTH(j4, "$.key12"), JSON_LENGTH(j3, "$.key13"), JSON_LENGTH(j2, "$") from pjs1 where v1 = -1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
 -- !result
 ALTER TABLE pjs1 DROP COLUMN j1;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Table test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1 is not found.')
 -- !result
 ALTER TABLE pjs1 DROP COLUMN j4;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Table test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1 is not found.')
 -- !result
 select JSON_EXISTS(j2, "$.key12"), JSON_EXISTS(j2, "$.key13"), JSON_EXISTS(j2, "$") from pjs1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+0	0	1
+0	0	1
 -- !result
 select JSON_LENGTH(j2, "$.key8"), JSON_LENGTH(j2, "$.key9"), JSON_LENGTH(j2, "$.key10") from pjs1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+0	0	0
+1	1	0
 -- !result
-select get_json_int(j2, "asdf"), get_json_double(j2, "$13"), get_json_string(j2, "$.key3") from pjs1 order by v1 limit 2;
+select get_json_string(j2, "asdf"), get_json_double(j2, "$13"), get_json_string(j2, "$.key3") from pjs1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
+None	None	value43
+None	None	value53
 -- !result
 select JSON_LENGTH(j2, "$.key12"), JSON_LENGTH(j2, "$.key13"), JSON_LENGTH(j2, "$") from pjs1 where v1 = -1 order by v1 limit 2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_974d5dbebb7111eeb63200163e04d4c2.pjs1'.")
 -- !result
