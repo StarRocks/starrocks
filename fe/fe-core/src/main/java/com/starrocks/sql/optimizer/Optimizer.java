@@ -89,6 +89,7 @@ import com.starrocks.sql.optimizer.rule.tree.lowcardinality.LowCardinalityRewrit
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.PruneSubfieldRule;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.PushDownSubfieldRule;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
+import com.starrocks.sql.optimizer.task.PrepareCollectMetaTask;
 import com.starrocks.sql.optimizer.task.RewriteTreeTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.validate.MVRewriteValidator;
@@ -428,6 +429,9 @@ public class Optimizer {
 
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.MULTI_DISTINCT_REWRITE);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
+
+        // No heavy metadata operation before external table partition prune
+        prepareMetaOnlyOnce(tree, rootTaskContext);
 
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_EMPTY_OPERATOR);
@@ -853,5 +857,12 @@ public class Optimizer {
         List<Rule> rules = Collections.singletonList(rule);
         context.getTaskScheduler().pushTask(new RewriteTreeTask(rootTaskContext, tree, rules, true));
         context.getTaskScheduler().executeTasks(rootTaskContext);
+    }
+
+    private void prepareMetaOnlyOnce(OptExpression tree, TaskContext rootTaskContext) {
+        if (rootTaskContext.getOptimizerContext().getSessionVariable().enableParallelPrepareMetadata()) {
+            context.getTaskScheduler().pushTask(new PrepareCollectMetaTask(rootTaskContext, tree));
+            context.getTaskScheduler().executeTasks(rootTaskContext);
+        }
     }
 }
