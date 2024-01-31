@@ -10,6 +10,7 @@ import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.task.SeriallyTaskScheduler;
 import com.starrocks.sql.optimizer.task.TaskContext;
@@ -30,6 +31,10 @@ public class OptimizerContext {
     private OptimizerTraceInfo traceInfo;
     private OptimizerConfig optimizerConfig;
     private List<MaterializationContext> candidateMvs;
+
+    // Is not null predicate can be derived from inner join or semi join,
+    // which should be kept to be used to convert outer join into inner join.
+    private List<IsNullPredicateOperator> pushdownNotNullPredicates = Lists.newArrayList();
 
     @VisibleForTesting
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
@@ -128,5 +133,18 @@ public class OptimizerContext {
 
     public void addCandidateMvs(MaterializationContext candidateMv) {
         this.candidateMvs.add(candidateMv);
+    }
+
+    public List<IsNullPredicateOperator> getPushdownNotNullPredicates() {
+        return pushdownNotNullPredicates;
+    }
+
+    public void addPushdownNotNullPredicates(IsNullPredicateOperator notNullPredicate) {
+        pushdownNotNullPredicates.add(notNullPredicate);
+    }
+
+    // Should clear pushdownNotNullPredicates after each call of PUSH_DOWN_PREDICATE rule set
+    public void reset() {
+        pushdownNotNullPredicates.clear();
     }
 }

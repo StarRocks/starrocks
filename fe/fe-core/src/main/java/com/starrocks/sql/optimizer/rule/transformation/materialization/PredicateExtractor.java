@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.TreeRangeSet;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -67,14 +68,20 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
         ScalarOperator right = predicate.getChild(1);
         if (left.isColumnRef() && right.isConstantRef()) {
             ConstantOperator constant = (ConstantOperator) right;
-            TreeRangeSet<ConstantOperator> rangeSet = TreeRangeSet.create();
-            rangeSet.addAll(range(predicate.getBinaryType(), constant));
-            return new ColumnRangePredicate(left.cast(), rangeSet);
+            TreeRangeSet<ConstantOperator> rangeSet = range(predicate.getBinaryType(), constant);
+            if (rangeSet == null) {
+                residualPredicates.add(predicate);
+            } else {
+                return new ColumnRangePredicate(left.cast(), rangeSet);
+            }
         } else if (left.isConstantRef() && right.isColumnRef()) {
             ConstantOperator constant = (ConstantOperator) left;
-            TreeRangeSet<ConstantOperator> rangeSet = TreeRangeSet.create();
-            rangeSet.addAll(range(predicate.getBinaryType(), constant));
-            return new ColumnRangePredicate(right.cast(), rangeSet);
+            TreeRangeSet<ConstantOperator> rangeSet = range(predicate.getBinaryType(), constant);
+            if (rangeSet == null) {
+                residualPredicates.add(predicate);
+            } else {
+                return new ColumnRangePredicate(right.cast(), rangeSet);
+            }
         } else if (left.isColumnRef() && right.isColumnRef() && context.isAnd()) {
             if (predicate.getBinaryType().isEqual()) {
                 columnEqualityPredicates.add(predicate);
@@ -84,14 +91,16 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
         } else if (context.isAnd()) {
             if (checkDateTrunc(left, right)) {
                 ConstantOperator constant = (ConstantOperator) right;
-                TreeRangeSet<ConstantOperator> rangeSet = TreeRangeSet.create();
-                rangeSet.addAll(range(predicate.getBinaryType(), constant));
-                return new ColumnRangePredicate(left.getChild(1).cast(), rangeSet);
+                TreeRangeSet<ConstantOperator> rangeSet = range(predicate.getBinaryType(), constant);
+                if (rangeSet != null) {
+                    return new ColumnRangePredicate(left.getChild(1).cast(), rangeSet);
+                }
             } else if (checkDateTrunc(right, left)) {
                 ConstantOperator constant = (ConstantOperator) left;
-                TreeRangeSet<ConstantOperator> rangeSet = TreeRangeSet.create();
-                rangeSet.addAll(range(predicate.getBinaryType(), constant));
-                return new ColumnRangePredicate(right.getChild(1).cast(), rangeSet);
+                TreeRangeSet<ConstantOperator> rangeSet = range(predicate.getBinaryType(), constant);
+                if (rangeSet != null) {
+                    return new ColumnRangePredicate(right.getChild(1).cast(), rangeSet);
+                }
             }
             residualPredicates.add(predicate);
         }
@@ -238,8 +247,8 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
         return rangePredicateOptional;
     }
 
-    private static  <C extends Comparable<C>> TreeRangeSet<C> range(BinaryPredicateOperator.BinaryType type, C value) {
-        TreeRangeSet<C> rangeSet = TreeRangeSet.create();
+    private static TreeRangeSet<ConstantOperator> range(BinaryPredicateOperator.BinaryType type, ConstantOperator value) {
+        TreeRangeSet<ConstantOperator> rangeSet = TreeRangeSet.create();
         switch (type) {
             case EQ:
                 rangeSet.add(Range.singleton(value));
@@ -257,6 +266,10 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
                 rangeSet.add(Range.lessThan(value));
                 return rangeSet;
             case NE:
+                Type valueType = value.getType();
+                if (!valueType.isNumericType() && !valueType.isDateType()) {
+                    return null;
+                }
                 rangeSet.add(Range.greaterThan(value));
                 rangeSet.add(Range.lessThan(value));
                 return rangeSet;
