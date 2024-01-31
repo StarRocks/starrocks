@@ -99,7 +99,7 @@ public class PipelineDriverAllocator {
     }
 
     public void release(LogicalSlot slot) {
-        boolean hasAllocated = allocatedSlotIds.remove(slot.getSlotId());
+        boolean hasAllocated = slot != null && allocatedSlotIds.remove(slot.getSlotId());
         if (hasAllocated) {
             numAllocatedDrivers.getAndAdd(-slot.getNumDrivers());
         }
