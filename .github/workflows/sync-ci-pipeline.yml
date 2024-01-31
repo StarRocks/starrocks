@@ -32,6 +32,7 @@ permissions:
 jobs:
   pr-label:
     runs-on: [ self-hosted, sync-normal ]
+    name: PR LABEL
     env:
       PR_NUMBER: ${{ github.event.number }}
     outputs:
@@ -238,7 +239,8 @@ jobs:
       - name: notify
         if: >
           needs.build.result == 'failure' ||
-          (needs.build.result == 'success' && contains(needs.pr-label.outputs.labels, 'conflict'))
+          (needs.build.result == 'success' && contains(needs.pr-label.outputs.labels, 'conflict')) ||
+          (needs.build.result == 'success' && contains(needs.pr-label.outputs.labels, 'ERROR'))
         env:
           build_res: ${{ needs.build.result }}
         run: |

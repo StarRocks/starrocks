@@ -238,9 +238,8 @@ jobs:
 
   build:
     runs-on: [ self-hosted, normal ]
-    needs: [ info, be-ut, clang-tidy, fe-ut ]
+    needs: [ info, clang-format, fe-codestyle-check ]
     name: BUILD
-    if: always() && needs.clang-tidy.result != 'failure' && needs.be-ut.result != 'failure' && needs.fe-ut.result != 'failure'
     env:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
     steps:
@@ -275,14 +274,7 @@ jobs:
     needs: [ info, clang-format, fe-codestyle-check, be-ut, clang-tidy, fe-ut, build ]
     name: REPORT
     if: >
-      always() &&
-      needs.info.result == 'success' && (
-      needs.clang-format.result == 'failure' ||
-      needs.be-ut.result == 'failure' ||
-      needs.clang-tidy.result == 'failure' ||
-      needs.fe-codestyle-check.result == 'failure' ||
-      needs.fe-ut.result == 'failure' ||
-      needs.build.result == 'failure')
+      always() && needs.info.result == 'success'
     env:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       ACTION_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
