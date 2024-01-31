@@ -94,7 +94,7 @@ private:
     Status _load_all_partition_build_side(RuntimeState* state);
 
     Status _load_partition_build_side(workgroup::YieldContext& ctx, RuntimeState* state,
-                                      const std::shared_ptr<spill::SpillerReader>& reader, size_t idx, int* yield);
+                                      const std::shared_ptr<spill::SpillerReader>& reader, size_t idx);
 
     void _update_status(Status&& status) const;
 

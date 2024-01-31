@@ -242,7 +242,7 @@ Status SpillableHashJoinProbeOperator::_push_probe_chunk(RuntimeState* state, co
 
 Status SpillableHashJoinProbeOperator::_load_partition_build_side(workgroup::YieldContext& ctx, RuntimeState* state,
                                                                   const std::shared_ptr<spill::SpillerReader>& reader,
-                                                                  size_t idx, int* yield) {
+                                                                  size_t idx) {
     using SyncTaskExecutor = spill::SyncTaskExecutor;
     using MemTrackerGuard = spill::MemTrackerGuard;
     TRY_CATCH_ALLOC_SCOPE_START()
@@ -253,11 +253,10 @@ Status SpillableHashJoinProbeOperator::_load_partition_build_side(workgroup::Yie
     enum SpillLoadPartitionStage { BEGIN = 0, FINISH = 1 };
     ctx.total_yield_point_cnt = FINISH;
     auto wg = ctx.wg;
-    int64_t time_spent_ns = 0;
     while (!finish && !_is_finished) {
-        BREAK_IF_YIELD(wg, yield, time_spent_ns);
+        BREAK_IF_YIELD(wg, &ctx.need_yield, ctx.time_spent_ns);
         {
-            SCOPED_RAW_TIMER(&time_spent_ns);
+            SCOPED_RAW_TIMER(&ctx.time_spent_ns);
             if (state->is_cancelled()) {
                 return Status::Cancelled("cancelled");
             }
@@ -304,9 +303,8 @@ Status SpillableHashJoinProbeOperator::_load_all_partition_build_side(RuntimeSta
                 }
                 yield_ctx.time_spent_ns = 0;
                 yield_ctx.need_yield = false;
-                int yield = false;
-                _update_status(_load_partition_build_side(yield_ctx, state, reader, i, &yield));
-                if (yield) {
+                _update_status(_load_partition_build_side(yield_ctx, state, reader, i));
+                if (yield_ctx.need_yield) {
                     defer.cancel();
                 }
             }

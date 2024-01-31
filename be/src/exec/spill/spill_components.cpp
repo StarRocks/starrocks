@@ -430,8 +430,8 @@ Status PartitionedSpillerWriter::spill_partition(workgroup::YieldContext& yield_
     auto block = partition->spill_writer->block();
     auto io_ctx = std::any_cast<PartitionedFlushContextPtr>(yield_ctx.task_context_data);
     if (!(block->is_remote() ^ io_ctx->use_local_io_executor)) {
-        LOG(INFO) << fmt::format("block[{}], use_local_io_executor[{}], should yield", block->debug_string(),
-                                 io_ctx->use_local_io_executor);
+        TRACE_SPILL_LOG << fmt::format("block[{}], use_local_io_executor[{}], should yield", block->debug_string(),
+                                       io_ctx->use_local_io_executor);
         io_ctx->use_local_io_executor = !block->is_remote();
         yield_ctx.need_yield = true;
         return Status::OK();
