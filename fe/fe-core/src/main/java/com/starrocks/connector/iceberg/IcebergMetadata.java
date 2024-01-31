@@ -34,6 +34,7 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileDesc;
@@ -142,6 +143,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
     private final Map<IcebergFilter, List<FileScanTask>> splitTasks = new ConcurrentHashMap<>();
     private final Set<IcebergFilter> scannedTables = new HashSet<>();
+    private final Set<IcebergFilter> preparedTables = ConcurrentHashMap.newKeySet();
 
     // FileScanTaskSchema -> Pair<schema_string, partition_string>
     private final Map<FileScanTaskSchema, Pair<String, String>> fileScanTaskSchemas = new ConcurrentHashMap<>();
@@ -398,10 +400,36 @@ public class IcebergMetadata implements ConnectorMetadata {
         return partitions.build();
     }
 
+    @Override
+    public boolean prepareMetadata(MetaPreparationItem item, Tracers tracers) {
+        IcebergFilter key;
+        IcebergTable icebergTable;
+        icebergTable = (IcebergTable) item.getTable();
+        String dbName = icebergTable.getRemoteDbName();
+        String tableName = icebergTable.getRemoteTableName();
+        Optional<Snapshot> snapshot = icebergTable.getSnapshot();
+        if (snapshot.isEmpty()) {
+            return true;
+        }
+
+        key = IcebergFilter.of(dbName, tableName, snapshot.get().snapshotId(), item.getPredicate());
+        if (!preparedTables.add(key)) {
+            return true;
+        }
+
+        triggerIcebergPlanFilesIfNeeded(key, icebergTable, item.getPredicate(), item.getLimit(), tracers);
+        return true;
+    }
+
     private void triggerIcebergPlanFilesIfNeeded(IcebergFilter key, IcebergTable table, ScalarOperator predicate, long limit) {
+        triggerIcebergPlanFilesIfNeeded(key, table, predicate, limit, null);
+    }
+
+    private void triggerIcebergPlanFilesIfNeeded(IcebergFilter key, IcebergTable table, ScalarOperator predicate,
+                                                 long limit, Tracers tracers) {
         if (!scannedTables.contains(key)) {
             try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.processSplit." + key)) {
-                collectTableStatisticsAndCacheIcebergSplit(table, predicate, limit);
+                collectTableStatisticsAndCacheIcebergSplit(table, predicate, limit, tracers);
             }
         }
     }
@@ -480,7 +508,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         return partitionKeys;
     }
 
-    private void collectTableStatisticsAndCacheIcebergSplit(Table table, ScalarOperator predicate, long limit) {
+    private void collectTableStatisticsAndCacheIcebergSplit(Table table, ScalarOperator predicate, long limit, Tracers tracers) {
         IcebergTable icebergTable = (IcebergTable) table;
         Optional<Snapshot> snapshot = icebergTable.getSnapshot();
         // empty table
@@ -595,10 +623,18 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         Optional<ScanReport> metrics = metricsReporter.getReporter(catalogName, dbName, tableName, snapshotId, icebergPredicate);
 
-        metrics.ifPresent(metric ->
-                Tracers.record(Tracers.Module.EXTERNAL, "ICEBERG.ScanMetrics." +
-                                metric.tableName() + "["  + icebergPredicate + "]",
-                        metric.scanMetrics().toString()));
+        if (metrics.isPresent()) {
+            Tracers.Module module = Tracers.Module.EXTERNAL;
+            String name = "ICEBERG.ScanMetrics." + metrics.get().tableName() + "["  + icebergPredicate + "]";
+            String value = metrics.get().scanMetrics().toString();
+            if (tracers == null) {
+                Tracers.record(module, name, value);
+            } else {
+                synchronized (this) {
+                    Tracers.record(tracers, module, name, value);
+                }
+            }
+        }
 
         splitTasks.put(key, icebergScanTasks);
         scannedTables.add(key);
