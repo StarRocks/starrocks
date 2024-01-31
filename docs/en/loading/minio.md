@@ -21,7 +21,7 @@ Make sure the source data you want to load into StarRocks is properly stored in 
 In this topic, we provide you with a sample dataset. You can download this with `curl`:
 
 ```bash
-curl -O https://starrocks-datasets.s3.amazonaws.com/user_behavior_ten_million_rows.parquet
+curl -O https://starrocks-examples.s3.amazonaws.com/user_behavior_ten_million_rows.parquet
 ```
 
 Load the Parquet file into your MinIO system and note the bucket name. The examples in this guide
