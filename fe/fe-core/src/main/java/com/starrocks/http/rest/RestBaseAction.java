@@ -143,8 +143,8 @@ public class RestBaseAction extends BaseAction {
     public void redirectTo(BaseRequest request, BaseResponse response, TNetworkAddress addr)
             throws DdlException {
         String urlStr = request.getRequest().uri();
-        URI urlObj = null;
-        URI resultUriObj = null;
+        URI urlObj;
+        URI resultUriObj;
         try {
             urlObj = new URI(urlStr);
             resultUriObj = new URI("http", null, addr.getHostname(),
