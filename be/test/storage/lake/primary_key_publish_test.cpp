@@ -861,6 +861,69 @@ TEST_P(LakePrimaryKeyPublishTest, test_batch_publish_1) {
     EXPECT_EQ(new_tablet_metadata->rowsets(2).num_dels(), 0);
 }
 
+TEST_P(LakePrimaryKeyPublishTest, test_transform_batch_to_single) {
+    auto [chunk0, indexes0] = gen_data_and_index(kChunkSize, 0, false, true);
+    auto [chunk1, indexes1] = gen_data_and_index(kChunkSize, 0, false, true);
+    auto base_version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    std::vector<int64_t> txn_ids;
+    auto txn_id1 = next_id();
+    txn_ids.emplace_back(txn_id1);
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id1)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_index_id(_tablet_schema->id())
+                                               .set_slot_descriptors(&_slot_pointers)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    ASSERT_OK(delta_writer->write(*chunk0, indexes0.data(), indexes0.size()));
+    ASSERT_OK(delta_writer->finish());
+    delta_writer->close();
+
+    auto txn_id2 = next_id();
+    txn_ids.emplace_back(txn_id2);
+    ASSIGN_OR_ABORT(delta_writer, DeltaWriterBuilder()
+                                          .set_tablet_manager(_tablet_mgr.get())
+                                          .set_tablet_id(tablet_id)
+                                          .set_txn_id(txn_id2)
+                                          .set_partition_id(_partition_id)
+                                          .set_mem_tracker(_mem_tracker.get())
+                                          .set_index_id(_tablet_schema->id())
+                                          .set_slot_descriptors(&_slot_pointers)
+                                          .build());
+    ASSERT_OK(delta_writer->open());
+    ASSERT_OK(delta_writer->write(*chunk1, indexes1.data(), indexes1.size()));
+    ASSERT_OK(delta_writer->finish());
+    delta_writer->close();
+
+    auto new_version = base_version + 2;
+    ASSERT_OK(batch_publish(tablet_id, base_version, new_version, txn_ids).status());
+    ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, new_version));
+    EXPECT_EQ(new_tablet_metadata->rowsets_size(), 2);
+    EXPECT_EQ(kChunkSize, read_rows(tablet_id, new_version));
+    EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), kChunkSize);
+    EXPECT_EQ(new_tablet_metadata->rowsets(1).num_dels(), 0);
+
+    // transform to single publish
+    new_version = base_version + 1;
+    ASSERT_OK(publish_single_version(tablet_id, new_version, txn_id1).status());
+    ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, new_version));
+    EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
+    EXPECT_EQ(kChunkSize, read_rows(tablet_id, new_version));
+    EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 0);
+
+    new_version = base_version + 2;
+    ASSERT_OK(publish_single_version(tablet_id, new_version, txn_id2).status());
+    ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, new_version));
+    EXPECT_EQ(new_tablet_metadata->rowsets_size(), 2);
+    EXPECT_EQ(kChunkSize, read_rows(tablet_id, new_version));
+    EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 12);
+    EXPECT_EQ(new_tablet_metadata->rowsets(1).num_dels(), 0);
+}
+
 TEST_P(LakePrimaryKeyPublishTest, test_mem_tracker) {
     EXPECT_EQ(1024 * 1024, _mem_tracker->limit());
     EXPECT_EQ(1024 * 1024 * config::lake_pk_preload_memory_limit_percent / 100,

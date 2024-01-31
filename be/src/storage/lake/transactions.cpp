@@ -71,10 +71,10 @@ static void clear_remote_snapshot_async(TabletManager* tablet_mgr, int64_t table
     files_to_delete->emplace_back(std::move(slog_path));
 }
 
-void adjust_base_version(int64_t tablet_id, TabletManager* tablet_mgr, int64_t* base_version) {
+void adjust_base_version(int64_t tablet_id, TabletManager* tablet_mgr, int64_t* base_version, int64_t new_version) {
     int64_t version = *base_version;
     auto metadata = tablet_mgr->get_latest_cached_tablet_metadata(tablet_id);
-    if (metadata != nullptr) {
+    if (metadata != nullptr && metadata->version() < new_version) {
         version = std::max(version, metadata->version());
     }
 
@@ -83,7 +83,7 @@ void adjust_base_version(int64_t tablet_id, TabletManager* tablet_mgr, int64_t* 
         // There is a possibility that the index version is newer than the version in remote storage.
         // Check whether the index version exists in remote storage. If not, clear and rebuild the index.
         auto res = tablet_mgr->get_tablet_metadata(tablet_id, index_version);
-        if (res.ok()) {
+        if (res.ok() && index_version < new_version) {
             version = index_version;
         } else {
             tablet_mgr->update_mgr()->remove_primary_index_cache(tablet_id);
@@ -130,7 +130,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
     };
 
     int64_t ori_base_version = base_version;
-    adjust_base_version(tablet_id, tablet_mgr, &base_version);
+    adjust_base_version(tablet_id, tablet_mgr, &base_version, new_version);
     if (base_version > new_version) {
         LOG(ERROR) << "base version should be less than or equal to new version, "
                    << "base version=" << base_version << ", new version=" << new_version << ", tablet_id=" << tablet_id;
@@ -175,7 +175,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
         auto txn_log_st = tablet_mgr->get_txn_log(log_path, false);
 
         if (txn_log_st.status().is_not_found()) {
-            if (i == txn_offset) {
+            if (i == 0) {
                 // this may happen in two situations
                 // 1. duplicate publish in mode single
                 if (txn_ids.size() == 1) {
