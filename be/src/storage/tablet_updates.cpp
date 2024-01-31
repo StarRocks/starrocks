@@ -1340,7 +1340,7 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
                         return;
                     }
                     st = _do_update(rowset_id, loaded_upsert, conditional_column, latest_applied_version.major_number(),
-                                    upserts, index, tablet_id, &new_deletes, apply_tschema);
+                                    upserts, index, tablet_id, &new_deletes, apply_tschema, iostat.get());
                     if (!st.ok()) {
                         std::string msg = strings::Substitute(
                                 "_apply_rowset_commit error: apply rowset update state failed: $0 $1", st.to_string(),
@@ -1402,7 +1402,7 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
         }
     }
     span->AddEvent("commit_index");
-    st = index.commit(&index_meta);
+    st = index.commit(&index_meta, iostat.get());
     if (!st.ok()) {
         std::string msg = strings::Substitute("primary index commit failed: $0", st.to_string());
         failure_handler(msg, true);
@@ -1592,8 +1592,8 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
               << " " << del_percent << "% rowset:" << rowset_id << " #seg:" << rowset->num_segments()
               << " #op(upsert:" << rowset->num_rows() << " del:" << delete_op << ") #del:" << old_total_del << "+"
               << new_del << "=" << total_del << " #dv:" << ndelvec << " duration:" << t_write - t_start << "ms"
-              << strings::Substitute("($0/$1/$2/$3)", t_apply - t_start, t_index - t_apply, t_delvec - t_index,
-                                     t_write - t_delvec);
+              << strings::Substitute("($0/$1/$2/$3) ", t_apply - t_start, t_index - t_apply, t_delvec - t_index,
+                                     t_write - t_delvec) << iostat->print_str();
     VLOG(1) << "rowset commit apply " << delvec_change_info << " " << _debug_string(true, true);
 }
 
@@ -1660,8 +1660,7 @@ Status TabletUpdates::_wait_for_version(const EditVersion& version, int64_t time
 
 Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t condition_column, int64_t read_version,
                                  const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index, int64_t tablet_id,
-                                 DeletesMap* new_deletes, const TabletSchemaCSPtr& tablet_schema,
-                                 IOStat* iostat) {
+                                 DeletesMap* new_deletes, const TabletSchemaCSPtr& tablet_schema, IOStat* iostat) {
     if (condition_column >= 0) {
         auto tablet_column = tablet_schema->column(condition_column);
         std::vector<uint32_t> read_column_ids;
@@ -1729,7 +1728,7 @@ Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t
     } else {
         MonotonicStopWatch watch;
         watch.start();
-        RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes, iostat.get()));
+        RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes, iostat));
         LOG(INFO) << "primary index upsert tid: " << tablet_id << ", cost: " << watch.elapsed_time() << ", "
                   << iostat->print_str();
     }
@@ -2090,6 +2089,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     }
     uint32_t max_src_rssid = max_rowset_id + rowset->num_segments() - 1;
 
+    std::unique_ptr<IOStat> iostat = std::make_unique<IOStat>();
     for (size_t i = 0; i < _compaction_state->pk_cols.size(); i++) {
         if (st = _compaction_state->load_segments(output_rowset, i); !st.ok()) {
             _compaction_state.reset();
@@ -2103,7 +2103,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         uint32_t rssid = rowset_id + i;
         tmp_deletes.clear();
         if (rebuild_index) {
-            st = index.insert(rssid, 0, *pk_col);
+            st = index.insert(rssid, 0, *pk_col, iostat.get());
             if (!st.ok()) {
                 _compaction_state.reset();
                 std::string msg = strings::Substitute("_apply_compaction_commit error: index isnert failed: $0 $1",
@@ -2113,7 +2113,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
             }
         } else {
             // replace will not grow hashtable, so don't need to check memory limit
-            st = index.try_replace(rssid, 0, *pk_col, max_src_rssid, &tmp_deletes);
+            st = index.try_replace(rssid, 0, *pk_col, max_src_rssid, &tmp_deletes, iostat.get());
             if (!st.ok()) {
                 _compaction_state.reset();
                 std::string msg = strings::Substitute("_apply_compaction_commit error: index try replace failed: $0 $1",
@@ -2137,7 +2137,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     _compaction_state.reset();
     int64_t t_index_delvec = MonotonicMillis();
 
-    st = index.commit(&index_meta);
+    st = index.commit(&index_meta, iostat.get());
     if (!st.ok()) {
         std::string msg =
                 strings::Substitute("primary index commit failed: $0 $1", st.to_string(), _debug_string(false, true));
@@ -2217,7 +2217,8 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
               << _cur_total_rows << " " << del_percent << "%"
               << " rowset:" << rowset_id << " #row:" << total_rows << " #del:" << total_deletes
               << " #delvec:" << delvecs.size() << " duration:" << t_write - t_start << "ms"
-              << strings::Substitute("($0/$1/$2)", t_load - t_start, t_index_delvec - t_load, t_write - t_index_delvec);
+              << strings::Substitute("($0/$1/$2) ", t_load - t_start, t_index_delvec - t_load, t_write - t_index_delvec)
+              << iostat->print_str();
     VLOG(1) << "update compaction apply " << _debug_string(true, true);
     if (row_before != row_after) {
         auto st = output_rowset->verify();

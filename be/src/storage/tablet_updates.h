@@ -51,6 +51,7 @@ class TabletReader;
 class ChunkChanger;
 class SegmentIterator;
 class PrimaryKeyDump;
+class IOStat;
 
 // save the context when reading from delta column files
 struct GetDeltaColumnContext {
@@ -410,7 +411,7 @@ private:
 
     Status _do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t condition_column, int64_t read_version,
                       const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index, int64_t tablet_id,
-                      DeletesMap* new_deletes, const TabletSchemaCSPtr& tablet_schema);
+                      DeletesMap* new_deletes, const TabletSchemaCSPtr& tablet_schema, IOStat* iostat);
 
     // This method will acquire |_lock|.
     size_t _get_rowset_num_deletes(uint32_t rowsetid);

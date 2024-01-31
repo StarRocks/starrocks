@@ -1041,10 +1041,10 @@ Status PrimaryIndex::prepare(const EditVersion& version, size_t n) {
     return Status::OK();
 }
 
-Status PrimaryIndex::commit(PersistentIndexMetaPB* index_meta) {
+Status PrimaryIndex::commit(PersistentIndexMetaPB* index_meta, IOStat* iostat) {
     auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
     if (_persistent_index != nullptr) {
-        return _persistent_index->commit(index_meta);
+        return _persistent_index->commit(index_meta, iostat);
     }
     return Status::OK();
 }
@@ -1236,7 +1236,8 @@ Status PrimaryIndex::_insert_into_persistent_index(uint32_t rssid, const vector<
     values.reserve(pks.size());
     RETURN_IF_ERROR(_build_persistent_values(rssid, rowids, 0, pks.size(), &values));
     const Slice* vkeys = _build_persistent_keys(pks, 0, pks.size(), &keys);
-    RETURN_IF_ERROR(_persistent_index->insert(pks.size(), vkeys, reinterpret_cast<IndexValue*>(values.data()), true, iostat));
+    RETURN_IF_ERROR(
+            _persistent_index->insert(pks.size(), vkeys, reinterpret_cast<IndexValue*>(values.data()), true, iostat));
     return Status::OK();
 }
 
@@ -1295,16 +1296,15 @@ Status PrimaryIndex::_get_from_persistent_index(const Column& key_col, std::vect
 
 [[maybe_unused]] Status PrimaryIndex::_replace_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
                                                                 const vector<uint32_t>& src_rssid,
-                                                                vector<uint32_t>* deletes,
-                                                                IOStat* iostat) {
+                                                                vector<uint32_t>* deletes, IOStat* iostat) {
     auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
     std::vector<Slice> keys;
     std::vector<uint64_t> values;
     values.reserve(pks.size());
     RETURN_IF_ERROR(_build_persistent_values(rssid, rowid_start, 0, pks.size(), &values));
-    Status st = _persistent_index->try_replace(pks.size(), _build_persistent_keys(pks, 0, pks.size(), &keys),
-                                               reinterpret_cast<IndexValue*>(values.data()), src_rssid, deletes,
-                                               iostat);
+    Status st =
+            _persistent_index->try_replace(pks.size(), _build_persistent_keys(pks, 0, pks.size(), &keys),
+                                           reinterpret_cast<IndexValue*>(values.data()), src_rssid, deletes, iostat);
     if (!st.ok()) {
         LOG(WARNING) << "try replace persistent index failed";
     }

@@ -103,16 +103,13 @@ struct IOStat {
 
     std::string print_str() {
         return fmt::format(
-                "IOStat \n"
-                "Time cost:\n"
                 "get_in_shard_cnt: {} get_in_shard_cost: {} read_io_bytes: {} l0_write_cost: {} "
-                "l1_l2_read_cost: {} flush_or_wal_cost: {} compaction_cost: {} reload_meta_cost: {} \n"
-                "Write Bytes:\n"
-                "dump_snapshot_bytes: {} append_wal_bytes: {} total_write_l1_bytes: {} flush_advance_bytes: {} "
+                "l1_l2_read_cost: {} flush_or_wal_cost: {} compaction_cost: {} reload_meta_cost: {} "
+                "dump_snapshot_bytes: {} append_wal_bytes: {} total_write_l1_bytes: {} flush_l1_bytes: {} "
                 "merge_advance_bytes: {} merge_compaction_bytes: {} ",
                 get_in_shard_cnt, get_in_shard_cost, read_io_bytes, l0_write_cost, l1_l2_read_cost, flush_or_wal_cost,
                 compaction_cost, reload_meta_cost, dump_snapshot_bytes, append_wal_bytes, total_write_l1_bytes,
-                flush_advance_bytes, merge_advance_bytes, merge_compaction_bytes);
+                flush_l1_bytes, merge_advance_bytes, merge_compaction_bytes);
     }
 };
 
@@ -702,7 +699,7 @@ public:
     Status abort();
 
     // commit modification
-    Status commit(PersistentIndexMetaPB* index_meta, IOStat* stat = nullptr);
+    Status commit(PersistentIndexMetaPB* index_meta, IOStat* iostat = nullptr);
 
     // apply modification
     Status on_commited();
@@ -725,14 +722,15 @@ public:
     // |old_values|: return old values for updates, or set to NullValue for inserts
     // |stat|: used for collect statistic
     virtual Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                          IOStat* stat = nullptr);
+                          IOStat* iostat = nullptr);
 
     // batch insert, return error if key already exists
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array
     // |check_l1|: also check l1 for insertion consistency(key must not exist previously), may imply heavy IO costs
-    virtual Status insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1, IOStat* iostat = nullptr);
+    virtual Status insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1,
+                          IOStat* iostat = nullptr);
 
     // batch erase
     // |n|: size of key/value array
@@ -833,7 +831,7 @@ private:
                                       bool keep_delete);
     Status _merge_compaction_advance();
     // merge l0 and l1 into new l1, then clear l0
-    Status _merge_compaction();
+    Status _merge_compaction(IOStat* iostat);
 
     Status _load(const PersistentIndexMetaPB& index_meta, bool reload = false);
     Status _reload(const PersistentIndexMetaPB& index_meta);
@@ -855,7 +853,7 @@ private:
     void _get_stat_from_immutable_index(ImmutableIndex* immu_index, uint32_t key_size, size_t& total_size,
                                         size_t& total_usage);
 
-    Status _minor_compaction(PersistentIndexMetaPB* index_meta);
+    Status _minor_compaction(PersistentIndexMetaPB* index_meta, IOStat* iostat);
 
     uint64_t _l1_l2_file_size() const;
 

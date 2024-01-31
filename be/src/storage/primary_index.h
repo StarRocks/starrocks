@@ -157,20 +157,22 @@ private:
     const Slice* _build_persistent_keys(const Column& pks, uint32_t idx_begin, uint32_t idx_end,
                                         std::vector<Slice>* key_slices) const;
 
-    Status _insert_into_persistent_index(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks, IOStat* iostat);
+    Status _insert_into_persistent_index(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks,
+                                         IOStat* iostat);
 
     Status _upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin,
                                          uint32_t idx_end, DeletesMap* deletes, IOStat* stat);
 
-    Status _erase_persistent_index(const Column& key_col, DeletesMap* deletes);
+    Status _erase_persistent_index(const Column& key_col, DeletesMap* deletes, IOStat* stat = nullptr);
 
     Status _get_from_persistent_index(const Column& key_col, std::vector<uint64_t>* rowids) const;
 
     // TODO(qzc): maybe unused, remove it or refactor it with the methods in use by template after a period of time
     [[maybe_unused]] Status _replace_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
-                                                      const vector<uint32_t>& src_rssid, vector<uint32_t>* deletes);
+                                                      const vector<uint32_t>& src_rssid, vector<uint32_t>* deletes,
+                                                      IOStat* iostat = nullptr);
     Status _replace_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
-                                     const uint32_t max_src_rssid, vector<uint32_t>* deletes);
+                                     const uint32_t max_src_rssid, vector<uint32_t>* deletes, IOStat* iostat = nullptr);
 
 protected:
     std::mutex _lock;
