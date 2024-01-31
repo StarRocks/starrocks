@@ -58,5 +58,5 @@ None	None	None
 -- !result
 select json_object('"1"')->"1";
 -- result:
-None
+null
 -- !result
