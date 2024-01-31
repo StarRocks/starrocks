@@ -101,15 +101,15 @@ public:
 
     static inline void add_read(int64_t bytes, int64_t latency_ns) {
         _add_tls_read(bytes, latency_ns);
-        if (_context_io_mode & IOMode::IOMODE_WRITE) {
-            _add_context_write(bytes);
+        if (_context_io_mode & IOMode::IOMODE_READ) {
+            _add_context_read(bytes);
         }
     }
 
     static inline void add_write(int64_t bytes, int64_t latency_ns) {
         _add_tls_write(bytes, latency_ns);
-        if (_context_io_mode & IOMode::IOMODE_READ) {
-            _add_context_read(bytes);
+        if (_context_io_mode & IOMode::IOMODE_WRITE) {
+            _add_context_write(bytes);
         }
     }
 
