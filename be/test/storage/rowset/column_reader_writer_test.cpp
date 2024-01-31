@@ -506,17 +506,10 @@ protected:
         return col;
     }
 
-<<<<<<< HEAD
     vectorized::ColumnPtr datetime_values(int null_ratio) {
-        size_t count = 4 * 1024 * 1024 / sizeof(vectorized::TimestampValue);
+        size_t count = 4 * 1024 / sizeof(vectorized::TimestampValue);
         auto col = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_TIMESTAMP, true);
         vectorized::TimestampValue value = vectorized::TimestampValue::create(2020, 10, 1, 10, 20, 1);
-=======
-    ColumnPtr datetime_values(int null_ratio) {
-        size_t count = 4 * 1024 / sizeof(TimestampValue);
-        auto col = ChunkHelper::column_from_field_type(TYPE_DATETIME, true);
-        TimestampValue value = TimestampValue::create(2020, 10, 1, 10, 20, 1);
->>>>>>> fd4abcec1c ([UT] Fix BinaryDictPageTest and ColumnReaderWriterTest slow UT (#40463))
         for (size_t i = 0; i < count; i++) {
             CHECK_EQ(1, col->append_numbers(&value, sizeof(value)));
             value = value.add<vectorized::TimeUnit::MICROSECOND>(1);
