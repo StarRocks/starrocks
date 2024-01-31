@@ -195,7 +195,7 @@ public class QueryPlannerTest {
         StmtExecutor stmtExecutor1 = new StmtExecutor(connectContext, addBlackListSql);
         stmtExecutor1.execute();
 
-        Assert.assertEquals(SqlBlackList.getInstance().sqlBlackListMap.entrySet().size(), 1);
+        Assert.assertEquals(1, SqlBlackList.getInstance().sqlBlackListMap.entrySet().size());
         long id = -1;
         for (Map.Entry<String, BlackListSql> entry : SqlBlackList.getInstance().sqlBlackListMap.entrySet()) {
             id = entry.getValue().id;
