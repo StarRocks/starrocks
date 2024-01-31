@@ -1768,6 +1768,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private Map<String, MaterializedView.BasePartitionInfo> getSelectedPartitionInfos(Table table,
                                                                                       List<String> selectedPartitionNames,
                                                                                       BaseTableInfo baseTableInfo) {
+        // sort selectedPartitionNames before the for loop, otherwise the order of partition names may be
+        // different in selectedPartitionNames and partitions and will lead to infinite partition refresh.
+        Collections.sort(selectedPartitionNames);
         Map<String, MaterializedView.BasePartitionInfo> partitionInfos = Maps.newHashMap();
         List<com.starrocks.connector.PartitionInfo> partitions = GlobalStateMgr.
                 getCurrentState().getMetadataMgr().getPartitions(baseTableInfo.getCatalogName(), table,
