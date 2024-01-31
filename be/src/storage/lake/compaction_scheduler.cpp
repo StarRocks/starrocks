@@ -237,7 +237,7 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
     if (task_or.ok()) {
         auto should_cancel = [&]() { return context->callback->has_error() || context->callback->timeout_exceeded(); };
         TEST_SYNC_POINT("CompactionScheduler::do_compaction:before_execute_task");
-        status.update(task_or.value()->execute(&context->progress, std::move(should_cancel), flush_pool));
+        status.update(task_or.value()->execute(&context->progress, std::move(should_cancel)));
     } else {
         status.update(task_or.status());
     }
