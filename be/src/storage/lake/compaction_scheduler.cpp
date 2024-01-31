@@ -233,36 +233,10 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
     }
 
     auto status = Status::OK();
-<<<<<<< HEAD
-    if (config::lake_compaction_check_txn_log_first && runs == 0 && txn_log_exists(tablet_id, txn_id)) {
-        context->skipped.store(true, std::memory_order_relaxed);
-        context->progress.update(100);
-        VLOG(2) << "Skipped already succeeded compaction task. tablet_id=" << tablet_id << " txn_id=" << txn_id
-                << " version=" << version;
-    } else {
-        auto task_or = _tablet_mgr->compact(tablet_id, version, txn_id);
-        if (task_or.ok()) {
-            auto should_cancel = [&]() {
-                return context->callback->has_error() || context->callback->timeout_exceeded();
-            };
-            TEST_SYNC_POINT("CompactionScheduler::do_compaction:before_execute_task");
-            status.update(task_or.value()->execute(&context->progress, std::move(should_cancel)));
-        } else {
-            status.update(task_or.status());
-=======
     auto task_or = _tablet_mgr->compact(tablet_id, version, txn_id);
     if (task_or.ok()) {
         auto should_cancel = [&]() { return context->callback->has_error() || context->callback->timeout_exceeded(); };
         TEST_SYNC_POINT("CompactionScheduler::do_compaction:before_execute_task");
-        ThreadPool* flush_pool = nullptr;
-        if (config::lake_enable_compaction_async_write) {
-            // CAUTION: we reuse delta writer's memory table flush pool here
-            flush_pool = StorageEngine::instance()->memtable_flush_executor()->get_thread_pool();
-            if (UNLIKELY(flush_pool == nullptr)) {
-                return Status::InternalError("Get memory table flush pool failed");
-            }
->>>>>>> 002e97cf40 ([Refactor] Remove useless config (#40357))
-        }
         status.update(task_or.value()->execute(&context->progress, std::move(should_cancel), flush_pool));
     } else {
         status.update(task_or.status());
