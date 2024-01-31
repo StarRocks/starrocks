@@ -108,6 +108,7 @@ import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
+import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
 import com.starrocks.system.BackendCoreStat;
@@ -115,6 +116,8 @@ import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.warehouse.Warehouse;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.commons.codec.binary.Hex;
 import org.junit.Assert;
 
@@ -1139,5 +1142,15 @@ public class UtFrameUtils {
             connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(300 * 1000);
             connectContext.getSessionVariable().setEnableShortCircuit(false);
         }
+
+        new MockUp<PlanTestBase>() {
+            /**
+             * {@link com.starrocks.sql.plan.PlanTestNoneDBBase#isIgnoreExplicitColRefIds()}
+             */
+            @Mock
+            boolean isIgnoreExplicitColRefIds() {
+                return true;
+            }
+        };
     }
 }
