@@ -550,12 +550,15 @@ Status CSVScanner::_get_schema(std::vector<SlotDescriptor>* schema) {
     RETURN_IF_ERROR(_init_reader());
 
     CSVReader::Record record;
-    auto st = _curr_reader->next_record(&record);
-    if (!st.ok() && st.is_end_of_file()) {
-        return Status::OK();
-    } else if (!st.ok()) {
-        return st;
-    }
+    // skip empty record.
+    do {
+        auto st = _curr_reader->next_record(&record);
+        if (!st.ok() && st.is_end_of_file()) {
+            return Status::OK();
+        } else if (!st.ok()) {
+            return st;
+        }
+    } while (record.empty());
 
     CSVReader::Fields fields;
     _curr_reader->split_record(record, &fields);
@@ -585,18 +588,23 @@ Status CSVScanner::_get_schema_v2(std::vector<SlotDescriptor>* schema) {
     }
 
     CSVRow row;
-    auto st = _curr_reader->next_record(row);
-    if (!st.ok() && st.is_end_of_file()) {
+    // skip empty row.
+    do {
+        auto st = _curr_reader->next_record(row);
+        if (!st.ok() && st.is_end_of_file()) {
+            return Status::OK();
+        } else if (!st.ok()) {
+            return st;
+        }
+        while (row.columns.empty())
+            ;
+
+        for (size_t i = 0; i < row.columns.size(); i++) {
+            // column name: $1, $2, $3...
+            schema->emplace_back(SlotDescriptor(i, fmt::format("${}", i + 1), get_type_desc(fields[i])));
+        }
+
         return Status::OK();
-    } else if (!st.ok()) {
-        return st;
     }
-
-    for (size_t i = 0; i < row.columns.size(); i++) {
-        schema->emplace_back(SlotDescriptor(i, fmt::format("${}", i + 1), get_type_desc(fields[i])));
-    }
-
-    return Status::OK();
-}
 
 } // namespace starrocks

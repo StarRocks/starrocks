@@ -243,6 +243,34 @@ public class TableFunctionTable extends Table {
         if (properties.containsKey(PROPERTY_CSV_ROW_DELIMITER)) {
             csvRowDelimiter = properties.get(PROPERTY_CSV_ROW_DELIMITER);
         }
+
+        if (properties.containsKey(PROPERTY_CSV_ENCLOSE)) {
+            byte[] bs = properties.get(PROPERTY_CSV_ENCLOSE).getBytes();
+            if (bs.length == 0) {
+                throw new DdlException("empty property csv.enclose");
+            }
+            csvEnclose = bs[0];
+        }
+
+        if (properties.containsKey(PROPERTY_CSV_ESCAPE)) {
+            byte[] bs = properties.get(PROPERTY_CSV_ESCAPE).getBytes();
+            if (bs.length == 0) {
+                throw new DdlException("empty property csv.escape");
+            }
+            csvEscape = bs[0];
+        }
+
+        if (properties.containsKey(PROPERTY_CSV_SKIP_HEADER)) {
+            try {
+                csvSkipHeader = Integer.parseInt(properties.get(PROPERTY_CSV_SKIP_HEADER));
+            } catch (NumberFormatException e) {
+                throw new DdlException("failed to parse csv.skip_header: ", e);
+            }
+        }
+
+        if (properties.containsKey(PROPERTY_CSV_TRIM_SPACE)) {
+            csvTrimSpace = Boolean.parseBoolean(properties.get(PROPERTY_CSV_TRIM_SPACE));
+        }
     }
 
     private void parseFiles() throws DdlException {
