@@ -39,7 +39,7 @@ public class MemoryUsageTracker extends FrontendDaemon {
     public static final Map<String, Map<String, MemoryTrackable>> REFERENCE =
             new ConcurrentSkipListMap<>(String.CASE_INSENSITIVE_ORDER);
 
-    private static final Map<String, MemoryStat> MEMORY_USAGE = Maps.newConcurrentMap();
+    public static final Map<String, Map<String, MemoryStat>> MEMORY_USAGE = Maps.newConcurrentMap();
 
     private boolean initialize;
     public MemoryUsageTracker() {
@@ -89,9 +89,7 @@ public class MemoryUsageTracker extends FrontendDaemon {
         for (Map.Entry<String, Map<String, MemoryTrackable>> entry : REFERENCE.entrySet()) {
             String moduleName = entry.getKey();
             Map<String, MemoryTrackable> statMap = entry.getValue();
-            MemoryStat memoryStat = new MemoryStat();
             long estimateSize = 0L;
-            long estimateCount = 0L;
             for (Map.Entry<String, MemoryTrackable> statEntry : statMap.entrySet()) {
                 String className = statEntry.getKey();
                 MemoryTrackable tracker = statEntry.getValue();
@@ -106,20 +104,22 @@ public class MemoryUsageTracker extends FrontendDaemon {
                     sb.append(subEntry.getKey()).append(" with ").append(subEntry.getValue())
                             .append(" object(s). ");
                 }
+                MemoryStat memoryStat = new MemoryStat();
+                MEMORY_USAGE.computeIfAbsent(moduleName, k -> new ConcurrentSkipListMap<>(String.CASE_INSENSITIVE_ORDER));
+                memoryStat.setCurrentConsumption(estimateSize);
+                Map<String, MemoryStat> usageMap = MEMORY_USAGE.get(moduleName);
+                MemoryStat oldMemoryStat = usageMap.get(className);
+                if (oldMemoryStat != null) {
+                    memoryStat.setPeakConsumption(Math.max(oldMemoryStat.getPeakConsumption(), estimateSize));
+                } else {
+                    memoryStat.setPeakConsumption(estimateSize);
+                }
+                usageMap.put(className, memoryStat);
 
                 LOG.info("({}ms) Module {} - {} estimated {} of memory. Contains {}",
                         endTime - startTime, moduleName, className,
                         new ByteSizeValue(currentEstimateSize), sb.toString());
             }
-            memoryStat.setCurrentConsumption(estimateSize);
-            memoryStat.setObjectCount(estimateCount);
-            MemoryStat oldMemoryStat = MEMORY_USAGE.get(moduleName);
-            if (oldMemoryStat != null) {
-                memoryStat.setPeakConsumption(Math.max(oldMemoryStat.getPeakConsumption(), estimateSize));
-            } else {
-                memoryStat.setPeakConsumption(estimateSize);
-            }
-            MEMORY_USAGE.put(moduleName, memoryStat);
         }
     }
 

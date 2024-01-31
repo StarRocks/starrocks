@@ -12,27 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.memory;
+#pragma once
 
-public class MemoryStat {
+#include "exec/schema_scanner.h"
+#include "gen_cpp/FrontendService_types.h"
 
-    private long currentConsumption;
+namespace starrocks {
 
-    private long peakConsumption;
+class SysFeMemoryUsage : public SchemaScanner {
+public:
+    SysFeMemoryUsage();
+    ~SysFeMemoryUsage() override;
+    Status start(RuntimeState* state) override;
+    Status get_next(ChunkPtr* chunk, bool* eos) override;
 
-    public long getCurrentConsumption() {
-        return currentConsumption;
-    }
+private:
+    Status _fill_chunk(ChunkPtr* chunk);
 
-    public void setCurrentConsumption(long currentConsumption) {
-        this.currentConsumption = currentConsumption;
-    }
+    size_t _index = 0;
+    TFeMemoryRes _result;
+    static SchemaScanner::ColumnDesc _s_columns[];
+};
 
-    public long getPeakConsumption() {
-        return peakConsumption;
-    }
-
-    public void setPeakConsumption(long peakConsumption) {
-        this.peakConsumption = peakConsumption;
-    }
-}
+} // namespace starrocks
