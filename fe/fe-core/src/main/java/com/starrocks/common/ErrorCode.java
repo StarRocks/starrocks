@@ -265,13 +265,76 @@ public enum ErrorCode {
             "Only support like 'function_pattern' syntax."),
     ERR_WRONG_LABEL_NAME(5082, new byte[] {'4', '2', '0', '0', '0'},
             "Incorrect label name '%s'"),
+<<<<<<< HEAD
     ERR_CHANGE_TO_SSL_CONNECTION_FAILED(5083, new byte[] {'4', '2', '0', '0', '0'},
             "Change to ssl connection failed"),
+=======
+    ERR_PRIVILEGE_TABLE_NOT_FOUND(5085, new byte[] {'4', '2', '0', '0', '0'},
+            "Table not found when checking privilege"),
+    ERR_PRIVILEGE_DB_NOT_FOUND(5086, new byte[] {'4', '2', '0', '0', '0'},
+            "Db [%s] not found when checking privilege"),
+    ERR_PRIVILEGE_ROUTINELODE_JOB_NOT_FOUND(5089, new byte[] {'4', '2', '0', '0', '0'},
+            "Routine load job [%s] not found when checking privilege"),
+    ERR_PRIVILEGE_EXPORT_JOB_NOT_FOUND(5090, new byte[] {'4', '2', '0', '0', '0'},
+            "Export job [%s] not found when checking privilege"),
+>>>>>>> d8bb832929 ([BugFix] Fix forward to self node bug (#39587))
     ERROR_DYNAMIC_PARTITION_HISTORY_PARTITION_NUM_ZERO(5092, new byte[] {'4', '2', '0', '0', '0'},
             "Dynamic history partition num must greater than 0"),
     ERR_PLAN_VALIDATE_ERROR(6000, new byte[] {'0', '7', '0', '0', '0'},
             "Incorrect logical plan found in operator: %s. Invalid reason: %s"),
+<<<<<<< HEAD
     ERR_INVALID_DATE_ERROR(6001, new byte[] {'2', '2', '0', '0', '0'}, "Incorrect %s value %s");
+=======
+    ERR_INVALID_DATE_ERROR(6001, new byte[] {'2', '2', '0', '0', '0'}, "Incorrect %s value %s"),
+
+    ERR_BAD_WAREHOUSE_ERROR(6002, new byte[] {'4', '2', '0', '0', '0'},
+            "Unknown warehouse '%s'"),
+
+    ERR_BAD_PIPE_STATEMENT(6010, new byte[] {'4', '2', '0', '0', '0'}, "Bad pipe statement: '%s'"),
+    ERR_UNKNOWN_PIPE(6011, new byte[] {'4', '2', '0', '0', '0'}, "Unknown pipe '%s'"),
+    ERR_PIPE_EXISTS(6012, new byte[] {'4', '2', '0', '0', '0'}, "Pipe exists"),
+    ERR_UNKNOWN_PROPERTY(6013, new byte[] {'4', '2', '0', '0', '0'}, "Unknown property %s"),
+    ERR_INVALID_PARAMETER(6013, new byte[] {'4', '2', '0', '0', '0'}, "Invalid parameter %s"),
+
+    /*
+     * The following ErrorCode has been reviewed.
+     * If you want to add an error code, please add it in the specific
+     * number segment according to the number segment of your own module.
+     */
+
+    /**
+     * 5200 - 5299: Authentication and Authorization
+     */
+    ERR_PASSWD_LENGTH(5201, new byte[] {'H', 'Y', '0', '0', '0'},
+            "Password hash should be a %d-digit hexadecimal number"),
+    ERR_SQL_IN_BLACKLIST_ERROR(5202, new byte[] {'4', '2', '0', '0', '0'},
+            "Access denied; This sql is in blacklist, please contact your admin"),
+    ERR_ACCESS_DENIED(5203, new byte[] {'4', '2', '0', '0', '0'},
+            "Access denied; you need (at least one of) the %s privilege(s) on %s%s for this operation. " +
+                    "Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. " +
+                    "Current role(s): %s. Inactivated role(s): %s."),
+    ERR_ACCESS_DENIED_FOR_EXTERNAL_ACCESS_CONTROLLER(5204, new byte[] {'4', '2', '0', '0', '0'},
+            "Access denied; you need (at least one of) the %s privilege(s) on %s%s for this operation."),
+
+    /**
+     * 5300 - 5399: Lock and Transaction
+     */
+    ERR_LOCK_ERROR(5300, new byte[] {'5', '5', 'P', '0', '3'}, "Failed to acquire lock: %s"),
+
+    /**
+     * 5400 - 5499: Internal error
+     */
+    ERR_CHANGE_TO_SSL_CONNECTION_FAILED(5400, new byte[] {'X', 'X', '0', '0', '0'},
+            "Failed to change to SSL connection"),
+    ERR_FORWARD_TOO_MANY_TIMES(5401, new byte[] {'X', 'X', '0', '0', '0'}, "forward too many times %d"),
+
+    /**
+     * 5500 - 5599: DDL operation failure
+     */
+    ERR_LOC_AWARE_UNSUPPORTED_FOR_COLOCATE_TBL(5500, new byte[] {'4', '2', '0', '0', '0'},
+            "table '%s' has location property and cannot be colocated")
+    ;
+>>>>>>> d8bb832929 ([BugFix] Fix forward to self node bug (#39587))
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {
         this.code = code;
