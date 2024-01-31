@@ -15,7 +15,9 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
+import com.google.common.collect.Sets;
 import com.google.common.collect.TreeRangeSet;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
@@ -24,7 +26,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 
 import java.util.List;
-import java.util.Optional;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.BiFunction;
 
 public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, PredicateExtractor.PredicateExtractorContext> {
     private final List<ScalarOperator> columnEqualityPredicates = Lists.newArrayList();
@@ -83,6 +87,73 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
         return null;
     }
 
+<<<<<<< HEAD
+=======
+    private boolean isSupportedRangeExpr(ScalarOperator op) {
+        List<ColumnRefOperator> columns = Utils.collect(op, ColumnRefOperator.class);
+        return op.isVariable() && columns.size() == 1;
+    }
+
+    private RangePredicate rewriteBinaryPredicate(BinaryPredicateOperator predicate) {
+        ScalarOperator left = predicate.getChild(0);
+        ScalarOperator right = predicate.getChild(1);
+        ScalarOperator op1 = null;
+        ConstantOperator op2 = null;
+        if (isSupportedRangeExpr(left) && right instanceof ConstantOperator) {
+            op1 = left;
+            op2 = (ConstantOperator) right;
+        } else if (isSupportedRangeExpr(right) && left instanceof ConstantOperator) {
+            op1 = right;
+            op2 = (ConstantOperator) left;
+        } else {
+            return null;
+        }
+
+        // rewrite to column ref by equivalent
+        if (!(op1 instanceof ColumnRefOperator)) {
+            RangePredicate rangePredicate = rewriteByEquivalent(predicate);
+            if (rangePredicate != null) {
+                return rangePredicate;
+            }
+        }
+
+        // by default
+        TreeRangeSet<ConstantOperator> rangeSet = range(predicate.getBinaryType(), op2);
+        if (rangeSet == null) {
+            return null;
+        }
+        return new ColumnRangePredicate(op1, rangeSet);
+    }
+
+    private static RangePredicate rewriteByEquivalent(BinaryPredicateOperator predicate) {
+        ScalarOperator left = predicate.getChild(0);
+        ScalarOperator right = predicate.getChild(1);
+        ScalarOperator op1 = null;
+        ConstantOperator op2 = null;
+        if (left instanceof CallOperator && right instanceof ConstantOperator) {
+            op1 = left;
+            op2 = (ConstantOperator) right;
+        } else if (right instanceof CallOperator && left instanceof ConstantOperator) {
+            op1 = right;
+            op2 = (ConstantOperator) left;
+        } else {
+            return null;
+        }
+
+        if (DateTruncEquivalent.INSTANCE.isEquivalent(op1, op2)) {
+            TreeRangeSet<ConstantOperator> rangeSet = TreeRangeSet.create();
+            rangeSet.addAll(range(predicate.getBinaryType(), op2));
+            return new ColumnRangePredicate(op1.getChild(1).cast(), rangeSet);
+        } else if (TimeSliceRewriteEquivalent.INSTANCE.isEquivalent(op1, op2)) {
+            TreeRangeSet<ConstantOperator> rangeSet = TreeRangeSet.create();
+            rangeSet.addAll(range(predicate.getBinaryType(), op2));
+            return new ColumnRangePredicate(op1.getChild(0).cast(), rangeSet);
+        } else {
+            return null;
+        }
+    }
+
+>>>>>>> de66428ad0 ([Enhancement] optimize range predicate rewrite (#39421))
     @Override
     public RangePredicate visitCompoundPredicate(
             CompoundPredicateOperator predicate, PredicateExtractorContext context) {
@@ -117,58 +188,25 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
             }
             if (predicate.isOr()) {
                 if (childRange instanceof ColumnRangePredicate) {
-                    ColumnRangePredicate childColumnRange = childRange.cast();
-                    Optional<RangePredicate> rangePredicateOpt = findColumnRangePredicate(rangePredicates, childColumnRange);
-                    if (rangePredicateOpt.isPresent()) {
-                        ColumnRangePredicate matchedColumnRangePredicate = rangePredicateOpt.get().cast();
-                        ColumnRangePredicate newPredicate =
-                                matchedColumnRangePredicate.orRange(matchedColumnRangePredicate, childColumnRange);
-                        rangePredicates.remove(matchedColumnRangePredicate);
-                        if (!newPredicate.isUnbounded()) {
-                            rangePredicates.add(newPredicate);
-                        }
-                    } else {
-                        if (!((ColumnRangePredicate) childRange).isUnbounded()) {
-                            rangePredicates.add(childRange);
-                        }
-                    }
+                    rangePredicates.add(childRange);
+                    mergeColumnRange(rangePredicates,
+                            (columnRange1, columnRange2) -> ColumnRangePredicate.orRange(columnRange1, columnRange2));
+                } else if (childRange instanceof OrRangePredicate) {
+                    rangePredicates.addAll(childRange.childPredicates);
+                    mergeColumnRange(rangePredicates,
+                            (columnRange1, columnRange2) -> ColumnRangePredicate.orRange(columnRange1, columnRange2));
                 } else {
                     rangePredicates.add(childRange);
                 }
             } else if (predicate.isAnd()) {
                 if (childRange instanceof ColumnRangePredicate) {
-                    ColumnRangePredicate childColumnRange = childRange.cast();
-                    Optional<RangePredicate> rangePredicateOpt = findColumnRangePredicate(rangePredicates, childColumnRange);
-                    if (rangePredicateOpt.isPresent()) {
-                        ColumnRangePredicate newPredicate =
-                                ColumnRangePredicate.andRange(rangePredicateOpt.get().cast(), childColumnRange);
-                        rangePredicates.remove(rangePredicateOpt.get());
-                        rangePredicates.add(newPredicate);
-                    } else {
-                        if (!childColumnRange.isUnbounded()) {
-                            rangePredicates.add(childRange);
-                        }
-                    }
+                    rangePredicates.add(childRange);
+                    mergeColumnRange(rangePredicates,
+                            (columnRange1, columnRange2) -> ColumnRangePredicate.andRange(columnRange1, columnRange2));
                 } else if (childRange instanceof AndRangePredicate) {
-                    for (RangePredicate subRangePredicate : childRange.getChildPredicates()) {
-                        if (subRangePredicate instanceof ColumnRangePredicate) {
-                            ColumnRangePredicate childColumnRange = subRangePredicate.cast();
-                            Optional<RangePredicate> rangePredicateOpt =
-                                    findColumnRangePredicate(rangePredicates, childColumnRange);
-                            if (rangePredicateOpt.isPresent()) {
-                                ColumnRangePredicate newPredicate =
-                                        ColumnRangePredicate.andRange(rangePredicateOpt.get().cast(), childColumnRange);
-                                rangePredicates.remove(rangePredicateOpt.get());
-                                rangePredicates.add(newPredicate);
-                            } else {
-                                if (!childColumnRange.isUnbounded()) {
-                                    rangePredicates.add(subRangePredicate);
-                                }
-                            }
-                        } else {
-                            rangePredicates.add(childRange);
-                        }
-                    }
+                    rangePredicates.addAll(childRange.childPredicates);
+                    mergeColumnRange(rangePredicates,
+                            (columnRange1, columnRange2) -> ColumnRangePredicate.andRange(columnRange1, columnRange2));
                 } else {
                     rangePredicates.add(childRange);
                 }
@@ -177,22 +215,38 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
                 return null;
             }
         }
+        if (rangePredicates.size() == 1 && (rangePredicates.get(0) instanceof ColumnRangePredicate)) {
+            return rangePredicates.get(0);
+        }
         if (predicate.isAnd()) {
-            if (rangePredicates.size() == 1 && (rangePredicates.get(0) instanceof ColumnRangePredicate)) {
-                return rangePredicates.get(0);
-            }
             return new AndRangePredicate(rangePredicates);
         } else {
             return new OrRangePredicate(rangePredicates);
         }
     }
 
-    private Optional<RangePredicate> findColumnRangePredicate(
-            List<RangePredicate> rangePredicates, ColumnRangePredicate toFind) {
-        Optional<RangePredicate> rangePredicateOptional = rangePredicates.stream().filter(rangePredicate -> {
-            if (!(rangePredicate instanceof ColumnRangePredicate)) {
-                return false;
+    private void mergeColumnRange(
+            List<RangePredicate> rangePredicates,
+            BiFunction<ColumnRangePredicate, ColumnRangePredicate, ColumnRangePredicate> mergeOp) {
+        Map<ScalarOperator, ColumnRangePredicate> columnRangePredicateMap = Maps.newHashMap();
+        List<ColumnRangePredicate> columnRanges = Lists.newArrayList();
+        for (RangePredicate rangePredicate : rangePredicates) {
+            if (rangePredicate instanceof ColumnRangePredicate) {
+                ColumnRangePredicate columnRangePredicate = rangePredicate.cast();
+                columnRanges.add(columnRangePredicate);
+                if (columnRangePredicateMap.containsKey(columnRangePredicate.getExpression())) {
+                    ColumnRangePredicate newRangePredicate = columnRangePredicateMap.get(columnRangePredicate.getExpression());
+                    newRangePredicate = mergeOp.apply(newRangePredicate, columnRangePredicate);
+                    if (newRangePredicate.isUnbounded()) {
+                        columnRangePredicateMap.remove(columnRangePredicate.getExpression());
+                    } else {
+                        columnRangePredicateMap.put(columnRangePredicate.getExpression(), newRangePredicate);
+                    }
+                } else {
+                    columnRangePredicateMap.put(columnRangePredicate.getExpression(), columnRangePredicate);
+                }
             }
+<<<<<<< HEAD
             ColumnRangePredicate columnRangePredicate = rangePredicate.cast();
             return columnRangePredicate.getColumnRef().equals(toFind.getColumnRef());
         }).findFirst();
@@ -201,6 +255,23 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
 
     private static  <C extends Comparable<C>> TreeRangeSet<C> range(BinaryPredicateOperator.BinaryType type, C value) {
         TreeRangeSet<C> rangeSet = TreeRangeSet.create();
+=======
+        }
+        rangePredicates.removeAll(columnRanges);
+        Set<ScalarOperator> visited = Sets.newHashSet();
+        // try to keep the sequence to make result steady
+        for (ColumnRangePredicate columnRangePredicate : columnRanges) {
+            ScalarOperator expr = columnRangePredicate.getExpression();
+            if (!visited.contains(expr) && columnRangePredicateMap.containsKey(expr)) {
+                rangePredicates.add(columnRangePredicateMap.get(expr));
+                visited.add(expr);
+            }
+        }
+    }
+
+    private static TreeRangeSet<ConstantOperator> range(BinaryType type, ConstantOperator value) {
+        TreeRangeSet<ConstantOperator> rangeSet = TreeRangeSet.create();
+>>>>>>> de66428ad0 ([Enhancement] optimize range predicate rewrite (#39421))
         switch (type) {
             case EQ:
                 rangeSet.add(Range.singleton(value));
@@ -218,6 +289,10 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
                 rangeSet.add(Range.lessThan(value));
                 return rangeSet;
             case NE:
+                if (value.getType().isStringType()) {
+                    // for str != '2023-10-01', treat it as original
+                    return null;
+                }
                 rangeSet.add(Range.greaterThan(value));
                 rangeSet.add(Range.lessThan(value));
                 return rangeSet;

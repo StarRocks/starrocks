@@ -1665,9 +1665,17 @@ public class MaterializedViewRewriter {
                 // predicate can not be pushdown, we should add it it optExpression
                 Operator.Builder builder = OperatorBuilderFactory.build(optExpression.getOp());
                 builder.withOperator(optExpression.getOp());
+<<<<<<< HEAD
                 // builder.setPredicate(Utils.compoundAnd(predicate, optExpression.getOp().getPredicate()));
                 builder.setPredicate(MvUtils.canonizePredicateForRewrite(
                         Utils.compoundAnd(predicate, optExpression.getOp().getPredicate())));
+=======
+                PredicateSplit predicateSplit = PredicateSplit.splitPredicate(
+                        Utils.compoundAnd(predicate, optExpression.getOp().getPredicate()));
+                ScalarOperator canonizePredicates = MvUtils.canonizePredicateForRewrite(
+                        queryMaterializationContext, predicateSplit.toScalarOperator());
+                builder.setPredicate(canonizePredicates);
+>>>>>>> de66428ad0 ([Enhancement] optimize range predicate rewrite (#39421))
                 Operator newQueryOp = builder.build();
                 return OptExpression.create(newQueryOp, optExpression.getInputs());
             } else {

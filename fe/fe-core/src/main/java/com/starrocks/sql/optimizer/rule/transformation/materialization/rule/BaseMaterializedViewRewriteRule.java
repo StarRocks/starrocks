@@ -99,7 +99,15 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         }
         final PredicateSplit queryPredicateSplit = PredicateSplit.splitPredicate(queryPredicate);
         List<ScalarOperator> onPredicates = MvUtils.collectOnPredicate(queryExpression);
+<<<<<<< HEAD
         onPredicates = onPredicates.stream().map(MvUtils::canonizePredicateForRewrite).collect(Collectors.toList());
+=======
+        QueryMaterializationContext queryMaterializationContext = context.getQueryMaterializationContext();
+        onPredicates = onPredicates.stream()
+                .map(p -> MvUtils.canonizePredicateForRewrite(queryMaterializationContext, p))
+                .map(predicate -> queryColumnRefRewriter.rewrite(predicate))
+                .collect(Collectors.toList());
+>>>>>>> de66428ad0 ([Enhancement] optimize range predicate rewrite (#39421))
         List<Table> queryTables = MvUtils.getAllTables(queryExpression);
         for (MaterializationContext mvContext : mvCandidateContexts) {
             MvRewriteContext mvRewriteContext = new MvRewriteContext(mvContext, queryTables, queryExpression,
