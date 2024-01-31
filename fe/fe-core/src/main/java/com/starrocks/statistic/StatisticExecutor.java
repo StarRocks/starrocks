@@ -338,15 +338,13 @@ public class StatisticExecutor {
         context.setExecutor(executor);
         context.setQueryId(UUIDUtil.genUUID());
         context.getSessionVariable().setEnableMaterializedViewRewrite(false);
+        AuditLog.getStatisticAudit().info("statistic execute query | QueryId [{}] | SQL: {}",
+                DebugUtil.printId(context.getQueryId()), sql);
         Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
         if (!sqlResult.second.ok()) {
-            AuditLog.getStatisticAudit().info("statistic query success | QueryId [{}] | SQL: {}",
-                    DebugUtil.printId(context.getQueryId()), sql);
             throw new SemanticException("Statistics query fail | Error Message [%s] | QueryId [%s] | SQL [%s]",
                     context.getState().getErrorMessage(), DebugUtil.printId(context.getQueryId()), sql);
         } else {
-            AuditLog.getStatisticAudit().info("statistic query fail | QueryId [{}] | SQL: {}",
-                    DebugUtil.printId(context.getQueryId()), sql);
             return sqlResult.first;
         }
     }
@@ -358,13 +356,11 @@ public class StatisticExecutor {
             StmtExecutor executor = new StmtExecutor(context, parsedStmt);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
-            executor.execute();
-            AuditLog.getStatisticAudit().info("statistic DML success | QueryId [{}] | SQL: {}",
+            AuditLog.getStatisticAudit().info("statistic execute DML | QueryId [{}] | SQL: {}",
                     DebugUtil.printId(context.getQueryId()), sql);
+            executor.execute();
             return true;
         } catch (Exception e) {
-            AuditLog.getStatisticAudit().info("statistic DML fail | QueryId [{}] | SQL: {}",
-                    DebugUtil.printId(context.getQueryId()), sql);
             LOG.warn("statistic DML fail | {} | SQL {}", DebugUtil.printId(context.getQueryId()), sql, e);
             return false;
         }

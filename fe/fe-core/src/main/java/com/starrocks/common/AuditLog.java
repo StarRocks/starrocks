@@ -28,6 +28,7 @@ public class AuditLog {
     public static final AuditLog BIG_QUERY_AUDIT = new AuditLog("big_query.query");
     public static final AuditLog CONNECTION_AUDIT = new AuditLog("audit.connection");
     public static final AuditLog STATISTIC_AUDIT = new AuditLog("internal.statistic");
+    public static final AuditLog INTERNAL_AUDIT = new AuditLog("internal.base");
 
     private final Logger logger;
 
@@ -49,6 +50,10 @@ public class AuditLog {
 
     public static Logger getStatisticAudit() {
         return STATISTIC_AUDIT.logger;
+    }
+
+    public static Logger getInternalAudit() {
+        return INTERNAL_AUDIT.logger;
     }
 
     public AuditLog(String auditName) {
