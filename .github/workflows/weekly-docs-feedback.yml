@@ -41,7 +41,9 @@ jobs:
         run: |
           set -eo pipefail # Ensure the script fails on any command error
           echo " " >> feedback.md
-          echo "## Algolia top successful searches" >> feedback.md
+          echo "## Algolia top searches" >> feedback.md
+          echo " " >> feedback.md
+          echo "Note: Searches with zero hits are searches that are very popular and also not returning any results. They will also appear in the failed search list." >> feedback.md
           echo " " >> feedback.md
           curl --silent --fail \
             -X GET \
