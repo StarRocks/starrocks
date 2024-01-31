@@ -16,6 +16,7 @@
 
 #include <utility>
 
+#include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "storage/compaction_manager.h"
@@ -30,6 +31,7 @@
 #include "storage/tablet_updates.h"
 #include "storage/txn_manager.h"
 #include "storage/update_manager.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -385,9 +387,26 @@ Status DeltaWriter::write_segment(const SegmentPB& segment_pb, butil::IOBuf& dat
                                                  segment_pb.segment_id(), _opt.tablet_id,
                                                  _replica_state_name(_replica_state)));
     }
-    VLOG(1) << "Flush segment tablet " << _opt.tablet_id << " segment " << segment_pb.DebugString();
 
+<<<<<<< HEAD
     return _rowset_writer->flush_segment(segment_pb, data);
+=======
+    _tablet->add_in_writing_data_size(_opt.txn_id, segment_pb.data_size());
+    auto scope = IOProfiler::scope(IOProfiler::TAG_LOAD, _tablet->tablet_id());
+    int64_t duration_ns = 0;
+    {
+        SCOPED_RAW_TIMER(&duration_ns);
+        RETURN_IF_ERROR(_rowset_writer->flush_segment(segment_pb, data));
+    }
+    auto io_stat = scope.current_scoped_tls_io();
+    StarRocksMetrics::instance()->segment_flush_total.increment(1);
+    StarRocksMetrics::instance()->segment_flush_duration_us.increment(duration_ns / 1000);
+    StarRocksMetrics::instance()->segment_flush_io_time_us.increment(io_stat.write_time_ns / 1000);
+    StarRocksMetrics::instance()->segment_flush_bytes_total.increment(segment_pb.data_size());
+    VLOG(1) << "Flush segment tablet " << _opt.tablet_id << " segment: " << segment_pb.DebugString()
+            << ", duration: " << duration_ns / 1000 << "us, io time: " << io_stat.write_time_ns / 1000 << "us";
+    return Status::OK();
+>>>>>>> 5de7d8b23d ([Enhancement] Add io time stat for memtable/segment flush (#40173))
 }
 
 Status DeltaWriter::close() {
