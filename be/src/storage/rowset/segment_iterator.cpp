@@ -1293,6 +1293,9 @@ StatusOr<uint16_t> SegmentIterator::_filter_by_expr_predicates(Chunk* chunk, vec
 }
 
 inline bool SegmentIterator::_can_using_dict_code(const FieldPtr& field) const {
+    if (field->type()->type() == TYPE_ARRAY) {
+        return false;
+    }
     if (_opts.predicates.find(field->id()) != _opts.predicates.end()) {
         return _predicate_need_rewrite[field->id()];
     } else {
