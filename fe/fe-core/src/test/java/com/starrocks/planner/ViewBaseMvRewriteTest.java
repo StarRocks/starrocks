@@ -16,6 +16,7 @@ package com.starrocks.planner;
 
 import com.starrocks.common.Config;
 import org.junit.AfterClass;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -485,5 +486,21 @@ public class ViewBaseMvRewriteTest extends MaterializedViewTestBase {
             String query = "select * from v_q15";
             sql(query).contains("mv_q15");
         }
+    }
+
+    @Test
+    public void testViewWithInvalidPlan() {
+        String view = "create view invalid_view0 as select count(distinct cnt) as ndv from " +
+                "(select count(*) cnt from lineitem group by l_returnflag) t";
+        try {
+            starRocksAssert.withView(view);
+        } catch (Exception e) {
+            Assert.fail();
+        }
+        String sql = "create materialized view invalid_plan_mv distributed by random as select * from invalid_view0";
+        starRocksAssert.withMaterializedView(sql, () -> {
+            sql("select * from invalid_view0").contains("invalid_plan_mv");
+            sql("select * from invalid_view0 where ndv > 10").contains("invalid_plan_mv");
+        });
     }
 }

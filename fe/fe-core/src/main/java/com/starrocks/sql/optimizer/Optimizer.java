@@ -31,6 +31,7 @@ import com.starrocks.sql.optimizer.cost.CostEstimate;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.implementation.OlapScanImplementationRule;
@@ -198,9 +199,9 @@ public class Optimizer {
         }
 
         memo.init(logicOperatorTree);
-        if (context.getLogicalTreeWithView() != null) {
+        if (context.getQueryMaterializationContext() != null) {
             // LogicalTreeWithView is logically equivalent to logicOperatorTree
-            addViewBasedPlanIntoMemo();
+            addViewBasedPlanIntoMemo(context.getQueryMaterializationContext().getLogicalTreeWithView());
         }
         OptimizerTraceUtil.log("after logical rewrite, root group:\n%s", memo.getRootGroup());
 
@@ -250,9 +251,12 @@ public class Optimizer {
         }
     }
 
-    private void addViewBasedPlanIntoMemo() {
+    private void addViewBasedPlanIntoMemo(OptExpression logicalTreeWithView) {
+        if (logicalTreeWithView == null) {
+            return;
+        }
         Memo memo = context.getMemo();
-        memo.copyIn(memo.getRootGroup(), context.getLogicalTreeWithView());
+        memo.copyIn(memo.getRootGroup(), logicalTreeWithView);
     }
 
     private void prepare(
@@ -272,9 +276,6 @@ public class Optimizer {
         // prepare related mvs if needed
         new MvRewritePreprocessor(connectContext, columnRefFactory,
                 context, logicOperatorTree, requiredColumns).prepare(logicOperatorTree);
-        if (context.getCandidateMvs() != null && !context.getCandidateMvs().isEmpty()) {
-            context.setQueryMaterializationContext(new QueryMaterializationContext());
-        }
     }
 
     private void pruneTables(OptExpression tree, TaskContext rootTaskContext, ColumnRefSet requiredColumns) {
@@ -447,8 +448,7 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, SplitScanORToUnionRule.getInstance());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownTopNBelowUnionRule());
 
-        // try view based mv rewrite first,
-        // then try normal mv rewrite rules
+        // try view based mv rewrite first, then try normal mv rewrite rules
         if (isEnableSingleViewMvRewrite()) {
             // view based mv rewrite for single view
             viewBasedMvRuleRewrite(tree, rootTaskContext);
@@ -485,26 +485,30 @@ public class Optimizer {
 
     // for single scan node, to make sure we can rewrite
     private void viewBasedMvRuleRewrite(OptExpression tree, TaskContext rootTaskContext) {
+        QueryMaterializationContext queryMaterializationContext = context.getQueryMaterializationContext();
+        Preconditions.checkArgument(queryMaterializationContext != null);
         try {
             OptimizerTraceUtil.logMVRewriteRule("VIEW_BASED_MV_REWRITE", "try VIEW_BASED_MV_REWRITE");
-            OptExpression treeWithView = context.getLogicalTreeWithView();
+            OptExpression treeWithView = queryMaterializationContext.getLogicalTreeWithView();
             // should add a LogicalTreeAnchorOperator for rewrite
             treeWithView = OptExpression.create(new LogicalTreeAnchorOperator(), treeWithView);
             deriveLogicalProperty(treeWithView);
             ruleRewriteIterative(treeWithView, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
             List<Operator> viewScanOperators = Lists.newArrayList();
             MvUtils.collectViewScanOperator(treeWithView, viewScanOperators);
-            if (viewScanOperators.size() < context.getViewScans().size()) {
+
+            List<LogicalViewScanOperator> mvViewScanOperators = queryMaterializationContext.getViewScans();
+            if (viewScanOperators.size() < mvViewScanOperators.size()) {
                 // replace original tree plan
                 tree.setChild(0, treeWithView.inputAt(0));
                 deriveLogicalProperty(tree);
                 if (!viewScanOperators.isEmpty()) {
                     // if there are view scan operator left, we should replace it back to original plans
-                    MvUtils.replaceLogicalViewScanOperator(tree, context.getViewScans());
+                    MvUtils.replaceLogicalViewScanOperator(tree, queryMaterializationContext);
                 }
                 OptimizerTraceUtil.logMVRewriteRule("VIEW_BASED_MV_REWRITE",
                         "original view scans size: {}, left view scans size: {}",
-                        context.getViewScans().size(), viewScanOperators.size());
+                        mvViewScanOperators.size(), viewScanOperators.size());
             }
             OptimizerTraceUtil.logMVRewriteRule("VIEW_BASED_MV_REWRITE", "VIEW_BASED_MV_REWRITE applied");
         } catch (Exception e) {
@@ -514,7 +518,8 @@ public class Optimizer {
     }
 
     private boolean isEnableSingleViewMvRewrite() {
-        return context.getLogicalTreeWithView() != null
+        return context.getQueryMaterializationContext() != null
+                && context.getQueryMaterializationContext().getLogicalTreeWithView() != null
                 && !optimizerConfig.isRuleSetTypeDisable(RuleSetType.SINGLE_TABLE_MV_REWRITE)
                 && !context.getCandidateMvs().isEmpty()
                 && context.getCandidateMvs().stream().anyMatch(MaterializationContext::isSingleTable)

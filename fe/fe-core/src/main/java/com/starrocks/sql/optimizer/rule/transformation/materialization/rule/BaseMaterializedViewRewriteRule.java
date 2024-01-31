@@ -29,6 +29,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -42,6 +43,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.Materiali
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 
 import java.util.List;
 import java.util.Set;
@@ -57,8 +59,9 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
     }
 
     private boolean checkOlapScanWithoutTabletOrPartitionHints(OptExpression input) {
-        if (input.getOp() instanceof LogicalOlapScanOperator) {
-            LogicalOlapScanOperator scan = input.getOp().cast();
+        Operator op = input.getOp();
+        if (op instanceof LogicalOlapScanOperator) {
+            LogicalOlapScanOperator scan = op.cast();
             if (scan.hasTableHints()) {
                 return false;
             }
@@ -90,6 +93,17 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
 
     @Override
     public List<OptExpression> transform(OptExpression queryExpression, OptimizerContext context) {
+        try {
+            return doTransform(queryExpression, context);
+        } catch (Exception e) {
+            String errMsg = ExceptionUtils.getStackTrace(e);
+            // for mv rewrite rules, do not disturb query when exception.
+            logMVRewrite(context, this, "mv rewrite exception, exception message:{}", errMsg);
+            return Lists.newArrayList();
+        }
+    }
+
+    private List<OptExpression> doTransform(OptExpression queryExpression, OptimizerContext context) {
         List<MaterializationContext> mvCandidateContexts = Lists.newArrayList();
         if (queryExpression.getGroupExpression() != null) {
             int currentRootGroupId = queryExpression.getGroupExpression().getGroup().getId();
