@@ -38,11 +38,17 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.UserException;
+import com.starrocks.common.profile.Tracers;
+>>>>>>> 26916e8ce9 ([Enhancement] parallel prepare  metadata (#40280))
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTableColumnStats;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
+import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -137,13 +143,17 @@ public class MetadataMgr {
         return Optional.empty();
     }
 
+    public Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
+        Optional<String> queryId = getOptionalQueryID();
+        return getOptionalMetadata(queryId, catalogName);
+    }
 
     /** get ConnectorMetadata by catalog name
      * if catalog is null or empty will return localMetastore
      * @param catalogName catalog's name
      * @return ConnectorMetadata
      */
-    public Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
+    public Optional<ConnectorMetadata> getOptionalMetadata(Optional<String> queryId, String catalogName) {
         if (Strings.isNullOrEmpty(catalogName) || CatalogMgr.isInternalCatalog(catalogName)) {
             return Optional.of(localMetastore);
         }
@@ -154,7 +164,6 @@ public class MetadataMgr {
             return Optional.empty();
         }
 
-        Optional<String> queryId = getOptionalQueryID();
         if (queryId.isPresent()) { // use query-level cache if from query
             QueryMetadatas queryMetadatas = metadataCacheByQueryId.getUnchecked(queryId.get());
             return Optional.ofNullable(queryMetadatas.getConnectorMetadata(catalogName, queryId.get()));
@@ -455,6 +464,19 @@ public class MetadataMgr {
             }
         }
         return partitions.build();
+    }
+
+    public boolean prepareMetadata(String queryId, String catalogName, MetaPreparationItem item, Tracers tracers) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(Optional.of(queryId), catalogName);
+        if (connectorMetadata.isPresent()) {
+            try {
+                return connectorMetadata.get().prepareMetadata(item, tracers);
+            } catch (Exception e) {
+                LOG.error("prepare metadata failed on [{}]", item, e);
+                return true;
+            }
+        }
+        return true;
     }
 
     public void refreshTable(String catalogName, String srDbName, Table table,
