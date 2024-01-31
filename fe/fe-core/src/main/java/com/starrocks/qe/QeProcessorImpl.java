@@ -34,11 +34,13 @@
 
 package com.starrocks.qe;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.MvId;
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.thrift.TBatchReportExecStatusParams;
 import com.starrocks.thrift.TBatchReportExecStatusResult;
@@ -52,6 +54,7 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.spark.util.SizeEstimator;
 
 import java.util.Iterator;
 import java.util.List;
@@ -61,7 +64,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.mysql.MysqlCommand.COM_STMT_EXECUTE;
 
-public final class QeProcessorImpl implements QeProcessor {
+public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
 
     private static final Logger LOG = LogManager.getLogger(QeProcessorImpl.class);
     private static final long ONE_MINUTE = 60 * 1000L;
@@ -285,6 +288,16 @@ public final class QeProcessorImpl implements QeProcessor {
     @Override
     public long getCoordinatorCount() {
         return coordinatorMap.size();
+    }
+
+    @Override
+    public long estimateSize() {
+        return SizeEstimator.estimate(coordinatorMap) + SizeEstimator.estimate(monitorQueryMap);
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("QueryInfo", (long) coordinatorMap.size());
     }
 
     public static final class QueryInfo {

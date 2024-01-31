@@ -38,6 +38,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.HashBasedTable;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -71,6 +72,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.datacache.DataCacheMetrics;
+import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.metric.GaugeMetric;
 import com.starrocks.metric.Metric.MetricUnit;
 import com.starrocks.metric.MetricRepo;
@@ -117,6 +119,7 @@ import org.apache.commons.lang3.tuple.ImmutableTriple;
 import org.apache.commons.lang3.tuple.Triple;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.spark.util.SizeEstimator;
 import org.apache.thrift.TException;
 
 import java.util.ArrayList;
@@ -128,7 +131,22 @@ import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.stream.Collectors;
 
-public class ReportHandler extends Daemon {
+public class ReportHandler extends Daemon implements MemoryTrackable {
+    @Override
+    public long estimateSize() {
+        return SizeEstimator.estimate(reportQueue) + SizeEstimator.estimate(pendingTaskMap);
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        long count = 0;
+        for (Map<Long, ReportTask> taskMap : pendingTaskMap.values()) {
+            count += taskMap.size();
+        }
+        return ImmutableMap.of("PendingTask", count,
+                                "ReportQueue", (long) reportQueue.size());
+    }
+
     public enum ReportType {
         UNKNOWN_REPORT,
         TABLET_REPORT,

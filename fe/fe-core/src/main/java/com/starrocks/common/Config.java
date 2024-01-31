@@ -1201,6 +1201,18 @@ public class Config extends ConfigBase {
     public static long dynamic_partition_check_interval_seconds = 600;
 
     /**
+     * If set to true, memory tracker feature will open
+     */
+    @ConfField(mutable = true)
+    public static boolean memory_tracker_enable = true;
+
+    /**
+     * Decide how often to track the memory usage of the FE process
+     */
+    @ConfField(mutable = true)
+    public static long memory_tracker_interval_seconds = 60;
+
+    /**
      * If batch creation of partitions is allowed to create half of the partitions, it is easy to generate holes.
      * By default, this is not enabled. If it is turned on, the partitions built by batch creation syntax will
      * not allow partial creation.
