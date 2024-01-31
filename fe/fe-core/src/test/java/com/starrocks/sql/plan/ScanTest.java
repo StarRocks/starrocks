@@ -537,7 +537,8 @@ public class ScanTest extends PlanTestBase {
         String sql = "select * from test_all_type where  id_datetime >= '2011-03-05 00:00:00'\n" +
                 "        and  id_datetime <= '2011-03-21 00:00:00';";
         String plan = getFragmentPlan(sql);
-        assertContains(plan,"PREDICATES: ((8: id_datetime >= '2011-03-05 00:00:00') AND (8: id_datetime <= '2011-03-21 00:00:00')) " +
+        assertContains(plan, "PREDICATES: ((8: id_datetime >= '2011-03-05 00:00:00') " +
+                "AND (8: id_datetime <= '2011-03-21 00:00:00')) " +
                 "OR ((((date_trunc('month', 8: id_datetime) >= '2011-04-01 00:00:00') " +
                 "AND (date_trunc('month', 8: id_datetime) < '2012-01-01 00:00:00')) " +
                 "AND (date_trunc('month', 8: id_datetime) < '2011-03-01 00:00:00')) " +
@@ -549,7 +550,8 @@ public class ScanTest extends PlanTestBase {
                 "        and  id_datetime <= '2011-04-11 00:00:00';";
         plan = getFragmentPlan(sql);
         assertContains(plan,
-                "PREDICATES: (((8: id_datetime >= '2011-03-05 00:00:00') AND (8: id_datetime < '2011-04-01 00:00:00')) " +
+                "PREDICATES: (((8: id_datetime >= '2011-03-05 00:00:00') " +
+                        "AND (8: id_datetime < '2011-04-01 00:00:00')) " +
                         "OR ((((date_trunc('month', 8: id_datetime) >= '2011-04-01 00:00:00') " +
                         "AND (date_trunc('month', 8: id_datetime) < '2012-01-01 00:00:00')) " +
                         "AND (date_trunc('month', 8: id_datetime) < '2011-04-01 00:00:00')) " +
@@ -562,7 +564,7 @@ public class ScanTest extends PlanTestBase {
         sql = "select * from test_all_type where  id_datetime >= '2011-03-05 00:00:00'\n" +
                 "        and  id_datetime <= '2011-05-11 00:00:00';";
         plan = getFragmentPlan(sql);
-        assertContains(plan,"PREDICATES: (((8: id_datetime >= '2011-03-05 00:00:00') " +
+        assertContains(plan, "PREDICATES: (((8: id_datetime >= '2011-03-05 00:00:00') " +
                 "AND (8: id_datetime < '2011-04-01 00:00:00')) " +
                 "OR ((((date_trunc('month', 8: id_datetime) >= '2011-04-01 00:00:00') " +
                 "AND (date_trunc('month', 8: id_datetime) < '2012-01-01 00:00:00')) " +
@@ -572,12 +574,11 @@ public class ScanTest extends PlanTestBase {
                 "OR ((8: id_datetime >= '2011-05-01 00:00:00') " +
                 "AND (8: id_datetime <= '2011-05-11 00:00:00'))");
 
-
         // two year
         sql = "select * from test_all_type where  id_datetime >= '2011-03-05 00:00:00'\n" +
                 "        and  id_datetime <= '2012-08-11 00:00:00';";
         plan = getFragmentPlan(sql);
-        assertContains(plan,"PREDICATES: (((8: id_datetime >= '2011-03-05 00:00:00') " +
+        assertContains(plan, "PREDICATES: (((8: id_datetime >= '2011-03-05 00:00:00') " +
                 "AND (8: id_datetime < '2011-04-01 00:00:00')) " +
                 "OR ((((date_trunc('month', 8: id_datetime) >= '2011-04-01 00:00:00') " +
                 "AND (date_trunc('month', 8: id_datetime) < '2012-01-01 00:00:00')) " +
@@ -593,7 +594,7 @@ public class ScanTest extends PlanTestBase {
         sql = "select * from test_all_type where  id_datetime >= '2011-03-05 00:00:00'\n" +
                 "        and  id_datetime <= '2013-08-11 00:00:00';";
         plan = getFragmentPlan(sql);
-        assertContains(plan,"PREDICATES: (((8: id_datetime >= '2011-03-05 00:00:00') " +
+        assertContains(plan, "PREDICATES: (((8: id_datetime >= '2011-03-05 00:00:00') " +
                 "AND (8: id_datetime < '2011-04-01 00:00:00')) " +
                 "OR ((((date_trunc('month', 8: id_datetime) >= '2011-04-01 00:00:00') " +
                 "AND (date_trunc('month', 8: id_datetime) < '2012-01-01 00:00:00')) " +

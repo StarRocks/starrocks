@@ -279,8 +279,6 @@ public class SplitDatePredicateRule extends TransformationRule {
             ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
             ScalarOperator finalResult = rewriter.rewrite(resultPredicate,
                     Arrays.asList(new FoldConstantsRule(true), new SimplifiedPredicateRule()));
-//            ScalarRangePredicateExtractor scalarRangePredicateExtractor = new ScalarRangePredicateExtractor();
-//            finalResult = scalarRangePredicateExtractor.rewriteAll(finalResult);
 
             resultPredicates.add(finalResult);
         }
