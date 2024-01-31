@@ -22,6 +22,7 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AuditLog;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
@@ -128,9 +129,9 @@ public class StatisticExecutor {
         }
     }
 
-    public void dropTableStatistics(ConnectContext statsConnectCtx, String tableUUID) {
+    public void dropExternalTableStatistics(ConnectContext statsConnectCtx, String tableUUID) {
         String sql = StatisticSQLBuilder.buildDropExternalStatSQL(tableUUID);
-        LOG.debug("Expire statistic SQL: {}", sql);
+        LOG.debug("Expire external statistic SQL: {}", sql);
 
         boolean result = executeDML(statsConnectCtx, sql);
         if (!result) {
@@ -339,9 +340,13 @@ public class StatisticExecutor {
         context.getSessionVariable().setEnableMaterializedViewRewrite(false);
         Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
         if (!sqlResult.second.ok()) {
+            AuditLog.getStatisticAudit().log("statistic query success | QueryId [{}] | SQL: {}",
+                    DebugUtil.printId(context.getQueryId()), sql);
             throw new SemanticException("Statistics query fail | Error Message [%s] | QueryId [%s] | SQL [%s]",
                     context.getState().getErrorMessage(), DebugUtil.printId(context.getQueryId()), sql);
         } else {
+            AuditLog.getStatisticAudit().log("statistic query fail | QueryId [{}] | SQL: {}",
+                    DebugUtil.printId(context.getQueryId()), sql);
             return sqlResult.first;
         }
     }
@@ -354,9 +359,13 @@ public class StatisticExecutor {
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
             executor.execute();
+            AuditLog.getStatisticAudit().log("statistic DML success | QueryId [{}] | SQL: {}",
+                    DebugUtil.printId(context.getQueryId()), sql);
             return true;
         } catch (Exception e) {
-            LOG.warn("Execute statistic DML fail | {} | SQL {}", DebugUtil.printId(context.getQueryId()), sql, e);
+            AuditLog.getStatisticAudit().log("statistic DML fail | QueryId [{}] | SQL: {}",
+                    DebugUtil.printId(context.getQueryId()), sql);
+            LOG.warn("statistic DML fail | {} | SQL {}", DebugUtil.printId(context.getQueryId()), sql, e);
             return false;
         }
     }

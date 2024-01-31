@@ -21,8 +21,10 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AuditLog;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -318,6 +320,9 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
     private void deployTasks() throws Exception {
         QeProcessorImpl.QueryInfo queryInfo = QeProcessorImpl.QueryInfo.fromMVJob(getView().getMvId(), connectContext);
         QeProcessorImpl.INSTANCE.registerQuery(connectContext.getExecutionId(), queryInfo);
+        AuditLog.getMVAudit().log("MV maintenance job started | execute_id [{}] | mv_id [{}] ",
+                DebugUtil.printId(connectContext.getExecutionId()),
+                getView().getMvId());
 
         List<Future<PMVMaintenanceTaskResult>> results = new ArrayList<>();
         for (MVMaintenanceTask task : taskMap.values()) {
