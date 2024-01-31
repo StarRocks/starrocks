@@ -525,12 +525,14 @@ public class IcebergMetadata implements ConnectorMetadata {
         Types.StructType schema = nativeTbl.schema().asStruct();
 
         Map<String, MetricsModes.MetricsMode> fieldToMetricsMode = getIcebergMetricsConfig(icebergTable);
-        Tracers.record(Tracers.Module.EXTERNAL, "ICEBERG.MetricsConfig." + nativeTbl + ".write_metrics_mode_default",
-                DEFAULT_WRITE_METRICS_MODE_DEFAULT);
-        Tracers.record(Tracers.Module.EXTERNAL, "ICEBERG.MetricsConfig." + nativeTbl + ".non-default.size",
-                String.valueOf(fieldToMetricsMode.size()));
-        Tracers.record(Tracers.Module.EXTERNAL, "ICEBERG.MetricsConfig." + nativeTbl + ".non-default.columns",
-                fieldToMetricsMode.toString());
+        if (!fieldToMetricsMode.isEmpty()) {
+            Tracers.record(Tracers.Module.EXTERNAL, "ICEBERG.MetricsConfig." + nativeTbl + ".write_metrics_mode_default",
+                    DEFAULT_WRITE_METRICS_MODE_DEFAULT);
+            Tracers.record(Tracers.Module.EXTERNAL, "ICEBERG.MetricsConfig." + nativeTbl + ".non-default.size",
+                    String.valueOf(fieldToMetricsMode.size()));
+            Tracers.record(Tracers.Module.EXTERNAL, "ICEBERG.MetricsConfig." + nativeTbl + ".non-default.columns",
+                    fieldToMetricsMode.toString());
+        }
 
         List<ScalarOperator> scalarOperators = Utils.extractConjuncts(predicate);
         ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(schema);
