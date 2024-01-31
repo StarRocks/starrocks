@@ -40,10 +40,12 @@ public:
     }
 
     void rowset_writer_add_rows(std::unique_ptr<RowsetWriter>& writer, int64_t level) {
+        static int64_t id = 0;
         std::srand(std::time(nullptr));
         std::vector<std::string> test_data;
         auto schema = ChunkHelper::convert_schema_to_format_v2(*_tablet_schema);
         auto chunk = ChunkHelper::new_chunk(schema, 1024);
+<<<<<<< HEAD
         for (size_t i = 0; i < 24576 * pow(config::size_tiered_level_multiple + 1, level - 2); ++i) {
             test_data.push_back("well" + std::to_string(std::rand()));
             auto& cols = chunk->columns();
@@ -51,6 +53,15 @@ public:
             Slice field_1(test_data[i]);
             cols[1]->append_datum(vectorized::Datum(field_1));
             cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(10000 + std::rand())));
+=======
+        for (size_t i = 0; i < 1500 * pow(config::size_tiered_level_multiple + 3, level - 2); ++i) {
+            test_data.push_back("well" + std::to_string(id++));
+            auto& cols = chunk->columns();
+            cols[0]->append_datum(Datum(static_cast<int32_t>(id++)));
+            Slice field_1(test_data[i]);
+            cols[1]->append_datum(Datum(field_1));
+            cols[2]->append_datum(Datum(static_cast<int32_t>(10000 + id++)));
+>>>>>>> 323ca5e3ca ([UT] Fix unstable be ut (#40444))
         }
         CHECK_OK(writer->add_chunk(*chunk));
     }
