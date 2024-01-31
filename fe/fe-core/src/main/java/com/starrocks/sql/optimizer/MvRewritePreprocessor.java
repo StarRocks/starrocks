@@ -433,7 +433,7 @@ public class MvRewritePreprocessor {
                 .collect(Collectors.toSet());
     }
 
-    private MvWithPlanContext getMVWithContext(MaterializedView mv) {
+    private List<MvWithPlanContext> getMVWithContext(MaterializedView mv) {
         if (!mv.isActive()) {
             logMVPrepare(connectContext, mv, "MV is not active: {}", mv.getName());
             return null;
@@ -446,15 +446,16 @@ public class MvRewritePreprocessor {
                     mv.getName());
             return null;
         }
+        List<MvWithPlanContext> mvWithPlanContexts = Lists.newArrayList();
         for (MvPlanContext mvPlanContext : mvPlanContexts) {
             if (!mvPlanContext.isValidMvPlan()) {
                 logMVPrepare(connectContext, mv, "MV plan is not valid: "
                         + mvPlanContext.getInvalidReason());
                 continue;
             }
-            return new MvWithPlanContext(mv, mvPlanContext);
+            mvWithPlanContexts.add(new MvWithPlanContext(mv, mvPlanContext));
         }
-        return null;
+        return mvWithPlanContexts;
     }
 
     private boolean canMVRewriteIfMVHasExtraTables(MaterializedView mv,
@@ -493,7 +494,8 @@ public class MvRewritePreprocessor {
         }
         // if mv is in plan cache(avoid building plan), check whether it's valid
         List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContextFromCacheIfPresent(mv);
-        if (planContexts != null && planContexts.stream().noneMatch(mvPlanContext -> mvPlanContext.isValidMvPlan())) {
+        if (planContexts != null && !planContexts.isEmpty() &&
+                planContexts.stream().noneMatch(mvPlanContext -> mvPlanContext.isValidMvPlan())) {
             logMVPrepare(connectContext, mv, "MV has not a valid plan: {}", mv.getName());
             return false;
         }
@@ -546,7 +548,7 @@ public class MvRewritePreprocessor {
 
         // 3. choose max config related mvs for mv rewrite to avoid too much optimize time
         int maxRelatedMVsLimit = connectContext.getSessionVariable().getCboMaterializedViewRewriteRelatedMVsLimit();
-        if (maxRelatedMVsLimit < 1 && validMVs.size() <= maxRelatedMVsLimit) {
+        if (validMVs.size() <= maxRelatedMVsLimit) {
             return validMVs;
         }
         return chooseBestRelatedMVsByCorrelations(queryTables, validMVs, queryOptExpression, maxRelatedMVsLimit);
@@ -557,9 +559,9 @@ public class MvRewritePreprocessor {
         Set<MvWithPlanContext> mvWithPlanContexts = Sets.newHashSet();
         for (MaterializedView mv : validMVs) {
             try {
-                MvWithPlanContext mvWithPlanContext = getMVWithContext(mv);
+                List<MvWithPlanContext> mvWithPlanContext = getMVWithContext(mv);
                 if (mvWithPlanContext != null) {
-                    mvWithPlanContexts.add(mvWithPlanContext);
+                    mvWithPlanContexts.addAll(mvWithPlanContext);
                 }
             } catch (Exception e) {
                 logMVPrepare(connectContext, "Get mv plan context failed:{}", e.getMessage());

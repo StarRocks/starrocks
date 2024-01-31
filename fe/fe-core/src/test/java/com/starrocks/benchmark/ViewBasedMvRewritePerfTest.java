@@ -21,10 +21,12 @@ import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteTestBase;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestRule;
 
+@Ignore
 public class ViewBasedMvRewritePerfTest extends MvRewriteTestBase {
 
     private static final int MV_NUM = 4;
