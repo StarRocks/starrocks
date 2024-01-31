@@ -550,7 +550,12 @@ Status CSVScanner::_get_schema(std::vector<SlotDescriptor>* schema) {
     RETURN_IF_ERROR(_init_reader());
 
     CSVReader::Record record;
-    RETURN_IF_ERROR(_curr_reader->next_record(&record));
+    auto st = _curr_reader->next_record(&record);
+    if (!st.ok() && st.is_end_of_file()) {
+        return Status::OK();
+    } else if (!st.ok()) {
+        return st;
+    }
 
     CSVReader::Fields fields;
     _curr_reader->split_record(record, &fields);
