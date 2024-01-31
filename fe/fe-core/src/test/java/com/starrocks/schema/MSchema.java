@@ -318,7 +318,8 @@ public class MSchema {
 
     public static MTable getTable(String tableName) {
         if (!TABLE_MAP.containsKey(tableName)) {
-            throw new RuntimeException(String.format("%s is not in metadata marketing, please add it in the marketing", tableName));
+            throw new RuntimeException(String.format("%s is not in metadata marketing, please add it in the marketing",
+                    tableName));
         }
         return TABLE_MAP.get(tableName);
     }
