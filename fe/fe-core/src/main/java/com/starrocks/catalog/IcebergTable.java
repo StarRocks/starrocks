@@ -143,8 +143,8 @@ public class IcebergTable extends Table {
         return hasNullPartitionField;
     }
 
-    public void setHasNullPartitionField(boolean hasNullPartitionField) {
-        this.hasNullPartitionField = hasNullPartitionField;
+    public void setNullPartitionTrue() {
+        this.hasNullPartitionField = true;
     }
 
     @Override

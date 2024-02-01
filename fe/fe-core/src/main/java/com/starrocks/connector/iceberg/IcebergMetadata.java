@@ -461,7 +461,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             org.apache.iceberg.PartitionData partitionData = (org.apache.iceberg.PartitionData) fileScanTask.file().partition();
 
             if (hasNullPartitionField(spec, partitionData)) {
-                icebergTable.setHasNullPartitionField(true);
+                icebergTable.setNullPartitionTrue();
                 return Lists.newArrayList();
             }
 
