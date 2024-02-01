@@ -156,7 +156,7 @@ public class MockedRemoteFileSystem extends FileSystem {
                     0, false, 0, 0, 0, new Path(HDFS_RECURSIVE_TABLE));
         }
 
-        return new FileStatus[]{fileStatus};
+        return new FileStatus[] {fileStatus};
     }
 
     @Override

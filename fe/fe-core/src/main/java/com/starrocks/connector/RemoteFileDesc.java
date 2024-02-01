@@ -135,7 +135,7 @@ public class RemoteFileDesc {
     public String toString() {
         final StringBuilder sb = new StringBuilder("RemoteFileDesc{");
         sb.append("fileName='").append(fileName).append('\'');
-	sb.append("fullPath='").append(fullPath).append('\'');
+        sb.append("fullPath='").append(fullPath).append('\'');
         sb.append(", compression='").append(compression).append('\'');
         sb.append(", length=").append(length);
         sb.append(", modificationTime=").append(modificationTime);
