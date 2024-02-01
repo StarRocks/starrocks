@@ -145,6 +145,9 @@ public class RewriteMultiDistinctRule extends TransformationRule {
         List<Double> distinctValueCounts = Lists.newArrayList();
         for (CallOperator callOperator : distinctAggOperatorList) {
             List<ColumnRefOperator> distinctColumns = callOperator.getColumnRefs();
+            if (distinctColumns.isEmpty()) {
+                continue;
+            }
             Set<ColumnRefOperator> deduplicateKeys = Sets.newHashSet();
             deduplicateKeys.addAll(aggOp.getGroupingKeys());
             deduplicateKeys.addAll(distinctColumns);
