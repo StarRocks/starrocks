@@ -32,6 +32,7 @@ public class ShowTabletTest {
     public void normalTest() {
         analyzeSuccess("SHOW TABLET 10000;");
         analyzeSuccess("SHOW TABLET FROM test_tbl;");
+        analyzeSuccess("SHOW TABLETS FROM test_tbl;");
         analyzeSuccess("SHOW TABLET FROM example_db.table_name;");
         analyzeSuccess("SHOW TABLET FROM example_db.table_name partition(p1, p2);");
         analyzeSuccess("SHOW TABLET FROM example_db.table_name limit 10;");
