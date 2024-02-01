@@ -12,40 +12,16 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
-<<<<<<< HEAD
 #include "util/logging.h"
-=======
-#include "types/logical_type.h"
->>>>>>> 23f21c09f2 ([Enhancement] Optimize the performance of calc mem usage for bitmap column (#38411))
 
 namespace starrocks::vectorized {
 
-<<<<<<< HEAD
-class ChunkHelperTest : public testing::Test {
-public:
-    void add_tablet_column(TabletSchemaPB& tablet_schema_pb, int32_t id, bool is_key, const std::string& type,
-                           int32_t length, bool is_nullable);
-    vectorized::SchemaPtr gen_v_schema(bool is_nullable);
-    void check_chunk(Chunk* chunk, size_t column_size, size_t row_size);
-    void check_chunk_nullable(Chunk* chunk, size_t column_size, size_t row_size);
-    void check_column(Column* column, FieldType type, size_t row_size);
-
-private:
-    FieldType _type[9] = {OLAP_FIELD_TYPE_TINYINT, OLAP_FIELD_TYPE_SMALLINT, OLAP_FIELD_TYPE_INT,
-                          OLAP_FIELD_TYPE_BIGINT,  OLAP_FIELD_TYPE_LARGEINT, OLAP_FIELD_TYPE_FLOAT,
-                          OLAP_FIELD_TYPE_DOUBLE,  OLAP_FIELD_TYPE_VARCHAR,  OLAP_FIELD_TYPE_CHAR};
-
+class ChunkHelperTest : public ::testing::Test {
+protected:
     PrimitiveType _primitive_type[9] = {
             PrimitiveType::TYPE_TINYINT, PrimitiveType::TYPE_SMALLINT, PrimitiveType::TYPE_INT,
             PrimitiveType::TYPE_BIGINT,  PrimitiveType::TYPE_LARGEINT, PrimitiveType::TYPE_FLOAT,
             PrimitiveType::TYPE_DOUBLE,  PrimitiveType::TYPE_VARCHAR,  PrimitiveType::TYPE_CHAR};
-=======
-class ChunkHelperTest : public ::testing::Test {
-protected:
-    LogicalType _primitive_type[9] = {LogicalType::TYPE_TINYINT, LogicalType::TYPE_SMALLINT, LogicalType::TYPE_INT,
-                                      LogicalType::TYPE_BIGINT,  LogicalType::TYPE_LARGEINT, LogicalType::TYPE_FLOAT,
-                                      LogicalType::TYPE_DOUBLE,  LogicalType::TYPE_VARCHAR,  LogicalType::TYPE_CHAR};
->>>>>>> 23f21c09f2 ([Enhancement] Optimize the performance of calc mem usage for bitmap column (#38411))
 
     TSlotDescriptor _create_slot_desc(PrimitiveType type, const std::string& col_name, int col_pos);
     TupleDescriptor* _create_tuple_desc();
@@ -104,129 +80,7 @@ TupleDescriptor* ChunkHelperTest::_create_tuple_desc() {
     return tuple_desc;
 }
 
-<<<<<<< HEAD
-void ChunkHelperTest::add_tablet_column(TabletSchemaPB& tablet_schema_pb, int32_t id, bool is_key,
-                                        const std::string& type, int32_t length, bool is_nullable) {
-    ColumnPB* column = tablet_schema_pb.add_column();
-    column->set_unique_id(id);
-    column->set_name("c" + std::to_string(id));
-    column->set_type(type);
-    column->set_is_key(is_key);
-    column->set_length(length);
-    column->set_is_nullable(is_nullable);
-    column->set_aggregation("NONE");
-}
-
-vectorized::SchemaPtr ChunkHelperTest::gen_v_schema(bool is_nullable) {
-    vectorized::Fields fields;
-    fields.emplace_back(std::make_shared<Field>(0, "c0", get_type_info(OLAP_FIELD_TYPE_TINYINT), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(1, "c1", get_type_info(OLAP_FIELD_TYPE_SMALLINT), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(2, "c2", get_type_info(OLAP_FIELD_TYPE_INT), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(3, "c3", get_type_info(OLAP_FIELD_TYPE_BIGINT), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(4, "c4", get_type_info(OLAP_FIELD_TYPE_LARGEINT), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(5, "c5", get_type_info(OLAP_FIELD_TYPE_FLOAT), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(6, "c6", get_type_info(OLAP_FIELD_TYPE_DOUBLE), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(7, "c7", get_type_info(OLAP_FIELD_TYPE_VARCHAR), is_nullable));
-    fields.emplace_back(std::make_shared<Field>(8, "c8", get_type_info(OLAP_FIELD_TYPE_CHAR), is_nullable));
-    return std::make_shared<Schema>(fields);
-}
-
-void ChunkHelperTest::check_chunk(Chunk* chunk, size_t column_size, size_t row_size) {
-    CHECK_EQ(chunk->columns().size(), column_size);
-    for (size_t i = 0; i < column_size; i++) {
-        check_column(chunk->get_column_by_index(i).get(), _type[i], row_size);
-    }
-}
-
-void ChunkHelperTest::check_chunk_nullable(Chunk* chunk, size_t column_size, size_t row_size) {
-    CHECK_EQ(chunk->columns().size(), column_size);
-    for (size_t i = 0; i < column_size; i++) {
-        Column* d_column =
-                (reinterpret_cast<NullableColumn*>(chunk->get_column_by_index(i).get()))->data_column().get();
-        check_column(d_column, _type[i], row_size);
-    }
-}
-
-void ChunkHelperTest::check_column(Column* column, FieldType type, size_t row_size) {
-    ASSERT_EQ(column->size(), row_size);
-
-    switch (type) {
-    case OLAP_FIELD_TYPE_TINYINT: {
-        const auto* data = reinterpret_cast<const int8_t*>(static_cast<Int8Column*>(column)->raw_data());
-        for (int i = 0; i < row_size; i++) {
-            ASSERT_EQ(*(data + i), static_cast<int8_t>(i * 2));
-        }
-        break;
-    }
-    case OLAP_FIELD_TYPE_SMALLINT: {
-        const auto* data = reinterpret_cast<const int16_t*>(static_cast<Int16Column*>(column)->raw_data());
-        for (int i = 0; i < row_size; i++) {
-            ASSERT_EQ(*(data + i), static_cast<int16_t>(i * 2 * 10));
-        }
-        break;
-    }
-    case OLAP_FIELD_TYPE_INT: {
-        const auto* data = reinterpret_cast<const int32_t*>(static_cast<Int32Column*>(column)->raw_data());
-        for (int i = 0; i < row_size; i++) {
-            ASSERT_EQ(*(data + i), static_cast<int32_t>(i * 2 * 100));
-        }
-        break;
-    }
-    case OLAP_FIELD_TYPE_BIGINT: {
-        const auto* data = reinterpret_cast<const int64_t*>(static_cast<Int64Column*>(column)->raw_data());
-        for (int i = 0; i < row_size; i++) {
-            ASSERT_EQ(*(data + i), static_cast<int64_t>(i * 2 * 1000));
-        }
-        break;
-    }
-    case OLAP_FIELD_TYPE_LARGEINT: {
-        const auto* data = reinterpret_cast<const int128_t*>(static_cast<Int128Column*>(column)->raw_data());
-        for (int i = 0; i < row_size; i++) {
-            ASSERT_EQ(*(data + i), static_cast<int128_t>(i * 2 * 10000));
-        }
-        break;
-    }
-    case OLAP_FIELD_TYPE_FLOAT: {
-        const auto* data = reinterpret_cast<const float*>(static_cast<FloatColumn*>(column)->raw_data());
-        for (int i = 0; i < row_size; i++) {
-            ASSERT_EQ(*(data + i), static_cast<float>(i * 2 * 100000));
-        }
-        break;
-    }
-    case OLAP_FIELD_TYPE_DOUBLE: {
-        const auto* data = reinterpret_cast<const double*>(static_cast<DoubleColumn*>(column)->raw_data());
-        for (int i = 0; i < row_size; i++) {
-            ASSERT_EQ(*(data + i), static_cast<double>(i * 2 * 1000000));
-        }
-        break;
-    }
-    case OLAP_FIELD_TYPE_VARCHAR: {
-        const auto* data = reinterpret_cast<const BinaryColumn*>(column);
-        for (int i = 0; i < row_size; i++) {
-            Slice l = data->get_slice(i);
-            Slice r(std::to_string(i * 2 * 10000000));
-            ASSERT_EQ(l, r);
-        }
-        break;
-    }
-    case OLAP_FIELD_TYPE_CHAR: {
-        const auto* data = reinterpret_cast<const BinaryColumn*>(column);
-        for (int i = 0; i < row_size; i++) {
-            Slice l = data->get_slice(i);
-            Slice r(std::to_string(i * 2 * 100000000));
-            ASSERT_EQ(l, r);
-        }
-        break;
-    }
-    default:
-        break;
-    }
-}
-
 TEST_F(ChunkHelperTest, NewChunkWithTuple) {
-=======
-TEST_F(ChunkHelperTest, new_chunk_with_tuple) {
->>>>>>> 23f21c09f2 ([Enhancement] Optimize the performance of calc mem usage for bitmap column (#38411))
     auto* tuple_desc = _create_tuple_desc();
 
     auto chunk = ChunkHelper::new_chunk(*tuple_desc, 1024);
