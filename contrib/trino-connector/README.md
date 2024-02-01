@@ -42,7 +42,7 @@ Because Trino and StarRocks each support types that the other does not, this con
 The connector maps StarRocks types to the corresponding Trino types following this table:
 | StarRocks type | Trino type | Notes |
 |-|-|-|
-| `BOOLEAN` | `TINYINT	` |  |
+| `BOOLEAN` | `TINYINT` |  |
 | `TINYINT` | `TINYINT` |  |
 | `SMALLINT` | `SMALLINT` |  |
 | `INT` | `INTEGER` |  |
