@@ -26,7 +26,8 @@ public class ScoreSorter implements Sorter {
     public List<PartitionStatistics> sort(@NotNull List<PartitionStatistics> partitionStatistics) {
         return partitionStatistics.stream()
                 .filter(p -> p.getCompactionScore() != null)
-                .sorted(Comparator.comparing(PartitionStatistics::getCompactionScore).reversed())
+                .sorted(Comparator.comparingInt(PartitionStatistics::getPriority).reversed()
+                        .thenComparing(Comparator.comparing(PartitionStatistics::getCompactionScore).reversed()))
                 .collect(Collectors.toList());
     }
 }

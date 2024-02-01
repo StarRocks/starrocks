@@ -32,7 +32,8 @@ public class ScoreSelector implements Selector {
         return statistics.stream()
                 .filter(p -> p.getNextCompactionTime() <= now)
                 .filter(p -> p.getCompactionScore() != null)
-                .filter(p -> p.getCompactionScore().getMax() >= minScore)
+                // When manual compaction is triggered, we just skip min score
+                .filter(p -> (p.getPriority() != -1 || p.getCompactionScore().getMax() >= minScore))
                 .collect(Collectors.toList());
     }
 }

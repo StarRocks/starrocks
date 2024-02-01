@@ -21,12 +21,10 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableColumnClause;
 import com.starrocks.sql.ast.AlterTableStmt;
-import com.starrocks.sql.ast.CompactionClause;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropIndexClause;
@@ -64,9 +62,6 @@ public class AlterTableStatementAnalyzer {
                     (alterClause instanceof AddColumnClause || alterClause instanceof DropColumnClause ||
                             alterClause instanceof AlterTableColumnClause)) {
                 throw new SemanticException(String.format("row store table %s can't do schema change", table.getName()));
-            }
-            if (RunMode.isSharedDataMode() && alterClause instanceof CompactionClause) {
-                throw new SemanticException("manually compact not supported in SHARED_DATA runMode");
             }
             alterTableClauseAnalyzerVisitor.analyze(alterClause, context);
         }

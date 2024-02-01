@@ -16,7 +16,9 @@
 package com.starrocks.lake.compaction;
 
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
 
 public class RandomSorter implements Sorter {
@@ -26,6 +28,8 @@ public class RandomSorter implements Sorter {
     @NotNull
     public List<PartitionStatistics> sort(@NotNull List<PartitionStatistics> partitionStatistics) {
         Collections.shuffle(partitionStatistics);
-        return partitionStatistics;
+        return partitionStatistics.stream()
+                .sorted(Comparator.comparingInt(PartitionStatistics::getPriority).reversed())
+                .collect(Collectors.toList());
     }
 }

@@ -32,6 +32,10 @@ public class PartitionStatistics {
     @SerializedName(value = "compactionScore")
     private Quantiles compactionScore;
 
+    // default priority is -1, manual compaction will have priority value 1
+    @SerializedName(value = "priority")
+    private int priority = -1;
+
     public PartitionStatistics(PartitionIdentifier partition) {
         this.partition = partition;
         this.compactionVersion = null;
@@ -81,6 +85,18 @@ public class PartitionStatistics {
     @Nullable
     public Quantiles getCompactionScore() {
         return compactionScore;
+    }
+
+    public int getPriority() {
+        return priority;
+    }
+
+    public void setPriority(int priority) {
+        this.priority = priority;
+    }
+
+    public void resetPriority() {
+        this.setPriority(-1);
     }
 
     @Override
