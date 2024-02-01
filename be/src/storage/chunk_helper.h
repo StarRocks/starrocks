@@ -124,14 +124,9 @@ private:
     static constexpr size_t LOW_WATERMARK_BYTES = 64 * 1024; // 64KB.
 #else
     static constexpr size_t LOW_WATERMARK_BYTES = 256 * 1024 * 1024; // 256MB.
-<<<<<<< HEAD
+#endif
     vectorized::ChunkPtr _in_chunk = nullptr;
     vectorized::ChunkPtr _out_chunk = nullptr;
-=======
-#endif
-    ChunkPtr _in_chunk = nullptr;
-    ChunkPtr _out_chunk = nullptr;
->>>>>>> 23f21c09f2 ([Enhancement] Optimize the performance of calc mem usage for bitmap column (#38411))
     size_t _max_size = 4096;
     // For bitmap columns, the cost of calculating mem_usage is relatively high,
     // so incremental calculation is used to avoid becoming a performance bottleneck.
