@@ -296,7 +296,8 @@
           "label": "DBT",
           "description": "Modeling and transformation with DBT",
           "href": "https://github.com/StarRocks/starrocks/tree/main/contrib/dbt-connector/README.md"
-         }
+         },
+         "integrations/hive_bitmap_udf"
       ]
     },
     {
@@ -1039,7 +1040,8 @@
           "label": "DBT",
           "description": "通过 DBT 实现数据建模与转换",
           "href": "https://github.com/StarRocks/starrocks/tree/main/contrib/dbt-connector/README.md"
-         }
+         },
+         "integrations/hive_bitmap_udf"
       ]
     },
     {
