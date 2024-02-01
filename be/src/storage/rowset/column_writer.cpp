@@ -404,16 +404,16 @@ Status ScalarColumnWriter::init() {
             bf_options.use_ngram = true;
             const TabletIndex& ngram_bf_index = _opts.tablet_index[NGRAMBF];
             const std::map<std::string, std::string>& index_properties = ngram_bf_index.index_properties();
-            auto it = index_properties.find("GRAM_NUM");
+            auto it = index_properties.find(GRAM_NUM_KEY);
             if (it != index_properties.end()) {
-                // Found the key "ngram_size"
-                const std::string& gram_num = it->second; // The value corresponding to the key "ngram_size"
+                // Found the key "gram_num"
+                const std::string& gram_num = it->second; // The value corresponding to the key "gram_num"
                 bf_options.gram_num = std::stoi(gram_num);
             }
-            it = index_properties.find("FPP");
+            it = index_properties.find(FPP_KEY);
             if (it != index_properties.end()) {
-                // Found the key "ngram_size"
-                const std::string& fpp = it->second; // The value corresponding to the key "ngram_size"
+                // Found the key "bloom_filter_fpp"
+                const std::string& fpp = it->second; // The value corresponding to the key "bloom_filter_fpp"
                 bf_options.fpp = std::stod(fpp);
             }
         }

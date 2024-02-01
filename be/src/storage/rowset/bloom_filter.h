@@ -45,7 +45,8 @@
 #include "util/murmur_hash3.h"
 
 namespace starrocks {
-
+static const std::string FPP_KEY = "bloom_filter_fpp";
+static const std::string GRAM_NUM_KEY = "gram_num";
 struct BloomFilterOptions {
     // false positive probablity
     double fpp = 0.05;

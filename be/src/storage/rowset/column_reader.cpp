@@ -697,7 +697,7 @@ size_t ColumnReader::_get_gram_num_for_ngram() const {
     }
 
     const std::map<std::string, std::string>& index_properties = ngram_bf_index->index_properties();
-    auto it = index_properties.find("GRAM_NUM");
+    auto it = index_properties.find(GRAM_NUM_KEY);
     if (it != index_properties.end()) {
         // Found the key "ngram_size"
         const std::string& gram_num_str = it->second; // The value corresponding to the key "ngram_size"
