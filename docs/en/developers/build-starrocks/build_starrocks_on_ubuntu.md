@@ -4,9 +4,9 @@ displayed_sidebar: "English"
 
 # Compile StarRocks on Ubuntu
 
-This topic describes how to compile StarRocks on the Ubuntu operating system. StarRocks supports compilation on both X86_64 and aarch64 architectures.
+This topic describes how to compile StarRocks on the Ubuntu operating system. StarRocks supports compilation on both x86_64 and AArch64 architectures.
 
-## Prerequisite
+## Prerequisites
 
 ### Install Dependencies
 
