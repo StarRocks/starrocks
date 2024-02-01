@@ -58,10 +58,12 @@ public:
     static Status start(IOMode op);
     static void stop();
     static void reset();
+    static IOMode get_context_io_mode() { return static_cast<IOMode>(_context_io_mode.load()); }
 
     static void set_context(uint32_t tag, uint64_t tablet_id);
     static void set_context(IOStatEntry* entry);
     static IOStatEntry* get_context();
+    static IOStat get_context_io();
     static void clear_context();
 
     static void take_tls_io_snapshot(IOStat* snapshot);
@@ -89,6 +91,8 @@ public:
         ~Scope() { set_context(_old); }
 
         IOStat current_scoped_tls_io() { return calculate_scoped_tls_io(_tls_io_snapshot); }
+
+        IOStat current_context_io() { return get_context_io(); }
 
     private:
         IOStatEntry* _old{nullptr};
