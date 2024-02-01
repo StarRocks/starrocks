@@ -290,29 +290,9 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_fail_retry) {
         ASSERT_OK(delta_writer->write(*chunks[i], indexes.data(), indexes.size()));
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
-<<<<<<< HEAD
-        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
-        auto txn_log_st = tablet.get_txn_log(txn_id);
-        EXPECT_TRUE(txn_log_st.ok());
-        auto& txn_log = txn_log_st.value();
-        ASSIGN_OR_ABORT(auto base_metadata, tablet.get_metadata(version));
-        auto new_metadata = std::make_shared<TabletMetadata>(*base_metadata);
-        new_metadata->set_version(version + 1);
-        std::unique_ptr<MetaFileBuilder> builder = std::make_unique<MetaFileBuilder>(tablet, new_metadata);
-        // update primary table state, such as primary index
-        std::unique_ptr<std::lock_guard<std::mutex>> lock = nullptr;
-        ASSIGN_OR_ABORT(auto index_entry, tablet.update_mgr()->prepare_primary_index(
-                                                  *new_metadata, &tablet, builder.get(), version, version + 1, lock));
-        ASSERT_OK(tablet.update_mgr()->publish_primary_key_tablet(txn_log->op_write(), txn_log->txn_id(), *new_metadata,
-                                                                  &tablet, index_entry, builder.get(), version));
-        // if builder.finalize fail, remove primary index cache and retry
-        tablet.update_mgr()->release_primary_index_cache(index_entry);
-        builder->handle_failure();
-=======
         // Publish version
         ASSERT_ERROR(publish_single_version(tablet_id, version + 1, txn_id).status());
         EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
->>>>>>> 3bf4bda790 ([Enhancement] Call unload before remove primary index to make sure clean the error pk index before retry (#40479))
     }
     // write success
     for (int i = 3; i < 5; i++) {
@@ -611,69 +591,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_abort_txn) {
     SyncPoint::GetInstance()->DisableProcessing();
 }
 
-<<<<<<< HEAD
-=======
-TEST_P(LakePrimaryKeyPublishTest, test_batch_publish) {
-    auto [chunk0, indexes0] = gen_data_and_index(kChunkSize, 0, true, true);
-    auto [chunk1, indexes1] = gen_data_and_index(kChunkSize, 0, false, false);
-    auto base_version = 1;
-    auto tablet_id = _tablet_metadata->id();
-    std::vector<int64_t> txn_ids;
-    auto txn_id = next_id();
-    txn_ids.emplace_back(txn_id);
-    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
-                                               .set_tablet_manager(_tablet_mgr.get())
-                                               .set_tablet_id(tablet_id)
-                                               .set_txn_id(txn_id)
-                                               .set_partition_id(_partition_id)
-                                               .set_mem_tracker(_mem_tracker.get())
-                                               .set_index_id(_tablet_schema->id())
-                                               .set_slot_descriptors(&_slot_pointers)
-                                               .build());
-    ASSERT_OK(delta_writer->open());
-    ASSERT_OK(delta_writer->write(*chunk0, indexes0.data(), indexes0.size()));
-    ASSERT_OK(delta_writer->finish());
-    delta_writer->close();
-
-    txn_id = next_id();
-    txn_ids.emplace_back(txn_id);
-    ASSIGN_OR_ABORT(delta_writer, DeltaWriterBuilder()
-                                          .set_tablet_manager(_tablet_mgr.get())
-                                          .set_tablet_id(tablet_id)
-                                          .set_txn_id(txn_id)
-                                          .set_partition_id(_partition_id)
-                                          .set_mem_tracker(_mem_tracker.get())
-                                          .set_index_id(_tablet_schema->id())
-                                          .set_slot_descriptors(&_slot_pointers)
-                                          .build());
-    ASSERT_OK(delta_writer->open());
-    ASSERT_OK(delta_writer->write(*chunk1, indexes1.data(), indexes1.size()));
-    ASSERT_OK(delta_writer->finish());
-    delta_writer->close();
-
-    auto new_version = base_version + 2;
-    ASSERT_OK(batch_publish(tablet_id, base_version, new_version, txn_ids).status());
-
-    ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, new_version));
-    EXPECT_EQ(new_tablet_metadata->rowsets_size(), 2);
-    EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 1);
-    EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 12);
-    EXPECT_EQ(new_tablet_metadata->rowsets(1).num_dels(), 0);
-    EXPECT_EQ(0, read_rows(tablet_id, new_version));
-    _tablet_mgr->prune_metacache();
-    _update_mgr->try_remove_primary_index_cache(tablet_id);
-
-    // publish again
-    ASSERT_OK(batch_publish(tablet_id, base_version, new_version, txn_ids).status());
-    ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, new_version));
-    EXPECT_EQ(new_tablet_metadata->rowsets_size(), 2);
-    EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 1);
-    EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 12);
-    EXPECT_EQ(new_tablet_metadata->rowsets(1).num_dels(), 0);
-    EXPECT_EQ(0, read_rows(tablet_id, new_version));
-}
-
->>>>>>> 3bf4bda790 ([Enhancement] Call unload before remove primary index to make sure clean the error pk index before retry (#40479))
 TEST_P(LakePrimaryKeyPublishTest, test_mem_tracker) {
     EXPECT_EQ(1024 * 1024, _mem_tracker->limit());
     EXPECT_EQ(1024 * 1024 * config::lake_pk_preload_memory_limit_percent / 100,
