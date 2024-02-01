@@ -68,16 +68,12 @@ public class MaterializedViewTestBase extends PlanTestBase {
         // set default config for async mvs
         UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
 
-        connectContext.getSessionVariable().setEnablePipelineEngine(true);
-        connectContext.getSessionVariable().setEnableQueryCache(false);
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
-        connectContext.getSessionVariable().setEnableShortCircuit(false);
-        connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(3000000L);
-        connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
-        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
-        connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
-
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
+
+        if (!starRocksAssert.databaseExist("_statistics_")) {
+            StatisticsMetaManager m = new StatisticsMetaManager();
+            m.createStatisticsTablesForTest();
+        }
 
         new MockUp<MaterializedView>() {
             /**
@@ -99,21 +95,6 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 return true;
             }
         };
-
-        new MockUp<PlanTestBase>() {
-            /**
-             * {@link com.starrocks.sql.plan.PlanTestNoneDBBase#isIgnoreExplicitColRefIds()}
-             */
-            @Mock
-            boolean isIgnoreExplicitColRefIds() {
-                return true;
-            }
-        };
-
-        if (!starRocksAssert.databaseExist("_statistics_")) {
-            StatisticsMetaManager m = new StatisticsMetaManager();
-            m.createStatisticsTablesForTest();
-        }
 
         starRocksAssert.withDatabase(MATERIALIZED_DB_NAME)
                 .useDatabase(MATERIALIZED_DB_NAME);
