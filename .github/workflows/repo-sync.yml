@@ -241,13 +241,17 @@ jobs:
           curl -s -X DELETE -u username:${{secrets.GITHUB_TOKEN}} https://api.github.com/repos/${{ github.repository }}/git/refs/heads/${{ env.source_branch }}
           curl -s -X DELETE -u username:${{secrets.GITHUB_TOKEN}} https://api.github.com/repos/${{ github.repository }}/git/refs/heads/${{ env.destination_branch }}
 
-      - uses: repo-sync/github-sync@v2
-        name: Sync repo to branch
-        with:
-          source_repo: StarRocks/starrocks
+      - name: sync repo to branch
+        env:
           source_branch: ${{ inputs.BRANCH }}
           destination_branch: ${{ inputs.BRANCH }}-sync-${{ inputs.PR_ID }}
           github_token: ${{ secrets.SYNC_PAT }}
+        run: |
+          cp -rf /var/local/env/ci-source-code/starrocks starrocks
+          cd starrocks && git pull
+          git checkout ${source_branch}
+          git remote set-url origin https://${github_token}@github.com/CelerData/celerdata-enterprise.git
+          git push origin ${source_branch}:${destination_branch}
 
       - name: checkout tools
         run: |
@@ -258,6 +262,7 @@ jobs:
       - name: pr branch
         run: |
           git pull
+          git checkout ${{ inputs.BRANCH }}
           pr_branch=${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
           git branch ${pr_branch} ${{ inputs.BRANCH }}
           git checkout ${pr_branch}
