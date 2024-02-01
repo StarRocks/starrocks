@@ -323,7 +323,6 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
                 properties_map.emplace(INDEX_PROPERTIES, index.index_properties);
                 std::string str = to_json(properties_map);
                 index_pb->set_index_properties(str);
-                LOG(INFO) << "ngram bloom filter set index pb's index properties:" << str;
             } else {
                 std::string index_type;
                 EnumToString(TIndexType, index.index_type, index_type);
