@@ -33,6 +33,8 @@ import org.junit.Test;
 
 import java.util.Set;
 
+import static com.starrocks.sql.plan.PlanTestNoneDBBase.assertContains;
+
 public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
 
     @BeforeClass
@@ -214,8 +216,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
             FeConstants.USE_MOCK_DICT_MANAGER = true;
             Pair<QueryDumpInfo, String> replayPair =
                     getCostPlanFragment(getDumpInfoFromFile("query_dump/tpch_query11_mv_rewrite"));
-            Assert.assertTrue(replayPair.second, replayPair.second.contains(
-                    "DictExpr(77: n_name,[<place-holder> = 'GERMANY'])"));
+            assertContains(replayPair.second, "DictExpr(60: n_name,[<place-holder> = 'GERMANY'])");
         } finally {
             FeConstants.USE_MOCK_DICT_MANAGER = false;
         }
