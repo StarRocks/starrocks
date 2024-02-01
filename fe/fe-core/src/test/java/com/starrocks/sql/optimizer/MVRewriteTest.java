@@ -1087,9 +1087,11 @@ public class MVRewriteTest {
                 " union all select empid, count(1) as cnt from"
                 + " " + EMPS_TABLE_NAME + " where deptno < 200 group by empid) a group by a.empid";
         String plan = starRocksAssert.withMaterializedView(createMVSQL).query(union).explainQuery();
+        // NOTE: Since `deptno` is key column of the new mv, so use `PREAGGREGATION` instead.
+        System.out.println(plan);
         Assert.assertTrue(plan.contains("1:OlapScanNode\n" +
                 "     TABLE: emps\n" +
-                "     PREAGGREGATION: OFF. Reason: Predicates include the value column\n" +
+                "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 4: deptno > 300\n" +
                 "     partitions=1/1\n" +
                 "     rollup: emps_mv"));
