@@ -33,6 +33,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
@@ -127,7 +128,7 @@ public class SplitTwoPhaseAggRule extends SplitAggregateRule {
                                                   List<ColumnRefOperator> distinctColumns) {
         int aggMode = ConnectContext.get().getSessionVariable().getNewPlannerAggStage();
         for (CallOperator callOperator : operator.getAggregations().values()) {
-            if (callOperator.isDistinct() && !canGenerateTwoStageAggregate(callOperator, distinctColumns)) {
+            if (callOperator.isDistinct() && !canGenerateTwoStageAggregate(callOperator)) {
                 return false;
             }
         }
@@ -141,11 +142,11 @@ public class SplitTwoPhaseAggRule extends SplitAggregateRule {
                 && isTwoStageMoreEfficient(input, distinctColumns);
     }
 
-    private boolean canGenerateTwoStageAggregate(CallOperator distinctCall,
-                                                 List<ColumnRefOperator> distinctColumns) {
+    private boolean canGenerateTwoStageAggregate(CallOperator distinctCall) {
+        List<ScalarOperator> children = distinctCall.getChildren();
         // 1. multiple cols distinct is not support two stage aggregate
         // 2. array type col is not support two stage aggregate
-        if (distinctColumns.size() > 1 || distinctColumns.get(0).getType().isArrayType()) {
+        if (children.size() > 1 || children.get(0).getType().isArrayType()) {
             return false;
         }
 
@@ -157,7 +158,7 @@ public class SplitTwoPhaseAggRule extends SplitAggregateRule {
         } else if (FunctionSet.ARRAY_AGG.equalsIgnoreCase(fnName)) {
             AggregateFunction aggregateFunction = (AggregateFunction) distinctCall.getFunction();
             if (CollectionUtils.isNotEmpty(aggregateFunction.getIsAscOrder()) ||
-                    distinctColumns.get(0).getType().isDecimalOfAnyVersion()) {
+                    children.get(0).getType().isDecimalOfAnyVersion()) {
                 return false;
             }
         }
