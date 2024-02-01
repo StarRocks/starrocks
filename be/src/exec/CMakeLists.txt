@@ -197,9 +197,6 @@ set(EXEC_FILES
     pipeline/scan/schema_chunk_source.cpp
     pipeline/scan/schema_scan_operator.cpp
     pipeline/scan/schema_scan_context.cpp
-    pipeline/sink/iceberg_table_sink_operator.cpp
-    pipeline/sink/hive_table_sink_operator.cpp
-    pipeline/sink/table_function_table_sink_operator.cpp
     pipeline/sink/blackhole_table_sink_operator.cpp
     pipeline/sink/connector_sink_operator.cpp
     pipeline/scan/morsel.cpp
