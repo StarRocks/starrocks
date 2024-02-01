@@ -263,11 +263,11 @@ TEST_F(ChunkPipelineAccumulatorTest, test_push) {
 
     // reserve large and use less
     accumulator.reset_state();
-    accumulator.push(_generate_chunk(1000, 20, 4000));
+    accumulator.push(_generate_chunk(1000, 25, 4000));
     ASSERT_FALSE(accumulator.has_output());
-    accumulator.push(_generate_chunk(1000, 20, 4000));
+    accumulator.push(_generate_chunk(1000, 25, 4000));
     ASSERT_FALSE(accumulator.has_output());
-    accumulator.push(_generate_chunk(1000, 20, 4000));
+    accumulator.push(_generate_chunk(1000, 25, 4000));
     ASSERT_TRUE(accumulator.has_output());
     result_chunk = std::move(accumulator.pull());
     ASSERT_EQ(result_chunk->num_rows(), 3000);
