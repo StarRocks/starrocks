@@ -35,7 +35,7 @@ AS <query_statement>
 | --------------- | ------------------------------------------------------------ |
 | OR REPLACE      | 替换已有视图。                                               |
 | database        | 视图所属的数据库名。                                         |
-| view_name       | 视图名。                                                     |
+| view_name       | 视图名。命名要求参见[系统限制](../../../reference/System_limit.md)。                                                     |
 | column_name     | 视图中的列名。请注意，视图中的列和 `query_statement` 中查询的列的数量必须一致。 |
 | COMMENT         | 视图中的列或视图本身的注释。                                 |
 | query_statement | 用于创建视图的查询语句。可以为 StarRocks 支持的任意查询语句。 |

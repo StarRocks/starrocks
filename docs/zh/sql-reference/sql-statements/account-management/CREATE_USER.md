@@ -22,6 +22,8 @@ CREATE USER <user_identity> [auth_option] [DEFAULT ROLE <role_name>[, <role_name
 
 - `user_identity`：用户标识。由登录IP（userhost）和用户名（username）组成，写作：`username@'userhost'` 。其中，`userhost` 的部分可以使用 `%` 来进行模糊匹配。如果不指定 `userhost`，默认为 `%`，即表示创建一个可以从任意 host 使用 `username` 链接到 StarRocks 的用户。
 
+  有关用户名 (username) 的命名要求，参见[系统限制](../../../reference/System_limit.md)。
+
 - `auth_option`：用户的认证方式。目前，StarRocks 支持原生密码、mysql_native_password 和 LDAP 三种认证方式，其中，原生密码与 mysql_native_password 认证方式的内在逻辑相同，仅在具体设置语法上有轻微差别。同一个 user identity 只能使用一种认证方式。
 
     ```SQL

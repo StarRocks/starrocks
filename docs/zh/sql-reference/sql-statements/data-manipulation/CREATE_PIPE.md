@@ -24,7 +24,7 @@ Pipe 所属的数据库的名称。
 
 ### pipe_name
 
-Pipe 的名称。该名称在 Pipe 所在的数据库内必须唯一。
+Pipe 的名称。该名称在 Pipe 所在的数据库内必须唯一。命名要求参见[系统限制](../../../reference/System_limit.md)。
 
 > **NOTICE**
 >

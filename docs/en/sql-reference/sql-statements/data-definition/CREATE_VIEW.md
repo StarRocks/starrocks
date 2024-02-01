@@ -12,9 +12,9 @@ A view, or a logical view, is a virtual table whose data is derived from a query
 
 For information about materialized views supported by StarRocks, see [Synchronous materialized views](../../../using_starrocks/Materialized_view-single_table.md) and [Asynchronous materialized views](../../../using_starrocks/Materialized_view.md).
 
-> **CAUTION**
->
-> Only users with the CREATE VIEW privilege on a specific database can perform this operation.
+:::tip
+Only users with the CREATE VIEW privilege on a specific database can perform this operation.
+:::
 
 ## Syntax
 
@@ -35,7 +35,7 @@ AS <query_statement>
 | --------------- | ------------------------------------------------------------ |
 | OR REPLACE      | Replace an existing view.                                    |
 | database        | The name of the database where the view resides.             |
-| view_name       | The name of the view.                                        |
+| view_name       | The name of the view. For the naming conventions, see [System limits](../../../reference/System_limit.md).             |
 | column_name     | The name of the column(s) in the view. Note that the columns in the view and the columns queried in the `query_statement` must agree in number. |
 | COMMENT         | The comment on the column in the view or the view itself.    |
 | query_statement | The query statement used to create the view. It can be any query statement supported by StarRocks. |

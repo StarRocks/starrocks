@@ -28,7 +28,7 @@ The unique name of the database to which the pipe belongs.
 
 ### pipe_name
 
-The name of the pipe. The pipe name must be unique within the database in which the pipe is created.
+The name of the pipe. The pipe name must be unique within the database in which the pipe is created. For the naming conventions, see [System limits](../../../reference/System_limit.md).
 
 ### INSERT_SQL
 
