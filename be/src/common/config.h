@@ -152,8 +152,8 @@ CONF_mInt32(compact_threads, "4");
 CONF_Int32(compact_thread_pool_queue_size, "100");
 
 // The count of thread to replication
-CONF_Int32(replication_threads, "0");
-CONF_Int32(clear_expired_replcation_snapshots_interval_seconds, "3600");
+CONF_mInt32(replication_threads, "0");
+CONF_mInt32(clear_expired_replcation_snapshots_interval_seconds, "3600");
 
 // The log dir.
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");

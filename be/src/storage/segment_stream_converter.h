@@ -24,14 +24,14 @@ class SegmentStreamConverter : public FileStreamConverter {
 public:
     explicit SegmentStreamConverter(std::string_view input_file_name, uint64_t input_file_size,
                                     std::unique_ptr<WritableFile> output_file,
-                                    const std::unordered_map<uint32_t, uint32_t>* column_unique_id_map);
+                                    std::unordered_map<uint32_t, uint32_t>* column_unique_id_map);
 
     virtual Status append(const void* data, size_t size) override;
 
     virtual Status close() override;
 
 private:
-    const std::unordered_map<uint32_t, uint32_t>* _column_unique_id_map;
+    std::unordered_map<uint32_t, uint32_t>* _column_unique_id_map;
     std::string _segment_footer_buffer;
 };
 
