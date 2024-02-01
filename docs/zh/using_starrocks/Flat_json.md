@@ -69,6 +69,7 @@ BE 上：
 * `json_flat_null_factor`：控制 Flat JSON 时，提取列的 NULL 值占比阈值，高于该比例不进行提取，默认为0.3。
 * `json_flat_internal_column_min_limit`：控制 Flat JSON 时，JSON 内部字段数量限制，低于该数量的 JSON 不执行 Flat JSON 优化，默认为 5。
 * `json_flat_column_max`：控制 Flat JSON 时，最多提取的子列数量，默认为 20。
+* `json_flat_sparsity_factor`：控制 Flat JSON 时，同名列的占比阈值，当同名列占比低于该值不进行提取，默认为0.9。
 
 ## 注意事项
 
