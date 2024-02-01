@@ -539,7 +539,7 @@ SELECT * FROM table3;
       format as "csv"
       (id, name)
   )
-  WTIH BROKER
+  WITH BROKER
   PROPERTIES
   (
       "partial_update" = "true"
