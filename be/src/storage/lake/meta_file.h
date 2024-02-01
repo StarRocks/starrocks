@@ -50,10 +50,6 @@ public:
     Status finalize(int64_t txn_id);
     // find delvec in builder's buffer, used for batch txn log precess.
     StatusOr<bool> find_delvec(const TabletSegmentId& tsid, DelVectorPtr* pdelvec) const;
-    // when apply or finalize fail, need to clear primary index cache
-    void handle_failure();
-    bool has_update_index() const { return _has_update_index; }
-    void set_has_update_index() { _has_update_index = true; }
 
     // update num dels in rowset meta, `segment_id_to_add_dels` record each segment's incremental del count
     Status update_num_del_stat(const std::map<uint32_t, size_t>& segment_id_to_add_dels);
@@ -73,10 +69,6 @@ private:
     UpdateManager* _update_mgr;
     Buffer<uint8_t> _buf;
     std::unordered_map<uint32_t, DelvecPagePB> _delvecs;
-    // whether finalize meta file success.
-    bool _has_finalized = false;
-    // whether update the state of pk index.
-    bool _has_update_index = false;
     // from segment id to delvec, used for fill cache in finalize stage.
     std::unordered_map<uint32_t, DelVectorPtr> _segmentid_to_delvec;
     // from cache key to segment id

@@ -71,7 +71,7 @@ public:
             c1->set_name("c1");
             c1->set_type("INT");
             c1->set_is_key(false);
-            c1->set_is_nullable(false);
+            c1->set_is_nullable(true);
             c1->set_aggregation("REPLACE");
         }
         auto c2 = schema->add_column();
@@ -80,7 +80,7 @@ public:
             c2->set_name("c2");
             c2->set_type("INT");
             c2->set_is_key(false);
-            c2->set_is_nullable(false);
+            c2->set_is_nullable(true);
             c2->set_aggregation("REPLACE");
             c2->set_default_value("10");
         }
@@ -561,7 +561,7 @@ TEST_P(LakePartialUpdateTest, test_write_with_index_reload) {
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 3);
 
     // remove pk index, to make it reload again
-    _update_mgr->remove_primary_index_cache(tablet_id);
+    _update_mgr->try_remove_primary_index_cache(tablet_id);
 
     // partial update
     for (int i = 0; i < 3; i++) {
@@ -797,7 +797,7 @@ TEST_P(LakePartialUpdateTest, test_batch_publish) {
     EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 3);
     _tablet_mgr->prune_metacache();
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
-    _update_mgr->remove_primary_index_cache(tablet_id);
+    _update_mgr->try_remove_primary_index_cache(tablet_id);
 
     // publish again
     ASSERT_OK(batch_publish(tablet_id, base_version, new_version, txn_ids).status());
