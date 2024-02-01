@@ -61,7 +61,10 @@ public:
                 if (subscript == 0) {
                     return Status::InvalidArgument("Array subscript start at 1");
                 }
-                if (subscript > (curr - prev)) {
+
+                // if curr==prev, means this line is null
+                // in Trino, null row's any subscript is still null
+                if ((curr != prev) && (subscript > (curr - prev))) {
                     return Status::InvalidArgument(
                             strings::Substitute("Array subscript must be less than or equal to array length: $0 > $1",
                                                 subscript, curr - prev));

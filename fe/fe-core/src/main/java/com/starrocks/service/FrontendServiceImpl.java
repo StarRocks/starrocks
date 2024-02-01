@@ -287,7 +287,7 @@ import static com.starrocks.thrift.TStatusCode.SERVICE_UNAVAILABLE;
 // Frontend service used to serve all request for this frontend through
 // thrift protocol
 public class FrontendServiceImpl implements FrontendService.Iface {
-    private static final Logger LOG = LogManager.getLogger(LeaderImpl.class);
+    private static final Logger LOG = LogManager.getLogger(FrontendServiceImpl.class);
     private final LeaderImpl leaderImpl;
     private final ExecuteEnv exeEnv;
     public AtomicLong partitionRequestNum = new AtomicLong(0);
