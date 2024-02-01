@@ -122,11 +122,18 @@ public:
     bool is_finished() const;
 
 private:
-    static constexpr double LOW_WATERMARK_ROWS_RATE = 0.75;          // 0.75 * chunk_size
+    static constexpr double LOW_WATERMARK_ROWS_RATE = 0.75; // 0.75 * chunk_size
+#ifdef BE_TEST
+    static constexpr size_t LOW_WATERMARK_BYTES = 64 * 1024; // 64KB.
+#else
     static constexpr size_t LOW_WATERMARK_BYTES = 256 * 1024 * 1024; // 256MB.
+#endif
     ChunkPtr _in_chunk = nullptr;
     ChunkPtr _out_chunk = nullptr;
     size_t _max_size = 4096;
+    // For bitmap columns, the cost of calculating mem_usage is relatively high,
+    // so incremental calculation is used to avoid becoming a performance bottleneck.
+    size_t _mem_usage = 0;
     bool _finalized = false;
 };
 
