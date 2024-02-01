@@ -47,11 +47,7 @@ public:
     }
 
     ~PrimaryKeyTxnLogApplier() override {
-        // must release primary index before `handle_failure`, otherwise `handle_failure` will fail
-        _tablet.update_mgr()->release_primary_index_cache(_index_entry);
-        _index_entry = nullptr;
-        // handle failure first, then release lock
-        _builder.handle_failure();
+        handle_failure();
         if (_inited) {
             _s_schema_change_set.erase(_tablet.id());
         }
@@ -71,6 +67,22 @@ public:
         // check tablet meta
         RETURN_IF_ERROR(_tablet.update_mgr()->check_meta_version(_tablet, _base_version));
         return Status::OK();
+    }
+
+    void handle_failure() {
+        if (_index_entry != nullptr && !_has_finalized) {
+            // if we meet failures and have not finalized yet, have to clear primary index,
+            // then we can retry again.
+            // 1. unload index first
+            _index_entry->value().unload();
+            // 2. and then release guard
+            _guard.reset(nullptr);
+            // 3. remove index from cache to save resource
+            _tablet.update_mgr()->remove_primary_index_cache(_index_entry);
+        } else {
+            _tablet.update_mgr()->release_primary_index_cache(_index_entry);
+        }
+        _index_entry = nullptr;
     }
 
     Status apply(const TxnLogPB& log) override {
@@ -99,7 +111,11 @@ public:
         // because if `commit_primary_index` or `finalize` fail, we can remove index in `handle_failure`.
         // if `_index_entry` is null, do nothing.
         RETURN_IF_ERROR(_tablet.update_mgr()->commit_primary_index(_index_entry, &_tablet));
-        return _builder.finalize(_max_txn_id);
+        Status st = _builder.finalize(_max_txn_id);
+        if (st.ok()) {
+            _has_finalized = true;
+        }
+        return st;
     }
 
 private:
@@ -298,6 +314,8 @@ private:
     DynamicCache<uint64_t, LakePrimaryIndex>::Entry* _index_entry{nullptr};
     bool _inited{false};
     std::unique_ptr<std::lock_guard<std::mutex>> _guard{nullptr};
+    // True when finalize meta file success.
+    bool _has_finalized = false;
 };
 
 class NonPrimaryKeyTxnLogApplier : public TxnLogApplier {

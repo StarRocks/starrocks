@@ -334,7 +334,6 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_fail_retry) {
                                                                   &tablet, index_entry, builder.get(), version));
         // if builder.finalize fail, remove primary index cache and retry
         tablet.update_mgr()->release_primary_index_cache(index_entry);
-        builder->handle_failure();
     }
     // write success
     for (int i = 3; i < 5; i++) {
@@ -781,7 +780,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_batch_publish) {
     EXPECT_EQ(new_tablet_metadata->rowsets(1).num_dels(), 0);
     EXPECT_EQ(0, read_rows(tablet_id, new_version));
     _tablet_mgr->prune_metacache();
-    _update_mgr->remove_primary_index_cache(tablet_id);
+    _update_mgr->try_remove_primary_index_cache(tablet_id);
 
     // publish again
     ASSERT_OK(batch_publish(tablet_id, base_version, new_version, txn_ids).status());

@@ -93,7 +93,6 @@ StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(const TabletMetadataP
         LOG(ERROR) << msg;
         return Status::InternalError(msg);
     }
-    builder->set_has_update_index();
     return index_entry;
 }
 
@@ -121,6 +120,12 @@ Status UpdateManager::commit_primary_index(IndexEntry* index_entry, Tablet* tabl
 void UpdateManager::release_primary_index_cache(IndexEntry* index_entry) {
     if (index_entry != nullptr) {
         _index_cache.release(index_entry);
+    }
+}
+
+void UpdateManager::remove_primary_index_cache(IndexEntry* index_entry) {
+    if (index_entry != nullptr) {
+        _index_cache.remove(index_entry);
     }
 }
 
@@ -633,17 +638,6 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     _print_memory_stats();
 
     return Status::OK();
-}
-
-void UpdateManager::remove_primary_index_cache(uint32_t tablet_id) {
-    bool succ = false;
-    auto index_entry = _index_cache.get(tablet_id);
-    if (index_entry != nullptr) {
-        index_entry->value().unload();
-        _index_cache.remove(index_entry);
-        succ = true;
-    }
-    LOG(WARNING) << "Lake update manager remove primary index cache, tablet_id: " << tablet_id << " , succ: " << succ;
 }
 
 bool UpdateManager::try_remove_primary_index_cache(uint32_t tablet_id) {
