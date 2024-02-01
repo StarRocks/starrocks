@@ -20,7 +20,6 @@ import com.sleepycat.je.EnvironmentConfig;
 import com.sleepycat.je.LockMode;
 import com.sleepycat.je.dbi.DbConfigManager;
 import com.sleepycat.je.rep.ReplicatedEnvironment;
-import com.sleepycat.je.rep.ReplicationConfig;
 import com.sleepycat.je.rep.RollbackException;
 import com.sleepycat.je.rep.impl.RepGroupImpl;
 import com.sleepycat.je.rep.impl.RepImpl;
