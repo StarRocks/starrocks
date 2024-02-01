@@ -1377,7 +1377,7 @@ showStatusStatement
 
 showTabletStatement
     : SHOW TABLET INTEGER_VALUE
-    | SHOW TABLET FROM qualifiedName partitionNames? (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
+    | SHOW (TABLET | TABLETS) FROM qualifiedName partitionNames? (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 showTransactionStatement
@@ -2552,7 +2552,11 @@ nonReserved
     | SAMPLE | SCHEDULER | SECOND | SECURITY | SEPARATOR | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SQLBLACKLIST | START
     | STREAM | SUM | STATUS | STOP | SKIP_HEADER | SWAP
     | STORAGE| STRING | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM_TIME
+<<<<<<< HEAD
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION | TRACE
+=======
+    | TABLES | TABLET | TABLETS | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TIMES | TRANSACTION | TRACE
+>>>>>>> 164cce0f09 ([Enhancement] Refine the syntax of show tablet (#40449))
     | TRIM_SPACE
     | TRIGGERS | TRUNCATE | TYPE | TYPES
     | UNBOUNDED | UNCOMMITTED | UNSET | UNINSTALL | USAGE | USER | USERS | UNLOCK
