@@ -40,7 +40,6 @@
 #include <string>
 
 #include "common/constexpr.h"
-#include "common/config.h"
 
 namespace starrocks {
 
@@ -49,9 +48,7 @@ static const size_t OLAP_PAGE_SIZE = 65536;
 
 static const uint64_t OLAP_FIX_HEADER_MAGIC_NUMBER = 0;
 
-inline uint32_t get_olap_string_max_length() {
-    return config::olap_string_max_length;
-}
+uint32_t get_olap_string_max_length();
 
 // the max bytes for stored string length
 using StringLengthType = uint16_t;
