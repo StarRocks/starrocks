@@ -306,6 +306,7 @@ public class TaskRun implements Comparable<TaskRun> {
         status.setExpireTime(System.currentTimeMillis() + Config.task_runs_ttl_second * 1000L);
         status.getMvTaskRunExtraMessage().setExecuteOption(this.executeOption);
 
+        LOG.info("init task status, task:{}, query_id:{}, create_time:{}", task.getName(), queryId, status.getCreateTime());
         this.status = status;
         return status;
     }
