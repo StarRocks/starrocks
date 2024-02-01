@@ -492,14 +492,14 @@ void ChunkPipelineAccumulator::push(const vectorized::ChunkPtr& chunk) {
     DCHECK(_out_chunk == nullptr);
     if (_in_chunk == nullptr) {
         _in_chunk = chunk;
-        _mem_usage = chunk->memory_usage();
+        _mem_usage = chunk->bytes_usage();
     } else if (_in_chunk->num_rows() + chunk->num_rows() > _max_size) {
         _out_chunk = std::move(_in_chunk);
         _in_chunk = chunk;
-        _mem_usage = chunk->memory_usage();
+        _mem_usage = chunk->bytes_usage();
     } else {
         _in_chunk->append(*chunk);
-        _mem_usage += chunk->memory_usage();
+        _mem_usage += chunk->bytes_usage();
     }
 
     if (_out_chunk == nullptr &&
