@@ -198,7 +198,7 @@ public:
         OlapReaderStatistics stats;
         seg_options.stats = &stats;
         std::string segment_file = Rowset::segment_file_path(_tablet->schema_hash_path(), rowset->rowset_id(), 0);
-        auto segment = *Segment::open(seg_options.fs, segment_file, 0, _tablet->tablet_schema());
+        auto segment = *Segment::open(seg_options.fs, FileInfo{segment_file}, 0, _tablet->tablet_schema());
         ASSERT_EQ(segment->num_rows(), num_rows);
         auto schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
         auto res = segment->new_iterator(schema, seg_options);

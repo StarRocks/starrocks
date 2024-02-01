@@ -846,6 +846,8 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
         return Status::InvalidArgument(msg.str());
     }
 
+    const auto& output_names = t_query_plan_info.output_names;
+    int i = 0;
     for (const auto& expr : t_query_plan_info.plan_fragment.output_exprs) {
         const auto& nodes = expr.nodes;
         if (nodes.empty() || nodes[0].node_type != TExprNodeType::SLOT_REF) {
@@ -865,9 +867,14 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
         }
 
         TScanColumnDesc col;
-        col.__set_name(slot_desc->col_name());
+        if (!output_names.empty()) {
+            col.__set_name(output_names[i]);
+        } else {
+            col.__set_name(slot_desc->col_name());
+        }
         col.__set_type(to_thrift(slot_desc->type().type));
         selected_columns->emplace_back(std::move(col));
+        i++;
     }
 
     LOG(INFO) << "BackendService execute open()  TQueryPlanInfo: "
@@ -929,6 +936,7 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
     // For spark sql / flink sql, we dont use page cache.
     query_options.use_page_cache = false;
     query_options.use_column_pool = false;
+    query_options.enable_profile = config::enable_profile_for_external_plan;
     exec_fragment_params.__set_query_options(query_options);
     VLOG_ROW << "external exec_plan_fragment params is "
              << apache::thrift::ThriftDebugString(exec_fragment_params).c_str();

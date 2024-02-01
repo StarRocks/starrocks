@@ -364,9 +364,6 @@ struct TTableStatus {
     5: optional i64 last_check_time
     6: optional i64 create_time
     20: optional string ddl_sql
-
-    21: optional string id
-    22: optional string rows
 }
 
 struct TListTableStatusResult {
@@ -780,6 +777,7 @@ struct TMasterOpRequest {
     31: optional bool isLastStmt
     32: optional string modified_variables_sql
     33: optional Types.TUserRoles user_roles
+    34: optional i32 forward_times
 }
 
 struct TColumnDefinition {
@@ -993,6 +991,7 @@ struct TLoadTxnRollbackRequest {
     9: optional i64 auth_code
     10: optional TTxnCommitAttachment txnCommitAttachment
     11: optional list<Types.TTabletFailInfo> failInfos
+    12: optional list<Types.TTabletCommitInfo> commitInfos
 }
 
 struct TGetLoadTxnStatusResult {
@@ -1303,6 +1302,9 @@ struct TAbortRemoteTxnRequest {
     2: optional i64 db_id
     3: optional string error_msg
     4: optional TAuthenticateParams auth_info
+    5: optional list<Types.TTabletCommitInfo> commit_infos
+    6: optional TTxnCommitAttachment commit_attachment
+    7: optional list<Types.TTabletFailInfo> fail_infos
 }
 
 struct TAbortRemoteTxnResponse {
@@ -1381,6 +1383,42 @@ struct TTableConfigInfo {
     12: optional i64 table_id
 }
 
+struct TGetPartitionsMetaRequest {
+    1: optional TAuthInfo auth_info
+}
+
+struct TGetPartitionsMetaResponse {
+    1: optional list<TPartitionMetaInfo> partitions_meta_infos
+}
+
+struct TPartitionMetaInfo {
+    1: optional string db_name
+    2: optional string table_name
+    3: optional string partition_name
+    4: optional i64 partition_id
+    5: optional i64 compact_version
+    6: optional i64 visible_version
+    7: optional i64 visible_version_time
+    8: optional i64 next_version
+    9: optional string partition_key
+    10: optional string partition_value
+    11: optional string distribution_key
+    12: optional i32 buckets
+    13: optional i32 replication_num
+    14: optional string storage_medium
+    15: optional i64 cooldown_time
+    16: optional i64 last_consistency_check_time
+    17: optional bool is_in_memory
+    18: optional bool is_temp
+    19: optional string data_size
+    20: optional i64 row_count
+    21: optional bool enable_datacache
+    22: optional double avg_cs
+    23: optional double p50_cs
+    24: optional double max_cs
+    25: optional string storage_path
+}
+
 struct TGetTablesInfoRequest {
     1: optional TAuthInfo auth_info
 }
@@ -1414,6 +1452,7 @@ struct TGetTabletScheduleRequest {
     4: optional string type
     5: optional string state
     6: optional i64 limit
+    7: optional Types.TUserIdentity current_user_ident
 }
 
 struct TGetTabletScheduleResponse {
@@ -1561,7 +1600,8 @@ struct TFeLocksItem {
     1: optional string lock_type
     2: optional string lock_object
     3: optional string lock_mode
-    4: optional i64 lock_start_time
+    4: optional i64 start_time
+    5: optional i64 hold_time_ms
     
     11: optional string thread_info
     12: optional bool granted
@@ -1651,6 +1691,7 @@ struct TTableReplicationRequest {
     6: optional Types.TTableType src_table_type
     7: optional i64 src_table_data_size
     8: optional map<i64, TPartitionReplicationInfo> partition_replication_infos
+    9: optional string job_id
 }
 
 struct TTableReplicationResponse {
@@ -1754,5 +1795,7 @@ service FrontendService {
     TGetDictQueryParamResponse getDictQueryParam(1: TGetDictQueryParamRequest request)
 
     TTableReplicationResponse startTableReplication(1: TTableReplicationRequest request)
+
+    TGetPartitionsMetaResponse getPartitionsMeta(1: TGetPartitionsMetaRequest request)
 }
 

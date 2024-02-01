@@ -728,6 +728,19 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    // --------------------------------------- Backend BlackList -------------------------------------
+    public R visitAddBackendBlackListStatement(AddBackendBlackListStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitDelBackendBlackListStatement(DelBackendBlackListStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowBackendBlackListStatement(ShowBackendBlackListStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     public R visitExecuteAsStatement(ExecuteAsStmt statement, C context) {
         return visitStatement(statement, context);
     }
@@ -924,7 +937,7 @@ public abstract class AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
-    public R visitModifyBackendHostClause(ModifyBackendAddressClause clause, C context) {
+    public R visitModifyBackendClause(ModifyBackendClause clause, C context) {
         return visitNode(clause, context);
     }
 

@@ -53,7 +53,7 @@ private:
 
 class UpdateManager {
 public:
-    UpdateManager(LocationProvider* location_provider, MemTracker* mem_tracker = nullptr);
+    UpdateManager(LocationProvider* location_provider, MemTracker* mem_tracker);
     ~UpdateManager();
     void set_tablet_mgr(TabletManager* tablet_mgr) { _tablet_mgr = tablet_mgr; }
     void set_cache_expire_ms(int64_t expire_ms) { _cache_expire_ms = expire_ms; }
@@ -101,6 +101,8 @@ public:
 
     bool try_remove_primary_index_cache(uint32_t tablet_id);
 
+    void unload_primary_index(int64_t tablet_id);
+
     // if base version != index.data_version, need to clear index cache
     Status check_meta_version(const Tablet& tablet, int64_t base_version);
 
@@ -128,6 +130,8 @@ public:
     }
 
     MemTracker* compaction_state_mem_tracker() const { return _compaction_state_mem_tracker.get(); }
+
+    MemTracker* update_state_mem_tracker() const { return _update_state_mem_tracker.get(); }
 
     // get or create primary index, and prepare primary index state
     StatusOr<IndexEntry*> prepare_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,

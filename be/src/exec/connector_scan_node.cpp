@@ -179,9 +179,13 @@ public:
         SCOPED_TIMER(_scan_timer);
         RETURN_IF_ERROR(_data_source->open(state));
         _opened = true;
+        connector_scan_node_open_limit.fetch_add(1, std::memory_order_relaxed);
         return Status::OK();
     }
-    void close(RuntimeState* state) { _data_source->close(state); }
+    void close(RuntimeState* state) {
+        _data_source->close(state);
+        connector_scan_node_open_limit.fetch_sub(1, std::memory_order_relaxed);
+    }
     Status get_next(RuntimeState* state, ChunkPtr* chunk) {
         SCOPED_TIMER(_scan_timer);
         RETURN_IF_ERROR(_data_source->get_next(state, chunk));
@@ -684,9 +688,17 @@ StatusOr<pipeline::MorselQueuePtr> ConnectorScanNode::convert_scan_range_to_mors
         bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
         size_t num_total_scan_ranges) {
     _data_source_provider->peek_scan_ranges(scan_ranges);
-    return ScanNode::convert_scan_range_to_morsel_queue(scan_ranges, node_id, pipeline_dop,
-                                                        enable_tablet_internal_parallel, tablet_internal_parallel_mode,
-                                                        num_total_scan_ranges);
+
+    pipeline::Morsels morsels;
+    // If this scan node does not accept non-empty scan ranges, create a placeholder one.
+    if (!accept_empty_scan_ranges() && scan_ranges.empty()) {
+        morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, TScanRangeParams()));
+    } else {
+        for (const auto& scan_range : scan_ranges) {
+            morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, scan_range));
+        }
+    }
+    return std::make_unique<pipeline::DynamicMorselQueue>(std::move(morsels));
 }
 
 } // namespace starrocks

@@ -111,7 +111,7 @@ public class PipePEntryObject implements PEntryObject {
 
     @Override
     public boolean validate(GlobalStateMgr globalStateMgr) {
-        Database db = globalStateMgr.getDbIncludeRecycleBin(Long.parseLong(this.dbUUID));
+        Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(Long.parseLong(this.dbUUID));
         if (db == null) {
             return false;
         }

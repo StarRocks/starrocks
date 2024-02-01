@@ -19,9 +19,9 @@ displayed_sidebar: "Chinese"
 - [对表进行原子替换](#swap-将两个表原子替换)
 - [手动执行 compaction 合并表数据](#手动-compaction31-版本起)
 
-> **注意**
->
-> 该操作需要有对应表的 ALTER 权限。
+:::tip
+该操作需要有对应表的 ALTER 权限。
+:::
 
 ## 语法
 
@@ -35,7 +35,7 @@ alter_clause1[, alter_clause2, ...]
 其中 **alter_clause** 分为 rename、comment、partition、bucket、column、rollup index、bitmap index、table property、swap、compaction 相关修改操作：
 
 - rename: 修改表名，rollup index 名称，修改 partition 名称，**注意列名不支持修改**。
-- comment: 修改已有表的注释。**从 3.1 版本开始支持。**
+- comment: 修改表的注释。**从 3.1 版本开始支持。** 当前还不支持修改列注释。
 - partition: 修改分区属性，删除分区，增加分区。
 - bucket：修改分桶方式和分桶数量。
 - column: 增加列，删除列，调整列顺序，修改列类型。
@@ -49,6 +49,7 @@ alter_clause1[, alter_clause2, ...]
 - partition、column 和 rollup index <!--是否包含compaction，bucket和column/rollupindex可以在一起吗-->这些操作不能同时出现在一条 `ALTER TABLE` 语句中。
 - bucket、column、rollup index <!--是否包含compaction和fast schema evolution-->是异步操作，命令提交成功后会立即返回一个成功消息，您可以使用 [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) 语句查看操作的进度。如果需要取消正在进行的操作，则您可以使用 [CANCEL ALTER TABLE](../data-manipulation/SHOW_ALTER.md)。
 - rename、comment、partition、bitmap index 和 swap 是同步操作，命令返回表示执行完毕。
+
 :::
 
 ### Rename 对名称进行修改
@@ -86,6 +87,10 @@ RENAME PARTITION <old_partition_name> <new_partition_name>;
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 ```
+
+:::tip
+当前还不支持修改列注释。
+:::
 
 ### 操作 partition 相关语法
 
@@ -314,8 +319,8 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 
 使用说明：
 
-- 聚合模型如果增加 value 列，需要指定 agg_type。
-- 非聚合模型（如 DUPLICATE KEY）如果增加 key 列，需要指定 KEY 关键字。
+- 聚合表如果增加 value 列，需要指定 agg_type。
+- 非聚合表（如 DUPLICATE KEY）如果增加 key 列，需要指定 KEY 关键字。
 - 不能在 rollup index 中增加 base index 中已经存在的列，如有需要，可以重新创建一个 rollup index。
 
 #### 向指定 index 添加多列
@@ -344,8 +349,8 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 
 注意：
 
-1. 聚合模型如果增加 value 列，需要指定 agg_type。
-2. 非聚合模型如果增加 key 列，需要指定 KEY 关键字。
+1. 聚合表如果增加 value 列，需要指定 agg_type。
+2. 非聚合表如果增加 key 列，需要指定 KEY 关键字。
 3. 不能在 rollup index 中增加 base index 中已经存在的列，如有需要，可以重新创建一个 rollup index。
 
 #### 增加生成列
@@ -388,7 +393,7 @@ MODIFY COLUMN column_name column_type [KEY | agg_type] [NULL | NOT NULL] [DEFAUL
 
 注意：
 
-1. 聚合模型如果修改 value 列，需要指定 agg_type。
+1. 聚合表如果修改 value 列，需要指定 agg_type。
 2. 非聚合类型如果修改 key 列，需要指定 KEY 关键字。
 3. 只能修改列的类型，列的其他属性维持原样（即其他属性需在语句中按照原属性显式的写出，参见示例中 [column](#column) 部分第 8 个例子）。
 4. 分区列不能做任何修改。
@@ -758,7 +763,7 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
 
 ### Column
 
-1. 向 `example_rollup_index` 的 `col1` 后添加一个 key 列 `new_col`（非聚合模型）。
+1. 向 `example_rollup_index` 的 `col1` 后添加一个 key 列 `new_col`（非聚合表）。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -766,7 +771,7 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
     TO example_rollup_index;
     ```
 
-2. 向 `example_rollup_index` 的 `col1` 后添加一个 value 列 `new_col`（非聚合模型）。
+2. 向 `example_rollup_index` 的 `col1` 后添加一个 value 列 `new_col`（非聚合表）。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -774,7 +779,7 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
     TO example_rollup_index;
     ```
 
-3. 向 `example_rollup_index` 的 `col1` 后添加一个 key 列 `new_col`（聚合模型）。
+3. 向 `example_rollup_index` 的 `col1` 后添加一个 key 列 `new_col`（聚合表）。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -782,7 +787,7 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
     TO example_rollup_index;
     ```
 
-4. 向 `example_rollup_index` 的 `col1` 后添加一个 value 列 `new_col`（SUM 聚合类型）（聚合模型）。
+4. 向 `example_rollup_index` 的 `col1` 后添加一个 value 列 `new_col`（SUM 聚合类型）（聚合表）。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -790,7 +795,7 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
     TO example_rollup_index;
     ```
 
-5. 向 `example_rollup_index` 添加多列（聚合模型）。
+5. 向 `example_rollup_index` 添加多列（聚合表）。
 
     ```sql
     ALTER TABLE example_db.my_table

@@ -21,10 +21,12 @@ namespace starrocks::parquet {
 
 class StoredColumnReaderWithIndex : public StoredColumnReader {
 public:
-    StoredColumnReaderWithIndex(std::unique_ptr<StoredColumnReader> reader, ColumnOffsetIndexCtx* offset_index_ctx)
-            : _inner_reader(std::move(reader)), _offset_index_ctx(offset_index_ctx) {
+    StoredColumnReaderWithIndex(std::unique_ptr<StoredColumnReader> reader, ColumnOffsetIndexCtx* offset_index_ctx,
+                                bool has_dict_page)
+            : _inner_reader(std::move(reader)), _offset_index_ctx(offset_index_ctx), _has_dict_page(has_dict_page) {
         _page_num = _offset_index_ctx->page_selected.size();
         _inner_reader->set_page_num(_page_num);
+        _inner_reader->set_page_change_on_record_boundry();
     }
 
     ~StoredColumnReaderWithIndex() = default;
@@ -56,7 +58,8 @@ private:
     ColumnOffsetIndexCtx* _offset_index_ctx;
     size_t _cur_page_idx = 0;
     size_t _page_num = 0;
-    bool _try_dict_loaded = false;
+    bool _dict_page_loaded = false;
+    bool _has_dict_page;
 };
 
 } // namespace starrocks::parquet

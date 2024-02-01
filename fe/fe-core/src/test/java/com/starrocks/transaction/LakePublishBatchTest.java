@@ -79,11 +79,11 @@ public class LakePublishBatchTest {
         new MockUp<StarOSAgent>() {
             @Mock
             public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) {
-                return GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
+                return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true).get(0);
             }
 
             @Mock
-            public FilePathInfo allocateFilePath(String storageVolumeId, long tableId) {
+            public FilePathInfo allocateFilePath(String storageVolumeId, long dbId, long tableId) {
                 FilePathInfo.Builder builder = FilePathInfo.newBuilder();
                 FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
 
@@ -171,7 +171,7 @@ public class LakePublishBatchTest {
         for (Partition partition : table.getPartitions()) {
             MaterializedIndex baseIndex = partition.getBaseIndex();
             for (Long tabletId : baseIndex.getTabletIdsInOrder()) {
-                for (Long backendId : GlobalStateMgr.getCurrentSystemInfo().getBackendIds()) {
+                for (Long backendId : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds()) {
                     TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tabletId, backendId);
                     if (num % 2 == 0) {
                         transTablets1.add(tabletCommitInfo);
@@ -183,7 +183,7 @@ public class LakePublishBatchTest {
             num++;
         }
 
-        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         long transactionId1 = globalTransactionMgr.
                 beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
                         GlobalStateMgrTestUtil.testTxnLable1,
@@ -238,7 +238,7 @@ public class LakePublishBatchTest {
         for (Partition partition : table.getPartitions()) {
             MaterializedIndex baseIndex = partition.getBaseIndex();
             for (Long tabletId : baseIndex.getTabletIdsInOrder()) {
-                for (Long backendId : GlobalStateMgr.getCurrentSystemInfo().getBackendIds()) {
+                for (Long backendId : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds()) {
                     TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tabletId, backendId);
                     transTablets.add(tabletCommitInfo);
                 }
@@ -246,7 +246,7 @@ public class LakePublishBatchTest {
         }
 
         // test publish transactionStateBatch which size is one
-        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         Config.lake_batch_publish_min_version_num = 1;
         long transactionId9 = globalTransactionMgr.
                 beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
@@ -270,14 +270,14 @@ public class LakePublishBatchTest {
         for (Partition partition : table.getPartitions()) {
             MaterializedIndex baseIndex = partition.getBaseIndex();
             for (Long tabletId : baseIndex.getTabletIdsInOrder()) {
-                for (Long backendId : GlobalStateMgr.getCurrentSystemInfo().getBackendIds()) {
+                for (Long backendId : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds()) {
                     TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tabletId, backendId);
                     transTablets.add(tabletCommitInfo);
                 }
             }
         }
 
-        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
 
         long transactionId5 = globalTransactionMgr.
                 beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
@@ -326,14 +326,14 @@ public class LakePublishBatchTest {
         for (Partition partition : table.getPartitions()) {
             MaterializedIndex baseIndex = partition.getBaseIndex();
             for (Long tabletId : baseIndex.getTabletIdsInOrder()) {
-                for (Long backendId : GlobalStateMgr.getCurrentSystemInfo().getBackendIds()) {
+                for (Long backendId : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds()) {
                     TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tabletId, backendId);
                     transTablets.add(tabletCommitInfo);
                 }
             }
         }
 
-        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
 
         long transactionId7 = globalTransactionMgr.
                 beginTransaction(db.getId(), Lists.newArrayList(table.getId()),

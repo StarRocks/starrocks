@@ -289,14 +289,13 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         return latencyMs > expireMs;
     }
 
-
     private synchronized boolean canEraseTable(RecycleTableInfo tableInfo, long currentTimeMs) {
         if (timeExpired(tableInfo.getTable().getId(), currentTimeMs)) {
             return true;
         }
 
         // database is force dropped, the table can not be recovered, erase it.
-        if (GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(tableInfo.getDbId()) == null) {
+        if (GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(tableInfo.getDbId()) == null) {
             return true;
         }
         return false;
@@ -308,13 +307,14 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         }
 
         // database is force dropped, the partition can not be recovered, erase it.
-        Database database = GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(partitionInfo.getDbId());
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(partitionInfo.getDbId());
         if (database == null) {
             return true;
         }
 
         // table is force dropped, the partition can not be recovered, erase it.
-        if (GlobalStateMgr.getCurrentState().getTableIncludeRecycleBin(database, partitionInfo.getTableId()) == null) {
+        if (GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTableIncludeRecycleBin(database, partitionInfo.getTableId()) == null) {
             return true;
         }
 
@@ -354,7 +354,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 dbIter.remove();
                 removeRecycleMarkers(entry.getKey());
 
-                GlobalStateMgr.getCurrentState().onEraseDatabase(db.getId());
+                GlobalStateMgr.getCurrentState().getLocalMetastore().onEraseDatabase(db.getId());
                 GlobalStateMgr.getCurrentState().getEditLog().logEraseDb(db.getId());
                 LOG.info("erase db[{}-{}] finished", db.getId(), db.getOriginName());
                 currentEraseOpCnt++;
@@ -375,7 +375,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 iterator.remove();
                 removeRecycleMarkers(entry.getKey());
 
-                GlobalStateMgr.getCurrentState().onEraseDatabase(db.getId());
+                GlobalStateMgr.getCurrentState().getLocalMetastore().onEraseDatabase(db.getId());
                 LOG.info("erase database[{}-{}], because db with the same name db is recycled", db.getId(), dbName);
             }
         }
@@ -385,7 +385,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         idToDatabase.remove(dbId);
         idToRecycleTime.remove(dbId);
 
-        GlobalStateMgr.getCurrentState().onEraseDatabase(dbId);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().onEraseDatabase(dbId);
         LOG.info("replay erase db[{}] finished", dbId);
     }
 
@@ -398,7 +398,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 RecycleTableInfo tableInfo = entry.getValue();
 
                 if (canEraseTable(tableInfo, currentTimeMs)
-                        || GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(tableInfo.dbId) == null) {
+                        || GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(tableInfo.dbId) == null) {
                     tableToRemove.add(tableInfo);
                     currentEraseOpCnt++;
                     if (currentEraseOpCnt >= MAX_ERASE_OPERATIONS_PER_CYCLE) {
@@ -413,7 +413,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             for (RecycleTableInfo tableInfo : tableToRemove) {
                 Table table = tableInfo.getTable();
                 long tableId = table.getId();
-                GlobalStateMgr.getCurrentState().removeAutoIncrementIdByTableId(tableId, false);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().removeAutoIncrementIdByTableId(tableId, false);
                 removeRecycleMarkers(tableId);
                 nameToTableInfo.remove(tableInfo.dbId, table.getName());
                 idToTableInfo.remove(tableInfo.dbId, tableId);
@@ -449,7 +449,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             if (tableInfo != null) {
                 Runnable runnable = null;
                 Table table = tableInfo.getTable();
-                GlobalStateMgr.getCurrentState().removeAutoIncrementIdByTableId(tableId, true);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().removeAutoIncrementIdByTableId(tableId, true);
                 nameToTableInfo.remove(dbId, table.getName());
                 runnable = table.delete(true);
                 if (!isCheckpointThread() && runnable != null) {
@@ -471,7 +471,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
 
             long partitionId = entry.getKey();
             if (canErasePartition(partitionInfo, currentTimeMs)) {
-                GlobalStateMgr.getCurrentState().onErasePartition(partition);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().onErasePartition(partition);
                 // erase partition
                 iterator.remove();
                 removeRecycleMarkers(partitionId);
@@ -498,7 +498,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
 
             Partition partition = partitionInfo.getPartition();
             if (partition.getName().equals(partitionName)) {
-                GlobalStateMgr.getCurrentState().onErasePartition(partition);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().onErasePartition(partition);
                 iterator.remove();
                 removeRecycleMarkers(entry.getKey());
                 LOG.info("erase partition[{}-{}] finished, because partition with the same name is recycled",
@@ -513,7 +513,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
 
         Partition partition = partitionInfo.getPartition();
         if (!isCheckpointThread()) {
-            GlobalStateMgr.getCurrentState().onErasePartition(partition);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().onErasePartition(partition);
         }
 
         LOG.info("replay erase partition[{}-{}] finished", partitionId, partition.getName());
@@ -730,7 +730,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     public void addTabletToInvertedIndex() {
         // no need to handle idToDatabase. Database is already empty before being put here
 
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         // idToTable
         for (RecycleTableInfo tableInfo : idToTableInfo.values()) {
             Table table = tableInfo.getTable();
@@ -850,7 +850,6 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         } catch (InterruptedException e) {
             LOG.warn(e);
         }
-
     }
 
     private void postProcessEraseTable(List<RecycleTableInfo> tableToRemove) {
@@ -1207,7 +1206,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         // create DatabaseTransactionMgr for db in recycle bin.
         // these dbs do not exist in `idToDb` of the globalStateMgr.
         for (Long dbId : getAllDbIds()) {
-            GlobalStateMgr.getCurrentGlobalTransactionMgr().addDatabaseTransactionMgr(dbId);
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().addDatabaseTransactionMgr(dbId);
         }
         LOG.info("finished replay recycleBin from image");
         return checksum;
@@ -1284,7 +1283,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         // create DatabaseTransactionMgr for db in recycle bin.
         // these dbs do not exist in `idToDb` of the globalStateMgr.
         for (Long dbId : getAllDbIds()) {
-            GlobalStateMgr.getCurrentGlobalTransactionMgr().addDatabaseTransactionMgr(dbId);
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().addDatabaseTransactionMgr(dbId);
         }
     }
 }

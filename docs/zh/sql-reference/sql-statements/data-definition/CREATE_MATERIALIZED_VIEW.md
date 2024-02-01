@@ -136,7 +136,7 @@ CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]<mv_name>
 -- refresh_moment
     [IMMEDIATE | DEFERRED]
 -- refresh_scheme
-    [ASYNC [START (<start_time>)] [EVERY (INTERVAL <refresh_interval>)] | MANUAL]
+    [ASYNC | ASYNC [START (<start_time>)] EVERY (INTERVAL <refresh_interval>) | MANUAL]
 ]
 -- partition_expression
 [PARTITION BY 
@@ -187,7 +187,7 @@ AS
 
   > **说明**
   >
-  > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../../../table_design/Data_distribution.md#设置分桶数量)。
+  > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../../../table_design/Data_distribution.md#设置分桶数量)。
 
 - **随机分桶**：
 
@@ -218,8 +218,9 @@ AS
 
 物化视图的刷新方式。该参数支持如下值：
 
-- `ASYNC`：异步刷新模式。每当基表数据发生变化，物化视图将根据预定义的刷新间隔自动进行刷新。您可以进一步指定刷新开始时间 `START('yyyy-MM-dd hh:mm:ss')` 和刷新间隔  `EVERY (interval n day/hour/minute/second)`。刷新间隔仅支持：`DAY`、`HOUR`、`MINUTE` 以及 `SECOND`。例如：`ASYNC START ('2023-09-12 16:30:25') EVERY (INTERVAL 5 MINUTE)`。如不指定刷新间隔，将使用默认值 `10 MINUTE`。
-- `MANUAL`：手动刷新模式。物化视图不会自动刷新。刷新任务只能由用户手动触发。
+- `ASYNC`: 自动刷新模式。每当基表数据发生变化时，物化视图会自动刷新。
+- `ASYNC [START (<start_time>)] EVERY(INTERVAL <interval>)`: 定时刷新模式。物化视图将按照定义的间隔定时刷新。您可以使用 `DAY`（天）、`HOUR`（小时）、`MINUTE`（分钟）和 `SECOND`（秒）作为单位指定间隔，格式为 `EVERY (interval n day/hour/minute/second)`。默认值为 `10 MINUTE`（10 分钟）。您还可以进一步指定刷新起始时间，格式为 `START('yyyy-MM-dd hh:mm:ss')`。如未指定起始时间，默认使用当前时间。示例：`ASYNC START ('2023-09-12 16:30:25') EVERY (INTERVAL 5 MINUTE)`。
+- `MANUAL`: 手动刷新模式。除非手动触发刷新任务，否则物化视图不会刷新。
 
 如果不指定该参数，则默认使用 MANUAL 方式。
 

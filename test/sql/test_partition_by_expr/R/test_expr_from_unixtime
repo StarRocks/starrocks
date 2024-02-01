@@ -104,7 +104,7 @@ show create table partition_unixtime_ms;
 partition_unixtime_ms	CREATE TABLE `partition_unixtime_ms` (
   `create_time` bigint(20) NULL COMMENT "",
   `sku_id` varchar(100) NULL COMMENT "",
-  `total_amount` decimal64(10, 0) NULL COMMENT "",
+  `total_amount` decimal(10, 0) NULL COMMENT "",
   `id` int(11) NULL COMMENT ""
 ) ENGINE=OLAP 
 DUPLICATE KEY(`create_time`, `sku_id`)
@@ -167,4 +167,18 @@ START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
 );
 -- result:
 E: (1064, 'Getting analyzing error from line 7, column 19 to line 7, column 47. Detail message: Unsupported partition expression from_unixtime_ms for column create_time type VARCHAR(100).')
+-- !result
+create table site_access_par_3 (
+`rowkey` string not null,
+`evernt_ts_col` BIGINT NOT NULL)
+ENGINE = OLAP
+PRIMARY KEY (`rowkey`, `evernt_ts_col`)
+PARTITION BY RANGE (FROM_UNIXTIME_MS(evernt_ts_col)) (
+START ("2023-12-30") END ("2024-01-05") EVERY (INTERVAL 1 DAY)
+)
+DISTRIBUTED BY HASH (`rowkey`) BUCKETS 1;
+-- result:
+-- !result
+insert INTO site_access_par_3 values ("2023-01-04", 1704077791000);
+-- result:
 -- !result

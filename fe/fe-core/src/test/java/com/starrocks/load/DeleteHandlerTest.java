@@ -17,7 +17,6 @@ package com.starrocks.load;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.IntLiteral;
@@ -36,7 +35,6 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.load.DeleteJob.DeleteState;
-import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryStateException;
@@ -94,7 +92,6 @@ public class DeleteHandlerTest {
     private AgentTaskExecutor executor;
 
     private Database db;
-    private Auth auth;
 
     private GlobalTransactionMgr globalTransactionMgr;
     private TabletInvertedIndex invertedIndex = new TabletInvertedIndex();
@@ -107,7 +104,6 @@ public class DeleteHandlerTest {
         globalTransactionMgr = new GlobalTransactionMgr(globalStateMgr);
         connectContext.setGlobalStateMgr(globalStateMgr);
         deleteHandler = new DeleteMgr();
-        auth = AccessTestUtil.fetchAdminAccess();
         try {
             db = CatalogMocker.mockDb();
         } catch (AnalysisException e) {
@@ -144,10 +140,6 @@ public class DeleteHandlerTest {
                 minTimes = 0;
                 result = editLog;
 
-                globalStateMgr.getAuth();
-                minTimes = 0;
-                result = auth;
-
                 globalStateMgr.getNextId();
                 minTimes = 0;
                 result = 10L;
@@ -170,11 +162,11 @@ public class DeleteHandlerTest {
                 minTimes = 0;
                 result = globalStateMgr;
 
-                GlobalStateMgr.getCurrentInvertedIndex();
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
                 minTimes = 0;
                 result = invertedIndex;
 
-                GlobalStateMgr.getCurrentGlobalTransactionMgr();
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
                 minTimes = 0;
                 result = globalTransactionMgr;
 
@@ -184,14 +176,6 @@ public class DeleteHandlerTest {
                 AgentTaskQueue.addTask((AgentTask) any);
                 minTimes = 0;
                 result = true;
-
-                GlobalStateMgr.getCurrentSystemInfo();
-                minTimes = 0;
-                result = systemInfoService;
-
-                systemInfoService.getBackendIds(true);
-                minTimes = 0;
-                result = Lists.newArrayList();
             }
         };
     }

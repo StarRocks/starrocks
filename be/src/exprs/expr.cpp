@@ -203,7 +203,7 @@ Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext*
     }
     int node_idx = 0;
     Expr* e = nullptr;
-    Status status = create_tree_from_thrift(pool, texpr.nodes, nullptr, &node_idx, &e, ctx, state);
+    Status status = create_tree_from_thrift_with_jit(pool, texpr.nodes, nullptr, &node_idx, &e, ctx, state);
     if (status.ok() && node_idx + 1 != texpr.nodes.size()) {
         status = Status::InternalError("Expression tree only partially reconstructed. Not all thrift nodes were used.");
     }
@@ -212,32 +212,6 @@ Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext*
                    << status.message() << "\n"
                    << apache::thrift::ThriftDebugString(texpr);
         return status;
-    }
-
-    // Enable JIT based on the "enable_jit" parameters.
-    if (state == nullptr || !state->is_jit_enabled()) {
-        return status;
-    }
-
-    // Check if JIT compilation is feasible on this platform.
-    auto* jit_engine = JITEngine::get_instance();
-    if (!jit_engine->support_jit()) {
-        return status;
-    }
-
-    const auto* prev_e = e;
-    status = e->replace_compilable_exprs(&e, pool);
-    if (!status.ok()) {
-        LOG(ERROR) << "Can't replace compilable exprs.\n"
-                   << status.message() << "\n"
-                   << apache::thrift::ThriftDebugString(texpr);
-        // Fall back to the non-JIT path.
-        return Status::OK();
-    }
-
-    if (e != prev_e) {
-        // The root node was replaced, so we need to update the context.
-        *ctx = pool->add(new ExprContext(e));
     }
 
     return status;
@@ -252,6 +226,37 @@ Status Expr::create_expr_trees(ObjectPool* pool, const std::vector<TExpr>& texpr
         ctxs->push_back(ctx);
     }
     return Status::OK();
+}
+
+Status Expr::create_tree_from_thrift_with_jit(ObjectPool* pool, const std::vector<TExprNode>& nodes, Expr* parent,
+                                              int* node_idx, Expr** root_expr, ExprContext** ctx, RuntimeState* state) {
+    Status status = create_tree_from_thrift(pool, nodes, parent, node_idx, root_expr, ctx, state);
+
+    // Enable JIT based on the "enable_jit" parameters.
+    if (state == nullptr || !status.ok() || !state->is_jit_enabled()) {
+        return status;
+    }
+
+    // Check if JIT compilation is feasible on this platform.
+    auto* jit_engine = JITEngine::get_instance();
+    if (!jit_engine->support_jit()) {
+        return status;
+    }
+
+    const auto* prev_e = *root_expr;
+    status = (*root_expr)->replace_compilable_exprs(root_expr, pool);
+    if (!status.ok()) {
+        LOG(WARNING) << "Can't replace compilable exprs.\n" << status.message() << "\n" << (*root_expr)->debug_string();
+        // Fall back to the non-JIT path.
+        return Status::OK();
+    }
+
+    if (*root_expr != prev_e) {
+        // The root node was replaced, so we need to update the context.
+        *ctx = pool->add(new ExprContext(*root_expr));
+    }
+
+    return status;
 }
 
 Status Expr::create_tree_from_thrift(ObjectPool* pool, const std::vector<TExprNode>& nodes, Expr* parent, int* node_idx,
@@ -700,13 +705,6 @@ StatusOr<LLVMDatum> Expr::generate_ir(ExprContext* context, const llvm::Module& 
     }
 
     ASSIGN_OR_RETURN(auto datum, generate_ir_impl(context, module, b, datums))
-    // Unoin null.
-    if (this->is_nullable()) {
-        // TODO(Yueyang): Check this.
-        for (auto& input : datums) {
-            datum.null_flag = b.CreateOr(datum.null_flag, input.null_flag);
-        }
-    }
     return datum;
 }
 
@@ -735,26 +733,20 @@ void Expr::get_jit_exprs(std::vector<Expr*>& exprs) {
 // This method searches from top to bottom for compilable expressions.
 // Once a compilable expression is found, it skips over its compilable subexpressions and continues the search downwards.
 Status Expr::replace_compilable_exprs(Expr** expr, ObjectPool* pool) {
-    std::vector<Expr*> next_exprs;
     if ((*expr)->should_compile()) {
         // If the current expression is compilable, we will replace it with a JITExpr.
         // This expression and its compilable subexpressions will be compiled into a single function.
         *expr = JITExpr::create(pool, *expr);
-        // Skip over the compilable subexpressions.
-        (*expr)->get_uncompilable_exprs(next_exprs);
-    } else {
-        // Search for compilable expressions in the subexpressions.
-        next_exprs = _children;
     }
 
-    for (auto& child : next_exprs) {
+    for (auto& child : (*expr)->_children) {
         RETURN_IF_ERROR(child->replace_compilable_exprs(&child, pool));
     }
     return Status::OK();
 }
 
 bool Expr::should_compile() const {
-    if (!is_compilable() || _children.empty()) {
+    if (!is_compilable() || _children.empty() || is_constant()) {
         return false;
     }
 

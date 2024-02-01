@@ -34,11 +34,12 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.MockedAuth;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -64,13 +65,10 @@ import java.util.List;
 public class SetStmtTest {
 
     @Mocked
-    private Auth auth;
-    @Mocked
     private ConnectContext ctx;
 
     @Before
     public void setUp() {
-        MockedAuth.mockedAuth(auth);
         MockedAuth.mockedConnectContext(ctx, "root", "192.168.1.1");
     }
 
@@ -315,6 +313,52 @@ public class SetStmtTest {
                 } catch (Exception e) {
                     Assert.fail();;
                 }
+            }
+        }
+    }
+
+    @Test
+    public void testCBOMaterializedViewRewriteLimit() {
+        // good
+        {
+            List<Pair<String, String>> goodCases = ImmutableList.of(
+                    Pair.create(SessionVariable.CBO_MATERIALIZED_VIEW_REWRITE_CANDIDATE_LIMIT, "1"),
+                    Pair.create(SessionVariable.CBO_MATERIALIZED_VIEW_REWRITE_RELATED_MVS_LIMIT, "1"),
+                    Pair.create(SessionVariable.CBO_MATERIALIZED_VIEW_REWRITE_RULE_OUTPUT_LIMIT, "1")
+            );
+            for (Pair<String, String> goodCase : goodCases) {
+                try {
+                    SystemVariable setVar = new SystemVariable(SetType.SESSION, goodCase.first,
+                            new StringLiteral(goodCase.second));
+                    SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+                } catch (Exception e) {
+                    Assert.fail();;
+                }
+            }
+        }
+    }
+
+    // bad
+    {
+        List<Pair<String, String>> goodCases = ImmutableList.of(
+                Pair.create(SessionVariable.CBO_MATERIALIZED_VIEW_REWRITE_CANDIDATE_LIMIT, "-1"),
+                Pair.create(SessionVariable.CBO_MATERIALIZED_VIEW_REWRITE_CANDIDATE_LIMIT, "0"),
+                Pair.create(SessionVariable.CBO_MATERIALIZED_VIEW_REWRITE_CANDIDATE_LIMIT, "abc"),
+                Pair.create(SessionVariable.CBO_MATERIALIZED_VIEW_REWRITE_RELATED_MVS_LIMIT, "-1"),
+                Pair.create(SessionVariable.CBO_MATERIALIZED_VIEW_REWRITE_RELATED_MVS_LIMIT, "0"),
+                Pair.create(SessionVariable.CBO_MATERIALIZED_VIEW_REWRITE_RELATED_MVS_LIMIT, "abc"),
+                Pair.create(SessionVariable.CBO_MATERIALIZED_VIEW_REWRITE_RULE_OUTPUT_LIMIT, "-1"),
+                Pair.create(SessionVariable.CBO_MATERIALIZED_VIEW_REWRITE_RULE_OUTPUT_LIMIT, "0"),
+                Pair.create(SessionVariable.CBO_MATERIALIZED_VIEW_REWRITE_RULE_OUTPUT_LIMIT, "abc")
+        );
+        for (Pair<String, String> goodCase : goodCases) {
+            try {
+                SystemVariable setVar = new SystemVariable(SetType.SESSION, goodCase.first,
+                        new StringLiteral(goodCase.second));
+                SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+                Assert.fail();;
+            } catch (Exception e) {
+                Assert.assertTrue(e instanceof SemanticException);
             }
         }
     }

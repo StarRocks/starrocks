@@ -21,7 +21,9 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.hive.HiveMetadata;
@@ -165,6 +167,12 @@ public class UnifiedMetadata implements ConnectorMetadata {
                                          List<PartitionKey> partitionKeys, ScalarOperator predicate, long limit) {
         ConnectorMetadata metadata = metadataOfTable(table);
         return metadata.getTableStatistics(session, table, columns, partitionKeys, predicate, limit);
+    }
+
+    @Override
+    public boolean prepareMetadata(MetaPreparationItem item, Tracers tracers) {
+        ConnectorMetadata metadata = metadataOfTable(item.getTable());
+        return metadata.prepareMetadata(item, tracers);
     }
 
     @Override

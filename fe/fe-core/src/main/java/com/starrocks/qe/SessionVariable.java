@@ -45,6 +45,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.monitor.unit.TimeValue;
 import com.starrocks.qe.VariableMgr.VarAttr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.QueryDebugOptions;
@@ -55,9 +56,11 @@ import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TSpillMode;
 import com.starrocks.thrift.TTabletInternalParallelMode;
+import com.starrocks.thrift.TTimeUnit;
 import org.apache.commons.lang3.EnumUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.TestOnly;
 import org.json.JSONObject;
 
 import java.io.DataInput;
@@ -143,7 +146,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String MAX_ALLOWED_PACKET = "max_allowed_packet";
     public static final String AUTO_INCREMENT_INCREMENT = "auto_increment_increment";
     public static final String QUERY_CACHE_TYPE = "query_cache_type";
-    public static final String INTERACTIVE_TIMTOUT = "interactive_timeout";
+    public static final String INTERACTIVE_TIMEOUT = "interactive_timeout";
     public static final String WAIT_TIMEOUT = "wait_timeout";
     public static final String WAREHOUSE = "warehouse";
     public static final String NET_WRITE_TIMEOUT = "net_write_timeout";
@@ -283,6 +286,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             "cbo_materialized_view_rewrite_rule_output_limit";
     public static final String CBO_MATERIALIZED_VIEW_REWRITE_CANDIDATE_LIMIT =
             "cbo_materialized_view_rewrite_candidate_limit";
+    public static final String CBO_MATERIALIZED_VIEW_REWRITE_RELATED_MVS_LIMIT =
+            "cbo_materialized_view_rewrite_related_mvs_limit";
 
     public static final String CBO_MAX_REORDER_NODE_USE_EXHAUSTIVE = "cbo_max_reorder_node_use_exhaustive";
     public static final String CBO_ENABLE_DP_JOIN_REORDER = "cbo_enable_dp_join_reorder";
@@ -308,11 +313,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_PUSH_DOWN_AGGREGATE = "cbo_push_down_aggregate";
     public static final String CBO_DEBUG_ALIVE_BACKEND_NUMBER = "cbo_debug_alive_backend_number";
     public static final String CBO_PRUNE_SUBFIELD = "cbo_prune_subfield";
+    public static final String CBO_PRUNE_JSON_SUBFIELD = "cbo_prune_json_subfield";
     public static final String ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL =
             "enable_rewrite_groupingsets_to_union_all";
 
     public static final String CBO_USE_DB_LOCK = "cbo_use_lock_db";
     public static final String CBO_PREDICATE_SUBFIELD_PATH = "cbo_enable_predicate_subfield_path";
+    public static final String CBO_PREPARE_METADATA_THREAD_POOL_SIZE = "cbo_prepare_metadata_thread_pool_size";
+
+    public static final String CBO_ENABLE_PARALLEL_PREPARE_METADATA = "enable_parallel_prepare_metadata";
 
     public static final String SKEW_JOIN_RAND_RANGE = "skew_join_rand_range";
 
@@ -447,6 +456,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PLAN_SERIALIZE_CONCURRENTLY = "enable_plan_serialize_concurrently";
 
     public static final String ENABLE_STRICT_ORDER_BY = "enable_strict_order_by";
+    private static final String CBO_SPLIT_SCAN_PREDICATE_WITH_DATE = "enable_split_scan_predicate_with_date";
 
     // Flag to control whether to proxy follower's query statement to leader/follower.
     public enum FollowerQueryForwardMode {
@@ -455,6 +465,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         LEADER      // proxy queries to leader no matter the follower's replay progress
     }
     public static final String FOLLOWER_QUERY_FORWARD_MODE = "follower_query_forward_mode";
+
+    public static final String ENABLE_ARRAY_DISTINCT_AFTER_AGG_OPT = "enable_array_distinct_after_agg_opt";
 
     public enum MaterializedViewRewriteMode {
         DISABLE,            // disable materialized view rewrite
@@ -505,7 +517,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String BIG_QUERY_LOG_CPU_SECOND_THRESHOLD = "big_query_log_cpu_second_threshold";
     public static final String BIG_QUERY_LOG_SCAN_BYTES_THRESHOLD = "big_query_log_scan_bytes_threshold";
     public static final String BIG_QUERY_LOG_SCAN_ROWS_THRESHOLD = "big_query_log_scan_rows_threshold";
-    public static final String BIG_QUERY_PROFILE_SECOND_THRESHOLD = "big_query_profile_second_threshold";
+    public static final String BIG_QUERY_PROFILE_THRESHOLD = "big_query_profile_threshold";
 
     public static final String SQL_DIALECT = "sql_dialect";
 
@@ -530,6 +542,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SPILL_OPERATOR_MAX_BYTES = "spill_operator_max_bytes";
     public static final String SPILL_REVOCABLE_MAX_BYTES = "spill_revocable_max_bytes";
     public static final String SPILL_ENABLE_DIRECT_IO = "spill_enable_direct_io";
+    // only used in test. spill_mode="RANDOM"
+    public static final String SPILL_RAND_RATIO = "spill_rand_ratio";
     public static final String SPILL_ENCODE_LEVEL = "spill_encode_level";
 
     // full_sort_max_buffered_{rows,bytes} are thresholds that limits input size of partial_sort
@@ -610,6 +624,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_EQ_BASE_TYPE = "cbo_eq_base_type";
 
     public static final String ENABLE_SHORT_CIRCUIT = "enable_short_circuit";
+
+    public static final String ENABLE_PREPARE_STMT = "enable_prepare_stmt";
 
     public static final String ENABLE_HYPERSCAN_VEC = "enable_hyperscan_vec";
 
@@ -804,7 +820,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int queryCacheType = 0;
 
     // The number of seconds the server waits for activity on an interactive connection before closing it
-    @VariableMgr.VarAttr(name = INTERACTIVE_TIMTOUT)
+    @VariableMgr.VarAttr(name = INTERACTIVE_TIMEOUT)
     private int interactiveTimeout = 3600;
 
     // The number of seconds the server waits for activity on a noninteractive connection before closing it.
@@ -870,6 +886,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_PRUNE_SUBFIELD, flag = VariableMgr.INVISIBLE)
     private boolean cboPruneSubfield = true;
 
+    // it's need BE to enable flat json, else will take a poor performance
+    @VarAttr(name = CBO_PRUNE_JSON_SUBFIELD)
+    private boolean cboPruneJsonSubfield = true;
+
     @VarAttr(name = ENABLE_SQL_DIGEST, flag = VariableMgr.INVISIBLE)
     private boolean enableSQLDigest = false;
 
@@ -915,8 +935,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_ASYNC_PROFILE, flag = VariableMgr.INVISIBLE)
     private boolean enableAsyncProfile = true;
 
-    @VariableMgr.VarAttr(name = BIG_QUERY_PROFILE_SECOND_THRESHOLD)
-    private int bigQueryProfileSecondThreshold = 0;
+    @VariableMgr.VarAttr(name = BIG_QUERY_PROFILE_THRESHOLD)
+    private String bigQueryProfileThreshold = "0s";
 
     @VariableMgr.VarAttr(name = RESOURCE_GROUP_ID, alias = RESOURCE_GROUP_ID_V2,
             show = RESOURCE_GROUP_ID_V2, flag = VariableMgr.INVISIBLE)
@@ -967,6 +987,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     
     @VarAttr(name = SPILL_ENABLE_DIRECT_IO)
     private boolean spillEnableDirectIO = false;
+    
+    @VarAttr(name = SPILL_RAND_RATIO, flag = VariableMgr.INVISIBLE)
+    private double spillRandRatio = 0.1;
 
     @VarAttr(name = ENABLE_AGG_SPILL_PREAGGREGATION, flag = VariableMgr.INVISIBLE)
     public boolean enableAggSpillPreaggregation = true;
@@ -1251,6 +1274,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_HYPERSCAN_VEC)
     private boolean enableHyperscanVec = true;
 
+    public boolean isCboPruneJsonSubfield() {
+        return cboPruneJsonSubfield;
+    }
+
+    public void setCboPruneJsonSubfield(boolean cboPruneJsonSubfield) {
+        this.cboPruneJsonSubfield = cboPruneJsonSubfield;
+    }
+
     public void setEnableArrayLowCardinalityOptimize(boolean enableArrayLowCardinalityOptimize) {
         this.enableArrayLowCardinalityOptimize = enableArrayLowCardinalityOptimize;
     }
@@ -1459,6 +1490,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_MATERIALIZED_VIEW_REWRITE_CANDIDATE_LIMIT, flag = VariableMgr.INVISIBLE)
     private int cboMaterializedViewRewriteCandidateLimit = 12;
 
+    /**
+     * Materialized view rewrite related mv limit: how many related MVs would be considered for rewrite to a query?
+     */
+    @VarAttr(name = CBO_MATERIALIZED_VIEW_REWRITE_RELATED_MVS_LIMIT, flag = VariableMgr.INVISIBLE)
+    private int cboMaterializedViewRewriteRelatedMVsLimit = 64;
+
     @VarAttr(name = QUERY_EXCLUDING_MV_NAMES, flag = VariableMgr.INVISIBLE)
     private String queryExcludingMVNames = "";
 
@@ -1580,6 +1617,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_SHORT_CIRCUIT)
     private boolean enableShortCircuit = false;
 
+    @VariableMgr.VarAttr(name = ENABLE_PREPARE_STMT)
+    private boolean enablePrepareStmt = true;
+
     @VarAttr(name = ENABLE_JIT)
     private boolean enableJit = true;
 
@@ -1590,6 +1630,28 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CROSS_JOIN_COST_PENALTY, flag = VariableMgr.INVISIBLE)
     private long crossJoinCostPenalty = 1000000;
+
+    @VarAttr(name = CBO_PREPARE_METADATA_THREAD_POOL_SIZE)
+    private int prepareMetadataPoolSize = 16;
+
+    @VarAttr(name = CBO_ENABLE_PARALLEL_PREPARE_METADATA)
+    private boolean enableParallelPrepareMetadata = false;
+
+    public int getPrepareMetadataPoolSize() {
+        return prepareMetadataPoolSize;
+    }
+
+    public void setPrepareMetadataPoolSize(int prepareMetadataPoolSize) {
+        this.prepareMetadataPoolSize = prepareMetadataPoolSize;
+    }
+
+    public boolean enableParallelPrepareMetadata() {
+        return enableParallelPrepareMetadata;
+    }
+
+    public void setEnableParallelPrepareMetadata(boolean enableParallelPrepareMetadata) {
+        this.enableParallelPrepareMetadata = enableParallelPrepareMetadata;
+    }
 
     public String getHiveTempStagingDir() {
         return hiveTempStagingDir;
@@ -1622,6 +1684,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_DERIVE_RANGE_JOIN_PREDICATE)
     private boolean cboDeriveRangeJoinPredicate = false;
 
+    @VarAttr(name = CBO_SPLIT_SCAN_PREDICATE_WITH_DATE)
+    private boolean cboSplitScanPredicateWithDate = false;
+
     @VarAttr(name = CBO_DERIVE_JOIN_IS_NULL_PREDICATE)
     private boolean cboDeriveJoinIsNullPredicate = true;
 
@@ -1634,6 +1699,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public boolean isCboDecimalCastStringStrict() {
         return cboDecimalCastStringStrict;
     }
+
+    @VarAttr(name = ENABLE_ARRAY_DISTINCT_AFTER_AGG_OPT)
+    private boolean enableArrayDistinctAfterAggOpt = true;
 
     public String getCboEqBaseType() {
         return cboEqBaseType;
@@ -1789,6 +1857,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return cboUseDBLock;
     }
 
+    @TestOnly
+    public void setCboUseDBLock(boolean cboUseDBLock) {
+        this.cboUseDBLock = cboUseDBLock;
+    }
+
     public boolean isEnableQueryTabletAffinity() {
         return enableQueryTabletAffinity;
     }
@@ -1882,11 +1955,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public boolean isEnableBigQueryProfile() {
-        return bigQueryProfileSecondThreshold > 0;
+        return TimeValue.parseTimeValue(bigQueryProfileThreshold).getMillis() > 0;
     }
 
-    public int getBigQueryProfileSecondThreshold() {
-        return bigQueryProfileSecondThreshold;
+    public long getBigQueryProfileMilliSecondThreshold() {
+        return TimeValue.parseTimeValue(bigQueryProfileThreshold).getMillis();
     }
 
     public int getWaitTimeoutS() {
@@ -2829,6 +2902,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.cboMaterializedViewRewriteCandidateLimit = limit;
     }
 
+    public int getCboMaterializedViewRewriteRelatedMVsLimit() {
+        return cboMaterializedViewRewriteRelatedMVsLimit;
+    }
+
+    public void setCboMaterializedViewRewriteRelatedMVsLimit(int cboMaterializedViewRewriteRelatedMVsLimit) {
+        this.cboMaterializedViewRewriteRelatedMVsLimit = cboMaterializedViewRewriteRelatedMVsLimit;
+    }
+
     public String getQueryExcludingMVNames() {
         return queryExcludingMVNames;
     }
@@ -3061,8 +3142,21 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.cboDeriveRangeJoinPredicate = cboDeriveRangeJoinPredicate;
     }
 
+
+    public boolean isCboSplitScanPredicateWithDate() {
+        return cboSplitScanPredicateWithDate;
+    }
+
+    public void setCboSplitScanPredicateWithDate(boolean cboSplitScanPredicateWithDate) {
+        this.cboSplitScanPredicateWithDate = cboSplitScanPredicateWithDate;
+    }
+
     public boolean isCboDeriveJoinIsNullPredicate() {
         return cboDeriveJoinIsNullPredicate;
+    }
+
+    public void setCboEqBaseType(String cboEqBaseType) {
+        this.cboEqBaseType = cboEqBaseType;
     }
 
     public boolean isAuditExecuteStmt() {
@@ -3075,6 +3169,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableShortCircuit() {
         return enableShortCircuit;
+    }
+
+    public boolean isEnablePrepareStmt() {
+        return enablePrepareStmt;
+    }
+
+    public void setEnablePrepareStmt(boolean enablePrepareStmt) {
+        this.enablePrepareStmt = enablePrepareStmt;
     }
 
     public void setLargeDecimalUnderlyingType(String type) {
@@ -3124,18 +3226,24 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableStrictOrderBy = enableStrictOrderBy;
     }
 
+    public boolean getEnableArrayDistinctAfterAggOpt() {
+        return  enableArrayDistinctAfterAggOpt;
+    }
+
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
         TQueryOptions tResult = new TQueryOptions();
         tResult.setMem_limit(maxExecMemByte);
         tResult.setQuery_mem_limit(queryMemLimit);
+        tResult.setSql_dialect(sqlDialect.toLowerCase());
 
         // Avoid integer overflow
         tResult.setQuery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryTimeoutS));
         tResult.setQuery_delivery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryDeliveryTimeoutS));
         tResult.setEnable_profile(enableProfile);
-        tResult.setBig_query_profile_second_threshold(bigQueryProfileSecondThreshold);
+        tResult.setBig_query_profile_threshold(TimeValue.parseTimeValue(bigQueryProfileThreshold).getMillis());
+        tResult.setBig_query_profile_threshold_unit(TTimeUnit.MILLISECOND);
         tResult.setRuntime_profile_report_interval(runtimeProfileReportInterval);
         tResult.setBatch_size(chunkSize);
         tResult.setLoad_mem_limit(loadMemLimit);
@@ -3163,6 +3271,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             tResult.setSpillable_operator_mask(spillableOperatorMask);
             tResult.setEnable_agg_spill_preaggregation(enableAggSpillPreaggregation);
             tResult.setSpill_enable_direct_io(spillEnableDirectIO);
+            tResult.setSpill_rand_ratio(spillRandRatio);
         }
 
         // Compression Type

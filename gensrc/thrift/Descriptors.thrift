@@ -166,6 +166,7 @@ enum TSchemaTableType {
     STARROCKS_OBJECT_DEPENDENCIES,
     SYS_FE_LOCKS,
     SCH_BE_DATACACHE_METRICS,
+    SCH_PARTITIONS_META,
 }
 
 enum THdfsCompression {
@@ -408,6 +409,9 @@ struct THdfsTable {
 
     // hive table serde properties
     10: optional map<string, string> serde_properties
+
+    // timezone
+    11: optional string time_zone
 }
 
 struct TFileTable {
@@ -424,6 +428,9 @@ struct TFileTable {
     5: optional string input_format
 
     6: optional string serde_lib
+
+    // timezone
+    7: optional string time_zone
 }
 
 struct TTableFunctionTable {
@@ -524,6 +531,9 @@ struct THudiTable {
 
     // hudi table serde_lib
     10: optional string serde_lib
+
+    // timezone
+    11: optional string time_zone
 }
 
 struct TPaimonTable {
@@ -531,6 +541,9 @@ struct TPaimonTable {
     1: optional string paimon_options
     // paimon table
     2: optional string paimon_native_table
+
+    // timezone
+    3: optional string time_zone
 }
 
 struct TDeltaLakeTable {

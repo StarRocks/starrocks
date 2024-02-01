@@ -71,7 +71,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     seg_options.unused_output_column_ids = options.unused_output_column_ids;
     seg_options.runtime_range_pruner = options.runtime_range_pruner;
     seg_options.tablet_schema = options.tablet_schema;
-    seg_options.fill_data_cache = options.fill_data_cache;
+    seg_options.lake_io_opts = options.lake_io_opts;
     if (options.is_primary_keys) {
         seg_options.is_primary_keys = true;
         seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(_tablet_mgr->update_mgr(), nullptr);
@@ -109,7 +109,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     }
 
     std::vector<SegmentPtr> segments;
-    RETURN_IF_ERROR(load_segments(&segments, options.fill_data_cache));
+    RETURN_IF_ERROR(load_segments(&segments, options.lake_io_opts.fill_data_cache, options.lake_io_opts.buffer_size));
     for (auto& seg_ptr : segments) {
         if (seg_ptr->num_rows() == 0) {
             continue;
@@ -210,20 +210,23 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
 }
 
 StatusOr<std::vector<SegmentPtr>> Rowset::segments(bool fill_cache) {
-    return segments(fill_cache, fill_cache);
+    LakeIOOptions lake_io_opts{.fill_data_cache = fill_cache};
+    return segments(lake_io_opts, fill_cache);
 }
 
-StatusOr<std::vector<SegmentPtr>> Rowset::segments(bool fill_data_cache, bool fill_metadata_cache) {
+StatusOr<std::vector<SegmentPtr>> Rowset::segments(const LakeIOOptions& lake_io_opts, bool fill_metadata_cache) {
     std::vector<SegmentPtr> segments;
-    RETURN_IF_ERROR(load_segments(&segments, fill_data_cache, fill_metadata_cache));
+    RETURN_IF_ERROR(load_segments(&segments, lake_io_opts, fill_metadata_cache));
     return segments;
 }
 
-Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_cache) {
-    return load_segments(segments, fill_cache, fill_cache);
+Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_cache, int64_t buffer_size) {
+    LakeIOOptions lake_io_opts{.fill_data_cache = fill_cache, .buffer_size = buffer_size};
+    return load_segments(segments, lake_io_opts, fill_cache);
 }
 
-Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_data_cache, bool fill_metadata_cache) {
+Status Rowset::load_segments(std::vector<SegmentPtr>* segments, const LakeIOOptions& lake_io_opts,
+                             bool fill_metadata_cache) {
 #ifndef BE_TEST
     RETURN_IF_ERROR(tls_thread_status.mem_tracker()->check_mem_limit("LoadSegments"));
 #endif
@@ -233,9 +236,27 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_data_c
     size_t footer_size_hint = 16 * 1024;
     uint32_t seg_id = 0;
     bool ignore_lost_segment = config::experimental_lake_ignore_lost_segment;
+
+    // RowsetMetaData upgrade from old version may not have the field of segment_size
+    auto segment_size_size = metadata().segment_size_size();
+    auto segment_file_size = metadata().segments_size();
+    bool has_segment_size = segment_size_size == segment_file_size;
+    LOG_IF(ERROR, segment_size_size > 0 && segment_size_size != segment_file_size)
+            << "segment_size size != segment file size, tablet: " << _tablet_id << ", rowset: " << metadata().id()
+            << ", segment file size: " << segment_file_size << ", segment_size size: " << segment_size_size;
+
+    const auto& files_to_size = metadata().segment_size();
+    int index = 0;
+
     for (const auto& seg_name : metadata().segments()) {
         auto segment_path = _tablet_mgr->segment_location(tablet_id(), seg_name);
-        auto segment_or = _tablet_mgr->load_segment(segment_path, seg_id++, &footer_size_hint, fill_data_cache,
+        auto segment_info = FileInfo{.path = segment_path};
+        if (LIKELY(has_segment_size)) {
+            segment_info.size = files_to_size.Get(index);
+        }
+        index++;
+
+        auto segment_or = _tablet_mgr->load_segment(segment_info, seg_id++, &footer_size_hint, lake_io_opts,
                                                     fill_metadata_cache, _tablet_schema);
         if (segment_or.ok()) {
             segments->emplace_back(std::move(segment_or.value()));

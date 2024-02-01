@@ -36,15 +36,6 @@ public:
     AgentTaskTest() = default;
     ~AgentTaskTest() override = default;
     void SetUp() override {
-        _transaction_id = 100;
-        _table_id = 10001;
-        _partition_id = 10002;
-        _tablet_id = 10003;
-        _src_tablet_id = 10004;
-        _schema_hash = 368169781;
-        _version = 2;
-        _src_version = 10;
-
         TCreateTabletReq create_tablet_req = get_create_tablet_request(_tablet_id, _schema_hash, _version);
         Status create_st = StorageEngine::instance()->tablet_manager()->create_tablet(
                 create_tablet_req, StorageEngine::instance()->get_stores());
@@ -56,7 +47,18 @@ public:
         ASSERT_TRUE(src_create_st.ok());
     }
 
-    void TearDown() override {}
+    void TearDown() override {
+        auto status = StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet_id, kDeleteFiles);
+        EXPECT_TRUE(status.ok()) << status;
+        status = StorageEngine::instance()->tablet_manager()->drop_tablet(_src_tablet_id, kDeleteFiles);
+        EXPECT_TRUE(status.ok()) << status;
+        status = StorageEngine::instance()->tablet_manager()->delete_shutdown_tablet(_tablet_id);
+        EXPECT_TRUE(status.ok()) << status;
+        status = StorageEngine::instance()->tablet_manager()->delete_shutdown_tablet(_src_tablet_id);
+        EXPECT_TRUE(status.ok()) << status;
+        status = fs::remove_all(config::storage_root_path);
+        EXPECT_TRUE(status.ok() || status.is_not_found()) << status;
+    }
 
     TCreateTabletReq get_create_tablet_request(int64_t tablet_id, int schema_hash, int64_t version) {
         TColumnType col_type;
@@ -73,6 +75,8 @@ public:
         tablet_schema.__set_keys_type(TKeysType::AGG_KEYS);
         tablet_schema.__set_storage_type(TStorageType::COLUMN);
         tablet_schema.__set_columns(cols);
+        tablet_schema.__set_id(1);
+        tablet_schema.__set_schema_version(0);
         TCreateTabletReq create_tablet_req;
         create_tablet_req.__set_tablet_schema(tablet_schema);
         create_tablet_req.__set_tablet_id(tablet_id);
@@ -82,14 +86,14 @@ public:
     }
 
 protected:
-    int64_t _transaction_id;
-    int64_t _table_id;
-    int64_t _partition_id;
-    int64_t _tablet_id;
-    int64_t _src_tablet_id;
-    int32_t _schema_hash;
-    int64_t _version;
-    int64_t _src_version;
+    int64_t _transaction_id = 100;
+    int64_t _table_id = 10001;
+    int64_t _partition_id = 10002;
+    int64_t _tablet_id = 10003;
+    int64_t _src_tablet_id = 10004;
+    int32_t _schema_hash = 368169781;
+    int64_t _version = 2;
+    int64_t _src_version = 10;
 };
 
 TEST_F(AgentTaskTest, test_replication_txn) {
@@ -175,6 +179,72 @@ TEST_F(AgentTaskTest, test_replication_txn) {
             agent_task_request, agent_task_request.clear_transaction_task_req, time(nullptr));
 
     run_clear_transaction_task(clear_transaction_agent_task, nullptr);
+}
+
+// TODO(zhangqiang) add ut
+TEST_F(AgentTaskTest, test_update_schema) {
+    TAgentTaskRequest agent_task_request;
+    agent_task_request.__set_task_type(TTaskType::UPDATE_SCHEMA);
+    agent_task_request.__set_signature(100);
+
+    TUpdateSchemaReq update_schema_req;
+    update_schema_req.__set_index_id(1);
+    update_schema_req.__set_schema_id(2);
+    update_schema_req.__set_schema_version(1);
+    auto& tablet_ids = update_schema_req.tablet_ids;
+    tablet_ids.push_back(_tablet_id);
+
+    // create column param
+    TOlapTableColumnParam column_param;
+    column_param.__set_short_key_column_count(1);
+    auto& columns = column_param.columns;
+    //auto& sort_key_uid = column_param.sort_key_uid;
+    //sort_key_uid.push_back(0);
+    TColumnType col_type;
+    col_type.__set_type(TPrimitiveType::BIGINT);
+
+    TScalarType scalar_type;
+    scalar_type.__set_type(TPrimitiveType::BIGINT);
+    TTypeNode type;
+    type.__set_type(TTypeNodeType::SCALAR);
+    type.__set_scalar_type(scalar_type);
+    TTypeDesc type_desc;
+    type_desc.types.push_back(type);
+
+    TColumn tcolumn1;
+    tcolumn1.__set_column_name("c1");
+    tcolumn1.__set_column_type(col_type);
+    tcolumn1.__set_is_key(true);
+    tcolumn1.__set_col_unique_id(0);
+    tcolumn1.__set_type_desc(type_desc);
+    columns.push_back(tcolumn1);
+
+    TColumn tcolumn2;
+    tcolumn2.__set_column_name("c2");
+    tcolumn2.__set_column_type(col_type);
+    tcolumn2.__set_is_key(false);
+    tcolumn2.__set_col_unique_id(1);
+    tcolumn2.__set_type_desc(type_desc);
+    columns.push_back(tcolumn2);
+
+    TColumn tcolumn3;
+    tcolumn3.__set_column_name("c3");
+    tcolumn3.__set_column_type(col_type);
+    tcolumn3.__set_is_key(false);
+    tcolumn3.__set_col_unique_id(2);
+    tcolumn3.__set_type_desc(type_desc);
+    columns.push_back(tcolumn3);
+
+    update_schema_req.__set_column_param(column_param);
+    agent_task_request.__set_update_schema_req(update_schema_req);
+
+    auto update_schema_agent_task = std::make_shared<UpdateSchemaTaskRequest>(
+            agent_task_request, agent_task_request.update_schema_req, time(nullptr));
+
+    run_update_schema_task(update_schema_agent_task, nullptr);
+
+    auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id, false);
+    EXPECT_EQ(3, tablet->num_columns_with_max_version());
 }
 
 } // namespace starrocks

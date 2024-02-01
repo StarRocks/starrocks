@@ -16,6 +16,13 @@ In addition to the native RBAC privilege system, StarRocks v3.1 also supports ac
 
 This topic describes the permission control methods and integration process of StarRocks and Apache Ranger. For information on how to create security policies on Ranger to manage data security, see the [Apache Ranger official website](https://ranger.apache.org/).
 
+Currently, StarRocks supports:
+
+- Creates access policies, masking policies, and row-level filter policies through Apache Ranger.
+- Ranger audit logs.
+
+**Ranger Servers that use Kerberos for authentication are not supported.**
+
 ## Permission control method
 
 StarRocks integrated with Apache Ranger provides the following permission control methods:
@@ -49,11 +56,6 @@ After StarRocks is integrating with Apache Ranger, you can achieve the following
 
 ### Install ranger-starrocks-plugin
 
-Currently, StarRocks supports:
-
-- Creates access policies, masking policies, and row-level filter policies through Apache Ranger.
-- Ranger audit logs.
-
 1. Create the `starrocks` folder in the Ranger Admin directory `ews/webapp/WEB-INF/classes/ranger-plugins`.
 
    ```SQL
@@ -73,7 +75,7 @@ Currently, StarRocks supports:
 1. Copy [ranger-servicedef-starrocks.json](https://github.com/StarRocks/ranger/blob/master/agents-common/src/main/resources/service-defs/ranger-servicedef-starrocks.json) to any directory of the StarRocks FE machine or Ranger machine.
 
    ```SQL
-   wget https://github.com/StarRocks/ranger/blob/master/agents-common/src/main/resources/service-defs/ranger-servicedef-starrocks.json
+   wget https://raw.githubusercontent.com/StarRocks/ranger/master/agents-common/src/main/resources/service-defs/ranger-servicedef-starrocks.json
    ```
 
 2. Add StarRocks Service by running the following command as a Ranger administrator.
@@ -158,9 +160,9 @@ Currently, StarRocks supports:
 
 ## Reuse other services to control access to external tables
 
-For External Catalog, you can reuse external services (such as Hive Service) for access control. StarRocks supports matching different Ranger external services for different Catalogs. When users access an external table, the system implements access control based on the access policy of the Ranger Service corresponding to the external table.
+For External Catalog, you can reuse external services (such as Hive Service) for access control. StarRocks supports matching different Ranger external services for different Catalogs. When users access an external table, the system implements access control based on the access policy of the Ranger Service corresponding to the external table. The user permissions are consistent with the Ranger user with the same name.
 
-1. Copy Hive's Ranger configuration file `ranger-hive-security.xml` to the `fe/conf` file of all FE machines.
+1. Copy Hive's Ranger configuration files `[ranger-hive-security.xml](https://github.com/StarRocks/ranger/blob/master/hive-agent/conf/ranger-hive-security.xml)` and `[ranger-hive-audit.xml](https://github.com/StarRocks/ranger/blob/master/hive-agent/conf/ranger-hive-audit.xml)` to the `fe/conf` file of all FE machines.
 2. Restart all FE machines.
 3. Configure External Catalog.
 
@@ -169,8 +171,10 @@ For External Catalog, you can reuse external services (such as Hive Service) for
       ```SQL
         CREATE EXTERNAL CATALOG hive_catalog_1
         PROPERTIES (
+            "type" = "hive",
+            "hive.metastore.type" = "hive",
             "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
-            "ranger.plugin.hive.service.name" = "hive_catalog_1"
+            "ranger.plugin.hive.service.name" = "<ranger_hive_service_name>"
         )
       ```
 
@@ -178,7 +182,7 @@ For External Catalog, you can reuse external services (such as Hive Service) for
   
        ```SQL
        ALTER CATALOG hive_catalog_1
-       SET ("ranger.plugin.hive.service.name" = "hive_catalog_1");
+       SET ("ranger.plugin.hive.service.name" = "<ranger_hive_service_name>");
        ```
 
 ​    This operation changes the authentication method of an existing Catalog to Ranger-based authentication.

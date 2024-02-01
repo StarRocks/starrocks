@@ -34,6 +34,7 @@
 #include "exec/schema_scanner/schema_load_tracking_logs_scanner.h"
 #include "exec/schema_scanner/schema_loads_scanner.h"
 #include "exec/schema_scanner/schema_materialized_views_scanner.h"
+#include "exec/schema_scanner/schema_partitions_meta_scanner.h"
 #include "exec/schema_scanner/schema_pipe_files.h"
 #include "exec/schema_scanner/schema_pipes.h"
 #include "exec/schema_scanner/schema_routine_load_jobs_scanner.h"
@@ -71,10 +72,6 @@ Status SchemaScanner::start(RuntimeState* state) {
     _runtime_state = state;
 
     return Status::OK();
-}
-
-void SchemaScanner::set_runtime_state(RuntimeState* state) {
-    _runtime_state = state;
 }
 
 Status SchemaScanner::get_next(ChunkPtr* chunk, bool* eos) {
@@ -188,6 +185,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SysFeLocks>();
     case TSchemaTableType::SCH_BE_DATACACHE_METRICS:
         return std::make_unique<SchemaBeDataCacheMetricsScanner>();
+    case TSchemaTableType::SCH_PARTITIONS_META:
+        return std::make_unique<SchemaPartitionsMetaScanner>();
     default:
         return std::make_unique<SchemaDummyScanner>();
     }
@@ -206,7 +205,6 @@ Status SchemaScanner::_create_slot_descs(ObjectPool* pool) {
     int null_byte = 0;
     int null_bit = 0;
 
-    _slot_descs.clear();
     for (int i = 0; i < _column_num; ++i) {
         TSlotDescriptor t_slot_desc;
         auto type_desc = TypeDescriptor(_columns[i].type);

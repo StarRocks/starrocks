@@ -36,7 +36,7 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
 
 ### database_name and label_name
 
-`label_name` specifies the label of the load job.
+`label_name` specifies the label of the load job. For the naming conventions, see [System limits](../../../reference/System_limit.md).
 
 `database_name` optionally specifies the name of the database to which the destination table belongs.
 
@@ -628,6 +628,16 @@ The following parameters are supported:
   You can use the [ALTER LOAD](../../../sql-reference/sql-statements/data-manipulation/ALTER_LOAD.md) statement to change the priority of an existing load job that is in the `QUEUEING` or `LOADING` state.
 
   StarRocks allows setting the `priority` parameter for a Broker Load job since v2.5.
+
+- `merge_condition`
+
+  Specifies the name of the column you want to use as the condition to determine whether updates can take effect. The update from a source record to a destination record takes effect only when the source data record has a greater or equal value than the destination data record in the specified column.
+  
+  Broker Load supports conditional updates since v3.1. For more information, see [Change data through loading](../../../loading/Load_to_Primary_Key_tables.md#conditional-updates).
+  
+  > **NOTE**
+  >
+  > The column that you specify cannot be a primary key column. Additionally, only tables that use the Primary Key table support conditional updates.
 
 ## Column mapping
 

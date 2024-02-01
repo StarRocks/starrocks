@@ -39,15 +39,26 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.persist.CreateTableInfo;
+import com.starrocks.persist.OperationType;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.system.Backend;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -67,11 +78,11 @@ public class CreateTableTest {
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         Backend be = UtFrameUtils.addMockBackend(10002);
-        be.setIsDecommissioned(true);
         UtFrameUtils.addMockBackend(10003);
         UtFrameUtils.addMockBackend(10004);
         Config.enable_strict_storage_medium_check = true;
         Config.enable_auto_tablet_distribution = true;
+        Config.enable_experimental_rowstore = true;
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
@@ -79,6 +90,8 @@ public class CreateTableTest {
         String createDbStmtStr = "create database test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
         GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
+
+        UtFrameUtils.setUpForPersistTest();
     }
 
     private static void createTable(String sql) throws Exception {
@@ -88,7 +101,7 @@ public class CreateTableTest {
 
     private static void alterTableWithNewParser(String sql) throws Exception {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
     }
 
     @Test(expected = DdlException.class)
@@ -506,6 +519,35 @@ public class CreateTableTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 32\n" +
                         "PROPERTIES ( \"replication_num\" = \"1\", \"abc\" = \"def\");"));
+
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "Date type partition does not support dynamic partitioning granularity of hour",
+                () -> createTable("CREATE TABLE test.test_hour_partition2 (\n" +
+                        "  `event_day` date NULL COMMENT \"\",\n" +
+                        "  `site_id` int(11) NULL DEFAULT \"10\" COMMENT \"\",\n" +
+                        "  `city_code` varchar(100) NULL COMMENT \"\",\n" +
+                        "  `user_name` varchar(32) NULL DEFAULT \"\" COMMENT \"\",\n" +
+                        "  `pv` bigint(20) NULL DEFAULT \"0\" COMMENT \"\"\n" +
+                        ") ENGINE=OLAP \n" +
+                        "DUPLICATE KEY(`event_day`, `site_id`, `city_code`, `user_name`)\n" +
+                        "PARTITION BY RANGE(`event_day`)\n" +
+                        "()\n" +
+                        "DISTRIBUTED BY HASH(`event_day`, `site_id`) BUCKETS 32 \n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"dynamic_partition.enable\" = \"true\",\n" +
+                        "\"dynamic_partition.time_unit\" = \"HOUR\",\n" +
+                        "\"dynamic_partition.time_zone\" = \"Asia/Shanghai\",\n" +
+                        "\"dynamic_partition.start\" = \"-1\",\n" +
+                        "\"dynamic_partition.end\" = \"10\",\n" +
+                        "\"dynamic_partition.prefix\" = \"p\",\n" +
+                        "\"dynamic_partition.buckets\" = \"3\",\n" +
+                        "\"dynamic_partition.history_partition_num\" = \"0\",\n" +
+                        "\"in_memory\" = \"false\",\n" +
+                        "\"storage_format\" = \"DEFAULT\",\n" +
+                        "\"enable_persistent_index\" = \"false\",\n" +
+                        "\"compression\" = \"LZ4\"\n" +
+                        ");"));
     }
 
     @Test
@@ -651,7 +693,7 @@ public class CreateTableTest {
                 .getTable("aggregate_table_sum");
         String columns = table.getColumns().toString();
         System.out.println("columns = " + columns);
-        Assert.assertTrue(columns.contains("`sum_decimal` decimal128(38, 4) SUM"));
+        Assert.assertTrue(columns.contains("`sum_decimal` decimal(38, 4) SUM"));
         Assert.assertTrue(columns.contains("`sum_bigint` bigint(20) SUM "));
     }
 
@@ -803,6 +845,220 @@ public class CreateTableTest {
                         "    \"replication_num\" = \"1\",\n" +
                         "    \"in_memory\" = \"false\"\n" +
                         ");"));
+    }
+
+    @Test
+    public void testCreateTableWithLocation() throws Exception {
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+
+        // add label to backend
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        System.out.println(systemInfoService.getBackends());
+        List<Long> backendIds = systemInfoService.getBackendIds();
+        Backend backend = systemInfoService.getBackend(backendIds.get(0));
+        String modifyBackendPropSqlStr = "alter system modify backend '" + backend.getHost() +
+                ":" + backend.getHeartbeatPort() + "' set ('" +
+                AlterSystemStmtAnalyzer.PROP_KEY_LOCATION + "' = 'rack:rack1')";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(modifyBackendPropSqlStr, connectContext),
+                connectContext);
+
+        // **test create table without location explicitly specified, and the location is set to default("*")
+        createTable("CREATE TABLE test.`test_location_no_prop` (\n" +
+                "    k1 int,\n" +
+                "    k2 VARCHAR NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 2\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"in_memory\" = \"false\"\n" +
+                ");");
+
+        OlapTable table = (OlapTable) testDb.getTable("test_location_no_prop");
+        Assert.assertNotNull(table.getLocation());
+        System.out.println(table.getLocation());
+        Assert.assertTrue(table.getLocation().containsKey("*"));
+
+        // verify the location property in show create table result, should be "*"
+        String showSql = "show create table test.`test_location_no_prop`";
+        ShowCreateTableStmt showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showSql,
+                connectContext);
+        ShowExecutor showExecutor = new ShowExecutor(connectContext, showCreateTableStmt);
+        ShowResultSet showResultSet = showExecutor.execute();
+        System.out.println(showResultSet.getResultRows());
+        Assert.assertTrue(showResultSet.getResultRows().get(0).toString().contains("\"" +
+                PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "\" = \"*\""));
+
+        // remove the location property from backend
+        modifyBackendPropSqlStr = "alter system modify backend '" + backend.getHost() +
+                ":" + backend.getHeartbeatPort() + "' set ('" +
+                AlterSystemStmtAnalyzer.PROP_KEY_LOCATION + "' = '')";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(modifyBackendPropSqlStr, connectContext),
+                connectContext);
+
+        // **test create table with no backend has location property, and the table won't have location property either
+        createTable("CREATE TABLE test.`test_location_no_backend_prop` (\n" +
+                "    k1 int,\n" +
+                "    k2 VARCHAR NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 2\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"in_memory\" = \"false\"\n" +
+                ");");
+        table = (OlapTable) testDb.getTable("test_location_no_backend_prop");
+        Assert.assertNull(table.getLocation());
+
+        // verify the location property in show create table result, shouldn't exist
+        showSql = "show create table test.`test_location_no_backend_prop`";
+        showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showSql,
+                connectContext);
+        showExecutor = new ShowExecutor(connectContext, showCreateTableStmt);
+        showResultSet = showExecutor.execute();
+        System.out.println(showResultSet.getResultRows());
+        Assert.assertFalse(showResultSet.getResultRows().get(0).toString().contains("\"" +
+                PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "\" = \"*\""));
+
+        // set 5 backends with location: key:a, key:b, key:c, key1:a, key_2:b
+        UtFrameUtils.addMockBackend(12005);
+        backendIds = systemInfoService.getBackendIds();
+        String[] backendLocationProps = {"key:a", "key:b", "key:c", "key1:a", "key_2:b"};
+        for (int i = 0; i < 5; i++) {
+            backend = systemInfoService.getBackend(backendIds.get(i));
+            modifyBackendPropSqlStr = "alter system modify backend '" + backend.getHost() +
+                    ":" + backend.getHeartbeatPort() + "' set ('" +
+                    AlterSystemStmtAnalyzer.PROP_KEY_LOCATION + "' = '" + backendLocationProps[i] + "')";
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(modifyBackendPropSqlStr, connectContext),
+                    connectContext);
+        }
+
+        for (int i = 0; i < 5; i++) {
+            backend = systemInfoService.getBackend(backendIds.get(i));
+            System.out.println("backend " + backend.getId() + " location: " + backend.getLocation());
+        }
+
+        // **test create table with valid/invalid location property format
+        String[] tableLocationProps = {"*", "*, *", "*, key : b,", "*, key: b, key:   c",
+                "key : a, key: b, key: c", "key1: a, key_2: b, key1: *", "key1:a, key3  : b",
+                "not", "", "*, a", "key: b c", "**", "*:*", "key:a,b,c"};
+        String[] expectedAnalyzedProps = {"*", "*", null, "*",
+                "key:a,key:b,key:c", "key1:*,key_2:b", null,
+                null, "", null, null, null, null, null};
+        for (int i = 0; i < tableLocationProps.length; i++) {
+            String tableLocationProp = tableLocationProps[i];
+            System.out.println(tableLocationProp);
+            String expectedAnalyzedProp = expectedAnalyzedProps[i];
+            String createTableSql = "CREATE TABLE test.`test_location_prop_" + i + "` (\n" +
+                    "    k1 int,\n" +
+                    "    k2 VARCHAR NOT NULL\n" +
+                    ") ENGINE=OLAP\n" +
+                    "DUPLICATE KEY(`k1`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(`k1`) BUCKETS 2\n" +
+                    "PROPERTIES (\n" +
+                    "    \"replication_num\" = \"1\",\n" +
+                    "    \"in_memory\" = \"false\",\n" +
+                    "    \"" + PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "\" = \"" + tableLocationProp + "\"\n" +
+                    ");";
+            if (expectedAnalyzedProp == null) {
+                if (tableLocationProp.equals("key1:a, key3  : b")) {
+                    ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                            "Cannot find any backend with location: key3:b",
+                            () -> createTable(createTableSql));
+                } else {
+                    ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                            "Invalid location format: " + tableLocationProp,
+                            () -> createTable(createTableSql));
+                }
+            } else {
+                createTable(createTableSql);
+                table = (OlapTable) testDb.getTable("test_location_prop_" + i);
+                if (tableLocationProp.isEmpty()) {
+                    Assert.assertNull(table.getLocation());
+                    continue;
+                }
+                Assert.assertNotNull(table.getLocation());
+                System.out.println(table.getLocation());
+                Assert.assertEquals(PropertyAnalyzer.convertLocationMapToString(table.getLocation()),
+                        expectedAnalyzedProp);
+
+                // verify the location property in show create table result
+                showSql = "show create table test.`test_location_prop_" + i + "`";
+                showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showSql,
+                        connectContext);
+                showExecutor = new ShowExecutor(connectContext, showCreateTableStmt);
+                showResultSet = showExecutor.execute();
+                System.out.println(showResultSet.getResultRows());
+                Assert.assertTrue(showResultSet.getResultRows().get(0).toString().contains("\"" +
+                        PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "\" = \"" + expectedAnalyzedProp + "\""));
+            }
+        }
+
+        // clean: remove backend 12005
+        backend = systemInfoService.getBackend(12005);
+        systemInfoService.dropBackend(backend);
+    }
+
+    /**
+     * Test persist into image and log and recover from image and log
+     */
+    @Test
+    public void testCreateTableLocationPropPersist() throws Exception {
+        // add label to backend
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        System.out.println(systemInfoService.getBackends());
+        List<Long> backendIds = systemInfoService.getBackendIds();
+        Backend backend = systemInfoService.getBackend(backendIds.get(0));
+        String modifyBackendPropSqlStr = "alter system modify backend '" + backend.getHost() +
+                ":" + backend.getHeartbeatPort() + "' set ('" +
+                AlterSystemStmtAnalyzer.PROP_KEY_LOCATION + "' = 'rack:rack1')";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(modifyBackendPropSqlStr, connectContext),
+                connectContext);
+
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        UtFrameUtils.PseudoImage initialImage = new UtFrameUtils.PseudoImage();
+        GlobalStateMgr.getCurrentState().getLocalMetastore().save(initialImage.getDataOutputStream());
+
+        createTable("CREATE TABLE test.`test_location_persist_t1` (\n" +
+                "    k1 int,\n" +
+                "    k2 VARCHAR NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 2\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\",\n" +
+                "    \"" + PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + "\" = \"rack:*\",\n" +
+                "    \"in_memory\" = \"false\"\n" +
+                ");");
+
+        // make final image
+        UtFrameUtils.PseudoImage finalImage = new UtFrameUtils.PseudoImage();
+        GlobalStateMgr.getCurrentState().getLocalMetastore().save(finalImage.getDataOutputStream());
+
+        // ** test replay from edit log
+        LocalMetastore localMetastoreFollower = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
+        localMetastoreFollower.load(new SRMetaBlockReader(initialImage.getDataInputStream()));
+        CreateTableInfo info = (CreateTableInfo)
+                UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_CREATE_TABLE_V2);
+        localMetastoreFollower.replayCreateTable(info);
+        OlapTable olapTable = (OlapTable) localMetastoreFollower.getDb("test")
+                .getTable("test_location_persist_t1");
+        System.out.println(olapTable.getLocation());
+        Assert.assertEquals(1, olapTable.getLocation().size());
+        Assert.assertTrue(olapTable.getLocation().containsKey("rack"));
+
+        // ** test load from image(simulate restart)
+        localMetastoreFollower = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
+        localMetastoreFollower.load(new SRMetaBlockReader(finalImage.getDataInputStream()));
+        olapTable = (OlapTable) localMetastoreFollower.getDb("test")
+                .getTable("test_location_persist_t1");
+        System.out.println(olapTable.getLocation());
+        Assert.assertEquals(1, olapTable.getLocation().size());
+        Assert.assertTrue(olapTable.getLocation().containsKey("rack"));
     }
 
     @Test
@@ -1714,6 +1970,30 @@ public class CreateTableTest {
                 ");";
 
         ExceptionChecker.expectThrowsNoException(() -> starRocksAssert.withTable(sql1));
+    }
+
+    @Test
+    public void testColumnWithRowExperimental() {
+        Config.enable_experimental_rowstore = false;
+        try {
+            StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+            starRocksAssert.useDatabase("test");
+            String sql1 = "CREATE TABLE test.dwd_column_with_row_experimental_test (\n" +
+                    "ship_id int(11) NOT NULL COMMENT \" \",\n" +
+                    "sub_ship_id bigint(20) NOT NULL COMMENT \"\" ,\n" +
+                    "address_code bigint(20) NOT NULL COMMENT \" \"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "PRIMARY KEY(ship_id, sub_ship_id) COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(ship_id, sub_ship_id) " +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\",\n" +
+                    "\"storage_type\" = \"column_with_row\"" +
+                    ");";
+
+            ExceptionChecker.expectThrows(DdlException.class, () -> starRocksAssert.withTable(sql1));
+        } finally {
+            Config.enable_experimental_rowstore = true;
+        }
     }
 
     @Test

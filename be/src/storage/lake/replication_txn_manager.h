@@ -16,6 +16,8 @@
 
 #include "common/status.h"
 #include "gen_cpp/AgentService_types.h"
+#include "gutil/macros.h"
+#include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/olap_common.h"
@@ -44,11 +46,12 @@ private:
                                 const std::vector<int64_t>* missing_version_ranges, TBackend* src_backend,
                                 std::string* src_snapshot_path);
 
-    StatusOr<TxnLogPtr> replicate_remote_snapshot(const TReplicateSnapshotRequest& request,
-                                                  const TRemoteSnapshotInfo& src_snapshot_info);
+    Status replicate_remote_snapshot(const TReplicateSnapshotRequest& request,
+                                     const TRemoteSnapshotInfo& src_snapshot_info,
+                                     const TabletMetadataPtr& tablet_metadata);
 
     Status convert_rowset_meta(const RowsetMeta& rowset_meta, TTransactionId transaction_id,
-                               RowsetMetadata* rowset_metadata,
+                               TxnLogPB::OpWrite* op_write,
                                std::unordered_map<std::string, std::string>* segment_filename_map);
 
 private:

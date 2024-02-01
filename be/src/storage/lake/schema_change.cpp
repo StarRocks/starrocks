@@ -143,7 +143,8 @@ Status ConvertedSchemaChange::init() {
     _read_params.skip_aggregation = false;
     _read_params.chunk_size = config::vector_chunk_size;
     _read_params.use_page_cache = false;
-    _read_params.fill_data_cache = false;
+    // not fill data cache
+    _read_params.lake_io_opts.fill_data_cache = false;
     _read_params.sorted_by_keys_per_tablet = true;
 
     auto base_tablet_schema = _base_tablet.get_schema();
@@ -203,7 +204,9 @@ Status DirectSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
     // update new rowset meta
     for (auto& f : writer->files()) {
         new_rowset_metadata->add_segments(std::move(f.path));
+        new_rowset_metadata->add_segment_size(f.size.value());
     }
+
     new_rowset_metadata->set_id(_next_rowset_id);
     new_rowset_metadata->set_num_rows(writer->num_rows());
     new_rowset_metadata->set_data_size(writer->data_size());
@@ -283,10 +286,11 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
 
     RETURN_IF_ERROR(writer->finish(DeltaWriter::kDontWriteTxnLog));
 
-    // update new rowset meta
     for (auto& f : writer->files()) {
         new_rowset_metadata->add_segments(std::move(f.path));
+        new_rowset_metadata->add_segment_size(f.size.value());
     }
+
     new_rowset_metadata->set_id(_next_rowset_id);
     new_rowset_metadata->set_num_rows(writer->num_rows());
     new_rowset_metadata->set_data_size(writer->data_size());

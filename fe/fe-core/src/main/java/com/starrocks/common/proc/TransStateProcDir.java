@@ -55,7 +55,7 @@ public class TransStateProcDir implements ProcDirInterface {
     public ProcResult fetchResult() throws AnalysisException {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
-        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         long dbId = ProcUtils.getDbId(dbIdOrName);
         result.setRows(transactionMgr.getDbTransStateInfo(dbId));
         return result;

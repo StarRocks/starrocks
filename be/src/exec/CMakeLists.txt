@@ -127,6 +127,7 @@ set(EXEC_FILES
     schema_scanner/schema_task_runs_scanner.cpp
     schema_scanner/schema_loads_scanner.cpp
     schema_scanner/schema_load_tracking_logs_scanner.cpp
+    schema_scanner/schema_partitions_meta_scanner.cpp
     schema_scanner/schema_user_privileges_scanner.cpp
     schema_scanner/schema_schema_privileges_scanner.cpp
     schema_scanner/schema_table_privileges_scanner.cpp
@@ -261,8 +262,8 @@ set(EXEC_FILES
     pipeline/adaptive/collect_stats_sink_operator.cpp
     pipeline/adaptive/collect_stats_source_operator.cpp
     pipeline/adaptive/collect_stats_context.cpp
-    pipeline/adaptive/lazy_instantiate_drivers_operator.cpp
     pipeline/adaptive/utils.cpp
+    pipeline/adaptive/event.cpp
     pipeline/chunk_accumulate_operator.cpp
     pipeline/pipeline.cpp
     pipeline/spill_process_operator.cpp
@@ -285,6 +286,8 @@ set(EXEC_FILES
     spill/serde.cpp
     spill/input_stream.cpp
     spill/log_block_manager.cpp
+    spill/file_block_manager.cpp
+    spill/hybird_block_manager.cpp
     spill/operator_mem_resource_manager.cpp
     stream/state/mem_state_table.cpp
     stream/aggregate/agg_state_data.cpp

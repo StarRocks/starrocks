@@ -21,6 +21,7 @@ import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -34,6 +35,8 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.Statement;
 
 public class PseudoClusterTest {
@@ -67,6 +70,7 @@ public class PseudoClusterTest {
 
     @Test
     public void testCreateColumnWithRowTable() throws Exception {
+        Config.enable_experimental_rowstore = true;
         Connection connection = PseudoCluster.getInstance().getQueryConnection();
         Statement stmt = connection.createStatement();
         try {
@@ -105,20 +109,87 @@ public class PseudoClusterTest {
         Connection connection = PseudoCluster.getInstance().getQueryConnection();
         Statement stmt = connection.createStatement();
         try {
-            stmt.execute("create database test_prepared_stmt");
+            stmt.execute("create database if not exists test_prepared_stmt");
             stmt.execute("use test_prepared_stmt");
-            stmt.execute("create table test ( pk bigint NOT NULL, v1 int not null ) " +
+            stmt.execute("create table if not exists test ( pk bigint NOT NULL, v1 int not null ) " +
                     "primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 " +
                     "PROPERTIES(\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\")");
-            stmt.execute("prepare stmt1 from insert overwrite test values (?,?)");
+            stmt.execute("prepare stmt1 from select * from test where pk = ?");
+            stmt.execute("prepare stmt3 from select 1");
             stmt.execute("set @i = 1");
-            stmt.executeUpdate("execute stmt1 using @i,@i");
+            stmt.execute("execute stmt1 using @i");
+            stmt.execute("execute stmt1 using @i");
+            stmt.execute("execute stmt3");
+            stmt.execute("select * from test where pk = ?", 1);
             try {
-                stmt.executeUpdate("execute stmt1 using @i,@i");
+                stmt.execute("prepare stmt2 from insert overwrite test values (1,2)");
                 Assert.fail("expected exception was not occured.");
             } catch (Exception e) {
-                Assert.assertTrue(e.getMessage().contains("maybe table partition changed after prepared statement creation"));
+                Assert.assertTrue(e.getMessage().contains("Invalid statement type for prepared statement"));
             }
+
+            // client prepared stmt
+            PreparedStatement pstmt = connection.prepareStatement("select * from test where pk = ?");
+            pstmt.setInt(1, 1);
+            ResultSet rs = pstmt.executeQuery();
+            pstmt.close();
+        } finally {
+            stmt.close();
+            connection.close();
+        }
+    }
+
+    @Test
+    public void testPreparedStatementServer() throws Exception {
+        Connection connection = PseudoCluster.getInstance().getQueryConnection();
+        Statement stmt = connection.createStatement();
+        try {
+            stmt.execute("create database if not exists test_prepared_stmt");
+            stmt.execute("use test_prepared_stmt");
+            stmt.execute("create table if not exists test ( pk bigint NOT NULL, v1 int not null ) " +
+                    "primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 " +
+                    "PROPERTIES(\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\")");
+            stmt.execute("prepare stmt1 from select * from test where pk = ?");
+            stmt.execute("prepare stmt3 from select 1");
+            stmt.execute("set @i = 1");
+            stmt.execute("execute stmt1 using @i");
+            stmt.execute("execute stmt1 using @i");
+            stmt.execute("execute stmt3");
+            stmt.execute("select * from test where pk = ?", 1);
+            try {
+                stmt.execute("prepare stmt2 from insert overwrite test values (1,2)");
+                Assert.fail("expected exception was not occured.");
+            } catch (Exception e) {
+                Assert.assertTrue(e.getMessage().contains("Invalid statement type for prepared statement"));
+            }
+
+            // client prepared stmt
+            PreparedStatement pstmt = connection.prepareStatement("select * from test where pk = ?");
+            pstmt.setInt(1, 1);
+            pstmt.executeQuery();
+            pstmt.close();
+        } finally {
+            stmt.close();
+            connection.close();
+        }
+    }
+
+    @Test
+    public void testPreparedStatementWitchServer() throws Exception {
+        PseudoCluster.getInstance().setServerPrepareStatement();
+        Connection connection = PseudoCluster.getInstance().getQueryConnection();
+        Statement stmt = connection.createStatement();
+        try {
+            stmt.execute("create database if not exists test_prepared_stmt");
+            stmt.execute("use test_prepared_stmt");
+            stmt.execute("create table if not exists test ( pk bigint NOT NULL, v1 int not null ) " +
+                    "primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 1 " +
+                    "PROPERTIES(\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\")");
+            // client prepared stmt
+            PreparedStatement pstmt = connection.prepareStatement("select * from test where pk = ?");
+            pstmt.setInt(1, 1);
+            pstmt.executeQuery();
+            pstmt.close();
         } finally {
             stmt.close();
             connection.close();
@@ -157,11 +228,11 @@ public class PseudoClusterTest {
         new MockUp<StarOSAgent>() {
             @Mock
             public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) {
-                return GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
+                return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true).get(0);
             }
 
             @Mock
-            public FilePathInfo allocateFilePath(String storageVolumeId, long tableId) {
+            public FilePathInfo allocateFilePath(String storageVolumeId, long dbId, long tableId) {
                 return pathInfo;
             }
         };

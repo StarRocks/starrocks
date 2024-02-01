@@ -26,6 +26,7 @@ import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -69,13 +70,16 @@ public abstract class TestWithFeService {
     protected String runningDir =
             "fe/mocked/" + getClass().getSimpleName() + "/" + UUID.randomUUID() + "/";
     protected ConnectContext connectContext;
+    // derived class can set this runMode to SHARED_DATA mode to create a shared-data cluster
+    protected RunMode runMode = RunMode.SHARED_NOTHING;
 
     @BeforeAll
     public final void beforeAll() throws Exception {
         beforeCreatingConnectContext();
-        connectContext = createDefaultCtx();
         beforeCluster();
         createStarrocksCluster();
+        // don't touch anything before GlobalStateMgr is initialized.
+        connectContext = createDefaultCtx();
         runBeforeAll();
     }
 
@@ -152,7 +156,7 @@ public abstract class TestWithFeService {
     }
 
     protected void createStarrocksCluster() {
-        UtFrameUtils.createMinStarRocksCluster(true);
+        UtFrameUtils.createMinStarRocksCluster(true, runMode);
     }
 
     protected void cleanStarrocksFeDir() {
@@ -185,7 +189,7 @@ public abstract class TestWithFeService {
     public void dropTable(String table, boolean force) throws Exception {
         DropTableStmt dropTableStmt = (DropTableStmt) parseAndAnalyzeStmt(
                 "drop table " + table + (force ? " force" : "") + ";", connectContext);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
     }
 
     public void createTables(String... sqls) throws Exception {
@@ -198,17 +202,17 @@ public abstract class TestWithFeService {
 
     private void updateReplicaPathHash() {
         com.google.common.collect.Table<Long, Long, Replica> replicaMetaTable =
-                GlobalStateMgr.getCurrentInvertedIndex()
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex()
                         .getReplicaMetaTable();
         for (com.google.common.collect.Table.Cell<Long, Long, Replica> cell : replicaMetaTable.cellSet()) {
             long beId = cell.getColumnKey();
-            Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
+            Backend be = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(beId);
             if (be == null) {
                 continue;
             }
             Replica replica = cell.getValue();
             TabletMeta tabletMeta =
-                    GlobalStateMgr.getCurrentInvertedIndex().getTabletMeta(cell.getRowKey());
+                    GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(cell.getRowKey());
             ImmutableMap<String, DiskInfo> diskMap = be.getDisks();
             for (DiskInfo diskInfo : diskMap.values()) {
                 if (diskInfo.getStorageMedium() == tabletMeta.getStorageMedium()) {

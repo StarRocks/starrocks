@@ -14,6 +14,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.ParseNode;
@@ -27,9 +28,12 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.load.EtlJobType;
+import com.starrocks.plugin.PluginInfo;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
@@ -132,7 +136,6 @@ import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.parquet.Strings;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
@@ -261,7 +264,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateTableLikeStatement(CreateTableLikeStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().createTableLike(stmt);
+                context.getGlobalStateMgr().getLocalMetastore().createTable(stmt.getCreateTableStmt());
             });
             return null;
         }
@@ -277,7 +280,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateMaterializedViewStmt(CreateMaterializedViewStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().createMaterializedView(stmt);
+                context.getGlobalStateMgr().getLocalMetastore().createMaterializedView(stmt);
             });
             return null;
         }
@@ -286,7 +289,7 @@ public class DDLStmtExecutor {
         public ShowResultSet visitCreateMaterializedViewStatement(CreateMaterializedViewStatement stmt,
                                                                   ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().createMaterializedView(stmt);
+                context.getGlobalStateMgr().getLocalMetastore().createMaterializedView(stmt);
             });
             return null;
         }
@@ -294,7 +297,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitDropMaterializedViewStatement(DropMaterializedViewStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().dropMaterializedView(stmt);
+                context.getGlobalStateMgr().getLocalMetastore().dropMaterializedView(stmt);
             });
             return null;
         }
@@ -303,7 +306,7 @@ public class DDLStmtExecutor {
         public ShowResultSet visitAlterMaterializedViewStatement(AlterMaterializedViewStmt stmt,
                                                                  ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().alterMaterializedView(stmt);
+                context.getGlobalStateMgr().getLocalMetastore().alterMaterializedView(stmt);
             });
             return null;
         }
@@ -344,7 +347,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitAlterViewStatement(AlterViewStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().alterView(stmt);
+                context.getGlobalStateMgr().getLocalMetastore().alterView(stmt);
             });
             return null;
         }
@@ -352,7 +355,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCancelAlterTableStatement(CancelAlterTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().cancelAlter(stmt);
+                context.getGlobalStateMgr().getLocalMetastore().cancelAlter(stmt);
             });
             return null;
         }
@@ -540,7 +543,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitAlterSystemStatement(AlterSystemStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().alterCluster(stmt);
+                context.getGlobalStateMgr().getAlterJobMgr().processAlterCluster(stmt);
             });
             return null;
         }
@@ -548,7 +551,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCancelAlterSystemStatement(CancelAlterSystemStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().cancelAlterCluster(stmt);
+                context.getGlobalStateMgr().getAlterJobMgr().getClusterHandler().cancel(stmt);
             });
             return null;
         }
@@ -556,7 +559,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitAlterDatabaseQuotaStatement(AlterDatabaseQuotaStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().alterDatabaseQuota(stmt);
+                context.getGlobalStateMgr().getLocalMetastore().alterDatabaseQuota(stmt);
             });
             return null;
         }
@@ -565,7 +568,7 @@ public class DDLStmtExecutor {
         public ShowResultSet visitAlterDatabaseRenameStatement(AlterDatabaseRenameStatement stmt,
                                                                ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().renameDatabase(stmt);
+                context.getGlobalStateMgr().getLocalMetastore().renameDatabase(stmt);
             });
             return null;
         }
@@ -573,7 +576,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitRecoverDbStatement(RecoverDbStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().recoverDatabase(stmt);
+                context.getGlobalStateMgr().getLocalMetastore().recoverDatabase(stmt);
             });
             return null;
         }
@@ -581,7 +584,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitRecoverTableStatement(RecoverTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().recoverTable(stmt);
+                context.getGlobalStateMgr().getLocalMetastore().recoverTable(stmt);
             });
             return null;
         }
@@ -589,7 +592,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitRecoverPartitionStatement(RecoverPartitionStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().recoverPartition(stmt);
+                context.getGlobalStateMgr().getLocalMetastore().recoverPartition(stmt);
             });
             return null;
         }
@@ -597,7 +600,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateViewStatement(CreateViewStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().createView(stmt);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().createView(stmt);
             });
             return null;
         }
@@ -605,7 +608,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitBackupStatement(BackupStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().backup(stmt);
+                context.getGlobalStateMgr().getBackupHandler().process(stmt);
             });
             return null;
         }
@@ -613,7 +616,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitRestoreStatement(RestoreStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().restore(stmt);
+                context.getGlobalStateMgr().getBackupHandler().process(stmt);
             });
             return null;
         }
@@ -621,7 +624,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCancelBackupStatement(CancelBackupStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().cancelBackup(stmt);
+                context.getGlobalStateMgr().getBackupHandler().cancel(stmt);
             });
             return null;
         }
@@ -652,7 +655,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitTruncateTableStatement(TruncateTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().truncateTable(stmt);
+                context.getGlobalStateMgr().getLocalMetastore().truncateTable(stmt);
             });
             return null;
         }
@@ -677,7 +680,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitAdminSetConfigStatement(AdminSetConfigStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().setConfig(stmt);
+                context.getGlobalStateMgr().getNodeMgr().setConfig(stmt);
                 if (stmt.getConfig().containsKey("mysql_server_version")) {
                     String version = stmt.getConfig().getMap().get("mysql_server_version");
                     if (!Strings.isNullOrEmpty(version)) {
@@ -708,7 +711,7 @@ public class DDLStmtExecutor {
         public ShowResultSet visitInstallPluginStatement(InstallPluginStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 try {
-                    context.getGlobalStateMgr().installPlugin(stmt);
+                    context.getGlobalStateMgr().getPluginMgr().installPlugin(stmt);
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
@@ -720,7 +723,12 @@ public class DDLStmtExecutor {
         public ShowResultSet visitUninstallPluginStatement(UninstallPluginStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 try {
-                    context.getGlobalStateMgr().uninstallPlugin(stmt);
+                    PluginInfo info = context.getGlobalStateMgr().getPluginMgr().uninstallPlugin(stmt.getPluginName());
+                    if (null != info) {
+                        GlobalStateMgr.getCurrentState().getEditLog().logUninstallPlugin(info);
+                    }
+                    LOG.info("uninstall plugin = " + stmt.getPluginName());
+
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
@@ -731,7 +739,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitAdminCheckTabletsStatement(AdminCheckTabletsStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().checkTablets(stmt);
+                context.getGlobalStateMgr().getLocalMetastore().checkTablets(stmt);
             });
             return null;
         }
@@ -740,7 +748,7 @@ public class DDLStmtExecutor {
         public ShowResultSet visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt stmt,
                                                                  ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().setReplicaStatus(stmt);
+                context.getGlobalStateMgr().getLocalMetastore().setReplicaStatus(stmt);
             });
             return null;
         }
@@ -890,10 +898,10 @@ public class DDLStmtExecutor {
             TaskManager taskManager = context.getGlobalStateMgr().getTaskManager();
             String taskName = dropTaskStmt.getTaskName().getName();
             if (!taskManager.containTask(taskName)) {
-                throw new RuntimeException("Task " + taskName + " is not exist");
+                throw new SemanticException("Task " + taskName + " is not exist");
             }
             Task task = taskManager.getTask(taskName);
-            if (task.getSource() == Constants.TaskSource.MV) {
+            if (task.getSource() == Constants.TaskSource.MV && !dropTaskStmt.isForce()) {
                 throw new RuntimeException("Can not drop task generated by materialized view. You can use " +
                         "DROP MATERIALIZED VIEW to drop task, when the materialized view is deleted, " +
                         "the related task will be deleted automatically.");

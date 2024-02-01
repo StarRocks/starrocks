@@ -19,17 +19,20 @@
 #include "column/chunk.h"
 #include "common/config.h"
 #include "fs/fs_util.h"
+#include "runtime/current_thread.h"
 #include "serde/column_array_serde.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/vacuum.h"
 #include "storage/rowset/segment_writer.h"
+#include "util/threadpool.h"
 
 namespace starrocks::lake {
 
 HorizontalGeneralTabletWriter::HorizontalGeneralTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
-                                                             std::shared_ptr<const TabletSchema> schema, int64_t txn_id)
-        : TabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id) {}
+                                                             std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
+                                                             ThreadPool* flush_pool)
+        : TabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, flush_pool) {}
 
 HorizontalGeneralTabletWriter::~HorizontalGeneralTabletWriter() = default;
 
@@ -105,14 +108,26 @@ Status HorizontalGeneralTabletWriter::flush_segment_writer(SegmentPB* segment) {
 
 VerticalGeneralTabletWriter::VerticalGeneralTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
                                                          std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
-                                                         uint32_t max_rows_per_segment)
-        : TabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id), _max_rows_per_segment(max_rows_per_segment) {}
+                                                         uint32_t max_rows_per_segment, ThreadPool* flush_pool)
+        : TabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, flush_pool),
+          _max_rows_per_segment(max_rows_per_segment) {}
 
-VerticalGeneralTabletWriter::~VerticalGeneralTabletWriter() = default;
+VerticalGeneralTabletWriter::~VerticalGeneralTabletWriter() {
+    auto st = wait_futures_finish();
+    if (!st.ok()) {
+        LOG(WARNING) << "Fail to finalize segment, tablet_id: " << _tablet_id << ", txn_id: " << _txn_id
+                     << ", status:" << st;
+    }
+}
 
 // To developers: Do NOT perform any I/O in this method, because this method may be invoked
 // in a bthread.
 Status VerticalGeneralTabletWriter::open() {
+    if (_flush_pool != nullptr) {
+        // Use CONCURRENT mode to ensure segments can finalize in parallel
+        _segment_writer_finalize_token =
+                std::make_unique<ConcurrencyLimitedThreadPoolToken>(_flush_pool, _flush_pool->max_threads() * 2);
+    }
     return Status::OK();
 }
 
@@ -129,7 +144,7 @@ Status VerticalGeneralTabletWriter::write_columns(const Chunk& data, const std::
     } else if (is_key) {
         // key columns
         if (_segment_writers[_current_writer_index]->num_rows_written() + chunk_num_rows >= _max_rows_per_segment) {
-            RETURN_IF_ERROR(flush_columns(&_segment_writers[_current_writer_index]));
+            RETURN_IF_ERROR(flush_columns(_segment_writers[_current_writer_index]));
             auto segment_writer = create_segment_writer(column_indexes, is_key);
             if (!segment_writer.ok()) return segment_writer.status();
             _segment_writers.emplace_back(std::move(segment_writer).value());
@@ -155,7 +170,7 @@ Status VerticalGeneralTabletWriter::write_columns(const Chunk& data, const std::
             size_t offset = 0;
             while (num_left_rows > 0) {
                 if (segment_num_rows == num_rows_written) {
-                    RETURN_IF_ERROR(flush_columns(&_segment_writers[_current_writer_index]));
+                    RETURN_IF_ERROR(flush_columns(_segment_writers[_current_writer_index]));
                     ++_current_writer_index;
                     RETURN_IF_ERROR(_segment_writers[_current_writer_index]->init(column_indexes, is_key));
                     num_rows_written = _segment_writers[_current_writer_index]->num_rows_written();
@@ -194,8 +209,12 @@ Status VerticalGeneralTabletWriter::flush_columns() {
     }
 
     DCHECK(_segment_writers[_current_writer_index]);
-    RETURN_IF_ERROR(flush_columns(&_segment_writers[_current_writer_index]));
+    RETURN_IF_ERROR(flush_columns(_segment_writers[_current_writer_index]));
     _current_writer_index = 0;
+
+    if (_segment_writer_finalize_token != nullptr) {
+        return wait_futures_finish();
+    }
     return Status::OK();
 }
 
@@ -211,6 +230,9 @@ Status VerticalGeneralTabletWriter::finish(SegmentPB* segment) {
         segment_writer.reset();
     }
     _segment_writers.clear();
+    if (_segment_writer_finalize_token != nullptr) {
+        _segment_writer_finalize_token.reset();
+    }
     _finished = true;
     return Status::OK();
 }
@@ -227,21 +249,76 @@ void VerticalGeneralTabletWriter::close() {
     _files.clear();
 }
 
-StatusOr<std::unique_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_segment_writer(
+StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_segment_writer(
         const std::vector<uint32_t>& column_indexes, bool is_key) {
     DCHECK(_schema != nullptr);
     auto name = gen_segment_filename(_txn_id);
     ASSIGN_OR_RETURN(auto of, fs::new_writable_file(_tablet_mgr->segment_location(_tablet_id, name)));
     SegmentWriterOptions opts;
-    auto w = std::make_unique<SegmentWriter>(std::move(of), _seg_id++, _schema, opts);
+    auto w = std::make_shared<SegmentWriter>(std::move(of), _seg_id++, _schema, opts);
     RETURN_IF_ERROR(w->init(column_indexes, is_key));
     return w;
 }
 
-Status VerticalGeneralTabletWriter::flush_columns(std::unique_ptr<SegmentWriter>* segment_writer) {
-    uint64_t index_size = 0;
-    RETURN_IF_ERROR((*segment_writer)->finalize_columns(&index_size));
+Status VerticalGeneralTabletWriter::flush_columns(const std::shared_ptr<SegmentWriter>& segment_writer) {
+    if (_segment_writer_finalize_token != nullptr) {
+        auto status = check_futures();
+        if (!status.ok()) {
+            return status;
+        }
+        auto mem_tracker = tls_thread_status.mem_tracker();
+        auto task = std::make_shared<std::packaged_task<Status()>>([segment_writer, mem_tracker]() {
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
+            uint64_t index_size = 0;
+            return segment_writer->finalize_columns(&index_size);
+        });
+        auto packaged_func = [task]() { (*task)(); };
+        auto timeout_deadline =
+                std::chrono::system_clock::now() + std::chrono::milliseconds(kDefaultTimeoutForAsyncWriteSegment);
+        auto st = _segment_writer_finalize_token->submit_func(std::move(packaged_func), timeout_deadline);
+        if (!st.ok()) {
+            LOG(WARNING) << "Fail to submit segment writer finalizing task to thread pool, " << st;
+            return st;
+        }
+        _futures.push_back(task->get_future());
+    } else {
+        uint64_t index_size = 0;
+        RETURN_IF_ERROR(segment_writer->finalize_columns(&index_size));
+    }
     return Status::OK();
+}
+
+template <typename R>
+bool is_ready(std::future<R> const& f) {
+    return f.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
+}
+
+Status VerticalGeneralTabletWriter::check_futures() {
+    for (auto it = _futures.begin(); it != _futures.end();) {
+        if (is_ready(*it)) {
+            auto st = it->get();
+            if (!st.ok()) {
+                LOG(WARNING) << "Segment flushing task resulted in error: " << st;
+                return st;
+            }
+            it = _futures.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    return Status::OK();
+}
+
+Status VerticalGeneralTabletWriter::wait_futures_finish() {
+    Status ret = Status::OK();
+    for (auto& future : _futures) {
+        if (auto st = future.get(); !st.ok()) {
+            VLOG(3) << "Fail to finalize segment, " << st;
+            ret.update(st);
+        }
+    }
+    _futures.clear();
+    return ret;
 }
 
 } // namespace starrocks::lake

@@ -16,25 +16,49 @@
 
 #include "agent/master_info.h"
 #include "exec/schema_scanner/schema_helper.h"
+#include "gen_cpp/Types_types.h" // for TStorageMedium::type
 #include "gutil/strings/substitute.h"
 #include "runtime/string_value.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
-#include "types/logical_type.h"
 
 namespace starrocks {
 
+namespace {
+std::set<int64_t> get_authorized_table_ids(const TGetTablesConfigResponse& _tables_config_response) {
+    std::set<int64_t> authorized_table_ids;
+    for (const auto& v : _tables_config_response.tables_config_infos) {
+        if (v.__isset.table_id) {
+            authorized_table_ids.insert(v.table_id);
+        }
+    }
+
+    return authorized_table_ids;
+}
+} // namespace
+
 SchemaScanner::ColumnDesc SchemaBeTabletsScanner::_s_columns[] = {
-        {"BE_ID", TYPE_BIGINT, sizeof(int64_t), false},         {"TABLE_ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"PARTITION_ID", TYPE_BIGINT, sizeof(int64_t), false},  {"TABLET_ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"NUM_VERSION", TYPE_BIGINT, sizeof(int64_t), false},   {"MAX_VERSION", TYPE_BIGINT, sizeof(int64_t), false},
-        {"MIN_VERSION", TYPE_BIGINT, sizeof(int64_t), false},   {"NUM_ROWSET", TYPE_BIGINT, sizeof(int64_t), false},
-        {"NUM_ROW", TYPE_BIGINT, sizeof(int64_t), false},       {"DATA_SIZE", TYPE_BIGINT, sizeof(int64_t), false},
-        {"INDEX_MEM", TYPE_BIGINT, sizeof(int64_t), false},     {"CREATE_TIME", TYPE_BIGINT, sizeof(int64_t), false},
-        {"STATE", TYPE_VARCHAR, sizeof(StringValue), false},    {"TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DATA_DIR", TYPE_VARCHAR, sizeof(StringValue), false}, {"SHARD_ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"SCHEMA_HASH", TYPE_BIGINT, sizeof(int64_t), false},   {"INDEX_DISK", TYPE_BIGINT, sizeof(int64_t), false},
+        {"BE_ID", TYPE_BIGINT, sizeof(int64_t), false},
+        {"TABLE_ID", TYPE_BIGINT, sizeof(int64_t), false},
+        {"PARTITION_ID", TYPE_BIGINT, sizeof(int64_t), false},
+        {"TABLET_ID", TYPE_BIGINT, sizeof(int64_t), false},
+        {"NUM_VERSION", TYPE_BIGINT, sizeof(int64_t), false},
+        {"MAX_VERSION", TYPE_BIGINT, sizeof(int64_t), false},
+        {"MIN_VERSION", TYPE_BIGINT, sizeof(int64_t), false},
+        {"NUM_ROWSET", TYPE_BIGINT, sizeof(int64_t), false},
+        {"NUM_ROW", TYPE_BIGINT, sizeof(int64_t), false},
+        {"DATA_SIZE", TYPE_BIGINT, sizeof(int64_t), false},
+        {"INDEX_MEM", TYPE_BIGINT, sizeof(int64_t), false},
+        {"CREATE_TIME", TYPE_BIGINT, sizeof(int64_t), false},
+        {"STATE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"DATA_DIR", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"SHARD_ID", TYPE_BIGINT, sizeof(int64_t), false},
+        {"SCHEMA_HASH", TYPE_BIGINT, sizeof(int64_t), false},
+        {"INDEX_DISK", TYPE_BIGINT, sizeof(int64_t), false},
+        {"MEDIUM_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"NUM_SEGMENT", TYPE_BIGINT, sizeof(int64_t), false},
 };
 
 SchemaBeTabletsScanner::SchemaBeTabletsScanner()
@@ -43,11 +67,42 @@ SchemaBeTabletsScanner::SchemaBeTabletsScanner()
 SchemaBeTabletsScanner::~SchemaBeTabletsScanner() = default;
 
 Status SchemaBeTabletsScanner::start(RuntimeState* state) {
+    if (!_is_init) {
+        return Status::InternalError("used before initialized.");
+    }
+    TAuthInfo auth_info;
+    if (nullptr != _param->db) {
+        auth_info.__set_pattern(*(_param->db));
+    }
+    if (nullptr != _param->current_user_ident) {
+        auth_info.__set_current_user_ident(*(_param->current_user_ident));
+    } else {
+        if (nullptr != _param->user) {
+            auth_info.__set_user(*(_param->user));
+        }
+        if (nullptr != _param->user_ip) {
+            auth_info.__set_user_ip(*(_param->user_ip));
+        }
+    }
+    TGetTablesConfigRequest tables_config_req;
+    tables_config_req.__set_auth_info(auth_info);
+
+    if (nullptr != _param->ip && 0 != _param->port) {
+        RETURN_IF_ERROR(SchemaHelper::get_tables_config(*(_param->ip), _param->port, tables_config_req,
+                                                        &_tables_config_response));
+    } else {
+        return Status::InternalError("IP or port doesn't exists");
+    }
+    // we only show tablets when the user has any privilege on the corresponding table
+    // first get the table ids on which the current user has privilege
+    auto authorized_table_ids = get_authorized_table_ids(_tables_config_response);
+
     auto o_id = get_backend_id();
     _be_id = o_id.has_value() ? o_id.value() : -1;
     _infos.clear();
     auto manager = StorageEngine::instance()->tablet_manager();
-    manager->get_tablets_basic_infos(_param->table_id, _param->partition_id, _param->tablet_id, _infos);
+    manager->get_tablets_basic_infos(_param->table_id, _param->partition_id, _param->tablet_id, _infos,
+                                     &authorized_table_ids);
     LOG(INFO) << strings::Substitute("get_tablets_basic_infos table_id:$0 partition:$1 tablet:$2 #info:$3",
                                      _param->table_id, _param->partition_id, _param->tablet_id, _infos.size());
     _cur_idx = 0;
@@ -86,13 +141,24 @@ static const char* keys_type_to_string(KeysType type) {
     }
 }
 
+static const char* medium_type_to_string(TStorageMedium::type type) {
+    switch (type) {
+    case TStorageMedium::SSD:
+        return "SSD";
+    case TStorageMedium::HDD:
+        return "HDD";
+    default:
+        return "UNKNOWN";
+    }
+}
+
 Status SchemaBeTabletsScanner::fill_chunk(ChunkPtr* chunk) {
     const auto& slot_id_to_index_map = (*chunk)->get_slot_id_to_index_map();
     auto end = _cur_idx + 1;
     for (; _cur_idx < end; _cur_idx++) {
         auto& info = _infos[_cur_idx];
         for (const auto& [slot_id, index] : slot_id_to_index_map) {
-            if (slot_id < 1 || slot_id > 18) {
+            if (slot_id < 1 || slot_id > 20) {
                 return Status::InternalError(strings::Substitute("invalid slot id:$0", slot_id));
             }
             ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
@@ -138,7 +204,7 @@ Status SchemaBeTabletsScanner::fill_chunk(ChunkPtr* chunk) {
                 break;
             }
             case 9: {
-                // num rowt
+                // num rows
                 fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.num_row);
                 break;
             }
@@ -171,8 +237,8 @@ Status SchemaBeTabletsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             case 15: {
                 // DATA_DIR
-                Slice type = Slice(info.data_dir);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&type);
+                Slice data_dir = Slice(info.data_dir);
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&data_dir);
                 break;
             }
             case 16: {
@@ -189,6 +255,16 @@ Status SchemaBeTabletsScanner::fill_chunk(ChunkPtr* chunk) {
                 // INDEX_DISK
                 fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.index_disk_usage);
                 break;
+            }
+            case 19: {
+                // medium type
+                Slice medium_type = Slice(medium_type_to_string(info.medium_type));
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&medium_type);
+                break;
+            }
+            case 20: {
+                // NUM_SEGMENT
+                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.num_segment);
             }
             default:
                 break;

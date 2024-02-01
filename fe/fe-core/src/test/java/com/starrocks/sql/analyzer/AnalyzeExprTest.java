@@ -356,6 +356,8 @@ public class AnalyzeExprTest {
                 " (select 'a' as c1, 1 as c2, 2 as c3)t");
         analyzeFail("select array_agg(case when c1='a' then [1,3] else map(1,2) end order by c3) as arr1" +
                 " from (select 'a' as c1, 1 as c2, 2 as c3)t");
+
+        analyzeSuccess("select array_agg_distinct(v1), array_agg(distinct v1),array_agg(v1) from t0;");
     }
 
     @Test
@@ -431,6 +433,7 @@ public class AnalyzeExprTest {
         analyzeSuccess("select map_concat(NULL)");
         analyzeSuccess("select map_concat(NULL,NULL)");
         analyzeSuccess("select map_concat(NULL,map{})");
+        analyzeSuccess("select map_concat(NULL,map{to_date(\"2020-02-02 00:00:00\"):2})");
 
         analyzeFail("select cardinality();");
         analyzeFail("select cardinality(map{},map{})");
@@ -497,6 +500,15 @@ public class AnalyzeExprTest {
         analyzeFail("select array_sortby('[a,b]','[1,2]')");
         analyzeFail("select array_sum('[1,2]')");
         analyzeFail("select array_to_bitmap('[1,2]')");
+    }
+
+    @Test
+    public void testAnalyseNullToBoolean() {
+        analyzeSuccess("select coalesce(map{to_date(\"2020-02-02 00:00:00\"):1}, map{})");
+        analyzeSuccess("select coalesce([to_date(\"2020-02-02 00:00:00\")], [])");
+        analyzeSuccess("select coalesce(struct(to_date(\"2020-02-02 00:00:00\")), NULL)");
+        analyzeSuccess("select ifnull(map{to_date(\"2020-02-02 00:00:00\"):1}, map{})");
+        analyzeSuccess("select map_from_arrays([1, 2], NULL)");
     }
 
 }

@@ -190,49 +190,131 @@ BE dynamic parameters are as follows.
 - **Default:** 1 second
 - **Description:** The time interval of thread polling for a Cumulative Compaction.
 
+#### min_cumulative_compaction_num_singleton_deltas
+
+- **Default:** 5
+- **Description:** The minimum number of segments to trigger Cumulative Compaction.
+
+#### max_cumulative_compaction_num_singleton_deltas
+
+- **Default:** 1000
+- **Description:** The maximum number of segments that can be merged in a single Cumulative Compaction. You can reduce this value if OOM occurs during compaction.
+
+#### max_compaction_candidate_num
+
+- **Default:** 40960
+- **Description:** The maximum number of candidate tablets for compaction. If the value is too large, it will cause high memory usage and high CPU load.
+
 #### update_compaction_check_interval_seconds
 
-- **Default:** 60 seconds
-- **Description:** The time interval at which to check the Update Compaction of the Primary Key table.
+- **Default:** 60
+- **Unit:** Seconds
+- **Description:** The time interval at which to check compaction for Primary Key tables.
+
+#### update_compaction_num_threads_per_disk
+
+- **Default:** 1
+- **Description:** The number of Compaction threads per disk for Primary Key tables.
+
+#### update_compaction_per_tablet_min_interval_seconds
+
+- **Default:** 120
+- **Description:** The minimum time interval at which compaction is triggered for each tablet in a Primary Key table.
+
+#### max_update_compaction_num_singleton_deltas
+
+- **Default:** 1000
+- **Description:** The maximum number of rowsets that can be merged in a single Compaction for Primary Key tables.
+
+#### update_compaction_size_threshold
+
+- **Default:** 268435456
+- **Unit:** Bytes
+- **Description:** The Compaction Score of Primary Key tables is calculated based on the file size, which is different from other table types. This parameter can be used to make the Compaction Score of Primary Key tables similar to that of other table types, making it easier for users to understand.
+
+#### update_compaction_result_bytes
+
+- **Default:** 1073741824
+- **Unit:** Bytes
+- **Description:** The maximum result size of a single compaction for Primary Key tables.
+
+#### update_compaction_delvec_file_io_amp_ratio
+
+- **Default:** 2
+- **Description:** Used to control the priority of compaction for rowsets that contain Delvec files in Primary Key tables. The larger the value, the higher the priority.
+
+#### repair_compaction_interval_seconds
+
+- **Default:** 600
+- **Unit:** Seconds
+- **Description:** The time interval to poll Repair Compaction threads.
+
+#### manual_compaction_threads
+
+- **Default:** 4
+- **Description:** Number of threads for Manual Compaction.
+
+#### enable_rowset_verify
+
+- **Default:** false
+- **Description:** Whether to verify the correctness of generated rowsets. When enabled, the correctness of the generated rowsets will be checked after Compaction and Schema Change.
+
+#### enable_size_tiered_compaction_strategy
+
+- **Default:** true
+- **Description:** Whether to enable the Size-tiered Compaction policy.
 
 #### min_compaction_failure_interval_sec
 
-- **Default:** 120 seconds
-- **Description:** The minimum time interval that a Tablet Compaction can be scheduled since the last compaction failure.
+- **Default:** 120
+- **Unit:** Second
+- **Description:** The minimum time interval at which a tablet compaction can be scheduled since the previous compaction failure.
 
 #### max_compaction_concurrency
 
 - **Default:** -1
-- **Description:** The maximum concurrency of compactions (both Base Compaction and Cumulative Compaction). The value -1 indicates that no limit is imposed on the concurrency.
+- **Description:** The maximum concurrency of compactions (including both Base Compaction and Cumulative Compaction). The value `-1` indicates that no limit is imposed on the concurrency.
 
 #### periodic_counter_update_period_ms
 
-- **Default:** 500 ms
+- **Default:** 500
+- **Unit:** ms
 - **Description:** The time interval at which to collect the Counter statistics.
+
+#### pindex_major_compaction_limit_per_disk
+
+- **Default:** 1
+- **Description:** The maximum concurrency of compaction on a disk. This addresses the issue of uneven I/O across disks due to compaction. This issue can cause excessively high I/O for certain disks.
+- **Introduced in:** 3.0.9
 
 #### load_error_log_reserve_hours
 
-- **Default:** 48 hours
+- **Default:** 48
+- **Unit:** hour
 - **Description:** The time for which data loading logs are reserved.
 
 #### streaming_load_max_mb
 
-- **Default:** 10,240 MB
+- **Default:** 102400
+- **Unit:** MB
 - **Description:** The maximum size of a file that can be streamed into StarRocks.
 
 #### streaming_load_max_batch_size_mb
 
-- **Default:** 100 MB
+- **Default:** 100
+- **Unit:** MB
 - **Description:** The maximum size of a JSON file that can be streamed into StarRocks.
 
 #### memory_maintenance_sleep_time_s
 
-- **Default:** 10 seconds
+- **Default:** 10
+- **Unit:** Seconds
 - **Description:** The time interval at which ColumnPool GC is triggered. StarRocks executes GC periodically and returns the released memory to the operating system.
 
 #### write_buffer_size
 
-- **Default:** 104,857,600 Bytes
+- **Default:** 104857600
+- **Unit:** Bytes
 - **Description:** The buffer size of MemTable in the memory. This configuration item is the threshold to trigger a flush.
 
 #### tablet_stat_cache_update_interval_second
@@ -249,6 +331,12 @@ BE dynamic parameters are as follows.
 
 - **Default:** 5,000 ms
 - **Description:** The timeout for a thrift RPC.
+
+#### txn_commit_rpc_timeout_ms
+
+- **Default:** 60,000
+- **Description:** The timeout for a transaction commit RPC. Since v3.1.0, this parameter is deprecated.
+- **Unit:** ms
 
 #### max_consumer_num_per_group
 
@@ -333,17 +421,22 @@ BE dynamic parameters are as follows.
 #### size_tiered_level_num
 
 - **Default:** 7 (Number of Levels for Size-tiered Compaction)
-- **Description:** The number of levels for the Size-tiered Compaction strategy. At most one rowset is reserved for each level. Therefore, under a stable condition, there are, at most, as many rowsets as the level number specified in this configuration item.
+- **Description:** The number of levels for the Size-tiered Compaction policy. At most one rowset is reserved for each level. Therefore, under a stable condition, there are, at most, as many rowsets as the level number specified in this configuration item.
 
 #### size_tiered_level_multiple
 
 - **Default:** 5 (Multiple of Data Size Between Contiguous Levels in Size-tiered Compaction)
-- **Description:** The multiple of data size between two contiguous levels in the Size-tiered Compaction strategy.
+- **Description:** The multiple of data size between two contiguous levels in the Size-tiered Compaction policy.
+
+#### size_tiered_level_multiple_dupkey
+
+- **Default:** 10
+- **Description:** In the Size-tiered Compaction policy, the multiple of the data amount difference between two adjacent levels for Duplicate Key tables.
 
 #### size_tiered_min_level_size
 
 - **Default:** 131,072 Bytes
-- **Description:** The data size of the minimum level in the Size-tiered Compaction strategy. Rowsets smaller than this value immediately trigger the data compaction.
+- **Description:** The data size of the minimum level in the Size-tiered Compaction policy. Rowsets smaller than this value immediately trigger the data compaction.
 
 #### storage_page_cache_limit
 
@@ -355,10 +448,40 @@ BE dynamic parameters are as follows.
 - **Default:** 10 (Number of Threads)
 - **Description:** The thread pool size allowed on each BE for interacting with Kafka. Currently, the FE responsible for processing Routine Load requests depends on BEs to interact with Kafka, and each BE in StarRocks has its own thread pool for interactions with Kafka. If a large number of Routine Load tasks are distributed to a BE, the BE's thread pool for interactions with Kafka may be too busy to process all tasks in a timely manner. In this situation, you can adjust the value of this parameter to suit your needs.
 
+#### lake_enable_vertical_compaction_fill_data_cache
+
+- **Default:** false
+- **Description:** Whether to allow compaction tasks to cache data on local disks in a shared-data cluster.
+- **Introduced in:** v3.1.7, v3.2.3
+
+#### compact_threads
+
+- **Default:** 4
+- **Description:** The maximum number of threads used for concurrent compaction tasks. This configuration is changed to dynamic from v3.1.7 and v3.2.2 onwards.
+- **Introduced in:** v3.0.0
+
 #### update_compaction_ratio_threshold
 
 - **Default:** 0.5
 - **Description:** The maximum proportion of data that a compaction can merge for a Primary Key table in a shared-data cluster. We recommend shrinking this value if a single tablet becomes excessively large. This parameter is supported from v3.1.5 onwards.
+
+#### create_tablet_worker_count
+
+- **Default**: 3
+- **Unit**: N/A
+- **Description**: The number of threads used to create a tablet. This configuration is changed to dynamic from v3.1.7 onwards.
+
+#### number_tablet_writer_threads
+
+- **Default**: 16
+- **Unit**: N/A
+- **Description**: The number of threads used for Stream Load. This configuration is changed to dynamic from v3.1.7 onwards.
+
+#### pipeline_connector_scan_thread_num_per_cpu
+
+- **Default**: 8
+- **Unit**: N/A
+- **Description**: The number of scan threads assigned to Pipeline Connector per CPU core in the BE node. This configuration is changed to dynamic from v3.1.7 onwards.
 
 ## Configure BE static parameters
 
@@ -402,6 +525,12 @@ BE static parameters are as follows.
 - **Unit**: N/A
 - **Description**: The number of bthreads of a bRPC. The value -1 indicates the same number with the CPU threads.
 
+#### compaction_memory_limit_per_worker
+
+- **Default**: 2147483648 (2 GB)
+- **Unit**: Bytes
+- **Description**: The maximum memory usage per compaction thread.
+
 #### priority_networks
 
 - **Default**: Empty string
@@ -425,12 +554,6 @@ BE static parameters are as follows.
 - **Default**: 1
 - **Unit**: N/A
 - **Description**: The thread count of the BE heartbeat service.
-
-#### create_tablet_worker_count
-
-- **Default**: 3
-- **Unit**: N/A
-- **Description**: The number of threads used to create a tablet.
 
 #### drop_tablet_worker_count
 
@@ -485,6 +608,20 @@ BE static parameters are as follows.
 - **Default**: 1
 - **Unit**: N/A
 - **Description**: The number of threads used for checking the consistency of tablets.
+
+#### object_storage_connect_timeout_ms
+
+- **Default**: `-1`, which means to use the default timeout duration of the SDK configurations.
+- **Unit**: ms
+- **Description**: Timeout duration to establish socket connections with object storage.
+- **Introduced in:** 3.0.9
+
+#### object_storage_request_timeout_ms
+
+- **Default**: `-1`, which means to use the default timeout duration of the SDK configurations.
+- **Unit**: ms
+- **Description**: Timeout duration to establish HTTP connections with object storage.
+- **Introduced in:** 3.0.9
 
 #### sys_log_dir
 
@@ -570,7 +707,7 @@ BE static parameters are as follows.
 #### max_length_for_bitmap_function
 
 - **Default**: 1000000
-- **Unit**: Byte
+- **Unit**: Bytes
 - **Description**: The maximum length of input values for bitmap functions.
 
 #### max_length_for_to_base64
@@ -588,7 +725,7 @@ BE static parameters are as follows.
 #### max_garbage_sweep_interval
 
 - **Default**: 3600
-- **Unit**: Second
+- **Unit**: Seconds
 - **Description**: The maximum time interval for garbage collection on storage volumes.
 
 #### min_garbage_sweep_interval
@@ -612,7 +749,7 @@ BE static parameters are as follows.
 #### index_stream_cache_capacity
 
 - **Default**: 10737418240
-- **Unit**: Byte
+- **Unit**: Bytes
 - **Description**: The cache capacity for the statistical information of BloomFilter, Min, and Max.
 
 #### disable_storage_page_cache
@@ -640,8 +777,29 @@ BE static parameters are as follows.
 #### compaction_trace_threshold
 
 - **Default**: 60
-- **Unit**: Second
+- **Unit**: Seconds
 - **Description**: The time threshold for each compaction. If a compaction takes more time than the time threshold, StarRocks prints the corresponding trace.
+
+#### cumulative_compaction_num_threads_per_disk
+
+- **Default**: 1
+- **Description**: The number of Cumulative Compaction threads per disk.
+
+#### vertical_compaction_max_columns_per_group
+
+- **Default**: 5
+- **Description**: The maximum number of columns per group of Vertical Compactions.
+
+#### enable_check_string_lengths
+
+- **Default**: true
+- **Description**: Whether to check the data length during loading to solve compaction failures caused by out-of-bound VARCHAR data.
+
+#### max_row_source_mask_memory_bytes
+
+- **Default**: 209715200
+- **Unit**: Bytes
+- **Description**: The maximum memory size of the row source mask buffer. When the buffer is larger than this value, data will be persisted to a temporary file on the disk. This value should be less than the `compaction_mem_limit` parameter.
 
 #### be_http_port
 
@@ -661,16 +819,10 @@ BE static parameters are as follows.
 - **Unit**: Hour
 - **Description**: The reservation time for the files produced by small-scale loadings.
 
-#### number_tablet_writer_threads
-
-- **Default**: 16
-- **Unit**: N/A
-- **Description**: The number of threads used for Stream Load.
-
 #### streaming_load_rpc_max_alive_time_sec
 
 - **Default**: 1200
-- **Unit**: Second
+- **Unit**: Seconds
 - **Description**: The RPC timeout for Stream Load.
 
 #### fragment_pool_thread_num_min
@@ -706,7 +858,7 @@ BE static parameters are as follows.
 #### load_process_max_memory_limit_bytes
 
 - **Default**: 107374182400
-- **Unit**: Byte
+- **Unit**: Bytes
 - **Description**: The maximum size limit of memory resources that can be taken up by all load processes on a BE node.
 
 #### load_process_max_memory_limit_percent
@@ -730,7 +882,7 @@ BE static parameters are as follows.
 #### brpc_max_body_size
 
 - **Default**: 2147483648
-- **Unit**: Byte
+- **Unit**: Bytes
 - **Description**: The maximum body size of a bRPC.
 
 #### tablet_map_shard_size

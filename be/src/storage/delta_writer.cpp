@@ -16,6 +16,7 @@
 
 #include <utility>
 
+#include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "storage/compaction_manager.h"
@@ -30,6 +31,7 @@
 #include "storage/tablet_updates.h"
 #include "storage/txn_manager.h"
 #include "storage/update_manager.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -423,10 +425,22 @@ Status DeltaWriter::write_segment(const SegmentPB& segment_pb, butil::IOBuf& dat
                                                  segment_pb.segment_id(), _opt.tablet_id,
                                                  _replica_state_name(_replica_state)));
     }
-    VLOG(1) << "Flush segment tablet " << _opt.tablet_id << " segment " << segment_pb.DebugString();
 
     _tablet->add_in_writing_data_size(_opt.txn_id, segment_pb.data_size());
-    return _rowset_writer->flush_segment(segment_pb, data);
+    auto scope = IOProfiler::scope(IOProfiler::TAG_LOAD, _tablet->tablet_id());
+    int64_t duration_ns = 0;
+    {
+        SCOPED_RAW_TIMER(&duration_ns);
+        RETURN_IF_ERROR(_rowset_writer->flush_segment(segment_pb, data));
+    }
+    auto io_stat = scope.current_scoped_tls_io();
+    StarRocksMetrics::instance()->segment_flush_total.increment(1);
+    StarRocksMetrics::instance()->segment_flush_duration_us.increment(duration_ns / 1000);
+    StarRocksMetrics::instance()->segment_flush_io_time_us.increment(io_stat.write_time_ns / 1000);
+    StarRocksMetrics::instance()->segment_flush_bytes_total.increment(segment_pb.data_size());
+    VLOG(1) << "Flush segment tablet " << _opt.tablet_id << " segment: " << segment_pb.DebugString()
+            << ", duration: " << duration_ns / 1000 << "us, io time: " << io_stat.write_time_ns / 1000 << "us";
+    return Status::OK();
 }
 
 Status DeltaWriter::close() {
@@ -559,8 +573,9 @@ Status DeltaWriter::_build_current_tablet_schema(int64_t index_id, const POlapTa
             ptable_schema_param.indexes(i).column_param().columns_desc(0).unique_id() >= 0 &&
             ptable_schema_param.version() > ori_tablet_schema->schema_version()) {
             new_schema->copy_from(ori_tablet_schema);
-            RETURN_IF_ERROR(new_schema->build_current_tablet_schema(index_id, ptable_schema_param.version(),
-                                                                    ptable_schema_param.indexes(i), ori_tablet_schema));
+            RETURN_IF_ERROR(new_schema->build_current_tablet_schema(
+                    ptable_schema_param.indexes(i).schema_id(), ptable_schema_param.version(),
+                    ptable_schema_param.indexes(i).column_param(), ori_tablet_schema));
         }
     }
     if (new_schema->schema_version() > ori_tablet_schema->schema_version()) {

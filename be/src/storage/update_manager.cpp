@@ -68,7 +68,7 @@ UpdateManager::UpdateManager(MemTracker* mem_tracker)
 
     int64_t byte_limits = ParseUtil::parse_mem_spec(config::mem_limit, MemInfo::physical_mem());
     int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
-    _index_cache.set_capacity(byte_limits * update_mem_percent);
+    _index_cache.set_capacity(byte_limits * update_mem_percent / 100);
     _update_column_state_cache.set_mem_tracker(_update_state_mem_tracker.get());
 }
 
@@ -587,13 +587,13 @@ bool UpdateManager::TEST_update_state_exist(Tablet* tablet, Rowset* rowset) {
         auto column_state_entry =
                 _update_column_state_cache.get(strings::Substitute("$0_$1", tablet->tablet_id(), rowset_unique_id));
         if (column_state_entry != nullptr) {
-            _update_column_state_cache.remove(column_state_entry);
+            _update_column_state_cache.release(column_state_entry);
             return true;
         }
     } else {
         auto state_entry = _update_state_cache.get(strings::Substitute("$0_$1", tablet->tablet_id(), rowset_unique_id));
         if (state_entry != nullptr) {
-            _update_state_cache.remove(state_entry);
+            _update_state_cache.release(state_entry);
             return true;
         }
     }

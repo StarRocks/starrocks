@@ -53,6 +53,7 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class ReplicationJobTest {
     private static StarRocksAssert starRocksAssert;
@@ -60,6 +61,8 @@ public class ReplicationJobTest {
     private static Database db;
     private static OlapTable table;
     private static OlapTable srcTable;
+    private static Partition partition;
+    private static Partition srcPartition;
     private ReplicationJob job;
 
     @BeforeClass
@@ -78,8 +81,10 @@ public class ReplicationJobTest {
                 AnalyzeTestUtil.getConnectContext());
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         table = (OlapTable) db.getTable("single_partition_duplicate_key");
-
         srcTable = DeepCopy.copyWithGson(table, OlapTable.class);
+
+        partition = table.getPartitions().iterator().next();
+        srcPartition = srcTable.getPartitions().iterator().next();
 
         new MockUp<AgentTaskExecutor>() {
             @Mock
@@ -91,10 +96,21 @@ public class ReplicationJobTest {
 
     @Before
     public void setUp() throws Exception {
-        srcTable.getPartitions().iterator().next()
-                .updateVisibleVersion(table.getPartitions().iterator().next().getCommittedVersion() + 100);
+        partition.updateVersionForRestore(10);
+        srcPartition.updateVersionForRestore(100);
 
-        job = new ReplicationJob("test_token", db.getId(), table, srcTable, GlobalStateMgr.getCurrentSystemInfo());
+        job = new ReplicationJob(null, "test_token", db.getId(), table, srcTable,
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
+    }
+
+    @Test
+    public void testJobId() {
+        ReplicationJob jobWithoutId = new ReplicationJob(null, "test_token", db.getId(), table, srcTable,
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
+        Assert.assertFalse(jobWithoutId.getJobId().isEmpty());
+        ReplicationJob jobWithId = new ReplicationJob("fake_id", "test_token", db.getId(), table, srcTable,
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
+        Assert.assertEquals("fake_id", jobWithId.getJobId());
     }
 
     @Test
@@ -111,7 +127,8 @@ public class ReplicationJobTest {
         job.run();
         Assert.assertEquals(ReplicationJobState.SNAPSHOTING, job.getState());
 
-        for (AgentTask task : job.getRunningTasks().values()) {
+        Map<AgentTask, AgentTask> runningTasks = Deencapsulation.getField(job, "runningTasks");
+        for (AgentTask task : runningTasks.values()) {
             TFinishTaskRequest request = new TFinishTaskRequest();
             request.setTask_status(new TStatus(TStatusCode.OK));
             request.setSnapshot_path("test_snapshot_path");
@@ -127,7 +144,7 @@ public class ReplicationJobTest {
         job.run();
         Assert.assertEquals(ReplicationJobState.REPLICATING, job.getState());
 
-        for (AgentTask task : job.getRunningTasks().values()) {
+        for (AgentTask task : runningTasks.values()) {
             TFinishTaskRequest request = new TFinishTaskRequest();
             request.setTask_status(new TStatus(TStatusCode.OK));
             job.finishReplicateSnapshotTask((ReplicateSnapshotTask) task, request);
@@ -140,6 +157,8 @@ public class ReplicationJobTest {
 
         job.run();
         Assert.assertEquals(ReplicationJobState.COMMITTED, job.getState());
+
+        Assert.assertEquals(partition.getCommittedVersion(), srcPartition.getVisibleVersion());
     }
 
     @Test
@@ -174,7 +193,8 @@ public class ReplicationJobTest {
         job.run();
         Assert.assertEquals(ReplicationJobState.SNAPSHOTING, job.getState());
 
-        for (AgentTask task : job.getRunningTasks().values()) {
+        Map<AgentTask, AgentTask> runningTasks = Deencapsulation.getField(job, "runningTasks");
+        for (AgentTask task : runningTasks.values()) {
             TFinishTaskRequest request = new TFinishTaskRequest();
             request.setTask_status(new TStatus(TStatusCode.OK));
             request.setSnapshot_path("test_snapshot_path");
@@ -202,7 +222,8 @@ public class ReplicationJobTest {
         job.run();
         Assert.assertEquals(ReplicationJobState.SNAPSHOTING, job.getState());
 
-        for (AgentTask task : job.getRunningTasks().values()) {
+        Map<AgentTask, AgentTask> runningTasks = Deencapsulation.getField(job, "runningTasks");
+        for (AgentTask task : runningTasks.values()) {
             TFinishTaskRequest request = new TFinishTaskRequest();
             request.setTask_status(new TStatus(TStatusCode.OK));
             request.setSnapshot_path("test_snapshot_path");
@@ -213,7 +234,7 @@ public class ReplicationJobTest {
         job.run();
         Assert.assertEquals(ReplicationJobState.REPLICATING, job.getState());
 
-        for (AgentTask task : job.getRunningTasks().values()) {
+        for (AgentTask task : runningTasks.values()) {
             TFinishTaskRequest request = new TFinishTaskRequest();
             request.setTask_status(new TStatus(TStatusCode.OK));
             job.finishReplicateSnapshotTask((ReplicateSnapshotTask) task, request);
@@ -236,7 +257,8 @@ public class ReplicationJobTest {
         job.run();
         Assert.assertEquals(ReplicationJobState.SNAPSHOTING, job.getState());
 
-        for (AgentTask task : job.getRunningTasks().values()) {
+        Map<AgentTask, AgentTask> runningTasks = Deencapsulation.getField(job, "runningTasks");
+        for (AgentTask task : runningTasks.values()) {
             TFinishTaskRequest request = new TFinishTaskRequest();
             TStatus status = new TStatus(TStatusCode.OK);
             request.setTask_status(status);
@@ -246,7 +268,7 @@ public class ReplicationJobTest {
         job.run();
         Assert.assertEquals(ReplicationJobState.REPLICATING, job.getState());
 
-        for (AgentTask task : job.getRunningTasks().values()) {
+        for (AgentTask task : runningTasks.values()) {
             TFinishTaskRequest request = new TFinishTaskRequest();
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
             status.addToError_msgs("failed");
@@ -268,7 +290,8 @@ public class ReplicationJobTest {
         job.run();
         Assert.assertEquals(ReplicationJobState.SNAPSHOTING, job.getState());
 
-        for (AgentTask task : job.getRunningTasks().values()) {
+        Map<AgentTask, AgentTask> runningTasks = Deencapsulation.getField(job, "runningTasks");
+        for (AgentTask task : runningTasks.values()) {
             TFinishTaskRequest request = new TFinishTaskRequest();
             request.setTask_status(new TStatus(TStatusCode.OK));
             request.setSnapshot_path("test_snapshot_path");
@@ -279,7 +302,7 @@ public class ReplicationJobTest {
         job.run();
         Assert.assertEquals(ReplicationJobState.REPLICATING, job.getState());
 
-        for (AgentTask task : job.getRunningTasks().values()) {
+        for (AgentTask task : runningTasks.values()) {
             TFinishTaskRequest request = new TFinishTaskRequest();
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
             status.addToError_msgs("failed");
@@ -331,7 +354,7 @@ public class ReplicationJobTest {
 
             tabletInfo.replica_replication_infos = new ArrayList<TReplicaReplicationInfo>();
             TReplicaReplicationInfo replicaInfo = new TReplicaReplicationInfo();
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackends().iterator().next();
+            Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends().iterator().next();
             replicaInfo.src_backend = new TBackend(backend.getHost(), backend.getBePort(), backend.getHttpPort());
             tabletInfo.replica_replication_infos.add(replicaInfo);
         }

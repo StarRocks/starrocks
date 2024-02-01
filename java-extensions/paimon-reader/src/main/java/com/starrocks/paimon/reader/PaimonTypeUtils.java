@@ -26,6 +26,7 @@ import org.apache.paimon.types.DecimalType;
 import org.apache.paimon.types.DoubleType;
 import org.apache.paimon.types.FloatType;
 import org.apache.paimon.types.IntType;
+import org.apache.paimon.types.LocalZonedTimestampType;
 import org.apache.paimon.types.MapType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.SmallIntType;
@@ -101,6 +102,10 @@ public class PaimonTypeUtils {
         }
 
         public String visit(TimestampType timestampType) {
+            return "timestamp-millis";
+        }
+
+        public String visit(LocalZonedTimestampType timestampType) {
             return "timestamp-millis";
         }
 

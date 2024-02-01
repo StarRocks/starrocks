@@ -19,6 +19,7 @@ import com.starrocks.common.Config;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.SecurityIntegrationInfo;
+import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -134,7 +135,7 @@ public class SecurityIntegrationTest {
         AuthenticationMgr masterManager = new AuthenticationMgr();
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
-        masterManager.save(emptyImage.getDataOutputStream());
+        masterManager.saveV2(emptyImage.getDataOutputStream());
 
         // master create security integration ldap3
         String sql = "create security integration ldap3 properties (" +
@@ -153,10 +154,13 @@ public class SecurityIntegrationTest {
 
         // make final snapshot
         UtFrameUtils.PseudoImage finalImage = new UtFrameUtils.PseudoImage();
-        masterManager.save(finalImage.getDataOutputStream());
+        masterManager.saveV2(finalImage.getDataOutputStream());
 
         // test replay OP_CREATE_SECURITY_INTEGRATION edit log
-        AuthenticationMgr followerManager = AuthenticationMgr.load(emptyImage.getDataInputStream());
+        AuthenticationMgr followerManager = new AuthenticationMgr();
+        SRMetaBlockReader srMetaBlockReader = new SRMetaBlockReader(emptyImage.getDataInputStream());
+        followerManager.loadV2(srMetaBlockReader);
+
         Assert.assertNull(followerManager.getSecurityIntegration("ldap3"));
         SecurityIntegrationInfo info = (SecurityIntegrationInfo)
                 UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_CREATE_SECURITY_INTEGRATION);
@@ -164,7 +168,9 @@ public class SecurityIntegrationTest {
         Assert.assertNotNull(followerManager.getSecurityIntegration("ldap3"));
 
         // simulate restart (load from image)
-        AuthenticationMgr imageManager = AuthenticationMgr.load(finalImage.getDataInputStream());
+        AuthenticationMgr imageManager = new AuthenticationMgr();
+        srMetaBlockReader = new SRMetaBlockReader(finalImage.getDataInputStream());
+        imageManager.loadV2(srMetaBlockReader);
         Assert.assertNotNull(imageManager.getSecurityIntegration("ldap3"));
 
         // check authentication with auth chain

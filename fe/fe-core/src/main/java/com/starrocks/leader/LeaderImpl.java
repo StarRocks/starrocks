@@ -73,12 +73,13 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.DeleteJob;
 import com.starrocks.load.OlapDeleteJob;
 import com.starrocks.load.loadv2.SparkLoadJob;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -101,7 +102,7 @@ import com.starrocks.task.PushTask;
 import com.starrocks.task.RemoteSnapshotTask;
 import com.starrocks.task.ReplicateSnapshotTask;
 import com.starrocks.task.SnapshotTask;
-import com.starrocks.task.UpdateTabletMetaInfoTask;
+import com.starrocks.task.TabletMetadataUpdateAgentTask;
 import com.starrocks.task.UploadTask;
 import com.starrocks.thrift.TAbortRemoteTxnRequest;
 import com.starrocks.thrift.TAbortRemoteTxnResponse;
@@ -171,6 +172,7 @@ public class LeaderImpl {
 
     public LeaderImpl() {
         reportHandler.start();
+        MemoryUsageTracker.registerMemoryTracker("Report", reportHandler);
     }
 
     public TMasterResult finishTask(TFinishTaskRequest request) {
@@ -200,11 +202,11 @@ public class LeaderImpl {
         int bePort = tBackend.getBe_port();
         long backendId;
         // TODO: need to refactor after be has been split into cn + dn.
-        ComputeNode cn = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, bePort);
+        ComputeNode cn = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendWithBePort(host, bePort);
 
         if (cn == null) {
             if (RunMode.isSharedDataMode()) {
-                cn = GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host, bePort);
+                cn = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodeWithBePort(host, bePort);
             }
             if (cn == null) {
                 tStatus.setStatus_code(TStatusCode.CANCELLED);
@@ -247,18 +249,19 @@ public class LeaderImpl {
                         && taskType != TTaskType.CREATE && taskType != TTaskType.UPDATE_TABLET_META_INFO
                         && taskType != TTaskType.DROP_AUTO_INCREMENT_MAP
                         && taskType != TTaskType.STORAGE_MEDIUM_MIGRATE
-                        && taskType != TTaskType.REMOTE_SNAPSHOT && taskType != TTaskType.REPLICATE_SNAPSHOT) {
+                        && taskType != TTaskType.REMOTE_SNAPSHOT && taskType != TTaskType.REPLICATE_SNAPSHOT
+                        && taskType != TTaskType.UPDATE_SCHEMA) {
                     if (taskType == TTaskType.REALTIME_PUSH) {
                         PushTask pushTask = (PushTask) task;
                         if (pushTask.getPushType() == TPushType.DELETE) {
                             LOG.info("remove push replica. tabletId: {}, backendId: {}", task.getSignature(),
-                                     pushTask.getBackendId());
+                                    pushTask.getBackendId());
 
                             String failMsg = "Backend: " + task.getBackendId() + "Tablet: " + pushTask.getTabletId() +
-                                             " error msg: " + taskStatus.getError_msgs().toString();
+                                    " error msg: " + taskStatus.getError_msgs().toString();
                             pushTask.countDownLatch(pushTask.getBackendId(), pushTask.getTabletId(), failMsg);
-                            AgentTaskQueue.removeTask(pushTask.getBackendId(), TTaskType.REALTIME_PUSH, 
-                                                      task.getSignature());
+                            AgentTaskQueue.removeTask(pushTask.getBackendId(), TTaskType.REALTIME_PUSH,
+                                    task.getSignature());
                         }
                     }
                     return result;
@@ -331,6 +334,9 @@ public class LeaderImpl {
                 case REPLICATE_SNAPSHOT:
                     finishReplicateSnapshotTask(task, request);
                     break;
+                case UPDATE_SCHEMA:
+                    finishUpdateSchemaTask(task, request);
+                    break;
                 default:
                     break;
             }
@@ -375,7 +381,7 @@ public class LeaderImpl {
             } else {
                 long tabletId = createReplicaTask.getTabletId();
                 if (request.isSetFinish_tablet_infos()) {
-                    Replica replica = GlobalStateMgr.getCurrentInvertedIndex()
+                    Replica replica = GlobalStateMgr.getCurrentState().getTabletInvertedIndex()
                             .getReplica(tabletId, createReplicaTask.getBackendId());
                     if (replica != null) {
                         replica.setPathHash(request.getFinish_tablet_infos().get(0).getPath_hash());
@@ -394,11 +400,11 @@ public class LeaderImpl {
                 }
 
                 // this should be called before 'countDownLatch()'
-                GlobalStateMgr.getCurrentSystemInfo()
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                         .updateBackendReportVersion(task.getBackendId(), request.getReport_version(), task.getDbId());
 
                 createReplicaTask.countDownLatch(task.getBackendId(), task.getSignature());
-                LOG.debug("finish create replica. tablet id: {}, be: {}, report version: {}",
+                LOG.info("finish create replica. tablet id: {}, be: {}, report version: {}",
                         tabletId, task.getBackendId(), request.getReport_version());
             }
 
@@ -416,7 +422,7 @@ public class LeaderImpl {
         // because in this function, the only problem that cause failure is meta missing.
         // and if meta is missing, we no longer need to resend this task
         try {
-            UpdateTabletMetaInfoTask tabletTask = (UpdateTabletMetaInfoTask) task;
+            TabletMetadataUpdateAgentTask tabletTask = (TabletMetadataUpdateAgentTask) task;
             if (request.getTask_status().getStatus_code() != TStatusCode.OK) {
                 tabletTask.countDownToZero(
                         task.getBackendId() + ": " + request.getTask_status().getError_msgs().toString());
@@ -447,6 +453,33 @@ public class LeaderImpl {
         try {
             GlobalStateMgr.getCurrentState().getReplicationMgr().finishReplicateSnapshotTask(
                     (ReplicateSnapshotTask) task, request);
+        } finally {
+            AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
+        }
+    }
+
+    private void finishUpdateSchemaTask(AgentTask task, TFinishTaskRequest request) {
+        try {
+            long dbId = task.getDbId();
+            long tableId = task.getTableId();
+            long indexId = task.getIndexId();
+            long backendId = task.getBackendId();
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            if (db != null) {
+                Locker locker = new Locker();
+                locker.lockDatabase(db, LockType.READ);
+                try {
+                    OlapTable olapTable = (OlapTable) db.getTable(tableId);
+                    if (olapTable != null) {
+                        MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
+                        if (indexMeta != null) {
+                            indexMeta.removeUpdateSchemaBackend(backendId);
+                        }
+                    }
+                } finally {
+                    locker.unLockDatabase(db, LockType.READ);
+                }
+            }
         } finally {
             AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
         }
@@ -516,12 +549,14 @@ public class LeaderImpl {
 
             // should be done before addReplicaPersistInfos and countDownLatch
             long reportVersion = request.getReport_version();
-            GlobalStateMgr.getCurrentSystemInfo().updateBackendReportVersion(task.getBackendId(), reportVersion,
-                    task.getDbId());
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                    .updateBackendReportVersion(task.getBackendId(), reportVersion,
+                            task.getDbId());
 
             List<Long> tabletIds = finishTabletInfos.stream().map(
                     TTabletInfo::getTablet_id).collect(Collectors.toList());
-            List<TabletMeta> tabletMetaList = GlobalStateMgr.getCurrentInvertedIndex().getTabletMetaList(tabletIds);
+            List<TabletMeta> tabletMetaList =
+                    GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMetaList(tabletIds);
 
             // handle load job
             // TODO yiguolei: why delete should check request version and task version?
@@ -657,7 +692,7 @@ public class LeaderImpl {
         if (request.isSetReport_version()) {
             // report version is required. here we check if set, for compatibility.
             long reportVersion = request.getReport_version();
-            GlobalStateMgr.getCurrentSystemInfo()
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                     .updateBackendReportVersion(task.getBackendId(), reportVersion, task.getDbId());
         }
 
@@ -720,7 +755,7 @@ public class LeaderImpl {
 
             TTabletInfo reportedTablet = request.getFinish_tablet_infos().get(0);
             long tabletId = reportedTablet.getTablet_id();
-            TabletMeta tabletMeta = GlobalStateMgr.getCurrentInvertedIndex().getTabletMeta(tabletId);
+            TabletMeta tabletMeta = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(tabletId);
             if (tabletMeta == null) {
                 LOG.warn("tablet meta does not exist. tablet id: {}", tabletId);
                 return;
@@ -737,7 +772,8 @@ public class LeaderImpl {
             locker.lockDatabase(db, LockType.WRITE);
             try {
                 // local migration just set path hash
-                Replica replica = GlobalStateMgr.getCurrentInvertedIndex().getReplica(tabletId, task.getBackendId());
+                Replica replica =
+                        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplica(tabletId, task.getBackendId());
                 Preconditions.checkArgument(reportedTablet.isSetPath_hash());
                 replica.setPathHash(reportedTablet.getPath_hash());
             } finally {
@@ -882,7 +918,7 @@ public class LeaderImpl {
             tableMeta.setTable_type(TableType.serialize(table.getType()));
             tableMeta.setDb_id(db.getId());
             tableMeta.setDb_name(dbName);
-            tableMeta.setCluster_id(GlobalStateMgr.getCurrentState().getClusterId());
+            tableMeta.setCluster_id(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId());
             tableMeta.setState(olapTable.getState().name());
             tableMeta.setBloomfilter_fpp(olapTable.getBfFpp());
             if (olapTable.getCopiedBfColumns() != null) {
@@ -1070,7 +1106,7 @@ public class LeaderImpl {
     }
 
     private static void initTabletMeta(Tablet tablet, TTabletMeta tTabletMeta) {
-        TabletMeta tabletMeta = GlobalStateMgr.getCurrentInvertedIndex().getTabletMeta(tablet.getId());
+        TabletMeta tabletMeta = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(tablet.getId());
         tTabletMeta.setDb_id(tabletMeta.getDbId());
         tTabletMeta.setTable_id(tabletMeta.getTableId());
         tTabletMeta.setPartition_id(tabletMeta.getPartitionId());
@@ -1083,7 +1119,7 @@ public class LeaderImpl {
     @NotNull
     private static List<TBackendMeta> getBackendMetas() {
         List<TBackendMeta> backends = new ArrayList<>();
-        for (Backend backend : GlobalStateMgr.getCurrentSystemInfo().getBackends()) {
+        for (Backend backend : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends()) {
             TBackendMeta backendMeta = new TBackendMeta();
             backendMeta.setBackend_id(backend.getId());
             backendMeta.setHost(backend.getHost());
@@ -1139,7 +1175,7 @@ public class LeaderImpl {
     }
 
     public TNetworkAddress masterAddr() {
-        Pair<String, Integer> ipAndPort = GlobalStateMgr.getCurrentState().getLeaderIpAndRpcPort();
+        Pair<String, Integer> ipAndPort = GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort();
         return new TNetworkAddress(ipAndPort.first, ipAndPort.second);
     }
 
@@ -1179,7 +1215,7 @@ public class LeaderImpl {
 
         long txnId;
         try {
-            txnId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
+            txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(db.getId(),
                     request.getTable_ids(), request.getLabel(),
                     new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                     LoadJobSourceType.valueOf(request.getSource_type()), request.getTimeout_second());
@@ -1238,7 +1274,7 @@ public class LeaderImpl {
             TxnCommitAttachment attachment = TxnCommitAttachment.fromThrift(request.getCommit_attachment());
             long timeoutMs = request.isSetCommit_timeout_ms() ? request.getCommit_timeout_ms() :
                     Config.external_table_commit_timeout_ms;
-            GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+            GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
             boolean visible = transactionMgr.commitAndPublishTransaction(db, request.getTxn_id(),
                     TabletCommitInfo.fromThrift(request.getCommit_infos()),
                     TabletFailInfo.fromThrift(request.getFail_infos()),
@@ -1299,8 +1335,11 @@ public class LeaderImpl {
         }
 
         try {
-            GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
-                    request.getDb_id(), request.getTxn_id(), request.getError_msg());
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(
+                    request.getDb_id(), request.getTxn_id(), request.getError_msg(),
+                    TabletCommitInfo.fromThrift(request.getCommit_infos()),
+                    TabletFailInfo.fromThrift(request.getFail_infos()),
+                    TxnCommitAttachment.fromThrift(request.getCommit_attachment()));
         } catch (Exception e) {
             LOG.warn("abort remote txn failed, txn_id: {}", request.getTxn_id(), e);
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);

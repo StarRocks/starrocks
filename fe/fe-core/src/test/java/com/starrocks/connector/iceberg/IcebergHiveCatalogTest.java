@@ -16,11 +16,13 @@
 package com.starrocks.connector.iceberg;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.catalog.Namespace;
+import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.hive.HiveCatalog;
 import org.junit.Assert;
 import org.junit.Test;
@@ -48,5 +50,20 @@ public class IcebergHiveCatalogTest {
                 "hive_native_catalog", new Configuration(), icebergProperties);
         List<String> dbs = icebergHiveCatalog.listAllDatabases();
         Assert.assertEquals(Arrays.asList("db1", "db2"), dbs);
+    }
+
+    @Test
+    public void testRenameTable(@Mocked HiveCatalog hiveCatalog) {
+        new Expectations() {
+            {
+                hiveCatalog.tableExists((TableIdentifier) any);
+                result = true;
+            }
+        };
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(
+                "catalog", new Configuration(), ImmutableMap.of("hive.metastore.uris", "thrift://129.1.2.3:9876"));
+        icebergHiveCatalog.renameTable("db", "tb1", "tb2");
+        boolean exists = icebergHiveCatalog.tableExists("db", "tbl2");
+        Assert.assertTrue(exists);
     }
 }

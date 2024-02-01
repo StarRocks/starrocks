@@ -62,6 +62,7 @@ import com.starrocks.thrift.TReplicateSnapshotRequest;
 import com.starrocks.thrift.TSnapshotRequest;
 import com.starrocks.thrift.TStorageMediumMigrateReq;
 import com.starrocks.thrift.TTaskType;
+import com.starrocks.thrift.TUpdateSchemaReq;
 import com.starrocks.thrift.TUpdateTabletMetaInfoReq;
 import com.starrocks.thrift.TUploadReq;
 import org.apache.logging.log4j.LogManager;
@@ -174,9 +175,9 @@ public class AgentBatchTask implements Runnable {
             TNetworkAddress address = null;
             boolean ok = false;
             try {
-                ComputeNode computeNode = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+                ComputeNode computeNode = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(backendId);
                 if (RunMode.isSharedDataMode() && computeNode == null) {
-                    computeNode = GlobalStateMgr.getCurrentSystemInfo().getComputeNode(backendId);
+                    computeNode = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNode(backendId);
                 }
 
                 if (computeNode == null || !computeNode.isAlive()) {
@@ -354,8 +355,8 @@ public class AgentBatchTask implements Runnable {
                 return tAgentTaskRequest;
             }
             case UPDATE_TABLET_META_INFO: {
-                UpdateTabletMetaInfoTask updateTabletMetaInfoTask = (UpdateTabletMetaInfoTask) task;
-                TUpdateTabletMetaInfoReq request = updateTabletMetaInfoTask.toThrift();
+                TabletMetadataUpdateAgentTask tabletMetadataUpdateAgentTask = (TabletMetadataUpdateAgentTask) task;
+                TUpdateTabletMetaInfoReq request = tabletMetadataUpdateAgentTask.toThrift();
                 if (LOG.isDebugEnabled()) {
                     LOG.debug(request.toString());
                 }
@@ -398,6 +399,12 @@ public class AgentBatchTask implements Runnable {
                 ReplicateSnapshotTask replicateSnapshotTask = (ReplicateSnapshotTask) task;
                 TReplicateSnapshotRequest req = replicateSnapshotTask.toThrift();
                 tAgentTaskRequest.setReplicate_snapshot_req(req);
+                return tAgentTaskRequest;
+            }
+            case UPDATE_SCHEMA: {
+                UpdateSchemaTask updateSchemaTask = (UpdateSchemaTask) task;
+                TUpdateSchemaReq req = updateSchemaTask.toThrift();
+                tAgentTaskRequest.setUpdate_schema_req(req);
                 return tAgentTaskRequest;
             }
             default:

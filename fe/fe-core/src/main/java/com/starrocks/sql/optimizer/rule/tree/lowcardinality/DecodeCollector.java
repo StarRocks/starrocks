@@ -381,7 +381,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         if ((table.getKeysType().equals(KeysType.PRIMARY_KEYS))) {
             return DecodeInfo.EMPTY;
         }
-        if (table.hasForbitGlobalDict()) {
+        if (table.hasForbiddenGlobalDict()) {
             return DecodeInfo.EMPTY;
         }
 
@@ -397,7 +397,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 continue;
             }
 
-            ColumnStatistic columnStatistic = GlobalStateMgr.getCurrentStatisticStorage()
+            ColumnStatistic columnStatistic = GlobalStateMgr.getCurrentState().getStatisticStorage()
                     .getColumnStatistic(table, column.getName());
             // Condition 2: the varchar column is low cardinality string column
             if (!FeConstants.USE_MOCK_DICT_MANAGER && (columnStatistic.isUnknown() ||

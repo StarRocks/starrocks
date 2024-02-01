@@ -30,6 +30,7 @@
 #include "exprs/anyval_util.h"
 #include "exprs/function_context.h"
 #include "exprs/mock_vectorized_expr.h"
+#include "gen_cpp/InternalService_types.h"
 #include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
 #include "runtime/time_types.h"
@@ -2241,6 +2242,84 @@ TEST_F(TimeFunctionsTest, jodatime_format) {
     }
 }
 
+TEST_F(TimeFunctionsTest, trino_str_to_jodatime) {
+    TQueryOptions query_option;
+    query_option.__set_sql_dialect("trino");
+    RuntimeState state(TUniqueId(), query_option, TQueryGlobals(), nullptr);
+    FunctionContext* ctx = FunctionContext::create_test_context();
+    ctx->set_runtime_state(&state);
+    auto ptr = std::unique_ptr<FunctionContext>(ctx);
+
+    {
+        auto dt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("2024-01-01 12:34:56"), 1);
+        auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("yyyy-MM-dd HH:mm:ss.S"), 1);
+
+        Columns columns;
+        columns.emplace_back(dt_col);
+        columns.emplace_back(fmt_col);
+        ctx->set_constant_columns(columns);
+        TimeFunctions::parse_joda_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        StatusOr<ColumnPtr> result = TimeFunctions::parse_jodatime(ctx, columns);
+        TimeFunctions::parse_joda_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_FALSE(result.ok());
+        ASSERT_EQ(result.status().message(), "Invalid format 'yyyy-MM-dd HH:mm:ss.S' for '2024-01-01 12:34:56'");
+    }
+
+    {
+        auto expect = TimestampValue::create(2023, 12, 21, 12, 34, 56);
+        auto dt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("2023-12-21 12:34:56"), 1);
+        auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("yyyy-MM-dd HH:mm:ss"), 1);
+
+        Columns columns;
+        columns.emplace_back(dt_col);
+        columns.emplace_back(fmt_col);
+        ctx->set_constant_columns(columns);
+        TimeFunctions::parse_joda_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        StatusOr<ColumnPtr> result = TimeFunctions::parse_jodatime(ctx, columns);
+        TimeFunctions::parse_joda_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_TRUE(result.ok());
+        auto v = ColumnHelper::as_column<ConstColumn>(result.value());
+        auto datetime_value = v->get(0).get_timestamp();
+        ASSERT_EQ(expect, datetime_value);
+    }
+
+    {
+        auto expect = TimestampValue::create(2023, 12, 21, 12, 34, 56);
+        auto dt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("21/December/23 12:34:56"), 1);
+        auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("dd/MMMM/yy HH:mm:ss"), 1);
+
+        Columns columns;
+        columns.emplace_back(dt_col);
+        columns.emplace_back(fmt_col);
+        ctx->set_constant_columns(columns);
+        TimeFunctions::parse_joda_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        StatusOr<ColumnPtr> result = TimeFunctions::parse_jodatime(ctx, columns);
+        TimeFunctions::parse_joda_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_TRUE(result.ok());
+        auto v = ColumnHelper::as_column<ConstColumn>(result.value());
+        auto datetime_value = v->get(0).get_timestamp();
+        ASSERT_EQ(expect, datetime_value);
+    }
+
+    {
+        auto expect = TimestampValue::create(2023, 12, 21, 12, 34, 56, 123);
+        auto dt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("21/December/23 12:34:56.000123"), 1);
+        auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("dd/MMMM/yy HH:mm:ss.SSSSSS"), 1);
+
+        Columns columns;
+        columns.emplace_back(dt_col);
+        columns.emplace_back(fmt_col);
+        ctx->set_constant_columns(columns);
+        TimeFunctions::parse_joda_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        StatusOr<ColumnPtr> result = TimeFunctions::parse_jodatime(ctx, columns);
+        TimeFunctions::parse_joda_close(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_TRUE(result.ok());
+        auto v = ColumnHelper::as_column<ConstColumn>(result.value());
+        auto datetime_value = v->get(0).get_timestamp();
+        ASSERT_EQ(expect, datetime_value);
+    }
+}
+
 TEST_F(TimeFunctionsTest, daynameTest) {
     auto tc = TimestampColumn::create();
     tc->append(TimestampValue::create(2020, 1, 1, 21, 22, 1));
@@ -3042,15 +3121,10 @@ TEST_F(TimeFunctionsTest, timeSliceFloorTest) {
         unit_text->append("second");
         auto unit_column = ConstColumn::create(unit_text, 1);
 
-        auto boundary_text = BinaryColumn::create();
-        boundary_text->append("floor");
-        auto boundary_column = ConstColumn::create(boundary_text, 1);
-
         Columns columns;
         columns.emplace_back(tc);
         columns.emplace_back(period_column);
         columns.emplace_back(unit_column);
-        columns.emplace_back(boundary_column);
 
         time_slice_context->set_constant_columns(columns);
 
@@ -3831,9 +3905,6 @@ TEST_F(TimeFunctionsTest, MakeDateTest) {
     year_value->append(1);
     day_of_year_value->append(-1);
 
-    year_value->append(1);
-    (void)day_of_year_value->append_nulls(1);
-
     Columns columns;
     columns.emplace_back(year_value);
     columns.emplace_back(day_of_year_value);
@@ -3853,6 +3924,5 @@ TEST_F(TimeFunctionsTest, MakeDateTest) {
     ASSERT_TRUE(nullable_col->is_null(7));
     ASSERT_TRUE(nullable_col->is_null(8));
     ASSERT_TRUE(nullable_col->is_null(9));
-    ASSERT_TRUE(nullable_col->is_null(10));
 }
 } // namespace starrocks

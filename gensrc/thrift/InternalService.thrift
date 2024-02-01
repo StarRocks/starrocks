@@ -102,7 +102,8 @@ enum TPipelineProfileLevel {
 enum TSpillMode {
   AUTO,
   FORCE,
-  NONE
+  NONE,
+  RANDOM,
 }
 
 enum TSpillableOperatorType {
@@ -121,6 +122,14 @@ enum TTabletInternalParallelMode {
 enum TOverflowMode {
   OUTPUT_NULL = 0;
   REPORT_ERROR = 1;
+}
+
+enum TTimeUnit {
+    NANOSECOND = 0;
+    MICROSECOND = 1;
+    MILLISECOND = 2;
+    SECOND = 3;
+    MINUTE = 4;
 }
 
 struct TQueryQueueOptions {
@@ -204,6 +213,10 @@ struct TQueryOptions {
   78: optional i32 spill_encode_level;
   79: optional i64 spill_revocable_max_bytes;
   80: optional bool spill_enable_direct_io;
+  // only used in spill_mode="random"
+  // probability of triggering operator spill
+  // (0.0,1.0)
+  81: optional double spill_rand_ratio;
 
   85: optional TSpillMode spill_mode;
   
@@ -239,7 +252,7 @@ struct TQueryOptions {
   107: optional i64 global_runtime_filter_build_max_size;
   108: optional i64 runtime_filter_rpc_http_min_size;
 
-  109: optional i64 big_query_profile_second_threshold;
+  109: optional i64 big_query_profile_threshold = 0;
 
   110: optional TQueryQueueOptions query_queue_options;
 
@@ -249,6 +262,10 @@ struct TQueryOptions {
   113: optional bool enable_hyperscan_vec;
 
   114: optional bool enable_jit = false;
+
+  115: optional TTimeUnit big_query_profile_threshold_unit = TTimeUnit.SECOND;
+  
+  116: optional string sql_dialect;
 }
 
 

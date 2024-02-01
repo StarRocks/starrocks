@@ -24,6 +24,7 @@
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
+#include "exec/avro_test.h"
 #include "runtime/types.h"
 #include "util/defer_op.h"
 
@@ -38,13 +39,6 @@ extern "C" {
 namespace starrocks {
 
 class AvroAddNullableColumnTest : public ::testing::Test {};
-
-struct AvroHelper {
-    avro_schema_t schema = NULL;
-    avro_value_iface_t* iface = NULL;
-    avro_value_t avro_val;
-    std::string schema_text;
-};
 
 static void init_avro_value(std::string schema_path, AvroHelper& avro_helper) {
     std::ifstream infile_schema;

@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-syntax="proto2";
+syntax = "proto2";
 
 package starrocks;
 option java_package = "com.starrocks.proto";
@@ -56,7 +56,7 @@ message PStructField {
 
 message PTypeNode {
     // TTypeNodeType(SCALAR, ARRAY, MAP, STRUCT)
-    required int32 type = 1; 
+    required int32 type = 1;
     // only set for scalar types
     optional PScalarType scalar_type = 2;
     // only used for structs; has struct_fields.size() corresponding child types
@@ -109,7 +109,7 @@ enum TxnTypePB {
  }
 
  enum ReplicationTxnStatePB {
-     TXN_INVALID = 0;
+     TXN_PREPARED = 0;
      TXN_SNAPSHOTED = 1;
      TXN_REPLICATED = 2;
      TXN_PUBLISHED = 3;

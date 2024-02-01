@@ -671,7 +671,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
             return false;
         }
 
-        ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
+        ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         if (colocateIndex.isColocateTable(getId())) {
             boolean isGroupUnstable = colocateIndex.isGroupUnstable(colocateIndex.getGroup(getId()));
             if (!isLocalBalance || isGroupUnstable) {
@@ -777,6 +777,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return false;
     }
 
+    public boolean supportPreCollectMetadata() {
+        return false;
+    }
+
     public boolean hasUniqueConstraints() {
         List<UniqueConstraint> uniqueConstraint = getUniqueConstraints();
         return uniqueConstraint != null;
@@ -796,6 +800,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     public List<ForeignKeyConstraint> getForeignKeyConstraints() {
         return this.foreignKeyConstraints;
+    }
+
+    public boolean hasForeignKeyConstraints() {
+        return this.foreignKeyConstraints != null && !this.foreignKeyConstraints.isEmpty();
     }
 
     public synchronized List<Long> allocatePartitionIdByKey(List<PartitionKey> keys) {

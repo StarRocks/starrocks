@@ -18,8 +18,8 @@
 
 #include "gutil/strings/join.h"
 #include "storage/lake/lake_primary_index.h"
+#include "storage/lake/lake_primary_key_recover.h"
 #include "storage/lake/meta_file.h"
-#include "storage/lake/primary_key_recover.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
@@ -63,7 +63,7 @@ public:
             _inited = true;
             return check_meta_version();
         } else {
-            return Status::InternalError("primary key does not support concurrent log applying");
+            return Status::ResourceBusy("primary key does not support concurrent log applying");
         }
     }
 
@@ -88,6 +88,9 @@ public:
         if (log.has_op_alter_metadata()) {
             RETURN_IF_ERROR(apply_alter_meta_log(log.op_alter_metadata()));
         }
+        if (log.has_op_replication()) {
+            RETURN_IF_ERROR(apply_replication_log(log.op_replication(), log.txn_id()));
+        }
         return Status::OK();
     }
 
@@ -99,8 +102,6 @@ public:
         _guard.reset(nullptr);
         return _builder.finalize(_max_txn_id);
     }
-
-    std::shared_ptr<std::vector<std::string>> trash_files() override { return _builder.trash_files(); }
 
 private:
     bool need_recover(const Status& st) { return _builder.recover_flag() != RecoverFlag::OK; }
@@ -116,8 +117,7 @@ private:
                 _tablet.update_mgr()->release_primary_index_cache(_index_entry);
                 _index_entry = nullptr;
                 // rebuild delvec and pk index
-                PrimaryKeyRecover recover(&_builder, &_tablet, _metadata);
-                RETURN_IF_ERROR(recover.pre_cleanup());
+                LakePrimaryKeyRecover recover(&_builder, &_tablet, _metadata);
                 RETURN_IF_ERROR(recover.recover());
                 LOG(INFO) << "Primary Key recover finish, tablet_id: " << _tablet.id()
                           << " base_ver: " << _base_version;
@@ -225,6 +225,69 @@ private:
         return Status::OK();
     }
 
+    Status apply_replication_log(const TxnLogPB_OpReplication& op_replication, int64_t txn_id) {
+        if (op_replication.txn_meta().txn_state() != ReplicationTxnStatePB::TXN_REPLICATED) {
+            LOG(WARNING) << "Fail to apply replication log, invalid txn meta state: "
+                         << ReplicationTxnStatePB_Name(op_replication.txn_meta().txn_state());
+            return Status::Corruption("Invalid txn meta state: " +
+                                      ReplicationTxnStatePB_Name(op_replication.txn_meta().txn_state()));
+        }
+        if (op_replication.txn_meta().snapshot_version() != _new_version) {
+            LOG(WARNING) << "Fail to apply replication log, mismatched snapshot version and new version"
+                         << ", snapshot version: " << op_replication.txn_meta().snapshot_version()
+                         << ", new version: " << _new_version;
+            return Status::Corruption("mismatched snapshot version and new version");
+        }
+
+        if (op_replication.txn_meta().incremental_snapshot()) {
+            CHECK(_new_version - _base_version == op_replication.op_writes_size())
+                    << ", base_version: " << _base_version << ", new_version: " << _new_version
+                    << ", op_write_size: " << op_replication.op_writes_size();
+            for (const auto& op_write : op_replication.op_writes()) {
+                RETURN_IF_ERROR(apply_write_log(op_write, txn_id));
+            }
+            LOG(INFO) << "Apply pk incremental replication log finish. tablet_id: " << _tablet.id()
+                      << ", base_version: " << _base_version << ", new_version: " << _new_version
+                      << ", txn_id: " << txn_id;
+        } else {
+            auto old_rowsets = std::move(*_metadata->mutable_rowsets());
+            _metadata->mutable_rowsets()->Clear();
+            _metadata->mutable_delvec_meta()->Clear();
+
+            auto new_next_rowset_id = _metadata->next_rowset_id();
+            for (const auto& op_write : op_replication.op_writes()) {
+                auto rowset = _metadata->add_rowsets();
+                rowset->CopyFrom(op_write.rowset());
+                const auto new_rowset_id = rowset->id() + _metadata->next_rowset_id();
+                rowset->set_id(new_rowset_id);
+                new_next_rowset_id =
+                        std::max<uint32_t>(new_next_rowset_id, new_rowset_id + std::max(1, rowset->segments_size()));
+            }
+
+            for (const auto& [segment_id, delvec_data] : op_replication.delvecs()) {
+                auto delvec = std::make_shared<DelVector>();
+                RETURN_IF_ERROR(delvec->load(_new_version, delvec_data.data().data(), delvec_data.data().size()));
+                _builder.append_delvec(delvec, segment_id + _metadata->next_rowset_id());
+            }
+
+            _metadata->set_next_rowset_id(new_next_rowset_id);
+            _metadata->set_cumulative_point(0);
+            old_rowsets.Swap(_metadata->mutable_compaction_inputs());
+
+            _tablet.update_mgr()->unload_primary_index(_tablet.id());
+
+            LOG(INFO) << "Apply pk full replication log finish. tablet_id: " << _tablet.id()
+                      << ", base_version: " << _base_version << ", new_version: " << _new_version
+                      << ", txn_id: " << txn_id;
+        }
+
+        if (op_replication.has_source_schema()) {
+            _metadata->mutable_source_schema()->CopyFrom(op_replication.source_schema());
+        }
+
+        return Status::OK();
+    }
+
     static inline ParallelSet<int64_t> _s_schema_change_set;
 
     Tablet _tablet;
@@ -263,8 +326,6 @@ public:
         _metadata->set_version(_new_version);
         return _tablet.put_metadata(_metadata);
     }
-
-    std::shared_ptr<std::vector<std::string>> trash_files() override { return nullptr; }
 
 private:
     Status apply_write_log(const TxnLogPB_OpWrite& op_write) {
@@ -395,12 +456,33 @@ private:
             return Status::Corruption("mismatched snapshot version and new version");
         }
 
-        if (!op_replication.txn_meta().incremental_snapshot()) {
-            _metadata->clear_rowsets();
+        if (op_replication.txn_meta().incremental_snapshot()) {
+            for (const auto& op_write : op_replication.op_writes()) {
+                RETURN_IF_ERROR(apply_write_log(op_write));
+            }
+            LOG(INFO) << "Apply incremental replication log finish. tablet_id: " << _tablet.id()
+                      << ", base_version: " << _metadata->version() << ", new_version: " << _new_version
+                      << ", txn_id: " << op_replication.txn_meta().txn_id();
+        } else {
+            auto old_rowsets = std::move(*_metadata->mutable_rowsets());
+            _metadata->mutable_rowsets()->Clear();
+
+            for (const auto& op_write : op_replication.op_writes()) {
+                RETURN_IF_ERROR(apply_write_log(op_write));
+            }
+
+            _metadata->set_cumulative_point(0);
+            old_rowsets.Swap(_metadata->mutable_compaction_inputs());
+
+            LOG(INFO) << "Apply full replication log finish. tablet_id: " << _tablet.id()
+                      << ", base_version: " << _metadata->version() << ", new_version: " << _new_version
+                      << ", txn_id: " << op_replication.txn_meta().txn_id();
         }
-        for (const auto& op_write : op_replication.op_writes()) {
-            RETURN_IF_ERROR(apply_write_log(op_write));
+
+        if (op_replication.has_source_schema()) {
+            _metadata->mutable_source_schema()->CopyFrom(op_replication.source_schema());
         }
+
         return Status::OK();
     }
 

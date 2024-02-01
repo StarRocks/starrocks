@@ -73,8 +73,8 @@ import com.starrocks.common.SchemaVersionAndHash;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
@@ -312,20 +312,6 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     int originSchemaHash = tbl.getSchemaHashByIndexId(originIndexId);
                     KeysType originKeysType = tbl.getKeysTypeByIndexId(originIndexId);
                     List<Column> originSchema = tbl.getSchemaByIndexId(originIndexId);
-
-                    // copy for generate some const default value
-                    List<Column> copiedShadowSchema = Lists.newArrayList();
-                    for (Column column : shadowSchema) {
-                        Column.DefaultValueType defaultValueType = column.getDefaultValueType();
-                        if (defaultValueType == Column.DefaultValueType.CONST) {
-                            Column copiedColumn = new Column(column);
-                            copiedColumn.setDefaultValue(column.calculatedDefaultValueWithTime(startTime));
-                            copiedShadowSchema.add(copiedColumn);
-                        } else {
-                            copiedShadowSchema.add(column);
-                        }
-                    }
-
                     List<Integer> copiedSortKeyIdxes = index.getSortKeyIdxes();
                     List<Integer> copiedSortKeyUniqueIds = index.getSortKeyUniqueIds();
                     // TODO
@@ -377,7 +363,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                                     shadowShortKeyColumnCount, shadowSchemaHash, shadowSchemaVersion,
                                     Partition.PARTITION_INIT_VERSION,
                                     originKeysType, TStorageType.COLUMN, storageMedium,
-                                    copiedShadowSchema, bfColumns, bfFpp, countDownLatch, indexes,
+                                    shadowSchema, bfColumns, bfFpp, countDownLatch, indexes,
                                     tbl.isInMemory(),
                                     tbl.enablePersistentIndex(),
                                     tbl.primaryIndexCacheExpireSec(),
@@ -443,7 +429,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
 
         this.watershedTxnId =
-                GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
         this.jobState = JobState.WAITING_TXN;
         span.setAttribute("watershedTxnId", this.watershedTxnId);
         span.addEvent("setWaitingTxn");
@@ -756,7 +742,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                         long baseTabletId = physicalPartitionIndexTabletMap.get(
                                 partitionId, shadowIdxId).get(shadowTablet.getId());
                         // NOTE: known for sure that only LocalTablet uses this SchemaChangeJobV2 class
-                        GlobalStateMgr.getCurrentInvertedIndex().
+                        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().
                                 markTabletForceDelete(baseTabletId, shadowTablet.getBackendIds());
                         List<Replica> replicas = ((LocalTablet) shadowTablet).getImmutableReplicas();
                         int healthyReplicaNum = 0;
@@ -838,7 +824,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     }
 
     private void onFinished(OlapTable tbl) {
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         // 
         // partition visible version won't update in schema change, so we need make global
         // dictionary invalid after schema change.
@@ -889,7 +875,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
                     // the origin tablet created by old schema can be deleted from FE meta data
                     for (Tablet originTablet : droppedIdx.getTablets()) {
-                        GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(originTablet.getId());
+                        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablet(originTablet.getId());
                     }
                 }
             }
@@ -965,7 +951,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         // clear tasks if has
         AgentTaskQueue.removeBatchTask(schemaChangeBatchTask, TTaskType.ALTER);
         // remove all shadow indexes, and set state to NORMAL
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db != null) {
             Locker locker = new Locker();
@@ -1001,7 +987,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
     // Check whether transactions of the given database which txnId is less than 'watershedTxnId' are finished.
     protected boolean isPreviousLoadFinished() throws AnalysisException {
-        return GlobalStateMgr.getCurrentGlobalTransactionMgr()
+        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                 .isPreviousTransactionsFinished(watershedTxnId, dbId, Lists.newArrayList(tableId));
     }
 
@@ -1026,7 +1012,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                 return;
             }
 
-            TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+            TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
             for (Cell<Long, Long, MaterializedIndex> cell : physicalPartitionIndexMap.cellSet()) {
                 long partitionId = cell.getRowKey();
                 long shadowIndexId = cell.getColumnKey();

@@ -15,9 +15,12 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateUserStmt;
+import com.starrocks.sql.ast.GrantPrivilegeStmt;
+import com.starrocks.sql.ast.ShowDataStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.UtFrameUtils;
@@ -96,6 +99,25 @@ public class ShowTablesTest {
         ShowResultSet resultSet = executor.execute();
         Assert.assertFalse(resultSet.next());
 
+        Assert.assertThrows(ErrorReportException.class,
+                () -> ctx.changeCatalog("hive_catalog"));
+        Assert.assertThrows(ErrorReportException.class,
+                () -> ctx.changeCatalogDb("hive_catalog.hive_db"));
+
+        String sql = "grant usage on catalog hive_catalog to test_user";
+        GrantPrivilegeStmt grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        DDLStmtExecutor.execute(grantPrivilegeStmt, ctx);
+        Assert.assertThrows(ErrorReportException.class,
+                () -> ctx.changeCatalogDb("hive_catalog.hive_db"));
+
         ctx.setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+    }
+
+    @Test
+    public void testShowData() {
+        ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%"));
+        ShowDataStmt stmt = new ShowDataStmt("test", "testTbl", null);
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        Assert.assertThrows(ErrorReportException.class, executor::execute);
     }
 }

@@ -28,8 +28,11 @@ import com.starrocks.catalog.system.sys.SysDb;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.privilege.ObjectType;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
@@ -128,13 +131,15 @@ public class DropStmtAnalyzer {
 
             String dbName = statement.getDbName();
             if (dbName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
-                        context.getCurrentUserIdentity().getUser(), dbName);
+                AccessDeniedException.reportAccessDenied(context.getCurrentCatalog(),
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.DROP.name(), ObjectType.DATABASE.name(), dbName);
             } else if (dbName.equalsIgnoreCase(SysDb.DATABASE_NAME)) {
                 Database db = GlobalStateMgr.getCurrentState().getDb(SysDb.DATABASE_NAME.toLowerCase());
                 if (db.getId() == SystemId.SYS_DB_ID) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
-                            context.getCurrentUserIdentity().getUser(), dbName);
+                    AccessDeniedException.reportAccessDenied(context.getCurrentCatalog(),
+                            context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                            PrivilegeType.DROP.name(), ObjectType.DATABASE.name(), dbName);
                 }
             }
             return null;

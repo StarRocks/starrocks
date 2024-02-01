@@ -116,6 +116,8 @@ CONF_Int32(clone_worker_count, "3");
 CONF_Int32(storage_medium_migrate_count, "3");
 // The count of thread to check consistency.
 CONF_Int32(check_consistency_worker_count, "1");
+// The count of thread to update scheam
+CONF_Int32(update_schema_worker_count, "3");
 // The count of thread to upload.
 CONF_Int32(upload_worker_count, "1");
 // The count of thread to download.
@@ -150,9 +152,8 @@ CONF_mInt32(compact_threads, "4");
 CONF_Int32(compact_thread_pool_queue_size, "100");
 
 // The count of thread to replication
-CONF_Int32(replication_threads, "64");
-CONF_Int32(replication_thread_pool_queue_size, "2048");
-CONF_Int32(clear_expired_replcation_snapshots_interval_seconds, "3600");
+CONF_mInt32(replication_threads, "0");
+CONF_mInt32(clear_expired_replcation_snapshots_interval_seconds, "3600");
 
 // The log dir.
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
@@ -304,6 +305,10 @@ CONF_mBool(enable_lazy_delta_column_compaction, "true");
 CONF_mInt32(update_compaction_check_interval_seconds, "10");
 CONF_mInt32(update_compaction_num_threads_per_disk, "1");
 CONF_mInt32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
+// using this config to adjust chunk size used in compaction for row store
+// if this value is 0, auto chunk size calculation algorithm will be used
+// set this value to none zero if auto algorithm isn't working well
+CONF_mInt32(update_compaction_chunk_size_for_row_store, "0");
 CONF_mInt64(max_update_compaction_num_singleton_deltas, "1000");
 CONF_mInt64(update_compaction_size_threshold, "268435456");
 CONF_mInt64(update_compaction_result_bytes, "1073741824");
@@ -349,10 +354,6 @@ CONF_mInt64(size_tiered_level_multiple_dupkey, "10");
 CONF_mInt64(size_tiered_level_num, "7");
 
 CONF_Bool(enable_check_string_lengths, "true");
-// 5GB
-CONF_mInt64(min_cumulative_compaction_size, "5368709120");
-// 20GB
-CONF_mInt64(min_base_compaction_size, "21474836480");
 
 // Max row source mask memory bytes, default is 200M.
 // Should be smaller than compaction_mem_limit.
@@ -383,6 +384,17 @@ CONF_Int32(be_exit_after_disk_write_hang_second, "60");
 // turn off dictionary dictionary encoding. This only will detect first chunk
 // set to 1 means always use dictionary encoding
 CONF_Double(dictionary_encoding_ratio, "0.7");
+
+// Some data types use dictionary encoding, and this configuration is used to control
+// the size of dictionary pages. If you want a higher compression ratio, please increase
+// this configuration item, but be aware that excessively large values may lead to
+// performance degradation.
+CONF_Int32(dictionary_page_size, "1048576");
+
+// Just like dictionary_encoding_ratio, dictionary_encoding_ratio_for_non_string_column is used for
+// no-string column.
+CONF_Double(dictionary_encoding_ratio_for_non_string_column, "0");
+
 // The minimum chunk size for dictionary encoding speculation
 CONF_Int32(dictionary_speculate_min_chunk_size, "10000");
 
@@ -882,7 +894,7 @@ CONF_String(query_debug_trace_dir, "${STARROCKS_HOME}/query_debug_trace");
 
 #ifdef USE_STAROS
 CONF_Int32(starlet_port, "9070");
-CONF_mInt32(starlet_cache_thread_num, "64");
+CONF_mInt32(starlet_cache_thread_num, "16");
 // Root dir used for cache if cache enabled.
 CONF_String(starlet_cache_dir, "");
 // Cache backend check interval (in seconds), for async write sync check and ttl clean, e.t.c.
@@ -901,7 +913,7 @@ CONF_mDouble(starlet_cache_evict_percent, "0.1");
 CONF_mInt32(starlet_cache_evict_throughput_mb, "200");
 // Buffer size in starlet fs buffer stream, size <= 0 means not use buffer stream.
 // Only support in S3/HDFS currently.
-CONF_mInt32(starlet_fs_stream_buffer_size_bytes, "131072");
+CONF_mInt32(starlet_fs_stream_buffer_size_bytes, "1048576");
 CONF_mBool(starlet_use_star_cache, "true");
 // TODO: support runtime change
 CONF_Int32(starlet_star_cache_mem_size_percent, "0");
@@ -925,7 +937,7 @@ CONF_mInt32(starlet_fslib_s3client_connect_timeout_ms, "1000");
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
 CONF_mBool(lake_print_delete_log, "true");
-CONF_mBool(lake_compaction_check_txn_log_first, "false");
+CONF_mInt64(lake_compaction_stream_buffer_size_bytes, "1048576"); // 1MB
 // Used to ensure service availability in extreme situations by sacrificing a certain degree of correctness
 CONF_mBool(experimental_lake_ignore_lost_segment, "false");
 CONF_mInt64(experimental_lake_wait_per_put_ms, "0");
@@ -938,6 +950,10 @@ CONF_mString(lake_vacuum_retry_pattern, "*request rate*");
 CONF_mInt64(lake_vacuum_retry_max_attempts, "5");
 CONF_mInt64(lake_vacuum_retry_min_delay_ms, "10");
 CONF_mBool(enable_primary_key_recover, "false");
+CONF_mBool(lake_enable_compaction_async_write, "false");
+CONF_mInt64(lake_pk_compaction_max_input_rowsets, "5");
+// Used for control memory usage of update state cache and compaction state cache
+CONF_mInt32(lake_pk_preload_memory_limit_percent, "30");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
@@ -1003,7 +1019,7 @@ CONF_Int64(max_length_for_to_base64, "200000");
 CONF_Int64(max_length_for_bitmap_function, "1000000");
 
 // Configuration items for datacache
-CONF_mBool(datacache_enable, "false");
+CONF_Bool(datacache_enable, "false");
 CONF_mString(datacache_mem_size, "10%");
 CONF_mString(datacache_disk_size, "0");
 CONF_mString(datacache_disk_path, "${STARROCKS_HOME}/datacache/");
@@ -1047,6 +1063,7 @@ CONF_Bool(block_cache_direct_io_enable, "false");
 CONF_String(block_cache_engine, "");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
+// max wal file size in l0
 CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
 CONF_mInt64(l0_min_mem_usage, "2097152");   // 2MB
 CONF_mInt64(l0_max_mem_usage, "104857600"); // 100MB
@@ -1062,7 +1079,7 @@ CONF_mInt64(max_allow_pindex_l2_num, "5");
 // Number of max major compaction threads
 CONF_mInt32(pindex_major_compaction_num_threads, "0");
 // Limit of major compaction per disk.
-CONF_mInt32(pindex_major_compaction_limit_per_disk, "2");
+CONF_mInt32(pindex_major_compaction_limit_per_disk, "1");
 // control the persistent index schedule compaction interval
 CONF_mInt64(pindex_major_compaction_schedule_interval_seconds, "15");
 // control the local persistent index in shared_data gc/evict interval
@@ -1083,6 +1100,12 @@ CONF_mBool(enable_pindex_rebuild_in_compaction, "true");
 
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");
+
+// When query cache enabled, the operators in the drivers contains cache operator are multilane
+// operators, if the number of lanes is big, Fragment Instance would spend too much time to prepare
+// operators since the number of operators scale up with the number of lanes.
+// ranges in [1,16], default value is 4.
+CONF_mInt32(query_cache_num_lanes_per_driver, "4");
 
 // Used to limit buffer size of tablet send channel.
 CONF_mInt64(send_channel_buffer_limit, "67108864");
@@ -1166,4 +1189,27 @@ CONF_mInt64(lake_local_pk_index_unused_threshold_seconds, "86400"); // 1 day
 
 CONF_mBool(lake_enable_vertical_compaction_fill_data_cache, "false");
 
+CONF_mInt32(dictionary_cache_refresh_timeout_ms, "60000"); // 1 min
+CONF_mInt32(dictionary_cache_refresh_threadpool_size, "8");
+// json flat flag
+CONF_mBool(enable_json_flat, "true");
+
+// extract flat json column when row_num * null_factor < null_row_num
+CONF_mDouble(json_flat_null_factor, "0.3");
+
+// extract flat json column when row_num * sparsity_factor < hit_row_num
+CONF_mDouble(json_flat_sparsity_factor, "0.9");
+
+// only flatten json when the number of sub-field in the JSON exceeds the limit
+CONF_mInt32(json_flat_internal_column_min_limit, "5");
+
+// the maximum number of extracted JSON sub-field
+CONF_mInt32(json_flat_column_max, "20");
+
+// Allowable intervals for continuous generation of pk dumps
+// Disable when pk_dump_interval_seconds <= 0
+CONF_mInt64(pk_dump_interval_seconds, "3600"); // 1 hour
+
+// whether enable query profile for queries initiated by spark or flink
+CONF_mBool(enable_profile_for_external_plan, "false");
 } // namespace starrocks::config

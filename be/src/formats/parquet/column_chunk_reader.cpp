@@ -263,7 +263,7 @@ Status ColumnChunkReader::_parse_dict_page() {
     return Status::OK();
 }
 
-Status ColumnChunkReader::try_load_dictionary() {
+Status ColumnChunkReader::_try_load_dictionary() {
     if (_dict_page_parsed) {
         return Status::OK();
     }
@@ -275,6 +275,18 @@ Status ColumnChunkReader::try_load_dictionary() {
 
     RETURN_IF_ERROR(_parse_dict_page());
     return Status::OK();
+}
+
+Status ColumnChunkReader::load_dictionary_page() {
+    if (_dict_page_parsed) {
+        return Status::OK();
+    }
+
+    RETURN_IF_ERROR(_parse_page_header());
+    if (UNLIKELY(!current_page_is_dict())) {
+        return Status::InternalError("Not a dictionary page in dictionary page offset");
+    }
+    return _parse_dict_page();
 }
 
 bool ColumnChunkReader::current_page_is_dict() {

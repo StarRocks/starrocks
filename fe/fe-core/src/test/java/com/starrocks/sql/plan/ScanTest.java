@@ -529,4 +529,36 @@ public class ScanTest extends PlanTestBase {
             Assert.assertEquals(expexted, scanNodeList.get(0).getScanOptimzeOption().getCanUseMinMaxCountOpt());
         }
     }
+
+    @Test
+    public void testChangeDatePredicat() throws Exception {
+        connectContext.getSessionVariable().setCboSplitScanPredicateWithDate(true);
+        String sql = "select * from test_all_type where  id_datetime >= '2011-03-05 00:00:00'\n" +
+                "        and  id_datetime <= '2031-02-13 00:00:00';";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan,
+                "PREDICATES: ((((8: id_datetime >= '2011-03-05 00:00:00') AND (8: id_datetime < '2011-04-01 00:00:00')) " +
+                        "OR ((8: id_datetime >= '2031-02-01 00:00:00') AND (8: id_datetime <= '2031-02-13 00:00:00'))) " +
+                        "OR (((date_trunc('month', 8: id_datetime) >= '2011-04-01 00:00:00') " +
+                        "AND (date_trunc('month', 8: id_datetime) < '2012-01-01 00:00:00')) " +
+                        "OR ((date_trunc('month', 8: id_datetime) >= '2031-01-01 00:00:00') " +
+                        "AND (date_trunc('month', 8: id_datetime) < '2031-02-01 00:00:00')))) " +
+                        "OR ((date_trunc('year', 8: id_datetime) >= '2012-01-01 00:00:00') " +
+                        "AND (date_trunc('year', 8: id_datetime) < '2031-01-01 00:00:00'))");
+
+        sql = "select * from test_all_type where  id_date >= '2011-03-05'\n" +
+                "        and  id_date <= '2031-02-13';";
+        plan = getFragmentPlan(sql);
+        assertContains(plan,
+                "PREDICATES: ((((9: id_date >= '2011-03-05') AND (9: id_date < '2011-04-01')) " +
+                        "OR ((9: id_date >= '2031-02-01') AND (9: id_date <= '2031-02-13'))) " +
+                        "OR (((date_trunc('month', 9: id_date) >= '2011-04-01') " +
+                        "AND (date_trunc('month', 9: id_date) < '2012-01-01')) " +
+                        "OR ((date_trunc('month', 9: id_date) >= '2031-01-01') " +
+                        "AND (date_trunc('month', 9: id_date) < '2031-02-01')))) " +
+                        "OR ((date_trunc('year', 9: id_date) >= '2012-01-01') " +
+                        "AND (date_trunc('year', 9: id_date) < '2031-01-01'))");
+
+        connectContext.getSessionVariable().setCboSplitScanPredicateWithDate(false);
+    }
 }

@@ -317,8 +317,14 @@ Status FileReader::_read_min_max_chunk(const tparquet::RowGroup& row_group, cons
             } else {
                 // is partition column
                 auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(ctx.partition_values[col_idx]);
-                (*min_chunk)->columns()[i]->append(*const_column->data_column(), 0, 1);
-                (*max_chunk)->columns()[i]->append(*const_column->data_column(), 0, 1);
+                ColumnPtr data_column = const_column->data_column();
+                if (data_column->is_nullable()) {
+                    (*min_chunk)->columns()[i]->append_nulls(1);
+                    (*max_chunk)->columns()[i]->append_nulls(1);
+                } else {
+                    (*min_chunk)->columns()[i]->append(*data_column, 0, 1);
+                    (*max_chunk)->columns()[i]->append(*data_column, 0, 1);
+                }
             }
         } else if (!column_meta->__isset.statistics) {
             // statistics not exist in parquet file
@@ -483,16 +489,13 @@ void FileReader::_prepare_read_columns() {
 
 bool FileReader::_select_row_group(const tparquet::RowGroup& row_group) {
     size_t row_group_start = _get_row_group_start_offset(row_group);
+    const auto* scan_range = _scanner_ctx->scan_range;
+    size_t scan_start = scan_range->offset;
+    size_t scan_end = scan_range->length + scan_start;
 
-    for (auto* scan_range : _scanner_ctx->scan_ranges) {
-        size_t scan_start = scan_range->offset;
-        size_t scan_end = scan_range->length + scan_start;
-
-        if (row_group_start >= scan_start && row_group_start < scan_end) {
-            return true;
-        }
+    if (row_group_start >= scan_start && row_group_start < scan_end) {
+        return true;
     }
-
     return false;
 }
 
@@ -525,7 +528,7 @@ Status FileReader::_init_group_readers() {
             StatusOr<bool> st = _filter_group(_file_metadata->t_metadata().row_groups[i]);
             if (!st.ok()) return st.status();
             if (st.value()) {
-                LOG(INFO) << "row group " << i << " of file has been filtered by min/max conjunct";
+                DLOG(INFO) << "row group " << i << " of file has been filtered by min/max conjunct";
                 continue;
             }
 

@@ -19,8 +19,6 @@ import com.google.common.base.Strings;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
@@ -67,23 +65,20 @@ public class MaterializedViewTestBase extends PlanTestBase {
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
 
-        FeConstants.runningUnitTest = true;
-        Config.enable_experimental_mv = true;
+        // set default config for async mvs
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
 
-        connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
-        connectContext.getSessionVariable().setEnablePipelineEngine(true);
-        connectContext.getSessionVariable().setEnableQueryCache(false);
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
-        connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(3000000L);
-        connectContext.getSessionVariable().setEnableShortCircuit(false);
-        connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
-        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
-        connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
 
-        FeConstants.runningUnitTest = true;
+        if (!starRocksAssert.databaseExist("_statistics_")) {
+            StatisticsMetaManager m = new StatisticsMetaManager();
+            m.createStatisticsTablesForTest();
+        }
 
         new MockUp<MaterializedView>() {
+            /**
+             * {@link MaterializedView#getPartitionNamesToRefreshForMv(Set, boolean)}
+             */
             @Mock
             public boolean getPartitionNamesToRefreshForMv(Set<String> toRefreshPartitions,
                                                            boolean isQueryRewrite) {
@@ -92,27 +87,17 @@ public class MaterializedViewTestBase extends PlanTestBase {
         };
 
         new MockUp<UtFrameUtils>() {
+            /**
+             * {@link UtFrameUtils#isPrintPlanTableNames()}
+             */
             @Mock
             boolean isPrintPlanTableNames() {
                 return true;
             }
         };
 
-        new MockUp<PlanTestBase>() {
-            @Mock
-            boolean isIgnoreExplicitColRefIds() {
-                return true;
-            }
-        };
-
-        if (!starRocksAssert.databaseExist("_statistics_")) {
-            StatisticsMetaManager m = new StatisticsMetaManager();
-            m.createStatisticsTablesForTest();
-        }
-
         starRocksAssert.withDatabase(MATERIALIZED_DB_NAME)
                 .useDatabase(MATERIALIZED_DB_NAME);
-
     }
 
     @AfterClass
@@ -166,7 +151,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
                     String properties = this.properties != null ? "PROPERTIES (\n" +
                             this.properties + ")" : "";
                     String mvSQL = "CREATE MATERIALIZED VIEW mv0 \n" +
-                            "   DISTRIBUTED BY HASH(`"+ outputNames.get(0) +"`) BUCKETS 12\n" +
+                            " REFRESH MANUAL " +
                             properties + " AS " +
                             mv;
                     starRocksAssert.withMaterializedView(mvSQL);

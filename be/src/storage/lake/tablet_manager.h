@@ -25,8 +25,10 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/types_fwd.h"
+#include "storage/options.h"
 
 namespace starrocks {
+struct FileInfo;
 class Segment;
 class TabletSchemaPB;
 class TCreateTabletReq;
@@ -162,8 +164,9 @@ public:
     // updating the cache size where the cached object is not the one as expected.
     void update_segment_cache_size(std::string_view key, intptr_t segment_addr_hint = 0);
 
-    StatusOr<SegmentPtr> load_segment(const std::string& segment_path, int segment_id, size_t* footer_size_hint,
-                                      bool fill_data_cache, bool fill_metadata_cache, TabletSchemaPtr tablet_schema);
+    StatusOr<SegmentPtr> load_segment(const FileInfo& segment_info, int segment_id, size_t* footer_size_hint,
+                                      const LakeIOOptions& lake_io_opts, bool fill_metadata_cache,
+                                      TabletSchemaPtr tablet_schema);
 
 private:
     static std::string global_schema_cache_key(int64_t index_id);

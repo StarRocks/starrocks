@@ -136,6 +136,7 @@ StorageEngine::StorageEngine(const EngineOptions& options)
 StorageEngine::~StorageEngine() {
     // tablet manager need to destruct before set storage engine instance to nullptr because tablet may access storage
     // engine instance during their destruction.
+    _update_manager.reset();
     _tablet_manager.reset();
 #ifdef BE_TEST
     if (_s_instance == this) {
@@ -241,6 +242,8 @@ Status StorageEngine::_open(const EngineOptions& options) {
     REGISTER_GAUGE_STARROCKS_METRIC(segment_replicate_queue_count, [this]() {
         return _segment_replicate_executor->get_thread_pool()->num_queued_tasks();
     })
+
+    RETURN_IF_ERROR_WITH_WARN(_replication_txn_manager->init(dirs), "init ReplicationTxnManager failed");
 
     return Status::OK();
 }
@@ -619,6 +622,8 @@ void StorageEngine::stop() {
     JOIN_THREADS(_tablet_checkpoint_threads)
 
     JOIN_THREAD(_pk_index_major_compaction_thread)
+
+    JOIN_THREAD(_pk_dump_thread);
 
 #ifdef USE_STAROS
     JOIN_THREAD(_local_pk_index_shared_data_gc_evict_thread)

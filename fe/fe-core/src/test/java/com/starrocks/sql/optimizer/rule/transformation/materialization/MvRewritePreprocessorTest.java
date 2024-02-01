@@ -14,15 +14,20 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.MaterializationContext;
+import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
+import com.starrocks.sql.optimizer.Memo;
+import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerConfig;
@@ -49,17 +54,24 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.UtFrameUtils;
+import org.assertj.core.util.Sets;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.Arrays;
 import java.util.List;
+import java.util.PriorityQueue;
+import java.util.Queue;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 public class MvRewritePreprocessorTest extends MvRewriteTestBase {
     @BeforeClass
     public static void before() throws Exception {
         starRocksAssert.useTable("t0");
-
+        starRocksAssert.useTable("t1");
+        starRocksAssert.useTable("t2");
     }
 
     private static class TimeoutRule extends Rule {
@@ -136,7 +148,6 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
 
     @Test
     public void testPreprocessMvNonPartitionMv() throws Exception {
-        Config.enable_experimental_mv = true;
         executeInsertSql(connectContext, "insert into t0 values(10, 20, 30)");
         starRocksAssert.withMaterializedView("create materialized view mv_1 distributed by hash(`v1`) " +
                 "as select v1, v2, sum(v3) as total from t0 group by v1, v2");
@@ -270,5 +281,419 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
             LogicalOlapScanOperator scanOperator = materializationContext3.getScanMvOperator();
             Assert.assertEquals(1, scanOperator.getSelectedPartitionId().size());
         }
+    }
+
+    private MvRewritePreprocessor buildMvProcessor(String query) {
+        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+        OptimizerConfig optimizerConfig = new OptimizerConfig();
+        OptimizerContext context = new OptimizerContext(new Memo(), columnRefFactory, connectContext, optimizerConfig);
+
+        try {
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(query, connectContext);
+            QueryStatement queryStatement = (QueryStatement) stmt;
+            LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
+                    .transformWithSelectLimit(queryStatement.getQueryRelation());
+            ColumnRefSet requiredColumns = new ColumnRefSet(logicalPlan.getOutputColumn());
+            OptExpression logicalTree = logicalPlan.getRoot();
+            MvRewritePreprocessor preprocessor = new MvRewritePreprocessor(connectContext, columnRefFactory,
+                    context, logicalTree, requiredColumns);
+            return preprocessor;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    // test without max related mvs limit
+    @Test
+    public void testChooseBestRelatedMVs1() {
+        List<String> mvs = ImmutableList.of(
+                // normal mv
+                "create materialized view mv_1 distributed by random as select k1, v1, v2 from t1;",
+                // with intersected tables
+                "create materialized view mv_2 distributed by random as select t1.k1, t1.v1, t1.v2, t0.v1 as v21 " +
+                        "from t1 join t0 on t1.k1=t0.v1;",
+                // invalid mv
+                "create materialized view mv_3 distributed by random as select k1, v1, v2 from t1 " +
+                        "union all select k1, v1, v2 from t1;",
+                // with intersected tables
+                "create materialized view mv_4 distributed by random as select t1.k1, t1.v1, t1.v2, t0.v1 as v21 " +
+                        "from t1 join t0 join t2 on t1.k1=t0.v1 and t1.k1=t2.v1;"
+        );
+
+        starRocksAssert.withMaterializedViews(mvs, (obj) -> {
+            long currentTime = System.currentTimeMillis();
+            for (int i = 0; i < 4; i++) {
+                String mvName = String.format("mv_%s", i + 1);
+                MaterializedView mv = getMv(DB_NAME, mvName);
+                mv.getRefreshScheme().setLastRefreshTime(currentTime + i * 1000);
+            }
+
+            // query 1
+            {
+                String query = "select k1, v1, v2 from t1";
+                MvRewritePreprocessor preprocessor = buildMvProcessor(query);
+                OptExpression logicalTree = preprocessor.getLogicalTree();
+
+                Set<Table> queryTables = MvUtils.getAllTables(logicalTree).stream().collect(Collectors.toSet());
+                Set<MaterializedView> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);
+                Assert.assertTrue(relatedMVs.size() == 4);
+                // mv2 contains extra mvs.
+                Assert.assertTrue(containsMV(relatedMVs, "mv_1", "mv_2", "mv_3", "mv_4"));
+
+                Set<MaterializedView> validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
+                Assert.assertTrue(validMVs.size() == 2);
+                Assert.assertTrue(containsMV(validMVs, "mv_1", "mv_3"));
+
+                // if mv_3 is in the plan cache
+                MaterializedView mv3 = getMv("test", "mv_3");
+                CachingMvPlanContextBuilder.getInstance().getPlanContext(mv3, true);
+                validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
+                Assert.assertTrue(validMVs.size() == 1);
+                Assert.assertTrue(containsMV(validMVs, "mv_1"));
+            }
+
+            // query 2
+            {
+                String query = "select t1.k1, t1.v1, t1.v2, t0.v1 as v21 from t1 join t0 on t1.k1=t0.v1";
+                MvRewritePreprocessor preprocessor = buildMvProcessor(query);
+                OptExpression logicalTree = preprocessor.getLogicalTree();
+
+                Set<Table> queryTables = MvUtils.getAllTables(logicalTree).stream().collect(Collectors.toSet());
+                Set<MaterializedView> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);
+                Assert.assertTrue(relatedMVs.size() == 4);
+                // mv2 contains extra mvs.
+                Assert.assertTrue(containsMV(relatedMVs, "mv_1", "mv_2", "mv_3", "mv_4"));
+
+                Set<MaterializedView> validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
+                Assert.assertTrue(validMVs.size() == 2);
+                Assert.assertTrue(containsMV(validMVs, "mv_1", "mv_2"));
+            }
+        });
+    }
+
+    @Test
+    public void testChooseBestRelatedMVs2() {
+        List<String> mvs = ImmutableList.of(
+                // normal mv
+                "create materialized view mv_1 distributed by random as select k1, v1, v2 from t1;",
+                // with intersected tables
+                "create materialized view mv_2 distributed by random as select t1.k1, t1.v1, t1.v2, t0.v1 as v21 " +
+                        "from t1 join t0 on t1.k1=t0.v1;",
+                // invalid mv
+                "create materialized view mv_3 distributed by random as select k1, v1, v2 from t1 " +
+                        "union all select k1, v1, v2 from t1;",
+                // with intersected tables
+                "create materialized view mv_4 distributed by random as select t1.k1, t1.v1, t1.v2, t0.v1 as v21 " +
+                        "from t1 join t0 join t2 on t1.k1=t0.v1 and t1.k1=t2.v1;"
+        );
+
+        int oldVal = connectContext.getSessionVariable().getCboMaterializedViewRewriteRelatedMVsLimit();
+        connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(2);
+        starRocksAssert.withMaterializedViews(mvs, (obj) -> {
+
+            long currentTime = System.currentTimeMillis();
+            for (int i = 0; i < 4; i++) {
+                String mvName = String.format("mv_%s", i + 1);
+                MaterializedView mv = getMv(DB_NAME, mvName);
+                mv.getRefreshScheme().setLastRefreshTime(currentTime + i * 1000);
+            }
+
+            // query 1
+            {
+                String query = "select k1, v1, v2 from t1";
+                MvRewritePreprocessor preprocessor = buildMvProcessor(query);
+                OptExpression logicalTree = preprocessor.getLogicalTree();
+
+                Set<Table> queryTables = MvUtils.getAllTables(logicalTree).stream().collect(Collectors.toSet());
+                Set<MaterializedView> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);
+                Assert.assertTrue(relatedMVs.size() == 4);
+                // mv2 contains extra mvs.
+                Assert.assertTrue(containsMV(relatedMVs, "mv_1", "mv_2", "mv_3", "mv_4"));
+
+                Set<MaterializedView> validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
+                Assert.assertTrue(validMVs.size() == 2);
+                Assert.assertTrue(containsMV(validMVs, "mv_1", "mv_3"));
+
+                connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(1);
+                validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
+                Assert.assertTrue(validMVs.size() == 1);
+                Assert.assertTrue(containsMV(validMVs, "mv_3"));
+
+                // if mv_3 is in the plan cache
+                connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(2);
+                MaterializedView mv3 = getMv("test", "mv_3");
+                CachingMvPlanContextBuilder.getInstance().getPlanContext(mv3, true);
+                validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
+                Assert.assertTrue(validMVs.size() == 1);
+                Assert.assertTrue(containsMV(validMVs, "mv_1"));
+            }
+
+            // query 2
+            {
+                String query = "select t1.k1, t1.v1, t1.v2, t0.v1 as v21 from t1 join t0 on t1.k1=t0.v1";
+                MvRewritePreprocessor preprocessor = buildMvProcessor(query);
+                OptExpression logicalTree = preprocessor.getLogicalTree();
+
+                Set<Table> queryTables = MvUtils.getAllTables(logicalTree).stream().collect(Collectors.toSet());
+                Set<MaterializedView> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);
+                Assert.assertTrue(relatedMVs.size() == 4);
+                // mv2 contains extra mvs.
+                Assert.assertTrue(containsMV(relatedMVs, "mv_1", "mv_2", "mv_3", "mv_4"));
+
+                connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(2);
+                Set<MaterializedView> validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
+                Assert.assertTrue(validMVs.size() == 2);
+                Assert.assertTrue(containsMV(validMVs, "mv_1", "mv_2"));
+
+                // set it to 1
+                connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(1);
+                validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
+                Assert.assertTrue(validMVs.size() == 1);
+                Assert.assertTrue(containsMV(validMVs, "mv_2"));
+            }
+        });
+        connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(oldVal);
+    }
+
+    @Test
+    public void testChooseBestRelatedMVs3() {
+        List<String> mvs = ImmutableList.of(
+                "create materialized view mv_1 distributed by random as select k1, v1, v2 from t1 where k1 > 1;",
+                "create materialized view mv_2 distributed by random as select k1, v1, v2 from t1 where k1 > 2;",
+                "create materialized view mv_3 distributed by random as select k1, v1, v2 from t1 where k1 > 3;",
+                "create materialized view mv_4 distributed by random as select k1, v1, v2 from t1 where k1 > 4;",
+                "create materialized view mv_5 distributed by random as select k1, v1, v2 from t1 where k1 > 5;"
+        );
+
+        starRocksAssert.withMaterializedViews(mvs, (obj) -> {
+            long currentTime = System.currentTimeMillis();
+            {
+                Queue<MvRewritePreprocessor.MVCorrelation> bestRelatedMVs = new PriorityQueue<>();
+                for (int i = 0; i < 5; i++) {
+                    String mvName = String.format("mv_%s", i + 1);
+                    MaterializedView mv = getMv(DB_NAME, mvName);
+                    mv.getRefreshScheme().setLastRefreshTime(currentTime + i * 1000);
+                    MvRewritePreprocessor.MVCorrelation mvCorrelation = new MvRewritePreprocessor.MVCorrelation(mv,
+                            i, i, currentTime + i * 10);
+                    bestRelatedMVs.add(mvCorrelation);
+                }
+
+                for (int i = 0; i < 5; i++) {
+                    MvRewritePreprocessor.MVCorrelation mvCorrelation = bestRelatedMVs.poll();
+                    String mvName = String.format("mv_%s", i + 1);
+                    Assert.assertTrue(mvCorrelation.getMv().getName().equals(mvName));
+                }
+            }
+
+            {
+                Queue<MvRewritePreprocessor.MVCorrelation> bestRelatedMVs = new PriorityQueue<>();
+                for (int i = 0; i < 5; i++) {
+                    String mvName = String.format("mv_%s", i + 1);
+                    MaterializedView mv = getMv(DB_NAME, mvName);
+                    mv.getRefreshScheme().setLastRefreshTime(currentTime + i * 1000);
+                    MvRewritePreprocessor.MVCorrelation mvCorrelation = new MvRewritePreprocessor.MVCorrelation(mv,
+                            1, i, currentTime + i * 10);
+                    bestRelatedMVs.add(mvCorrelation);
+                }
+
+                for (int i = 0; i < 5; i++) {
+                    MvRewritePreprocessor.MVCorrelation mvCorrelation = bestRelatedMVs.poll();
+                    String mvName = String.format("mv_%s", 5 - i);
+                    Assert.assertTrue(mvCorrelation.getMv().getName().equals(mvName));
+                }
+            }
+
+            {
+                Queue<MvRewritePreprocessor.MVCorrelation> bestRelatedMVs = new PriorityQueue<>();
+                for (int i = 0; i < 5; i++) {
+                    String mvName = String.format("mv_%s", i + 1);
+                    MaterializedView mv = getMv(DB_NAME, mvName);
+                    mv.getRefreshScheme().setLastRefreshTime(currentTime + i * 1000);
+                    MvRewritePreprocessor.MVCorrelation mvCorrelation = new MvRewritePreprocessor.MVCorrelation(mv,
+                            1, 0, currentTime + i * 10);
+                    bestRelatedMVs.add(mvCorrelation);
+                }
+
+                for (int i = 0; i < 5; i++) {
+                    MvRewritePreprocessor.MVCorrelation mvCorrelation = bestRelatedMVs.poll();
+                    String mvName = String.format("mv_%s", i + 1);
+                    Assert.assertTrue(mvCorrelation.getMv().getName().equals(mvName));
+                }
+            }
+        });
+    }
+
+    @Test
+    public void testChooseBestRelatedMVs4() {
+        List<String> mvs = ImmutableList.of(
+                "create materialized view mv_1 distributed by random as select k1, v1, v2 from t1 where k1 > 1;",
+                "create materialized view mv_2 distributed by random as select k1, v1, v2 from t1 where k1 > 2;",
+                "create materialized view mv_3 distributed by random as select k1, v1, v2 from t1 where k1 > 3;",
+                "create materialized view mv_4 distributed by random as select k1, v1, v2 from t1 where k1 > 4;",
+                "create materialized view mv_5 distributed by random as select k1, v1, v2 from t1 where k1 > 5;"
+        );
+
+        int oldVal = connectContext.getSessionVariable().getCboMaterializedViewRewriteRelatedMVsLimit();
+        starRocksAssert.withMaterializedViews(mvs, (obj) -> {
+            long currentTime = System.currentTimeMillis();
+            for (int i = 0; i < 5; i++) {
+                String mvName = String.format("mv_%s", i + 1);
+                MaterializedView mv = getMv(DB_NAME, mvName);
+                mv.getRefreshScheme().setLastRefreshTime(currentTime + i * 1000);
+            }
+
+            // query 1
+            {
+                String query = "select k1, v1, v2 from t1 where k1 > 3";
+                MvRewritePreprocessor preprocessor = buildMvProcessor(query);
+                OptExpression logicalTree = preprocessor.getLogicalTree();
+
+                Set<Table> queryTables = MvUtils.getAllTables(logicalTree).stream().collect(Collectors.toSet());
+                Set<MaterializedView> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);
+                Assert.assertTrue(relatedMVs.size() == 5);
+                // mv2 contains extra mvs.
+                Assert.assertTrue(containsMV(relatedMVs, "mv_1", "mv_2", "mv_3", "mv_4", "mv_5"));
+
+                connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(2);
+                Set<MaterializedView> validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
+                Assert.assertTrue(validMVs.size() == 2);
+                Assert.assertTrue(containsMV(validMVs, "mv_4", "mv_5"));
+
+                connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(1);
+                validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
+                Assert.assertTrue(validMVs.size() == 1);
+                Assert.assertTrue(containsMV(validMVs, "mv_5"));
+            }
+        });
+        connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(oldVal);
+    }
+
+    // with view
+    @Test
+    public void testChooseBestRelatedMVs5() {
+        int mvNum = 100;
+
+        List<String> mvs = Lists.newArrayList();
+        for (int i = 0; i < mvNum; i++) {
+            String view = String.format("create view test_view_%s as select k1, v1, v2 from t1 where k1 > %s", i, i);
+            try {
+                starRocksAssert.withView(view);
+            } catch (Exception e) {
+                Assert.fail();
+            }
+            mvs.add(String.format("create materialized view mv_%s distributed by random as select * from test_view_%s", i, i));
+        }
+
+        int oldVal = connectContext.getSessionVariable().getCboMaterializedViewRewriteRelatedMVsLimit();
+        starRocksAssert.withMaterializedViews(mvs, (obj) -> {
+            long currentTime = System.currentTimeMillis();
+            for (int i = 0; i < mvNum; i++) {
+                String mvName = String.format("mv_%s", i);
+                MaterializedView mv = getMv(DB_NAME, mvName);
+                mv.getRefreshScheme().setLastRefreshTime(currentTime + i * 1000);
+            }
+
+            // query 1
+            {
+                String query = "select k1, v1, v2 from t1 where k1 > 3";
+                MvRewritePreprocessor preprocessor = buildMvProcessor(query);
+                OptExpression logicalTree = preprocessor.getLogicalTree();
+
+                Set<Table> queryTables = MvUtils.getAllTables(logicalTree).stream().collect(Collectors.toSet());
+                Set<MaterializedView> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);
+                Assert.assertTrue(relatedMVs.size() == mvNum);
+                Set<MaterializedView> validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
+                Assert.assertTrue(validMVs.size() == oldVal);
+                Set<String> expectMvs = Sets.newHashSet();
+                for (int i = 0; i < oldVal; i++) {
+                    String mvName = String.format("mv_%s", mvNum - i - 1);
+                    expectMvs.add(mvName);
+                }
+                for (MaterializedView mv : validMVs) {
+                    Assert.assertTrue(expectMvs.contains(mv.getName()));
+                }
+                Set<MvRewritePreprocessor.MvWithPlanContext> mvWithPlanContexts =
+                        preprocessor.getMvWithPlanContext(validMVs);
+                Assert.assertTrue(mvWithPlanContexts.size() == oldVal * 2);
+
+                connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(2);
+                validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
+                Assert.assertTrue(validMVs.size() == 2);
+                Assert.assertTrue(containsMV(validMVs, "mv_98", "mv_99"));
+                mvWithPlanContexts = preprocessor.getMvWithPlanContext(validMVs);
+                Assert.assertTrue(mvWithPlanContexts.size() == 2 * 2);
+
+                connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(1);
+                validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
+                Assert.assertTrue(validMVs.size() == 1);
+                Assert.assertTrue(containsMV(validMVs, "mv_99"));
+
+                mvWithPlanContexts = preprocessor.getMvWithPlanContext(validMVs);
+                Assert.assertTrue(mvWithPlanContexts.size() == 1 * 2);
+            }
+        });
+        connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(oldVal);
+    }
+
+    private boolean containsMV(Set<MaterializedView> mvs, String... expects) {
+        Set<String> mvNames = mvs.stream().map(mv -> mv.getName()).collect(Collectors.toSet());
+        if (mvNames.size() != Arrays.stream(expects).count()) {
+            return false;
+        }
+        for (String exp : expects) {
+            if (!mvNames.contains(exp)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    @Test
+    public void testValidPlan() {
+        String sql = "create materialized view invalid_plan_mv distributed by random " +
+                "as select count(distinct cnt) from (select count(v1) as cnt from t1 group by k1) t";
+        starRocksAssert.withMaterializedView(sql, (obj) -> {
+            String mvName = (String) obj;
+            MaterializedView mv = getMv(DB_NAME, mvName);
+            MvPlanContext mvPlanContext = new MaterializedViewOptimizer().optimize(mv, connectContext, true);
+            Assert.assertTrue(!mvPlanContext.isValidMvPlan());
+        });
+    }
+
+    @Test
+    public void testValidPlanWithView() {
+        String view = "create view view0 " +
+                "as select count(distinct cnt) from (select count(v1) as cnt from t1 group by k1) t";
+        try {
+            starRocksAssert.withView(view);
+        } catch (Exception e) {
+            Assert.fail();
+        }
+        String sql = "create materialized view invalid_plan_mv distributed by random as select * from view0";
+        starRocksAssert.withMaterializedView(sql, (obj) -> {
+            String mvName = (String) obj;
+            MaterializedView mv = getMv(DB_NAME, mvName);
+            MvPlanContext mvPlanContext = new MaterializedViewOptimizer().optimize(mv, connectContext, true);
+            Assert.assertTrue(!mvPlanContext.isValidMvPlan());
+            mvPlanContext = new MaterializedViewOptimizer().optimize(mv, connectContext, false);
+            Assert.assertTrue(mvPlanContext.isValidMvPlan());
+
+
+            String query = "select * from view0";
+            MvRewritePreprocessor preprocessor = buildMvProcessor(query);
+            OptExpression logicalTree = preprocessor.getLogicalTree();
+
+            Set<Table> queryTables = MvUtils.getAllTables(logicalTree).stream().collect(Collectors.toSet());
+            Set<MaterializedView> relatedMVs = preprocessor.getRelatedMVs(queryTables, false);
+            Assert.assertTrue(relatedMVs.size() == 1);
+            Assert.assertTrue(containsMV(relatedMVs, "invalid_plan_mv"));
+
+            Set<MaterializedView> validMVs = preprocessor.chooseBestRelatedMVs(queryTables, relatedMVs, logicalTree);
+            Assert.assertTrue(validMVs.size() == 1);
+            Assert.assertTrue(containsMV(validMVs, "invalid_plan_mv"));
+            Set<MvRewritePreprocessor.MvWithPlanContext> mvWithPlanContexts =
+                    preprocessor.getMvWithPlanContext(validMVs);
+            Assert.assertTrue(mvWithPlanContexts.size() == 1);
+        });
     }
 }

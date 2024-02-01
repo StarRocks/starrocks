@@ -14,13 +14,12 @@
 
 #pragma once
 
-#include "common/status.h"
-#include "storage/olap_common.h"
-#include "storage/olap_define.h"
+#include "storage/file_stream_converter.h"
 #include "storage/storage_engine.h"
 
 namespace starrocks {
 
+class TabletSchemaPB;
 class ReplicationUtils {
 public:
     static Status make_remote_snapshot(const std::string& host, int32_t be_port, TTabletId tablet_id,
@@ -34,10 +33,10 @@ public:
 
     static Status download_remote_snapshot(const std::string& host, int32_t http_port, const std::string& remote_token,
                                            const std::string& remote_snapshot_path, TTabletId remote_tablet_id,
-                                           TSchemaHash remote_schema_hash, DataDir* data_dir,
-                                           const std::string& local_path_prefix,
-                                           const std::function<std::string(const std::string&)>& name_converter =
-                                                   std::function<std::string(const std::string&)>());
+                                           TSchemaHash remote_schema_hash,
+                                           const std::function<StatusOr<std::unique_ptr<FileStreamConverter>>(
+                                                   const std::string& file_name, uint64_t file_size)>& file_converters,
+                                           DataDir* data_dir = nullptr);
 
     static StatusOr<std::string> download_remote_snapshot_file(const std::string& host, int32_t http_port,
                                                                const std::string& remote_token,
@@ -45,6 +44,56 @@ public:
                                                                TTabletId remote_tablet_id,
                                                                TSchemaHash remote_schema_hash,
                                                                const std::string& file_name, uint64_t timeout_sec);
+
+    static constexpr uint32_t kFakeColumnUniqueId = -1;
+
+    template <typename T>
+    static void calc_column_unique_id_map(const T& source_columns, const T& target_columns,
+                                          std::unordered_map<uint32_t, uint32_t>* column_unique_id_map) {
+        std::unordered_map<std::string_view, typename T::const_pointer> target_columns_map;
+        for (const auto& target_column : target_columns) {
+            target_columns_map.emplace(target_column.name(), &target_column);
+        }
+
+        bool need_convert = false;
+        for (const auto& source_column : source_columns) {
+            auto iter = target_columns_map.find(source_column.name());
+            if (iter != target_columns_map.end()) {
+                const auto& target_column = *iter->second;
+                if (source_column.unique_id() != target_column.unique_id()) {
+                    need_convert = true;
+                }
+                column_unique_id_map->emplace(source_column.unique_id(), target_column.unique_id());
+            }
+        }
+
+        if (need_convert) {
+            column_unique_id_map->emplace(kFakeColumnUniqueId, 0);
+        } else {
+            column_unique_id_map->clear();
+        }
+    }
+
+    template <typename T>
+    static void convert_column_unique_ids(T* columns, std::unordered_map<uint32_t, uint32_t>* column_unique_id_map) {
+        if (column_unique_id_map == nullptr || column_unique_id_map->empty()) {
+            return;
+        }
+
+        for (auto& column : *columns) {
+            auto iter = column_unique_id_map->find(column.unique_id());
+            if (iter != column_unique_id_map->end()) {
+                column.set_unique_id(iter->second);
+            } else {
+                uint32_t column_unique_id = --column_unique_id_map->operator[](kFakeColumnUniqueId);
+                column.set_unique_id(column_unique_id);
+                column_unique_id_map->emplace(column.unique_id(), column_unique_id);
+            }
+        }
+    }
+
+    static Status convert_rowset_txn_meta(RowsetTxnMetaPB* rowset_txn_meta,
+                                          const std::unordered_map<uint32_t, uint32_t>& column_unique_id_map);
 };
 
 } // namespace starrocks

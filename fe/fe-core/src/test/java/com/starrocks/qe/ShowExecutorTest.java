@@ -79,6 +79,7 @@ import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.QualifiedName;
@@ -351,12 +352,6 @@ public class ShowExecutorTest {
                 minTimes = 0;
                 result = globalStateMgr;
 
-                GlobalStateMgr.getDdlStmt((Table) any, (List) any, (List) any, (List) any, anyBoolean, anyBoolean);
-                minTimes = 0;
-
-                GlobalStateMgr.getDdlStmt((Table) any, (List) any, null, null, anyBoolean, anyBoolean);
-                minTimes = 0;
-
                 GlobalStateMgr.getCurrentState().getMetadataMgr().listDbNames("default_catalog");
                 minTimes = 0;
                 result = Lists.newArrayList("testDb");
@@ -592,8 +587,6 @@ public class ShowExecutorTest {
         Assert.assertEquals(4, resultSet2.getResultRows().get(0).size());
     }
 
-
-
     @Test
     public void testShowCreateDb() throws AnalysisException, DdlException {
         ctx.setGlobalStateMgr(globalStateMgr);
@@ -629,16 +622,6 @@ public class ShowExecutorTest {
         ShowResultSet resultSet = executor.execute();
 
         Assert.fail("No Exception throws.");
-    }
-
-    @Test
-    public void testShowCreateTableEmptyTbl() throws AnalysisException, DdlException {
-        ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("testDb", "emptyTable"),
-                ShowCreateTableStmt.CreateTableType.TABLE);
-        ShowExecutor executor = new ShowExecutor(ctx, stmt);
-        ShowResultSet resultSet = executor.execute();
-
-        Assert.assertFalse(resultSet.next());
     }
 
     @Test
@@ -742,15 +725,24 @@ public class ShowExecutorTest {
             }
         };
 
+        NodeMgr nodeMgr = new NodeMgr();
         new MockUp<GlobalStateMgr>() {
             @Mock
-            SystemInfoService getCurrentSystemInfo() {
-                return clusterInfo;
+            NodeMgr getNodeMgr() {
+                return nodeMgr;
             }
 
             @Mock
             StarOSAgent getStarOSAgent() {
                 return starosAgent;
+            }
+        };
+
+        new Expectations(nodeMgr) {
+            {
+                nodeMgr.getClusterInfo();
+                minTimes = 0;
+                result = clusterInfo;
             }
         };
 
@@ -777,25 +769,25 @@ public class ShowExecutorTest {
             }
         };
 
-
         ShowBackendsStmt stmt = new ShowBackendsStmt();
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
 
-        Assert.assertEquals(29, resultSet.getMetaData().getColumnCount());
+        Assert.assertEquals(30, resultSet.getMetaData().getColumnCount());
         Assert.assertEquals("BackendId", resultSet.getMetaData().getColumn(0).getName());
         Assert.assertEquals("NumRunningQueries", resultSet.getMetaData().getColumn(23).getName());
         Assert.assertEquals("MemUsedPct", resultSet.getMetaData().getColumn(24).getName());
         Assert.assertEquals("CpuUsedPct", resultSet.getMetaData().getColumn(25).getName());
         Assert.assertEquals("DataCacheMetrics", resultSet.getMetaData().getColumn(26).getName());
-        Assert.assertEquals("StarletPort", resultSet.getMetaData().getColumn(27).getName());
-        Assert.assertEquals("WorkerId", resultSet.getMetaData().getColumn(28).getName());
+        Assert.assertEquals("StarletPort", resultSet.getMetaData().getColumn(28).getName());
+        Assert.assertEquals("WorkerId", resultSet.getMetaData().getColumn(29).getName());
 
         Assert.assertTrue(resultSet.next());
+        System.out.println(resultSet);
         Assert.assertEquals("1", resultSet.getString(0));
         Assert.assertEquals("0", resultSet.getString(23));
         Assert.assertEquals("N/A", resultSet.getString(26));
-        Assert.assertEquals("5", resultSet.getString(28));
+        Assert.assertEquals("5", resultSet.getString(29));
     }
 
     @Test
@@ -805,6 +797,27 @@ public class ShowExecutorTest {
 
         ComputeNode node = new ComputeNode(1L, "127.0.0.1", 80);
         node.updateResourceUsage(10, 100L, 1L, 30);
+
+        NodeMgr nodeMgr = new NodeMgr();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            NodeMgr getNodeMgr() {
+                return nodeMgr;
+            }
+
+            @Mock
+            StarOSAgent getStarOSAgent() {
+                return starosAgent;
+            }
+        };
+
+        new Expectations(nodeMgr) {
+            {
+                nodeMgr.getClusterInfo();
+                minTimes = 0;
+                result = clusterInfo;
+            }
+        };
 
         new MockUp<SystemInfoService>() {
             @Mock
@@ -818,18 +831,6 @@ public class ShowExecutorTest {
                     return node;
                 }
                 return null;
-            }
-        };
-
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            SystemInfoService getCurrentSystemInfo() {
-                return clusterInfo;
-            }
-
-            @Mock
-            StarOSAgent getStarOSAgent() {
-                return starosAgent;
             }
         };
 
@@ -1053,20 +1054,20 @@ public class ShowExecutorTest {
             }
         };
 
-
         ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("hive_catalog", "hive_db", "test_table"),
                 ShowCreateTableStmt.CreateTableType.TABLE);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
         Assert.assertEquals("test_table", resultSet.getResultRows().get(0).get(0));
         Assert.assertEquals("CREATE TABLE `test_table` (\n" +
-                "  `id` int(11) DEFAULT NULL COMMENT \"id\",\n" +
-                "  `name` varchar DEFAULT NULL,\n" +
-                "  `year` int(11) DEFAULT NULL,\n" +
-                "  `dt` int(11) DEFAULT NULL\n" +
-                ")\n" +
-                "PARTITION BY ( year, dt )\n" +
-                "PROPERTIES (\"location\" = \"hdfs://hadoop/hive/warehouse/test.db/test\");", resultSet.getResultRows().get(0).get(1));
+                        "  `id` int(11) DEFAULT NULL COMMENT \"id\",\n" +
+                        "  `name` varchar DEFAULT NULL,\n" +
+                        "  `year` int(11) DEFAULT NULL,\n" +
+                        "  `dt` int(11) DEFAULT NULL\n" +
+                        ")\n" +
+                        "PARTITION BY ( year, dt )\n" +
+                        "PROPERTIES (\"location\" = \"hdfs://hadoop/hive/warehouse/test.db/test\");",
+                resultSet.getResultRows().get(0).get(1));
     }
 
     @Test

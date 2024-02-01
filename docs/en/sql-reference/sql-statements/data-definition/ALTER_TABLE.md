@@ -19,9 +19,9 @@ Modifies an existing table, including:
 - [Atomic swap](#swap)
 - [Manual data version compaction](#manual-compaction-from-31)
 
-> **NOTE**
->
-> This operation requires the ALTER privilege on the destination table.
+:::tip
+This operation requires the ALTER privilege on the destination table.
+:::
 
 ## Syntax
 
@@ -33,7 +33,7 @@ alter_clause1[, alter_clause2, ...]
 `alter_clause` can held the following operations: rename, comment, partition, bucket, column, rollup index, bitmap index, table property, swap, and compaction.
 
 - rename: renames a table, rollup index, or partition. **Note that column names cannot be modified.**
-- comment: modifies the table comment (supported from **v3.1 onwards**).
+- comment: modifies the table comment (supported from **v3.1 onwards**). Currently, column comments cannot be modified.
 - partition: modifies partition properties, drops a partition, or adds a partition.
 - bucket: modifies the bucketing method and number of buckets.
 - column: adds, drops, or reorders columns, or modifies column type.
@@ -80,6 +80,10 @@ Syntax:
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 ```
+
+:::tip
+Currently, column comments cannot be modified.
+:::
 
 ### Modify partition
 
@@ -166,8 +170,8 @@ DROP TEMPORARY PARTITION <partition_name>
 
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
-    MODIFY PARTITION { <partition_name> | partition_name_list | (*) }
-        SET ("key" = "value", ...);
+MODIFY PARTITION { <partition_name> | ( <partition1_name> [, <partition2_name> ...] ) | (*) }
+SET ("key" = "value", ...);
 ```
 
 **Usages**
@@ -336,9 +340,9 @@ Syntax:
 
 Note:
 
-1. If you add a value column to an aggregate table, you need to specify `agg_type`.
+1. If you add a value column to an Aggregate table, you need to specify `agg_type`.
 
-2. If you add a key column to a non-aggregate table, you need to specify the KEY keyword.
+2. If you add a key column to a non-Aggregate table, you need to specify the KEY keyword.
 
 3. You cannot add a column that already exists in the base index to the rollup index. (You can create another rollup index if needed.)
 
@@ -543,7 +547,7 @@ Bitmap index supports the following modifications:
 Syntax:
 
 ```sql
- ALTER TABLE [<db_name>.]<tbl_name>
+ALTER TABLE [<db_name>.]<tbl_name>
 ADD INDEX index_name (column [, ...],) [USING BITMAP] [COMMENT 'balabala'];
 ```
 
@@ -609,8 +613,13 @@ Before v3.1, compaction is performed in two ways:
 Starting from v3.1, StarRocks offers a SQL interface for users to manually perform compaction by running SQL commands. They can choose a specific table or partition for compaction. This provides more flexibility and control over the compaction process.
 
 Syntax:
+```SQL
+ALTER TABLE <tbl_name> [ BASE | COMULATIVE ] COMPACT [ <partition_name> | ( <partition1_name> [, <partition2_name> ...] ) ]
+```
 
-```sql
+That is:
+
+```SQL
 -- Perform compaction on the entire table.
 ALTER TABLE <tbl_name> COMPACT
 

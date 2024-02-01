@@ -108,7 +108,7 @@ public class AuditEventProcessorTest {
 
     @Test
     public void testAuditEventProcessor() throws IOException {
-        AuditEventProcessor processor = GlobalStateMgr.getCurrentAuditEventProcessor();
+        AuditEventProcessor processor = GlobalStateMgr.getCurrentState().getAuditEventProcessor();
         long start = System.currentTimeMillis();
         for (int i = 0; i < 10000; i++) {
             AuditEvent event = new AuditEvent.AuditEventBuilder().setEventType(EventType.AFTER_QUERY)

@@ -70,7 +70,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 #### ignore_unknown_log_id
 
-- 含义：是否忽略未知的 logID。当 FE 回滚到低版本时，可能存在低版本 BE 无法识别的 logID。<br />如果为 TRUE，则 FE 会忽略这些 logID；否则 FE 会退出。
+- 含义：是否忽略未知的 logID。当 FE 回滚到低版本时，可能存在低版本 FE 无法识别的 logID。<br />如果为 TRUE，则 FE 会忽略这些 logID；否则 FE 会退出。
 - 默认值：FALSE
 
 #### ignore_materialized_view_error
@@ -286,6 +286,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 默认值：10000000
 - 引入版本：v3.2
 
+#### enable_statistic_collect_on_first_load
+
+- 含义：当空表第一次导入数据时，是否自动触发统计信息采集。如果一张表包含多个分区，只要是某个空的分区第一次导入数据，都会触发该分区的统计信息采集。如果系统频繁创建新表并且导入数据，会存在一定内存和 CPU 开销。
+- 默认值：true
+- 引入版本：v3.1
+
 #### enable_local_replica_selection
 
 - 含义：是否选择本地副本进行查询。本地副本可以减少数据传输的网络时延。<br />如果设置为 true，优化器优先选择与当前 FE 相同 IP 的 BE 节点上的 tablet 副本。设置为 false 表示选择可选择本地或非本地副本进行查询。
@@ -477,7 +483,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 #### enable_sync_publish
 
-- 含义：是否在导入事务 publish 阶段同步执行 apply 任务，仅适用于主键模型表。取值：
+- 含义：是否在导入事务 publish 阶段同步执行 apply 任务，仅适用于主键表。取值：
   - `TRUE`（默认）：导入事务 publish 阶段同步执行 apply 任务，即 apply 任务完成后才会返回导入事务 publish 成功，此时所导入数据真正可查。因此当导入任务一次导入的数据量比较大，或者导入频率较高时，开启该参数可以提升查询性能和稳定性，但是会增加导入耗时。
   - `FALSE`：在导入事务 publish 阶段异步执行 apply 任务，即在导入事务 publish 阶段 apply 任务提交之后立即返回导入事务 publish 成功，然而此时导入数据并不真正可查。这时并发的查询需要等到 apply 任务完成或者超时，才能继续执行。因此当导入任务一次导入的数据量比较大，或者导入频率较高时，关闭该参数会影响查询性能和稳定性。
 - 默认值：TRUE
@@ -503,7 +509,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 #### enable_auto_tablet_distribution
 
-- 含义：是否开启自动设置分桶功能。<ul><li>设置为 `true` 表示开启，您在建表或新增分区时无需指定分桶数目，StarRocks 自动决定分桶数量。自动设置分桶数目的策略，请参见[确定分桶数量](../table_design/Data_distribution.md#设置分桶数量)。</li><li>设置为 `false` 表示关闭，您在建表时需要手动指定分桶数量。<br />新增分区时，如果您不指定分桶数量，则新分区的分桶数量继承建表时候的分桶数量。当然您也可以手动指定新增分区的分桶数量。</li></ul>
+- 含义：是否开启自动设置分桶功能。<ul><li>设置为 `true` 表示开启，您在建表或新增分区时无需指定分桶数目，StarRocks 自动决定分桶数量。自动设置分桶数目的策略，请参见[设置分桶数量](../table_design/Data_distribution.md#设置分桶数量)。</li><li>设置为 `false` 表示关闭，您在建表时需要手动指定分桶数量。<br />新增分区时，如果您不指定分桶数量，则新分区的分桶数量继承建表时候的分桶数量。当然您也可以手动指定新增分区的分桶数量。</li></ul>
 - 默认值：TRUE
 - 引入版本：2.5.6
 
@@ -590,12 +596,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 #### tablet_sched_balance_load_disk_safe_threshold
 
-- 含义：判断 BE 磁盘使用率是否均衡的阈值。只有 `tablet_sched_balancer_strategy` 设置为 `disk_and_tablet`时，该参数才生效。<br />如果所有 BE 的磁盘使用率低于 50%，认为磁盘使用均衡。<br />对于 disk_and_tablet 策略，如果最大和最小 BE 磁盘使用率之差高于 10%，认为磁盘使用不均衡，会触发 tablet 重新均衡。参数别名`balance_load_disk_safe_threshold`。
+- 含义：判断 BE 磁盘使用率是否均衡的百分比阈值。如果所有 BE 的磁盘使用率低于该值，认为磁盘使用均衡。当有 BE 磁盘使用率超过该阈值时，如果最大和最小 BE 磁盘使用率之差高于 10%，则认为磁盘使用不均衡，会触发 Tablet 重新均衡。参数别名`balance_load_disk_safe_threshold`。
 - 默认值：0.5
 
 #### tablet_sched_balance_load_score_threshold
 
-- 含义：用于判断 BE 负载是否均衡。只有 `tablet_sched_balancer_strategy` 设置为 `be_load_score`时，该参数才生效。<br />负载比平均负载低 10% 的 BE 处于低负载状态，比平均负载高 10% 的 BE 处于高负载状态。参数别名 `balance_load_score_threshold`。
+- 含义：用于判断 BE 负载是否均衡的百分比阈值。如果一个 BE 的负载低于所有 BE 的平均负载，且差值大于该阈值，则认为该 BE 处于低负载状态。相反，如果一个 BE 的负载比平均负载高且差值大于该阈值，则认为该 BE 处于高负载状态。参数别名 `balance_load_score_threshold`。
 - 默认值：0.1
 
 #### tablet_sched_repair_delay_factor_second
@@ -1004,7 +1010,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 含义：FE 节点上 MySQL 服务器的端口。
 - 默认值：9030
 
-#### mysql_service_nio_enabled  
+#### mysql_service_nio_enabled
 
 - 含义：是否开启 MySQL 服务器的异步 I/O 选项。
 - 默认值：TRUE
@@ -1061,9 +1067,14 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 含义：Heartbeat Manager 中存储心跳任务的阻塞队列大小。
 - 默认值：1024
 
-#### metadata_failure_recovery
+#### bdbje_reset_election_group
 
-- 含义：是否强制重置 FE 的元数据。请谨慎使用该配置项。
+- 含义：是否重置 BDBJE 复制组。如果设置为 `TRUE`，FE 将重置 BDBJE 复制组（即删除所有 FE 节点的信息）并以 Leader 身份启动。重置后，该 FE 将成为集群中唯一的成员，其他 FE 节点通过 `ALTER SYSTEM ADD/DROP FOLLOWER/OBSERVER 'xxx'` 重新加入该集群。仅当无法成功选举出 leader FE 时（因为大部分 follower FE 数据已损坏）才使用此配置。该参数用来替代 `metadata_failure_recovery`。
+- 默认值：FALSE
+
+#### metadata_journal_ignore_replay_failure
+
+- 含义：是否忽略回放失败的日志。设置为 `TRUE` 表示忽略回放失败的日志，但是对于会损坏集群数据的失败，此配置并不生效。
 - 默认值：FALSE
 
 #### edit_log_port
@@ -1099,7 +1110,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 含义：允许回滚的最大事务数。
 - 默认值：100
 
-#### bdbje_replica_ack_timeout_second  
+#### bdbje_replica_ack_timeout_second
 
 - 含义：FE 所在 StarRocks 集群中，元数据从 Leader FE 写入到多个 Follower FE 时，Leader FE 等待足够多的 Follower FE 发送 ACK 消息的超时时间。当写入的元数据较多时，可能返回 ACK 的时间较长，进而导致等待超时。如果超时，会导致写元数据失败，FE 进程退出，此时可以适当地调大该参数取值。
 - 单位：秒
@@ -1144,7 +1155,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 - 含义：导入作业的轮询间隔。
 - 单位：秒。
-- 默认值：5  
+- 默认值：5
 
 #### transaction_clean_interval_second
 
@@ -1201,10 +1212,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 ### 存储（FE 静态）
 
-#### tablet_sched_balancer_strategy
-
-- 含义：Tablet 均衡策略。参数别名为 `tablet_balancer_strategy`。取值范围：`disk_and_tablet` 和 `be_load_score`。
-- 默认值：`disk_and_tablet`
 
 #### tablet_sched_storage_cooldown_second
 
@@ -1245,7 +1252,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 #### aws_s3_region
 
-- 含义：需访问的 S3 存储空间的地区，如 `us-west-2`。  
+- 含义：需访问的 S3 存储空间的地区，如 `us-west-2`。
 
 #### aws_s3_endpoint
 
@@ -1364,3 +1371,19 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 - 含义：是否开启定期收集指标 (Metrics) 的功能。取值范围：`TRUE` 和 `FALSE`。`TRUE` 表示开该功能。`FALSE`表示关闭该功能。
 - 默认值：TRUE
+
+#### jdbc_connection_pool_size
+
+- 含义：访问 JDBC Catalog 时，JDBC Connection Pool 的容量上限。
+- 默认值：8
+
+#### jdbc_minimum_idle_connections
+
+- 含义：访问 JDBC Catalog 时，JDBC Connection Pool 中处于 idle 状态的连接最低数量。
+- 默认值：1
+
+#### jdbc_connection_idle_timeout_ms
+
+- 含义：访问 JDBC Catalog 时，连接建立的超时时长。超过参数取值时间的连接被认为是 idle 状态。
+- 单位：毫秒
+- 默认值：600000

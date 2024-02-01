@@ -56,7 +56,6 @@ import java.io.File;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.sql.SQLSyntaxErrorException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -97,10 +96,14 @@ public class PseudoCluster {
 
     static {
         try {
-            Class.forName("com.mysql.cj.jdbc.Driver").newInstance();
+            Class.forName("org.mariadb.jdbc.Driver").newInstance();
         } catch (Exception ex) {
             ex.printStackTrace();
         }
+    }
+
+    public void setServerPrepareStatement() {
+        dataSource.setConnectionProperties("useServerPrepStmts=true");
     }
 
     public void setQueryTimeout(int timeout) {
@@ -165,7 +168,7 @@ public class PseudoCluster {
         }
 
         @Override
-        public FilePathInfo allocateFilePath(long tableId) throws DdlException {
+        public FilePathInfo allocateFilePath(long dbId, long tableId) throws DdlException {
             FilePathInfo.Builder builder = FilePathInfo.newBuilder();
             FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
 
@@ -261,7 +264,7 @@ public class PseudoCluster {
     public ClusterConfig getConfig() {
         return config;
     }
-    
+
     public PseudoBackend getBackend(long beId) {
         String host = backendIdToHost.get(beId);
         if (host == null) {
@@ -323,8 +326,8 @@ public class PseudoCluster {
                     System.out.printf("runSql(%.3fs): %s\n", (end - start) / 1e9, sql);
                 }
                 break;
-            } catch (SQLSyntaxErrorException e) {
-                if (e.getMessage().startsWith("rpc failed, host")) {
+            } catch (SQLException e) {
+                if (e.getMessage().contains("rpc failed, host")) {
                     try {
                         Thread.sleep(1000);
                     } catch (InterruptedException ie) {
@@ -390,6 +393,10 @@ public class PseudoCluster {
         }
     }
 
+    public void shutdown() {
+        shutdown(true);
+    }
+
     /**
      * build cluster at specified dir
      *
@@ -406,7 +413,7 @@ public class PseudoCluster {
 
         BasicDataSource dataSource = new BasicDataSource();
         dataSource.setUrl(
-                "jdbc:mysql://127.0.0.1:" + queryPort + "/?permitMysqlScheme" +
+                "jdbc:mariadb://127.0.0.1:" + queryPort + "/?permitMysqlScheme" +
                         "&usePipelineAuth=false&useBatchMultiSend=false&" +
                         "autoReconnect=true&failOverReadOnly=false&maxReconnects=10");
         dataSource.setUsername("root");
@@ -446,13 +453,13 @@ public class PseudoCluster {
                     cluster.frontend.getFrontendService());
             cluster.backends.put(backend.getHost(), backend);
             cluster.backendIdToHost.put(beId, backend.getHost());
-            GlobalStateMgr.getCurrentSystemInfo().addBackend(backend.be);
-            GlobalStateMgr.getCurrentStarOSAgent()
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend.be);
+            GlobalStateMgr.getCurrentState().getStarOSAgent()
                     .addWorker(beId, String.format("%s:%d", backend.getHost(), backendPortStart - 1), 0);
             LOG.info("add PseudoBackend {} {}", beId, host);
         }
         int retry = 0;
-        while (GlobalStateMgr.getCurrentSystemInfo().getBackend(10001).getBePort() == -1 &&
+        while (GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(10001).getBePort() == -1 &&
                 retry++ < 600) {
             Thread.sleep(100);
         }
@@ -471,14 +478,14 @@ public class PseudoCluster {
                     this.frontend.getFrontendService());
             this.backends.put(backend.getHost(), backend);
             this.backendIdToHost.put(beId, backend.getHost());
-            GlobalStateMgr.getCurrentSystemInfo().addBackend(backend.be);
-            GlobalStateMgr.getCurrentStarOSAgent()
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend.be);
+            GlobalStateMgr.getCurrentState().getStarOSAgent()
                     .addWorker(beId, String.format("%s:%d", backend.getHost(), backendPortStart - 1), 0);
             LOG.info("add PseudoBackend {} {}", beId, host);
             beIds.add(beId);
         }
         int retry = 0;
-        while (GlobalStateMgr.getCurrentSystemInfo().getBackend(beIds.get(0)).getBePort() == -1 &&
+        while (GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(beIds.get(0)).getBePort() == -1 &&
                 retry++ < 600) {
             try {
                 Thread.sleep(100);
@@ -593,7 +600,7 @@ public class PseudoCluster {
     public static void main(String[] args) throws Exception {
         PseudoCluster.getOrCreate("pseudo_cluster", false, 9030, 4);
         for (int i = 0; i < 4; i++) {
-            System.out.println(GlobalStateMgr.getCurrentSystemInfo().getBackend(10001 + i).getBePort());
+            System.out.println(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(10001 + i).getBePort());
         }
         while (true) {
             Thread.sleep(1000);

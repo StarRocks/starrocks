@@ -349,6 +349,7 @@ public:
     bool spill_enable_direct_io() const {
         return _query_options.__isset.spill_enable_direct_io && _query_options.spill_enable_direct_io;
     }
+    double spill_rand_ratio() const { return _query_options.spill_rand_ratio; }
 
     int32_t spill_encode_level() const { return _query_options.spill_encode_level; }
 
@@ -431,6 +432,8 @@ public:
     }
 
     bool is_jit_enabled() const { return _query_options.__isset.enable_jit && _query_options.enable_jit; }
+
+    std::string_view get_sql_dialect() const { return _query_options.sql_dialect; }
 
 private:
     // Set per-query state.

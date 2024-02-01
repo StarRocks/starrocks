@@ -270,7 +270,7 @@ Status RowsetColumnUpdateState::_finalize_partial_update_state(Tablet* tablet, R
                                                                MemTracker* update_mem_tracker,
                                                                EditVersion latest_applied_version,
                                                                const PrimaryIndex& index) {
-    const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
+    const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb_without_schema();
     if (!rowset_meta_pb.has_txn_meta() || rowset->num_update_files() == 0 ||
         rowset_meta_pb.txn_meta().has_merge_condition()) {
         return Status::OK();
@@ -299,7 +299,7 @@ static StatusOr<ChunkPtr> read_from_source_segment(Rowset* rowset, const Schema&
                                                    OlapReaderStatistics* stats, int64_t version,
                                                    RowsetSegmentId rowset_seg_id, const std::string& path) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(rowset->rowset_path()));
-    auto segment = Segment::open(fs, path, rowset_seg_id.segment_id, rowset->schema());
+    auto segment = Segment::open(fs, FileInfo{path}, rowset_seg_id.segment_id, rowset->schema());
     if (!segment.ok()) {
         LOG(WARNING) << "Fail to open " << path << ": " << segment.status();
         return segment.status();
@@ -547,7 +547,7 @@ Status RowsetColumnUpdateState::_insert_new_rows(const TabletSchemaCSPtr& tablet
                                                  PrimaryIndex& index) {
     int segid = 0;
     RowsetSegmentStat stat;
-    const auto& txn_meta = rowset->rowset_meta()->get_meta_pb().txn_meta();
+    const auto& txn_meta = rowset->rowset_meta()->get_meta_pb_without_schema().txn_meta();
     auto schema = ChunkHelper::convert_schema(tablet_schema);
     auto read_update_column_ids = get_read_update_columns_ids(txn_meta, tablet_schema);
     std::map<int, ChunkUniquePtr> segid_to_chunk;
@@ -617,9 +617,9 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
     watch.start();
 
     DCHECK(rowset->num_update_files() == _partial_update_states.size());
-    DCHECK(rowset->rowset_meta()->get_meta_pb().has_txn_meta())
+    DCHECK(rowset->rowset_meta()->get_meta_pb_without_schema().has_txn_meta())
             << fmt::format("tablet_id: {} rowset_id: {}", tablet->tablet_id(), rowset_id);
-    const auto& txn_meta = rowset->rowset_meta()->get_meta_pb().txn_meta();
+    const auto& txn_meta = rowset->rowset_meta()->get_meta_pb_without_schema().txn_meta();
 
     // 1. resolve conflicts and generate `ColumnPartialUpdateState` finally.
     EditVersion latest_applied_version;

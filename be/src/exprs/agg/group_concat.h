@@ -679,7 +679,7 @@ public:
             }
         }
 
-        DCHECK(elem_size == perm.size());
+        DCHECK(perm.empty() || elem_size == perm.size());
         for (auto j = 0; j <= last_unique_row_id && !overflow; ++j) {
             auto idx = j;
             if (!perm.empty()) {

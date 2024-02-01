@@ -75,7 +75,6 @@ import com.starrocks.sql.optimizer.rule.transformation.MergeApplyWithTableFuncti
 import com.starrocks.sql.optimizer.rule.transformation.MergeLimitDirectRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeLimitWithLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeLimitWithSortRule;
-import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoFiltersRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PartitionPruneRule;
@@ -146,9 +145,10 @@ import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToMetaSca
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSumByAssociativeRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2AnalyticRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2JoinRule;
-import com.starrocks.sql.optimizer.rule.transformation.SplitAggregateRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitLimitRule;
+import com.starrocks.sql.optimizer.rule.transformation.SplitMultiPhaseAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitTopNRule;
+import com.starrocks.sql.optimizer.rule.transformation.SplitTwoPhaseAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.OnlyJoinRule;
@@ -417,18 +417,19 @@ public class RuleSet {
                 new PushDownPredicateProjectRule(),
                 PushDownPredicateScanRule.OLAP_SCAN,
                 new CastToEmptyRule(),
+                new PruneProjectColumnsRule(),
                 PruneScanColumnRule.OLAP_SCAN,
                 new PruneProjectEmptyRule(),
                 new MergeTwoProjectRule(),
                 new PruneProjectRule(),
                 new PartitionPruneRule(),
-                new DistributionPruneRule(),
-                new MergeProjectWithChildRule()));
+                new DistributionPruneRule()));
     }
 
     public RuleSet() {
         // Add common transform rule
-        transformRules.add(SplitAggregateRule.getInstance());
+        transformRules.add(SplitMultiPhaseAggRule.getInstance());
+        transformRules.add(SplitTwoPhaseAggRule.getInstance());
         transformRules.add(GroupByCountDistinctDataSkewEliminateRule.getInstance());
         transformRules.add(SplitTopNRule.getInstance());
     }

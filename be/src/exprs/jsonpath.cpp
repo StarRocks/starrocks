@@ -22,6 +22,7 @@
 #include <memory>
 
 #include "column/column_viewer.h"
+#include "common/compiler_util.h"
 #include "common/status.h"
 #include "glog/logging.h"
 #include "gutil/strings/split.h"
@@ -145,7 +146,7 @@ Status JsonPathPiece::parse(const std::string& path_string, std::vector<JsonPath
         if (i == 0) {
             std::shared_ptr<ArraySelector> selector(new ArraySelectorNone());
             if (current != "$") {
-                parsed_paths->emplace_back(JsonPathPiece("", std::move(selector)));
+                parsed_paths->emplace_back(JsonPathPiece("$", std::move(selector)));
             } else {
                 parsed_paths->emplace_back(JsonPathPiece("$", std::move(selector)));
                 continue;
@@ -260,6 +261,66 @@ StatusOr<JsonPath> JsonPath::parse(Slice path_string) {
 
 vpack::Slice JsonPath::extract(const JsonValue* json, const JsonPath& jsonpath, vpack::Builder* b) {
     return JsonPathPiece::extract(json, jsonpath.paths, b);
+}
+
+bool JsonPath::starts_with(const JsonPath* other) const {
+    if (other->paths.size() > paths.size()) {
+        // this: a.b, other: a.b.c.d
+        return false;
+    }
+
+    size_t i = 0;
+    bool eq_key = true;
+    for (; i < other->paths.size(); i++) {
+        auto& this_path = paths[i];
+        auto& other_path = other->paths[i];
+        if (this_path.key != other_path.key) {
+            eq_key = false;
+            break;
+        }
+        if (!this_path.array_selector->match(*other_path.array_selector)) {
+            break;
+        }
+    }
+
+    if (i == 0) {
+        return false;
+    }
+    return eq_key;
+}
+
+StatusOr<JsonPath*> JsonPath::relativize(const JsonPath* other, JsonPath* output_root) const {
+    if (other->paths.size() > paths.size()) {
+        // this: a.b, other: a.b.c.d
+        return Status::InvalidArgument("Unsupported rollup json path");
+    }
+
+    size_t i = 0;
+    for (; i < other->paths.size(); ++i) {
+        auto& this_path = paths[i];
+        auto& other_path = other->paths[i];
+        if (this_path.key != other_path.key) {
+            break;
+        }
+        if (!this_path.array_selector->match(*other_path.array_selector)) {
+            if (UNLIKELY(NONE != other_path.array_selector->type)) {
+                return Status::InvalidArgument(
+                        fmt::format("Unsupported json path type: {}", other_path.array_selector->type));
+            }
+            output_root->paths.emplace_back("", this_path.array_selector);
+            i++; // to next
+            break;
+        }
+    }
+
+    for (; i < paths.size(); ++i) {
+        output_root->paths.emplace_back(paths[i]);
+    }
+
+    if (this->paths[0].key == "$" && !output_root->paths.empty()) {
+        output_root->paths.insert(output_root->paths.cbegin(), this->paths[0]);
+    }
+    return output_root;
 }
 
 } // namespace starrocks

@@ -30,16 +30,16 @@ None
 -- !result
 select case i when 1 then mi when 3 then ms else mi end from tc order by i;
 -- result:
-{1:"1",null:"2"}
-{1:"1",null:"2"}
-{1:null,null:null}
+{null:"2",1:"1"}
+{null:"2",1:"1"}
+{null:null,1:null}
 None
 -- !result
 select case i when 1 then mi when 3 then ms end from tc order by i;
 -- result:
-{1:"1",null:"2"}
+{null:"2",1:"1"}
 None
-{1:null,null:null}
+{null:null,1:null}
 None
 -- !result
 select case  when i = 1 then ai when i=3 then ass end from tc order by i;
@@ -58,16 +58,16 @@ None
 -- !result
 select case  when i = 1 then mi when i=3 then ms end from tc order by i;
 -- result:
-{1:"1",null:"2"}
+{null:"2",1:"1"}
 None
-{1:null,null:null}
+{null:null,1:null}
 None
 -- !result
 select case  when i = 1 then mi when i=3 then ms else ms end from tc order by i;
 -- result:
-{1:"1",null:"2"}
-{1:"b",null:null}
-{1:null,null:null}
+{null:"2",1:"1"}
+{null:null,1:"b"}
+{null:null,1:null}
 None
 -- !result
 select coalesce(ai, ass) from tc order by i;
@@ -79,23 +79,23 @@ None
 -- !result
 select coalesce(mi, ms) from tc order by i;
 -- result:
-{1:"1",null:"2"}
-{1:"1",null:"2"}
-{1:null,null:null}
+{null:"2",1:"1"}
+{null:"2",1:"1"}
+{null:null,1:null}
 None
 -- !result
 select coalesce(null,ms, mi) from tc order by i;
 -- result:
-{1:"1",null:"2"}
-{1:"b",null:null}
-{1:null,null:null}
+{null:"2",1:"1"}
+{null:null,1:"b"}
+{null:null,1:null}
 None
 -- !result
 select ifnull(ms, mi), ms,mi from tc order by i;
 -- result:
-{1:"1",null:"2"}	None	{1:1,null:2}
-{1:"b",null:null}	{1:"b",null:null}	{1:1,null:2}
-{1:null,null:null}	{1:null,null:null}	None
+{null:"2",1:"1"}	None	{null:2,1:1}
+{null:null,1:"b"}	{null:null,1:"b"}	{null:2,1:1}
+{null:null,1:null}	{null:null,1:null}	None
 None	None	None
 -- !result
 select ifnull(ass, ai), ass,ai from tc order by i;
@@ -114,9 +114,9 @@ None
 -- !result
 select if(i>2, ms, mi) from tc order by i;
 -- result:
-{1:"1",null:"2"}
-{1:"1",null:"2"}
-{1:null,null:null}
+{null:"2",1:"1"}
+{null:"2",1:"1"}
+{null:null,1:null}
 None
 -- !result
 select if(i>2, ass, ai) from tc order by i;
@@ -135,9 +135,9 @@ None
 -- !result
 select nullif(ms, mi), ms,mi from tc order by i;
 -- result:
-None	None	{1:1,null:2}
-{1:"b",null:null}	{1:"b",null:null}	{1:1,null:2}
-{1:null,null:null}	{1:null,null:null}	None
+None	None	{null:2,1:1}
+{null:null,1:"b"}	{null:null,1:"b"}	{null:2,1:1}
+{null:null,1:null}	{null:null,1:null}	None
 None	None	None
 -- !result
 select nullif(ai, ass), ai, ass from tc order by i;

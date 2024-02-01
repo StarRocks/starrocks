@@ -426,7 +426,12 @@ Status SyncFileWriter::close() {
     }
 
     RETURN_IF_ERROR(_flush_row_group());
-    _writer->Close();
+    try {
+        _writer->Close();
+    } catch (const ::parquet::ParquetStatusException& e) {
+        LOG(WARNING) << "close writer error: " << e.what();
+        return Status::IOError(fmt::format("{}: {}", "close writer error", e.what()));
+    }
 
     auto arrow_st = _outstream->Close();
     if (!arrow_st.ok()) {

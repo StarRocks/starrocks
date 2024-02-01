@@ -38,7 +38,9 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
+import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
 import com.starrocks.analysis.DateLiteral;
@@ -67,28 +69,30 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.Property;
+import com.starrocks.system.Backend;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
 import org.apache.commons.collections.MapUtils;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.threeten.extra.PeriodDuration;
 
 import java.time.format.DateTimeParseException;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.TableProperty.INVALID;
 
 public class PropertyAnalyzer {
-    private static final Logger LOG = LogManager.getLogger(PropertyAnalyzer.class);
     private static final String COMMA_SEPARATOR = ",";
 
     public static final String PROPERTIES_SHORT_KEY = "short_key";
@@ -125,6 +129,8 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_ENABLE_PERSISTENT_INDEX = "enable_persistent_index";
 
+    public static final String PROPERTIES_LABELS_LOCATION = "labels.location";
+
     public static final String PROPERTIES_PERSISTENT_INDEX_TYPE = "persistent_index_type";
 
     public static final String PROPERTIES_BINLOG_VERSION = "binlog_version";
@@ -137,8 +143,6 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_STORAGE_TYPE_COLUMN = "column";
     public static final String PROPERTIES_STORAGE_TYPE_COLUMN_WITH_ROW = "column_with_row";
-    public static final String PROPERTIES_STORAGE_TYPE_ROW = "row";
-    public static final String PROPERTIES_STORAGE_TYPE_ROW_MVCC = "row_mvcc";
 
     public static final String PROPERTIES_WRITE_QUORUM = "write_quorum";
 
@@ -205,6 +209,18 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_USE_LIGHT_SCHEMA_CHANGE = "light_schema_change";
 
     public static final String PROPERTIES_DEFAULT_PREFIX = "default.";
+
+    /**
+     * Matches location labels like : ["*", "a:*", "bcd_123:*", "123bcd_:val_123", "  a :  b  "],
+     * leading and trailing space of key and value will be ignored.
+     */
+    public static final String SINGLE_LOCATION_LABEL_REGEX = "(\\*|\\s*[a-z_0-9]+\\s*:\\s*(\\*|[a-z_0-9]+)\\s*)";
+    /**
+     * Matches location labels like: ["*, a: b,  c:d", "*, a:b, *", etc.].
+     * Limit the occurrences of single location label to 10 to avoid regex overflowing the stack.
+     */
+    public static final String MULTI_LOCATION_LABELS_REGEX = "\\s*" + SINGLE_LOCATION_LABEL_REGEX +
+            "\\s*(,\\s*" + SINGLE_LOCATION_LABEL_REGEX + "){0,9}\\s*";
 
     public static DataProperty analyzeDataProperty(Map<String, String> properties,
                                                    DataProperty inferredDataProperty,
@@ -496,9 +512,9 @@ public class PropertyAnalyzer {
             throw new AnalysisException("Replication num should larger than 0");
         }
 
-        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
+        List<Long> backendIds = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAvailableBackendIds();
         if (RunMode.isSharedDataMode()) {
-            backendIds.addAll(GlobalStateMgr.getCurrentSystemInfo().getAvailableComputeNodeIds());
+            backendIds.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAvailableComputeNodeIds());
             if (RunMode.defaultReplicationNum() > backendIds.size()) {
                 throw new AnalysisException("Number of available CN nodes is " + backendIds.size()
                         + ", less than " + RunMode.defaultReplicationNum());
@@ -555,7 +571,11 @@ public class PropertyAnalyzer {
             } else {
                 throw new AnalysisException(storageType + " for " + olapTable.getKeysType() + " table not supported");
             }
-
+            if (!Config.enable_experimental_rowstore &&
+                    (tStorageType == TStorageType.ROW || tStorageType == TStorageType.COLUMN_WITH_ROW)) {
+                throw new AnalysisException(storageType + " for " + olapTable.getKeysType() +
+                        " table not supported, enable it by setting `enable_experimental_rowstore` to true");
+            }
             properties.remove(PROPERTIES_STORAGE_TYPE);
         }
         return tStorageType;
@@ -612,7 +632,8 @@ public class PropertyAnalyzer {
 
     public static Boolean analyzeUseFastSchemaEvolution(Map<String, String> properties) throws AnalysisException {
         if (properties == null || properties.isEmpty()) {
-            return Config.enable_fast_schema_evolution;
+            return RunMode.isSharedNothingMode() ? Config.enable_fast_schema_evolution
+                    : Config.experimental_enable_fast_schema_evolution_in_shared_data;
         }
         String value = properties.get(PROPERTIES_USE_FAST_SCHEMA_EVOLUTION);
         if (null == value) {
@@ -785,6 +806,140 @@ public class PropertyAnalyzer {
                 return Pair.create(Config.enable_persistent_index_by_default, false);
             }
             return Pair.create(false, false);
+        }
+    }
+
+    // Convert location string like: "k1:v1,k2:v2" to map
+    // Return `{*:*}` means that we have specified '*" in location string,
+    // in this case, we will scatter replicas on all the backends which have location label,
+    // not some specified locations. So we can ignore others location labels.
+    // And the location string will be simplified to a single '*'.
+    public static Multimap<String, String> analyzeLocationStringToMap(String locations) {
+        Multimap<String, String> locationMap = HashMultimap.create();
+        String[] singleLocationStrings = locations.split(",");
+        for (String singleLocationString : singleLocationStrings) {
+            if (singleLocationString.trim().equals("*")) {
+                locationMap.put("*", "*");
+                return locationMap;
+            } else {
+                String[] kv = singleLocationString.split(":");
+                String key = kv[0].trim();
+                String value = kv[1].trim();
+                if (value.equals("*") && locationMap.containsKey(key)) {
+                    // if value is '*', and we have specified this key before,
+                    // we will ignore this key, and use '*' to replace all the values of this key.
+                    locationMap.removeAll(key);
+                }
+                locationMap.put(key, value);
+            }
+        }
+
+        return locationMap;
+    }
+
+    public static String validateTableLocationProperty(String location) throws SemanticException {
+        if (location.isEmpty()) {
+            return location;
+        }
+
+        if (location.length() > 255) {
+            throw new SemanticException("location is too long, max length is 255");
+        }
+
+        Matcher matcher = Pattern.compile(MULTI_LOCATION_LABELS_REGEX).matcher(location);
+        if (!matcher.matches()) {
+            throw new SemanticException("Invalid location format: " + location +
+                    ", should be like: '*', 'key:*', or 'k1:v1,k2:v2,k1:v11'");
+        }
+
+        // check location is valid or not
+        Multimap<String, String> locationMap = analyzeLocationStringToMap(location);
+
+        if (!locationMap.keySet().contains("*")) {
+            // check location label associated with any backend or not
+            SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            List<Backend> backends = systemInfoService.getBackends();
+            for (String key : locationMap.keySet()) {
+                Collection<String> values = locationMap.get(key);
+                for (String value : values) {
+                    boolean isValueValid = false;
+                    for (Backend backend : backends) {
+                        Pair<String, String> backendLocKV = backend.getSingleLevelLocationKV();
+                        if (backendLocKV != null && backend.getLocation().containsKey(key) &&
+                                (Objects.equals(backendLocKV.second, value) || value.equals("*"))) {
+                            isValueValid = true;
+                            break;
+                        }
+                    }
+                    if (!isValueValid) {
+                        throw new SemanticException(
+                                "Cannot find any backend with location: " + key + ":" + value);
+                    }
+                }
+            }
+        }
+
+        return convertLocationMapToString(locationMap);
+    }
+
+    public static String convertLocationMapToString(Map<String, String> locationMap) {
+        // Convert map to multi hash map.
+        Multimap<String, String> multiLocationMap = HashMultimap.create();
+        for (Map.Entry<String, String> entry : locationMap.entrySet()) {
+            multiLocationMap.put(entry.getKey(), entry.getValue());
+        }
+
+        return convertLocationMapToString(multiLocationMap);
+    }
+
+    // Convert location map to string without head and tail space.
+    public static String convertLocationMapToString(Multimap<String, String> locationMap) {
+        if (locationMap.containsKey("*")) {
+            return "*";
+        }
+
+        return locationMap.entries().stream()
+                .map(entry -> entry.getKey() + ":" + entry.getValue())
+                .collect(Collectors.joining(","));
+    }
+
+    public static String analyzeLocation(Map<String, String> properties, boolean removeAnalyzedProp) {
+        if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
+                throw new SemanticException("colocate table doesn't support location property");
+            }
+            String loc = properties.get(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION);
+            // validate location format
+            String validatedLoc = validateTableLocationProperty(loc);
+            if (removeAnalyzedProp) {
+                properties.remove(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION);
+            }
+            return validatedLoc;
+        } else {
+            if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
+                // won't set default location prop for colocate table
+                return null;
+            }
+            SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+            long numOfBackendsWithLocationLabel =
+                    systemInfoService.getBackends().stream()
+                            .filter(backend -> !backend.getLocation().isEmpty()).count();
+            if (numOfBackendsWithLocationLabel > 0) {
+                // If location is not specified explicitly, and we have some backends with location label,
+                // return '*', meaning by default we will scatter the replicas
+                // on all the backends which have location label.
+                // So that we can identify tables before and after upgrade to newer version.
+                // For history tables which don't have location label,
+                // their replica distribution won't be changed after upgrade.
+                return "*";
+            } else {
+                // If no backend has location label, return null,
+                // meaning we won't scatter replicas based on backend location,
+                // so we won't put the location label in table properties(`show create table` won't see it).
+                // User may not want to use this feature at all,
+                // we won't add a default location property to bother users.
+                return null;
+            }
         }
     }
 

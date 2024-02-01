@@ -112,10 +112,7 @@ public class CreateMaterializedViewTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         ConnectorPlanTestBase.doInit(temp.newFolder().toURI().toString());
-        Config.alter_scheduler_interval_millisecond = 100;
-        Config.dynamic_partition_enable = true;
-        Config.dynamic_partition_check_interval_seconds = 1;
-        Config.enable_experimental_mv = true;
+
         UtFrameUtils.createMinStarRocksCluster();
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -126,6 +123,10 @@ public class CreateMaterializedViewTest {
             StatisticsMetaManager m = new StatisticsMetaManager();
             m.createStatisticsTablesForTest();
         }
+
+        // set default config for async mvs
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
+        Config.default_mv_refresh_immediate = true;
 
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.tbl1\n" +
@@ -601,7 +602,7 @@ public class CreateMaterializedViewTest {
                 "as select date_trunc('month',tb1.k1) s1, tb2.k2 s2 from tbl1 tb1 join tbl2 tb2 on tb1.k2 = tb2.k2;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
             Table mv1 = testDb.getTable("mv1");
             Assert.assertTrue(mv1 instanceof MaterializedView);
             // test partition
@@ -668,7 +669,7 @@ public class CreateMaterializedViewTest {
                 "as select k1, tbl1.k2 from tbl1;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
             Table mv1 = testDb.getTable("mv1");
             Assert.assertTrue(mv1 instanceof MaterializedView);
             // test partition
@@ -724,7 +725,7 @@ public class CreateMaterializedViewTest {
                 "as select k1, tbl1.k2 from tbl1;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         } finally {
@@ -1572,7 +1573,7 @@ public class CreateMaterializedViewTest {
                 "as select k1, k2 from tbl1;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql1, connectContext);
-            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
@@ -1586,7 +1587,7 @@ public class CreateMaterializedViewTest {
                 "as select k1, k2 from base_mv;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql2, connectContext);
-            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
@@ -1604,7 +1605,7 @@ public class CreateMaterializedViewTest {
                 "as select k1, k2 from tbl1;";
         {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql1, connectContext);
-            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
         }
 
         String sql2 = "create materialized view mv_from_base_mv2 " +
@@ -1617,7 +1618,7 @@ public class CreateMaterializedViewTest {
                 "as select k1, k2 from base_mv2;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql2, connectContext);
-            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
@@ -1635,7 +1636,7 @@ public class CreateMaterializedViewTest {
                 "as select k1, k2 from tbl1;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql1, connectContext);
-            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
@@ -1653,7 +1654,7 @@ public class CreateMaterializedViewTest {
                 "as select k1, k2 from base_inactive_mv;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql2, connectContext);
-            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
         } catch (Exception e) {
             Assert.assertEquals("Getting analyzing error at line 3, column 24. Detail message: " +
                             "Create/Rebuild materialized view from inactive materialized view: base_inactive_mv.",
@@ -1673,7 +1674,7 @@ public class CreateMaterializedViewTest {
                 "as select k1 ss, *  from tbl1;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
             MaterializedView mv = ((MaterializedView) testDb.getTable("testAsHasStar"));
             mv.setInactiveAndReason("");
             List<Column> mvColumns = mv.getFullSchema();
@@ -1706,7 +1707,7 @@ public class CreateMaterializedViewTest {
                 "as select a.k1 ss, a.*, b.* from tbl1 as a join tbl1 as b on a.k1=b.k1;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
             Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Duplicate column name 'k1'"));
@@ -1727,7 +1728,7 @@ public class CreateMaterializedViewTest {
                 "as select a.k1 ss, a.k2, b.k2 from tbl1 as a join tbl1 as b on a.k1=b.k1;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
             Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Duplicate column name 'k2'"));
@@ -1766,7 +1767,7 @@ public class CreateMaterializedViewTest {
                 "as select date_trunc('month',tbl1.k1), k1, k2 from tbl1;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
             MaterializedView mv = ((MaterializedView) testDb.getTable("testAsSelectItemAlias1"));
             mv.setInactiveAndReason("");
             List<Column> mvColumns = mv.getFullSchema();
@@ -1797,7 +1798,7 @@ public class CreateMaterializedViewTest {
                 "select date_trunc('month',tbl1.k1), k1, k2 from tbl1;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
             MaterializedView mv = ((MaterializedView) testDb.getTable("testAsSelectItemAlias2"));
             mv.setInactiveAndReason("");
             List<Column> mvColumns = mv.getFullSchema();
@@ -1824,7 +1825,7 @@ public class CreateMaterializedViewTest {
                 "as select date_trunc('month',tbl1.k1), k1, k2 from tbl1;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Materialized view partition exp: " +
                     "`tbl1`.`k1` must related to column"));
@@ -1844,7 +1845,7 @@ public class CreateMaterializedViewTest {
                 "as select date_trunc('month',tbl1.k1), k1, k2 from tbl1;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage()
                     .contains("No viable statement for input 'distributed by hash(date_trunc('."));
@@ -1947,7 +1948,7 @@ public class CreateMaterializedViewTest {
                 "as select k1, k2 from colocateTable;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            currentState.createMaterializedView((CreateMaterializedViewStmt) statementBase);
+            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStmt) statementBase);
             waitingRollupJobV2Finish();
             ColocateTableIndex colocateTableIndex = currentState.getColocateTableIndex();
             String fullGroupName = testDb.getId() + "_" + "colocate_group1";
@@ -1994,7 +1995,7 @@ public class CreateMaterializedViewTest {
 
         Assert.assertThrows(AnalysisException.class, () -> {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            currentState.createMaterializedView((CreateMaterializedViewStmt) statementBase);
+            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStmt) statementBase);
         });
 
         currentState.getColocateTableIndex().clear();
@@ -2043,10 +2044,10 @@ public class CreateMaterializedViewTest {
                 "as select k1, k2 from colocateTable3;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            currentState.createMaterializedView((CreateMaterializedViewStmt) statementBase);
+            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStmt) statementBase);
             waitingRollupJobV2Finish();
             statementBase = UtFrameUtils.parseStmtWithNewParser(sql2, connectContext);
-            currentState.createMaterializedView((CreateMaterializedViewStmt) statementBase);
+            currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStmt) statementBase);
             waitingRollupJobV2Finish();
 
             ColocateTableIndex colocateTableIndex = currentState.getColocateTableIndex();
@@ -2197,7 +2198,7 @@ public class CreateMaterializedViewTest {
         }
 
         try {
-            currentState.createMaterializedView(stmt);
+            currentState.getLocalMetastore().createMaterializedView(stmt);
             Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains(msg));
@@ -2233,7 +2234,7 @@ public class CreateMaterializedViewTest {
             CreateMaterializedViewStatement stmt =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
                             starRocksAssert.getCtx());
-            currentState.createMaterializedView(stmt);
+            currentState.getLocalMetastore().createMaterializedView(stmt);
             Table mv1 = testDb.getTable("mv_with_property1");
             Assert.assertTrue(mv1 instanceof MaterializedView);
         } catch (Exception e) {
@@ -2283,7 +2284,7 @@ public class CreateMaterializedViewTest {
             CreateMaterializedViewStatement stmt =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
                             connectContext);
-            currentState.createMaterializedView(stmt);
+            currentState.getLocalMetastore().createMaterializedView(stmt);
         } catch (Exception e) {
             Assert.fail();
         }
@@ -2407,7 +2408,7 @@ public class CreateMaterializedViewTest {
                 ") " +
                 "as select tbl1.k1 ss, k2 from tbl1;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+        currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
         String fullGroupName = testDb.getId() + "_" + groupName;
         long tableId = currentState.getColocateTableIndex().getTableIdByGroup(fullGroupName);
         Assert.assertTrue(tableId > 0);
@@ -2481,7 +2482,7 @@ public class CreateMaterializedViewTest {
             CreateMaterializedViewStatement stmt =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
                             connectContext);
-            currentState.createMaterializedView(stmt);
+            currentState.getLocalMetastore().createMaterializedView(stmt);
         } catch (Exception e) {
             Assert.fail();
         }
@@ -2501,7 +2502,7 @@ public class CreateMaterializedViewTest {
             CreateMaterializedViewStatement stmt =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
                             connectContext);
-            currentState.createMaterializedView(stmt);
+            currentState.getLocalMetastore().createMaterializedView(stmt);
         } catch (Exception e) {
             Assert.fail();
         }
@@ -2521,7 +2522,7 @@ public class CreateMaterializedViewTest {
             CreateMaterializedViewStatement stmt =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql,
                             connectContext);
-            currentState.createMaterializedView(stmt);
+            currentState.getLocalMetastore().createMaterializedView(stmt);
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
@@ -2845,7 +2846,6 @@ public class CreateMaterializedViewTest {
 
     @Test
     public void testCreateAsyncMv() {
-        Config.enable_experimental_mv = true;
         String sql = "create materialized view async_mv_1 distributed by hash(c_1_9) as" +
                 " select c_1_9, c_1_4 from t1";
         try {
@@ -2892,7 +2892,7 @@ public class CreateMaterializedViewTest {
                     (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, newStarRocksAssert.getCtx());
             Assert.assertEquals(stmt.getDBName(), "test");
             Assert.assertEquals(stmt.getMVName(), "test_mv_use_different_tbl");
-            currentState.createMaterializedView(stmt);
+            currentState.getLocalMetastore().createMaterializedView(stmt);
             waitingRollupJobV2Finish();
 
             Table table = testDb.getTable("tbl5");
@@ -2946,7 +2946,7 @@ public class CreateMaterializedViewTest {
             Assert.assertEquals(stmt.getTableName().getDb(), "test");
             Assert.assertEquals(stmt.getTableName().getTbl(), "test_mv_use_different_tbl");
 
-            currentState.createMaterializedView(stmt);
+            currentState.getLocalMetastore().createMaterializedView(stmt);
             newStarRocksAssert.dropDatabase("test_mv_different_db");
             Table mv1 = testDb.getTable("test_mv_use_different_tbl");
             Assert.assertTrue(mv1 instanceof MaterializedView);
@@ -2972,7 +2972,7 @@ public class CreateMaterializedViewTest {
             Assert.assertEquals(stmt.getTableName().getDb(), "test_mv_different_db");
             Assert.assertEquals(stmt.getTableName().getTbl(), "test_mv_use_different_tbl");
 
-            currentState.createMaterializedView(stmt);
+            currentState.getLocalMetastore().createMaterializedView(stmt);
 
             Database differentDb = currentState.getDb("test_mv_different_db");
             Table mv1 = differentDb.getTable("test_mv_use_different_tbl");
@@ -3703,7 +3703,7 @@ public class CreateMaterializedViewTest {
             CreateMaterializedViewStatement createMaterializedViewStatement =
                     (CreateMaterializedViewStatement) statementBase;
 
-            currentState.createMaterializedView(createMaterializedViewStatement);
+            currentState.getLocalMetastore().createMaterializedView(createMaterializedViewStatement);
             ThreadUtil.sleepAtLeastIgnoreInterrupts(4000L);
 
             TableName mvName = createMaterializedViewStatement.getTableName();
@@ -3725,7 +3725,7 @@ public class CreateMaterializedViewTest {
             CreateMaterializedViewStatement createMaterializedViewStatement =
                     (CreateMaterializedViewStatement) statementBase;
 
-            currentState.createMaterializedView(createMaterializedViewStatement);
+            currentState.getLocalMetastore().createMaterializedView(createMaterializedViewStatement);
             ThreadUtil.sleepAtLeastIgnoreInterrupts(4000L);
 
             TableName mvTableName = createMaterializedViewStatement.getTableName();

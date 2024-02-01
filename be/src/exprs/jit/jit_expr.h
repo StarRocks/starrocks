@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <string>
+
 #include "common/global_types.h"
 #include "common/object_pool.h"
 #include "common/status.h"
@@ -33,9 +35,11 @@ public:
 
     JITExpr(ObjectPool* pool, const TExprNode& node, Expr* expr);
 
-    ~JITExpr() override = default;
+    ~JITExpr() override;
 
     Expr* clone(ObjectPool* pool) const override { return JITExpr::create(pool, _expr); }
+
+    bool is_jit_compiled() { return _jit_function != nullptr && !_jit_expr_name.empty(); }
 
 protected:
     /**
@@ -50,21 +54,13 @@ protected:
      */
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
 
-    /**
-     * @brief Evaluate the expression, remove the compiled function.
-     */
-    void close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
-
 private:
     ObjectPool* _pool;
     // The original expression.
     Expr* _expr;
-
     bool _is_prepared = false;
-
-    std::atomic_int prepared_times = 0;
-
     JITScalarFunction _jit_function = nullptr;
+    std::string _jit_expr_name;
 };
 
 } // namespace starrocks

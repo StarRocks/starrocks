@@ -185,6 +185,7 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
             }
         }
 
+        opts.need_flat = config::enable_json_flat;
         ASSIGN_OR_RETURN(auto writer, ColumnWriter::create(opts, &column, _wfile.get()));
         RETURN_IF_ERROR(writer->init());
         _column_writers.push_back(std::move(writer));
@@ -237,6 +238,10 @@ uint64_t SegmentWriter::estimate_segment_size() {
     }
     size += _index_builder->size();
     return size;
+}
+
+uint64_t SegmentWriter::current_filesz() const {
+    return _wfile->size();
 }
 
 Status SegmentWriter::finalize(uint64_t* segment_file_size, uint64_t* index_size, uint64_t* footer_position) {

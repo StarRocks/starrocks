@@ -149,6 +149,8 @@ public:
 
     static Status JitCompileError(std::string_view msg) { return Status(TStatusCode::JIT_COMPILE_ERROR, msg); }
 
+    static Status CapacityLimitExceed(std::string_view msg) { return Status(TStatusCode::CAPACITY_LIMIT_EXCEED, msg); }
+
     bool ok() const { return _state == nullptr; }
 
     bool is_cancelled() const { return code() == TStatusCode::CANCELLED; }
@@ -192,6 +194,8 @@ public:
     bool is_duplicate_rpc_invocation() const { return code() == TStatusCode::DUPLICATE_RPC_INVOCATION; }
 
     bool is_time_out() const { return code() == TStatusCode::TIMEOUT; }
+
+    bool is_publish_timeout() const { return code() == TStatusCode::PUBLISH_TIMEOUT; }
 
     bool is_eagain() const { return code() == TStatusCode::SR_EAGAIN; }
 

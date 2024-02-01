@@ -24,7 +24,6 @@
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "service/brpc.h"
 #include "storage/delta_writer.h"
@@ -78,7 +77,6 @@ public:
 
         auto st = Status::OK();
         if (_request->has_segment() && _cntl->request_attachment().size() > 0) {
-            auto scope = IOProfiler::scope(IOProfiler::TAG_LOAD, _writer->tablet()->tablet_id());
             auto& segment_pb = _request->segment();
             st = _writer->write_segment(segment_pb, _cntl->request_attachment());
         } else if (!_request->eos()) {
@@ -97,8 +95,8 @@ public:
             Status cancel_st = Status::InternalError("cancel writer because fail to run flush task, " + st.to_string());
             _writer->cancel(cancel_st);
             _send_fail_response(st);
-            LOG(ERROR) << "failed to flush segment, txn_id: " << _request->txn_id()
-                       << ", tablet id: " << _request->tablet_id() << ", status: " << st;
+            LOG(ERROR) << "failed to flush segment, txn_id: " << _writer->txn_id()
+                       << ", tablet id: " << _writer->tablet()->tablet_id() << ", status: " << st;
         } else {
             _send_success_response(eos, st);
         }

@@ -17,7 +17,9 @@ package com.starrocks.scheduler;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
@@ -29,6 +31,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.QueryableReentrantLock;
+import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -47,7 +50,7 @@ import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.optimizer.Utils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.parquet.Strings;
+import org.apache.spark.util.SizeEstimator;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -72,7 +75,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.scheduler.SubmitResult.SubmitStatus.SUBMITTED;
 
-public class TaskManager {
+public class TaskManager implements MemoryTrackable {
 
     private static final Logger LOG = LogManager.getLogger(TaskManager.class);
 
@@ -114,6 +117,7 @@ public class TaskManager {
             registerPeriodicalTask();
             dispatchScheduler.scheduleAtFixedRate(() -> {
                 if (!taskRunManager.tryTaskRunLock()) {
+                    LOG.warn("TaskRun scheduler cannot acquire the lock");
                     return;
                 }
                 try {
@@ -200,9 +204,7 @@ public class TaskManager {
     }
 
     public void createTask(Task task, boolean isReplay) throws DdlException {
-        if (!tryTaskLock()) {
-            throw new DdlException("Failed to get task lock when create Task [" + task.getName() + "]");
-        }
+        takeTaskLock();
         try {
             if (nameToTaskMap.containsKey(task.getName())) {
                 throw new DdlException("Task [" + task.getName() + "] already exists");
@@ -342,10 +344,7 @@ public class TaskManager {
     }
 
     public void dropTasks(List<Long> taskIdList, boolean isReplay) {
-        // keep nameToTaskMap and manualTaskMap consist
-        if (!tryTaskLock()) {
-            return;
-        }
+        takeTaskLock();
         try {
             for (long taskId : taskIdList) {
                 Task task = idToTaskMap.get(taskId);
@@ -467,6 +466,17 @@ public class TaskManager {
             LOG.warn("got exception while getting task lock", e);
         }
         return false;
+    }
+
+    /**
+     * Keep trying to get the lock until succeed
+     */
+    private void takeTaskLock() {
+        int i = 1;
+        while (!tryTaskLock()) {
+            LOG.warn("fail to get TaskManager lock after retry {} times", i);
+            i++;
+        }
     }
 
     public void taskUnlock() {
@@ -897,6 +907,16 @@ public class TaskManager {
         LOG.info("remove run history:{}", historyToDelete);
     }
 
+    @Override
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("Task", (long) idToTaskMap.size());
+    }
+
+    @Override
+    public long estimateSize() {
+        return SizeEstimator.estimate(idToTaskMap.values());
+    }
+
     private static class SerializeData {
         @SerializedName("tasks")
         public List<Task> tasks;
@@ -906,9 +926,7 @@ public class TaskManager {
     }
 
     public boolean containTask(String taskName) {
-        if (!tryTaskLock()) {
-            throw new DmlException("Failed to get task lock when check Task [" + taskName + "]");
-        }
+        takeTaskLock();
         try {
             return nameToTaskMap.containsKey(taskName);
         } finally {
@@ -917,9 +935,7 @@ public class TaskManager {
     }
 
     public Task getTask(String taskName) {
-        if (!tryTaskLock()) {
-            throw new DmlException("Failed to get task lock when get Task [" + taskName + "]");
-        }
+        takeTaskLock();
         try {
             return nameToTaskMap.get(taskName);
         } finally {

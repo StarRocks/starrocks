@@ -56,6 +56,8 @@ class WritableFile;
 
 class Column;
 
+static const size_t dictionary_min_rowcount = 256;
+
 struct ColumnWriterOptions {
     // input and output parameter:
     // - input: column_id/unique_id/type/length/encoding/compression/is_nullable members
@@ -76,6 +78,8 @@ struct ColumnWriterOptions {
     // when column data is encoding by dict
     // if global_dict is not nullptr, will checkout whether global_dict can cover all data
     GlobalDictMap* global_dict = nullptr;
+
+    bool need_flat = false;
 };
 
 class BitmapIndexWriter;

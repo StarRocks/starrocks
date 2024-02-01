@@ -56,6 +56,8 @@ Status ShortCircuitHybridScanNode::open(RuntimeState* state) {
     DCHECK(_tuple_desc != nullptr);
 
     // skips runtime filters in ScanNode::open
+    RETURN_IF_ERROR(ScanNode::init(_tnode, state));
+    RETURN_IF_ERROR(ScanNode::prepare(state));
     RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
     return Status::OK();
 }
@@ -104,8 +106,9 @@ Status ShortCircuitHybridScanNode::get_next(RuntimeState* state, ChunkPtr* chunk
             }
         }
         RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, result_chunk.get()));
+    } else {
+        *eos = true;
     }
-    *eos = true;
     *chunk = std::move(result_chunk);
     return Status::OK();
 }

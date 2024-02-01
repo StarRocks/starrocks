@@ -35,6 +35,7 @@
 package com.starrocks.backup;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -43,8 +44,10 @@ import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.AbstractJob.JobType;
 import com.starrocks.backup.BackupJob.BackupJobState;
 import com.starrocks.backup.BackupJobInfo.BackupTableInfo;
+import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
@@ -55,8 +58,9 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.FrontendDaemon;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -95,7 +99,10 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
-public class BackupHandler extends FrontendDaemon implements Writable {
+import static com.starrocks.scheduler.MVActiveChecker.MV_BACKUP_INACTIVE_REASON;
+
+public class BackupHandler extends FrontendDaemon implements Writable, MemoryTrackable {
+
     private static final Logger LOG = LogManager.getLogger(BackupHandler.class);
 
     public static final int SIGNATURE_VERSION = 1;
@@ -114,6 +121,8 @@ public class BackupHandler extends FrontendDaemon implements Writable {
     // user can get the error message before submitting the next one.
     // Use ConcurrentMap to get rid of locks.
     protected Map<Long, AbstractJob> dbIdToBackupOrRestoreJob = Maps.newConcurrentMap();
+
+    protected MvRestoreContext mvRestoreContext = new MvRestoreContext();
 
     // this lock is used for handling one backup or restore request at a time.
     private ReentrantLock seqlock = new ReentrantLock();
@@ -349,6 +358,11 @@ public class BackupHandler extends FrontendDaemon implements Writable {
                     ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
                             "Failed to copy table " + tblName + " with selected partitions");
                 }
+                if (copiedTbl.isMaterializedView()) {
+                    MaterializedView copiedMv = (MaterializedView) copiedTbl;
+                    copiedMv.setInactiveAndReason(String.format("Set the materialized view %s inactive because %s",
+                            copiedMv.getName(), MV_BACKUP_INACTIVE_REASON));
+                }
                 backupTbls.add(copiedTbl);
             }
             curBackupMeta = new BackupMeta(backupTbls);
@@ -432,11 +446,12 @@ public class BackupHandler extends FrontendDaemon implements Writable {
                 if (remoteTbl.isCloudNativeTable()) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_NOT_OLAP_TABLE, remoteTbl.getName());
                 }
+                mvRestoreContext.addIntoMvBaseTableBackupInfoIfNeeded(remoteTbl, jobInfo, tblInfo);
             }
         }
         restoreJob = new RestoreJob(stmt.getLabel(), stmt.getBackupTimestamp(),
                 db.getId(), db.getOriginName(), jobInfo, stmt.allowLoad(), stmt.getReplicationNum(),
-                stmt.getTimeoutMs(), globalStateMgr, repository.getId(), backupMeta);
+                stmt.getTimeoutMs(), globalStateMgr, repository.getId(), backupMeta, mvRestoreContext);
         globalStateMgr.getEditLog().logRestoreJob(restoreJob);
 
         // must put to dbIdToBackupOrRestoreJob after edit log, otherwise the state of job may be changed.
@@ -618,6 +633,7 @@ public class BackupHandler extends FrontendDaemon implements Writable {
             return;
         }
         dbIdToBackupOrRestoreJob.put(job.getDbId(), job);
+        mvRestoreContext.addIntoMvBaseTableBackupInfo(job);
     }
 
     public boolean report(TTaskType type, long jobId, long taskId, int finishedNum, int totalNum) {
@@ -665,6 +681,7 @@ public class BackupHandler extends FrontendDaemon implements Writable {
                 continue;
             }
             dbIdToBackupOrRestoreJob.put(job.getDbId(), job);
+            mvRestoreContext.addIntoMvBaseTableBackupInfo(job);
         }
         LOG.info("finished replay {} backup/store jobs from image", dbIdToBackupOrRestoreJob.size());
     }
@@ -704,6 +721,7 @@ public class BackupHandler extends FrontendDaemon implements Writable {
                 continue;
             }
             dbIdToBackupOrRestoreJob.put(job.getDbId(), job);
+            mvRestoreContext.addIntoMvBaseTableBackupInfo(job);
         }
     }
 
@@ -723,6 +741,9 @@ public class BackupHandler extends FrontendDaemon implements Writable {
             while (iterator.hasNext()) {
                 AbstractJob job = iterator.next().getValue();
                 if (isJobExpired(job, currentTimeMs)) {
+                    // discard mv backup table info if needed.
+                    mvRestoreContext.discardExpiredBackupTableInfo(job);
+
                     LOG.warn("discard expired job {}", job);
                     iterator.remove();
                 }
@@ -730,6 +751,11 @@ public class BackupHandler extends FrontendDaemon implements Writable {
         } finally {
             seqlock.unlock();
         }
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("BackupOrRestoreJob", (long) dbIdToBackupOrRestoreJob.size());
     }
 }
 

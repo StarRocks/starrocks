@@ -2,9 +2,9 @@
 displayed_sidebar: "English"
 ---
 
-# Spark connector
+# Releases of StarRocks Connector for Spark
 
-## **Notifications**
+## Notifications
 
 **User guide:**
 
@@ -28,11 +28,11 @@ displayed_sidebar: "English"
 | 1.1.1           | 3.2, 3.3, or 3.4 | 2.5 and later | 8    | 2.12  |
 | 1.1.0           | 3.2, 3.3, or 3.4 | 2.5 and later | 8    | 2.12  |
 
-## **Release note**
+## Release notes
 
 ### 1.1
 
-**1.1.1**
+#### 1.1.1
 
 This release mainly includes some features and improvements for loading data to StarRocks.
 

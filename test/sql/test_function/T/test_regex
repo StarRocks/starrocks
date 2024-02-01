@@ -34,3 +34,31 @@ select regexp_replace('xxaxx', 'xx', 'aaa');
 select regexp_replace('xaxaxax', 'xax', '-');
 
 select str, regex, replaced, regexp_replace(str, regex, replaced) from ts order by str, regex, replaced;
+
+
+-- name: test_regexp
+
+CREATE TABLE `tsr` (
+  `str` varchar(65533) NULL COMMENT "",
+  `regex` varchar(65533) NULL COMMENT "",
+  `pos` int NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`str`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`str`) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+
+insert into tsr values ("AbCdExCeF", "([[:lower:]]+)C([[:lower:]]+)", 3), ("AbCdExCeF", "([[:lower:]]+)C([[:lower:]]+)", 0);
+
+SELECT regexp_extract_all("AbCdExCeF", "([[:lower:]]+)C([[:lower:]]+)", 0);
+SELECT regexp_extract_all(str, "([[:lower:]]+)C([[:lower:]]+)", 0) from tsr;
+SELECT regexp_extract_all(str, regex, 0) from tsr;
+SELECT regexp_extract_all(str, regex, pos) from tsr;
+SELECT regexp_extract_all(str, "([[:lower:]]+)C([[:lower:]]+)", pos) from tsr;
+SELECT regexp_extract_all("AbCdExCeF", "([[:lower:]]+)C([[:lower:]]+)", pos) from tsr;
+SELECT regexp_extract_all("AbCdExCeF", regex, pos) from tsr;
+SELECT regexp_extract_all(str, "([[:lower:]]+)C([[:lower:]]+)", pos) from tsr;
+
+SELECT regexp_extract_all("AbCdExCeF", "([[:lower:]]+)C([[:lower:]]+)", 3);
+SELECT regexp_extract_all(str, "([[:lower:]]+)C([[:lower:]]+)", 3) from tsr;
+SELECT regexp_extract_all(str, regex, 3) from tsr;
+

@@ -18,10 +18,10 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.StatementBase;
@@ -45,13 +45,14 @@ public class ShowCreateMaterializedViewStmtTest {
 
     @BeforeAll
     public static void setUp() throws Exception {
-        FeConstants.runningUnitTest = true;
-        Config.alter_scheduler_interval_millisecond = 100;
-        Config.dynamic_partition_enable = true;
-        Config.dynamic_partition_check_interval_seconds = 1;
-        Config.enable_experimental_mv = true;
         UtFrameUtils.createMinStarRocksCluster();
         ctx = UtFrameUtils.createDefaultCtx();
+
+        // set default config for async mvs
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(ctx);
+        // NOTE: no set it because we need to check the defined sql.
+        Config.default_mv_refresh_immediate = true;
+
         ConnectorPlanTestBase.mockHiveCatalog(ctx);
         starRocksAssert = new StarRocksAssert(ctx);
         starRocksAssert.withDatabase("test").useDatabase("test")
@@ -95,10 +96,10 @@ public class ShowCreateMaterializedViewStmtTest {
                 "as select tbl1.k1, tbl2.k2 from tbl1 join tbl2 on tbl1.k1 = tbl2.k1;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
-        currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+        currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
         Table table = currentState.getDb("test").getTable("mv9");
         List<String> createTableStmt = Lists.newArrayList();
-        GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
+        AstToStringBuilder.getDdlStmt(table, createTableStmt, null, null, false, true);
         Assert.assertEquals("CREATE MATERIALIZED VIEW `mv9` (`k1`, `k2`)\n" +
                 "DISTRIBUTED BY HASH(`k1`) BUCKETS 10 \n" +
                 "REFRESH MANUAL\n" +
@@ -123,10 +124,10 @@ public class ShowCreateMaterializedViewStmtTest {
                 "as select t2.c1, t1.c2 from hive0.partitioned_db.t1 join hive0.partitioned_db2.t2 on t1.c2 = t2.c2;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
-        currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+        currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
         Table table = currentState.getDb("test").getTable("mv10");
         List<String> createTableStmt = Lists.newArrayList();
-        GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
+        AstToStringBuilder.getDdlStmt(table, createTableStmt, null, null, false, true);
         Assert.assertEquals("CREATE MATERIALIZED VIEW `mv10` (`c1`, `c2`)\n" +
                         "DISTRIBUTED BY HASH(`c1`) BUCKETS 10 \n" +
                         "REFRESH MANUAL\n" +
@@ -152,10 +153,10 @@ public class ShowCreateMaterializedViewStmtTest {
                 "as select l_orderkey,l_partkey,l_shipdate from hive0.tpch.lineitem;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
-        currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+        currentState.getLocalMetastore().createMaterializedView((CreateMaterializedViewStatement) statementBase);
         Table table = currentState.getDb("test").getTable("mv8");
         List<String> createTableStmt = Lists.newArrayList();
-        GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
+        AstToStringBuilder.getDdlStmt(table, createTableStmt, null, null, false, true);
         Assert.assertEquals(createTableStmt.get(0),
                 "CREATE MATERIALIZED VIEW `mv8` (`l_orderkey`, `l_partkey`, `l_shipdate`)\n" +
                         "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10 \n" +
@@ -197,7 +198,7 @@ public class ShowCreateMaterializedViewStmtTest {
 
         MaterializedView mv = starRocksAssert.getMv(starRocksAssert.getCtx().getDatabase(), mvName);
         List<String> createTableStmt = Lists.newArrayList();
-        GlobalStateMgr.getDdlStmt(mv, createTableStmt, null, null, false, true);
+        AstToStringBuilder.getDdlStmt(mv, createTableStmt, null, null, false, true);
 
         Assertions.assertTrue(createTableStmt.get(0).contains(refreshClause), createTableStmt.get(0));
         Assertions.assertTrue(createTableStmt.get(0).contains(orderBy), createTableStmt.get(0));

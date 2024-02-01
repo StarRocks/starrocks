@@ -52,13 +52,14 @@ SELECT * FROM information_schema.task_runs WHERE task_name = '<task_name>';
 
 You can configure asynchronous ETL tasks using the following FE configuration items:
 
-| **Parameter**              | **Default value** | **Description**                                              |
-| -------------------------- | ----------------- | ------------------------------------------------------------ |
-| task_ttl_second            | 259200            | The period during which a Task is valid. Unit: seconds. Tasks that exceed the validity period are deleted. |
-| task_check_interval_second | 14400             | The time interval to delete invalid Tasks. Unit: seconds.    |
-| task_runs_ttl_second       | 259200            | The period during which a TaskRun is valid. Unit: seconds. TaskRuns that exceed the validity period are deleted automatically. Additionally, TaskRuns in the `FAILED` and `SUCCESS` states are also deleted automatically. |
-| task_runs_concurrency      | 20                | The maximum number of TaskRuns that can be run in parallel.  |
-| task_runs_queue_length     | 500               | The maximum number of TaskRuns that are pending for running. If the number exceeds the default value, the incoming tasks will be suspended. |
+| **Parameter**                | **Default value** | **Description**                                              |
+| ---------------------------- | ----------------- | ------------------------------------------------------------ |
+| task_ttl_second              | 86400            | The period during which a Task is valid. Unit: seconds. Tasks that exceed the validity period are deleted. |
+| task_check_interval_second   | 14400             | The time interval to delete invalid Tasks. Unit: seconds.    |
+| task_runs_ttl_second         | 86400            | The period during which a TaskRun is valid. Unit: seconds. TaskRuns that exceed the validity period are deleted automatically. Additionally, TaskRuns in the `FAILED` and `SUCCESS` states are also deleted automatically. |
+| task_runs_concurrency        | 4                 | The maximum number of TaskRuns that can be run in parallel.  |
+| task_runs_queue_length       | 500               | The maximum number of TaskRuns that are pending for running. If the number exceeds the default value, the incoming tasks will be suspended. |
+| task_runs_max_history_number | 10000      | The maximum number of TaskRun records to retain. |
 
 ## Examples
 

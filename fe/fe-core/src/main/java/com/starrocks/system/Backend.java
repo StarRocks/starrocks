@@ -35,6 +35,7 @@
 package com.starrocks.system;
 
 import com.google.common.base.Objects;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -43,6 +44,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.DiskInfo.DiskState;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TDisk;
@@ -54,6 +56,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -78,6 +81,9 @@ public class Backend extends ComputeNode {
     @SerializedName(value = "d")
     private volatile ConcurrentHashMap<String, DiskInfo> disksRef;
 
+    @SerializedName("loc")
+    private Map<String, String> location = new HashMap<>();
+
     // This is used for the first time we initiate pathHashToDishInfo in SystemInfoService.
     // after initiating it, this variable is set to true.
     private boolean initPathInfo = false;
@@ -101,6 +107,28 @@ public class Backend extends ComputeNode {
 
     public void setDisks(ImmutableMap<String, DiskInfo> disks) {
         this.disksRef = new ConcurrentHashMap<>(disks);
+    }
+
+    public Map<String, String> getLocation() {
+        return location;
+    }
+
+    /**
+     * Currently only single-level location label is supported.
+     *
+     * @return null if location map is empty, otherwise return the first key-value pair
+     */
+    public Pair<String, String> getSingleLevelLocationKV() {
+        if (location.isEmpty()) {
+            return null;
+        } else {
+            Preconditions.checkArgument(location.size() == 1);
+            return new Pair<>(location.keySet().iterator().next(), location.values().iterator().next());
+        }
+    }
+
+    public void setLocation(Map<String, String> location) {
+        this.location = location;
     }
 
     public ImmutableMap<String, DiskInfo> getDisks() {
@@ -223,7 +251,7 @@ public class Backend extends ComputeNode {
             }
             if (allPathHashUpdated) {
                 initPathInfo = true;
-                GlobalStateMgr.getCurrentSystemInfo()
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                         .updatePathInfo(new ArrayList<>(disksRef.values()), Lists.newArrayList());
             }
         }
@@ -293,7 +321,7 @@ public class Backend extends ComputeNode {
         if (isChanged) {
             // update disksRef
             disksRef = new ConcurrentHashMap<>(newDiskInfos);
-            GlobalStateMgr.getCurrentSystemInfo().updatePathInfo(addedDisks, removedDisks);
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updatePathInfo(addedDisks, removedDisks);
             // log disk changing
             GlobalStateMgr.getCurrentState().getEditLog().logBackendStateChange(this);
         }

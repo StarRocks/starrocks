@@ -15,20 +15,13 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.LocalTablet;
-import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Tablet;
-import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.pseudocluster.PseudoCluster;
@@ -37,8 +30,6 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
-import com.starrocks.sql.ast.DmlStmt;
-import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
@@ -56,11 +47,8 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Mock;
-import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.parquet.Strings;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -87,62 +75,19 @@ public class MvRewriteTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        Config.dynamic_partition_check_interval_seconds = 10000;
-        Config.bdbje_heartbeat_timeout_second = 60;
-        Config.bdbje_replica_ack_timeout_second = 60;
-        Config.bdbje_lock_timeout_second = 60;
-        // set some parameters to speedup test
-        Config.tablet_sched_checker_interval_seconds = 1;
-        Config.tablet_sched_repair_delay_factor_second = 1;
-        Config.enable_new_publish_mechanism = true;
-        Config.alter_scheduler_interval_millisecond = 100;
-        FeConstants.enablePruneEmptyOutputScan = false;
-        FeConstants.runningUnitTest = true;
         startSuiteTime = Instant.now().getEpochSecond();
 
-        // build a small cache for test
-        Config.mv_plan_cache_max_size = 10;
         CachingMvPlanContextBuilder.getInstance().rebuildCache();
-
-        // Use sync analyze
-        Config.mv_auto_analyze_async = false;
-
-        // Default REFRESH DEFERRED
-        Config.default_mv_refresh_immediate = false;
-
-        Config.default_replication_num = 1;
         PseudoCluster.getOrCreateWithRandomPort(true, 1);
-
         GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(500);
         cluster = PseudoCluster.getInstance();
 
         connectContext = UtFrameUtils.createDefaultCtx();
-        // 300s: 5min
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(3000 * 100);
-        // 300s: 5min
-        connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(3000 * 100);
-        connectContext.getSessionVariable().setEnableShortCircuit(false);
-
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);
 
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
-                if (stmt instanceof InsertStmt) {
-                    InsertStmt insertStmt = (InsertStmt) stmt;
-                    TableName tableName = insertStmt.getTableName();
-                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-                    OlapTable tbl = ((OlapTable) testDb.getTable(tableName.getTbl()));
-                    if (tbl != null) {
-                        for (Long partitionId : insertStmt.getTargetPartitionIds()) {
-                            Partition partition = tbl.getPartition(partitionId);
-                            setPartitionVersion(partition, partition.getVisibleVersion() + 1);
-                        }
-                    }
-                }
-            }
-        };
+        // set default config for async mvs
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
     }
 
     @AfterClass
@@ -151,18 +96,6 @@ public class MvRewriteTestBase {
             PseudoCluster.getInstance().shutdown(true);
         } catch (Exception e) {
             // ignore exception
-        }
-    }
-
-    private static void setPartitionVersion(Partition partition, long version) {
-        partition.setVisibleVersion(version, System.currentTimeMillis());
-        MaterializedIndex baseIndex = partition.getBaseIndex();
-        List<Tablet> tablets = baseIndex.getTablets();
-        for (Tablet tablet : tablets) {
-            List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
-            for (Replica replica : replicas) {
-                replica.updateVersionInfo(version, -1, version);
-            }
         }
     }
 

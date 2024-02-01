@@ -71,11 +71,17 @@ struct HdfsScanStats {
     bool has_page_statistics = false;
     // page skip
     int64_t page_skip = 0;
+    // page index
+    int64_t rows_before_page_index = 0;
+    int64_t page_index_ns = 0;
 
     // late materialize round-by-round
     int64_t group_min_round_cost = 0;
 
     std::vector<int64_t> orc_stripe_sizes;
+    // io coalesce
+    int64_t orc_stripe_active_lazy_coalesce_together = 0;
+    int64_t orc_stripe_active_lazy_coalesce_seperately = 0;
 
     // Iceberg v2 only!
     int64_t iceberg_delete_file_build_ns = 0;
@@ -131,7 +137,7 @@ struct HdfsScanProfile {
 
 struct HdfsScannerParams {
     // one file split (parition_id, file_path, file_length, offset, length, file_format)
-    std::vector<const THdfsScanRange*> scan_ranges;
+    const THdfsScanRange* scan_range = nullptr;
 
     // runtime bloom filter.
     const RuntimeFilterProbeCollector* runtime_filter_collector = nullptr;
@@ -141,7 +147,6 @@ struct HdfsScannerParams {
     std::unordered_set<SlotId> slots_in_conjunct;
     // slot used by conjunct_ctxs
     std::unordered_set<SlotId> slots_of_mutli_slot_conjunct;
-    bool eval_conjunct_ctxs = true;
 
     // conjunct ctxs grouped by slot.
     std::unordered_map<SlotId, std::vector<ExprContext*>> conjunct_ctxs_by_slot;
@@ -182,8 +187,6 @@ struct HdfsScannerParams {
     bool case_sensitive = false;
 
     HdfsScanProfile* profile = nullptr;
-
-    std::atomic<int32_t>* open_limit;
 
     std::vector<const TIcebergDeleteFile*> deletes;
 
@@ -227,8 +230,8 @@ struct HdfsScannerContext {
     // partition column value which read from hdfs file path
     std::vector<ColumnPtr> partition_values;
 
-    // scan ranges
-    std::vector<const THdfsScanRange*> scan_ranges;
+    // scan range
+    const THdfsScanRange* scan_range = nullptr;
 
     // min max slots
     const TupleDescriptor* min_max_tuple_desc = nullptr;
@@ -282,13 +285,6 @@ struct HdfsScannerContext {
     Status evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Filter* filter);
 };
 
-// if *lvalue == expect, swap(*lvalue,*rvalue)
-inline bool atomic_cas(std::atomic_bool* lvalue, std::atomic_bool* rvalue, bool expect) {
-    bool res = lvalue->compare_exchange_strong(expect, *rvalue);
-    if (res) *rvalue = expect;
-    return res;
-}
-
 class HdfsScanner {
 public:
     HdfsScanner() = default;
@@ -305,31 +301,9 @@ public:
     int64_t cpu_time_spent() const { return _total_running_time - _app_stats.io_ns; }
     int64_t io_time_spent() const { return _app_stats.io_ns; }
     virtual int64_t estimated_mem_usage() const;
-    void set_keep_priority(bool v) { _keep_priority = v; }
-    bool keep_priority() const { return _keep_priority; }
     void update_counter();
 
     RuntimeState* runtime_state() { return _runtime_state; }
-
-    int32_t open_limit() { return _scanner_params.open_limit->load(std::memory_order_relaxed); }
-
-    bool is_open() { return _opened; }
-
-    bool acquire_pending_token(std::atomic_bool* token) {
-        // acquire resource
-        return atomic_cas(token, &_pending_token, true);
-    }
-
-    bool release_pending_token(std::atomic_bool* token) {
-        if (_pending_token) {
-            _pending_token = false;
-            *token = true;
-            return true;
-        }
-        return false;
-    }
-
-    bool has_pending_token() { return _pending_token; }
 
     virtual Status do_open(RuntimeState* runtime_state) = 0;
     virtual void do_close(RuntimeState* runtime_state) noexcept = 0;
@@ -337,10 +311,6 @@ public:
     virtual Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) = 0;
     virtual void do_update_counter(HdfsScanProfile* profile);
     virtual bool is_jni_scanner() { return false; }
-
-    void enter_pending_queue();
-    // how long it stays inside pending queue.
-    uint64_t exit_pending_queue();
 
 protected:
     Status open_random_access_file();
@@ -350,15 +320,11 @@ protected:
 private:
     bool _opened = false;
     std::atomic<bool> _closed = false;
-    bool _keep_priority = false;
     Status _build_scanner_context();
-    MonotonicStopWatch _pending_queue_sw;
     void update_hdfs_counter(HdfsScanProfile* profile);
     Status _init_mor_processor(RuntimeState* runtime_state, const MORParams& params);
 
 protected:
-    std::atomic_bool _pending_token = false;
-
     HdfsScannerContext _scanner_ctx;
     HdfsScannerParams _scanner_params;
     RuntimeState* _runtime_state = nullptr;

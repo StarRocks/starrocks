@@ -36,13 +36,11 @@ WITH BROKER
 
 ### database_name 和 label_name
 
-`label_name` 指定导入作业的标签。
+`label_name` 指定导入作业的标签。命名要求参见[系统限制](../../../reference/System_limit.md)。
 
 `database_name` 为可选，指定目标 StarRocks 表所在的数据库。
 
 每个导入作业都对应一个在该数据库内唯一的标签。通过标签，可以查看对应导入作业的执行情况，并防止导入相同的数据。导入作业的状态为 **FINISHED** 时，其标签不可再复用给其他导入作业。导入作业的状态为 **CANCELLED** 时，其标签可以复用给其他导入作业，但通常都是用来重试同一个导入作业（即使用同一个标签导入相同的数据）以实现数据“精确一次 (Exactly-Once)”语义。
-
-有关标签的命名规范，请参见[系统限制](../../../reference/System_limit.md)。
 
 ### data_desc
 
@@ -111,7 +109,7 @@ INTO TABLE <table_name>
 
   > **说明**
   >
-  > 该参数仅适用于目标 StarRocks 表使用聚合模型、并且所有 Value 列的聚合函数均为 `sum` 的情况。
+  > 该参数仅适用于目标 StarRocks 表使用聚合表、并且所有 Value 列的聚合函数均为 `sum` 的情况。
 
 - `PARTITION`
 
@@ -688,6 +686,16 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
    已经创建成功的导入作业，如果处于 **QUEUEING** 状态或者 **LOADING** 状态，那么您可以使用 [ALTER LOAD](../data-manipulation/ALTER_LOAD.md) 语句修改该作业的优先级。
 
    StarRocks 自 v2.5 版本起支持为导入作业设置 `priority` 参数。
+
+- `merge_condition`
+
+  用于指定作为更新生效条件的列名。这样只有当导入的数据中该列的值大于等于当前值的时候，更新才会生效。
+  
+  Broker Load 自 3.1 版本起支持条件更新。参见[通过导入实现数据变更](../../../loading/Load_to_Primary_Key_tables.md#条件更新)。
+  
+  > **说明**
+  >
+  > 指定的列必须为非主键列，且仅主键表支持条件更新。
 
 ## 列映射
 

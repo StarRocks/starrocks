@@ -58,6 +58,8 @@ public:
 
     size_t merged_rows() const override { return _collect_iter->merged_rows(); }
 
+    void set_delete_predicates_version(Version version) { _delete_predicates_version = version; }
+
     Status get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters);
 
     static Status parse_seek_range(const TabletSchemaCSPtr& tablet_schema,
@@ -87,6 +89,9 @@ private:
     TabletSharedPtr _tablet;
     TabletSchemaCSPtr _tablet_schema;
     Version _version;
+    // version of delete predicates, equal as _version by default
+    // _delete_predicates_version will be set as max_version of tablet in schema change
+    Version _delete_predicates_version;
 
     MemPool _mempool;
     ObjectPool _obj_pool;

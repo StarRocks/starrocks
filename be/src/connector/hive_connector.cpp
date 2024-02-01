@@ -299,6 +299,7 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     // 1. can_use_any_column = true
     // 2. only one materialized slot
     // 3. besides that, all slots are partition slots.
+    // 4. scan iceberg data file without equality delete files.
     auto check_opt_on_iceberg = [&]() {
         if (!_can_use_any_column) {
             return false;
@@ -307,6 +308,9 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
             return false;
         }
         if (_materialize_slots.size() != 1) {
+            return false;
+        }
+        if (!_scan_range.delete_column_slot_ids.empty()) {
             return false;
         }
         return true;
@@ -569,6 +573,7 @@ HdfsScanner* HiveDataSource::_create_hudi_jni_scanner(const FSOptions& options) 
     jni_scanner_params["serde"] = hudi_table->get_serde_lib();
     jni_scanner_params["input_format"] = hudi_table->get_input_format();
     jni_scanner_params["fs_options_props"] = build_fs_options_properties(options);
+    jni_scanner_params["time_zone"] = hudi_table->get_time_zone();
 
     std::string scanner_factory_class = "com/starrocks/hudi/reader/HudiSliceScannerFactory";
     HdfsScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, jni_scanner_params));
@@ -600,6 +605,7 @@ HdfsScanner* HiveDataSource::_create_paimon_jni_scanner(const FSOptions& options
     jni_scanner_params["predicate_info"] = _scan_range.paimon_predicate_info;
     jni_scanner_params["nested_fields"] = nested_fields;
     jni_scanner_params["native_table"] = paimon_table->get_paimon_native_table();
+    jni_scanner_params["time_zone"] = paimon_table->get_time_zone();
 
     std::string scanner_factory_class = "com/starrocks/paimon/reader/PaimonSplitScannerFactory";
     HdfsScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, jni_scanner_params));
@@ -634,6 +640,7 @@ HdfsScanner* HiveDataSource::_create_hive_jni_scanner(const FSOptions& options) 
     std::string serde;
     std::string input_format;
     std::map<std::string, std::string> serde_properties;
+    std::string time_zone;
 
     if (dynamic_cast<const FileTableDescriptor*>(_hive_table)) {
         const auto* file_table = dynamic_cast<const FileTableDescriptor*>(_hive_table);
@@ -644,6 +651,7 @@ HdfsScanner* HiveDataSource::_create_hive_jni_scanner(const FSOptions& options) 
         hive_column_types = file_table->get_hive_column_types();
         serde = file_table->get_serde_lib();
         input_format = file_table->get_input_format();
+        time_zone = file_table->get_time_zone();
     } else {
         const auto* hdfs_table = dynamic_cast<const HdfsTableDescriptor*>(_hive_table);
 
@@ -656,6 +664,7 @@ HdfsScanner* HiveDataSource::_create_hive_jni_scanner(const FSOptions& options) 
         serde = hdfs_table->get_serde_lib();
         input_format = hdfs_table->get_input_format();
         serde_properties = hdfs_table->get_serde_properties();
+        time_zone = hdfs_table->get_time_zone();
     }
 
     std::map<std::string, std::string> jni_scanner_params;
@@ -670,6 +679,7 @@ HdfsScanner* HiveDataSource::_create_hive_jni_scanner(const FSOptions& options) 
     jni_scanner_params["serde"] = serde;
     jni_scanner_params["input_format"] = input_format;
     jni_scanner_params["fs_options_props"] = build_fs_options_properties(options);
+    jni_scanner_params["time_zone"] = time_zone;
 
     for (const auto& pair : serde_properties) {
         jni_scanner_params[serde_property_prefix + pair.first] = pair.second;
@@ -705,6 +715,7 @@ HdfsScanner* HiveDataSource::_create_odps_jni_scanner(const FSOptions& options) 
     jni_scanner_params["required_fields"] = required_fields;
     jni_scanner_params.insert(_scan_range.odps_split_infos.begin(), _scan_range.odps_split_infos.end());
     jni_scanner_params["nested_fields"] = nested_fields;
+    jni_scanner_params["time_zone"] = odps_table->get_time_zone();
 
     const AliyunCloudConfiguration aliyun_cloud_configuration =
             CloudConfigurationFactory::create_aliyun(*options.cloud_configuration);
@@ -748,7 +759,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     COUNTER_UPDATE(_profile.scan_ranges_size, scan_range.length);
     HdfsScannerParams scanner_params;
     scanner_params.runtime_filter_collector = _runtime_filters;
-    scanner_params.scan_ranges = {&scan_range};
+    scanner_params.scan_range = &scan_range;
     scanner_params.fs = _pool.add(fs.release());
     scanner_params.path = native_file_path;
     scanner_params.file_size = _scan_range.file_length;
@@ -769,7 +780,6 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.hive_column_names = &_hive_column_names;
     scanner_params.case_sensitive = _case_sensitive;
     scanner_params.profile = &_profile;
-    scanner_params.open_limit = nullptr;
     scanner_params.lazy_column_coalesce_counter = get_lazy_column_coalesce_counter();
 
     if (!_equality_delete_slots.empty()) {

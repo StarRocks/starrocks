@@ -20,6 +20,7 @@ import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.FrontendHbResponse;
 import com.starrocks.utframe.UtFrameUtils;
@@ -31,7 +32,7 @@ public class BDBHATest {
 
     @BeforeClass
     public static void beforeClass() {
-        UtFrameUtils.createMinStarRocksCluster(true);
+        UtFrameUtils.createMinStarRocksCluster(true, RunMode.SHARED_NOTHING);
         UtFrameUtils.PseudoImage.setUpImageVersion();
     }
 
@@ -64,10 +65,12 @@ public class BDBHATest {
         BDBEnvironment environment = journal.getBdbEnvironment();
 
         // add two followers
-        GlobalStateMgr.getCurrentState().addFrontend(FrontendNodeType.FOLLOWER, "192.168.2.3", 9010);
+        GlobalStateMgr.getCurrentState().getNodeMgr()
+                .addFrontend(FrontendNodeType.FOLLOWER, "192.168.2.3", 9010);
         Assert.assertEquals(1,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
-        GlobalStateMgr.getCurrentState().addFrontend(FrontendNodeType.FOLLOWER, "192.168.2.4", 9010);
+        GlobalStateMgr.getCurrentState().getNodeMgr()
+                .addFrontend(FrontendNodeType.FOLLOWER, "192.168.2.4", 9010);
         Assert.assertEquals(1,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
 
@@ -80,7 +83,7 @@ public class BDBHATest {
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
 
         // the other one is dropped
-        GlobalStateMgr.getCurrentState().dropFrontend(FrontendNodeType.FOLLOWER, "192.168.2.3", 9010);
+        GlobalStateMgr.getCurrentState().getNodeMgr().dropFrontend(FrontendNodeType.FOLLOWER, "192.168.2.3", 9010);
 
         Assert.assertEquals(0,
                 environment.getReplicatedEnvironment().getRepMutableConfig().getElectableGroupSizeOverride());
@@ -91,7 +94,7 @@ public class BDBHATest {
         NodeMgr nodeMgr = new NodeMgr();
         nodeMgr.load(reader);
         reader.close();
-        Assert.assertEquals(GlobalStateMgr.getCurrentState().getRemovedFrontendNames().size(), 1);
+        Assert.assertEquals(GlobalStateMgr.getCurrentState().getNodeMgr().getRemovedFrontendNames().size(), 1);
         Assert.assertEquals(GlobalStateMgr.getCurrentState().getNodeMgr().getHelperNodes().size(), 2);
     }
 }
