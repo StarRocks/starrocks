@@ -50,7 +50,7 @@ public class DistinctAggTest extends PlanTestBase {
                 "group_concat('1', '2', ','), array_agg(1)");
         sql = "select count(distinct 1, 2, 3, 4) from t0 group by v2";
         plan = getFragmentPlan(sql);
-        assertContains(plan,"4:AGGREGATE (update finalize)\n" +
+        assertContains(plan, "4:AGGREGATE (update finalize)\n" +
                 "  |  output: count(if(1 IS NULL, NULL, if(2 IS NULL, NULL, if(3 IS NULL, NULL, 4))))");
 
         sql = "select count(distinct v3, 1) from t0 group by v2";
