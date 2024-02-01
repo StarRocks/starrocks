@@ -54,17 +54,24 @@ jobs:
         id: ori_pr_info
         run: |
           cd /var/lib/elastic-service && git pull
-          ./lib/get_pr_info.sh 
+          ./lib/get_pr_info.sh
 
-  repo-sync:
-    name: Repo Sync
+  repo-sync-main:
+    name: Repo Sync - main
     runs-on: [self-hosted, sync]
+    if: inputs.BRANCH == 'main'
     needs: pr-info
     steps:
       - name: clean
         run: |
           rm -rf ${{ github.workspace }}
           mkdir -p ${{ github.workspace }}
+
+      - name: checkout code
+        run: |
+          shopt -s dotglob
+          cp -rf /root/tools/celerdata-github-runner/celerdata-enterprise/* ${{ github.workspace }}
+          shopt -u dotglob
 
       - name: Clean Branches
         env:
@@ -73,12 +80,6 @@ jobs:
         run: |
           curl -s -X DELETE -u username:${{secrets.GITHUB_TOKEN}} https://api.github.com/repos/${{ github.repository }}/git/refs/heads/${{ env.source_branch }}
           curl -s -X DELETE -u username:${{secrets.GITHUB_TOKEN}} https://api.github.com/repos/${{ github.repository }}/git/refs/heads/${{ env.destination_branch }}
-
-      - uses: actions/checkout@v3
-        with:
-          token: ${{ secrets.SYNC_PAT }}
-          fetch-depth: 0
-          ref: ${{ inputs.BRANCH }}
 
       - uses: repo-sync/github-sync@v2
         name: Sync repo to branch
@@ -89,11 +90,10 @@ jobs:
           github_token: ${{ secrets.SYNC_PAT }}
 
       - name: checkout tools
-        uses: actions/checkout@v3
-        with:
-          repository: StarRocks/elastic-service
-          path: './elastic-service'
-          token: ${{ secrets.SYNC_PAT }}
+        run: |
+          cp -rf /root/tools/github-runner/elastic-service ./elastic-service
+          cd elastic-service
+          git pull
           
       - name: pr branch
         run: |
@@ -191,9 +191,169 @@ jobs:
         run: |
           cd ${{ github.workspace }}
           if [[ ! -d ${{ github.workspace }}/elastic-service ]]; then
-            git clone https://${{ secrets.SYNC_PAT }}@github.com/StarRocks/elastic-service.git
+            cp -rf /root/tools/github-runner/elastic-service ./elastic-service
           fi
+          cd elastic-service && git pull
+          if [[ "${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}" != '' && "${{ steps.create_pr.outcome }}" == 'success' ]]; then
+            msg_type="conflict"
+            this_pr_url=${{ steps.create_pr.outputs.pr_url }}
+          elif [[ "${{ steps.create_pending_pr.outcome }}" == 'success' ]]; then
+            msg_type="pending"
+            this_pr_url=${{ steps.create_pending_pr.outputs.pr_url }}
+          elif [[ "${{ steps.create_pr.outcome }}" == 'success' ]]; then
+            exit 0;
+          else
+            msg_type="error"
+            this_pr_url=${{ steps.create_error_pr.outputs.pr_url }}
+          fi
+          python3 lib/sync_notify.py ${msg_type} ${branch} ${source_pr} ${source_commit_id} ${action_url} ${this_pr_url}
+
+      - name: clean
+        if: always()
+        env:
+          BODY_FILE: /home/disk1/nas/body-${{ inputs.PR_ID }}.txt
+        run: |
+          rm -f ${BODY_FILE}
+          rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+
+  repo-sync-branch:
+    name: Repo Sync - branch
+    runs-on: [ self-hosted, sync-branch ]
+    if: inputs.BRANCH != 'main'
+    needs: pr-info
+    steps:
+      - name: clean
+        run: |
+          rm -rf ${{ github.workspace }}
+          mkdir -p ${{ github.workspace }}
+
+      - name: checkout code
+        run: |
+          shopt -s dotglob
+          cp -rf /var/lib/celerdata-enterprise/* ${{ github.workspace }}
+          shopt -u dotglob
+
+      - name: Clean Branches
+        env:
+          source_branch: ${{ inputs.BRANCH }}-sync-${{ inputs.PR_ID }}
+          destination_branch: ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
+        run: |
+          curl -s -X DELETE -u username:${{secrets.GITHUB_TOKEN}} https://api.github.com/repos/${{ github.repository }}/git/refs/heads/${{ env.source_branch }}
+          curl -s -X DELETE -u username:${{secrets.GITHUB_TOKEN}} https://api.github.com/repos/${{ github.repository }}/git/refs/heads/${{ env.destination_branch }}
+
+      - uses: repo-sync/github-sync@v2
+        name: Sync repo to branch
+        with:
+          source_repo: StarRocks/starrocks
+          source_branch: ${{ inputs.BRANCH }}
+          destination_branch: ${{ inputs.BRANCH }}-sync-${{ inputs.PR_ID }}
+          github_token: ${{ secrets.SYNC_PAT }}
+
+      - name: checkout tools
+        run: |
+          cp -rf /var/lib/elastic-service ./elastic-service
           cd elastic-service
+          git pull
+
+      - name: pr branch
+        run: |
+          git pull
+          pr_branch=${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
+          git branch ${pr_branch} ${{ inputs.BRANCH }}
+          git checkout ${pr_branch}
+          git push -u origin ${pr_branch}
+
+      - name: previous check
+        id: previous-check
+        env:
+          GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
+        run: |
+          cd ${{ github.workspace }}/elastic-service
+          check_res=$(python3 lib/pr_sequence_checker.py new ${{ inputs.BRANCH }} ${{ inputs.PR_ID }} ${{ inputs.COMMIT_ID }})
+          echo ${check_res}
+          conflict_prs=$(echo ${check_res} | awk -F'Files:' '{print $1}' | awk -F' ' '{print $NF}')
+          echo CONFLICT_PRS=${conflict_prs} >> $GITHUB_OUTPUT
+          check_res=$(echo $check_res | tail -n 1)
+          echo RES=${check_res} >> $GITHUB_OUTPUT
+
+      - name: cherry pick
+        id: cherry-pick
+        run: |
+          cd ${{ github.workspace }}/elastic-service
+          ./lib/run_cherry_pick.sh --pr ${{ inputs.PR_ID }}
+          cd ${{ github.workspace }}
+          git push -u origin ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
+
+      - name: Create pull request
+        id: create_pr
+        if: steps.previous-check.outputs.RES == 'True'
+        env:
+          GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
+          PR_LABEL: sync,${{ inputs.BRANCH }},${{ steps.cherry-pick.outputs.LABEL }}${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}
+          HEAD: ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
+          TITLE: "${{ needs.pr-info.outputs.title }}(sync #${{ inputs.PR_ID }})"
+          BODY_FILE: /home/disk1/nas/body-${{ inputs.PR_ID }}.txt
+          REVIEWER: ${{ needs.pr-info.outputs.assignees }}
+        run: |
+          info=`gh pr create -B ${{ inputs.BRANCH }} -H "${HEAD}" -l "${PR_LABEL}" -t "${TITLE}" -F "${BODY_FILE}" -r "${REVIEWER}"`
+          echo $info
+          pr_url=`echo $info | tail -n 1`
+          echo pr_url=${pr_url} >> $GITHUB_OUTPUT
+
+      # previous pr files' check pending
+      - name: Create pending pull request
+        id: create_pending_pr
+        if: steps.previous-check.outputs.RES != 'True'
+        env:
+          GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
+          PR_LABEL: "sync,${{ inputs.BRANCH }},${{ steps.cherry-pick.outputs.LABEL }},pending"
+          HEAD: ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
+          TITLE: "${{ needs.pr-info.outputs.title }}(sync #${{ inputs.PR_ID }})"
+          BODY: "Previous prs: ${{ steps.previous-check.outputs.CONFLICT_PRS }}"
+          REVIEWER: ${{ needs.pr-info.outputs.assignees }}
+        run: |
+          info=`gh pr create -B ${{ inputs.BRANCH }} -H "${HEAD}" -l "${PR_LABEL}" -t "${TITLE}" -b "${BODY}" -r "${REVIEWER}"`
+          echo $info
+          pr_url=`echo $info | tail -n 1`
+          echo pr_url=${pr_url} >> $GITHUB_OUTPUT
+
+      # Unexpected failure
+      - name: Create Error pull request
+        id: create_error_pr
+        if: >
+          always() && 
+          ( steps.previous-check.outcome == 'failure' ||
+            steps.cherry-pick.outcome == 'failure' ||
+            steps.create_pr.outcome == 'failure' ||
+            steps.create_pending_pr.outcome == 'failure')
+        env:
+          GITHUB_TOKEN: ${{ secrets.SYNC_PAT }}
+          PR_LABEL: "sync,${{ inputs.BRANCH }},${{ steps.cherry-pick.outputs.LABEL }},conflict,ERROR"
+          HEAD: ${{ inputs.BRANCH }}-sync-${{ inputs.PR_ID }}
+          BASE: ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
+          TITLE: "${{ needs.pr-info.outputs.title }}(sync #${{ inputs.PR_ID }})"
+          BODY_FILE: /home/disk1/nas/body-${{ inputs.PR_ID }}.txt
+          REVIEWER: ${{ needs.pr-info.outputs.assignees }}
+        run: |
+          info=`gh pr create -B "${BASE}" -H "${HEAD}" -l "${PR_LABEL}" -t "${TITLE}" -F "${BODY_FILE}" -r "${REVIEWER}"`
+          echo $info
+          pr_url=`echo $info | tail -n 1`
+          echo pr_url=${pr_url} >> $GITHUB_OUTPUT
+
+      - name: notify
+        if: always()
+        env:
+          branch: ${{ inputs.BRANCH }}
+          source_pr: ${{ inputs.PR_ID }}
+          source_commit_id: ${{ inputs.COMMIT_ID }}
+          action_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GITHUB_TOKEN: ${{ secrets.PAT }}
+        run: |
+          cd ${{ github.workspace }}
+          if [[ ! -d ${{ github.workspace }}/elastic-service ]]; then
+            cp -rf /var/lib/elastic-service ./elastic-service
+          fi
+          cd elastic-service && git pull
           if [[ "${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}" != '' && "${{ steps.create_pr.outcome }}" == 'success' ]]; then
             msg_type="conflict"
             this_pr_url=${{ steps.create_pr.outputs.pr_url }}
