@@ -1180,6 +1180,13 @@ build_clucene() {
     fi
 }
 
+# avx2ki
+build_avx2ki() {
+    check_if_source_exist $AVX2KI_SOURCE
+    cd $TP_SOURCE_DIR/$AVX2KI_SOURCE
+    rpm -ivh boostkit-ksl-2.1.0-1.aarch64.rpm
+}
+
 # restore cxxflags/cppflags/cflags to default one
 restore_compile_flags() {
     # c preprocessor flags
@@ -1270,6 +1277,9 @@ build_fiu
 build_llvm
 build_clucene
 
+if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+    build_avx2ki
+fi
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad
