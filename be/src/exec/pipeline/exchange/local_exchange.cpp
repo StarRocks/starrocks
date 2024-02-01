@@ -45,10 +45,6 @@ Status PartitionExchanger::Partitioner::partition_chunk(const vectorized::ChunkP
     _partition_row_indexes_start_points.assign(num_partitions + 1, 0);
     for (size_t i = 0; i < num_rows; ++i) {
         _partition_row_indexes_start_points[_shuffle_channel_id[i]]++;
-<<<<<<< HEAD
-=======
-        _partition_memory_usage[_shuffle_channel_id[i]] += chunk->bytes_usage(i, 1);
->>>>>>> 03bf99af4b ([BugFix] rename element_memory_usage to reference_memory_usage and fix incorrect result (#18090))
     }
     // We make the last item equal with number of rows of this chunk.
     for (int32_t i = 1; i <= num_partitions; ++i) {
