@@ -372,14 +372,10 @@ public:
 
     virtual std::string debug_string() const { return {}; }
 
-<<<<<<< HEAD
     // used for automatic partition item in this column
     virtual std::string raw_item_value(size_t idx) const { return debug_item(idx); }
 
-    // memory usage includes container memory usage and element memory usage.
-=======
     // memory usage includes container memory usage and reference memory usage.
->>>>>>> 03bf99af4b ([BugFix] rename element_memory_usage to reference_memory_usage and fix incorrect result (#18090))
     // 1. container memory usage: container capacity * type size.
     // 2. reference memory usage: element data size that is not in the container,
     //    such as memory referenced by pointer.
