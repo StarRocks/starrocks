@@ -144,7 +144,7 @@ public class SplitTwoPhaseAggRule extends SplitAggregateRule {
 
     private boolean canGenerateTwoStageAggregate(CallOperator distinctCall) {
         List<ColumnRefOperator> distinctCols = distinctCall.getColumnRefs();
-        List< ScalarOperator> children = distinctCall.getChildren();
+        List<ScalarOperator> children = distinctCall.getChildren();
         // 1. multiple cols distinct is not support two stage aggregate
         // 2. array type col is not support two stage aggregate
         if (distinctCols.size() > 1 || children.get(0).getType().isComplexType()) {
