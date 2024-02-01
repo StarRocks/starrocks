@@ -1443,7 +1443,7 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
     cfg.algorithm = algorithm;
 
     // compaction task maybe failed if tablet is deleted
-    st = compaction_merge_rowsets(_tablet, info->start_version.major_number(), input_rowsets, rowset_writer.get(), cfg);
+    st = compaction_merge_rowsets(_tablet, info->start_version.major(), input_rowsets, rowset_writer.get(), cfg);
     if (!st.ok()) {
         if (_tablet.tablet_state() == TABLET_SHUTDOWN) {
             std::string msg = strings::Substitute(
