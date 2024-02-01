@@ -25,6 +25,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.delta.DeltaLakeMetadata;
@@ -243,6 +244,11 @@ public class UnifiedMetadataTest {
                 result = ImmutableList.of();
                 times = 1;
             }
+            {
+                icebergMetadata.prepareMetadata((MetaPreparationItem) any, null);
+                result = true;
+                times = 1;
+            }
         };
 
         Table table = unifiedMetadata.getTable("test_db", "test_tbl");
@@ -261,6 +267,7 @@ public class UnifiedMetadataTest {
         createTableStmt.setEngineName("iceberg");
         assertTrue(unifiedMetadata.createTable(createTableStmt));
         Assert.assertTrue(unifiedMetadata.getPrunedPartitions(table, null, -1).isEmpty());
+        Assert.assertTrue(unifiedMetadata.prepareMetadata(new MetaPreparationItem(icebergTable, null, -1), null));
     }
 
     @Test
