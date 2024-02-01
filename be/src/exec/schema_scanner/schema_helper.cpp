@@ -224,6 +224,17 @@ Status SchemaHelper::get_grants_to(const std::string& ip, const int32_t port,
             timeout_ms);
 }
 
+Status SchemaHelper::get_partitions_meta(const std::string& ip, const int32_t port,
+                                         const TGetPartitionsMetaRequest& var_params,
+                                         TGetPartitionsMetaResponse* var_result, int timeout_ms) {
+    return ThriftRpcHelper::rpc<FrontendServiceClient>(
+            ip, port,
+            [&var_params, &var_result](FrontendServiceConnection& client) {
+                client->getPartitionsMeta(*var_result, var_params);
+            },
+            timeout_ms);
+}
+
 void fill_data_column_with_null(Column* data_column) {
     auto* nullable_column = down_cast<NullableColumn*>(data_column);
     nullable_column->append_nulls(1);
