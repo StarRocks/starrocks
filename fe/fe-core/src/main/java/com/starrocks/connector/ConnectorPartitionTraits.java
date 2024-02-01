@@ -376,12 +376,7 @@ public abstract class ConnectorPartitionTraits {
         }
 
         public List<Column> getPartitionColumns() {
-            // TODO: check partition type
-            try {
-                return ((OlapTable) table).getPartitionInfo().getPartitionColumns();
-            } catch (com.starrocks.common.NotImplementedException e) {
-                return null;
-            }
+            return ((OlapTable) table).getPartitionInfo().getPartitionColumns();
         }
     }
 

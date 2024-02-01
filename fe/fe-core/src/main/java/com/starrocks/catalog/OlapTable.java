@@ -2789,7 +2789,7 @@ public class OlapTable extends Table {
         tableProperty.setForeignKeyConstraints(foreignKeyConstraints);
     }
 
-    public Boolean getUseFastSchemaEvolution() {
+    public boolean getUseFastSchemaEvolution() {
         if (tableProperty != null) {
             return tableProperty.getUseFastSchemaEvolution();
         }

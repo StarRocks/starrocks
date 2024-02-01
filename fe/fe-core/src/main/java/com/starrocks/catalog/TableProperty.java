@@ -212,7 +212,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // foreign key constraint for mv rewrite
     private List<ForeignKeyConstraint> foreignKeyConstraints;
 
-    private Boolean useFastSchemaEvolution;
+    private boolean useFastSchemaEvolution;
 
     private PeriodDuration dataCachePartitionDuration;
 
@@ -807,7 +807,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
-    public Boolean getUseFastSchemaEvolution() {
+    public boolean getUseFastSchemaEvolution() {
         return useFastSchemaEvolution;
     }
 

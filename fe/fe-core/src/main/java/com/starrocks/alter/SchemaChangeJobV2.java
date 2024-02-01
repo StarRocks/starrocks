@@ -312,20 +312,6 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     int originSchemaHash = tbl.getSchemaHashByIndexId(originIndexId);
                     KeysType originKeysType = tbl.getKeysTypeByIndexId(originIndexId);
                     List<Column> originSchema = tbl.getSchemaByIndexId(originIndexId);
-
-                    // copy for generate some const default value
-                    List<Column> copiedShadowSchema = Lists.newArrayList();
-                    for (Column column : shadowSchema) {
-                        Column.DefaultValueType defaultValueType = column.getDefaultValueType();
-                        if (defaultValueType == Column.DefaultValueType.CONST) {
-                            Column copiedColumn = new Column(column);
-                            copiedColumn.setDefaultValue(column.calculatedDefaultValueWithTime(startTime));
-                            copiedShadowSchema.add(copiedColumn);
-                        } else {
-                            copiedShadowSchema.add(column);
-                        }
-                    }
-
                     List<Integer> copiedSortKeyIdxes = index.getSortKeyIdxes();
                     List<Integer> copiedSortKeyUniqueIds = index.getSortKeyUniqueIds();
                     // TODO
@@ -377,7 +363,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                                     shadowShortKeyColumnCount, shadowSchemaHash, shadowSchemaVersion,
                                     Partition.PARTITION_INIT_VERSION,
                                     originKeysType, TStorageType.COLUMN, storageMedium,
-                                    copiedShadowSchema, bfColumns, bfFpp, countDownLatch, indexes,
+                                    shadowSchema, bfColumns, bfFpp, countDownLatch, indexes,
                                     tbl.isInMemory(),
                                     tbl.enablePersistentIndex(),
                                     tbl.primaryIndexCacheExpireSec(),
