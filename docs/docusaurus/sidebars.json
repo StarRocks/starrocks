@@ -220,7 +220,21 @@
             "integrations/IDE_integrations/jupysql"
           ]
         },
+<<<<<<< HEAD
         "integrations/other_integrations/intro"
+=======
+        {
+          "type": "doc",
+          "id": "integrations/other_integrations/datadog_support"
+        },
+        {
+          "type": "link",
+          "label": "DBT",
+          "description": "Modeling and transformation with DBT",
+          "href": "https://github.com/StarRocks/starrocks/tree/main/contrib/dbt-connector/README.md"
+         },
+         "integrations/hive_bitmap_udf"
+>>>>>>> 39beadfc79 ([Doc] Add doc for hive bitmap udf (#40108))
       ]
     },
     {
@@ -857,7 +871,21 @@
             "integrations/IDE_integrations/jupysql"
           ]
         },
+<<<<<<< HEAD
         "integrations/other_integrations/intro"
+=======
+        {
+          "type": "doc",
+          "id": "integrations/other_integrations/datadog_support"
+        },
+        {
+          "type": "link",
+          "label": "DBT",
+          "description": "通过 DBT 实现数据建模与转换",
+          "href": "https://github.com/StarRocks/starrocks/tree/main/contrib/dbt-connector/README.md"
+         },
+         "integrations/hive_bitmap_udf"
+>>>>>>> 39beadfc79 ([Doc] Add doc for hive bitmap udf (#40108))
       ]
     },
     {
