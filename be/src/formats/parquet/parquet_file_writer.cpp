@@ -565,7 +565,8 @@ std::future<FileWriter::CommitResult> ParquetFileWriter::commit() {
                  has_field_id = _writer_options->column_ids.has_value(), rollback = _rollback_action,
                  location = _location] {
         // TODO(letian-jiang): check if there are any outstanding io task
-        FileWriter::CommitResult result{.io_status = Status::OK(), .format = PARQUET, .location = location, .rollback_action = rollback};
+        FileWriter::CommitResult result{
+                .io_status = Status::OK(), .format = PARQUET, .location = location, .rollback_action = rollback};
         try {
             writer->Close();
         } catch (const ::parquet::ParquetStatusException& e) {
@@ -683,8 +684,8 @@ FileWriter::FileMetrics ParquetFileWriter::_metrics(const ::parquet::FileMetaDat
         int64_t dict_page_offset = first_column_meta->dictionary_page_offset();
         int64_t first_data_page_offset = first_column_meta->data_page_offset();
         int64_t split_offset = dict_page_offset > 0 && dict_page_offset < first_data_page_offset
-                               ? dict_page_offset
-                               : first_data_page_offset;
+                                       ? dict_page_offset
+                                       : first_data_page_offset;
         split_offsets.push_back(split_offset);
     }
     file_metrics.split_offsets = split_offsets;

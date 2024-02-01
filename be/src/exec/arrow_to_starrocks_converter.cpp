@@ -200,8 +200,8 @@ void offsets_copy(const T* arrow_offsets_data, T arrow_base_offset, size_t num_e
 }
 
 template <LogicalType LT, typename = StringOrBinaryGaurd<LT>>
-static inline constexpr uint32_t binary_max_length = (LT == TYPE_VARCHAR || LT == TYPE_VARBINARY)
-                                                     ? TypeDescriptor::MAX_VARCHAR_LENGTH
+static inline constexpr uint32_t binary_max_length =
+        (LT == TYPE_VARCHAR || LT == TYPE_VARBINARY) ? TypeDescriptor::MAX_VARCHAR_LENGTH
                                                      : TypeDescriptor::MAX_CHAR_LENGTH;
 
 template <ArrowTypeId AT, LogicalType LT, bool is_nullable, bool is_strict>

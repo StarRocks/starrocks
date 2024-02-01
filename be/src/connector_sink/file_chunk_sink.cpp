@@ -105,8 +105,8 @@ std::unique_ptr<ConnectorChunkSink> FileChunkSinkProvider::create_chunk_sink(
     std::unique_ptr<formats::FileWriterFactory> file_writer_factory;
     if (boost::iequals(ctx->format, formats::PARQUET)) {
         file_writer_factory = std::make_unique<formats::ParquetFileWriterFactory>(
-                std::move(fs), ctx->format, ctx->options, ctx->column_names, std::move(column_evaluators),
-                std::nullopt, ctx->executor);
+                std::move(fs), ctx->format, ctx->options, ctx->column_names, std::move(column_evaluators), std::nullopt,
+                ctx->executor);
     } else if (boost::iequals(ctx->format, formats::ORC)) {
         file_writer_factory = std::make_unique<formats::ORCFileWriterFactory>(
                 std::move(fs), ctx->format, ctx->options, ctx->column_names, std::move(column_evaluators),

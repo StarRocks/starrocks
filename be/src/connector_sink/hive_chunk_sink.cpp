@@ -125,9 +125,9 @@ std::unique_ptr<ConnectorChunkSink> HiveChunkSinkProvider::create_chunk_sink(
     }
 
     auto partition_column_evaluators = ColumnEvaluator::clone(ctx->partition_column_evaluators);
-    return std::make_unique<connector::HiveChunkSink>(ctx->partition_column_names, std::move(partition_column_evaluators),
-                                                      std::move(location_provider), std::move(file_writer_factory),
-                                                      ctx->max_file_size, runtime_state);
+    return std::make_unique<connector::HiveChunkSink>(
+            ctx->partition_column_names, std::move(partition_column_evaluators), std::move(location_provider),
+            std::move(file_writer_factory), ctx->max_file_size, runtime_state);
 }
 
 } // namespace starrocks::connector

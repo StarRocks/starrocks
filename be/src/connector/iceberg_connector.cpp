@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "iceberg_connector.h"
+
 #include "connector_sink/iceberg_chunk_sink.h"
 
 namespace starrocks::connector {

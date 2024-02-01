@@ -17,8 +17,8 @@
 #include "column/column.h"
 #include "column/datum.h"
 #include "exprs/expr.h"
-#include "util/url_coding.h"
 #include "formats/parquet/parquet_file_writer.h"
+#include "util/url_coding.h"
 
 namespace starrocks::connector {
 
@@ -36,8 +36,8 @@ StatusOr<std::string> HiveUtils::make_partition_name(
     return ss.str();
 }
 
-std::vector<formats::FileColumnId>
-IcebergUtils::generate_parquet_field_ids(const std::vector<TIcebergSchemaField> &fields) {
+std::vector<formats::FileColumnId> IcebergUtils::generate_parquet_field_ids(
+        const std::vector<TIcebergSchemaField>& fields) {
     std::vector<formats::FileColumnId> file_column_ids(fields.size());
     for (int i = 0; i < fields.size(); ++i) {
         file_column_ids[i].field_id = fields[i].field_id;

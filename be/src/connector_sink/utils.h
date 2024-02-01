@@ -21,8 +21,8 @@
 #include "exprs/expr_context.h"
 #include "fmt/format.h"
 #include "formats/column_evaluator.h"
-#include "runtime/types.h"
 #include "formats/parquet/parquet_file_writer.h"
+#include "runtime/types.h"
 
 namespace starrocks::connector {
 
@@ -38,7 +38,8 @@ private:
 
 class IcebergUtils {
 public:
-    static std::vector<formats::FileColumnId> generate_parquet_field_ids(const std::vector<TIcebergSchemaField>& fields);
+    static std::vector<formats::FileColumnId> generate_parquet_field_ids(
+            const std::vector<TIcebergSchemaField>& fields);
 
     inline const static std::string DATA_DIRECTORY = "/data";
 };

@@ -28,10 +28,10 @@
 namespace starrocks::connector {
 
 IcebergChunkSink::IcebergChunkSink(const std::vector<std::string>& partition_columns,
-                             std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
-                             std::unique_ptr<LocationProvider> location_provider,
-                             std::unique_ptr<formats::FileWriterFactory> file_writer_factory, int64_t max_file_size,
-                             RuntimeState* state)
+                                   std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
+                                   std::unique_ptr<LocationProvider> location_provider,
+                                   std::unique_ptr<formats::FileWriterFactory> file_writer_factory,
+                                   int64_t max_file_size, RuntimeState* state)
         : _partition_column_names(partition_columns),
           _partition_column_evaluators(std::move(partition_column_evaluators)),
           _location_provider(std::move(location_provider)),
@@ -137,8 +137,8 @@ std::unique_ptr<ConnectorChunkSink> IcebergChunkSinkProvider::create_chunk_sink(
     std::unique_ptr<formats::FileWriterFactory> file_writer_factory;
     CHECK(boost::iequals(ctx->format, formats::PARQUET)) << "iceberg sink only supports parquet";
     file_writer_factory = std::make_unique<formats::ParquetFileWriterFactory>(
-            std::move(fs), ctx->format, ctx->options, ctx->column_names, std::move(column_evaluators), ctx->parquet_field_ids,
-            ctx->executor);
+            std::move(fs), ctx->format, ctx->options, ctx->column_names, std::move(column_evaluators),
+            ctx->parquet_field_ids, ctx->executor);
 
     std::vector<std::string> partition_columns;
     std::vector<std::unique_ptr<ColumnEvaluator>> partition_column_evaluators;
@@ -147,8 +147,8 @@ std::unique_ptr<ConnectorChunkSink> IcebergChunkSinkProvider::create_chunk_sink(
         partition_column_evaluators.push_back(ctx->column_evaluators[idx]->clone());
     }
     return std::make_unique<connector::IcebergChunkSink>(partition_columns, std::move(partition_column_evaluators),
-                                                      std::move(location_provider), std::move(file_writer_factory),
-                                                      ctx->max_file_size, runtime_state);
+                                                         std::move(location_provider), std::move(file_writer_factory),
+                                                         ctx->max_file_size, runtime_state);
 }
 
 } // namespace starrocks::connector
