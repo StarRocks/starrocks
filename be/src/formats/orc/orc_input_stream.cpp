@@ -42,16 +42,7 @@ void ORCHdfsFileStream::prepareCache(PrepareCacheScope scope, uint64_t offset, u
     _cache_buffer.resize(length);
     _cache_offset = offset;
 
-    // We need to set io range manually, otherwise one io request will be split into multiple requests
-    std::vector<IORange> io_ranges{};
-    io_ranges.emplace_back(InputStream::IORange{.offset = offset, .size = length});
-    setIORanges(io_ranges, false);
-
     doRead(_cache_buffer.data(), length, offset);
-
-    // Don't do clearIORanges(), because it will clear io ranges setted in startNextStripe()
-    // Just left clearIORanges() operation take place in startNextStripe()
-    // clearIORanges();
 }
 
 bool ORCHdfsFileStream::isAlreadyCachedInBuffer(uint64_t offset, uint64_t length) {

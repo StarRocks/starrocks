@@ -35,7 +35,6 @@ public:
     int64_t estimated_mem_usage() const override;
 
 private:
-    Status _setup_io_ranges() const;
     // create a reader or re init reader
     Status _create_or_reinit_reader();
     Status _build_hive_column_name_2_index();
