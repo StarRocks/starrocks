@@ -284,7 +284,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         {
             long refreshDurationMs = System.currentTimeMillis() - startRefreshTs;
             LOG.info("Refresh {} success, cost time(s): {}", materializedView.getName(),
-                    DebugUtil.DECIMAL_FORMAT_SCALE_3.format(refreshDurationMs / 1000));
+                    DebugUtil.DECIMAL_FORMAT_SCALE_3.format(refreshDurationMs / 1000.0));
             mvEntity.updateRefreshDuration(refreshDurationMs);
         }
 
@@ -1674,8 +1674,27 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 for (String mvPartitionName : mvToRefreshedPartitions) {
                     needRefreshTablePartitionNames.addAll(mvToBaseNameRef.get(mvPartitionName));
                 }
+<<<<<<< HEAD
                 refTableAndPartitionNames.put(table, needRefreshTablePartitionNames);
                 return refTableAndPartitionNames;
+=======
+                Map<Table, Set<String>> mvToBaseNameRef = mvToBaseNameRefs.get(mvPartitionName);
+                if (mvToBaseNameRef.containsKey(snapshotTable)) {
+                    if (needRefreshTablePartitionNames == null) {
+                        needRefreshTablePartitionNames = Sets.newHashSet();
+                    }
+                    // The table in this map has related partition with mv
+                    // It's ok to add empty set for a table, means no partition corresponding to this mv partition
+                    needRefreshTablePartitionNames.addAll(mvToBaseNameRef.get(snapshotTable));
+                } else {
+                    LOG.info("MV {}'s refTable {} is not found in `mvRefBaseTableIntersectedPartitions` " +
+                                    "because of empty update",
+                            materializedView.getName(), snapshotTable.getName());
+                }
+            }
+            if (needRefreshTablePartitionNames != null) {
+                refTableAndPartitionNames.put(snapshotInfo, needRefreshTablePartitionNames);
+>>>>>>> 51aa2a3ff4 ([Enhancement] Support to add random interval even if mv has defined start time (#40341))
             }
         }
         return refTableAndPartitionNames;

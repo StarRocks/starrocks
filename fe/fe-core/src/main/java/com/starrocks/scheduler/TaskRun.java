@@ -283,6 +283,12 @@ public class TaskRun implements Comparable<TaskRun> {
         status.setDefinition(task.getDefinition());
         status.setPostRun(task.getPostRun());
         status.setExpireTime(System.currentTimeMillis() + Config.task_runs_ttl_second * 1000L);
+<<<<<<< HEAD
+=======
+        status.getMvTaskRunExtraMessage().setExecuteOption(this.executeOption);
+
+        LOG.info("init task status, task:{}, query_id:{}, create_time:{}", task.getName(), queryId, status.getCreateTime());
+>>>>>>> 51aa2a3ff4 ([Enhancement] Support to add random interval even if mv has defined start time (#40341))
         this.status = status;
         return status;
     }

@@ -3074,22 +3074,18 @@ public class LocalMetastore implements ConnectorMetadata {
                 // remove this transient variable
                 properties.remove(PropertyAnalyzer.PROPERTY_MV_RANDOMIZE_START);
             }
-            if (asyncRefreshSchemeDesc.isDefineStartTime() || randomizeStart == -1) {
-                asyncRefreshContext.setStartTime(Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
-            } else if (asyncRefreshSchemeDesc.getIntervalLiteral() != null) {
-                // randomize the start time if not specified manually, to avoid refresh conflicts
-                // default random interval is min(300s, INTERVAL/2)
-                // user could specify it through mv_randomize_start
-                IntervalLiteral interval = asyncRefreshSchemeDesc.getIntervalLiteral();
-                long period = ((IntLiteral) interval.getValue()).getLongValue();
-                TimeUnit timeUnit =
-                        TimeUtils.convertUnitIdentifierToTimeUnit(interval.getUnitIdentifier().getDescription());
-                long intervalSeconds = TimeUtils.convertTimeUnitValueToSecond(period, timeUnit);
-                long currentTimeSecond = Utils.getLongFromDateTime(LocalDateTime.now());
-                long randomInterval = randomizeStart == 0 ? Math.min(300, intervalSeconds / 2) : randomizeStart;
-                long random = ThreadLocalRandom.current().nextLong(randomInterval);
-                long randomizedStart = currentTimeSecond + random;
 
+            long random = getRandomStart(asyncRefreshSchemeDesc.getIntervalLiteral(), randomizeStart);
+            if (asyncRefreshSchemeDesc.isDefineStartTime() || randomizeStart == -1) {
+                long definedStartTime = Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime());
+                // Add random set only if mv_random_start > 0 when user has already set the start time
+                if (randomizeStart > 0) {
+                    definedStartTime += random;
+                }
+                asyncRefreshContext.setStartTime(definedStartTime);
+            } else if (asyncRefreshSchemeDesc.getIntervalLiteral() != null) {
+                long currentTimeSecond = Utils.getLongFromDateTime(LocalDateTime.now());
+                long randomizedStart = currentTimeSecond + random;
                 asyncRefreshContext.setStartTime(randomizedStart);
             }
             if (asyncRefreshSchemeDesc.getIntervalLiteral() != null) {
@@ -3230,6 +3226,22 @@ public class LocalMetastore implements ConnectorMetadata {
         // NOTE: The materialized view has been added to the database, and the following procedure cannot throw exception.
         createTaskForMaterializedView(dbName, materializedView, optHints);
         DynamicPartitionUtil.registerOrRemovePartitionTTLTable(db.getId(), materializedView);
+    }
+
+    private long getRandomStart(IntervalLiteral interval,
+                                long randomizeStart) throws DdlException {
+        if (interval == null || randomizeStart == -1) {
+            return 0;
+        }
+        // randomize the start time if not specified manually, to avoid refresh conflicts
+        // default random interval is min(300s, INTERVAL/2)
+        // user could specify it through mv_randomize_start
+        long period = ((IntLiteral) interval.getValue()).getLongValue();
+        TimeUnit timeUnit =
+                TimeUtils.convertUnitIdentifierToTimeUnit(interval.getUnitIdentifier().getDescription());
+        long intervalSeconds = TimeUtils.convertTimeUnitValueToSecond(period, timeUnit);
+        long randomInterval = randomizeStart == 0 ? Math.min(300, intervalSeconds / 2) : randomizeStart;
+        return ThreadLocalRandom.current().nextLong(randomInterval);
     }
 
     private DataProperty analyzeMVDataProperties(Database db,
