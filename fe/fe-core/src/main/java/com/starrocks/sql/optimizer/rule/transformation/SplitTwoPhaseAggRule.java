@@ -90,7 +90,7 @@ public class SplitTwoPhaseAggRule extends SplitAggregateRule {
                     "each can't have multi columns.", ErrorType.USER_ERROR);
         }
 
-        if (CollectionUtils.isNotEmpty(distinctCols.get()) && !isSuitableForTwoStageDistinct(input, aggOp, distinctCols.get())) {
+        if (!isSuitableForTwoStageDistinct(input, aggOp, distinctCols.get())) {
             return Lists.newArrayList();
         }
 
@@ -146,7 +146,7 @@ public class SplitTwoPhaseAggRule extends SplitAggregateRule {
         List<ScalarOperator> children = distinctCall.getChildren();
         // 1. multiple cols distinct is not support two stage aggregate
         // 2. array type col is not support two stage aggregate
-        if (children.size() > 1 || children.get(0).getType().isArrayType()) {
+        if (children.size() > 1 || children.get(0).getType().isComplexType()) {
             return false;
         }
 
