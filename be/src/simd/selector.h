@@ -17,6 +17,8 @@
 #ifdef __AVX2__
 #include <emmintrin.h>
 #include <immintrin.h>
+#elif defined(__aarch64__)
+#include "avx2ki.h"
 #endif
 
 #include <cstdint>
@@ -29,7 +31,7 @@
 
 namespace starrocks {
 
-#ifdef __AVX2__
+#if defined(__AVX2__) || defined(__aarch64__)
 template <typename T, bool left_const = false, bool right_const = false, std::enable_if_t<sizeof(T) == 1, int> = 1>
 inline void avx2_select_if(uint8_t*& selector, T*& dst, const T*& a, const T*& b, int size) {
     const T* dst_end = dst + size;
@@ -237,7 +239,7 @@ public:
         auto* start_a = a.data();
         auto* start_b = b.data();
 
-#ifdef __AVX2__
+#if defined(__AVX2__) || defined(__aarch64__)
         if constexpr (sizeof(CppType) == 1) {
             avx2_select_if(select_vec, start_dst, start_a, start_b, size);
         } else if constexpr (sizeof(CppType) == 4) {
@@ -266,7 +268,7 @@ public:
         [[maybe_unused]] const CppType* start_a = &a;
         auto* start_b = b.data();
 
-#ifdef __AVX2__
+#if defined(__AVX2__) || defined(__aarch64__)
         if constexpr (sizeof(RunTimeCppType<TYPE>) == 1) {
             avx2_select_if<CppType, true, false>(select_vec, start_dst, start_a, start_b, size);
         } else if constexpr (could_use_common_select_if<CppType>()) {
@@ -292,7 +294,7 @@ public:
         auto* start_a = a.data();
         [[maybe_unused]] const CppType* start_b = &b;
 
-#ifdef __AVX2__
+#if defined(__AVX2__) || defined(__aarch64__)
         if constexpr (sizeof(RunTimeCppType<TYPE>) == 1) {
             avx2_select_if<CppType, false, true>(select_vec, start_dst, start_a, start_b, size);
         } else if constexpr (could_use_common_select_if<CppType>()) {
@@ -318,7 +320,7 @@ public:
         [[maybe_unused]] const CppType* start_a = &a;
         [[maybe_unused]] const CppType* start_b = &b;
 
-#ifdef __AVX2__
+#if defined(__AVX2__) || defined(__aarch64__)
         if constexpr (sizeof(RunTimeCppType<TYPE>) == 1) {
             avx2_select_if<CppType, true, true>(select_vec, start_dst, start_a, start_b, size);
         } else if constexpr (could_use_common_select_if<CppType>()) {

@@ -19,6 +19,8 @@
 #ifdef __SSE2__
 #include <emmintrin.h>
 #include <immintrin.h>
+#elif defined(__aarch64__)
+#include "avx2ki.h"
 #endif
 
 #include <cstddef>
@@ -119,7 +121,7 @@ ALWAYS_INLINE inline void memcpy_inlined(void* __restrict _dst, const void* __re
         }
     }
     else {
-#ifdef __AVX2__
+#if defined (__AVX2__) || defined (__aarch64__)
         if (size <= 256) {
             if (size <= 32) {
                 __builtin_memcpy(dst, src, 8);
@@ -143,9 +145,14 @@ ALWAYS_INLINE inline void memcpy_inlined(void* __restrict _dst, const void* __re
         } else {
             static constexpr size_t KB = 1024;
             if (size >= 512 * KB && size <= 2048 * KB) {
+                #ifdef __AVX2__
                 // erms(enhanced repeat movsv/stosb) version works well in this region.
-                asm volatile("rep movsb" : "=D"(dst), "=S"(src), "=c"(size) : "0"(dst), "1"(src), "2"(size) : "memory");
+                    asm volatile("rep movsb" : "=D"(dst), "=S"(src), "=c"(size) : "0"(dst), "1"(src), "2"(size) : "memory");
+                #elif defined(__aarch64__)
+                    goto common;
+                #endif
             } else {
+                common:
                 size_t padding = (32 - (reinterpret_cast<size_t>(dst) & 31)) & 31;
 
                 if (padding > 0) {

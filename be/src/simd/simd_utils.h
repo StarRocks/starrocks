@@ -14,9 +14,13 @@
 
 #pragma once
 
+#if defined(__AVX2__) || defined(__aarch64__)
 #ifdef __AVX2__
 #include <emmintrin.h>
 #include <immintrin.h>
+#elif defined (__aarch64__)
+#include "avx2ki.h"
+#endif
 
 namespace starrocks {
 class SIMDUtils {

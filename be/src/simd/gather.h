@@ -18,6 +18,8 @@
 #ifdef __AVX2__
 #include <emmintrin.h>
 #include <immintrin.h>
+#elif defined(__aarch64__)
+#include "avx2ki.h"
 #endif
 
 #include <cstdint>
@@ -37,7 +39,7 @@ struct SIMDGather {
         static_assert(sizeof(TC) == 4);
         static_assert(std::is_integral_v<TC>);
         int i = 0;
-#ifdef __AVX2__
+#if defined(__AVX2__) || defined(__aarch64__)
         if (buckets < max_process_size) {
             // gather will collect data of size sizeof(int32)
             // we only need the lower 16 bits

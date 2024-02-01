@@ -17,6 +17,8 @@
 #include "column/column.h"
 #ifdef __x86_64__
 #include <immintrin.h>
+#elif defined(__aarch64__)
+#include "avx2ki.h"
 #endif
 
 #include <utility>
@@ -306,7 +308,7 @@ public:
                 return;
             }
 
-#ifdef __AVX2__
+#if defined(__AVX2__) || defined(__aarch64__)
             // !important: filter must be an uint8_t container
             constexpr int batch_nums = 256 / (8 * sizeof(uint8_t));
             __m256i all0 = _mm256_setzero_si256();
@@ -375,7 +377,7 @@ public:
             const uint8_t* f_data = column->null_column()->raw_data();
             int offset = 0;
 
-#ifdef __AVX2__
+#if defined(__AVX2__) || defined(__aarch64__)
             // !important: filter must be an uint8_t container
             constexpr int batch_nums = 256 / (8 * sizeof(uint8_t));
             __m256i all0 = _mm256_setzero_si256();
@@ -481,7 +483,7 @@ public:
 
             const uint8_t* f_data = column->null_column()->raw_data();
             int offset = 0;
-#ifdef __AVX2__
+#if defined(__AVX2__) || defined(__aarch64__)
             // !important: filter must be an uint8_t container
             constexpr int batch_nums = 256 / (8 * sizeof(uint8_t));
             __m256i all0 = _mm256_setzero_si256();

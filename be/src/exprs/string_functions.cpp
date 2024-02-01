@@ -17,6 +17,8 @@
 #ifdef __x86_64__
 #include <immintrin.h>
 #include <mmintrin.h>
+#elif defined(__aarch64__)
+#include "avx2ki.h"
 #endif
 
 #include <algorithm>
@@ -1935,7 +1937,7 @@ static inline void vectorized_toggle_case(const Bytes* src, Bytes* dst) {
     char* begin = (char*)(src->data());
     char* end = (char*)(begin + size);
     char* src_ptr = begin;
-#if defined(__SSE2__)
+#if defined(__SSE2__) || defined(__aarch64__)
     static constexpr int SSE2_BYTES = sizeof(__m128i);
     const char* sse2_end = begin + (size & ~(SSE2_BYTES - 1));
     const auto a_minus1 = _mm_set1_epi8(CA - 1);
@@ -2087,7 +2089,7 @@ template <bool simd_optimization, bool trim_single, bool trim_utf8>
 static inline const char* skip_leading_spaces(const char* begin, const char* end, const std::string& remove,
                                               const std::vector<size_t>& utf8_index) {
     auto p = begin;
-#if defined(__SSE2__)
+#if defined(__SSE2__) || defined(__aarch64__)
     if constexpr (simd_optimization && trim_single) {
         const auto size = end - begin;
         const auto SSE2_BYTES = sizeof(__m128i);
@@ -2132,7 +2134,7 @@ static const char* skip_trailing_spaces(const char* begin, const char* end, cons
         return begin;
     }
     auto p = end;
-#if defined(__SSE2__)
+#if defined(__SSE2__) || defined(__aarch64__)
     if constexpr (simd_optimization && trim_single && !trim_utf8) {
         const auto size = end - begin;
         const auto SSE2_BYTES = sizeof(__m128i);

@@ -1185,6 +1185,9 @@ build_avx2ki() {
     check_if_source_exist $AVX2KI_SOURCE
     cd $TP_SOURCE_DIR/$AVX2KI_SOURCE
     rpm -ivh boostkit-ksl-2.1.0-1.aarch64.rpm
+
+     # patch avx2ki/operatoroverload.h
+     patch /usr/local/ksl/include/operatoroverload.h -p1 < $TP_PATCH_DIR/avx2ki-2.1.0.patch
 }
 
 # restore cxxflags/cppflags/cflags to default one

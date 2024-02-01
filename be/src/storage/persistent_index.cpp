@@ -2153,9 +2153,12 @@ Status ShardByLengthMutableIndex::create_index_file(std::string& path) {
     return Status::OK();
 }
 
+#if defined(__SSE2__) || defined(__aarch64__)
 #ifdef __SSE2__
-
 #include <emmintrin.h>
+#elif defined (__aarch64__)
+#include "avx2ki.h"
+#endif
 
 size_t get_matched_tag_idxes(const uint8_t* tags, size_t ntag, uint8_t tag, uint8_t* matched_idxes) {
     size_t nmatched = 0;

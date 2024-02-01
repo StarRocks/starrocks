@@ -43,6 +43,8 @@
 // the code that is built and the runtime checks to control what code is run.
 #ifdef __SSE4_2__
 #include <nmmintrin.h>
+#elif defined(__aarch64__)
+#include "avx2ki.h"
 #endif
 #include <zlib.h>
 
@@ -61,7 +63,7 @@ public:
     static uint32_t zlib_crc_hash(const void* data, int32_t bytes, uint32_t hash) {
         return crc32(hash, (const unsigned char*)data, bytes);
     }
-#ifdef __SSE4_2__
+#if defined(__SSE4_2__) || defined(__aarch64__)
     // Compute the Crc32 hash for data using SSE4 instructions.  The input hash parameter is
     // the current hash/seed value.
     // This should only be called if SSE is supported.
@@ -273,7 +275,7 @@ public:
     // Seed values for different steps of the query execution should use different seeds
     // to prevent accidental key collisions. (See IMPALA-219 for more details).
     static uint32_t hash(const void* data, int32_t bytes, uint32_t seed) {
-#ifdef __SSE4_2__
+#if defined(__SSE4_2__) || defined(__aarch64__)
 
         if (LIKELY(CpuInfo::is_supported(CpuInfo::SSE4_2))) {
             return crc_hash(data, bytes, seed);

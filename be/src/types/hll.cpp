@@ -36,6 +36,8 @@
 
 #ifdef __x86_64__
 #include <immintrin.h>
+#elif defined(__aarch64__)
+#include "avx2ki.h"
 #endif
 
 #include <cmath>
@@ -563,7 +565,7 @@ void HyperLogLog::clear() {
 }
 
 void HyperLogLog::_merge_registers(uint8_t* other_registers) {
-#ifdef __AVX2__
+#if defined(__AVX2__) || defined (__aarch64__)
     int loop = HLL_REGISTERS_COUNT / 32;
     uint8_t* dst = _registers.data;
     const uint8_t* src = other_registers;

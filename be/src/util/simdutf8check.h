@@ -17,7 +17,11 @@
 
 #pragma once
 
+#ifdef __x86_64__
 #include <x86intrin.h>
+#elif defined (__aarch64__)
+#include "avx2ki.h"
+#endif
 
 #include <cstddef>
 #include <cstdint>
@@ -181,7 +185,7 @@ static bool validate_utf8_fast(const char* src, size_t len) {
     return _mm_testz_si128(has_error, has_error);
 }
 
-#ifdef __AVX2__
+#if defined(__AVX2__)  || defined(__aarch64__)
 
 /*****************************/
 static inline __m256i push_last_byte_of_a_to_b(__m256i a, __m256i b) {

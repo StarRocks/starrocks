@@ -9,6 +9,8 @@
 
 #ifdef __SSE4_1__
 #include <smmintrin.h>
+#elif defined(__aarch64__)
+#include "avx2ki.h"
 #endif
 
 namespace starrocks {
@@ -17,7 +19,7 @@ namespace starrocks {
   * In most cases, performance is less than Volnitsky (see Volnitsky.h).
   */
 struct StringSearcherBase {
-#ifdef __SSE4_1__
+#if defined(__SSE4_1__) || defined(__aarch64__)
     static constexpr size_t SSE2_WIDTH = sizeof(__m128i);
 
     const int page_size = getpagesize();
@@ -39,7 +41,7 @@ private:
     /// first character in `needle`
     uint8_t first{};
 
-#ifdef __SSE4_1__
+#if defined(__SSE4_1__) || defined(__aarch64__)
     /// vector filled `first` for determining leftmost position of the first symbol
     __m128i pattern;
     /// vector of first 16 characters of `needle`
@@ -59,7 +61,7 @@ public:
 
         first = *needle;
 
-#ifdef __SSE4_1__
+#if defined(__SSE4_1__) || defined(__aarch64__)
         pattern = _mm_set1_epi8(first);
 
         const uint8_t* needle_pos = needle;
@@ -87,7 +89,7 @@ public:
 
     template <typename CharT, typename = std::enable_if_t<sizeof(CharT) == 1>>
     inline bool compare_lt_sse4_1_width(const CharT* haystack, const CharT* haystack_end, const CharT* pos) const {
-#ifdef __SSE4_1__
+#if defined(__SSE4_1__) || defined(__aarch64__)
         if (pageSafe(pos)) {
             const auto v_haystack = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pos));
             const auto v_against_cache = _mm_cmpeq_epi8(v_haystack, cache);
@@ -133,7 +135,7 @@ public:
     template <typename CharT, typename = std::enable_if_t<sizeof(CharT) == 1>>
     inline bool compare_ge_sse4_1_width(const CharT* haystack, const CharT* haystack_end, const CharT* pos) const {
         const uint8_t* needle_pos = needle;
-#ifdef __SSE4_1__
+#if defined(__SSE4_1__) || defined(__aarch64__)
         size_t quotient = needle_size / SSE2_WIDTH;
         for (int i = 0; i < quotient; ++i) {
             const auto v_haystack = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pos));
@@ -163,7 +165,7 @@ public:
         if (needle == needle_end) return haystack;
 
         while (haystack < haystack_end) {
-#ifdef __SSE4_1__
+#if defined(__SSE4_1__) || defined(__aarch64__)
             if (haystack + SSE2_WIDTH <= haystack_end && pageSafe(haystack)) {
                 /// find first character
                 const auto v_haystack = _mm_loadu_si128(reinterpret_cast<const __m128i*>(haystack));

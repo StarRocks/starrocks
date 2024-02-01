@@ -158,12 +158,12 @@ static void simd_offsets_copy(uint32_t* dst_array, const int32_t* src_array, con
     const char* src_p = src_begin;
     char* dst_p = (char*)dst_array;
     uint32_t base_diff = dst_base - src_base;
-#if defined(__AVX2__)
+#if defined(__AVX2__) || defined(__aarch64__)
     static constexpr size_t avx2_size = sizeof(__m256i);
     const char* src_end_avx2 = src_begin + (num_bytes & ~(avx2_size - 1));
     const __m256i diffs = _mm256_set1_epi32(base_diff);
     for (; src_p < src_end_avx2; src_p += avx2_size, dst_p += avx2_size) {
-        _mm256_storeu_si256((__m256i_u*)dst_p, _mm256_add_epi32(_mm256_loadu_si256((const __m256i_u*)src_p), diffs));
+        _mm256_storeu_si256((__m256i*)dst_p, _mm256_add_epi32(_mm256_loadu_si256((const __m256i*)src_p), diffs));
     }
 #elif defined(__SSE2__)
     static constexpr size_t sse2_size = sizeof(__m128i);
@@ -416,7 +416,7 @@ struct ArrowConverter<ArrowTypeId::DECIMAL, LT, is_nullable, is_strict, guard::G
         if constexpr (is_aligned) {
             *dst = *(int128_t*)src;
         } else {
-#if defined(__SSE2__)
+#if defined(__SSE2__) || defined (__aarch64__)
             _mm_store_si128((__m128i*)dst, _mm_loadu_si128((__m128i_u*)src));
 #else
             strings::memcpy_inlined(dst, src, sizeof(int128_t));
