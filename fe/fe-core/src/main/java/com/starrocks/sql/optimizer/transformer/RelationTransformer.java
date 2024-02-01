@@ -198,7 +198,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
             OptExprBuilder optExprBuilder;
             Pair<OptExprBuilder, OptExprBuilder> cteRootAndMostDeepAnchor = buildCTEAnchorAndProducer(queryRelation);
-            if (cteRootAndMostDeepAnchor.first == null && cteRootAndMostDeepAnchor.second == null) {
+            if (cteRootAndMostDeepAnchor.first == null || cteRootAndMostDeepAnchor.second == null) {
                 return visit(relation);
             }
             optExprBuilder = cteRootAndMostDeepAnchor.first;
