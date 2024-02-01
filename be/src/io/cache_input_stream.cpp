@@ -57,7 +57,7 @@ CacheInputStream::CacheInputStream(const std::shared_ptr<SharedBufferedInputStre
         uint32_t file_size = _size;
         memcpy(data + 8, &file_size, sizeof(file_size));
     }
-    // default _buffer size is 4MB(16 * 256KB)
+    // default _buffer size is 4MB = (16 * 256KB)
     _buffer_size = 16 * _block_size;
     _buffer.reserve(_buffer_size);
 }
@@ -166,7 +166,7 @@ Status CacheInputStream::_read_blocks_from_remote(const int64_t offset, const in
     char* out_pointer_cursor = out;
 
     for (int64_t read_offset_cursor = block_start_offset; read_offset_cursor < block_end_offset;) {
-        // Everytime read at least one buffer size
+        // Everytime read at most one buffer size
         const int64_t read_size = std::min(_buffer_size, block_end_offset - read_offset_cursor);
         RETURN_IF_ERROR(_sb_stream->read_at_fully(read_offset_cursor, _buffer.data(), read_size));
 
@@ -263,13 +263,12 @@ struct ReadFromRemoteIORange {
 };
 
 Status CacheInputStream::read_at_fully(int64_t offset, void* out, int64_t count) {
-    const BlockCache* cache = BlockCache::instance();
     const int64_t origin_offset = offset;
     count = std::min(_size - offset, count);
     if (count < 0) {
         return Status::EndOfFile("");
     }
-    const int64_t _block_size = cache->block_size();
+    const int64_t _block_size = _cache->block_size();
     char* p = static_cast<char*>(out);
     char* pe = p + count;
 
