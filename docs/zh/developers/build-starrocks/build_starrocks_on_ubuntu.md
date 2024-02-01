@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # 基于 Ubuntu 编译 StarRocks
 
-本文介绍如何基于 Ubuntu 操作系统编译 StarRocks。StarRocks 支持基于 X86_64 和 aarch64 架构编译。
+本文介绍如何基于 Ubuntu 操作系统编译 StarRocks。StarRocks 支持基于 x86_64 和 AArch64 架构编译。
 
 ## 前提条件
 
@@ -53,7 +53,7 @@ sudo apt-get install cmake gcc g++ default-jdk -y
    cmake --version
    ```
 
-   cmake 的版本必须为 3.20.1 或以上。如果您使用的版本较低，[请点此安装 cmake](https://cmake.org/download)。
+   CMake 的版本必须为 3.20.1 或以上。如果您使用的版本较低，[请点此安装 CMake](https://cmake.org/download)。
 
 ## 编译 StarRocks
 
