@@ -36,7 +36,7 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
 
 ### database_name and label_name
 
-`label_name` specifies the label of the load job.
+`label_name` specifies the label of the load job. For the naming conventions, see [System limits](../../../reference/System_limit.md).
 
 `database_name` optionally specifies the name of the database to which the destination table belongs.
 
