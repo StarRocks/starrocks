@@ -651,31 +651,20 @@ static StatusOr<TabletMetadataPtr> get_tablet_metadata(const string& metadata_lo
     return metadata;
 }
 
-static StatusOr<std::map<std::string, TabletMetadataPtr>> list_tablet_metadata(
-        FileSystem* fs, const std::string& metadata_root_location) {
+static StatusOr<std::list<std::string>> list_meta_files(FileSystem* fs, const std::string& metadata_root_location) {
     LOG(INFO) << "Start to list " << metadata_root_location;
-    std::map<std::string, TabletMetadataPtr> metadatas;
-    RETURN_IF_ERROR_WITH_WARN(
-            ignore_not_found(fs->iterate_dir(
-                    metadata_root_location,
-                    [&](std::string_view name) {
-                        if (is_tablet_metadata(name)) {
-                            auto location = join_path(metadata_root_location, name);
-                            auto res = get_tablet_metadata(location, false);
-                            if (res.status().is_not_found()) { // This metadata file was deleted by another node
-                                LOG(INFO) << location << " is deleted by other node";
-                                return true;
-                            } else if (!res.ok()) {
-                                LOG(WARNING) << "Failed to get meta file: " << location << ", status: " << res.status();
-                                return true;
-                            }
-                            metadatas.emplace(name, std::move(res).value());
-                        }
-                        return true;
-                    })),
-            "Failed to list " + metadata_root_location);
-    LOG(INFO) << "Found " << metadatas.size() << " meta files";
-    return metadatas;
+    std::list<std::string> meta_files;
+    RETURN_IF_ERROR_WITH_WARN(ignore_not_found(fs->iterate_dir(metadata_root_location,
+                                                               [&](std::string_view name) {
+                                                                   if (is_tablet_metadata(name)) {
+                                                                       return true;
+                                                                   }
+                                                                   meta_files.emplace_back(name);
+                                                                   return true;
+                                                               })),
+                              "Failed to list " + metadata_root_location);
+    LOG(INFO) << "Found " << meta_files.size() << " meta files";
+    return meta_files;
 }
 
 static StatusOr<std::map<std::string, DirEntry>> list_data_files(FileSystem* fs,
@@ -717,39 +706,44 @@ static StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSyst
     const auto metadata_root_location = join_path(root_location, kMetadataDirectoryName);
     const auto segment_root_location = join_path(root_location, kSegmentDirectoryName);
 
-    ASSIGN_OR_RETURN(auto metadatas, list_tablet_metadata(fs, metadata_root_location));
-
-    if (metadatas.empty()) {
-        LOG(INFO) << "Skipped data file GC of " << root_location << ", because there is no tablet metadata";
-        return std::map<std::string, DirEntry>();
-    }
-
     ASSIGN_OR_RETURN(auto data_files, list_data_files(fs, segment_root_location, expired_seconds));
 
     if (data_files.empty()) {
         return data_files;
     }
 
+    ASSIGN_OR_RETURN(auto meta_files, list_meta_files(fs, metadata_root_location));
+
     std::set<std::string> data_files_in_metadatas;
     auto check_rowset = [&](const RowsetMetadata& rowset) {
-        for (const auto& seg : rowset.segments()) {
-            data_files.erase(seg);
-            data_files_in_metadatas.emplace(seg);
+        for (const auto& segment : rowset.segments()) {
+            data_files.erase(segment);
+            data_files_in_metadatas.emplace(segment);
         }
     };
 
-    audit_ostream << "Total metadatas: " << metadatas.size() << std::endl;
-    LOG(INFO) << "Start to filter with metadatas, count: " << metadatas.size();
+    audit_ostream << "Total meta files: " << meta_files.size() << std::endl;
+    LOG(INFO) << "Start to filter with metadatas, count: " << meta_files.size();
 
     int64_t progress = 0;
-    for (const auto& [name, metadata] : metadatas) {
+    for (const auto& name : meta_files) {
+        auto location = join_path(metadata_root_location, name);
+        auto res = get_tablet_metadata(location, false);
+        if (res.status().is_not_found()) { // This metadata file was deleted by another node
+            LOG(INFO) << location << " is deleted by other node";
+            continue;
+        } else if (!res.ok()) {
+            LOG(WARNING) << "Failed to get meta file: " << location << ", status: " << res.status();
+            continue;
+        }
+        const auto& metadata = res.value();
         for (const auto& rowset : metadata->rowsets()) {
             check_rowset(rowset);
         }
         ++progress;
-        audit_ostream << '(' << progress << '/' << metadatas.size() << ") " << name << '\n'
+        audit_ostream << '(' << progress << '/' << meta_files.size() << ") " << name << '\n'
                       << proto_to_json(*metadata) << std::endl;
-        LOG(INFO) << "Filtered with meta file: " << name << " (" << progress << '/' << metadatas.size() << ')';
+        LOG(INFO) << "Filtered with meta file: " << name << " (" << progress << '/' << meta_files.size() << ')';
     }
 
     LOG(INFO) << "Start to double checking";

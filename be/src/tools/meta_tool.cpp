@@ -148,7 +148,7 @@ std::string get_usage(const std::string& progname) {
     ss << "cat 0001000000001394_0000000000000004.meta | ./meta_tool.sh --operation=print_lake_metadata\n";
     ss << "cat 0001000000001391_0000000000000001.log | ./meta_tool.sh --operation=print_lake_txn_log\n";
     ss << "cat SCHEMA_000000000004204C | ./meta_tool.sh --operation=print_lake_schema\n";
-    ss << "./meta_tool.sh --operation=lake_datafile_gc --root_path=path --expired_sec=expiredsec --conf_file=path "
+    ss << "./meta_tool.sh --operation=lake_datafile_gc --root_path=path --expired_sec=86400 --conf_file=path "
           "--audit_file=path --do_delete=false\n";
     return ss.str();
 }
@@ -1124,6 +1124,10 @@ int meta_tool_main(int argc, char** argv) {
         }
         if (!starrocks::init_glog("lake_datafile_gc", true)) {
             std::cerr << "Init glog failed" << std::endl;
+            return -1;
+        }
+        if (FLAGS_expired_sec < 600) {
+            std::cerr << "expired_sec is less than 10min" << std::endl;
             return -1;
         }
         Aws::SDKOptions options;
