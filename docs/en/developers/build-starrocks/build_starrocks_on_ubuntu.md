@@ -2,9 +2,21 @@
 displayed_sidebar: "English"
 ---
 
+<<<<<<< HEAD
 ### Prerequisite
+=======
+# Compile StarRocks on Ubuntu
 
-```
+This topic describes how to compile StarRocks on the Ubuntu operating system. StarRocks supports compilation on both x86_64 and AArch64 architectures.
+>>>>>>> 30def6a80d ([Doc] Remake Build on Ubuntu (#40537))
+
+## Prerequisites
+
+### Install Dependencies
+
+Run the following commands to install necessary dependencies:
+
+```bash
 sudo apt-get update
 ```
 
@@ -12,64 +24,61 @@ sudo apt-get update
 sudo apt-get install automake binutils-dev bison byacc ccache flex libiberty-dev libtool maven zip python3 python-is-python3 -y
 ```
 
-### Compiler
+### Install Compiler
 
-If the ubuntu version >= 22.04, you can
-```
+If you are using Ubuntu 22.04 or later, run the following command to install the tools and compilers:
+
+```bash
 sudo apt-get install cmake gcc g++ default-jdk -y
 ```
 
-If the ubuntu version < 22.04.
-Check the version of following tools and compilers
+If you are using an Ubuntu version earlier than 22.04, run the following commands to check the versions of tools and compilers:
 
-##### 1. GCC/G++
+1. Check GCC/G++ versions:
 
-GCC/G++ version must be >= 10.3
-```
-gcc --version
-g++ --version
-```
-Install GCC/G++(https://gcc.gnu.org/releases.html)
+   ```bash
+   gcc --version
+   g++ --version
+   ```
 
-##### 2. JDK
+   GCC/G++ versions must be 10.3 or later. If you are using earlier versions, [click here to install GCC/G++](https://gcc.gnu.org/releases.html).
 
-OpenJDK version must be >= 8
-```
-java --version
-```
-Install OpenJdk(https://openjdk.org/install)
+2. Check JDK version:
 
-##### 3. CMake
+   ```bash
+   java --version
+   ```
 
-cmake version must be >= 3.20.1
+   OpenJDK version must be 8 or later. If you are using an earlier version, [click here to install OpenJDK](https://openjdk.org/install).
 
-```
-cmake --version
-```
-Install cmake(https://cmake.org/download)
+3. Check CMake version:
 
+   ```bash
+   cmake --version
+   ```
 
-### Improve the compile speed
+   CMake version must be 3.20.1 or later. If you are using an earlier version, [click here to install CMake](https://cmake.org/download).
 
-The default compiling paralleilsim equals to the **CPU Cores / 4**.
-If you want to improve the compile speed. If You can improve the paralleilsim.
+## Compile StarRocks
 
-1. Suppose you have 32 Cpu cores, the default paralleilsim is 8.
+Run the following command to start the compilation:
 
-```
+```bash
 ./build.sh
 ```
 
-2. Suppose you have 32 Cpu cores, want to use 24 cores to compile.
+The default compilation parallelism is equal to **CPU core count/4**. Assuming you have 32 CPU cores, the default parallelism is 8.
 
-```
+If you want to adjust the parallelism, you can specify the number of CPU cores to be used for compilation via `-j` in the command line.
+
+The following example uses 24 CPU cores for compilation:
+
+```bash
 ./build.sh -j 24
 ```
 
-### FAQ
+## FAQ
 
-1. Failed to build `aws_cpp_sdk` in the Ubuntu 20.04.
-```
-Error: undefined reference to pthread_create
-```
-The error comes from the lower CMake version; you can upgrade the CMake version to at least 3.20.1
+Q: Building `aws_cpp_sdk` fails on Ubuntu 20.04 with the error "Error: undefined reference to pthread_create". How can I resolve this?
+
+A: This error occurs due to a lower version of CMake. Please upgrade CMake to version 3.20.1 or above.
