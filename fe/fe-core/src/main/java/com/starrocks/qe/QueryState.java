@@ -51,6 +51,12 @@ public class QueryState {
 
     public enum ErrType {
         ANALYSIS_ERR,
+        IGNORE_ERR,
+
+        INTERNAL_ERR,
+
+        IO_ERR,
+
         OTHER_ERR
     }
 
