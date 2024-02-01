@@ -2,9 +2,9 @@
 displayed_sidebar: "Chinese"
 ---
 
-# StarRocks migration tools（SMT）
+# StarRocks migration tool（SMT）
 
-StarRocks migration tools（简称 SMT）是StarRocks 提供的数据迁移工具，用于将源数据库的数据通过 Flink 导入 StarRocks。其主要有两个功能：
+StarRocks migration tool（简称 SMT）是 StarRocks 提供的数据迁移工具，用于将源数据库的数据通过 Flink 导入 StarRocks。其主要有两个功能：
 
 - 根据源数据库和目标 StarRocks 集群的信息，生成 StarRocks 建表语句。
 - 生成 Flink 的 SQL 客户端 可执行的 SQL 语句，以提交同步数据的 Flink job，简化链路中全量或增量数据同步流程。
