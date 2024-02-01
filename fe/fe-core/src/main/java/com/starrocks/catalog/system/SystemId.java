@@ -114,4 +114,6 @@ public class SystemId {
     public static final long PIPES_ID = 121L;
     public static final long BE_DATACACHE_METRICS = 130L;
     // Remain for other datacache manage table
+
+    public static final long PARTITIONS_META_ID = 140L;
 }

@@ -194,6 +194,8 @@ import com.starrocks.thrift.TGetLoadTxnStatusRequest;
 import com.starrocks.thrift.TGetLoadTxnStatusResult;
 import com.starrocks.thrift.TGetLoadsParams;
 import com.starrocks.thrift.TGetLoadsResult;
+import com.starrocks.thrift.TGetPartitionsMetaRequest;
+import com.starrocks.thrift.TGetPartitionsMetaResponse;
 import com.starrocks.thrift.TGetProfileRequest;
 import com.starrocks.thrift.TGetProfileResponse;
 import com.starrocks.thrift.TGetRoleEdgesRequest;
@@ -2419,6 +2421,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TGetTablesConfigResponse getTablesConfig(TGetTablesConfigRequest request) throws TException {
         return InformationSchemaDataSource.generateTablesConfigResponse(request);
+    }
+
+    @Override
+    public TGetPartitionsMetaResponse getPartitionsMeta(TGetPartitionsMetaRequest request) throws TException {
+        return InformationSchemaDataSource.generatePartitionsMetaResponse(request);
     }
 
     @Override

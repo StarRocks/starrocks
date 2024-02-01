@@ -162,7 +162,7 @@ After StarRocks is integrating with Apache Ranger, you can achieve the following
 
 For External Catalog, you can reuse external services (such as Hive Service) for access control. StarRocks supports matching different Ranger external services for different Catalogs. When users access an external table, the system implements access control based on the access policy of the Ranger Service corresponding to the external table. The user permissions are consistent with the Ranger user with the same name.
 
-1. Copy Hive's Ranger configuration files `ranger-hive-security.xml` and `ranger-hive-audit.xml` to the `fe/conf` file of all FE machines.
+1. Copy Hive's Ranger configuration files `[ranger-hive-security.xml](https://github.com/StarRocks/ranger/blob/master/hive-agent/conf/ranger-hive-security.xml)` and `[ranger-hive-audit.xml](https://github.com/StarRocks/ranger/blob/master/hive-agent/conf/ranger-hive-audit.xml)` to the `fe/conf` file of all FE machines.
 2. Restart all FE machines.
 3. Configure External Catalog.
 
