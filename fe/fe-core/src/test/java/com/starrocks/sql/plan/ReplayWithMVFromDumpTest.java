@@ -208,22 +208,6 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
         FeConstants.isReplayFromQueryDump = false;
     }
-<<<<<<< HEAD
-}
-=======
-
-    @Test
-    public void testMVWithDictRewrite() throws Exception {
-        try {
-            FeConstants.USE_MOCK_DICT_MANAGER = true;
-            Pair<QueryDumpInfo, String> replayPair =
-                    getCostPlanFragment(getDumpInfoFromFile("query_dump/tpch_query11_mv_rewrite"));
-            Assert.assertTrue(replayPair.second, replayPair.second.contains(
-                    "DictDecode(78: n_name, [<place-holder> = 'GERMANY'])"));
-        } finally {
-            FeConstants.USE_MOCK_DICT_MANAGER = false;
-        }
-    }
 
     /**
      * Test synchronous materialized view rewrite with global dict optimization.
@@ -245,4 +229,3 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Assert.assertFalse(replayPair.second, replayPair.second.contains("mv_tbl_mock_001"));
     }
 }
->>>>>>> 2ebfcd37ab ([BugFix] Fix sync mv aggregate column's name not equal to base column (#40374))
