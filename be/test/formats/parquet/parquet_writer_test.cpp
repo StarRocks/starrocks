@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "formats/parquet/parquet_file_writer.h"
-
 #include <gtest/gtest.h>
 
 #include <filesystem>
@@ -27,6 +25,7 @@
 #include "column/struct_column.h"
 #include "common/statusor.h"
 #include "formats/parquet/file_reader.h"
+#include "formats/parquet/parquet_file_writer.h"
 #include "formats/parquet/parquet_test_util/util.h"
 #include "fs/fs.h"
 #include "fs/fs_memory.h"
@@ -46,13 +45,13 @@ public:
     void TearDown() override {}
 
 protected:
-    HdfsScannerContext *_create_scan_context(const std::vector<TypeDescriptor> &type_descs) {
+    HdfsScannerContext* _create_scan_context(const std::vector<TypeDescriptor>& type_descs) {
         auto ctx = _pool.add(new HdfsScannerContext());
-        auto *lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
+        auto* lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
         ctx->lazy_column_coalesce_counter = lazy_column_coalesce_counter;
 
         std::vector<parquet::Utils::SlotDesc> slot_descs;
-        for (auto &type_desc: type_descs) {
+        for (auto& type_desc : type_descs) {
             auto type_name = type_desc.debug_string();
             slot_descs.push_back({type_name, type_desc});
         }
@@ -68,8 +67,8 @@ protected:
         return ctx;
     }
 
-    THdfsScanRange *_create_scan_range(const std::string &file_path, size_t file_length) {
-        auto *scan_range = _pool.add(new THdfsScanRange());
+    THdfsScanRange* _create_scan_range(const std::string& file_path, size_t file_length) {
+        auto* scan_range = _pool.add(new THdfsScanRange());
         scan_range->relative_path = file_path;
         scan_range->file_length = file_length;
         scan_range->offset = 4;
@@ -78,15 +77,15 @@ protected:
         return scan_range;
     }
 
-    std::vector<std::string> _make_type_names(const std::vector<TypeDescriptor> &type_descs) {
+    std::vector<std::string> _make_type_names(const std::vector<TypeDescriptor>& type_descs) {
         std::vector<std::string> names;
-        for (auto &desc: type_descs) {
+        for (auto& desc : type_descs) {
             names.push_back(desc.debug_string());
         }
         return names;
     }
 
-    ChunkPtr _read_chunk(const std::vector<TypeDescriptor> &type_descs) {
+    ChunkPtr _read_chunk(const std::vector<TypeDescriptor>& type_descs) {
         auto ctx = _create_scan_context(type_descs);
         ASSIGN_OR_ABORT(auto file, _fs.new_random_access_file(_file_path));
         ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
@@ -99,7 +98,7 @@ protected:
         }
 
         auto read_chunk = std::make_shared<Chunk>();
-        for (auto type_desc: type_descs) {
+        for (auto type_desc : type_descs) {
             auto col = ColumnHelper::create_column(type_desc, true);
             read_chunk->append_column(col, read_chunk->num_columns());
         }
@@ -110,7 +109,7 @@ protected:
 
     MemoryFileSystem _fs;
     std::string _file_path{"/dummy_file.parquet"};
-    RuntimeState *_runtime_state;
+    RuntimeState* _runtime_state;
     ObjectPool _pool;
 };
 
@@ -174,8 +173,9 @@ TEST_F(ParquetFileWriterTest, TestWriteIntegralTypes) {
     }
 
     auto writer_options = std::make_shared<ParquetFileWriter::ParquetWriterOptions>();
-    auto writer = std::make_unique<ParquetFileWriter>(std::move(parquet_output_stream), column_names, type_descs, std::move(column_evaluators),
-                                                      writer_options, []() {}, nullptr);
+    auto writer = std::make_unique<ParquetFileWriter>(
+            std::move(parquet_output_stream), column_names, type_descs, std::move(column_evaluators), writer_options,
+            []() {}, nullptr);
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();

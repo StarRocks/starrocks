@@ -27,6 +27,7 @@
 #include "column/struct_column.h"
 #include "common/object_pool.h"
 #include "formats/orc/orc_chunk_reader.h"
+#include "formats/orc/orc_file_writer.h"
 #include "fs/fs_posix.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gutil/strings/substitute.h"
@@ -36,7 +37,6 @@
 #include "runtime/runtime_state.h"
 #include "testutil/assert.h"
 #include "util/priority_thread_pool.hpp"
-#include "formats/orc/orc_file_writer.h"
 
 namespace starrocks {
 
@@ -203,8 +203,9 @@ TEST_F(OrcChunkWriterTest, TestWriteIntergersNullable) {
     }
 
     auto writer_options = std::make_shared<formats::ORCFileWriter::ORCWriterOptions>();
-    auto writer = std::make_unique<formats::ORCFileWriter>(std::move(parquet_output_stream), column_names, type_descs, std::move(column_evaluators),
-                                                      writer_options, []() {}, nullptr);
+    auto writer = std::make_unique<formats::ORCFileWriter>(
+            std::move(parquet_output_stream), column_names, type_descs, std::move(column_evaluators), writer_options,
+            []() {}, nullptr);
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
