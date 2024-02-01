@@ -52,6 +52,27 @@ public:
         }
     }
 
+    doris::PBackendService_Stub* get_stub(const butil::EndPoint& endpoint) {
+        std::lock_guard<SpinLock> l(_lock);
+        auto stub_ptr = _stub_map.seek(endpoint);
+        if (stub_ptr != nullptr) {
+            return *stub_ptr;
+        }
+        // new one stub and insert into map
+        brpc::ChannelOptions options;
+        options.connect_timeout_ms = config::rpc_connect_timeout_ms;
+        // Explicitly set the max_retry
+        // TODO(meegoo): The retry strategy can be customized in the future
+        options.max_retry = 3;
+        std::unique_ptr<brpc::Channel> channel(new brpc::Channel());
+        if (channel->Init(endpoint, &options)) {
+            return nullptr;
+        }
+        auto stub = new doris::PBackendService_Stub(channel.release(), google::protobuf::Service::STUB_OWNS_CHANNEL);
+        _stub_map.insert(endpoint, stub);
+        return stub;
+    }
+
     doris::PBackendService_Stub* get_stub(const TNetworkAddress& taddr) { return get_stub(taddr.hostname, taddr.port); }
 
     doris::PBackendService_Stub* get_stub(const std::string& host, int port) {
@@ -76,6 +97,7 @@ private:
     SpinLock _lock;
     butil::FlatMap<butil::EndPoint, doris::PBackendService_Stub*> _stub_map;
 };
+
 
 class HttpBrpcStubCache {
 public:
