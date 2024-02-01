@@ -78,9 +78,9 @@ struct FileChunkSinkContext : public ConnectorChunkSinkContext {
     pipeline::FragmentContext* fragment_context;
 };
 
-class FileDataSinkProvider : public ConnectorChunkSinkProvider {
+class FileChunkSinkProvider : public ConnectorChunkSinkProvider {
 public:
-    ~FileDataSinkProvider() override = default;
+    ~FileChunkSinkProvider() override = default;
 
     std::unique_ptr<ConnectorChunkSink> create_chunk_sink(std::shared_ptr<ConnectorChunkSinkContext> context,
                                                           int32_t driver_id) override;

@@ -44,6 +44,7 @@ public:
 
     struct CommitResult {
         Status io_status;
+        std::string format;
         FileMetrics file_metrics;
         std::string location;
         std::function<void()> rollback_action;

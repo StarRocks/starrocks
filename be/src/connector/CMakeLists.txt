@@ -21,6 +21,7 @@ endif()
 add_library(Connector STATIC
         connector.cpp
         hive_connector.cpp
+        iceberg_connector.cpp
         es_connector.cpp
         jdbc_connector.cpp
         lake_connector.cpp

@@ -308,6 +308,7 @@ public:
                              const std::map<std::string, std::string>& options,
                              const std::vector<std::string>& column_names,
                              std::vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
+                             std::optional<std::vector<formats::FileColumnId>> field_ids = std::nullopt,
                              PriorityThreadPool* executors = nullptr);
 
     StatusOr<std::shared_ptr<FileWriter>> create(const std::string& path) override;
@@ -317,6 +318,7 @@ private:
 
     std::shared_ptr<FileSystem> _fs;
     std::string _format;
+    std::optional<std::vector<formats::FileColumnId>> _field_ids;
     std::map<std::string, std::string> _options;
     std::shared_ptr<ParquetWriterOptions> _parsed_options;
 

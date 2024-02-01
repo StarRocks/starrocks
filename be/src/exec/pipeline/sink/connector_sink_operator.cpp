@@ -104,7 +104,6 @@ bool ConnectorSinkOperator::is_finished() const {
 
 Status ConnectorSinkOperator::set_finishing(RuntimeState* state) {
     _no_more_input = true;
-    LOG(INFO) << "set finishing";
     auto future = _connector_chunk_sink->finish();
     return _enqueue_futures(std::move(future));
 }

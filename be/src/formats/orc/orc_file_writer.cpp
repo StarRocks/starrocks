@@ -60,7 +60,7 @@ std::future<FileWriter::CommitResult> ORCFileWriter::commit() {
     auto task = [writer = _writer, output_stream = _output_stream, p = promise, rollback = _rollback_action,
                  row_counter = _row_counter, location = _location] {
         // TODO(letian-jiang): check if there are any outstanding io task
-        FileWriter::CommitResult result{.io_status = Status::OK(), .location = location, .rollback_action = rollback};
+        FileWriter::CommitResult result{.io_status = Status::OK(), .format = ORC, .location = location, .rollback_action = rollback};
         try {
             writer->close();
         } catch (const std::exception& e) {

@@ -82,7 +82,7 @@ std::function<void(const formats::FileWriter::CommitResult& result)> FileChunkSi
     };
 }
 
-std::unique_ptr<ConnectorChunkSink> FileDataSinkProvider::create_chunk_sink(
+std::unique_ptr<ConnectorChunkSink> FileChunkSinkProvider::create_chunk_sink(
         std::shared_ptr<ConnectorChunkSinkContext> context, int32_t driver_id) {
     auto ctx = std::dynamic_pointer_cast<FileChunkSinkContext>(context);
     auto runtime_state = ctx->fragment_context->runtime_state();
@@ -96,7 +96,7 @@ std::unique_ptr<ConnectorChunkSink> FileDataSinkProvider::create_chunk_sink(
     if (boost::iequals(ctx->format, formats::PARQUET)) {
         file_writer_factory = std::make_unique<formats::ParquetFileWriterFactory>(
                 std::move(fs), ctx->format, ctx->options, ctx->column_names, std::move(column_evaluators),
-                ctx->executor);
+                std::nullopt, ctx->executor);
     } else if (boost::iequals(ctx->format, formats::ORC)) {
         file_writer_factory = std::make_unique<formats::ORCFileWriterFactory>(
                 std::move(fs), ctx->format, ctx->options, ctx->column_names, std::move(column_evaluators),

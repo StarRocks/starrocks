@@ -8,6 +8,7 @@
 #include "column/datum.h"
 #include "exprs/expr.h"
 #include "util/url_coding.h"
+#include "formats/parquet/parquet_file_writer.h"
 
 namespace starrocks::connector {
 
@@ -23,6 +24,16 @@ StatusOr<std::string> HiveUtils::make_partition_name(
         ss << column_names[i] << "=" << value << "/";
     }
     return ss.str();
+}
+
+std::vector<formats::FileColumnId>
+IcebergUtils::generate_parquet_field_ids(const std::vector<TIcebergSchemaField> &fields) {
+    std::vector<formats::FileColumnId> file_column_ids(fields.size());
+    for (int i = 0; i < fields.size(); ++i) {
+        file_column_ids[i].field_id = fields[i].field_id;
+        file_column_ids[i].children = generate_parquet_field_ids(fields[i].children);
+    }
+    return file_column_ids;
 }
 
 // TODO(letian-jiang): translate org.apache.hadoop.hive.common.FileUtils#makePartName

@@ -12,6 +12,7 @@
 #include "fmt/format.h"
 #include "formats/column_evaluator.h"
 #include "runtime/types.h"
+#include "formats/parquet/parquet_file_writer.h"
 
 namespace starrocks::connector {
 
@@ -23,6 +24,30 @@ public:
 
 private:
     static StatusOr<std::string> column_value(const TypeDescriptor& type_desc, const ColumnPtr& column);
+};
+
+class IcebergUtils {
+public:
+    static std::vector<formats::FileColumnId> generate_parquet_field_ids(const std::vector<TIcebergSchemaField>& fields);
+
+    inline const static std::string DATA_DIRECTORY = "/data";
+};
+
+class PathUtils {
+public:
+    // requires: path contains "/"
+    static std::string get_parent_path(const std::string& path) {
+        std::size_t i = path.find_last_of("/");
+        CHECK_NE(i, std::string::npos);
+        return path.substr(0, i);
+    }
+
+    // requires: path contains "/"
+    static std::string get_filename(const std::string& path) {
+        std::size_t i = path.find_last_of("/");
+        CHECK_NE(i, std::string::npos);
+        return path.substr(i, path.length());
+    }
 };
 
 // Location provider provides file location for every output file. The name format depends on if the write is partitioned or not.

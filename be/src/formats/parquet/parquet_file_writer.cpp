@@ -560,7 +560,7 @@ std::future<FileWriter::CommitResult> ParquetFileWriter::commit() {
                  has_field_id = _writer_options->column_ids.has_value(), rollback = _rollback_action,
                  location = _location] {
         // TODO(letian-jiang): check if there are any outstanding io task
-        FileWriter::CommitResult result{.io_status = Status::OK(), .location = location, .rollback_action = rollback};
+        FileWriter::CommitResult result{.io_status = Status::OK(), .format = PARQUET, .location = location, .rollback_action = rollback};
         try {
             writer->Close();
         } catch (const ::parquet::ParquetStatusException& e) {
@@ -574,6 +574,7 @@ std::future<FileWriter::CommitResult> ParquetFileWriter::commit() {
 
         if (result.io_status.ok()) {
             result.file_metrics = _metrics(writer->metadata().get(), has_field_id);
+            result.file_metrics.file_size = output_stream->Tell().MoveValueUnsafe();
         }
 
         p->set_value(result);
@@ -669,6 +670,19 @@ FileWriter::FileMetrics ParquetFileWriter::_metrics(const ::parquet::FileMetaDat
     if (!has_field_id) {
         return file_metrics;
     }
+
+    // rowgroup split offsets
+    std::vector<int64_t> split_offsets;
+    for (int i = 0; i < meta->num_row_groups(); i++) {
+        auto first_column_meta = meta->RowGroup(i)->ColumnChunk(0);
+        int64_t dict_page_offset = first_column_meta->dictionary_page_offset();
+        int64_t first_data_page_offset = first_column_meta->data_page_offset();
+        int64_t split_offset = dict_page_offset > 0 && dict_page_offset < first_data_page_offset
+                               ? dict_page_offset
+                               : first_data_page_offset;
+        split_offsets.push_back(split_offset);
+    }
+    file_metrics.split_offsets = split_offsets;
 
     // field_id -> column_stat
     std::map<int32_t, std::shared_ptr<::parquet::Statistics>> column_stats;
@@ -913,19 +927,20 @@ ParquetFileWriterFactory::ParquetFileWriterFactory(std::shared_ptr<FileSystem> f
                                                    const std::map<std::string, std::string>& options,
                                                    const vector<std::string>& column_names,
                                                    vector<std::unique_ptr<ColumnEvaluator>>&& column_evaluators,
+                                                   std::optional<std::vector<formats::FileColumnId>> field_ids,
                                                    PriorityThreadPool* executors)
         : _fs(std::move(fs)),
           _format(format),
+          _field_ids(field_ids),
           _options(options),
           _column_names(column_names),
           _column_evaluators(std::move(column_evaluators)),
           _executors(executors) {}
 
 Status ParquetFileWriterFactory::_init() {
-    for (auto& e : _column_evaluators) {
-        RETURN_IF_ERROR(e->init());
-    }
+    RETURN_IF_ERROR(ColumnEvaluator::init(_column_evaluators));
     _parsed_options = std::make_shared<ParquetWriterOptions>();
+    _parsed_options->column_ids = _field_ids;
     return Status::OK();
 }
 

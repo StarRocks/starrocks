@@ -35,7 +35,7 @@ DataSourceProviderPtr FileConnector::create_data_source_provider(ConnectorScanNo
 }
 
 std::unique_ptr<ConnectorChunkSinkProvider> FileConnector::create_data_sink_provider() const {
-    return std::make_unique<FileDataSinkProvider>();
+    return std::make_unique<FileChunkSinkProvider>();
 }
 
 // ================================

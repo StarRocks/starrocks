@@ -172,6 +172,7 @@ class Connector {
 public:
     // supported connectors.
     static const std::string HIVE;
+    static const std::string ICEBERG;
     static const std::string ES;
     static const std::string JDBC;
     static const std::string MYSQL;
@@ -184,13 +185,16 @@ public:
     // Later version we could use user-defined data.
 
     virtual DataSourceProviderPtr create_data_source_provider(ConnectorScanNode* scan_node,
-                                                              const TPlanNode& plan_node) const = 0;
+                                                              const TPlanNode& plan_node) const {
+        CHECK(false) << connector_type() << " connector does not implement chunk source yet";
+        __builtin_unreachable();
+    }
 
     // virtual DataSourceProviderPtr create_data_source_provider(ConnectorScanNode* scan_node,
     //                                                         const std::string& table_handle) const;
 
     virtual std::unique_ptr<ConnectorChunkSinkProvider> create_data_sink_provider() const {
-        CHECK(false) << connector_type() << " connector does not implement sink yet";
+        CHECK(false) << connector_type() << " connector does not implement chunk sink yet";
         __builtin_unreachable();
     };
 
