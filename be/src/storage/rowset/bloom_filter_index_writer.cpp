@@ -235,7 +235,6 @@ public:
                 str += iter.to_string();
                 str += ", ";
             }
-            LOG(INFO) << "ngram add values:[ " << str << "]";
 
             // move to next row
             ++cur_slice;
