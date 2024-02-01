@@ -4,13 +4,13 @@ displayed_sidebar: "English"
 
 # Hive Bitmap UDF
 
-Hive Bitmap UDF provides UDFs that can be used directly in Hive, which can be used to generate Bitmap data and perform Bitmap-related calculations.
+Hive Bitmap UDF provides UDFs that can be directly used in Hive. They can be used to generate Bitmap data and perform Bitmap-related calculations.
 
 The Bitmap format defined by Hive Bitmap UDF is consistent with the format in StarRocks and can be directly used for loading Bitmap data into StarRocks and unloading Bitmap data from StarRocks to Hive.
 
 Applicable scenarios:
 
-- The amount of original data is large and directly loading these data into StarRocks for computing will cause tremendous pressure on StarRocks clusters. The desired solution is generating Bitmap data in Hive and then loading Bitmap into StarRocks.
+- The amount of raw data is large and directly loading these data into StarRocks for computing will cause tremendous pressure on StarRocks clusters. The desired solution is generating Bitmap data in Hive and then loading Bitmap into StarRocks.
 - Export the Bitmap data generated in StarRocks to Hive for other systems to use.
 
 Supported source and target data types:
