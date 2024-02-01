@@ -220,9 +220,6 @@
             "integrations/IDE_integrations/jupysql"
           ]
         },
-<<<<<<< HEAD
-        "integrations/other_integrations/intro"
-=======
         {
           "type": "doc",
           "id": "integrations/other_integrations/datadog_support"
@@ -234,7 +231,6 @@
           "href": "https://github.com/StarRocks/starrocks/tree/main/contrib/dbt-connector/README.md"
          },
          "integrations/hive_bitmap_udf"
->>>>>>> 39beadfc79 ([Doc] Add doc for hive bitmap udf (#40108))
       ]
     },
     {
@@ -871,9 +867,6 @@
             "integrations/IDE_integrations/jupysql"
           ]
         },
-<<<<<<< HEAD
-        "integrations/other_integrations/intro"
-=======
         {
           "type": "doc",
           "id": "integrations/other_integrations/datadog_support"
@@ -885,7 +878,6 @@
           "href": "https://github.com/StarRocks/starrocks/tree/main/contrib/dbt-connector/README.md"
          },
          "integrations/hive_bitmap_udf"
->>>>>>> 39beadfc79 ([Doc] Add doc for hive bitmap udf (#40108))
       ]
     },
     {
