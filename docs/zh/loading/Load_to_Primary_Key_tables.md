@@ -535,8 +535,13 @@ SELECT * FROM table3;
       format as "csv"
       (id, name)
   )
+<<<<<<< HEAD
   with broker
   properties
+=======
+  WITH BROKER
+  PROPERTIES
+>>>>>>> 2054728494 ([Doc]Update Load_to_Primary_Key_tables.md broker load sql (#40541))
   (
       "partial_update" = "true"
   );
