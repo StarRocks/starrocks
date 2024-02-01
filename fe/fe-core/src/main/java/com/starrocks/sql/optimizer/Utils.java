@@ -19,7 +19,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.JoinOperator;
-import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
@@ -718,16 +717,14 @@ public class Utils {
         for (CallOperator callOperator : aggs.values()) {
             if (callOperator.isDistinct()) {
                 String fnName = callOperator.getFnName();
-                List<ColumnRefOperator> distinctCols = callOperator.getColumnRefs();
-                if (distinctCols.size() > 1 || distinctCols.stream().anyMatch(c -> c.getType().isComplexType())) {
+                List<ScalarOperator> children = callOperator.getChildren();
+                if (children.size() > 1 || children.stream().anyMatch(c -> c.getType().isComplexType())) {
                     return true;
                 }
                 if (FunctionSet.GROUP_CONCAT.equalsIgnoreCase(fnName) || FunctionSet.AVG.equalsIgnoreCase(fnName)) {
                     return true;
                 } else if (FunctionSet.ARRAY_AGG.equalsIgnoreCase(fnName))  {
-                    AggregateFunction aggregateFunction = (AggregateFunction) callOperator.getFunction();
-                    if (CollectionUtils.isNotEmpty(aggregateFunction.getIsAscOrder()) ||
-                            (!distinctCols.isEmpty() && distinctCols.get(0).getType().isDecimalOfAnyVersion())) {
+                    if (children.size() > 1 || children.get(0).getType().isDecimalOfAnyVersion()) {
                         return true;
                     }
                 }

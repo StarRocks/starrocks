@@ -30,6 +30,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
@@ -104,11 +105,8 @@ public class RewriteMultiDistinctRule extends TransformationRule {
         boolean canRewriteByMultiFunc = true;
         for (CallOperator distinctCall : distinctAggOperatorList) {
             String fnName = distinctCall.getFnName();
-            List<ColumnRefOperator> distinctCols = distinctCall.getColumnRefs();
-            if (distinctCols.isEmpty()) {
-                continue;
-            }
-            Type type = distinctCols.get(0).getType();
+            List<ScalarOperator> children = distinctCall.getChildren();
+            Type type = children.get(0).getType();
             if (type.isComplexType()
                     || type.isJsonType()
                     || FunctionSet.GROUP_CONCAT.equalsIgnoreCase(fnName)
