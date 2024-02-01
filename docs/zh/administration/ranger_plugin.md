@@ -164,13 +164,19 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
 
 ## 复用其他 Service 来为外表鉴权
 
-对于 External Catalog，可以复用外部 Service（如 Hive Service）实现访问控制。StarRocks  支持对于不同的 Catalog 匹配不同的 Ranger service。用户访问外表时，会直接根据对应外表的 Service 来进行访问控制。用户权限与 Ranger 同名用户一致。
+对于 External Catalog，可以复用外部 Service（如 Hive Service）实现访问控制。StarRocks 支持对于不同的 Catalog 匹配不同的 Ranger service。用户访问外表时，会直接根据对应外表的 Service 来进行访问控制。用户权限与 Ranger 同名用户一致。
 
+<<<<<<< HEAD
 1. 将 Hive 的 Ranger 相关配置文件 (`ranger-hive-security.xml` 和 `ranger-hive-audit.xml`) 拷贝至所有 FE 机器的 `fe/conf` 文件下。
 
 3. 重启所有 FE。
 
 4. 配置 Catalog。
+=======
+1. 将 Hive 的 Ranger 相关配置文件 (`[ranger-hive-security.xml](https://github.com/StarRocks/ranger/blob/master/hive-agent/conf/ranger-hive-security.xml)` 和 `[ranger-hive-audit.xml]https://github.com/StarRocks/ranger/blob/master/hive-agent/conf/ranger-hive-audit.xml`) 拷贝至所有 FE 机器的 `fe/conf` 文件下。
+2. 重启所有 FE。
+3. 配置 Catalog。
+>>>>>>> c55725c90c ([Doc] Add links to hive files to ranger (backport #40454) (#40486))
 
    创建 External Catalog 时，添加 PROPERTIES `"ranger.plugin.hive.service.name"`.
 
