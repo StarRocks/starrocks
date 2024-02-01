@@ -58,11 +58,8 @@ public class MultiDistinctByMultiFuncRewriter {
             CallOperator oldFunctionCall = aggregation.getValue();
             if (oldFunctionCall.isDistinct()) {
                 CallOperator newAggOperator;
-                List<ColumnRefOperator> distinctCols = oldFunctionCall.getColumnRefs();
 
-                if (distinctCols.size() > 1) {
-                    newAggOperator = oldFunctionCall;
-                } else if (oldFunctionCall.getFnName().equalsIgnoreCase(FunctionSet.COUNT)) {
+                if (oldFunctionCall.getFnName().equalsIgnoreCase(FunctionSet.COUNT)) {
                     newAggOperator = buildMultiCountDistinct(oldFunctionCall);
                 } else if (oldFunctionCall.getFnName().equalsIgnoreCase(FunctionSet.SUM)) {
                     newAggOperator = buildMultiSumDistinct(oldFunctionCall);

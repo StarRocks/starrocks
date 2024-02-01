@@ -105,6 +105,9 @@ public class RewriteMultiDistinctRule extends TransformationRule {
         for (CallOperator distinctCall : distinctAggOperatorList) {
             String fnName = distinctCall.getFnName();
             List<ColumnRefOperator> distinctCols = distinctCall.getColumnRefs();
+            if (distinctCols.isEmpty()) {
+                continue;
+            }
             Type type = distinctCols.get(0).getType();
             if (type.isComplexType()
                     || type.isJsonType()
