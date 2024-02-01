@@ -725,6 +725,15 @@ public class PartitionUtil {
         return ICEBERG_DEFAULT_PARTITION;
     }
 
+    public static boolean hasNullPartitionField(PartitionSpec spec, PartitionData data) {
+        for (int i = 0; i < spec.fields().size(); i++) {
+            if (data.get(i) == null) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static List<String> getIcebergPartitionValues(PartitionSpec spec, StructLike partition) {
         PartitionData partitionData = (PartitionData) partition;
         List<String> partitionValues = new ArrayList<>();

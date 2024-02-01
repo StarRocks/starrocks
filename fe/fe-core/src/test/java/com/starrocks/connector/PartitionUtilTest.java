@@ -42,6 +42,10 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.apache.iceberg.PartitionData;
+import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.Schema;
+import org.apache.iceberg.types.Types;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -293,5 +297,34 @@ public class PartitionUtilTest {
 
         String partitionPath = "hdfs://hadoop01:9000/mytable/year=2023/month=12/day=30";
         Assert.assertEquals("year=2023/month=12/day=30", PartitionUtil.getPartitionName(base, partitionPath));
+    }
+
+    @Test
+    public void testHasNullPartitionField() {
+        Schema schema = new Schema(
+                Types.NestedField.of(0, false, "event_id", Types.StringType.get()),
+                Types.NestedField.of(1, false, "user_id", Types.StringType.get()),
+                Types.NestedField.of(2, false, "content", Types.StringType.get()),
+                Types.NestedField.of(3, false, "day", Types.StringType.get()),
+                Types.NestedField.of(4, false, "hour", Types.StringType.get()),
+                Types.NestedField.of(5, false, "minute", Types.StringType.get()));
+        PartitionSpec spec = PartitionSpec.builderFor(schema)
+                .identity("day")
+                .identity("hour")
+                .identity("minute")
+                .build();
+
+
+        PartitionData partition1 = new PartitionData(spec.partitionType());
+        partition1.set(0, "2024-02-01");
+        partition1.set(1, "21");
+        partition1.set(2, "38");
+        Assert.assertFalse(PartitionUtil.hasNullPartitionField(spec, partition1));
+
+        PartitionData partition2 = new PartitionData(spec.partitionType());
+        partition2.set(0, "2024-02-01");
+        partition2.set(1, null);
+        partition2.set(1, "38");
+        Assert.assertTrue(PartitionUtil.hasNullPartitionField(spec, partition2));
     }
 }

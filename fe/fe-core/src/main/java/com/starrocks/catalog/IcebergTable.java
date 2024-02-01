@@ -93,6 +93,8 @@ public class IcebergTable extends Table {
     private org.apache.iceberg.Table nativeTable; // actual iceberg table
     private List<Column> partitionColumns;
 
+    private boolean hasNullPartitionField = false;
+
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
 
     public IcebergTable() {
@@ -135,6 +137,14 @@ public class IcebergTable extends Table {
             snapshot = Optional.ofNullable(getNativeTable().currentSnapshot());
             return snapshot;
         }
+    }
+
+    public boolean hasNullPartitionField() {
+        return hasNullPartitionField;
+    }
+
+    public void setHasNullPartitionField(boolean hasNullPartitionField) {
+        this.hasNullPartitionField = hasNullPartitionField;
     }
 
     @Override

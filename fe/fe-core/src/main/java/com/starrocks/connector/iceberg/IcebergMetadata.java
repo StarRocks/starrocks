@@ -117,6 +117,7 @@ import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 import static com.starrocks.connector.ColumnTypeConverter.fromIcebergType;
 import static com.starrocks.connector.PartitionUtil.createPartitionKeyWithType;
+import static com.starrocks.connector.PartitionUtil.hasNullPartitionField;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.parsePartitionFields;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.toIcebergApiSchema;
 import static com.starrocks.connector.iceberg.IcebergCatalogType.GLUE_CATALOG;
@@ -458,6 +459,12 @@ public class IcebergMetadata implements ConnectorMetadata {
         List<Column> partitionColumns = icebergTable.getPartitionColumnsIncludeTransformed();
         for (FileScanTask fileScanTask : icebergSplitTasks) {
             org.apache.iceberg.PartitionData partitionData = (org.apache.iceberg.PartitionData) fileScanTask.file().partition();
+
+            if (hasNullPartitionField(spec, partitionData)) {
+                icebergTable.setHasNullPartitionField(true);
+                return Lists.newArrayList();
+            }
+
             List<String> values = PartitionUtil.getIcebergPartitionValues(spec, partitionData);
 
             if (values.size() != partitionColumns.size()) {

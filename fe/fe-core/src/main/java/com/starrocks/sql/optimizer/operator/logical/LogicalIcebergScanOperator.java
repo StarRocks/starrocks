@@ -65,9 +65,11 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
 
     @Override
     public boolean isEmptyOutputRows() {
-        return !table.isUnPartitioned() &&
-                !(((IcebergTable) table).hasPartitionTransformedEvolution()) &&
-                predicates.getSelectedPartitionIds().isEmpty();
+        IcebergTable icebergTable = (IcebergTable) table;
+        return !icebergTable.isUnPartitioned() &&
+               !icebergTable.hasNullPartitionField() &&
+               !icebergTable.hasPartitionTransformedEvolution() &&
+               predicates.getSelectedPartitionIds().isEmpty();
     }
 
     public boolean hasUnknownColumn() {
