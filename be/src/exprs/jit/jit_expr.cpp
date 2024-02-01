@@ -75,10 +75,9 @@ Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
                       << " Reason: " << function.status();
         } else {
             LOG(INFO) << "JIT: JIT compile success, time cost: " << elapsed / 1000000.0 << " ms";
+            _delete_cache_handle = function->second;
+            _jit_function = function->first;
         }
-
-        _delete_cache_handle = function->second;
-        _jit_function = function->first;
     }
     if (_jit_function != nullptr) {
         _jit_expr_name = _expr->jit_func_name();

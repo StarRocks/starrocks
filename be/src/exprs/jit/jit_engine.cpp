@@ -41,6 +41,15 @@ struct JitCacheEntry {
     JitCacheEntry(llvm::orc::ResourceTrackerSP t, JITScalarFunction f) : tracker(std::move(t)), func(std::move(f)) {}
     llvm::orc::ResourceTrackerSP tracker;
     JITScalarFunction func;
+    ~JitCacheEntry() {
+        auto error = tracker->remove();
+        if (UNLIKELY(error)) {
+            std::string error_message;
+            llvm::handleAllErrors(std::move(error),
+                                  [&](const llvm::ErrorInfoBase& EIB) { error_message = EIB.message(); });
+            LOG(ERROR) << "JIT: Failed to remove IR module from JIT: " << error_message;
+        }
+    }
 };
 
 JITEngine::~JITEngine() {
@@ -202,13 +211,6 @@ std::pair<JITScalarFunction, std::function<void()>> JITEngine::compile_module(
 
     auto* handle = _func_cache->insert(expr_name, (void*)cache, 1, [](const CacheKey& key, void* value) {
         auto* entry = ((JitCacheEntry*)value);
-        auto error = entry->tracker->remove();
-        if (UNLIKELY(error)) {
-            std::string error_message;
-            llvm::handleAllErrors(std::move(error),
-                                  [&](const llvm::ErrorInfoBase& EIB) { error_message = EIB.message(); });
-            LOG(ERROR) << "JIT: Failed to remove IR module from JIT: " << error_message;
-        }
         delete entry;
     });
     if (handle == nullptr) {
