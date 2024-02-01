@@ -114,7 +114,7 @@ Status BlockCache::write_buffer(const CacheKey& cache_key, off_t offset, size_t 
 }
 
 Status BlockCache::write_object(const CacheKey& cache_key, const void* ptr, size_t size, DeleterFunc deleter,
-                                CacheHandle* handle, WriteCacheOptions* options) {
+                                DataCacheHandle* handle, WriteCacheOptions* options) {
     if (!ptr) {
         return Status::InvalidArgument("invalid object pointer");
     }
@@ -140,7 +140,7 @@ StatusOr<size_t> BlockCache::read_buffer(const CacheKey& cache_key, off_t offset
     return buffer.size();
 }
 
-Status BlockCache::read_object(const CacheKey& cache_key, CacheHandle* handle, ReadCacheOptions* options) {
+Status BlockCache::read_object(const CacheKey& cache_key, DataCacheHandle* handle, ReadCacheOptions* options) {
     return _kv_cache->read_object(cache_key, handle, options);
 }
 
@@ -177,6 +177,10 @@ Status BlockCache::shutdown() {
     _kv_cache = nullptr;
     _initialized.store(false, std::memory_order_relaxed);
     return st;
+}
+
+DataCacheEngine BlockCache::cache_engine() {
+    return _kv_cache->cache_engine();
 }
 
 } // namespace starrocks

@@ -68,6 +68,7 @@ Status init_datacache(GlobalEnv* global_env) {
 
 #if !defined(WITH_CACHELIB) && !defined(WITH_STARCACHE)
     if (config::datacache_enable) {
+        LOG(WARNING) << "No valid engines supported, skip initializing datacache module";
         config::datacache_enable = false;
     }
 #endif
@@ -177,7 +178,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
         LOG(ERROR) << "Fail to init datacache";
         exit(1);
     }
-    LOG(INFO) << "BE start step " << start_step++ << ": datacache init successfully";
+    LOG_IF(INFO, config::datacache_enable) << "BE start step " << start_step++ << ": datacache init successfully";
 
     // Start thrift server
     int thrift_port = config::be_port;

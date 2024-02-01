@@ -33,7 +33,8 @@ Status CacheLibWrapper::init(const CacheOptions& options) {
         for (auto& dir : options.disk_spaces) {
             nvm_files.emplace_back(dir.path + "/cachelib_data");
             // If exist, truncate it to empty file
-            FileSystemUtil::resize_file(nvm_files.back(), 0);
+            auto st = FileSystemUtil::resize_file(nvm_files.back(), 0);
+            LOG_IF(WARNING, !st.ok()) << "fail to truncate cachelib data, use it directly";
         }
         if (nvm_files.size() == 1) {
             nvmConfig.navyConfig.setSimpleFile(nvm_files[0], options.disk_spaces[0].size, false);
@@ -99,11 +100,12 @@ const DataCacheMetrics CacheLibWrapper::cache_metrics(int level) {
 }
 
 Status CacheLibWrapper::write_object(const std::string& key, const void* ptr, size_t size,
-                                     std::function<void()> deleter, CacheHandle* handle, WriteCacheOptions* options) {
+                                     std::function<void()> deleter, DataCacheHandle* handle,
+                                     WriteCacheOptions* options) {
     return Status::NotSupported("not supported write object in cachelib");
 }
 
-Status CacheLibWrapper::read_object(const std::string& key, CacheHandle* handle, ReadCacheOptions* options) {
+Status CacheLibWrapper::read_object(const std::string& key, DataCacheHandle* handle, ReadCacheOptions* options) {
     return Status::NotSupported("not supported read object in cachelib");
 }
 
