@@ -65,6 +65,7 @@
 #include "exprs/info_func.h"
 #include "exprs/is_null_predicate.h"
 #include "exprs/java_function_call_expr.h"
+#include "exprs/jit/ir_helper.h"
 #include "exprs/jit/jit_engine.h"
 #include "exprs/jit/jit_expr.h"
 #include "exprs/lambda_function.h"
