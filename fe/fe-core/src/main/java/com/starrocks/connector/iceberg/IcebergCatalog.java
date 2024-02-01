@@ -25,7 +25,10 @@ import org.apache.iceberg.Schema;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableScan;
+import org.apache.iceberg.io.CloseableIterable;
+import org.apache.iceberg.io.CloseableIterator;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -73,12 +76,22 @@ public interface IcebergCatalog {
         }
 
         TableScan tableScan = icebergTable.newScan().planWith(executorService);
-        List<FileScanTask> tasks = Lists.newArrayList(tableScan.planFiles());
 
-        for (FileScanTask fileScanTask : tasks) {
-            StructLike partition = fileScanTask.file().partition();
-            partitionNames.add(convertIcebergPartitionToPartitionName(fileScanTask.spec(), partition));
+        CloseableIterable<FileScanTask> fileScanTaskIterable = tableScan.planFiles();
+        CloseableIterator<FileScanTask> fileScanTaskIterator = fileScanTaskIterable.iterator();
+        while (fileScanTaskIterator.hasNext()) {
+            FileScanTask task = fileScanTaskIterator.next();
+            StructLike partition = task.file().partition();
+            partitionNames.add(convertIcebergPartitionToPartitionName(task.spec(), partition));
         }
+
+        try {
+            fileScanTaskIterable.close();
+            fileScanTaskIterator.close();
+        } catch (IOException e) {
+            // Ignored
+        }
+
         return partitionNames;
     }
 
