@@ -97,5 +97,4 @@ private:
 
     void _update_counter();
 };
-
 } // namespace starrocks::connector

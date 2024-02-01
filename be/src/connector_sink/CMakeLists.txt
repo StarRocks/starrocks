@@ -15,13 +15,13 @@
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/connector_sink")
 
 if (CLANG_TIDY_PATH)
-        set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
+    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
 endif()
 
 add_library(ConnectorSink STATIC
-        connector_chunk_sink.cpp
-        file_chunk_sink.cpp
-        hive_chunk_sink.cpp
-        iceberg_chunk_sink.cpp
-        utils.cpp
+    connector_chunk_sink.cpp
+    file_chunk_sink.cpp
+    hive_chunk_sink.cpp
+    iceberg_chunk_sink.cpp
+    utils.cpp
 )

@@ -180,7 +180,7 @@ public:
 
 private:
     // REQUIRES: _lock has been acquired.
-    void _adjust_priority_if_needed() {
+    ALWAYS_INLINE void _adjust_priority_if_needed() {
         if (_upgrade_counter <= config::priority_queue_remaining_tasks_increased_frequency) {
             return;
         }

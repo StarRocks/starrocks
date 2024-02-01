@@ -15,17 +15,17 @@
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/connector")
 
 if (CLANG_TIDY_PATH)
-        set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
+    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
 endif()
 
 add_library(Connector STATIC
-        connector.cpp
-        hive_connector.cpp
-        iceberg_connector.cpp
-        es_connector.cpp
-        jdbc_connector.cpp
-        lake_connector.cpp
-        mysql_connector.cpp
-        file_connector.cpp
-        binlog_connector.cpp
+    connector.cpp
+    hive_connector.cpp
+    iceberg_connector.cpp
+    es_connector.cpp
+    jdbc_connector.cpp
+    lake_connector.cpp
+    mysql_connector.cpp
+    file_connector.cpp
+    binlog_connector.cpp
 )
