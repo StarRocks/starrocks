@@ -189,7 +189,7 @@ TEST_F(ChunkHelperTest, Accumulator) {
 
 class ChunkPipelineAccumulatorTest : public ::testing::Test {
 protected:
-    ChunkPtr _generate_chunk(size_t rows, size_t cols, size_t reserve_size=0);
+    ChunkPtr _generate_chunk(size_t rows, size_t cols, size_t reserve_size = 0);
 };
 
 ChunkPtr ChunkPipelineAccumulatorTest::_generate_chunk(size_t rows, size_t cols, size_t reserve_size) {
