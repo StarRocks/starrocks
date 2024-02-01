@@ -98,7 +98,6 @@ private:
     butil::FlatMap<butil::EndPoint, doris::PBackendService_Stub*> _stub_map;
 };
 
-
 class HttpBrpcStubCache {
 public:
     static HttpBrpcStubCache* getInstance() {
