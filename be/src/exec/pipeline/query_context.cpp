@@ -183,8 +183,6 @@ Status QueryContext::init_query_once(workgroup::WorkGroup* wg, bool enable_group
             } else {
                 st = maybe_token.status();
             }
-
-            _spill_manager = std::make_unique<spill::QuerySpillManager>(_query_id);
         });
     }
 

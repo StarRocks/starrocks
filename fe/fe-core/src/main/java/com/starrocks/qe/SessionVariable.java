@@ -59,6 +59,7 @@ import com.starrocks.thrift.TOverflowMode;
 import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TSpillMode;
+import com.starrocks.thrift.TSpillToRemoteStorageOptions;
 import com.starrocks.thrift.TTabletInternalParallelMode;
 import com.starrocks.thrift.TTimeUnit;
 import org.apache.commons.lang3.EnumUtils;
@@ -3296,11 +3297,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
                 StorageVolume sv = storageVolumeMgr.getStorageVolumeByName(spillStorageVolume);
                 if (sv != null) {
                     tResult.setEnable_spill_to_remote_storage(true);
-                    tResult.setSpill_remote_storage_paths(sv.getLocations());
+                    TSpillToRemoteStorageOptions options = new TSpillToRemoteStorageOptions();
+                    options.setRemote_storage_paths(sv.getLocations());
                     TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
                     sv.getCloudConfiguration().toThrift(tCloudConfiguration);
-                    tResult.setSpill_remote_storage_conf(tCloudConfiguration);
-                    tResult.setDisable_spill_to_local_disk(disableSpillToLocalDisk);
+                    options.setRemote_storage_conf(tCloudConfiguration);
+                    options.setDisable_spill_to_local_disk(disableSpillToLocalDisk);
+                    tResult.setSpill_to_remote_storage_options(options);
                 }
             }
         }

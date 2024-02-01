@@ -138,6 +138,12 @@ struct TQueryQueueOptions {
   2: optional bool enable_group_level_query_queue;
 }
 
+struct TSpillToRemoteStorageOptions {
+  1: optional list<string> remote_storage_paths;
+  2: optional CloudConfiguration.TCloudConfiguration remote_storage_conf;
+  3: optional bool disable_spill_to_local_disk;
+}
+
 // Query options with their respective defaults
 struct TQueryOptions {
   2: optional i32 max_errors = 0
@@ -269,9 +275,10 @@ struct TQueryOptions {
   116: optional string sql_dialect;
 
   117: optional bool enable_spill_to_remote_storage;
-  118: optional list<string> spill_remote_storage_paths;
-  119: optional CloudConfiguration.TCloudConfiguration spill_remote_storage_conf;
-  120: optional bool disable_spill_to_local_disk;
+  118: optional TSpillToRemoteStorageOptions spill_to_remote_storage_options;
+  // 118: optional list<string> spill_remote_storage_paths;
+  // 119: optional CloudConfiguration.TCloudConfiguration spill_remote_storage_conf;
+  // 120: optional bool disable_spill_to_local_disk;
 }
 
 

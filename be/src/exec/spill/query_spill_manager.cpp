@@ -32,14 +32,17 @@ Status QuerySpillManager::init_block_manager(const TQueryOptions& query_options)
         _block_manager = std::make_unique<LogBlockManager>(_uid, ExecEnv::GetInstance()->spill_dir_mgr());
         return Status::OK();
     }
-    if (!query_options.__isset.spill_remote_storage_paths || !query_options.__isset.spill_remote_storage_conf) {
-        DCHECK(false) << "enable spill_to_remote_storage but spill_remote_storage_paths or spill_remote_storage_conf "
+    DCHECK(query_options.__isset.spill_to_remote_storage_options);
+    const auto& options = query_options.spill_to_remote_storage_options;
+
+    if (!options.__isset.remote_storage_paths || !options.__isset.remote_storage_conf) {
+        DCHECK(false) << "enable spill_to_remote_storage but remote_storage_paths or remote_storage_conf "
                          "is not set";
         _block_manager = std::make_unique<LogBlockManager>(_uid, ExecEnv::GetInstance()->spill_dir_mgr());
         return Status::OK();
     }
-    const auto& remote_storage_paths = query_options.spill_remote_storage_paths;
-    auto remote_storage_conf = std::make_shared<TCloudConfiguration>(query_options.spill_remote_storage_conf);
+    const auto& remote_storage_paths = options.remote_storage_paths;
+    auto remote_storage_conf = std::make_shared<TCloudConfiguration>(options.remote_storage_conf);
     // init remote block manager
     std::vector<std::shared_ptr<Dir>> remote_dirs;
     for (const auto& path : remote_storage_paths) {
@@ -51,7 +54,7 @@ Status QuerySpillManager::init_block_manager(const TQueryOptions& query_options)
     _remote_dir_manager = std::make_unique<DirManager>(remote_dirs);
 
     bool disable_spill_to_local_disk =
-            query_options.__isset.disable_spill_to_local_disk && query_options.disable_spill_to_local_disk;
+            options.__isset.disable_spill_to_local_disk && options.disable_spill_to_local_disk;
     if (disable_spill_to_local_disk) {
         _block_manager = std::make_unique<FileBlockManager>(_uid, _remote_dir_manager.get());
         return Status::OK();
