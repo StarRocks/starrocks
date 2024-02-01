@@ -123,7 +123,7 @@ StatusOr<JITScalarFunction> JITEngine::compile_scalar_function(ExprContext* cont
     // Return function pointer.
     return compiled_function;
 }
-#define HAS_NULL 1
+
 Status JITEngine::generate_scalar_function_ir(ExprContext* context, llvm::Module& module, Expr* expr) {
     llvm::IRBuilder<> b(module.getContext());
 
@@ -136,10 +136,10 @@ Status JITEngine::generate_scalar_function_ir(ExprContext* context, llvm::Module
     // Same with JITColumn.
     auto* data_type = llvm::StructType::get(b.getInt8PtrTy(), b.getInt8PtrTy());
     // Same with JITScalarFunction.
-    auto* func_type = llvm::FunctionType::get(b.getInt8Ty(), {size_type, data_type->getPointerTo()}, false);
+    auto* func_type = llvm::FunctionType::get(b.getVoidTy(), {size_type, data_type->getPointerTo()}, false);
 
     /// Create function in module.
-    // Pseudo code: uint8_t "expr->debug_string()"(int64_t rows_count, JITColumn* columns);
+    // Pseudo code: void "expr->debug_string()"(int64_t rows_count, JITColumn* columns);
     auto* func = llvm::Function::Create(func_type, llvm::Function::ExternalLinkage, expr->debug_string(), module);
     auto* func_args = func->args().begin();
     llvm::Value* rows_count_arg = func_args++;
@@ -171,18 +171,12 @@ Status JITEngine::generate_scalar_function_ir(ExprContext* context, llvm::Module
     /// Initialize loop.
     auto* end = llvm::BasicBlock::Create(b.getContext(), "end", func);
     auto* loop = llvm::BasicBlock::Create(b.getContext(), "loop", func);
+    // If rows_count == 0, jump to end.
+    // Pseudo code: if (rows_count == 0) goto end;
+    b.CreateCondBr(b.CreateICmpEQ(rows_count_arg, llvm::ConstantInt::get(size_type, 0)), end, loop);
 
-    b.CreateBr(loop);
     b.SetInsertPoint(loop);
 
-#if HAS_NULL
-    // Pseudo code: for(has_null =0; ;has_null |= null_flag)
-    llvm::PHINode* has_null_phi = nullptr;
-    if (expr->is_nullable()) {
-        has_null_phi = b.CreatePHI(b.getInt8Ty(), 2);
-        has_null_phi->addIncoming(llvm::ConstantInt::get(b.getInt8Ty(), 0, false), entry);
-    }
-#endif
     /// Loop.
     // Pseudo code: for (int64_t counter = 0; counter < rows_count; counter++)
     auto* counter_phi = b.CreatePHI(rows_count_arg->getType(), 2);
@@ -196,10 +190,6 @@ Status JITEngine::generate_scalar_function_ir(ExprContext* context, llvm::Module
     // null_flags_last[counter] = result_null_flag;
     b.CreateStore(result.value, b.CreateInBoundsGEP(columns.back().value_type, columns.back().values, counter_phi));
     if (expr->is_nullable()) {
-#if HAS_NULL
-        auto* new_null = b.CreateOr(has_null_phi, result.null_flag);
-        has_null_phi->addIncoming(new_null, b.GetInsertBlock());
-#endif
         b.CreateStore(result.null_flag, b.CreateInBoundsGEP(b.getInt8Ty(), columns.back().null_flags, counter_phi));
     }
 
@@ -213,16 +203,8 @@ Status JITEngine::generate_scalar_function_ir(ExprContext* context, llvm::Module
     b.CreateCondBr(b.CreateICmpEQ(incremeted_counter, rows_count_arg), end, loop);
 
     b.SetInsertPoint(end);
-#if HAS_NULL
-    // Pseudo code: return has_null;
-    if (expr->is_nullable()) {
-        b.CreateRet(has_null_phi);
-    } else {
-        b.CreateRet(b.getInt8(0));
-    }
-#else
-    b.CreateRet(llvm::ConstantInt::get(b.getInt8Ty(), 0, false));
-#endif
+    // Pseudo code: return;
+    b.CreateRetVoid();
 
     return Status::OK();
 }
@@ -269,7 +251,6 @@ JITScalarFunction JITEngine::compile_module(std::unique_ptr<llvm::Module> module
     if (func != nullptr) {
         return func;
     }
-    //print_module(*module);
 
     // Create a resource tracker for the module, which will be used to remove the module from the JIT engine.
     auto resource_tracker = _jit->getMainJITDylib().createResourceTracker();
@@ -281,7 +262,6 @@ JITScalarFunction JITEngine::compile_module(std::unique_ptr<llvm::Module> module
         LOG(ERROR) << "JIT: Failed to add IR module to JIT: " << error_message;
         return nullptr;
     }
-
 
     _resource_tracker_map[expr_name] = std::move(resource_tracker);
     _resource_ref_count_map[expr_name] = 0;

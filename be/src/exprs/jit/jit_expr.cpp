@@ -144,32 +144,13 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
         backup_args.emplace_back(column);
     }
 
-    // as create_column return nullable column with null flags = 1, but we need all null flags = 0.
-    uint8_t has_null = 0;
-#if !HAS_NULL
-    auto result_column = ColumnHelper::create_column(type(), false, false, num_rows);
-    if (is_nullable()) {
-        auto null = NullColumn::create(result_column->size(), 0);
-        result_column = NullableColumn::create(std::move(result_column), std::move(null));
-    }
-    if (num_rows > 0) {
-        unfold_ptr(result_column);
-        has_null = (uint8_t)_jit_function(num_rows, jit_columns.data());
-        LOG(INFO) <<"JIT 1ret value = " << std::to_string(has_null);
-        if (has_null > 0) {
-            DCHECK(is_nullable());
-            auto nullable_col = down_cast<NullableColumn*>(result_column.get());
-            nullable_col->set_has_null(has_null);
-        }
-    }
-#else
     auto result_column = ColumnHelper::create_column(type(), is_nullable(), false, num_rows);
     unfold_ptr(result_column);
-    has_null = _jit_function(num_rows, jit_columns.data());
-    LOG(INFO) <<"JIT 0ret value = " << std::to_string(has_null);
-#endif
-    LOG(INFO) << "res col = " << result_column->debug_string() << "  || name " << result_column->get_name()
-              << "  || has_null = " << result_column->has_null() <<" res has_null = " << has_null;
+    _jit_function(num_rows, jit_columns.data());
+    //TODO: _jit_function return has_null
+    if (is_nullable()) {
+        down_cast<NullableColumn*>(result_column.get())->update_has_null();
+    }
     return result_column;
 }
 

@@ -53,5 +53,6 @@ SELECT v2 % v4 + 6720 as result FROM jit_fpe ORDER BY result;
 SELECT v2 % v4 + k1 as result FROM jit_fpe ORDER BY result;
 SELECT v2 % v5 + k1 as result FROM jit_fpe ORDER BY result;
 SELECT v2 % v5 + 2892.193 as result FROM jit_fpe ORDER BY result;
+select v1+v3+ null, v5 + 1.0 + null+v5, v3+null * v1, 2+null/3 * 5, v4-v1 *null  FROM jit_fpe ORDER BY 1,2,3,4;
 
 DROP TABLE IF EXISTS `jit_fpe`;

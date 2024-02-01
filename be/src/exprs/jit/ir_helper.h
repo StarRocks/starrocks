@@ -51,7 +51,7 @@ struct JITColumn {
  * @param int64_t: the number of rows.
  * @param JITColumn*: the pointer to the columns.
  */
-using JITScalarFunction = uint8_t (*)(int64_t, JITColumn*);
+using JITScalarFunction = void (*)(int64_t, JITColumn*);
 
 /**
  * @brief The LLVMDatum struct is utilized to store the column's values and nullity flags within LLVM IR.

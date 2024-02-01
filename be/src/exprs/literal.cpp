@@ -169,16 +169,17 @@ bool VectorizedLiteral::is_compilable() const {
     return IRHelper::support_jit(_type.type);
 }
 
+// guarantee _type.type is right
 StatusOr<LLVMDatum> VectorizedLiteral::generate_ir_impl(ExprContext* context, JITContext* jit_ctx) {
     bool only_null = _value->only_null();
     LLVMDatum datum(jit_ctx->builder, only_null);
     if (only_null) {
-        LOG(INFO) <<"only null type = " << logical_type_to_string(_type.type);
+        DCHECK(is_integer_type(_type.type) || is_float_type(_type.type));
         ASSIGN_OR_RETURN(auto res_type, IRHelper::logical_to_ir_type(jit_ctx->builder, _type.type));
-        if (is_integer_type(_type.type)) {
-            datum.value = llvm::ConstantInt::get(res_type, 0);
-        } else {
+        if (is_float_type(_type.type)) {
             datum.value = llvm::ConstantFP::get(res_type, 0);
+        } else {
+            datum.value = llvm::ConstantInt::get(res_type, 0);
         }
     } else {
         ASSIGN_OR_RETURN(datum.value, IRHelper::create_ir_number(jit_ctx->builder, _type.type, _value->raw_data()));
