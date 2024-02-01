@@ -61,7 +61,7 @@ Status PartitionExchanger::Partitioner::partition_chunk(const ChunkPtr& chunk,
     _partition_memory_usage.assign(num_partitions, 0);
     for (size_t i = 0; i < num_rows; ++i) {
         _partition_row_indexes_start_points[_shuffle_channel_id[i]]++;
-        _partition_memory_usage[_shuffle_channel_id[i]] += chunk->element_memory_usage(i, 1);
+        _partition_memory_usage[_shuffle_channel_id[i]] += chunk->bytes_usage(i, 1);
     }
     // We make the last item equal with number of rows of this chunk.
     for (int32_t i = 1; i <= num_partitions; ++i) {
