@@ -32,11 +32,7 @@ struct LLVMDatum {
     llvm::Value* null_flag = nullptr; ///< Represents the nullity status of the datum.
 
     LLVMDatum(llvm::IRBuilder<>& b, bool null = false) {
-        if (null) {
-            null_flag = llvm::ConstantInt::get(b.getInt8Ty(), 1);
-        } else {
-            null_flag = llvm::ConstantInt::get(b.getInt8Ty(), 0);
-        }
+        null_flag = llvm::ConstantInt::get(b.getInt8Ty(), null, false);
     }
 
     LLVMDatum() = default;
@@ -55,7 +51,7 @@ struct JITColumn {
  * @param int64_t: the number of rows.
  * @param JITColumn*: the pointer to the columns.
  */
-using JITScalarFunction = void (*)(int64_t, JITColumn*);
+using JITScalarFunction = uint8_t (*)(int64_t, JITColumn*);
 
 /**
  * @brief The LLVMDatum struct is utilized to store the column's values and nullity flags within LLVM IR.
