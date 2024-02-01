@@ -58,7 +58,7 @@ jobs:
 
   repo-sync-main:
     name: Repo Sync - main
-    runs-on: [self-hosted, sync]
+    runs-on: [ self-hosted, sync-main ]
     if: inputs.BRANCH == 'main'
     needs: pr-info
     steps:
@@ -70,7 +70,7 @@ jobs:
       - name: checkout code
         run: |
           shopt -s dotglob
-          cp -rf /root/tools/celerdata-github-runner/celerdata-enterprise/* ${{ github.workspace }}
+          cp -rf /var/lib/celerdata-enterprise/* ${{ github.workspace }}
           shopt -u dotglob
 
       - name: Clean Branches
@@ -81,23 +81,28 @@ jobs:
           curl -s -X DELETE -u username:${{secrets.GITHUB_TOKEN}} https://api.github.com/repos/${{ github.repository }}/git/refs/heads/${{ env.source_branch }}
           curl -s -X DELETE -u username:${{secrets.GITHUB_TOKEN}} https://api.github.com/repos/${{ github.repository }}/git/refs/heads/${{ env.destination_branch }}
 
-      - uses: repo-sync/github-sync@v2
-        name: Sync repo to branch
-        with:
-          source_repo: StarRocks/starrocks
+      - name: sync repo to branch
+        env:
           source_branch: ${{ inputs.BRANCH }}
           destination_branch: ${{ inputs.BRANCH }}-sync-${{ inputs.PR_ID }}
           github_token: ${{ secrets.SYNC_PAT }}
+        run: |
+          cp -rf /var/local/env/ci-source-code/starrocks starrocks
+          cd starrocks && git pull
+          git checkout ${source_branch}
+          git remote set-url origin https://${github_token}@github.com/CelerData/celerdata-enterprise.git
+          git push origin ${source_branch}:${destination_branch}
 
       - name: checkout tools
         run: |
-          cp -rf /root/tools/github-runner/elastic-service ./elastic-service
+          cp -rf /var/lib/elastic-service ./elastic-service
           cd elastic-service
           git pull
-          
+
       - name: pr branch
         run: |
           git pull
+          git checkout ${{ inputs.BRANCH }}
           pr_branch=${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
           git branch ${pr_branch} ${{ inputs.BRANCH }}
           git checkout ${pr_branch}
@@ -132,7 +137,7 @@ jobs:
           PR_LABEL: sync,${{ inputs.BRANCH }},${{ steps.cherry-pick.outputs.LABEL }}${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}
           HEAD: ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
           TITLE: "${{ needs.pr-info.outputs.title }}(sync #${{ inputs.PR_ID }})"
-          BODY_FILE: /home/disk1/nas/body-${{ inputs.PR_ID }}.txt
+          BODY_FILE: /var/local/env/body-${{ inputs.PR_ID }}.txt
           REVIEWER: ${{ needs.pr-info.outputs.assignees }}
         run: |
           info=`gh pr create -B ${{ inputs.BRANCH }} -H "${HEAD}" -l "${PR_LABEL}" -t "${TITLE}" -F "${BODY_FILE}" -r "${REVIEWER}"`
@@ -172,7 +177,7 @@ jobs:
           HEAD: ${{ inputs.BRANCH }}-sync-${{ inputs.PR_ID }}
           BASE: ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
           TITLE: "${{ needs.pr-info.outputs.title }}(sync #${{ inputs.PR_ID }})"
-          BODY_FILE: /home/disk1/nas/body-${{ inputs.PR_ID }}.txt
+          BODY_FILE: /var/local/env/body-${{ inputs.PR_ID }}.txt
           REVIEWER: ${{ needs.pr-info.outputs.assignees }}
         run: |
           info=`gh pr create -B "${BASE}" -H "${HEAD}" -l "${PR_LABEL}" -t "${TITLE}" -F "${BODY_FILE}" -r "${REVIEWER}"`
@@ -191,7 +196,7 @@ jobs:
         run: |
           cd ${{ github.workspace }}
           if [[ ! -d ${{ github.workspace }}/elastic-service ]]; then
-            cp -rf /root/tools/github-runner/elastic-service ./elastic-service
+            cp -rf /var/lib/elastic-service ./elastic-service
           fi
           cd elastic-service && git pull
           if [[ "${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}" != '' && "${{ steps.create_pr.outcome }}" == 'success' ]]; then
@@ -211,7 +216,7 @@ jobs:
       - name: clean
         if: always()
         env:
-          BODY_FILE: /home/disk1/nas/body-${{ inputs.PR_ID }}.txt
+          BODY_FILE: /var/local/env/body-${{ inputs.PR_ID }}.txt
         run: |
           rm -f ${BODY_FILE}
           rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
@@ -297,7 +302,7 @@ jobs:
           PR_LABEL: sync,${{ inputs.BRANCH }},${{ steps.cherry-pick.outputs.LABEL }}${{ steps.cherry-pick.outputs.CONFLICT_LABEL }}
           HEAD: ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
           TITLE: "${{ needs.pr-info.outputs.title }}(sync #${{ inputs.PR_ID }})"
-          BODY_FILE: /home/disk1/nas/body-${{ inputs.PR_ID }}.txt
+          BODY_FILE: /var/local/env/body-${{ inputs.PR_ID }}.txt
           REVIEWER: ${{ needs.pr-info.outputs.assignees }}
         run: |
           info=`gh pr create -B ${{ inputs.BRANCH }} -H "${HEAD}" -l "${PR_LABEL}" -t "${TITLE}" -F "${BODY_FILE}" -r "${REVIEWER}"`
@@ -337,7 +342,7 @@ jobs:
           HEAD: ${{ inputs.BRANCH }}-sync-${{ inputs.PR_ID }}
           BASE: ${{ inputs.BRANCH }}-sync-pr-${{ inputs.PR_ID }}
           TITLE: "${{ needs.pr-info.outputs.title }}(sync #${{ inputs.PR_ID }})"
-          BODY_FILE: /home/disk1/nas/body-${{ inputs.PR_ID }}.txt
+          BODY_FILE: /var/local/env/body-${{ inputs.PR_ID }}.txt
           REVIEWER: ${{ needs.pr-info.outputs.assignees }}
         run: |
           info=`gh pr create -B "${BASE}" -H "${HEAD}" -l "${PR_LABEL}" -t "${TITLE}" -F "${BODY_FILE}" -r "${REVIEWER}"`
@@ -376,7 +381,7 @@ jobs:
       - name: clean
         if: always()
         env:
-          BODY_FILE: /home/disk1/nas/body-${{ inputs.PR_ID }}.txt
+          BODY_FILE: /var/local/env/body-${{ inputs.PR_ID }}.txt
         run: |
           rm -f ${BODY_FILE}
           rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
