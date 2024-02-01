@@ -175,9 +175,6 @@ TEST_F(ChunkHelperTest, Accumulator) {
     EXPECT_TRUE(accumulator.reach_limit());
 }
 
-<<<<<<< HEAD
-} // namespace starrocks::vectorized
-=======
 class ChunkPipelineAccumulatorTest : public ::testing::Test {
 protected:
     ChunkPtr _generate_chunk(size_t rows, size_t cols);
@@ -204,7 +201,7 @@ TEST_F(ChunkPipelineAccumulatorTest, test_push) {
     ASSERT_FALSE(accumulator.has_output());
 
     // mem reach limit
-    accumulator.reset_state();
+    accumulator.reset();
     accumulator.push(_generate_chunk(2048, 64));
     ASSERT_TRUE(accumulator.has_output());
     result_chunk = std::move(accumulator.pull());
@@ -213,7 +210,7 @@ TEST_F(ChunkPipelineAccumulatorTest, test_push) {
     ASSERT_FALSE(accumulator.has_output());
 
     // merge chunk and reach rows limit
-    accumulator.reset_state();
+    accumulator.reset();
     for (size_t i = 0; i < 3; i++) {
         accumulator.push(_generate_chunk(1000, 1));
         ASSERT_FALSE(accumulator.has_output());
@@ -226,7 +223,7 @@ TEST_F(ChunkPipelineAccumulatorTest, test_push) {
     ASSERT_FALSE(accumulator.has_output());
 
     // merge chunk and read mem limit
-    accumulator.reset_state();
+    accumulator.reset();
     for (size_t i = 0; i < 2; i++) {
         accumulator.push(_generate_chunk(1000, 30));
         ASSERT_FALSE(accumulator.has_output());
@@ -239,7 +236,7 @@ TEST_F(ChunkPipelineAccumulatorTest, test_push) {
     ASSERT_FALSE(accumulator.has_output());
 
     // merge chunk and rows overflow
-    accumulator.reset_state();
+    accumulator.reset();
     accumulator.push(_generate_chunk(3000, 1));
     ASSERT_FALSE(accumulator.has_output());
     accumulator.push(_generate_chunk(3000, 1));
@@ -254,4 +251,3 @@ TEST_F(ChunkPipelineAccumulatorTest, test_push) {
 }
 
 } // namespace starrocks
->>>>>>> 23f21c09f2 ([Enhancement] Optimize the performance of calc mem usage for bitmap column (#38411))
