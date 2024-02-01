@@ -24,3 +24,31 @@ ALTER TABLE ngram_index ADD INDEX idx_name1(username) USING NGRAMBF ('gram_num' 
 function: wait_alter_table_finish()
 show index from ngram_index;
 select * from ngram_index order by timestamp;
+drop database ngram_bloom_filter_db_1;
+
+-- name: test_ngram_bloom_filter_default
+create database ngram_bloom_filter_db_2;
+use  ngram_bloom_filter_db_2;
+CREATE TABLE ngram_index_default_1(
+    timestamp DATETIME NOT NULL,
+    username STRING,
+    price INT NULL,
+    INDEX idx_name1(username) USING NGRAMBF ("gram_num" = "4")
+)PROPERTIES ("replication_num" = "1");
+show index from ngram_index_default_1;
+
+CREATE TABLE ngram_index_default_2(
+    timestamp DATETIME NOT NULL,
+    username STRING,
+    price INT NULL,
+    INDEX idx_name1(username) USING NGRAMBF ("bloom_filter_fpp" = "0.05")
+)PROPERTIES ("replication_num" = "1");
+show index from ngram_index_default_2;
+
+CREATE TABLE ngram_index_default_3(
+    timestamp DATETIME NOT NULL,
+    username STRING,
+    price INT NULL,
+    INDEX idx_name1(username) USING NGRAMBF
+)PROPERTIES ("replication_num" = "1");
+show index from ngram_index_default_3;
