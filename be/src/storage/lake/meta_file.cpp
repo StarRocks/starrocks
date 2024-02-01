@@ -247,9 +247,6 @@ Status MetaFileBuilder::finalize(int64_t txn_id) {
     RETURN_IF_ERROR(_tablet.put_metadata(_tablet_meta));
     _update_mgr->update_primary_index_data_version(_tablet, version);
     _fill_delvec_cache();
-    // Set _has_finalized at last, and if failure happens before this, we need to clear pk index
-    // and retry publish later.
-    _has_finalized = true;
     return Status::OK();
 }
 
@@ -273,14 +270,6 @@ void MetaFileBuilder::_fill_delvec_cache() {
         if (delvec_iter != _segmentid_to_delvec.end() && delvec_iter->second != nullptr) {
             _tablet.tablet_mgr()->metacache()->cache_delvec(cache_item.first, delvec_iter->second);
         }
-    }
-}
-
-void MetaFileBuilder::handle_failure() {
-    if (is_primary_key(_tablet_meta.get()) && !_has_finalized && _has_update_index) {
-        // if we meet failures and have not finalized yet, have to clear primary index cache,
-        // then we can retry again.
-        _update_mgr->remove_primary_index_cache(_tablet_meta->id());
     }
 }
 
