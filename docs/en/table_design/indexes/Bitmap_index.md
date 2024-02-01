@@ -62,7 +62,7 @@ There are two ways to create a bitmap index for a column.
 
     | **Parameter** | **Required** | **Description**                                              |
     | ------------- | ------------ | ------------------------------------------------------------ |
-    | index_name    | Yes          | The name of the bitmap index.The naming conventions are as follows:<ul><li>The name can contain letters, digits (0-9), and underscores (_). It can start with a letter or an underscore.</li><li>The name cannot exceed 64 characters in length and is not case-sensitive.</li></ul>The name of bitmap index must be unique in a table.                              |
+    | index_name    | Yes          | The name of the bitmap index. For the naming conventions, see [System limits](../../reference/System_limit.md). The name of bitmap index must be unique in a table.                |
     | column_name   | Yes          | The name of the column on which a bitmap index is created. You can specify multiple column names to create bitmap indexes for multiple columns at a time. Separate multiple columns with commas (`,`).  |
     | COMMENT       | No           | The comment of the bitmap index.                             |
 

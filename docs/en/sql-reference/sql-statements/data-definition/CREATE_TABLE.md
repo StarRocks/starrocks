@@ -8,9 +8,9 @@ displayed_sidebar: "English"
 
 Creates a new table in StarRocks.
 
-> **NOTE**
->
-> This operation requires the CREATE TABLE privilege on the destination database.
+:::tip
+This operation requires the CREATE TABLE privilege on the destination database.
+:::
 
 ## Syntax
 
@@ -31,6 +31,13 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 
 ## Parameters
 
+:::tip
+
+- The table name, partition name, column name, and index name you create must follow the naming conventions in [System limits](../../../reference/System_limit.md).
+- When you specify database name, table name, column name, or partition name, note that some literals are used as reserved keywords in StarRocks. Do not directly use these keywords in SQL statements. If you want to use such a keyword in an SQL statement, enclose it in a pair of backticks (`). See [Keywords](../../../sql-reference/sql-statements/keywords.md) for these reserved keywords.
+
+:::
+
 ### column_definition
 
 Syntax:
@@ -39,7 +46,7 @@ Syntax:
 col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_INCREMENT] [AS generation_expr]
 ```
 
-**col_name**: column name. For the naming conventions, see [System limits](../../../reference/System_limit.md).
+**col_name**: column name.
 
 Note that normally you cannot create a column whose name is initiated with `__op` or `__row` because these name formats are reserved for special purposes in StarRocks and creating such columns may result in undefined behavior. If you do need to create such column, set the FE dynamic parameter [`allow_system_reserved_names`](../../../administration/FE_configuration.md#allow_system_reserved_names) to `TRUE`.
 

@@ -8,9 +8,9 @@ displayed_sidebar: "Chinese"
 
 该语句用于创建表。
 
-> **注意**
->
-> 该操作需要有在对应数据库内的建表权限 (CREATE TABLE)。
+:::tip
+该操作需要有在对应数据库内的建表权限 (CREATE TABLE)。
+:::
 
 ## 语法
 
@@ -31,7 +31,13 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 
 ## 参数说明
 
-在指定数据库名、表名和列名等变量时，如果使用了保留关键字，必须使用反引号 (`) 包裹，否则可能会产生报错。有关 StarRocks 的保留关键字列表，请参见[关键字](../keywords.md#保留关键字)。
+:::tip
+
+- 关于建表时对于表名、列名、分区名、索引名的命名要求，参见[系统限制](../../../reference/System_limit.md)。
+
+- 在指定数据库名、表名和列名等变量时，如果使用了保留关键字，必须使用反引号 (`) 包裹，否则可能会产生报错。有关 StarRocks 的保留关键字列表，请参见[关键字](../keywords.md#保留关键字)。
+
+:::
 
 ### **column_definition**
 
@@ -43,7 +49,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 
 说明：
 
-**col_name**：列名称，命名要求参见[系统限制](../../../reference/System_limit.md)。
+**col_name**：列名称。
 
 注意，在一般情况下，不能直接创建以以 `__op` 或 `__row` 开头命名的列，因为此类列名被 StarRocks 保留用于特殊目的，创建这样的列可能导致未知行为。如需创建这样的列，必须将 FE 动态参数 [`allow_system_reserved_names`](../../../administration/FE_configuration.md#allow_system_reserved_names) 设置为 `TRUE`。
 

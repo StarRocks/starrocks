@@ -8,7 +8,7 @@ This topic describes the rules and limits that apply when you use StarRocks.
 
 - StarRocks uses the MySQL protocol for communication. You can connect to the StarRocks cluster via a MySQL client or JDBC. We recommend that you use a MySQL client whose version is 5.1 or later. Versions earlier than 5.1 do not support usernames that are longer than 16 characters.
 
-- Naming conventions for objects such as catalogs, databases, tables, views, partitions, columns, usernames, roles, repositories, resources, storage volumes, and pipes:
+- Naming conventions for objects such as catalogs, databases, tables, views, partitions, columns, indexes, usernames, roles, repositories, resources, storage volumes, and pipes:
 
   - The name can only consist of digits (0-9), letters (a-z or A-Z), and underscores (\_). **Usernames can be all digits.**
   - The name can start with a letter or an understore (\_).
@@ -16,7 +16,7 @@ This topic describes the rules and limits that apply when you use StarRocks.
     - Database name cannot exceed 256 characters.
     - Table name and column name cannot exceed 1024 characters.
     - Username cannot exceed 128 characters.
-  - Column and partition names are **not** case-sensitive. Other names are **case-sensitive**.
+  - Column, partition, and index names are **not** case-sensitive. Other names are **case-sensitive**.
 
 - Naming conventions for labels:
   You can specify the label of a job when you load data. The label name can consist of digits (0-9), letters (a-z or A-Z), and underscores (\_), and cannot exceed 128 characters in length. The label name has no requirement for the starting character.
