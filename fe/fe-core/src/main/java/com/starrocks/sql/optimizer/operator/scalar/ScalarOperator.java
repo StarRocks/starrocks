@@ -115,7 +115,11 @@ public abstract class ScalarOperator implements Cloneable {
     }
 
     public boolean isIndexOnlyFilter() {
-        return isIndexOnlyFilter;
+        boolean result = isIndexOnlyFilter;
+        for (ScalarOperator child : getChildren()) {
+            result = result || child.isIndexOnlyFilter();
+        }
+        return result;
     }
 
     public void setIndexOnlyFilter(boolean indexOnlyFilter) {

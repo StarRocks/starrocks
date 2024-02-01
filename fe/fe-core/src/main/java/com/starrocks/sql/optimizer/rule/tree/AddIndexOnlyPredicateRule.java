@@ -62,6 +62,8 @@ public class AddIndexOnlyPredicateRule implements TreeRewriteRule {
                 ColumnRefOperator key = entry.getKey();
                 if (FunctionSet.INDEX_ONLY_FUNCTIONS.contains(key.getName())) {
                     ScalarOperator func = entry.getValue();
+                    // Set as index only filter
+                    func.setIndexOnlyFilter(true);
                     BinaryPredicateOperator newIndexPredicate =
                             BinaryPredicateOperator.ge(func, ConstantOperator.createDouble(0));
                     scan.setPredicate(CompoundPredicateOperator.and(scan.getPredicate(), newIndexPredicate));
