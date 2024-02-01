@@ -166,6 +166,7 @@ enum TSchemaTableType {
     STARROCKS_OBJECT_DEPENDENCIES,
     SYS_FE_LOCKS,
     SCH_BE_DATACACHE_METRICS,
+    SCH_PARTITIONS_META,
 }
 
 enum THdfsCompression {

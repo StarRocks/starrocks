@@ -86,6 +86,7 @@ public class InfoSchemaDb extends Database {
             super.registerTableUnlocked(PipeFileSystemTable.create());
             super.registerTableUnlocked(PipesSystemTable.create());
             super.registerTableUnlocked(BeDataCacheMetricsTable.create());
+            super.registerTableUnlocked(PartitionsMetaSystemTable.create());
         }
     }
 
