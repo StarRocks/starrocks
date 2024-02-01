@@ -89,7 +89,6 @@ public class MemoryUsageTracker extends FrontendDaemon {
         for (Map.Entry<String, Map<String, MemoryTrackable>> entry : REFERENCE.entrySet()) {
             String moduleName = entry.getKey();
             Map<String, MemoryTrackable> statMap = entry.getValue();
-            long estimateSize = 0L;
             for (Map.Entry<String, MemoryTrackable> statEntry : statMap.entrySet()) {
                 String className = statEntry.getKey();
                 MemoryTrackable tracker = statEntry.getValue();
@@ -97,7 +96,6 @@ public class MemoryUsageTracker extends FrontendDaemon {
                 long currentEstimateSize = tracker.estimateSize();
                 Map<String, Long> counterMap = tracker.estimateCount();
                 endTime = System.currentTimeMillis();
-                estimateSize += currentEstimateSize;
 
                 StringBuilder sb  = new StringBuilder();
                 for (Map.Entry<String, Long> subEntry : counterMap.entrySet()) {
@@ -106,13 +104,13 @@ public class MemoryUsageTracker extends FrontendDaemon {
                 }
                 MemoryStat memoryStat = new MemoryStat();
                 MEMORY_USAGE.computeIfAbsent(moduleName, k -> new ConcurrentSkipListMap<>(String.CASE_INSENSITIVE_ORDER));
-                memoryStat.setCurrentConsumption(estimateSize);
+                memoryStat.setCurrentConsumption(currentEstimateSize);
                 Map<String, MemoryStat> usageMap = MEMORY_USAGE.get(moduleName);
                 MemoryStat oldMemoryStat = usageMap.get(className);
                 if (oldMemoryStat != null) {
-                    memoryStat.setPeakConsumption(Math.max(oldMemoryStat.getPeakConsumption(), estimateSize));
+                    memoryStat.setPeakConsumption(Math.max(oldMemoryStat.getPeakConsumption(), currentEstimateSize));
                 } else {
-                    memoryStat.setPeakConsumption(estimateSize);
+                    memoryStat.setPeakConsumption(currentEstimateSize);
                 }
                 usageMap.put(className, memoryStat);
 

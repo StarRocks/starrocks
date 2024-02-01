@@ -67,14 +67,16 @@ public class SysFeMemoryUsage {
         TFeMemoryRes response = new TFeMemoryRes();
 
         MemoryUsageTracker.MEMORY_USAGE.forEach((moduleName, module) -> {
-            module.forEach((className, memoryStat) -> {
-                TFeMemoryItem item = new TFeMemoryItem();
-                item.setModule_name(moduleName);
-                item.setClass_name(className);
-                item.setCurrent_consumption(new ByteSizeValue(memoryStat.getCurrentConsumption()).toString());
-                item.setPeak_consumption(new ByteSizeValue(memoryStat.getPeakConsumption()).toString());
-                response.addToItems(item);
-            });
+            if (module != null) {
+                module.forEach((className, memoryStat) -> {
+                    TFeMemoryItem item = new TFeMemoryItem();
+                    item.setModule_name(moduleName);
+                    item.setClass_name(className);
+                    item.setCurrent_consumption(new ByteSizeValue(memoryStat.getCurrentConsumption()).toString());
+                    item.setPeak_consumption(new ByteSizeValue(memoryStat.getPeakConsumption()).toString());
+                    response.addToItems(item);
+                });
+            }
         });
 
         return response;
