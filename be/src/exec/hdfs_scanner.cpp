@@ -441,15 +441,12 @@ void HdfsScannerContext::append_or_update_partition_column_to_chunk(ChunkPtr* ch
         DCHECK(partition_values[i]->is_constant());
         auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(partition_values[i]);
         ColumnPtr data_column = const_column->data_column();
-        auto chunk_part_column = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
+        ColumnPtr chunk_part_column;
 
-        if (row_count > 0) {
-            if (data_column->is_nullable()) {
-                chunk_part_column->append_nulls(1);
-            } else {
-                chunk_part_column->append(*data_column, 0, 1);
-            }
-            chunk_part_column->assign(row_count, 0);
+        if (data_column->is_nullable()) {
+            chunk_part_column = ColumnHelper::create_const_null_column(row_count);
+        } else {
+            chunk_part_column = std::make_shared<ConstColumn>(data_column, row_count);
         }
 
         if (ck->is_slot_exist(slot_desc->id())) {
