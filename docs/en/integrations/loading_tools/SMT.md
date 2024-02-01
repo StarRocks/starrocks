@@ -4,7 +4,9 @@ displayed_sidebar: English
 
 # StarRocks Migration Tool (SMT) 
 
-StarRocks Migration Tool (SMT) is a data migration tool provided by StarRocks to load data from source databases through Flink into StarRocks. SMT mainly can: - Generate statements to create tables in StarRocks based on information of the source database and the target StarRocks cluster. - Generate SQL statements that can be executed in Flink's SQL client to submit Flink jobs for synchronizing data, which simplifies full or incremental data synchronization in the pipeline. Currently, SMT supports the following source databases:
+StarRocks Migration Tool (SMT) is a data migration tool provided by StarRocks to load data from source databases through Flink into StarRocks. SMT mainly can:
+- Generate statements to create tables in StarRocks based on information of the source database and the target StarRocks cluster.
+- Generate SQL statements that can be executed in Flink's SQL client to submit Flink jobs for synchronizing data, which simplifies full or incremental data synchronization in the pipeline. Currently, SMT supports the following source databases:
 
 | Source database | Generate statement to create table in StarRocks | Full data synchronization | Incremental data synchronization |
 | --------------- | ----------------------------------------------- | ------------------------- | -------------------------------- |
@@ -486,7 +488,7 @@ This guide explains how to use SMT to synchronize Hive data to StarRocks. During
 
 ### Steps
 
-#### Preparement
+#### Preparations
 
 ```SQL
 [db]
@@ -753,6 +755,7 @@ The Flink CDC connector captures data by directly reading full and incremental d
     flink-create.1.sql    smt.tar.gz              starrocks-create.all.sql
     flink-create.all.sql  starrocks-create.1.sql  starrocks-external-create.all.sql
     ```
+
 8. Use a SQL script whose prefix is `starrocks-create` to generate the table in StarRocks.
 
     ```Bash
@@ -776,7 +779,7 @@ The Flink CDC connector captures data by directly reading full and incremental d
 
 ### Notes
 
-For Tidb whose version is before v4.0.0, additional configuration of `flink.cdc.pd-addresses` is required.
+For TiDB whose version is before v4.0.0, additional configuration of `flink.cdc.pd-addresses` is required.
 
 ````
 ```Bash
