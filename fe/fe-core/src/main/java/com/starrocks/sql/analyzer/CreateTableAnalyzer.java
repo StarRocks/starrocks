@@ -523,7 +523,9 @@ public class CreateTableAnalyzer {
                         }
                     }
                     if (!found) {
-                        throw new SemanticException(indexDef.getIndexName() + " column does not exist in table. invalid column: " + indexColName,
+                        throw new SemanticException(
+                                indexDef.getIndexName() + " column does not exist in table. invalid column: " +
+                                        indexColName,
                                 indexDef.getPos());
                     }
                 }
