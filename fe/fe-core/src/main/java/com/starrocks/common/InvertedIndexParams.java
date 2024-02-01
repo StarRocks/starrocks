@@ -14,6 +14,8 @@
 
 package com.starrocks.common;
 
+import com.starrocks.common.io.ParamsKey;
+
 import java.util.Arrays;
 import java.util.Locale;
 import java.util.Map;
@@ -33,17 +35,6 @@ public class InvertedIndexParams {
                 .forEach(k -> properties.put(k.name().toLowerCase(Locale.ROOT), k.defaultValue()));
     }
 
-    public interface ParamsKey {
-
-        String defaultValue();
-
-        default boolean needDefault() {
-            return false;
-        }
-
-        // auto implemented by Enum.name()
-        String name();
-    }
 
     public enum InvertedIndexImpType {
         CLUCENE
@@ -124,36 +115,6 @@ public class InvertedIndexParams {
         @Override
         public String defaultValue() {
             return defaultValue;
-        }
-    }
-
-    public enum NgramBfIndexParamsKey implements ParamsKey {
-        /**
-         * gram num, if gram num is 4, "apple" -> ["appl","pple"]
-         */
-        GRAM_NUM(String.valueOf(FeConstants.DEFAULT_GRAM_NUM), true),
-
-        /**
-         * bloom filter's false positive possibility
-         */
-        FPP(String.valueOf(FeConstants.DEFAULT_BLOOM_FILTER_FPP), true);
-
-        private final String defaultValue;
-        private boolean needDefault = false;
-
-        NgramBfIndexParamsKey(String defaultValue, boolean needDefault) {
-            this.defaultValue = defaultValue;
-            this.needDefault = needDefault;
-        }
-
-        @Override
-        public String defaultValue() {
-            return defaultValue;
-        }
-
-        @Override
-        public boolean needDefault() {
-            return needDefault;
         }
     }
 }

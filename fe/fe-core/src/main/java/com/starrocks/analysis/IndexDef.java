@@ -96,14 +96,9 @@ public class IndexDef implements ParseNode {
             throw new SemanticException("columns of index has duplicated.");
         }
 
-        if (indexType == IndexDef.IndexType.BITMAP) {
-            if (columns.size() != 1) {
-                throw new SemanticException("bitmap index can only apply to a single column.");
-            }
-        } else if (indexType == IndexDef.IndexType.GIN) {
-            if (columns.size() != 1) {
-                throw new SemanticException("INVERTED index can only apply to a single column for now.");
-            }
+        // right now only support single column index
+        if (columns.size() != 1) {
+            throw new SemanticException("bitmap index can only apply to a single column.");
         }
     }
 
@@ -200,7 +195,7 @@ public class IndexDef implements ParseNode {
         } else if (indexType == IndexType.GIN) {
             InvertedIndexUtil.checkInvertedIndexValid(column, properties, keysType);
         } else if (indexType == IndexType.NGRAMBF) {
-
+            BloomFilterIndexUtil.checkNgramBloomFilterIndexValid(column, properties, keysType);
         } else {
             throw new SemanticException("Unsupported index type: " + indexType);
         }

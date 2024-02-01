@@ -43,6 +43,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
+import com.starrocks.analysis.BloomFilterIndexUtil;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
@@ -108,8 +109,6 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_BF_COLUMNS = "bloom_filter_columns";
     public static final String PROPERTIES_BF_FPP = "bloom_filter_fpp";
-    private static final double MAX_FPP = 0.05;
-    private static final double MIN_FPP = 0.0001;
 
     public static final String PROPERTIES_COLUMN_SEPARATOR = "column_separator";
     public static final String PROPERTIES_LINE_DELIMITER = "line_delimiter";
@@ -709,18 +708,8 @@ public class PropertyAnalyzer {
     public static double analyzeBloomFilterFpp(Map<String, String> properties) throws AnalysisException {
         double bfFpp = 0;
         if (properties != null && properties.containsKey(PROPERTIES_BF_FPP)) {
-            String bfFppStr = properties.get(PROPERTIES_BF_FPP);
-            try {
-                bfFpp = Double.parseDouble(bfFppStr);
-            } catch (NumberFormatException e) {
-                throw new AnalysisException("Bloom filter fpp is not Double");
-            }
-
-            // check range
-            if (bfFpp < MIN_FPP || bfFpp > MAX_FPP) {
-                throw new AnalysisException("Bloom filter fpp should in [" + MIN_FPP + ", " + MAX_FPP + "]");
-            }
-
+            bfFpp = BloomFilterIndexUtil.analyzeBloomFilterFpp(properties);
+            // have to remove this from properties, which means it's valid and checked already
             properties.remove(PROPERTIES_BF_FPP);
         }
 
