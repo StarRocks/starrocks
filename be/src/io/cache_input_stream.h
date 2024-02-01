@@ -82,7 +82,11 @@ private:
         IOBuffer buffer;
     };
 
-    Status _read_block(int64_t offset, int64_t size, char* out, bool single_read);
+    // Read block from local, if not found, will return Status::NotFound();
+    Status _read_block_from_local(const int64_t offset, const int64_t size, char* out);
+    // Read multiple blocks from remote
+    Status _read_blocks_from_remote(const int64_t offset, const int64_t size, char* out);
+    Status _populate_to_cache(const int64_t offset, const int64_t size, char* src);
     void _populate_cache_from_zero_copy_buffer(const char* p, int64_t offset, int64_t count);
     void _deduplicate_shared_buffer(SharedBufferedInputStream::SharedBuffer* sb);
 
@@ -90,9 +94,11 @@ private:
     std::string _filename;
     std::shared_ptr<SharedBufferedInputStream> _sb_stream;
     int64_t _offset;
+    int64_t _buffer_size;
     std::string _buffer;
     Stats _stats;
     int64_t _size;
+    const int64_t _ignore_block_nums = 1;
     bool _enable_populate_cache = false;
     bool _enable_block_buffer = false;
     BlockCache* _cache = nullptr;
