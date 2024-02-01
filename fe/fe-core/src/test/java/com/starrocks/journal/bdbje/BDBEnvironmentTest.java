@@ -325,6 +325,7 @@ public class BDBEnvironmentTest {
             }
         };
 
+        // mock DatabaseUtil.checkForNullParam to generate RollBackException
         new MockUp<DatabaseUtil>() {
             @Mock
             public void checkForNullParam(final Object param, final String name) {
