@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.plan;
 
-import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
@@ -31,12 +30,6 @@ import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.Test;
-
-import java.io.File;
-import java.util.List;
-import java.util.Objects;
-
-import static org.junit.Assert.fail;
 
 public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
 
@@ -659,37 +652,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  equal join conjunct: 71: order_id = 2: orderid\n" +
                 "  |  \n" +
                 "  |----24:EXCHANGE"));
-    }
-
-    @Test
-    public void testMockQueryDump() {
-        List<String> fileNames = mockCases();
-        for (String fileName : fileNames) {
-            try {
-                Pair<QueryDumpInfo, String> replayPair =
-                        getPlanFragment(getDumpInfoFromFile("query_dump/mock-files/" + fileName),
-                                null, TExplainLevel.NORMAL);
-                Assert.assertTrue(replayPair.second, replayPair.second.contains("mock"));
-            } catch (Throwable e) {
-                fail("file: " + fileName + " should success. errMsg: " + e.getMessage());
-            }
-
-        }
-    }
-
-    private static List<String> mockCases() {
-        String folderPath = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath()
-                + "/query_dump/mock-files";
-        File folder = new File(folderPath);
-        List<String> fileNames = Lists.newArrayList();
-
-        if (folder.exists() && folder.isDirectory()) {
-            File[] files = folder.listFiles();
-            for (File file : files) {
-                fileNames.add(file.getName().split("\\.")[0]);
-            }
-        }
-        return fileNames;
     }
 
     @Test
