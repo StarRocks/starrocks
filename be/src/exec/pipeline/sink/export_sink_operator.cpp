@@ -85,7 +85,7 @@ void ExportSinkIOBuffer::close(RuntimeState* state) {
 
 void ExportSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
     sleep(5);
-    std::cout << "NUM_PENDING: " << _num_pending_chunks;
+    std::cout << "NUM_PENDING: " << _num_pending_chunks << std::endl;
 
     DeferOp op([&]() {
         auto nc = _num_pending_chunks.fetch_sub(1);
