@@ -96,7 +96,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         try {
             return doTransform(queryExpression, context);
         } catch (Exception e) {
-            String errMsg = ExceptionUtils.getMessage(e);
+            String errMsg = ExceptionUtils.getStackTrace(e);
             // for mv rewrite rules, do not disturb query when exception.
             logMVRewrite(context, this, "mv rewrite exception, exception message:{}", errMsg);
             return Lists.newArrayList();
@@ -116,6 +116,8 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             mvCandidateContexts.addAll(context.getCandidateMvs());
         }
         mvCandidateContexts.removeIf(x -> !x.prune(context, queryExpression));
+
+        // Order all candidate mvs by priority so can be rewritten fast.
         MaterializationContext.RewriteOrdering ordering =
                 new MaterializationContext.RewriteOrdering(queryExpression, context.getColumnRefFactory());
         mvCandidateContexts.sort(ordering);
