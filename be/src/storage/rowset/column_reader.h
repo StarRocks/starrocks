@@ -197,7 +197,7 @@ private:
     LogicalType _column_child_type = TYPE_UNKNOWN;
     PagePointer _dict_page_pointer;
     uint64_t _total_mem_footprint = 0;
-    uint32 _column_unique_id;
+    uint32 _column_unique_id = std::numeric_limits<uint32_t>::max();
 
     // initialized in init(), used for create PageDecoder
     const EncodingInfo* _encoding_info = nullptr;

@@ -317,7 +317,8 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
                     mit->second->set_is_bf_column(true);
                     index_pb->add_col_unique_id(mit->second->unique_id());
                 } else {
-                    LOG(WARNING) << "index column (" << index.columns[0] << ") can not be found in table columns";
+                    return Status::Cancelled(
+                            strings::Substitute("index column $0 can not be found in table columns", index.columns[0]));
                 }
                 std::map<std::string, std::map<std::string, std::string>> properties_map;
                 properties_map.emplace(INDEX_PROPERTIES, index.index_properties);

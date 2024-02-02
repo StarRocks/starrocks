@@ -98,7 +98,7 @@ public class IndexDef implements ParseNode {
 
         // right now only support single column index
         if (columns.size() != 1) {
-            throw new SemanticException("bitmap index can only apply to a single column.");
+            throw new SemanticException(indexName + " index can only apply to a single column.");
         }
     }
 

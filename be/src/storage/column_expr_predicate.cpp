@@ -35,9 +35,7 @@ StatusOr<ColumnExprPredicate*> ColumnExprPredicate::make_column_expr_predicate(T
     // so here we have to clone one to keep thread safe.
     expr_predicate->_add_expr_ctx(expr_ctx);
     // passed by FE
-    if (expr_ctx->is_index_only_filter()) {
-        expr_predicate->set_index_filter_only(true);
-    }
+    expr_predicate->set_index_filter_only(expr_ctx->is_index_only_filter());
     return expr_predicate;
 }
 
