@@ -67,7 +67,7 @@ struct JITContext {
     std::vector<LLVMColumn>& columns;
     llvm::Module& module;
     llvm::IRBuilder<>& builder;
-    int input_index;
+    int input_index = 0;
 };
 
 class IRHelper {

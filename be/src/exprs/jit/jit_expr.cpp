@@ -115,6 +115,10 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
     if (ptr != nullptr) {
         num_rows = ptr->num_rows();
     }
+    auto result_column = ColumnHelper::create_column(type(), is_nullable(), false, num_rows);
+    if(num_rows == 0) {
+        return result_column;
+    }
     Columns backup_args;
     backup_args.reserve(_children.size() + 1);
     for (auto i = 0; i < _children.size(); i++) {
@@ -144,8 +148,8 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
         backup_args.emplace_back(column);
     }
 
-    auto result_column = ColumnHelper::create_column(type(), is_nullable(), false, num_rows);
     unfold_ptr(result_column);
+    // inputs are not empty.
     _jit_function(num_rows, jit_columns.data());
     //TODO: _jit_function return has_null
     if (is_nullable()) {
