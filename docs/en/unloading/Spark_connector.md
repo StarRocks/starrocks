@@ -219,7 +219,7 @@ The following parameters apply only to the Spark RDD reading method.
 | STRING              | DataTypes.StringType      |
 | DATE                | DataTypes.DateType        |
 | DATETIME            | DataTypes.TimestampType   |
-| JSON | DataTypes.StringType <br /> **NOTE:** <br /> **Supported since version 1.1.2**, and require StarRocks at least 2.5.13, 3.0.3, 3.1 or later |
+| JSON | DataTypes.StringType <br /> **NOTE:** <br /> This data type mapping is supported since Spark connector v1.1.2, and requires a StarRocks version of at least 2.5.13, 3.0.3, 3.1 or later. |
 | ARRAY               | Unsupported datatype      |
 | HLL                 | Unsupported datatype      |
 | BITMAP              | Unsupported datatype      |

@@ -39,7 +39,7 @@ displayed_sidebar: "Chinese"
 **新增特性**
 
 - 支持 Spark 的版本为 3.5。[#89](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/89)
-- 通过 Spark SQL 读取 StarRocks 时支持 `starrocks.filter.query `参数。[#92](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/92)
+- 通过 Spark SQL 读取 StarRocks 时支持 `starrocks.filter.query` 参数。[#92](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/92)
 - 支持读取 StarRocks 中 JSON 类型的列。[#100](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/100)
 
 **功能优化**
