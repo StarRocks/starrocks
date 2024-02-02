@@ -297,7 +297,7 @@ SELECT col2,col3,col0,id,col1 FROM test_base_table1 ORDER BY col2,col3,col0;
 -- !result
 analyze full table test_base_table1 with sync mode;
 -- result:
-test_db_afc3e318c02611eea0bedbbedfe51b53.test_base_table1	analyze	status	OK
+test_db_44197a8ac1a011eea0bfdbbedfe51b53.test_base_table1	analyze	status	OK
 -- !result
 function: wait_materialized_view_finish()
 -- result:
@@ -315,6 +315,47 @@ select col3, min(col1) startTime, max(col1) endTime from test_base_table1 where 
 -- result:
 Guangdong	10001	10001
 Fujian	None	None
+-- !result
+function: check_hit_materialized_view("select * from test_base_table1 where col0=123456789", "rollup: test_base_table1")
+-- result:
+None
+-- !result
+select * from test_base_table1 where col0=123456789;
+-- result:
+123456789	2022-04-30 12:00:00	Guangdong	1	10001
+-- !result
+function: check_hit_materialized_view("select * from test_base_table1 where col2 >='2022-04-30 12:00:00'", "rollup: mv_test_base_table1")
+-- result:
+None
+-- !result
+select * from test_base_table1 where col2 >='2022-04-30 12:00:00';
+-- result:
+123456789	2022-04-30 12:00:00	Guangdong	1	10001
+987654321	2022-04-30 13:00:00	Fujian	None	None
+-- !result
+function: check_hit_materialized_view("select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 union select col0, col2, col3, id, col1 from test_base_table1 where col2 >='2022-04-30 12:00:00') t;", "rollup: mv_test_base_table1",  "rollup: test_base_table1")
+-- result:
+None
+-- !result
+select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 union select col0, col2, col3, id, col1 from test_base_table1 where col2 >='2022-04-30 12:00:00') t;
+-- result:
+123456789	2022-04-30 12:00:00	Guangdong	1	10001
+987654321	2022-04-30 13:00:00	Fujian	None	None
+-- !result
+set enable_sync_materialized_view_rewrite=false;
+-- result:
+-- !result
+function: check_hit_materialized_view("select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 union select col0, col2, col3, id, col1 from mv_test_base_table1 [_SYNC_MV_] where col2 >='2022-04-30 12:00:00') t;", "rollup: mv_test_base_table1",  "rollup: test_base_table1")
+-- result:
+None
+-- !result
+select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 union select col0, col2, col3, id, col1 from mv_test_base_table1 [_SYNC_MV_] where col2 >='2022-04-30 12:00:00') t;
+-- result:
+987654321	2022-04-30 13:00:00	Fujian	None	None
+123456789	2022-04-30 12:00:00	Guangdong	1	10001
+-- !result
+set enable_sync_materialized_view_rewrite=true;
+-- result:
 -- !result
 drop table test_base_table1;
 -- result:
