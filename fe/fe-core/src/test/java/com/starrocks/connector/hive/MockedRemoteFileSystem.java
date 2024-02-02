@@ -146,6 +146,20 @@ public class MockedRemoteFileSystem extends FileSystem {
     }
 
     @Override
+    public FileStatus[] globStatus(Path path) {
+        FileStatus fileStatus = null;
+        if (this.hdfsTable.equals(HDFS_HIVE_TABLE)) {
+            fileStatus = new FileStatus(
+                    0, false, 0, 0, 0, new Path(HDFS_HIVE_TABLE));
+        } else if (this.hdfsTable.equals(HDFS_RECURSIVE_TABLE)) {
+            fileStatus = new FileStatus(
+                    0, false, 0, 0, 0, new Path(HDFS_RECURSIVE_TABLE));
+        }
+
+        return new FileStatus[] {fileStatus};
+    }
+
+    @Override
     public URI getUri() {
         throw new UnsupportedOperationException();
     }
