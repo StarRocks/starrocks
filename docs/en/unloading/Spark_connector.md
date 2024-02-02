@@ -25,6 +25,7 @@ You can also map the StarRocks table to a Spark DataFrame or a Spark RDD, and th
 
 | Spark connector | Spark         | StarRocks       | Java | Scala |
 |---------------- | ------------- | --------------- | ---- | ----- |
+| 1.1.2           | 3.2, 3.3, 3.4, 3.5 | 2.5 and later   | 8    | 2.12  |
 | 1.1.1           | 3.2, 3.3, 3.4 | 2.5 and later   | 8    | 2.12  |
 | 1.1.0           | 3.2, 3.3, 3.4 | 2.5 and later   | 8    | 2.12  |
 | 1.0.0           | 3.x           | 1.18 and later  | 8    | 2.12  |
@@ -218,6 +219,7 @@ The following parameters apply only to the Spark RDD reading method.
 | STRING              | DataTypes.StringType      |
 | DATE                | DataTypes.DateType        |
 | DATETIME            | DataTypes.TimestampType   |
+| JSON | DataTypes.StringType <br /> **NOTE:** <br /> This data type mapping is supported since Spark connector v1.1.2, and requires a StarRocks version of at least 2.5.13, 3.0.3, 3.1.0 or later. |
 | ARRAY               | Unsupported datatype      |
 | HLL                 | Unsupported datatype      |
 | BITMAP              | Unsupported datatype      |
