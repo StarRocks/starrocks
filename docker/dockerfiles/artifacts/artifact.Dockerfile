@@ -43,6 +43,7 @@ RUN --mount=type=cache,target=/root/.m2/ STARROCKS_VERSION=${RELEASE_VERSION} BU
 
 FROM busybox:latest
 ARG RELEASE_VERSION
+ARG TARGETARCH
 
 LABEL org.opencontainers.image.source="https://github.com/starrocks/starrocks"
 LABEL org.starrocks.version=${RELEASE_VERSION:-"UNKNOWN"}
@@ -50,5 +51,15 @@ LABEL org.starrocks.version=${RELEASE_VERSION:-"UNKNOWN"}
 COPY --from=fe-builder /build/starrocks/output /release/fe_artifacts
 COPY --from=be-builder /build/starrocks/output /release/be_artifacts
 COPY --from=broker-builder /build/starrocks/fs_brokers/apache_hdfs_broker/output /release/broker_artifacts
+
+# download the latest dd-java-agent
+ADD 'https://dtdg.co/latest-java-tracer' /release/fe_artifacts/fe/datadog/dd-java-agent.jar
+
+# Get ddprof for BE profiling
+ADD https://github.com/DataDog/ddprof/releases/download/v0.15.3/ddprof-0.15.3-${TARGETARCH}-linux.tar.xz ddprof-linux.tar.xz
+RUN tar xvf ddprof-linux.tar.xz && mkdir -p /release/be_artifacts/be/datadog/  \
+    && mv ddprof/bin/ddprof /release/be_artifacts/be/datadog/ \
+    && chmod 755 /release/be_artifacts/be/datadog/ddprof \
+    && rm -f ddprof-linux.tar.xz
 
 WORKDIR /release
