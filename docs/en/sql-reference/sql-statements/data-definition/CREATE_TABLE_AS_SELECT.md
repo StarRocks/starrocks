@@ -2,7 +2,7 @@
 displayed_sidebar: "English"
 ---
 
-# CREATE TABLE AS SELECT
+# CREATE TABLE AS SELECT (CTAS)
 
 ## Description
 

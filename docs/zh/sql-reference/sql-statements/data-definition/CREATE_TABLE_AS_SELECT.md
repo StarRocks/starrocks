@@ -2,7 +2,7 @@
 displayed_sidebar: "Chinese"
 ---
 
-# CREATE TABLE AS SELECT
+# CREATE TABLE AS SELECT (CTAS)
 
 ## 功能
 
