@@ -14,7 +14,7 @@
 
 package com.starrocks.catalog.system.sys;
 
-import com.starrocks.common.FeConstants;
+import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
@@ -25,37 +25,44 @@ import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
-import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.ClassRule;
+import org.junit.FixMethodOrder;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
+import org.junit.runners.MethodSorters;
 
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class SysObjectDependenciesTest {
 
-    private StarRocksAssert starRocksAssert;
 
-    private ConnectContext connectContext;
+    private static StarRocksAssert starRocksAssert;
+
+    private static ConnectContext connectContext;
 
     @ClassRule
     public static TemporaryFolder temp = new TemporaryFolder();
 
-
-    @Before
-    public void setUp() throws Exception {
-        FeConstants.runningUnitTest = true;
+    @BeforeClass
+    public static void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
-
+        // set default config for async mvs
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
+
+        ConnectorPlanTestBase.mockCatalog(connectContext, MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME);
+
+        starRocksAssert.withDatabase("test")
+                .useDatabase("test");
+        // with user
         String createUserSql = "create user if not exists test_mv";
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createUserSql, connectContext), connectContext);
     }
 
     @Test
     public void testObjectDependencies() throws Exception {
-        starRocksAssert.withDatabase("test")
-                .useDatabase("test")
-                .withTable("CREATE TABLE test.test_mv_base_table\n" +
+        starRocksAssert.withTable("CREATE TABLE test.test_mv_base_table\n" +
                         "(\n" + "    k1 date,\n" + "    k2 int,\n" + "    v1 int sum\n" + ")\n"
                         + "PARTITION BY RANGE(k1)\n" +
                         "(\n" + "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n"
@@ -87,18 +94,10 @@ public class SysObjectDependenciesTest {
         Assert.assertEquals("OLAP", objectDependencyRes.getItems().get(0).getRef_object_type());
     }
 
-
     @Test
     public void testUnknownCatalogObjectDependencies() throws Exception {
-        ConnectorPlanTestBase.mockAllCatalogs(connectContext, temp.newFolder().toURI().toString());
-        starRocksAssert = new StarRocksAssert(connectContext);
-
-
         String mvName = "test.iceberg_mv";
-
-        starRocksAssert.withDatabase("test")
-                .useDatabase("test")
-                .withMaterializedView("create materialized view " + mvName + " " +
+        starRocksAssert.withMaterializedView("create materialized view " + mvName + " " +
                         "partition by str2date(d,'%Y-%m-%d') " +
                         "distributed by hash(a) " +
                         "REFRESH DEFERRED MANUAL " +
@@ -111,16 +110,10 @@ public class SysObjectDependenciesTest {
 
         String grantSql1 = "GRANT ALL ON MATERIALIZED VIEW test.iceberg_mv TO USER `test_mv`@`%`;";
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantSql1, connectContext), connectContext);
-
-
         TObjectDependencyReq dependencyReq = buildRequest();
-
-
         TObjectDependencyRes objectDependencyRes = SysObjectDependencies.listObjectDependencies(dependencyReq);
-
-        Assert.assertEquals("ICEBERG", objectDependencyRes.getItems().get(0).getRef_object_type());
+        Assert.assertTrue(objectDependencyRes.getItems().stream().anyMatch(x -> x.getRef_object_type().equals("ICEBERG")));
     }
-
 
     private static TObjectDependencyReq buildRequest() {
         TObjectDependencyReq dependencyReq = new TObjectDependencyReq();
@@ -136,6 +129,4 @@ public class SysObjectDependenciesTest {
         dependencyReq.setAuth_info(tAuthInfo);
         return dependencyReq;
     }
-
-
 }
