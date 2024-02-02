@@ -354,6 +354,9 @@ public class GlobalStateMgr {
     // false if default_cluster is not created.
     private boolean isDefaultClusterCreated = false;
 
+    // True indicates that the node is transferring to the leader, using this state avoids forwarding stmt to its own node.
+    private volatile boolean isInTransferringToLeader = false;
+
     private FrontendNodeType feType;
     // replica and observer use this value to decide provide read service or not
     private long synchronizedTimeMs;
@@ -662,7 +665,12 @@ public class GlobalStateMgr {
         this.execution = new StateChangeExecution() {
             @Override
             public void transferToLeader() {
-                gsm.transferToLeader();
+                isInTransferringToLeader = true;
+                try {
+                    gsm.transferToLeader();
+                } finally {
+                    isInTransferringToLeader = false;
+                }
             }
 
             @Override
@@ -3636,5 +3644,9 @@ public class GlobalStateMgr {
 
     public MetaContext getMetaContext() {
         return metaContext;
+    }
+
+    public boolean isInTransferringToLeader() {
+        return isInTransferringToLeader;
     }
 }
