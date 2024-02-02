@@ -41,7 +41,7 @@ public class StmtExecutorTest {
             }
         };
 
-        Assert.assertFalse(new StmtExecutor(new ConnectContext(), new OriginStatement("show frontends"), false)
+        Assert.assertFalse(new StmtExecutor(new ConnectContext(), new OriginStatement("show frontends", 0), false)
                 .isForwardToLeader());
     }
 }
