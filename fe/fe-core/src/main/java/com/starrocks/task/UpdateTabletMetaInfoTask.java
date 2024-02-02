@@ -36,124 +36,122 @@ package com.starrocks.task;
 
 import com.google.common.collect.Lists;
 import com.starrocks.binlog.BinlogConfig;
+import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTabletMetaInfo;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.thrift.TUpdateTabletMetaInfoReq;
-import org.apache.commons.lang3.tuple.Triple;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
-public class UpdateTabletMetaInfoTask extends AgentTask {
+import static java.util.Objects.requireNonNull;
+
+public abstract class UpdateTabletMetaInfoTask extends AgentTask {
 
     private static final Logger LOG = LogManager.getLogger(UpdateTabletMetaInfoTask.class);
 
-    // used for synchronous process
-    private MarkedCountDownLatch<Long, Set<Pair<Long, Integer>>> latch;
-
-    private Set<Pair<Long, Integer>> tableIdWithSchemaHash;
-    private boolean isInMemory;
-    private boolean enablePersistentIndex;
-    private int primaryIndexCacheExpireSec;
-
-    private BinlogConfig binlogConfig;
-
-    private TTabletMetaType metaType;
-
-    private TTabletType tabletType;
+    private MarkedCountDownLatch<Long, Set<Long>> latch;
 
     private long txnId;
 
-    // <tablet id, tablet schema hash, tablet in memory> or
-    // <tablet id, tablet schema hash, tablet enable persistent index>
-    private List<Triple<Long, Integer, Boolean>> tabletToMeta;
-
-    // <tablet id, tablet schema hash, BinlogConfig>
-    private List<Triple<Long, Integer, BinlogConfig>> tabletToBinlogCofig;
-
-    // <tablet id, tablet schema hash, primary index cache expire sec>
-    private List<Triple<Long, Integer, Integer>> tabletToPrimaryCacheExpireSec;
-
-    public UpdateTabletMetaInfoTask(long backendId, Set<Pair<Long, Integer>> tableIdWithSchemaHash,
-                                    TTabletMetaType metaType) {
-        super(null, backendId, TTaskType.UPDATE_TABLET_META_INFO,
-                -1L, -1L, -1L, -1L, -1L, tableIdWithSchemaHash.hashCode());
-        this.tableIdWithSchemaHash = tableIdWithSchemaHash;
-        this.metaType = metaType;
+    private UpdateTabletMetaInfoTask(long backendId, long signature) {
+        super(null, backendId, TTaskType.UPDATE_TABLET_META_INFO, -1L, -1L, -1L, -1L, -1L, signature);
     }
 
-    public UpdateTabletMetaInfoTask(long backendId,
-                                    Set<Pair<Long, Integer>> tableIdWithSchemaHash,
-                                    boolean metaValue,
-                                    MarkedCountDownLatch<Long, Set<Pair<Long, Integer>>> latch,
-                                    TTabletMetaType metaType) {
-        this(backendId, tableIdWithSchemaHash, metaType);
+    public static UpdateTabletMetaInfoTask updateBooleanProperty(long backendId, Set<Long> tablets,
+                                                                 Boolean value,
+                                                                 TTabletMetaType metaType) {
         if (metaType == TTabletMetaType.INMEMORY) {
-            this.isInMemory = metaValue;
-        } else if (metaType == TTabletMetaType.ENABLE_PERSISTENT_INDEX) {
-            this.enablePersistentIndex = metaValue;
+            return updateIsInMemory(backendId, tablets, value);
         }
-        this.latch = latch;
+        if (metaType == TTabletMetaType.ENABLE_PERSISTENT_INDEX) {
+            return updateEnablePersistentIndex(backendId, tablets, value);
+        }
+        return null;
     }
 
-    public UpdateTabletMetaInfoTask(long backendId,
-                                    Set<Pair<Long, Integer>> tableIdWithSchemaHash,
-                                    boolean metaValue,
-                                    MarkedCountDownLatch<Long, Set<Pair<Long, Integer>>> latch,
-                                    TTabletMetaType metaType, TTabletType tabletType, long txnId) {
-        this(backendId, tableIdWithSchemaHash, metaValue, latch, metaType);
-        this.tabletType = tabletType;
+    public static UpdateTabletMetaInfoTask updatePartitionId(long backendId, Set<Long> tablets) {
+        return new UpdatePartitionIdTask(backendId, requireNonNull(tablets, "tablets is null"));
+    }
+
+    public static UpdateTabletMetaInfoTask updateIsInMemory(long backendId, Set<Long> tablets, Boolean value) {
+        requireNonNull(tablets, "tablets is null");
+        List<Pair<Long, Boolean>> valueList =
+                tablets.stream().map(id -> new Pair<>(id, value)).collect(Collectors.toList());
+        return updateIsInMemory(backendId, valueList);
+    }
+
+    public static UpdateTabletMetaInfoTask updateIsInMemory(long backendId, List<Pair<Long, Boolean>> inMemoryConfigs) {
+        return new UpdateIsInMemoryTask(backendId, inMemoryConfigs);
+    }
+
+    public static UpdateTabletMetaInfoTask updateEnablePersistentIndex(long backend, Set<Long> tablets,
+                                                                       Boolean value) {
+        requireNonNull(tablets, "tablets is null");
+        List<Pair<Long, Boolean>> valueList =
+                tablets.stream().map(id -> new Pair<>(id, value)).collect(Collectors.toList());
+        return new UpdateEnablePersistentIndexTask(backend, valueList);
+    }
+
+    public static UpdateTabletMetaInfoTask updateEnablePersistentIndex(long backend,
+                                                                       List<Pair<Long, Boolean>> valueList) {
+        return new UpdateEnablePersistentIndexTask(backend, requireNonNull(valueList, "valueList is null"));
+    }
+
+    public static UpdateTabletMetaInfoTask updateBinlogConfig(long backendId,
+                                                              Set<Long> tablets,
+                                                              BinlogConfig binlogConfig) {
+        requireNonNull(tablets, "tablets is null");
+        requireNonNull(binlogConfig, "binlogConfig is null");
+        List<Pair<Long, BinlogConfig>> configList = tablets.stream().map(id -> new Pair<>(id, binlogConfig)).collect(
+                Collectors.toList());
+        return updateBinlogConfig(backendId, configList);
+    }
+
+    public static UpdateTabletMetaInfoTask updateBinlogConfig(long backendId,
+                                                              List<Pair<Long, BinlogConfig>> binlogConfigs) {
+        return new UpdateBinlogConfigTask(backendId, requireNonNull(binlogConfigs, "binlogConfigs is null"));
+    }
+
+    public static UpdateTabletMetaInfoTask updatePrimaryIndexCacheExpireTime(long backendId,
+                                                                             Set<Long> tablets,
+                                                                             Integer expireTime) {
+        requireNonNull(tablets, "tablets is null");
+        List<Pair<Long, Integer>> expireTimeList = tablets.stream().map(id -> new Pair<>(id, expireTime)).collect(
+                Collectors.toList());
+        return updatePrimaryIndexCacheExpireTime(backendId, expireTimeList);
+    }
+
+    public static UpdateTabletMetaInfoTask updatePrimaryIndexCacheExpireTime(long backendId,
+                                                                             List<Pair<Long, Integer>> expireTimes) {
+        return new UpdatePrimaryIndexCacheExpireTimeTask(backendId, requireNonNull(expireTimes, "expireTimes is null"));
+    }
+
+    public void setLatch(MarkedCountDownLatch<Long, Set<Long>> latch) {
+        this.latch = requireNonNull(latch, "latch is null");
+    }
+
+    public void setTxnId(long txnId) {
         this.txnId = txnId;
     }
 
-    public UpdateTabletMetaInfoTask(long backendId,
-                                    Set<Pair<Long, Integer>> tableIdWithSchemaHash,
-                                    BinlogConfig binlogConfig,
-                                    MarkedCountDownLatch<Long, Set<Pair<Long, Integer>>> latch,
-                                    TTabletMetaType metaType) {
-        this(backendId, tableIdWithSchemaHash, metaType);
-        this.binlogConfig = binlogConfig;
-        this.latch = latch;
-    }
-
-    public UpdateTabletMetaInfoTask(long backendId,
-                                    Set<Pair<Long, Integer>> tableIdWithSchemaHash,
-                                    int primaryIndexCacheExpireSec,
-                                    MarkedCountDownLatch<Long, Set<Pair<Long, Integer>>> latch,
-                                    TTabletMetaType metaType) {
-        this(backendId, tableIdWithSchemaHash, metaType);
-        this.primaryIndexCacheExpireSec = primaryIndexCacheExpireSec;
-        this.latch = latch;
-    }
-
-    public UpdateTabletMetaInfoTask(long backendId, Object tabletToMeta, TTabletMetaType metaType) {
-        super(null, backendId, TTaskType.UPDATE_TABLET_META_INFO,
-                -1L, -1L, -1L, -1L, -1L, tabletToMeta.hashCode());
-        this.metaType = metaType;
-        if (metaType == TTabletMetaType.BINLOG_CONFIG) {
-            this.tabletToBinlogCofig = (List<Triple<Long, Integer, BinlogConfig>>) tabletToMeta;
-        } else if (metaType == TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC) {
-            this.tabletToPrimaryCacheExpireSec = (List<Triple<Long, Integer, Integer>>) tabletToMeta;
-        } else {
-            this.tabletToMeta = (List<Triple<Long, Integer, Boolean>>) tabletToMeta;
-        }
-    }
-
-    public void countDownLatch(long backendId, Set<Pair<Long, Integer>> tablets) {
+    public void countDownLatch(long backendId, Set<Long> tablets) {
         if (this.latch != null) {
             if (latch.markedCountDown(backendId, tablets)) {
-                LOG.debug("UpdateTabletMetaInfoTask current latch count: {}, backend: {}, tablets:{}",
-                        latch.getCount(), backendId, tablets);
+                LOG.debug("UpdateTabletMetaInfoTask current latch count: {}, backend: {}, tablets:{}", latch.getCount(),
+                        backendId, tablets);
             }
         }
     }
@@ -166,142 +164,164 @@ public class UpdateTabletMetaInfoTask extends AgentTask {
         }
     }
 
-    public Set<Pair<Long, Integer>> getTablets() {
-        return tableIdWithSchemaHash;
-    }
+    public abstract Set<Long> getTablets();
+
+    public abstract List<TTabletMetaInfo> getTTabletMetaInfoList();
 
     public TUpdateTabletMetaInfoReq toThrift() {
         TUpdateTabletMetaInfoReq updateTabletMetaInfoReq = new TUpdateTabletMetaInfoReq();
-        List<TTabletMetaInfo> metaInfos = Lists.newArrayList();
-        switch (metaType) {
-            case PARTITIONID: {
-                int tabletEntryNum = 0;
-                for (Pair<Long, Integer> pair : tableIdWithSchemaHash) {
-                    // add at most 10000 tablet meta during one sync to avoid too large task
-                    if (tabletEntryNum > 10000) {
-                        break;
-                    }
-                    TTabletMetaInfo metaInfo = new TTabletMetaInfo();
-                    metaInfo.setTablet_id(pair.first);
-                    metaInfo.setSchema_hash(pair.second);
-                    TabletMeta tabletMeta =
-                            GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(pair.first);
-                    if (tabletMeta == null) {
-                        LOG.warn("could not find tablet [{}] in meta ignore it", pair.second);
-                        continue;
-                    }
-                    metaInfo.setPartition_id(tabletMeta.getPartitionId());
-                    metaInfo.setMeta_type(metaType);
-                    metaInfos.add(metaInfo);
-                    ++tabletEntryNum;
-                }
-                break;
-            }
-            case INMEMORY: {
-                if (latch != null) {
-                    // for schema change
-                    for (Pair<Long, Integer> pair : tableIdWithSchemaHash) {
-                        TTabletMetaInfo metaInfo = new TTabletMetaInfo();
-                        metaInfo.setTablet_id(pair.first);
-                        metaInfo.setSchema_hash(pair.second);
-                        metaInfo.setIs_in_memory(isInMemory);
-                        metaInfo.setMeta_type(metaType);
-                        metaInfos.add(metaInfo);
-                    }
-                } else {
-                    // for ReportHandler
-                    for (Triple<Long, Integer, Boolean> triple : tabletToMeta) {
-                        TTabletMetaInfo metaInfo = new TTabletMetaInfo();
-                        metaInfo.setTablet_id(triple.getLeft());
-                        metaInfo.setSchema_hash(triple.getMiddle());
-                        metaInfo.setIs_in_memory(triple.getRight());
-                        metaInfo.setMeta_type(metaType);
-                        metaInfos.add(metaInfo);
-                    }
-                }
-                break;
-            }
-            case ENABLE_PERSISTENT_INDEX: {
-                if (latch != null) {
-                    // for schema change
-                    for (Pair<Long, Integer> pair : tableIdWithSchemaHash) {
-                        TTabletMetaInfo metaInfo = new TTabletMetaInfo();
-                        metaInfo.setTablet_id(pair.first);
-                        metaInfo.setSchema_hash(pair.second);
-                        metaInfo.setEnable_persistent_index(enablePersistentIndex);
-                        metaInfo.setMeta_type(metaType);
-                        metaInfos.add(metaInfo);
-                    }
-                } else {
-                    // for ReportHandler
-                    for (Triple<Long, Integer, Boolean> triple : tabletToMeta) {
-                        TTabletMetaInfo metaInfo = new TTabletMetaInfo();
-                        metaInfo.setTablet_id(triple.getLeft());
-                        metaInfo.setSchema_hash(triple.getMiddle());
-                        metaInfo.setEnable_persistent_index(triple.getRight());
-                        metaInfo.setMeta_type(metaType);
-                        metaInfos.add(metaInfo);
-                    }
-                }
-                break;
-            }
-            case BINLOG_CONFIG: {
-                if (latch != null) {
-                    // for schema change
-                    for (Pair<Long, Integer> pair : tableIdWithSchemaHash) {
-                        TTabletMetaInfo metaInfo = new TTabletMetaInfo();
-                        metaInfo.setTablet_id(pair.first);
-                        metaInfo.setSchema_hash(pair.second);
-                        metaInfo.setBinlog_config(binlogConfig.toTBinlogConfig());
-                        metaInfo.setMeta_type(metaType);
-                        metaInfos.add(metaInfo);
-                    }
-                } else {
-                    // for ReportHandler
-                    for (Triple<Long, Integer, BinlogConfig> triple : tabletToBinlogCofig) {
-                        TTabletMetaInfo metaInfo = new TTabletMetaInfo();
-                        metaInfo.setTablet_id(triple.getLeft());
-                        metaInfo.setSchema_hash(triple.getMiddle());
-                        metaInfo.setBinlog_config(triple.getRight().toTBinlogConfig());
-                        metaInfo.setMeta_type(metaType);
-                        metaInfos.add(metaInfo);
-                    }
-                }
-                break;
-            }
-            case PRIMARY_INDEX_CACHE_EXPIRE_SEC: {
-                if (latch != null) {
-                    // for schema change
-                    for (Pair<Long, Integer> pair : tableIdWithSchemaHash) {
-                        TTabletMetaInfo metaInfo = new TTabletMetaInfo();
-                        metaInfo.setTablet_id(pair.first);
-                        metaInfo.setSchema_hash(pair.second);
-                        metaInfo.setPrimary_index_cache_expire_sec(primaryIndexCacheExpireSec);
-                        metaInfo.setMeta_type(metaType);
-                        metaInfos.add(metaInfo);
-                    }
-                } else {
-                    // for ReportHandler
-                    for (Triple<Long, Integer, Integer> triple : tabletToPrimaryCacheExpireSec) {
-                        TTabletMetaInfo metaInfo = new TTabletMetaInfo();
-                        metaInfo.setTablet_id(triple.getLeft());
-                        metaInfo.setSchema_hash(triple.getMiddle());
-                        metaInfo.setPrimary_index_cache_expire_sec(triple.getRight());
-                        metaInfo.setMeta_type(metaType);
-                        metaInfos.add(metaInfo);
-                    }
-                }
-                break;
-            }
-
-        }
+        List<TTabletMetaInfo> metaInfos = getTTabletMetaInfoList();
         updateTabletMetaInfoReq.setTabletMetaInfos(metaInfos);
-
-        if (tabletType != null) {
-            updateTabletMetaInfoReq.setTablet_type(tabletType);
-            updateTabletMetaInfoReq.setTxn_id(txnId);
+        if (RunMode.isSharedDataMode()) {
+            updateTabletMetaInfoReq.setTablet_type(TTabletType.TABLET_TYPE_LAKE);
         }
-
+        updateTabletMetaInfoReq.setTxn_id(txnId);
         return updateTabletMetaInfoReq;
     }
+
+    private static class UpdatePartitionIdTask extends UpdateTabletMetaInfoTask {
+        private final Set<Long> tabletSet;
+
+        private UpdatePartitionIdTask(long backendId, Set<Long> tabletSet) {
+            super(backendId, tabletSet.hashCode());
+            this.tabletSet = requireNonNull(tabletSet, "tabletSet is null");
+        }
+
+        @Override
+        public Set<Long> getTablets() {
+            return tabletSet;
+        }
+
+        @Override
+        public List<TTabletMetaInfo> getTTabletMetaInfoList() {
+            TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+            List<TTabletMetaInfo> metaInfos = Lists.newArrayList();
+            for (Long tabletId : tabletSet) {
+                TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
+                if (tabletMeta == null) {
+                    LOG.warn("could not find tablet [{}] in meta ignore it", tabletId);
+                    continue;
+                }
+                TTabletMetaInfo metaInfo = new TTabletMetaInfo();
+                metaInfo.setTablet_id(tabletId);
+                metaInfo.setPartition_id(tabletMeta.getPartitionId());
+                metaInfo.setMeta_type(TTabletMetaType.PARTITIONID);
+                metaInfos.add(metaInfo);
+                // add at most 10000 tablet meta during one sync to avoid too large task
+                if (metaInfos.size() > 10000) {
+                    break;
+                }
+            }
+            return metaInfos;
+        }
+    }
+
+    private static class UpdateIsInMemoryTask extends UpdateTabletMetaInfoTask {
+        private final List<Pair<Long, Boolean>> isInMemoryList;
+
+        private UpdateIsInMemoryTask(long backendId, List<Pair<Long, Boolean>> isInMemoryList) {
+            super(backendId, isInMemoryList.hashCode());
+            this.isInMemoryList = isInMemoryList;
+        }
+
+        @Override
+        public Set<Long> getTablets() {
+            return isInMemoryList.stream().map(p -> p.first).collect(Collectors.toSet());
+        }
+
+        @Override
+        public List<TTabletMetaInfo> getTTabletMetaInfoList() {
+            List<TTabletMetaInfo> metaInfos = Lists.newArrayList();
+            for (Pair<Long, Boolean> pair : isInMemoryList) {
+                TTabletMetaInfo metaInfo = new TTabletMetaInfo();
+                metaInfo.setTablet_id(pair.first);
+                metaInfo.setIs_in_memory(pair.second);
+                metaInfo.setMeta_type(TTabletMetaType.INMEMORY);
+                metaInfos.add(metaInfo);
+            }
+            return metaInfos;
+        }
+    }
+
+    private static class UpdateEnablePersistentIndexTask extends UpdateTabletMetaInfoTask {
+        private final List<Pair<Long, Boolean>> enablePersistentIndexList;
+
+        private UpdateEnablePersistentIndexTask(long backendId, List<Pair<Long, Boolean>> enablePersistentIndexList) {
+            super(backendId, enablePersistentIndexList.hashCode());
+            this.enablePersistentIndexList = enablePersistentIndexList;
+        }
+
+        @Override
+        public Set<Long> getTablets() {
+            return enablePersistentIndexList.stream().map(p -> p.first).collect(Collectors.toSet());
+        }
+
+        @Override
+        public List<TTabletMetaInfo> getTTabletMetaInfoList() {
+            List<TTabletMetaInfo> metaInfos = Lists.newArrayList();
+            for (Pair<Long, Boolean> pair : enablePersistentIndexList) {
+                TTabletMetaInfo metaInfo = new TTabletMetaInfo();
+                metaInfo.setTablet_id(pair.first);
+                metaInfo.setEnable_persistent_index(pair.second);
+                metaInfo.setMeta_type(TTabletMetaType.ENABLE_PERSISTENT_INDEX);
+                metaInfos.add(metaInfo);
+            }
+            return metaInfos;
+        }
+    }
+
+    private static class UpdateBinlogConfigTask extends UpdateTabletMetaInfoTask {
+        private final List<Pair<Long, BinlogConfig>> binlogConfigList;
+
+        private UpdateBinlogConfigTask(long backendId, List<Pair<Long, BinlogConfig>> binlogConfigList) {
+            super(backendId, binlogConfigList.hashCode());
+            this.binlogConfigList = binlogConfigList;
+        }
+
+        @Override
+        public Set<Long> getTablets() {
+            return binlogConfigList.stream().map(p -> p.first).collect(Collectors.toSet());
+        }
+
+        @Override
+        public List<TTabletMetaInfo> getTTabletMetaInfoList() {
+            List<TTabletMetaInfo> metaInfos = Lists.newArrayList();
+            for (Pair<Long, BinlogConfig> pair : binlogConfigList) {
+                TTabletMetaInfo metaInfo = new TTabletMetaInfo();
+                metaInfo.setTablet_id(pair.first);
+                metaInfo.setBinlog_config(pair.second.toTBinlogConfig());
+                metaInfo.setMeta_type(TTabletMetaType.BINLOG_CONFIG);
+                metaInfos.add(metaInfo);
+            }
+            return metaInfos;
+        }
+    }
+
+    private static class UpdatePrimaryIndexCacheExpireTimeTask extends UpdateTabletMetaInfoTask {
+        private final List<Pair<Long, Integer>> expireTimeList;
+
+        private UpdatePrimaryIndexCacheExpireTimeTask(long backendId, List<Pair<Long, Integer>> expireTimeList) {
+            super(backendId, expireTimeList.hashCode());
+            this.expireTimeList = expireTimeList;
+        }
+
+        @Override
+        public Set<Long> getTablets() {
+            return expireTimeList.stream().map(p -> p.first).collect(Collectors.toSet());
+        }
+
+        @Override
+        public List<TTabletMetaInfo> getTTabletMetaInfoList() {
+            List<TTabletMetaInfo> metaInfos = Lists.newArrayList();
+            for (Pair<Long, Integer> pair : expireTimeList) {
+                TTabletMetaInfo metaInfo = new TTabletMetaInfo();
+                metaInfo.setTablet_id(pair.first);
+                metaInfo.setPrimary_index_cache_expire_sec(pair.second);
+                metaInfo.setMeta_type(TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC);
+                metaInfos.add(metaInfo);
+            }
+            return metaInfos;
+        }
+    }
+
 }
