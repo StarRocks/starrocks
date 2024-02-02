@@ -14,6 +14,7 @@ StarRocks provides a self-developed connector named StarRocks Connector for Apac
 
 | Spark connector | Spark            | StarRocks     | Java | Scala |
 | --------------- | ---------------- | ------------- | ---- | ----- |
+| 1.1.2           | 3.2, 3.3, 3.4, 3.5 | 2.5 and later   | 8    | 2.12  |
 | 1.1.1           | 3.2, 3.3, or 3.4 | 2.5 and later | 8    | 2.12  |
 | 1.1.0           | 3.2, 3.3, or 3.4 | 2.5 and later | 8    | 2.12  |
 
@@ -231,6 +232,7 @@ Directly download the corresponding version of the Spark connector JAR from the 
   | StringType      | CHAR                                                         |
   | StringType      | VARCHAR                                                      |
   | StringType      | STRING                                                       |
+  | StringType      | JSON                                                       |
   | DateType        | DATE                                                         |
   | TimestampType   | DATETIME                                                     |
   | ArrayType       | ARRAY <br /> **NOTE:** <br /> **Supported since version 1.1.1**. For detailed steps, see [Load data into columns of ARRAY type](#load-data-into-columns-of-array-type). |
