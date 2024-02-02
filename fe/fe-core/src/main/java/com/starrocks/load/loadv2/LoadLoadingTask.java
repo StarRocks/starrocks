@@ -55,6 +55,11 @@ import com.starrocks.qe.Coordinator;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.SessionVariable;
+<<<<<<< HEAD
+=======
+import com.starrocks.qe.scheduler.Coordinator;
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> e448c7cca1 ([Enhancement] Check meta before executing load task (#39878))
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TLoadJobType;
@@ -162,6 +167,8 @@ public class LoadLoadingTask extends LoadTask {
     }
 
     private void executeOnce() throws Exception {
+        checkMeta();
+
         // New one query id,
         Coordinator curCoordinator;
         if (!Config.enable_pipeline_load) {
@@ -285,4 +292,171 @@ public class LoadLoadingTask extends LoadTask {
     private long getLeftTimeMs() {
         return jobDeadlineMs - System.currentTimeMillis();
     }
+<<<<<<< HEAD
+=======
+
+    private void checkMeta() throws LoadException {
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(db.getId());
+        if (database == null) {
+            throw new LoadException(String.format("db: %s-%d has been dropped", db.getFullName(), db.getId()));
+        }
+
+        if (database.getTable(table.getId()) == null) {
+            throw new LoadException(String.format("table: %s-%d has been dropped from db: %s-%d",
+                    table.getName(), table.getId(), db.getFullName(), db.getId()));
+        }
+    }
+
+    public static class Builder {
+        private TUniqueId loadId;
+        private Database db;
+        private OlapTable table;
+        private BrokerDesc brokerDesc;
+        private List<BrokerFileGroup> fileGroups;
+        private long jobDeadlineMs;
+        private long execMemLimit;
+        private boolean strictMode;
+        private long txnId;
+        private String timezone;
+        private long createTimestamp;
+        private boolean partialUpdate;
+        private long timeoutS;
+        private Map<String, String> sessionVariables;
+        private TLoadJobType loadJobType;
+        private String mergeConditionStr;
+        private TPartialUpdateMode partialUpdateMode;
+        private ConnectContext context;
+        private OriginStatement originStmt;
+        private List<List<TBrokerFileStatus>> fileStatusList;
+        private int fileNum = 0;
+        private LoadTaskCallback callback;
+        private int priority;
+
+        private LoadJob.JSONOptions jsonOptions = new LoadJob.JSONOptions();
+
+        public Builder setCallback(LoadTaskCallback callback) {
+            this.callback = callback;
+            return this;
+        }
+
+        public Builder setPriority(int priority) {
+            this.priority = priority;
+            return this;
+        }
+
+        public Builder setLoadId(TUniqueId loadId) {
+            this.loadId = loadId;
+            return this;
+        }
+
+        public Builder setDb(Database db) {
+            this.db = db;
+            return this;
+        }
+
+        public Builder setTable(OlapTable table) {
+            this.table = table;
+            return this;
+        }
+
+        public Builder setBrokerDesc(BrokerDesc brokerDesc) {
+            this.brokerDesc = brokerDesc;
+            return this;
+        }
+
+        public Builder setFileGroups(List<BrokerFileGroup> fileGroups) {
+            this.fileGroups = fileGroups;
+            return this;
+        }
+
+        public Builder setJobDeadlineMs(long jobDeadlineMs) {
+            this.jobDeadlineMs = jobDeadlineMs;
+            return this;
+        }
+
+        public Builder setExecMemLimit(long execMemLimit) {
+            this.execMemLimit = execMemLimit;
+            return this;
+        }
+
+        public Builder setStrictMode(boolean strictMode) {
+            this.strictMode = strictMode;
+            return this;
+        }
+
+        public Builder setTxnId(long txnId) {
+            this.txnId = txnId;
+            return this;
+        }
+
+        public Builder setTimezone(String timezone) {
+            this.timezone = timezone;
+            return this;
+        }
+
+        public Builder setCreateTimestamp(long createTimestamp) {
+            this.createTimestamp = createTimestamp;
+            return this;
+        }
+
+        public Builder setPartialUpdate(boolean partialUpdate) {
+            this.partialUpdate = partialUpdate;
+            return this;
+        }
+
+        public Builder setTimeoutS(long timeoutS) {
+            this.timeoutS = timeoutS;
+            return this;
+        }
+
+        public Builder setSessionVariables(Map<String, String> sessionVariables) {
+            this.sessionVariables = sessionVariables;
+            return this;
+        }
+
+        public Builder setLoadJobType(TLoadJobType loadJobType) {
+            this.loadJobType = loadJobType;
+            return this;
+        }
+
+        public Builder setMergeConditionStr(String mergeConditionStr) {
+            this.mergeConditionStr = mergeConditionStr;
+            return this;
+        }
+
+        public Builder setPartialUpdateMode(TPartialUpdateMode partialUpdateMode) {
+            this.partialUpdateMode = partialUpdateMode;
+            return this;
+        }
+
+        public Builder setContext(ConnectContext context) {
+            this.context = context;
+            return this;
+        }
+
+        public Builder setOriginStmt(OriginStatement originStmt) {
+            this.originStmt = originStmt;
+            return this;
+        }
+
+        public Builder setFileStatusList(List<List<TBrokerFileStatus>> fileStatusList) {
+            this.fileStatusList = fileStatusList;
+            return this;
+        }
+
+        public Builder setFileNum(int fileNum) {
+            this.fileNum = fileNum;
+            return this;
+        }
+
+        public Builder setJSONOptions(LoadJob.JSONOptions options) {
+            this.jsonOptions = options;
+            return this;
+        }
+
+        public LoadLoadingTask build() {
+            return new LoadLoadingTask(this);
+        }
+    }
+>>>>>>> e448c7cca1 ([Enhancement] Check meta before executing load task (#39878))
 }
