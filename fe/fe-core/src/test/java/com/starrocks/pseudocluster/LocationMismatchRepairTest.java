@@ -19,6 +19,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.clone.TabletScheduler;
 import com.starrocks.clone.TabletSchedulerStat;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
@@ -52,6 +53,7 @@ public class LocationMismatchRepairTest {
         Config.tablet_sched_consecutive_full_clone_delay_sec = 1;
         // Disable balance
         Config.tablet_sched_disable_balance = true;
+        TabletScheduler.stateUpdateIntervalMs = 1000;
         PseudoBackend.reportIntervalMs = 1000;
         PseudoCluster.getOrCreateWithRandomPort(true, 10);
     }
@@ -194,7 +196,7 @@ public class LocationMismatchRepairTest {
         }
 
         // sleep to wait for redundant replicas cleaned
-        Thread.sleep(10000);
+        Thread.sleep(5000);
         printTabletReplicaInfo(table);
         Set<Long> stayedBackendIds = getBackendIdsWithLocProp("rack", "r1");
         stayedBackendIds.addAll(getBackendIdsWithLocProp("rack", "r2"));
@@ -258,7 +260,7 @@ public class LocationMismatchRepairTest {
         }
 
         // sleep to wait for redundant replicas cleaned
-        Thread.sleep(10000);
+        Thread.sleep(5000);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable table = (OlapTable) db.getTable("test_table_backend_no_loc");
         printTabletReplicaInfo(table);
