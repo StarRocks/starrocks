@@ -768,6 +768,7 @@ Status PipelineDriver::_mark_operator_finished(OperatorPtr& op, RuntimeState* st
 }
 
 Status PipelineDriver::_mark_operator_cancelled(OperatorPtr& op, RuntimeState* state) {
+    LOG(WARNING) << "PipelineDriver::_mark_operator_cancelled step 1";
     Status res = _mark_operator_finished(op, state);
     if (!res.ok()) {
         LOG(WARNING) << fmt::format("fragment_id {} driver {} cancels operator {} with finished error {}",
@@ -775,15 +776,18 @@ Status PipelineDriver::_mark_operator_cancelled(OperatorPtr& op, RuntimeState* s
                                     res.message());
     }
     auto& op_state = _operator_stages[op->get_id()];
+    LOG(WARNING) << "PipelineDriver::_mark_operator_cancelled step 2";
     if (op_state >= OperatorStage::CANCELLED) {
         return Status::OK();
     }
 
+    LOG(WARNING) << "PipelineDriver::_mark_operator_cancelled step 3";
     VLOG_ROW << strings::Substitute("[Driver] cancelled operator [fragment_id=$0] [driver=$1] [operator=$2]",
                                     print_id(state->fragment_instance_id()), to_readable_string(), op->get_name());
     {
         SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(op);
         op_state = OperatorStage::CANCELLED;
+        LOG(WARNING) << "PipelineDriver::_mark_operator_cancelled step 4";
         return op->set_cancelled(state);
     }
 }
