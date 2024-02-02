@@ -343,6 +343,13 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
             src_snapshot_info.backend.host, src_snapshot_info.backend.http_port, request.src_token,
             src_snapshot_info.snapshot_path, request.src_tablet_id, request.src_schema_hash, file_converters));
 
+    for (auto& op_write : *txn_log->mutable_op_replication()->mutable_op_writes()) {
+        if (op_write.has_txn_meta()) {
+            RETURN_IF_ERROR(
+                    ReplicationUtils::convert_rowset_txn_meta(op_write.mutable_txn_meta(), column_unique_id_map));
+        }
+    }
+
     txn_log->set_tablet_id(request.tablet_id);
     txn_log->set_txn_id(request.transaction_id);
 
@@ -390,8 +397,10 @@ Status ReplicationTxnManager::convert_rowset_meta(const RowsetMeta& rowset_meta,
     }
 
     // Convert rowset txn meta
-    auto* rowset_txn_meta = op_write->mutable_txn_meta();
-    rowset_txn_meta->CopyFrom(rowset_meta.txn_meta());
+    if (rowset_meta.has_txn_meta()) {
+        auto* rowset_txn_meta = op_write->mutable_txn_meta();
+        rowset_txn_meta->CopyFrom(rowset_meta.txn_meta());
+    }
 
     // Convert dels
     for (int64_t del_id = 0; del_id < rowset_meta.get_num_delete_files(); ++del_id) {

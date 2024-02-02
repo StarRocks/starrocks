@@ -45,6 +45,8 @@ public:
                                                                TSchemaHash remote_schema_hash,
                                                                const std::string& file_name, uint64_t timeout_sec);
 
+    static constexpr uint32_t kFakeColumnUniqueId = -1;
+
     template <typename T>
     static void calc_column_unique_id_map(const T& source_columns, const T& target_columns,
                                           std::unordered_map<uint32_t, uint32_t>* column_unique_id_map) {
@@ -65,28 +67,33 @@ public:
             }
         }
 
-        if (!need_convert) {
+        if (need_convert) {
+            column_unique_id_map->emplace(kFakeColumnUniqueId, 0);
+        } else {
             column_unique_id_map->clear();
         }
     }
 
     template <typename T>
-    static void convert_column_unique_ids(T* columns,
-                                          const std::unordered_map<uint32_t, uint32_t>& column_unique_id_map) {
-        if (column_unique_id_map.empty()) {
+    static void convert_column_unique_ids(T* columns, std::unordered_map<uint32_t, uint32_t>* column_unique_id_map) {
+        if (column_unique_id_map == nullptr || column_unique_id_map->empty()) {
             return;
         }
 
-        uint32_t column_unique_id_max_value = -1;
         for (auto& column : *columns) {
-            auto iter = column_unique_id_map.find(column.unique_id());
-            if (iter != column_unique_id_map.end()) {
+            auto iter = column_unique_id_map->find(column.unique_id());
+            if (iter != column_unique_id_map->end()) {
                 column.set_unique_id(iter->second);
             } else {
-                column.set_unique_id(column_unique_id_max_value--);
+                uint32_t column_unique_id = --column_unique_id_map->operator[](kFakeColumnUniqueId);
+                column.set_unique_id(column_unique_id);
+                column_unique_id_map->emplace(column.unique_id(), column_unique_id);
             }
         }
     }
+
+    static Status convert_rowset_txn_meta(RowsetTxnMetaPB* rowset_txn_meta,
+                                          const std::unordered_map<uint32_t, uint32_t>& column_unique_id_map);
 };
 
 } // namespace starrocks
