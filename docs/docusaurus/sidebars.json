@@ -214,7 +214,8 @@
             "integrations/IDE_integrations/jupysql"
           ]
         },
-        "integrations/other_integrations/intro"
+        "integrations/hive_bitmap_udf",
+        "integrations/other_integrations/intro"   
       ]
     },
     {
@@ -828,6 +829,7 @@
             "integrations/IDE_integrations/jupysql"
           ]
         },
+        "integrations/hive_bitmap_udf",
         "integrations/other_integrations/intro"
       ]
     },
