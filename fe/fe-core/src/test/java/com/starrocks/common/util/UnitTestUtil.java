@@ -57,10 +57,13 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.system.Backend;
+import com.starrocks.task.AgentTask;
+import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
+import com.starrocks.thrift.TTaskType;
 import org.junit.Assert;
 
 import java.lang.reflect.Method;
@@ -331,6 +334,26 @@ public class UnitTestUtil {
             }
         }
         return innerClass;
+    }
+
+    /*
+     * NOTE: Three replicates will create in createOlapTableByName().
+     */
+    public static List<AgentTask> getTasksWithRandomBE(long startBeId, TTaskType taskType, long signature) {
+        Map<Long, AgentTask> signatureMap;
+        List<AgentTask> tasks = new ArrayList<>();
+        for (long id = startBeId; id < startBeId + 3; id++) {
+            signatureMap = AgentTaskQueue.getTasks(id, taskType);
+            if (signatureMap == null) {
+                continue;
+            }
+            if (signature < 0) {
+                tasks.addAll(signatureMap.values());
+            } else if (signatureMap.containsKey(signature)) {
+                tasks.add(signatureMap.get(signature));
+            }
+        }
+        return tasks;
     }
 
 }
