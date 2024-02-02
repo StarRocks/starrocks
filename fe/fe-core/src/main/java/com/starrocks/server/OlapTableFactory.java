@@ -392,7 +392,7 @@ public class OlapTableFactory implements AbstractTableFactory {
 
             boolean hasGin = table.getIndexes().stream().anyMatch(index -> index.getIndexType() == IndexType.GIN);
             if (hasGin && table.enableReplicatedStorage()) {
-                throw new SemanticException("GIN is only supported in not replicated mode");
+                throw new SemanticException("GIN does not support replicated mode");
             }
 
             TTabletType tabletType = TTabletType.TABLET_TYPE_DISK;

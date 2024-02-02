@@ -2307,7 +2307,7 @@ public class SchemaChangeHandler extends AlterHandler {
         }
 
         if (newIndex.getIndexType() == IndexType.GIN && olapTable.enableReplicatedStorage()) {
-            throw new SemanticException("GIN is only supported in not replicated mode");
+            throw new SemanticException("GIN does not support replicated mode");
         }
 
         List<Index> existedIndexes = olapTable.getIndexes();
