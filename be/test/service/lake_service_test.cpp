@@ -1522,7 +1522,7 @@ TEST_F(LakeServiceTest, test_drop_table_no_thread_pool) {
 TEST_F(LakeServiceTest, test_drop_table_duplicate_request) {
     ASSERT_OK(FileSystem::Default()->path_exists(kRootLocation));
     SyncPoint::GetInstance()->LoadDependency(
-            {{"LakeService::drop_table:task_run", "LakeService::drop_table:duplicate_path_id"}});
+            {{"LakeService::drop_table:duplicate_path_id", "LakeService::drop_table:task_run"}});
     SyncPoint::GetInstance()->EnableProcessing();
     DeferOp defer([]() { SyncPoint::GetInstance()->DisableProcessing(); });
 
