@@ -54,17 +54,20 @@ TEST_F(VectorizedBinaryPredicateTest, eqExpr) {
     // normal int8
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
-        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
-            ASSERT_FALSE(ptr->is_nullable());
-            ASSERT_TRUE(ptr->is_numeric());
+        ExprsTestHelper::verify_with_jit(
+                ptr, expr.get(), &runtime_state,
+                [](ColumnPtr const& ptr) {
+                    ASSERT_FALSE(ptr->is_nullable());
+                    ASSERT_TRUE(ptr->is_numeric());
 
-            auto v = std::static_pointer_cast<BooleanColumn>(ptr);
-            ASSERT_EQ(10, v->size());
+                    auto v = std::static_pointer_cast<BooleanColumn>(ptr);
+                    ASSERT_EQ(10, v->size());
 
-            for (int j = 0; j < v->size(); ++j) {
-                ASSERT_EQ(0, (int)v->get_data()[j]);
-            }
-        });
+                    for (int j = 0; j < v->size(); ++j) {
+                        ASSERT_EQ(0, (int)v->get_data()[j]);
+                    }
+                },
+                expr->is_compilable());
     }
 }
 
@@ -83,17 +86,20 @@ TEST_F(VectorizedBinaryPredicateTest, neExpr) {
     // normal int8
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
-        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
-            ASSERT_FALSE(ptr->is_nullable());
-            ASSERT_TRUE(ptr->is_numeric());
+        ExprsTestHelper::verify_with_jit(
+                ptr, expr.get(), &runtime_state,
+                [](ColumnPtr const& ptr) {
+                    ASSERT_FALSE(ptr->is_nullable());
+                    ASSERT_TRUE(ptr->is_numeric());
 
-            auto v = std::static_pointer_cast<BooleanColumn>(ptr);
-            ASSERT_EQ(10, v->size());
+                    auto v = std::static_pointer_cast<BooleanColumn>(ptr);
+                    ASSERT_EQ(10, v->size());
 
-            for (int j = 0; j < v->size(); ++j) {
-                ASSERT_EQ(1, (int)v->get_data()[j]);
-            }
-        });
+                    for (int j = 0; j < v->size(); ++j) {
+                        ASSERT_EQ(1, (int)v->get_data()[j]);
+                    }
+                },
+                expr->is_compilable());
     }
 }
 
@@ -111,17 +117,20 @@ TEST_F(VectorizedBinaryPredicateTest, geExpr) {
     // normal int8
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
-        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
-            ASSERT_FALSE(ptr->is_nullable());
-            ASSERT_TRUE(ptr->is_numeric());
+        ExprsTestHelper::verify_with_jit(
+                ptr, expr.get(), &runtime_state,
+                [](ColumnPtr const& ptr) {
+                    ASSERT_FALSE(ptr->is_nullable());
+                    ASSERT_TRUE(ptr->is_numeric());
 
-            auto v = std::static_pointer_cast<BooleanColumn>(ptr);
-            ASSERT_EQ(10, v->size());
+                    auto v = std::static_pointer_cast<BooleanColumn>(ptr);
+                    ASSERT_EQ(10, v->size());
 
-            for (int j = 0; j < v->size(); ++j) {
-                ASSERT_EQ(1, v->get_data()[j]);
-            }
-        });
+                    for (int j = 0; j < v->size(); ++j) {
+                        ASSERT_EQ(1, v->get_data()[j]);
+                    }
+                },
+                expr->is_compilable());
     }
 }
 
@@ -171,20 +180,23 @@ TEST_F(VectorizedBinaryPredicateTest, nullLtExpr) {
     }
     {
         ColumnPtr v = expr->evaluate(nullptr, nullptr);
-        ExprsTestHelper::verify_with_jit(v, expr.get(), &runtime_state, [](ColumnPtr const& v) {
-            ColumnPtr ptr = std::static_pointer_cast<NullableColumn>(v)->data_column();
+        ExprsTestHelper::verify_with_jit(
+                v, expr.get(), &runtime_state,
+                [](ColumnPtr const& v) {
+                    ColumnPtr ptr = std::static_pointer_cast<NullableColumn>(v)->data_column();
 
-            ASSERT_TRUE(v->is_nullable());
-            ASSERT_FALSE(v->is_numeric());
+                    ASSERT_TRUE(v->is_nullable());
+                    ASSERT_FALSE(v->is_numeric());
 
-            for (int j = 0; j < ptr->size(); ++j) {
-                ASSERT_EQ(0, (int)std::static_pointer_cast<BooleanColumn>(ptr)->get_data()[j]);
-            }
+                    for (int j = 0; j < ptr->size(); ++j) {
+                        ASSERT_EQ(0, (int)std::static_pointer_cast<BooleanColumn>(ptr)->get_data()[j]);
+                    }
 
-            for (int j = 0; j < ptr->size(); ++j) {
-                ASSERT_TRUE(v->is_null(j));
-            }
-        });
+                    for (int j = 0; j < ptr->size(); ++j) {
+                        ASSERT_TRUE(v->is_null(j));
+                    }
+                },
+                expr->is_compilable());
     }
 }
 
@@ -231,24 +243,27 @@ TEST_F(VectorizedBinaryPredicateTest, mergeNullLtExpr) {
     col2.flag = 1;
     {
         ColumnPtr v = expr->evaluate(nullptr, nullptr);
-        ExprsTestHelper::verify_with_jit(v, expr.get(), &runtime_state, [](ColumnPtr const& v) {
-            ColumnPtr ptr = std::static_pointer_cast<NullableColumn>(v)->data_column();
+        ExprsTestHelper::verify_with_jit(
+                v, expr.get(), &runtime_state,
+                [](ColumnPtr const& v) {
+                    ColumnPtr ptr = std::static_pointer_cast<NullableColumn>(v)->data_column();
 
-            ASSERT_TRUE(v->is_nullable());
-            ASSERT_FALSE(v->is_numeric());
+                    ASSERT_TRUE(v->is_nullable());
+                    ASSERT_FALSE(v->is_numeric());
 
-            for (int j = 0; j < ptr->size(); ++j) {
-                ASSERT_EQ(1, (int)std::static_pointer_cast<BooleanColumn>(ptr)->get_data()[j]);
-            }
+                    for (int j = 0; j < ptr->size(); ++j) {
+                        ASSERT_EQ(1, (int)std::static_pointer_cast<BooleanColumn>(ptr)->get_data()[j]);
+                    }
 
-            for (int j = 0; j < ptr->size(); ++j) {
-                if (j % 2) {
-                    ASSERT_FALSE(v->is_null(j));
-                } else {
-                    ASSERT_TRUE(v->is_null(j));
-                }
-            }
-        });
+                    for (int j = 0; j < ptr->size(); ++j) {
+                        if (j % 2) {
+                            ASSERT_FALSE(v->is_null(j));
+                        } else {
+                            ASSERT_TRUE(v->is_null(j));
+                        }
+                    }
+                },
+                expr->is_compilable());
     }
 }
 
@@ -268,17 +283,20 @@ TEST_F(VectorizedBinaryPredicateTest, eqForNullExpr) {
     // normal int8
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
-        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
-            ASSERT_FALSE(ptr->is_nullable());
-            ASSERT_TRUE(ptr->is_numeric());
+        ExprsTestHelper::verify_with_jit(
+                ptr, expr.get(), &runtime_state,
+                [](ColumnPtr const& ptr) {
+                    ASSERT_FALSE(ptr->is_nullable());
+                    ASSERT_TRUE(ptr->is_numeric());
 
-            auto v = std::static_pointer_cast<BooleanColumn>(ptr);
-            ASSERT_EQ(10, v->size());
+                    auto v = std::static_pointer_cast<BooleanColumn>(ptr);
+                    ASSERT_EQ(10, v->size());
 
-            for (int j = 0; j < v->size(); ++j) {
-                ASSERT_EQ(1, v->get_data()[j]);
-            }
-        });
+                    for (int j = 0; j < v->size(); ++j) {
+                        ASSERT_EQ(1, v->get_data()[j]);
+                    }
+                },
+                expr->is_compilable());
     }
 }
 
@@ -333,20 +351,23 @@ TEST_F(VectorizedBinaryPredicateTest, nullEqForNullExpr) {
     }
     {
         ColumnPtr v = expr->evaluate(nullptr, nullptr);
-        ExprsTestHelper::verify_with_jit(v, expr.get(), &runtime_state, [](ColumnPtr const& v) {
-            auto ptr = std::static_pointer_cast<BooleanColumn>(v);
+        ExprsTestHelper::verify_with_jit(
+                v, expr.get(), &runtime_state,
+                [](ColumnPtr const& v) {
+                    auto ptr = std::static_pointer_cast<BooleanColumn>(v);
 
-            ASSERT_FALSE(v->is_nullable());
-            ASSERT_TRUE(v->is_numeric());
+                    ASSERT_FALSE(v->is_nullable());
+                    ASSERT_TRUE(v->is_numeric());
 
-            for (int j = 0; j < ptr->size(); ++j) {
-                if (j % 2) {
-                    ASSERT_EQ(1, (int)ptr->get_data()[j]);
-                } else {
-                    ASSERT_EQ(0, (int)ptr->get_data()[j]);
-                }
-            }
-        });
+                    for (int j = 0; j < ptr->size(); ++j) {
+                        if (j % 2) {
+                            ASSERT_EQ(1, (int)ptr->get_data()[j]);
+                        } else {
+                            ASSERT_EQ(0, (int)ptr->get_data()[j]);
+                        }
+                    }
+                },
+                expr->is_compilable());
     }
 }
 
@@ -387,20 +408,23 @@ TEST_F(VectorizedBinaryPredicateTest, nullAndNotNullEqForNullExpr) {
 
     {
         ColumnPtr v = expr->evaluate(nullptr, nullptr);
-        ExprsTestHelper::verify_with_jit(v, expr.get(), &runtime_state, [](ColumnPtr const& v) {
-            auto ptr = std::static_pointer_cast<BooleanColumn>(v);
+        ExprsTestHelper::verify_with_jit(
+                v, expr.get(), &runtime_state,
+                [](ColumnPtr const& v) {
+                    auto ptr = std::static_pointer_cast<BooleanColumn>(v);
 
-            ASSERT_FALSE(v->is_nullable());
-            ASSERT_TRUE(v->is_numeric());
+                    ASSERT_FALSE(v->is_nullable());
+                    ASSERT_TRUE(v->is_numeric());
 
-            for (int j = 0; j < ptr->size(); ++j) {
-                if (j % 2) {
-                    ASSERT_EQ(0, (int)ptr->get_data()[j]);
-                } else {
-                    ASSERT_EQ(1, (int)ptr->get_data()[j]);
-                }
-            }
-        });
+                    for (int j = 0; j < ptr->size(); ++j) {
+                        if (j % 2) {
+                            ASSERT_EQ(0, (int)ptr->get_data()[j]);
+                        } else {
+                            ASSERT_EQ(1, (int)ptr->get_data()[j]);
+                        }
+                    }
+                },
+                expr->is_compilable());
     }
 }
 
@@ -446,16 +470,19 @@ TEST_F(VectorizedBinaryPredicateTest, diffNullEqForNullExpr) {
 
     {
         ColumnPtr v = expr->evaluate(nullptr, nullptr);
-        ExprsTestHelper::verify_with_jit(v, expr.get(), &runtime_state, [](ColumnPtr const& v) {
-            auto ptr = std::static_pointer_cast<BooleanColumn>(v);
+        ExprsTestHelper::verify_with_jit(
+                v, expr.get(), &runtime_state,
+                [](ColumnPtr const& v) {
+                    auto ptr = std::static_pointer_cast<BooleanColumn>(v);
 
-            ASSERT_FALSE(v->is_nullable());
-            ASSERT_TRUE(v->is_numeric());
+                    ASSERT_FALSE(v->is_nullable());
+                    ASSERT_TRUE(v->is_numeric());
 
-            for (int j = 0; j < ptr->size(); ++j) {
-                ASSERT_EQ(0, (int)ptr->get_data()[j]);
-            }
-        });
+                    for (int j = 0; j < ptr->size(); ++j) {
+                        ASSERT_EQ(0, (int)ptr->get_data()[j]);
+                    }
+                },
+                expr->is_compilable());
     }
 }
 
