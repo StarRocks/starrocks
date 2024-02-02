@@ -1007,15 +1007,15 @@ class StarrocksSQLApiLib(object):
         """
         tools.assert_true(str(res).find(mv_name) > 0, "assert mv %s is not found" % (mv_name))
 
-    def check_hit_materialized_view(self, query, mv_name):
+    def check_hit_materialized_view(self, query, *expects):
         """
         assert mv_name is hit in query
         """
         time.sleep(1)
         sql = "explain %s" % (query)
         res = self.execute_sql(sql, True)
-        #print(res)
-        tools.assert_true(str(res["result"]).find(mv_name) > 0, "assert mv %s is not found" % (mv_name))
+        for expect in expects:
+            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan" % (expect))
 
     def check_no_hit_materialized_view(self, query, mv_name):
         """
