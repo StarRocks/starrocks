@@ -383,7 +383,8 @@ Status Rowset::link_files_to(KVStore* kvstore, const std::string& dir, RowsetId 
         std::string src_file_path = segment_file_path(_rowset_path, rowset_id(), i);
         if (link(src_file_path.c_str(), dst_link_path.c_str()) != 0) {
             PLOG(WARNING) << "Fail to link " << src_file_path << " to " << dst_link_path;
-            return Status::RuntimeError("Fail to link segment data file");
+            return Status::RuntimeError(
+                    strings::Substitute("Fail to link segment data file from $0 to $1", src_file_path, dst_link_path));
         }
 
         // link inverted files
@@ -406,7 +407,8 @@ Status Rowset::link_files_to(KVStore* kvstore, const std::string& dir, RowsetId 
 
                         if (link(src_absolute_path.c_str(), dst_absolute_path.c_str()) != 0) {
                             PLOG(WARNING) << "Fail to link " << src_absolute_path << " to " << dst_absolute_path;
-                            return Status::RuntimeError("Fail to link index inverted file");
+                            return Status::RuntimeError(strings::Substitute("Fail to link index gin file from $0 to $1",
+                                                                            src_absolute_path, dst_absolute_path));
                         }
                     }
                 }

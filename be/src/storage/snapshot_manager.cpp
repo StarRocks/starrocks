@@ -749,7 +749,9 @@ Status SnapshotManager::assign_new_rowset_id(SnapshotMeta* snapshot_meta, const 
 
                             if (link(src_absolute_path.c_str(), dst_absolute_path.c_str()) != 0) {
                                 PLOG(WARNING) << "Fail to link " << src_absolute_path << " to " << dst_absolute_path;
-                                return Status::RuntimeError("Fail to link index inverted file");
+                                return Status::RuntimeError(
+                                        strings::Substitute("Fail to link index inverted file from $0 to $1",
+                                                            src_absolute_path, dst_absolute_path));
                             }
                         }
                     }
