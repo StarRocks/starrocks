@@ -14,6 +14,9 @@
 
 package com.starrocks.catalog.system.sys;
 
+import com.google.common.collect.ImmutableMap;
+import com.starrocks.memory.MemoryStat;
+import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.privilege.AccessControlProvider;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
@@ -26,6 +29,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.thrift.TException;
 import org.junit.jupiter.api.Test;
 
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -48,6 +52,9 @@ public class SysFeMemoryUsageTest {
                 minTimes = 0;
             }
         };
+        Map<String, Map<String, MemoryStat>> memoryUsage = MemoryUsageTracker.MEMORY_USAGE;
+        MemoryStat memoryStat = new MemoryStat();
+        memoryUsage.put("test", ImmutableMap.of("test", memoryStat));
 
         var res = SysFeMemoryUsage.listFeMemoryUsage(req);
         assertTrue(StringUtils.isNotEmpty(res.toString()));

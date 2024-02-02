@@ -24,8 +24,8 @@ namespace starrocks {
 SchemaScanner::ColumnDesc SysFeMemoryUsage::_s_columns[] = {
         {"module_name", TYPE_VARCHAR, sizeof(StringValue), true},
         {"class_name", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"current_consumption", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"peak_consumption", TYPE_VARCHAR, sizeof(StringValue), true}};
+        {"current_consumption", TYPE_BIGINT, sizeof(long), true},
+        {"peak_consumption", TYPE_BIGINT, sizeof(long), true}};
 
 SysFeMemoryUsage::SysFeMemoryUsage()
         : SchemaScanner(_s_columns, sizeof(_s_columns) / sizeof(SchemaScanner::ColumnDesc)) {}

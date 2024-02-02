@@ -52,6 +52,7 @@
 #include "exec/schema_scanner/starrocks_grants_to_scanner.h"
 #include "exec/schema_scanner/starrocks_role_edges_scanner.h"
 #include "exec/schema_scanner/sys_fe_locks.h"
+#include "exec/schema_scanner/sys_fe_memory_usage.h"
 #include "exec/schema_scanner/sys_object_dependencies.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/FrontendService_types.h"
@@ -187,6 +188,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SchemaBeDataCacheMetricsScanner>();
     case TSchemaTableType::SCH_PARTITIONS_META:
         return std::make_unique<SchemaPartitionsMetaScanner>();
+    case TSchemaTableType::SYS_FE_MEMORY_USAGE:
+        return std::make_unique<SysFeMemoryUsage>();
     default:
         return std::make_unique<SchemaDummyScanner>();
     }
