@@ -455,7 +455,8 @@ Status RowsetUpdateState::_prepare_partial_update_states(const TxnLogPB_OpWrite&
 }
 
 StatusOr<bool> RowsetUpdateState::file_exist(const std::string& full_path) {
-    auto st = FileSystem::Default()->path_exists(full_path);
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(full_path));
+    auto st = fs->path_exists(full_path);
     if (st.ok()) {
         return true;
     } else if (st.is_not_found()) {
@@ -502,6 +503,7 @@ Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, cons
         const auto& dest_path = op_write.rewrite_segments(i);
         DCHECK(src_path != dest_path);
 
+        bool skip_because_file_exist = false;
         int64_t t_rewrite_start = MonotonicMillis();
         if (op_write.txn_meta().has_auto_increment_partial_update_column_id() &&
             !_auto_increment_partial_update_states[i].skip_rewrite) {
@@ -513,6 +515,8 @@ Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, cons
                         _auto_increment_partial_update_states[i], read_column_ids,
                         _partial_update_states.size() != 0 ? &_partial_update_states[i].write_columns : nullptr,
                         op_write, tablet));
+            } else {
+                skip_because_file_exist = true;
             }
             file_info.path = dest_path;
             (*replace_segments)[i] = file_info;
@@ -525,6 +529,8 @@ Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, cons
                 RETURN_IF_ERROR(SegmentRewriter::rewrite(tablet->segment_location(src_path), &file_info, tablet_schema,
                                                          read_column_ids, _partial_update_states[i].write_columns, i,
                                                          partial_rowset_footer));
+            } else {
+                skip_because_file_exist = true;
             }
             file_info.path = dest_path;
             (*replace_segments)[i] = file_info;
@@ -533,9 +539,10 @@ Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, cons
         }
         int64_t t_rewrite_end = MonotonicMillis();
         LOG(INFO) << strings::Substitute(
-                "lake apply partial segment tablet:$0 rowset:$1 seg:$2 #column:$3 #rewrite:$4ms [$5 -> $6]",
+                "lake apply partial segment tablet:$0 rowset:$1 seg:$2 #column:$3 #rewrite:$4ms [$5 -> $6] "
+                "skip_because_file_exist $7",
                 tablet->id(), rowset_meta.id(), i, read_column_ids.size(), t_rewrite_end - t_rewrite_start, src_path,
-                dest_path);
+                dest_path, skip_because_file_exist);
     }
 
     // rename segment file

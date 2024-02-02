@@ -12,6 +12,7 @@
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
+#include "testutil/sync_point.h"
 #include "util/filesystem_util.h"
 #include "util/raw_container.h"
 #include "util/slice.h"
@@ -65,6 +66,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, FileInfo* dest_path
     RETURN_IF_ERROR(writer.finalize_footer(&segment_file_size));
 
     dest_path->size = segment_file_size;
+    TEST_ERROR_POINT("SegmentRewriter::rewrite");
     return Status::OK();
 }
 
@@ -154,6 +156,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
     RETURN_IF_ERROR(writer.finalize_columns(&index_size));
     RETURN_IF_ERROR(writer.finalize_footer(&segment_file_size));
 
+    TEST_ERROR_POINT("SegmentRewriter::rewrite");
     return Status::OK();
 }
 
@@ -251,6 +254,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, FileInfo* dest_path
     RETURN_IF_ERROR(writer.finalize_footer(&segment_file_size));
 
     dest_path->size = segment_file_size;
+    TEST_ERROR_POINT("SegmentRewriter::rewrite");
     return Status::OK();
 }
 
@@ -284,6 +288,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const TabletSchemaC
     RETURN_IF_ERROR(writer.finalize_columns(&index_size));
     RETURN_IF_ERROR(writer.finalize_footer(&segment_file_size));
 
+    TEST_ERROR_POINT("SegmentRewriter::rewrite");
     return Status::OK();
 }
 

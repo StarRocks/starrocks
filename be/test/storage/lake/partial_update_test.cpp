@@ -1076,8 +1076,28 @@ TEST_P(LakePartialUpdateTest, test_partial_update_retry_check_file_exist) {
         ASSERT_OK(delta_writer->finish());
         delta_writer->close();
     }
-    // retry publish again
-    for (int i = 0; i < 5; i++) {
+    // retry because rewrite fail
+    for (int i = 0; i < 2; i++) {
+        TEST_ENABLE_ERROR_POINT("SegmentRewriter::rewrite", Status::IOError("injected rewrite error"));
+
+        SyncPoint::GetInstance()->EnableProcessing();
+
+        DeferOp defer([]() {
+            TEST_DISABLE_ERROR_POINT("SegmentRewriter::rewrite");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+        _tablet_mgr->prune_metacache();
+        ASSERT_ERROR(publish_single_version(tablet_id, version + 1, txn_id));
+        auto txn_log_st = _tablet_mgr->get_txn_log(tablet_id, txn_id);
+        EXPECT_TRUE(txn_log_st.ok());
+        auto& txn_log = txn_log_st.value();
+        auto segment = txn_log->op_write().rewrite_segments(0);
+        std::string filename = _tablet_mgr->segment_location(tablet_id, segment);
+        ASSIGN_OR_ABORT(bool file_exist, RowsetUpdateState::file_exist(filename));
+        EXPECT_FALSE(file_exist);
+    }
+    // retry because put meta fail
+    for (int i = 0; i < 2; i++) {
         TEST_ENABLE_ERROR_POINT("TabletManager::put_tablet_metadata",
                                 Status::IOError("injected put tablet metadata error"));
 
