@@ -114,7 +114,7 @@ private:
     llvm::legacy::PassManager _pass_manager;
 
     std::unique_ptr<llvm::orc::LLJIT> _jit;
-
+    std::mutex _mutex;
     Cache* _func_cache;
 };
 

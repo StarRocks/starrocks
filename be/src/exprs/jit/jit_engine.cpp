@@ -271,6 +271,7 @@ std::pair<JITScalarFunction, std::function<void()>> JITEngine::compile_module(
         return func;
     }
 
+    std::unique_lock<std::mutex> lock(_mutex);
     // Create a resource tracker for the module, which will be used to remove the module from the JIT engine.
     auto resource_tracker = _jit->getMainJITDylib().createResourceTracker();
     auto error =
@@ -292,6 +293,7 @@ std::pair<JITScalarFunction, std::function<void()>> JITEngine::compile_module(
         VLOG_ROW << "Failed to find jit function: " << error_message;
         return std::make_pair(nullptr, nullptr);
     }
+    lock.unlock();
 
     auto* cache = new JitCacheEntry(resource_tracker, addr->toPtr<JITScalarFunction>());
 
