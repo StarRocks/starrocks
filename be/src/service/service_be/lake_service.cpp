@@ -516,8 +516,8 @@ void LakeServiceImpl::drop_table(::google::protobuf::RpcController* controller,
                        << " path=" << request->path();
             st.to_protobuf(response->mutable_status());
         } else {
-            LOG(INFO) << "Removed " << location << ". tablet_id=" << request->tablet_id()
-                      << " path=" << request->path() << " is_not_found=" << st.is_not_found();
+            LOG(INFO) << "Removed " << location << ". tablet_id=" << request->tablet_id() << " path=" << request->path()
+                      << " is_not_found=" << st.is_not_found();
         }
     };
 

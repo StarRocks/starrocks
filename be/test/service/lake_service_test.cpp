@@ -1546,7 +1546,6 @@ TEST_F(LakeServiceTest, test_drop_table_duplicate_request) {
     auto expect_error_msg = "Previous delete task for the same path has not yet finished";
     ASSERT_TRUE(error_texts[0] == expect_error_msg || error_texts[1] == expect_error_msg)
             << error_texts[0] << ", " << error_texts[1];
-
 }
 
 // NOLINTNEXTLINE
