@@ -17,6 +17,7 @@ package com.starrocks.sql.plan;
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -40,6 +41,36 @@ import java.util.Objects;
 import static org.junit.Assert.fail;
 
 public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
+
+    @Test
+    public void testForceRuleBasedRewrite() throws Exception {
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite"));
+        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
+        sessionVariable.setEnableForceRuleBasedMvRewrite(true);
+        Pair<QueryDumpInfo, String> replayPair =
+                getCostPlanFragment(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite"), sessionVariable);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("partition_flat_consumptions_partition_drinks_dates"));
+    }
+
+    @Test
+    public void testForceRuleBasedRewriteMonth() throws Exception {
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_month"));
+        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
+        sessionVariable.setEnableForceRuleBasedMvRewrite(true);
+        Pair<QueryDumpInfo, String> replayPair =
+                getCostPlanFragment(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_month"), sessionVariable);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("partition_flat_consumptions_partition_drinks_roll_month"));
+    }
+
+    @Test
+    public void testForceRuleBasedRewriteYear() throws Exception {
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_year"));
+        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
+        sessionVariable.setEnableForceRuleBasedMvRewrite(true);
+        Pair<QueryDumpInfo, String> replayPair =
+                getCostPlanFragment(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_year"), sessionVariable);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("flat_consumptions_drinks_dates_roll_year"));
+    }
 
     @Test
     public void testTPCH17WithUseAnalytic() throws Exception {

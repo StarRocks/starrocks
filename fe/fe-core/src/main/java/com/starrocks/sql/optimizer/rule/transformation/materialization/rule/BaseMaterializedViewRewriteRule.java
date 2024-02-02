@@ -15,14 +15,18 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
 
 import com.github.benmanes.caffeine.cache.Cache;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.metric.MaterializedViewMetricsEntity;
 import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
+import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -30,6 +34,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -37,14 +42,18 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.TransformationRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.BestMvSelector;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVColumnPruner;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVPartitionPruner;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
+import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -94,7 +103,18 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
     @Override
     public List<OptExpression> transform(OptExpression queryExpression, OptimizerContext context) {
         try {
-            return doTransform(queryExpression, context);
+            List<OptExpression> expressions = doTransform(queryExpression, context);
+            if (expressions == null || expressions.isEmpty()) {
+                return Lists.newArrayList();
+            }
+            if (context.isInMemoPhase()) {
+                return expressions;
+            } else {
+                // in rule phase, only return the best one result
+                BestMvSelector bestMvSelector = new BestMvSelector(
+                        expressions, context, queryExpression.getOp() instanceof LogicalAggregationOperator);
+                return Lists.newArrayList(bestMvSelector.selectBest());
+            }
         } catch (Exception e) {
             String errMsg = ExceptionUtils.getMessage(e);
             // for mv rewrite rules, do not disturb query when exception.
