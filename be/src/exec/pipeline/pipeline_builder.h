@@ -38,7 +38,6 @@ public:
         _pipelines.emplace_back(std::make_shared<Pipeline>(next_pipe_id(), operators));
         bool enable_wait_event = _fragment_context->runtime_state()->enable_wait_dependent_event();
         if (enable_wait_event && !_dependent_pipelines.empty()) {
-            _pipelines.back()->pipeline_event();
             subscribe_pipeline_event(_pipelines.back().get(), _dependent_pipelines.back()->pipeline_event());
         }
     }
