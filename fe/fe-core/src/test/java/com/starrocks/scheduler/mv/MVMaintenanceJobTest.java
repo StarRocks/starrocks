@@ -53,11 +53,11 @@ public class MVMaintenanceJobTest extends PlanTestBase {
         view.setMaintenancePlan(new ExecPlan());
 
         List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
-        BaseTableInfo baseTableInfo1 = new BaseTableInfo(100L, 1L);
+        BaseTableInfo baseTableInfo1 = new BaseTableInfo(100L, "db", "tbl1", 1L);
         baseTableInfos.add(baseTableInfo1);
-        BaseTableInfo baseTableInfo2 = new BaseTableInfo(100L, 2L);
+        BaseTableInfo baseTableInfo2 = new BaseTableInfo(100L, "db", "tbl2", 2L);
         baseTableInfos.add(baseTableInfo2);
-        BaseTableInfo baseTableInfo3 = new BaseTableInfo(100L, 2L);
+        BaseTableInfo baseTableInfo3 = new BaseTableInfo(100L, "db", "tbl3", 2L);
         baseTableInfos.add(baseTableInfo3);
 
         view.setBaseTableInfos(baseTableInfos);
