@@ -458,7 +458,7 @@ public:
                 break;
             }
             if (UNLIKELY(errno != saved_errno)) {
-                PLOG(ERROR) << "errno changed to " << errno << ", will restore it back to " << saved_errno;
+                LOG(INFO) << "errno changed to " << errno << ", will restore it back to " << saved_errno;
                 errno = saved_errno;
             }
         }
