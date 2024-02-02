@@ -1383,7 +1383,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitDropTaskStatement(StarRocksParser.DropTaskStatementContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TaskName taskName = qualifiedNameToTaskName(qualifiedName);
-        return new DropTaskStmt(taskName, createPos(context));
+        boolean force = context.FORCE() != null;
+        return new DropTaskStmt(taskName, force, createPos(context));
     }
 
     // ------------------------------------------- Materialized View Statement -----------------------------------------
