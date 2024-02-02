@@ -30,20 +30,33 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 public class ViewBaseMvRewriteOnTpcdsTest extends MaterializedViewTestBase {
+    private static final List<List<Arguments>> ARGUMENTS = Lists.newArrayList();
+    private static final int N = 4;
+
     @BeforeAll
     public static void beforeClass() throws Exception {
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         MaterializedViewTestBase.beforeClass();
+
         connectContext.getSessionVariable().setEnableViewBasedMvRewrite(true);
+
         starRocksAssert.useDatabase("test");
         connectContext.executeSql("drop table if exists customer");
         TPCDSTestUtil.prepareTables(starRocksAssert);
-    }
 
-    @ParameterizedTest(name = "ViewBasedRewriteOnTpcds.{0}")
-    @MethodSource("tpcdsSource")
-    public void testTPCDS(String name, String sql) throws Exception {
-        testMvRewrite(name, sql);
+        // prepare argument, split arguments into 4 parts to avoid cost too much time
+        for (int i = 0; i < N; i++) {
+            ARGUMENTS.add(Lists.newArrayList());
+        }
+
+        int i = 0;
+        for (Map.Entry<String, String> entry : TPCDSPlanTestBase.getSqlMap().entrySet()) {
+            // these queries are not supported because they has duplicate output column names
+            Set<String> filteredQueries = Sets.newHashSet("query39-1", "query39-2", "query64");
+            if (!filteredQueries.contains(entry.getKey())) {
+                ARGUMENTS.get(i++ % N).add(Arguments.of(entry.getKey(), entry.getValue()));
+            }
+        }
     }
 
     private void testMvRewrite(String name, String sql) throws Exception {
@@ -59,15 +72,43 @@ public class ViewBaseMvRewriteOnTpcdsTest extends MaterializedViewTestBase {
         }
     }
 
-    private static Stream<Arguments> tpcdsSource() {
-        List<Arguments> cases = Lists.newArrayList();
-        for (Map.Entry<String, String> entry : TPCDSPlanTestBase.getSqlMap().entrySet()) {
-            // these queries are not supported because they has duplicate output column names
-            Set<String> filteredQueries = Sets.newHashSet("query39-1", "query39-2", "query64");
-            if (!filteredQueries.contains(entry.getKey())) {
-                cases.add(Arguments.of(entry.getKey(), entry.getValue()));
-            }
-        }
-        return cases.stream();
+    private static Stream<Arguments> tpcdsSource0() {
+        return ARGUMENTS.get(0).stream();
+    }
+
+    private static Stream<Arguments> tpcdsSource1() {
+        return ARGUMENTS.get(1).stream();
+    }
+
+    private static Stream<Arguments> tpcdsSource2() {
+        return ARGUMENTS.get(2).stream();
+    }
+
+    private static Stream<Arguments> tpcdsSource3() {
+        return ARGUMENTS.get(3).stream();
+    }
+
+    @ParameterizedTest(name = "ViewBasedRewriteOnTpcds.{0}")
+    @MethodSource("tpcdsSource0")
+    public void testViewRewriteWithTPCDS0(String name, String sql) throws Exception {
+        testMvRewrite(name, sql);
+    }
+
+    @ParameterizedTest(name = "ViewBasedRewriteOnTpcds.{0}")
+    @MethodSource("tpcdsSource1")
+    public void testViewRewriteWithTPCDS1(String name, String sql) throws Exception {
+        testMvRewrite(name, sql);
+    }
+
+    @ParameterizedTest(name = "ViewBasedRewriteOnTpcds.{0}")
+    @MethodSource("tpcdsSource2")
+    public void testViewRewriteWithTPCDS2(String name, String sql) throws Exception {
+        testMvRewrite(name, sql);
+    }
+
+    @ParameterizedTest(name = "ViewBasedRewriteOnTpcds.{0}")
+    @MethodSource("tpcdsSource3")
+    public void testViewRewriteWithTPCDS3(String name, String sql) throws Exception {
+        testMvRewrite(name, sql);
     }
 }
