@@ -216,7 +216,7 @@ Spark Connector Jar 包的命名格式如下：
 | STRING           | DataTypes.StringType    |
 | DATE             | DataTypes.DateType      |
 | DATETIME         | DataTypes.TimestampType |
-| JSON             | DataTypes.StringType <br> **NOTE:** <br> **自版本 1.1.2 起支持该类型映射**，并且 StarRocks 版本需要为 2.5.13、3.0.3、3.1 或更高版本。 |
+| JSON             | DataTypes.StringType <br /> **NOTE:** <br /> **自版本 1.1.2 起支持该类型映射**，并且 StarRocks 版本需要为 2.5.13、3.0.3、3.1 或更高版本。 |
 | ARRAY            | Unsupported datatype    |
 | HLL              | Unsupported datatype    |
 | BITMAP           | Unsupported datatype    |
