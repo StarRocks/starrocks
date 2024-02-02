@@ -993,7 +993,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
                     cluster.runSql("test", "alter table parent_table1 set(\"unique_constraints\"=\"k1, k2\")");
 
-                    ;
                     OlapTable baseTable = (OlapTable) getTable("test", "base_table1");
                     Assert.assertNotNull(baseTable.getForeignKeyConstraints());
                     List<ForeignKeyConstraint> foreignKeyConstraints = baseTable.getForeignKeyConstraints();
