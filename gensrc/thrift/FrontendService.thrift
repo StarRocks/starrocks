@@ -525,11 +525,7 @@ struct TMasterOpRequest {
     30: optional Types.TUniqueId queryId
     31: optional bool isLastStmt
     32: optional string modified_variables_sql
-<<<<<<< HEAD
-=======
-    33: optional Types.TUserRoles user_roles
     34: optional i32 forward_times
->>>>>>> d8bb832929 ([BugFix] Fix forward to self node bug (#39587))
 }
 
 struct TColumnDefinition {

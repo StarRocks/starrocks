@@ -622,16 +622,6 @@ public class ConnectContext {
         return parent;
     }
 
-<<<<<<< HEAD
-=======
-    public void setRelationAliasCaseInSensitive(boolean relationAliasCaseInsensitive) {
-        this.relationAliasCaseInsensitive = relationAliasCaseInsensitive;
-    }
-
-    public boolean isRelationAliasCaseInsensitive() {
-        return relationAliasCaseInsensitive;
-    }
-
     public void setForwardTimes(int forwardTimes) {
         this.forwardTimes = forwardTimes;
     }
@@ -640,7 +630,6 @@ public class ConnectContext {
         return this.forwardTimes;
     }
 
->>>>>>> d8bb832929 ([BugFix] Fix forward to self node bug (#39587))
     // kill operation with no protect.
     public void kill(boolean killConnection) {
         LOG.warn("kill query, {}, kill connection: {}",

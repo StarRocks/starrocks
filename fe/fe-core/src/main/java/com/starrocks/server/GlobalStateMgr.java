@@ -354,15 +354,9 @@ public class GlobalStateMgr {
     // false if default_cluster is not created.
     private boolean isDefaultClusterCreated = false;
 
-<<<<<<< HEAD
-=======
     // True indicates that the node is transferring to the leader, using this state avoids forwarding stmt to its own node.
     private volatile boolean isInTransferringToLeader = false;
 
-    // false if default_warehouse is not created.
-    private boolean isDefaultWarehouseCreated = false;
-
->>>>>>> d8bb832929 ([BugFix] Fix forward to self node bug (#39587))
     private FrontendNodeType feType;
     // replica and observer use this value to decide provide read service or not
     private long synchronizedTimeMs;
@@ -3651,43 +3645,8 @@ public class GlobalStateMgr {
     public MetaContext getMetaContext() {
         return metaContext;
     }
-<<<<<<< HEAD
-=======
-
-    public void createBuiltinStorageVolume() {
-        try {
-            String builtinStorageVolumeId = storageVolumeMgr.createBuiltinStorageVolume();
-            if (!builtinStorageVolumeId.isEmpty()) {
-                authorizationMgr.grantStorageVolumeUsageToPublicRole(builtinStorageVolumeId);
-            }
-        } catch (InvalidConfException e) {
-            LOG.fatal(e.getMessage());
-            System.exit(-1);
-        } catch (DdlException | AlreadyExistsException e) {
-            LOG.warn("Failed to create or update builtin storage volume", e);
-        } catch (PrivilegeException e) {
-            LOG.warn("Failed to grant builtin storage volume usage to public role", e);
-        }
-    }
-
-    public SlotManager getSlotManager() {
-        return slotManager;
-    }
-
-    public SlotProvider getSlotProvider() {
-        return slotProvider;
-    }
-
-    public ResourceUsageMonitor getResourceUsageMonitor() {
-        return resourceUsageMonitor;
-    }
-
-    public DictionaryMgr getDictionaryMgr() {
-        return dictionaryMgr;
-    }
 
     public boolean isInTransferringToLeader() {
         return isInTransferringToLeader;
     }
->>>>>>> d8bb832929 ([BugFix] Fix forward to self node bug (#39587))
 }
