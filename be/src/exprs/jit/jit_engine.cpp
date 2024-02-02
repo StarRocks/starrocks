@@ -22,6 +22,7 @@
 #include <utility>
 
 #include "common/compiler_util.h"
+#include "common/config.h"
 #include "common/status.h"
 #include "exprs/expr.h"
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
@@ -235,15 +236,6 @@ Status JITEngine::generate_scalar_function_ir(ExprContext* context, llvm::Module
     b.CreateRetVoid();
 
     return Status::OK();
-}
-
-Status JITEngine::remove_function(const std::string& expr_name) {
-    auto* instance = JITEngine::get_instance();
-    if (!instance->initialized()) {
-        return Status::JitCompileError("JIT engine is not initialized");
-    }
-
-    return instance->remove_module(expr_name);
 }
 
 void JITEngine::setup_module(llvm::Module* module) const {
