@@ -68,10 +68,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.Util;
 import com.starrocks.load.Load;
-import com.starrocks.mysql.privilege.Auth;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.system.SystemInfoService;
@@ -238,26 +235,6 @@ public class CatalogMocker {
 
         SCHEMA_HASH = Util.schemaHash(0, TEST_TBL_BASE_SCHEMA, null, 0);
         ROLLUP_SCHEMA_HASH = Util.schemaHash(0, TEST_ROLLUP_SCHEMA, null, 0);
-    }
-
-    private static Auth fetchAdminAccess() {
-        Auth auth = new Auth();
-        new Expectations(auth) {
-            {
-                auth.checkGlobalPriv((ConnectContext) any, (PrivPredicate) any);
-                minTimes = 0;
-                result = true;
-
-                auth.checkDbPriv((ConnectContext) any, anyString, (PrivPredicate) any);
-                minTimes = 0;
-                result = true;
-
-                auth.checkTblPriv((ConnectContext) any, anyString, anyString, (PrivPredicate) any);
-                minTimes = 0;
-                result = true;
-            }
-        };
-        return auth;
     }
 
     public static SystemInfoService fetchSystemInfoService() {
@@ -546,79 +523,43 @@ public class CatalogMocker {
     }
 
     public static GlobalStateMgr fetchAdminCatalog() {
-        try {
-            FakeEditLog fakeEditLog = new FakeEditLog();
+        FakeEditLog fakeEditLog = new FakeEditLog();
 
-            GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
+        GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
 
-            Database db = new Database();
-            Auth auth = fetchAdminAccess();
+        Database db = new Database();
 
-            new Expectations(globalStateMgr) {
-                {
-                    globalStateMgr.getAuth();
-                    minTimes = 0;
-                    result = auth;
-
-                    globalStateMgr.getDb(TEST_DB_NAME);
-                    minTimes = 0;
-                    result = db;
-
-                    globalStateMgr.getDb(WRONG_DB);
-                    minTimes = 0;
-                    result = null;
-
-                    globalStateMgr.getDb(TEST_DB_ID);
-                    minTimes = 0;
-                    result = db;
-
-                    globalStateMgr.getDb(anyString);
-                    minTimes = 0;
-                    result = new Database();
-
-                    globalStateMgr.getLocalMetastore().listDbNames();
-                    minTimes = 0;
-                    result = Lists.newArrayList(TEST_DB_NAME);
-
-                    globalStateMgr.getLoadInstance();
-                    minTimes = 0;
-                    result = new Load();
-
-                    globalStateMgr.getEditLog();
-                    minTimes = 0;
-                    result = new EditLog(new ArrayBlockingQueue<>(100));
-
-                    globalStateMgr.changeCatalogDb((ConnectContext) any, WRONG_DB);
-                    minTimes = 0;
-                    result = new DdlException("failed");
-
-                    globalStateMgr.changeCatalogDb((ConnectContext) any, anyString);
-                    minTimes = 0;
-                }
-            };
-            return globalStateMgr;
-        } catch (DdlException e) {
-            return null;
-        }
-    }
-
-    public static Auth fetchBlockAccess() {
-        Auth auth = new Auth();
-        new Expectations(auth) {
+        new Expectations(globalStateMgr) {
             {
-                auth.checkGlobalPriv((ConnectContext) any, (PrivPredicate) any);
+                globalStateMgr.getDb(TEST_DB_NAME);
                 minTimes = 0;
-                result = false;
+                result = db;
 
-                auth.checkDbPriv((ConnectContext) any, anyString, (PrivPredicate) any);
+                globalStateMgr.getDb(WRONG_DB);
                 minTimes = 0;
-                result = false;
+                result = null;
 
-                auth.checkTblPriv((ConnectContext) any, anyString, anyString, (PrivPredicate) any);
+                globalStateMgr.getDb(TEST_DB_ID);
                 minTimes = 0;
-                result = false;
+                result = db;
+
+                globalStateMgr.getDb(anyString);
+                minTimes = 0;
+                result = new Database();
+
+                globalStateMgr.getLocalMetastore().listDbNames();
+                minTimes = 0;
+                result = Lists.newArrayList(TEST_DB_NAME);
+
+                globalStateMgr.getLoadInstance();
+                minTimes = 0;
+                result = new Load();
+
+                globalStateMgr.getEditLog();
+                minTimes = 0;
+                result = new EditLog(new ArrayBlockingQueue<>(100));
             }
         };
-        return auth;
+        return globalStateMgr;
     }
 }

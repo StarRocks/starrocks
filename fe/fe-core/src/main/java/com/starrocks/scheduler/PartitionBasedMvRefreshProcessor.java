@@ -318,7 +318,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         {
             long refreshDurationMs = System.currentTimeMillis() - startRefreshTs;
             LOG.info("Refresh {} success, cost time(s): {}", materializedView.getName(),
-                    DebugUtil.DECIMAL_FORMAT_SCALE_3.format(refreshDurationMs / 1000));
+                    DebugUtil.DECIMAL_FORMAT_SCALE_3.format(refreshDurationMs / 1000.0));
             mvEntity.updateRefreshDuration(refreshDurationMs);
         }
 
@@ -1971,7 +1971,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     // It's ok to add empty set for a table, means no partition corresponding to this mv partition
                     needRefreshTablePartitionNames.addAll(mvToBaseNameRef.get(snapshotTable));
                 } else {
-                    LOG.warn("MV {}'s refTable {} is not found in `mvRefBaseTableIntersectedPartitions`",
+                    LOG.info("MV {}'s refTable {} is not found in `mvRefBaseTableIntersectedPartitions` " +
+                                    "because of empty update",
                             materializedView.getName(), snapshotTable.getName());
                 }
             }
@@ -2044,6 +2045,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private Map<String, MaterializedView.BasePartitionInfo> getSelectedPartitionInfos(Table table,
                                                                                       List<String> selectedPartitionNames,
                                                                                       BaseTableInfo baseTableInfo) {
+        // sort selectedPartitionNames before the for loop, otherwise the order of partition names may be
+        // different in selectedPartitionNames and partitions and will lead to infinite partition refresh.
+        Collections.sort(selectedPartitionNames);
         Map<String, MaterializedView.BasePartitionInfo> partitionInfos = Maps.newHashMap();
         List<com.starrocks.connector.PartitionInfo> partitions = GlobalStateMgr.
                 getCurrentState().getMetadataMgr().getPartitions(baseTableInfo.getCatalogName(), table,

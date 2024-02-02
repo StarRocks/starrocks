@@ -640,8 +640,6 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_DROP_ROLE_V2 = 10266;
 
-    public static final short OP_AUTH_UPGRADE_V2 = 10267;
-
     @Deprecated
     @IgnorableOnReplayFailed
     public static final short OP_UPDATE_USER_PROP_V2 = 10268;

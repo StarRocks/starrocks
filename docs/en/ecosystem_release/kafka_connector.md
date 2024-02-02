@@ -23,7 +23,7 @@ displayed_sidebar: "English"
 | 1.0.1           | 2.1 and later | 8    |
 | 1.0.0           | 2.1 and later | 8    |
 
-## Release note
+## Release notes
 
 ### 1.0
 

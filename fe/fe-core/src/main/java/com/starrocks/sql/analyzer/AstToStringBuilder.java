@@ -1527,6 +1527,17 @@ public class AstToStringBuilder {
                         .append(olapTable.getAutomaticBucketSize()).append("\"");
             }
 
+            // locations
+            if (olapTable.getLocation() != null) {
+                String locations = PropertyAnalyzer.convertLocationMapToString(olapTable.getLocation());
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)
+                        .append("\" = \"")
+                        .append(locations)
+                        .append("\"");
+            }
+
+            Map<String, String> properties = olapTable.getTableProperty().getProperties();
             if (table.isCloudNativeTable()) {
                 Map<String, String> storageProperties = olapTable.getProperties();
 
@@ -1611,9 +1622,6 @@ public class AstToStringBuilder {
                     sb.append(olapTable.getUseFastSchemaEvolution()).append("\"");
                 }
 
-                // storage media
-                Map<String, String> properties = olapTable.getTableProperty().getProperties();
-
                 if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
                     sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
                             .append("\" = \"");
@@ -1627,14 +1635,6 @@ public class AstToStringBuilder {
                             .append(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)
                             .append("\" = \"")
                             .append(storageCoolDownTTL).append("\"");
-                }
-
-                // partition live number
-                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
-                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                            .append(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)
-                            .append("\" = \"");
-                    sb.append(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)).append("\"");
                 }
 
                 // unique constraint
@@ -1666,6 +1666,14 @@ public class AstToStringBuilder {
                         sb.append(olapTable.storageType()).append("\"");
                     }
                 }
+            }
+
+            // partition live number
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)
+                        .append("\" = \"");
+                sb.append(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)).append("\"");
             }
 
             if (olapTable.primaryIndexCacheExpireSec() > 0) {

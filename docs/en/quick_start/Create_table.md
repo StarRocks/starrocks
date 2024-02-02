@@ -78,5 +78,5 @@ In addition to the features this tutorial has demonstrated, StarRocks also suppo
 - A variety of [data types](../sql-reference/sql-statements/data-types/BIGINT.md)
 - Multiple [table types](../table_design/table_types/table_types.md)
 - Flexible [partitioning strategies](../table_design/Data_distribution.md#dynamic-partition-management)
-- Classic database query indexes, including [bitmap index](../using_starrocks/Bitmap_index.md) and [bloom filter index](../using_starrocks/Bloomfilter_index.md)
+- Classic database query indexes, including [bitmap index](../table_design/indexes/Bitmap_index.md) and [bloom filter index](../table_design/indexes/Bloomfilter_index.md)
 - [Materialized view](../using_starrocks/Materialized_view.md)

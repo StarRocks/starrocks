@@ -262,7 +262,7 @@ import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ManualRefreshSchemeDesc;
 import com.starrocks.sql.ast.MapExpr;
-import com.starrocks.sql.ast.ModifyBackendAddressClause;
+import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
@@ -1459,7 +1459,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitDropTaskStatement(StarRocksParser.DropTaskStatementContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TaskName taskName = qualifiedNameToTaskName(qualifiedName);
-        return new DropTaskStmt(taskName, createPos(context));
+        boolean force = context.FORCE() != null;
+        return new DropTaskStmt(taskName, force, createPos(context));
     }
 
     // ------------------------------------------- Materialized View Statement -----------------------------------------
@@ -3617,10 +3618,20 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitModifyBackendHostClause(StarRocksParser.ModifyBackendHostClauseContext context) {
-        List<String> clusters =
+    public ParseNode visitModifyBackendClause(StarRocksParser.ModifyBackendClauseContext context) {
+        List<String> strings =
                 context.string().stream().map(c -> ((StringLiteral) visit(c)).getStringValue()).collect(toList());
-        return new ModifyBackendAddressClause(clusters.get(0), clusters.get(1), createPos(context));
+        if (context.HOST() != null) {
+            return new ModifyBackendClause(strings.get(0), strings.get(1), createPos(context));
+        } else {
+            String backendHostPort = strings.get(0);
+            Map<String, String> properties = new HashMap<>();
+            List<Property> propertyList = visit(context.propertyList().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+            return new ModifyBackendClause(backendHostPort, properties, createPos(context));
+        }
     }
 
     @Override
@@ -5789,7 +5800,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             if (params.size() != 2) {
                 throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(functionName), pos);
             }
-            return new CollectionElementExpr(params.get(0), params.get(1));
+            return new CollectionElementExpr(params.get(0), params.get(1), false);
         }
 
         if (functionName.equals(FunctionSet.ISNULL)) {
@@ -5910,6 +5921,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String functionName;
         boolean isGroupConcat = false;
         boolean isLegacyGroupConcat = false;
+        boolean isDistinct = false;
         if (context.aggregationFunction().COUNT() != null) {
             functionName = FunctionSet.COUNT;
         } else if (context.aggregationFunction().AVG() != null) {
@@ -5920,6 +5932,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             functionName = FunctionSet.MIN;
         } else if (context.aggregationFunction().ARRAY_AGG() != null) {
             functionName = FunctionSet.ARRAY_AGG;
+        } else if (context.aggregationFunction().ARRAY_AGG_DISTINCT() != null) { // alias to ARRAY_AGG
+            functionName = FunctionSet.ARRAY_AGG;
+            isDistinct = true;
         } else if (context.aggregationFunction().GROUP_CONCAT() != null) {
             functionName = FunctionSet.GROUP_CONCAT;
             isGroupConcat = true;
@@ -5937,7 +5952,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             hints = context.aggregationFunction().bracketHint().identifier().stream().map(
                     RuleContext::getText).collect(Collectors.toList());
         }
-        boolean isDistinct = false;
         if (context.aggregationFunction().setQuantifier() != null) {
             isDistinct = context.aggregationFunction().setQuantifier().DISTINCT() != null;
         }
@@ -6330,7 +6344,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitCollectionSubscript(StarRocksParser.CollectionSubscriptContext context) {
         Expr value = (Expr) visit(context.value);
         Expr index = (Expr) visit(context.index);
-        return new CollectionElementExpr(value, index);
+        return new CollectionElementExpr(value, index, false);
     }
 
     @Override

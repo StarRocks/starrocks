@@ -220,9 +220,14 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
+    // For show tablet detail command, if user has any privilege on the corresponding table, user can run it
+    // TODO(yiming): match "/dbs", not only show tablet detail cmd, need to change privilege check for other proc node
+    private static final Pattern SHOW_TABLET_DETAIL_CMD_PATTERN =
+            Pattern.compile("/dbs/\\d+/\\d+/partitions/\\d+/\\d+/\\d+/?");
 
     private static final Logger LOG = LogManager.getLogger(AuthorizerStmtVisitor.class);
 
@@ -1995,14 +2000,7 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitShowTabletStatement(ShowTabletStmt statement, ConnectContext context) {
-        try {
-            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.OPERATE);
-        } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(
-                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
-        }
+        // Privilege is checked in execution logic, see `ShowExecutor#handleShowTablet()` for details.
         return null;
     }
 
@@ -2148,7 +2146,10 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitShowProcStmt(ShowProcStmt statement, ConnectContext context) {
         try {
-            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.OPERATE);
+            if (!SHOW_TABLET_DETAIL_CMD_PATTERN.matcher(statement.getPath()).matches()) {
+                Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.OPERATE);
+            }
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
                     InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,

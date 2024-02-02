@@ -192,9 +192,11 @@ public:
     void get_tablets_by_partition(int64_t partition_id, std::vector<TabletInfo>& tablet_infos);
 
     void get_tablets_basic_infos(int64_t table_id, int64_t partition_id, int64_t tablet_id,
-                                 std::vector<TabletBasicInfo>& tablet_infos);
+                                 std::vector<TabletBasicInfo>& tablet_infos, std::set<int64_t>* authorized_table_ids);
 
     std::vector<TabletAndScore> pick_tablets_to_do_pk_index_major_compaction();
+
+    Status generate_pk_dump();
 
 private:
     using TabletMap = std::unordered_map<int64_t, TabletSharedPtr>;

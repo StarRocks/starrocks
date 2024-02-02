@@ -53,7 +53,7 @@ private:
 
 class UpdateManager {
 public:
-    UpdateManager(LocationProvider* location_provider, MemTracker* mem_tracker = nullptr);
+    UpdateManager(LocationProvider* location_provider, MemTracker* mem_tracker);
     ~UpdateManager();
     void set_tablet_mgr(TabletManager* tablet_mgr) { _tablet_mgr = tablet_mgr; }
     void set_cache_expire_ms(int64_t expire_ms) { _cache_expire_ms = expire_ms; }
@@ -94,11 +94,6 @@ public:
                                       const TabletMetadata& metadata, Tablet tablet, IndexEntry* index_entry,
                                       MetaFileBuilder* builder, int64_t base_version);
 
-    // remove primary index entry from cache, called when publish version error happens.
-    // Because update primary index isn't idempotent, so if primary index update success, but
-    // publish failed later, need to clear primary index.
-    void remove_primary_index_cache(uint32_t tablet_id);
-
     bool try_remove_primary_index_cache(uint32_t tablet_id);
 
     void unload_primary_index(int64_t tablet_id);
@@ -131,6 +126,8 @@ public:
 
     MemTracker* compaction_state_mem_tracker() const { return _compaction_state_mem_tracker.get(); }
 
+    MemTracker* update_state_mem_tracker() const { return _update_state_mem_tracker.get(); }
+
     // get or create primary index, and prepare primary index state
     StatusOr<IndexEntry*> prepare_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
                                                 int64_t base_version, int64_t new_version,
@@ -141,6 +138,8 @@ public:
 
     // release index entry if it isn't nullptr
     void release_primary_index_cache(IndexEntry* index_entry);
+    // remove index entry if it isn't nullptr
+    void remove_primary_index_cache(IndexEntry* index_entry);
 
     DynamicCache<uint64_t, LakePrimaryIndex>& index_cache() { return _index_cache; }
 

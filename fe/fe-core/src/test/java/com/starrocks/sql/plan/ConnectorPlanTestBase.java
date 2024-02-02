@@ -309,8 +309,8 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         Map<String, String> properties = Maps.newHashMap();
 
         properties.put(JDBCResource.TYPE, "jdbc");
-        properties.put(JDBCResource.DRIVER_CLASS, "com.mysql.cj.jdbc.Driver");
-        properties.put(JDBCResource.URI, "jdbc:mysql://127.0.0.1:3306");
+        properties.put(JDBCResource.DRIVER_CLASS, "org.mariadb.jdbc.Driver");
+        properties.put(JDBCResource.URI, "jdbc:mariadb://127.0.0.1:3306");
         properties.put(JDBCResource.USER, "root");
         properties.put(JDBCResource.PASSWORD, "123456");
         properties.put(JDBCResource.CHECK_SUM, "xxxx");

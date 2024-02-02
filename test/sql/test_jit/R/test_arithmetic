@@ -925,6 +925,26 @@ select a.c_dis,b.c_largeint + a.c_bigint + b.c_int + a.c_smallint + b.c_tinyint 
 1	-170141183460469231722463931676881813381
 2	170141183460469231722463931676881813376
 -- !result
+SELECT (((1 / 1) % 1) * 1);
+-- result:
+0.0
+-- !result
+select 1+2 * null;
+-- result:
+None
+-- !result
+select 2/null;
+-- result:
+None
+-- !result
+SELECT min(((1 / 1) % 1) * 1) from jit_basic;
+-- result:
+0.0
+-- !result
+SELECT min(((1 / 1) % 1) * null) from jit_basic;
+-- result:
+None
+-- !result
 DROP TABLE IF EXISTS `jit_basic`;
 -- result:
 -- !result

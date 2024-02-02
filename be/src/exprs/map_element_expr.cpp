@@ -14,6 +14,8 @@
 
 #include "exprs/map_element_expr.h"
 
+#include <gutil/strings/substitute.h>
+
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
@@ -30,7 +32,9 @@ namespace starrocks {
 
 class MapElementExpr final : public Expr {
 public:
-    explicit MapElementExpr(const TExprNode& node) : Expr(node) {}
+    explicit MapElementExpr(const TExprNode& node, const bool check_is_out_of_bounds) : Expr(node) {
+        _check_is_out_of_bounds = check_is_out_of_bounds;
+    }
 
     MapElementExpr(const MapElementExpr& m) = default;
     MapElementExpr(MapElementExpr&& m) noexcept = default;
@@ -74,6 +78,12 @@ public:
             auto map_idx = map_is_const ? 0 : i;
             auto key_idx = key_is_const ? 0 : i;
             bool has_equal = false;
+            bool has_null = false;
+            // For trino, null row's any element is still null
+            // We only check has_null when set _check_is_out_of_bounds = true
+            if (_check_is_out_of_bounds && map_nulls != nullptr && map_nulls->get_data()[map_idx]) {
+                has_null = true;
+            }
 
             // map is not null and not empty
             if ((map_nulls == nullptr || !map_nulls->get_data()[map_idx]) && offsets[map_idx + 1] > offsets[map_idx]) {
@@ -97,6 +107,11 @@ public:
                 }
             }
             if (!has_equal) {
+                if (_check_is_out_of_bounds && !has_null) {
+                    // row is not null, and specific key not found, return error
+                    return Status::InvalidArgument(
+                            strings::Substitute("Key not present in map: $0", key_column->debug_item(key_idx)));
+                }
                 res->append_nulls(1);
             }
         }
@@ -114,11 +129,18 @@ public:
     }
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new MapElementExpr(*this)); }
+
+private:
+    bool _check_is_out_of_bounds = false;
 };
 
 Expr* MapElementExprFactory::from_thrift(const TExprNode& node) {
     DCHECK_EQ(TExprNodeType::MAP_ELEMENT_EXPR, node.node_type);
-    return new MapElementExpr(node);
+    bool check_is_out_of_bounds = false;
+    if (node.__isset.check_is_out_of_bounds) {
+        check_is_out_of_bounds = node.check_is_out_of_bounds;
+    }
+    return new MapElementExpr(node, check_is_out_of_bounds);
 }
 
 } // namespace starrocks

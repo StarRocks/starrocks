@@ -52,6 +52,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.proto.TxnTypePB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.Backend;
@@ -77,6 +78,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
@@ -342,6 +344,20 @@ public class TransactionState implements Writable {
     // Therefore, a snapshot of this information is maintained here.
     private ConcurrentMap<String, TOlapTablePartition> partitionNameToTPartition = Maps.newConcurrentMap();
     private ConcurrentMap<Long, TTabletLocation> tabletIdToTTabletLocation = Maps.newConcurrentMap();
+
+    private final ReentrantReadWriteLock txnLock = new ReentrantReadWriteLock(true);
+
+    public void writeLock() {
+        if (Config.load_using_fine_granularity_lock_enabled) {
+            txnLock.writeLock().lock();
+        }
+    }
+
+    public void writeUnlock() {
+        if (Config.load_using_fine_granularity_lock_enabled) {
+            txnLock.writeLock().unlock();
+        }
+    }
 
     public TransactionState() {
         this.dbId = -1;
@@ -776,6 +792,10 @@ public class TransactionState implements Writable {
 
     public TTxnType getTxnType() {
         return sourceType == LoadJobSourceType.REPLICATION ? TTxnType.TXN_REPLICATION : TTxnType.TXN_NORMAL;
+    }
+
+    public TxnTypePB getTxnTypePB() {
+        return sourceType == LoadJobSourceType.REPLICATION ? TxnTypePB.TXN_REPLICATION : TxnTypePB.TXN_NORMAL;
     }
 
     public Map<Long, PublishVersionTask> getPublishVersionTasks() {

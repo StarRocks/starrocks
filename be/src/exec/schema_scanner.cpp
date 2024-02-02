@@ -34,6 +34,7 @@
 #include "exec/schema_scanner/schema_load_tracking_logs_scanner.h"
 #include "exec/schema_scanner/schema_loads_scanner.h"
 #include "exec/schema_scanner/schema_materialized_views_scanner.h"
+#include "exec/schema_scanner/schema_partitions_meta_scanner.h"
 #include "exec/schema_scanner/schema_pipe_files.h"
 #include "exec/schema_scanner/schema_pipes.h"
 #include "exec/schema_scanner/schema_routine_load_jobs_scanner.h"
@@ -184,6 +185,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SysFeLocks>();
     case TSchemaTableType::SCH_BE_DATACACHE_METRICS:
         return std::make_unique<SchemaBeDataCacheMetricsScanner>();
+    case TSchemaTableType::SCH_PARTITIONS_META:
+        return std::make_unique<SchemaPartitionsMetaScanner>();
     default:
         return std::make_unique<SchemaDummyScanner>();
     }

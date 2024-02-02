@@ -29,6 +29,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -42,6 +43,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.Materiali
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 
 import java.util.List;
 import java.util.Set;
@@ -57,8 +59,9 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
     }
 
     private boolean checkOlapScanWithoutTabletOrPartitionHints(OptExpression input) {
-        if (input.getOp() instanceof LogicalOlapScanOperator) {
-            LogicalOlapScanOperator scan = input.getOp().cast();
+        Operator op = input.getOp();
+        if (op instanceof LogicalOlapScanOperator) {
+            LogicalOlapScanOperator scan = op.cast();
             if (scan.hasTableHints()) {
                 return false;
             }
@@ -93,8 +96,9 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         try {
             return doTransform(queryExpression, context);
         } catch (Exception e) {
+            String errMsg = ExceptionUtils.getStackTrace(e);
             // for mv rewrite rules, do not disturb query when exception.
-            logMVRewrite(context, this, "mv rewrite exception, exception message:{}", e.toString());
+            logMVRewrite(context, this, "mv rewrite exception, exception message:{}", errMsg);
             return Lists.newArrayList();
         }
     }
@@ -112,6 +116,8 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             mvCandidateContexts.addAll(context.getCandidateMvs());
         }
         mvCandidateContexts.removeIf(x -> !x.prune(context, queryExpression));
+
+        // Order all candidate mvs by priority so can be rewritten fast.
         MaterializationContext.RewriteOrdering ordering =
                 new MaterializationContext.RewriteOrdering(queryExpression, context.getColumnRefFactory());
         mvCandidateContexts.sort(ordering);
@@ -135,6 +141,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         QueryMaterializationContext queryMaterializationContext = context.getQueryMaterializationContext();
         onPredicates = onPredicates.stream()
                 .map(p -> MvUtils.canonizePredicateForRewrite(queryMaterializationContext, p))
+                .map(predicate -> queryColumnRefRewriter.rewrite(predicate))
                 .collect(Collectors.toList());
         List<Table> queryTables = MvUtils.getAllTables(queryExpression);
         ConnectContext connectContext = ConnectContext.get();
@@ -206,7 +213,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             return null;
         }
         // only add valid predicates into query split predicate
-        Set<ScalarOperator> queryConjuncts = MvUtils.getAllValidPredicates(queryExpression);
+        Set<ScalarOperator> queryConjuncts = MvUtils.getPredicateForRewrite(queryExpression);
         if (!ConstantOperator.TRUE.equals(queryPartitionPredicate)) {
             logMVRewrite(mvContext.getOptimizerContext(), this, "Query compensate partition predicate:{}",
                     queryPartitionPredicate);

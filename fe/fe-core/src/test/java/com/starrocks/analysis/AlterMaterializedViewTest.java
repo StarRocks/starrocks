@@ -28,8 +28,6 @@ import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.RefreshSchemeClause;
-import com.starrocks.sql.ast.TableRenameClause;
-import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -53,6 +51,7 @@ public class AlterMaterializedViewTest {
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
         connectContext = AnalyzeTestUtil.getConnectContext();
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
         starRocksAssert = AnalyzeTestUtil.getStarRocksAssert();
         currentState = GlobalStateMgr.getCurrentState();
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv1\n" +
@@ -71,14 +70,18 @@ public class AlterMaterializedViewTest {
 
     @Test
     public void testRename() throws Exception {
-        String alterMvSql = "alter materialized view mv1 rename mv2;";
-        AlterMaterializedViewStmt alterMvStmt =
-                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-        TableName oldMvName = alterMvStmt.getMvName();
-        String newMvName = ((TableRenameClause) alterMvStmt.getAlterTableClause()).getNewTableName();
-        Assert.assertEquals("test", oldMvName.getDb());
-        Assert.assertEquals("mv1", oldMvName.getTbl());
-        Assert.assertEquals("mv2", newMvName);
+        MaterializedView mv1 = starRocksAssert.getMv("test", "mv1");
+        String taskDefinition = mv1.getTaskDefinition();
+        starRocksAssert.ddl("alter materialized view mv1 rename mv2;");
+        MaterializedView mv2 = starRocksAssert.getMv("test", "mv2");
+        Assert.assertEquals("insert overwrite `mv2` " +
+                "SELECT `test`.`t0`.`v1`, count(`test`.`t0`.`v2`) AS `count_c2`, sum(`test`.`t0`.`v3`) AS `sum_c3`\n" +
+                "FROM `test`.`t0`\n" +
+                "GROUP BY `test`.`t0`.`v1`", mv2.getTaskDefinition());
+
+        starRocksAssert.ddl("alter materialized view mv2 rename mv1;");
+        mv1 = starRocksAssert.getMv("test", "mv1");
+        Assert.assertEquals(taskDefinition, mv1.getTaskDefinition());
     }
 
     @Test(expected = AnalysisException.class)
@@ -111,16 +114,19 @@ public class AlterMaterializedViewTest {
         );
 
         String mvName = "mv1";
+        MaterializedView mv = starRocksAssert.getMv("test", mvName);
+        String taskDefinition = mv.getTaskDefinition();
         for (String refresh : refreshSchemes) {
             // alter
             String sql = String.format("alter materialized view %s refresh %s", mvName, refresh);
             starRocksAssert.ddl(sql);
 
             // verify
-            MaterializedView mv = starRocksAssert.getMv("test", mvName);
+            mv = starRocksAssert.getMv("test", mvName);
             String showCreateStmt = mv.getMaterializedViewDdlStmt(false);
             Assert.assertTrue(String.format("alter to %s \nbut got \n%s", refresh, showCreateStmt),
                     showCreateStmt.contains(refresh));
+            Assert.assertEquals(taskDefinition, mv.getTaskDefinition());
         }
     }
 
@@ -207,7 +213,6 @@ public class AlterMaterializedViewTest {
      */
     @Test
     public void testMVOnMVReload() throws Exception {
-        PlanTestBase.mockDml();
         MVActiveChecker checker = GlobalStateMgr.getCurrentState().getMvActiveChecker();
         checker.setStop();
 
@@ -316,7 +321,6 @@ public class AlterMaterializedViewTest {
 
     @Test
     public void testActiveChecker() throws Exception {
-        PlanTestBase.mockDml();
         MVActiveChecker checker = GlobalStateMgr.getCurrentState().getMvActiveChecker();
         checker.setStop();
 
@@ -369,7 +373,6 @@ public class AlterMaterializedViewTest {
 
     @Test
     public void testActiveGracePeriod() throws Exception {
-        PlanTestBase.mockDml();
         MVActiveChecker checker = GlobalStateMgr.getCurrentState().getMvActiveChecker();
         checker.setStop();
 

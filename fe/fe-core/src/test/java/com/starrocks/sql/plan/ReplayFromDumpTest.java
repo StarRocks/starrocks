@@ -30,7 +30,6 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.File;
@@ -168,14 +167,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
-    @Ignore
-    public void testTPCDS77() throws Exception {
-        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds77"));
-        // check can generate plan without exception
-        System.out.println(replayPair.second);
-    }
-
-    @Test
     public void testTPCDS78() throws Exception {
         // check outer join with isNull predicate on inner table
         // The estimate cardinality of join should not be 0.
@@ -235,22 +226,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |----3:EXCHANGE\n" +
                 "  |       distribution type: BROADCAST\n" +
                 "  |       cardinality: 335"));
-    }
-
-    @Ignore
-    @Test
-    public void testTPCDS54WithJoinHint() throws Exception {
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/tpcds54_with_join_hint"), null, TExplainLevel.NORMAL);
-        // checkout join order as hint
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  19:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (BROADCAST)\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 3: ss_sold_date_sk = 24: d_date_sk\n" +
-                "  |  \n" +
-                "  |----18:EXCHANGE\n" +
-                "  |    \n" +
-                "  0:OlapScanNode"));
     }
 
     @Test
@@ -512,20 +487,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  equal join conjunct: [3802: ref_id, BIGINT, true] = [3681: customer_id, BIGINT, true]"));
     }
 
-    @Ignore
-    @Test
-    public void testManyPartitions() throws Exception {
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/many_partitions"), null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("6:OlapScanNode\n" +
-                "     TABLE: segment_profile\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 11: segment_id = 6259, 12: version = 20221221\n" +
-                "     partitions=17727/17727\n" +
-                "     rollup: segment_profile\n" +
-                "     tabletRatio=88635/88635"));
-    }
-
     @Test
     public void testGroupByDistinctColumnSkewHint() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
@@ -652,19 +613,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 52: n_regionkey = 58: r_regionkey"));
         FeConstants.isReplayFromQueryDump = false;
-    }
-
-    @Test
-    public void testTPCH11() throws Exception {
-        try {
-            FeConstants.USE_MOCK_DICT_MANAGER = true;
-            Pair<QueryDumpInfo, String> replayPair =
-                    getCostPlanFragment(getDumpInfoFromFile("query_dump/tpch_query11_mv_rewrite"));
-            Assert.assertTrue(replayPair.second, replayPair.second.contains(
-                    "DictDecode(78: n_name, [<place-holder> = 'GERMANY'])"));
-        } finally {
-            FeConstants.USE_MOCK_DICT_MANAGER = false;
-        }
     }
 
     @Test

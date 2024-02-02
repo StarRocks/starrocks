@@ -31,9 +31,11 @@ public:
     Status replicate_snapshot(const TReplicateSnapshotRequest& request);
 
     void get_txn_related_tablets(TTransactionId transaction_id, TPartitionId partition_id,
-                                 std::vector<TTabletId>* tablet_ids);
+                                 std::vector<TTabletId>* tablet_ids) const;
 
-    void get_tablet_related_txns(TTabletId tablet_id, std::set<TTransactionId>* transaction_ids);
+    void get_tablet_related_txns(TTabletId tablet_id, std::set<TTransactionId>* transaction_ids) const;
+
+    bool has_txn(TTransactionId transaction_id) const;
 
     Status publish_txn(TTransactionId transaction_id, TPartitionId partition_id, const TabletSharedPtr& tablet,
                        int64_t version);
@@ -57,11 +59,11 @@ private:
                                      const std::string& tablet_snapshot_dir_path, Tablet* tablet);
 
     Status convert_snapshot_for_none_primary(const std::string& tablet_snapshot_path,
-                                             const std::unordered_map<uint32_t, uint32_t>& column_unique_id_map,
+                                             std::unordered_map<uint32_t, uint32_t>* column_unique_id_map,
                                              const TReplicateSnapshotRequest& request);
 
     Status convert_snapshot_for_primary(const std::string& tablet_snapshot_path,
-                                        const std::unordered_map<uint32_t, uint32_t>& column_unique_id_map,
+                                        std::unordered_map<uint32_t, uint32_t>* column_unique_id_map,
                                         const TReplicateSnapshotRequest& request);
 
     Status publish_snapshot(Tablet* tablet, const string& snapshot_dir, int64_t snapshot_version,

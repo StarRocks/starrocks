@@ -170,6 +170,17 @@ public class IcebergTable extends Table {
         return allPartitionColumns;
     }
 
+    public PartitionField getPartitionField(String partitionColumnName) {
+        List<PartitionField> allPartitionFields = getNativeTable().spec().fields();
+        Schema schema = this.getNativeTable().schema();
+        for (PartitionField field : allPartitionFields) {
+            if (getPartitionSourceName(schema, field).equalsIgnoreCase(partitionColumnName)) {
+                return field;
+            }
+        }
+        return null;
+    }
+
     public long nextPartitionId() {
         return partitionIdGen.getAndIncrement();
     }
@@ -385,6 +396,11 @@ public class IcebergTable extends Table {
         // for now, only support writing iceberg table with parquet file format
         return getNativeTable().properties().getOrDefault(DEFAULT_FILE_FORMAT, DEFAULT_FILE_FORMAT_DEFAULT)
                 .equalsIgnoreCase(PARQUET_FORMAT);
+    }
+
+    @Override
+    public boolean supportPreCollectMetadata() {
+        return true;
     }
 
     @Override

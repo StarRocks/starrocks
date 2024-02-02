@@ -117,7 +117,7 @@ public class PseudoClusterTest {
             stmt.execute("prepare stmt1 from select * from test where pk = ?");
             stmt.execute("prepare stmt3 from select 1");
             stmt.execute("set @i = 1");
-            stmt.executeUpdate("execute stmt1 using @i");
+            stmt.execute("execute stmt1 using @i");
             stmt.execute("execute stmt1 using @i");
             stmt.execute("execute stmt3");
             stmt.execute("select * from test where pk = ?", 1);
@@ -152,7 +152,7 @@ public class PseudoClusterTest {
             stmt.execute("prepare stmt1 from select * from test where pk = ?");
             stmt.execute("prepare stmt3 from select 1");
             stmt.execute("set @i = 1");
-            stmt.executeUpdate("execute stmt1 using @i");
+            stmt.execute("execute stmt1 using @i");
             stmt.execute("execute stmt1 using @i");
             stmt.execute("execute stmt3");
             stmt.execute("select * from test where pk = ?", 1);
@@ -232,7 +232,7 @@ public class PseudoClusterTest {
             }
 
             @Mock
-            public FilePathInfo allocateFilePath(String storageVolumeId, long tableId) {
+            public FilePathInfo allocateFilePath(String storageVolumeId, long dbId, long tableId) {
                 return pathInfo;
             }
         };

@@ -286,6 +286,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 默认值：10000000
 - 引入版本：v3.2
 
+#### enable_statistic_collect_on_first_load
+
+- 含义：当空表第一次导入数据时，是否自动触发统计信息采集。如果一张表包含多个分区，只要是某个空的分区第一次导入数据，都会触发该分区的统计信息采集。如果系统频繁创建新表并且导入数据，会存在一定内存和 CPU 开销。
+- 默认值：true
+- 引入版本：v3.1
+
 #### enable_local_replica_selection
 
 - 含义：是否选择本地副本进行查询。本地副本可以减少数据传输的网络时延。<br />如果设置为 true，优化器优先选择与当前 FE 相同 IP 的 BE 节点上的 tablet 副本。设置为 false 表示选择可选择本地或非本地副本进行查询。
@@ -1368,16 +1374,16 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 #### jdbc_connection_pool_size
 
-- 含义：访问JDBC Catalog, JDBC Connection Pool容量上限
+- 含义：访问 JDBC Catalog 时，JDBC Connection Pool 的容量上限。
 - 默认值：8
 
 #### jdbc_minimum_idle_connections
 
-- 含义：访问JDBC Catalog, JDBC Connection Pool中处于idle状态的最低数量
+- 含义：访问 JDBC Catalog 时，JDBC Connection Pool 中处于 idle 状态的连接最低数量。
 - 默认值：1
 
 #### jdbc_connection_idle_timeout_ms
 
-- 含义：访问JDBC Catalog, 超过这个时间的连接被认为是idle状态
+- 含义：访问 JDBC Catalog 时，连接建立的超时时长。超过参数取值时间的连接被认为是 idle 状态。
 - 单位：毫秒
 - 默认值：600000

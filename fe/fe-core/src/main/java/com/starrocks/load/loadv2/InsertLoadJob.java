@@ -46,6 +46,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.UserException;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.FailMsg;
@@ -53,12 +54,15 @@ import com.starrocks.load.FailMsg.CancelType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TReportExecStatusParams;
+import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TabletFailInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -223,6 +227,16 @@ public class InsertLoadJob extends LoadJob {
         } else {
             return true;
         }
+    }
+
+    @Override
+    protected List<TabletCommitInfo> getTabletCommitInfos() {
+        throw new RuntimeException(new NotImplementedException("Not implemented"));
+    }
+
+    @Override
+    protected List<TabletFailInfo> getTabletFailInfos() {
+        throw new RuntimeException(new NotImplementedException("Not implemented"));
     }
 
     @Override
