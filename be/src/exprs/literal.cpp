@@ -179,7 +179,6 @@ StatusOr<LLVMDatum> VectorizedLiteral::generate_ir_impl(ExprContext* context, JI
     return datum;
 }
 
-
 std::string VectorizedLiteral::debug_string() const {
     std::stringstream out;
     out << "Literal("
