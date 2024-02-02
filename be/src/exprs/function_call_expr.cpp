@@ -193,6 +193,8 @@ bool VectorizedFunctionCallExpr::ngram_bloom_filter(ExprContext* context, const 
     if (UNLIKELY(ngram_set.size() == 0)) {
         Slice needle;
         if (_fn_desc->name == "like" || _fn_desc->name == "regex") {
+            // not implemented right now
+            return true;
         } else {
             // checked in support_ngram_bloom_filter(size_t gram_num), so it 's safe to get const column's value
             const auto& needle_column = fn_ctx->get_constant_column(1);
