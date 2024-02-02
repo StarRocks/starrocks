@@ -164,16 +164,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
-<<<<<<< HEAD
-    public void testTPCDS77() throws Exception {
-        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds77"));
-        // check can generate plan without exception
-        System.out.println(replayPair.second);
-    }
-
-    @Test
-=======
->>>>>>> b91957fd1a ([UT] use parameterized test to split ut (#40567))
     public void testTPCDS78() throws Exception {
         // check outer join with isNull predicate on inner table
         // The estimate cardinality of join should not be 0.
