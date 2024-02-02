@@ -18,13 +18,13 @@
 #include <vector>
 
 #include "column/chunk.h"
+#include "column/column_helper.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
 #include "exprs/anyval_util.h"
 #include "exprs/expr.h"
 #include "exprs/function_context.h"
 #include "exprs/jit/jit_engine.h"
-#include "exprs/jit/jit_functions.h"
 #include "llvm/IR/IRBuilder.h"
 
 namespace starrocks {

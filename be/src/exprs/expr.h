@@ -226,22 +226,11 @@ public:
     ColumnRef* get_column_ref();
 
     /**
-     * @brief For JIT compile, generate IR code for this expr.
-     * This function primarily generates generic union null code and calls the 'generate_ir_impl' method.
-     */
-    [[nodiscard]] virtual StatusOr<LLVMDatum> generate_ir(ExprContext* context, const llvm::Module& module,
-                                                          llvm::IRBuilder<>& b,
-                                                          const std::vector<LLVMDatum>& datums) const final;
-
-    /**
      * @brief For JIT compile, generate specific evaluation IR code for this expr.
      * Its internal logic is similar to the 'evaluate_checked' function.
      */
-    [[nodiscard]] virtual StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module,
-                                                               llvm::IRBuilder<>& b,
-                                                               const std::vector<LLVMDatum>& datums) const {
-        return Status::NotSupported("JIT expr not supported");
-    }
+
+    virtual StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx);
 
     // Return true if this expression supports JIT compilation.
     virtual bool is_compilable() const { return false; }
@@ -251,10 +240,6 @@ public:
     // This function will collect all uncompiled expressions in this expression tree.
     // The uncompiled expressions are those expressions which are not supported by JIT, it will become the input of JIT function.
     void get_uncompilable_exprs(std::vector<Expr*>& exprs);
-
-    // This function collects all JIT-related expressions in this expression tree in post-order.
-    // JIT-related expressions include all compilable expressions and the non-compilable expressions that serve as inputs.
-    void get_jit_exprs(std::vector<Expr*>& exprs);
 
     // This method attempts to traverse the entire expression tree from the current expression downwards, seeking to replace expressions with JITExprs.
     // This method searches from top to bottom for compilable expressions.

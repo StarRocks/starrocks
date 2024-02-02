@@ -36,13 +36,11 @@ WITH BROKER
 
 ### database_name 和 label_name
 
-`label_name` 指定导入作业的标签。
+`label_name` 指定导入作业的标签。命名要求参见[系统限制](../../../reference/System_limit.md)。
 
 `database_name` 为可选，指定目标 StarRocks 表所在的数据库。
 
 每个导入作业都对应一个在该数据库内唯一的标签。通过标签，可以查看对应导入作业的执行情况，并防止导入相同的数据。导入作业的状态为 **FINISHED** 时，其标签不可再复用给其他导入作业。导入作业的状态为 **CANCELLED** 时，其标签可以复用给其他导入作业，但通常都是用来重试同一个导入作业（即使用同一个标签导入相同的数据）以实现数据“精确一次 (Exactly-Once)”语义。
-
-有关标签的命名规范，请参见[系统限制](../../../reference/System_limit.md)。
 
 ### data_desc
 

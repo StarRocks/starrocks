@@ -130,15 +130,18 @@ public:
                (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
     }
 
-    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
-                                         const std::vector<LLVMDatum>& datums) const override {
+    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
+        std::vector<LLVMDatum> datums(2);
+        ASSIGN_OR_RETURN(datums[0], _children[0]->generate_ir_impl(context, jit_ctx))
+        ASSIGN_OR_RETURN(datums[1], _children[1]->generate_ir_impl(context, jit_ctx))
+
         if constexpr (lt_is_decimal<Type>) {
             // TODO(yueyang): Implement decimal arithmetic in LLVM IR.
             return Status::NotSupported("JIT of decimal arithmetic not support");
         } else {
             using ArithmeticOp = ArithmeticBinaryOperator<OP, Type>;
             using CppType = RunTimeCppType<Type>;
-            return ArithmeticOp::template generate_ir<CppType>(context, module, b, datums);
+            return ArithmeticOp::template generate_ir<CppType>(context, jit_ctx->module, jit_ctx->builder, datums);
         }
     }
 
@@ -196,15 +199,18 @@ public:
                (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
     }
 
-    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
-                                         const std::vector<LLVMDatum>& datums) const override {
+    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
+        std::vector<LLVMDatum> datums(2);
+        ASSIGN_OR_RETURN(datums[0], _children[0]->generate_ir_impl(context, jit_ctx))
+        ASSIGN_OR_RETURN(datums[1], _children[1]->generate_ir_impl(context, jit_ctx))
+
         if constexpr (lt_is_decimal<Type>) {
             // TODO(yueyang): Implement decimal arithmetic in LLVM IR.
             return Status::NotSupported("JIT of decimal arithmetic not support");
         } else {
             using ArithmeticOp = ArithmeticBinaryOperator<DivOp, Type>;
             using CppType = RunTimeCppType<Type>;
-            return ArithmeticOp::template generate_ir<CppType>(context, module, b, datums);
+            return ArithmeticOp::template generate_ir<CppType>(context, jit_ctx->module, jit_ctx->builder, datums);
         }
     }
 
@@ -271,15 +277,18 @@ public:
                (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
     }
 
-    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
-                                         const std::vector<LLVMDatum>& datums) const override {
+    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
+        std::vector<LLVMDatum> datums(2);
+        ASSIGN_OR_RETURN(datums[0], _children[0]->generate_ir_impl(context, jit_ctx))
+        ASSIGN_OR_RETURN(datums[1], _children[1]->generate_ir_impl(context, jit_ctx))
+
         if constexpr (lt_is_decimal<Type>) {
             // TODO(yueyang): Implement decimal arithmetic in LLVM IR.
             return Status::NotSupported("JIT of decimal arithmetic not support");
         } else {
             using ArithmeticOp = ArithmeticBinaryOperator<ModOp, Type>;
             using CppType = RunTimeCppType<Type>;
-            return ArithmeticOp::template generate_ir<CppType>(context, module, b, datums);
+            return ArithmeticOp::template generate_ir<CppType>(context, jit_ctx->module, jit_ctx->builder, datums);
         }
     }
 
@@ -311,13 +320,10 @@ public:
                type().debug_string();
     }
 
-    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
-                                         const std::vector<LLVMDatum>& datums) const override {
-        auto* l = datums[0].value;
-
+    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
+        ASSIGN_OR_RETURN(auto datum, _children[0]->generate_ir_impl(context, jit_ctx))
         using ArithmeticBitNot = ArithmeticUnaryOperator<BitNotOp, Type>;
-        LLVMDatum datum(b);
-        datum.value = ArithmeticBitNot::generate_ir(b, l);
+        datum.value = ArithmeticBitNot::generate_ir(jit_ctx->builder, datum.value);
         return datum;
     }
 
@@ -350,13 +356,16 @@ public:
                (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
     }
 
-    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
-                                         const std::vector<LLVMDatum>& datums) const override {
+    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
+        std::vector<LLVMDatum> datums(2);
+        ASSIGN_OR_RETURN(datums[0], _children[0]->generate_ir_impl(context, jit_ctx))
+        ASSIGN_OR_RETURN(datums[1], _children[1]->generate_ir_impl(context, jit_ctx))
+
         using ArithmeticOp = ArithmeticBinaryOperator<OP, Type>;
         using CppType = RunTimeCppType<Type>;
         // TODO(Yueyang): handle TYPE_BIGINT.
-        return ArithmeticOp::template generate_ir<CppType, RunTimeCppType<TYPE_BIGINT>, CppType>(context, module, b,
-                                                                                                 datums);
+        return ArithmeticOp::template generate_ir<CppType, RunTimeCppType<TYPE_BIGINT>, CppType>(
+                context, jit_ctx->module, jit_ctx->builder, datums);
     }
 
     std::string debug_string() const override {

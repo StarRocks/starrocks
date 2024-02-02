@@ -1146,17 +1146,16 @@ public:
                (is_nullable() ? "n:" : "") + type().debug_string();
     }
 
-    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
-                                         const std::vector<LLVMDatum>& datums) const override {
-        auto* l = datums[0].value;
+    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
+        ASSIGN_OR_RETURN(auto datum, _children[0]->generate_ir_impl(context, jit_ctx))
+        auto* l = datum.value;
+        auto& b = jit_ctx->builder;
         if constexpr (FromType == TYPE_JSON || ToType == TYPE_JSON) {
             return Status::NotSupported("JIT casting does not support JSON");
         } else if constexpr (lt_is_decimal<FromType> || lt_is_decimal<ToType>) {
             return Status::NotSupported("JIT casting does not support decimal");
         } else {
-            LLVMDatum datum(b);
             ASSIGN_OR_RETURN(datum.value, IRHelper::cast_to_type(b, l, FromType, ToType));
-            datum.null_flag = datums[0].null_flag;
             if constexpr ((lt_is_integer<FromType> || lt_is_float<FromType>)&&(lt_is_integer<ToType> ||
                                                                                lt_is_float<ToType>)) {
                 typedef RunTimeCppType<FromType> FromCppType;

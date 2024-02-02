@@ -36,7 +36,7 @@ ZoneMap 索引存储了每块数据统计信息，统计信息包括 Min 最大�
 
 ## 手动创建的索引
 
-如果查询条件中的列不是前缀字段，您可以为这一列手动创建 Bitmap 索引或者 Bloom filter 索引来提高查询效率。 
+如果查询条件中的列不是前缀字段，您可以为这一列手动创建 Bitmap 索引或者 Bloom filter 索引来提高查询效率。
 
 ### [Bitmap 索引](./Bitmap_index.md)
 

@@ -1496,7 +1496,7 @@ showStatusStatement
 
 showTabletStatement
     : SHOW TABLET INTEGER_VALUE
-    | SHOW TABLET FROM qualifiedName partitionNames? (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
+    | SHOW (TABLET | TABLETS) FROM qualifiedName partitionNames? (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
     ;
 
 showTransactionStatement
@@ -2250,7 +2250,7 @@ expressionSingleton
     ;
 
 expression
-    : booleanExpression                                                                   #expressionDefault
+    : (BINARY)? booleanExpression                                                         #expressionDefault
     | NOT expression                                                                      #logicalNot
     | left=expression operator=(AND|LOGICAL_AND) right=expression                         #logicalBinary
     | left=expression operator=(OR|LOGICAL_OR) right=expression                           #logicalBinary
@@ -2786,7 +2786,7 @@ nonReserved
     | SAMPLE | SCHEDULER | SECOND | SECURITY | SEPARATOR | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SQLBLACKLIST | START
     | STREAM | SUM | STATUS | STOP | SKIP_HEADER | SWAP
     | STORAGE| STRING | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM_TIME
-    | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TIMES | TRANSACTION | TRACE
+    | TABLES | TABLET | TABLETS | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TIMES | TRANSACTION | TRACE
     | TRIM_SPACE
     | TRIGGERS | TRUNCATE | TYPE | TYPES
     | UNBOUNDED | UNCOMMITTED | UNSET | UNINSTALL | USAGE | USER | USERS | UNLOCK

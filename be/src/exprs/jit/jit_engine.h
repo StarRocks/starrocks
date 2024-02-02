@@ -22,7 +22,8 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
-#include "exprs/jit/jit_functions.h"
+#include "exprs/expr_context.h"
+#include "exprs/jit/ir_helper.h"
 #include "llvm/ExecutionEngine/JITSymbol.h"
 #include "llvm/ExecutionEngine/Orc/LLJIT.h"
 #include "llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h"
@@ -75,6 +76,7 @@ public:
     Cache* get_func_cache() const { return _func_cache; }
 
 private:
+    static Status generate_scalar_function_ir(ExprContext* context, llvm::Module& module, Expr* expr);
     /**
      * @brief Sets up an LLVM module by specifying its data layout and target triple.
      * The data layout guides the compiler on how to arrange data.
