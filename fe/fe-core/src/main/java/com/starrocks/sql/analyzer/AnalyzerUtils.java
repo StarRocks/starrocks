@@ -566,7 +566,7 @@ public class AnalyzerUtils {
 
         protected void doVisitSelect(SelectRelation node) {
             Relation relation = node.getRelation();
-            if (node.getOutputExpression().stream().allMatch(expr -> expr instanceof FieldReference)) {
+            if (node.getOutputExpression().stream().allMatch(FieldReference.class::isInstance)) {
                 Set<TableName> starRelationNames = Sets.newHashSet();
                 fillStarRelation(relation, starRelationNames);
                 starRelationNames.forEach(name -> put(name, "*"));

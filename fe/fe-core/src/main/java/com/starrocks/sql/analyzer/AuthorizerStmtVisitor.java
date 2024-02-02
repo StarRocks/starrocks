@@ -19,6 +19,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
@@ -87,6 +88,7 @@ import com.starrocks.sql.ast.CancelCompactionStmt;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
+import com.starrocks.sql.ast.ColumnAssignment;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
@@ -299,8 +301,8 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
                         // no need to check COLUMN SELECT privilege when user already has COLUMN INSERT privilege
                         Set<String> usedCols = allTouchedColumns.get(statement.getTableName());
                         if (usedCols.contains("*")) {
-                            usedCols = statement.getTargetTable().getColumns().stream()
-                                    .map(column -> column.getName()).collect(Collectors.toSet());
+                            usedCols = statement.getTargetTable().getColumns().stream().map(Column::getName)
+                                    .collect(Collectors.toSet());
                             allTouchedColumns.put(statement.getTableName(), usedCols);
                         }
                         if (columnNames.contains("*")) {
@@ -377,8 +379,8 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
                 updatePrivLevel = PrivilegeLevel.TABLE;
             } catch (AccessDeniedException e) {
                 try {
-                    assignmentColumns = statement.getAssignments().stream()
-                            .map(columnAssignment -> columnAssignment.getColumn()).collect(Collectors.toSet());
+                    assignmentColumns = statement.getAssignments().stream().map(ColumnAssignment::getColumn)
+                            .collect(Collectors.toSet());
                     Authorizer.checkColumnsAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                             statement.getTableName(), assignmentColumns, PrivilegeType.UPDATE);
                     updatePrivLevel = PrivilegeLevel.COLUMN;
@@ -406,8 +408,8 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
                     if (tableColumns.containsKey(statement.getTableName())) {
                         Set<String> usedCols = tableColumns.get(statement.getTableName());
                         if (usedCols.contains("*")) {
-                            usedCols = statement.getTable().getColumns().stream()
-                                    .map(column -> column.getName()).collect(Collectors.toSet());
+                            usedCols = statement.getTable().getColumns().stream().map(Column::getName)
+                                    .collect(Collectors.toSet());
                             tableColumns.put(statement.getTableName(), usedCols);
                         }
                         usedCols.removeAll(assignmentColumns);
