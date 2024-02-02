@@ -178,7 +178,38 @@
       "link": {"type": "doc", "id": "integrations/integrations"},
       "items": [
         "integrations/authenticate_to_aws_resources",
+<<<<<<< HEAD
         "integrations/other_integrations/intro"
+=======
+        "integrations/authenticate_to_azure_storage",
+        "integrations/authenticate_to_gcs",
+        {
+          "type": "category",
+          "label": "BI Tools",
+          "link": {"type": "doc", "id": "cover_pages/bi_tools"},
+          "items": [
+            "integrations/BI_integrations/Superset",
+            "integrations/BI_integrations/FineBI",
+            "integrations/BI_integrations/Hex",
+            "integrations/BI_integrations/Querybook",
+            "integrations/BI_integrations/QuickBI",
+            "integrations/BI_integrations/Tableau_Desktop"
+          ]
+        },
+        {
+          "type": "category",
+          "label": "IDE Tools",
+          "link": {"type": "doc", "id": "cover_pages/ide_tools"},
+          "items": [
+            "integrations/IDE_integrations/DataGrip",
+            "integrations/IDE_integrations/Dataphin",
+            "integrations/IDE_integrations/DBeaver",
+            "integrations/IDE_integrations/jupysql"
+          ]
+        },
+        "integrations/hive_bitmap_udf",
+        "integrations/other_integrations/intro"   
+>>>>>>> d63686b24a ([Doc] Add doc for hive bitmap udf (backport #40108) (#40533))
       ]
     },
     {
@@ -727,6 +758,36 @@
       "link": {"type": "doc", "id": "integrations/integrations"},
       "items": [
         "integrations/authenticate_to_aws_resources",
+<<<<<<< HEAD
+=======
+        "integrations/authenticate_to_azure_storage",
+        "integrations/authenticate_to_gcs",
+        {
+          "type": "category",
+          "label": "BI 集成",
+          "link": {"type": "doc", "id": "cover_pages/bi_tools"},
+          "items": [
+            "integrations/BI_integrations/Superset",
+            "integrations/BI_integrations/FineBI",
+            "integrations/BI_integrations/Hex",
+            "integrations/BI_integrations/Querybook",
+            "integrations/BI_integrations/QuickBI",
+            "integrations/BI_integrations/Tableau_Desktop"
+          ]
+        },
+        {
+          "type": "category",
+          "label": "IDE 集成",
+          "link": {"type": "doc", "id": "cover_pages/ide_tools"},
+          "items": [
+            "integrations/IDE_integrations/DataGrip",
+            "integrations/IDE_integrations/Dataphin",
+            "integrations/IDE_integrations/DBeaver",
+            "integrations/IDE_integrations/jupysql"
+          ]
+        },
+        "integrations/hive_bitmap_udf",
+>>>>>>> d63686b24a ([Doc] Add doc for hive bitmap udf (backport #40108) (#40533))
         "integrations/other_integrations/intro"
       ]
     },
