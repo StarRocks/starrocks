@@ -116,7 +116,7 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
         num_rows = ptr->num_rows();
     }
     auto result_column = ColumnHelper::create_column(type(), is_nullable(), false, num_rows);
-    if(num_rows == 0) {
+    if (num_rows == 0) {
         return result_column;
     }
     Columns backup_args;
