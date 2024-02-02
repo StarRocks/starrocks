@@ -34,6 +34,19 @@ displayed_sidebar: "Chinese"
 
 ### 1.1
 
+### 1.1.2
+
+**新增特性**
+
+- 支持 Spark 的版本为 3.5。[#89](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/89)
+- 通过 Spark SQL 读取 StarRocks 时支持 `starrocks.filter.query` 参数。[#92](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/92)
+- 支持读取 StarRocks 中 JSON 类型的列。[#100](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/100)
+
+**功能优化**
+
+- 优化报错信息。读取 StarRocks 时如果在 `starrocks.columns` 指定 StarRocks 表中不存在的列，则报错信息会明确提示不存在的列名。[#97](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/97)
+- Spark connector 通过 HTTP 向 StarRocks 的 FE 请求查询计划时出现异常的时候，FE 会把异常信息通过 HTTP 本身的 status 和 entity 返回给 Spark connector。[#98](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/98)
+
 #### 1.1.1
 
 本版本发布主要包括如下新增特性和功能优化，涉及导入数据到 StarRocks。
