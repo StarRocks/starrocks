@@ -1834,8 +1834,11 @@ Status SegmentIterator::_init_inverted_index_iterators() {
 Status SegmentIterator::_apply_inverted_index() {
     DCHECK_EQ(_predicate_columns, _opts.predicates.size());
     RETURN_IF(!_has_inverted_index, Status::OK());
+    SCOPED_RAW_TIMER(&_opts.stats->gin_index_filter_timer);
+
 
     roaring::Roaring row_bitmap = range2roaring(_scan_range);
+    size_t input_rows = row_bitmap.cardinality();
     std::vector<const ColumnPredicate*> erased_preds;
 
     std::unordered_map<ColumnId, ColumnId> cid_2_fid;
@@ -1851,9 +1854,7 @@ Status SegmentIterator::_apply_inverted_index() {
         const auto& it = cid_2_fid.find(cid);
         RETURN_IF(it == cid_2_fid.end(),
                   Status::InternalError(strings::Substitute("No fid can be mapped by cid $0", cid)));
-        const FieldPtr& fieldPtr = _schema.field(it->second);
-        std::string_view sv_c = fieldPtr->name();
-        std::string column_name = {sv_c.begin(), sv_c.end()};
+        std::string column_name(_schema.field(it->second)->name());
         for (const ColumnPredicate* pred : pred_list) {
             Status res = pred->seek_inverted_index(column_name, _inverted_index_iterators[cid], &row_bitmap);
             if (res.ok()) {
@@ -1872,6 +1873,7 @@ Status SegmentIterator::_apply_inverted_index() {
         pred_list.erase(std::find(pred_list.begin(), pred_list.end(), pred));
     }
 
+    _opts.stats->rows_gin_filtered += input_rows - _scan_range.span_size();
     return Status::OK();
 }
 
