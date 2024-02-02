@@ -46,6 +46,8 @@ QueryContext::QueryContext()
     _sub_plan_query_statistics_recvr = std::make_shared<QueryStatisticsRecvr>();
     _stream_epoch_manager = std::make_shared<StreamEpochManager>();
     _lifetime_sw.start();
+
+    std::cout << "query context start" << std::endl;
 }
 
 QueryContext::~QueryContext() noexcept {
@@ -74,6 +76,8 @@ QueryContext::~QueryContext() noexcept {
     if (_connector_scan_mem_tracker != nullptr) {
         _connector_scan_mem_tracker->release_without_root();
     }
+
+    std::cout << "query context end" << std::endl;
 }
 
 void QueryContext::count_down_fragments() {

@@ -39,7 +39,9 @@ public:
               _export_sink_buffer(std::move(std::move(export_sink_buffer))),
               _num_sinkers(num_sinkers) {}
 
-    ~ExportSinkOperator() override = default;
+    ~ExportSinkOperator() override {
+        std::cout << "destruct ExportSinkOpertor" << std::endl;
+    }
 
     Status prepare(RuntimeState* state) override;
 
