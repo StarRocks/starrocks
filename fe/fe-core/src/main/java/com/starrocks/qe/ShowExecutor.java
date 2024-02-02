@@ -632,7 +632,9 @@ public class ShowExecutor {
             // refresh_type
             mvStatus.setRefreshType("ROLLUP");
             // is_active
-            mvStatus.setActive(true);
+            mvStatus.setActive(!mvMeta.isInActive());
+            // inactive_reason
+            mvStatus.setInactiveReason(Optional.ofNullable(mvMeta.getInactiveReason()).orElse(""));
             // partition type
             if (olapTable.getPartitionInfo() != null && olapTable.getPartitionInfo().getType() != null) {
                 mvStatus.setPartitionType(olapTable.getPartitionInfo().getType().toString());

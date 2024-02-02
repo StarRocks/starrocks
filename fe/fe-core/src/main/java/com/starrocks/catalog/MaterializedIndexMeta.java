@@ -47,6 +47,8 @@ import com.starrocks.qe.OriginStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TStorageType;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -58,6 +60,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
+    private static final Logger LOG = LogManager.getLogger(MaterializedIndexMeta.class);
 
     @SerializedName(value = "indexId")
     private long indexId;
@@ -87,6 +90,11 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     private String viewDefineSql;
     @SerializedName(value = "isColocateMVIndex")
     private boolean isColocateMVIndex = false;
+
+    @SerializedName(value = "isInactive")
+    private boolean isInactive = false;
+    @SerializedName(value = "inactiveReason")
+    private String inactiveReason;
 
     private Expr whereClause;
     private Set<Long> updateSchemaBackendId = new HashSet<>();
@@ -262,6 +270,20 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         }
     }
 
+    public void setInactiveAndReason(String reason) {
+        LOG.warn("set {} to inactive because of {}", indexId, reason);
+        this.isInactive = true;
+        this.inactiveReason = reason;
+    }
+
+    public boolean isInActive() {
+        return isInactive;
+    }
+
+    public String getInactiveReason() {
+        return inactiveReason;
+    }
+
     @Override
     public int hashCode() {
         return Long.hashCode(indexId);
@@ -291,6 +313,8 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         indexMeta.viewDefineSql = this.viewDefineSql;
         indexMeta.isColocateMVIndex = this.isColocateMVIndex;
         indexMeta.whereClause = this.whereClause;
+        indexMeta.isInactive = this.isInactive;
+        indexMeta.inactiveReason = this.inactiveReason;
         return indexMeta;
     }
 
@@ -319,6 +343,9 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
             return false;
         }
         if (indexMeta.keysType != this.keysType) {
+            return false;
+        }
+        if (indexMeta.isInactive != this.isInactive) {
             return false;
         }
         if (indexMeta.whereClause != null && this.whereClause == null) {

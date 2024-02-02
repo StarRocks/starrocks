@@ -506,7 +506,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * active the materialized again & reload the state.
      */
     public void setActive() {
-        LOG.warn("set {} to active", name);
+        LOG.info("set {} to active", name);
         this.active = true;
         this.inactiveReason = null;
         // reset mv rewrite cache when it is active again
@@ -892,6 +892,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     @Override
     public void onReload() {
         try {
+            super.onReload();
+
             boolean desiredActive = active;
             active = false;
             boolean reloadActive = onReloadImpl();
@@ -996,11 +998,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 );
             }
         }
-        analyzePartitionInfo();
         return res;
     }
 
-    private void analyzePartitionInfo() {
+    @Override
+    protected void analyzePartitionInfo() {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
 
         if (partitionInfo instanceof SinglePartitionInfo) {
