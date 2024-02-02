@@ -227,7 +227,7 @@ public class CatalogRecycleBinTest {
         TabletInvertedIndex invertedIndex = new TabletInvertedIndex();
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentInvertedIndex();
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
                 result = invertedIndex;
             }
         };
@@ -300,7 +300,7 @@ public class CatalogRecycleBinTest {
         TabletInvertedIndex invertedIndex = new TabletInvertedIndex();
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentInvertedIndex();
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
                 result = invertedIndex;
             }
         };
@@ -370,7 +370,7 @@ public class CatalogRecycleBinTest {
         };
         new Expectations() {
             {
-                globalStateMgr.onEraseDatabase(anyLong);
+                globalStateMgr.getLocalMetastore().onEraseDatabase(anyLong);
                 minTimes = 0;
                 globalStateMgr.getEditLog();
                 minTimes = 0;
@@ -507,7 +507,7 @@ public class CatalogRecycleBinTest {
         };
         new Expectations() {
             {
-                globalStateMgr.onErasePartition((Partition) any);
+                globalStateMgr.getLocalMetastore().onErasePartition((Partition) any);
                 minTimes = 0;
 
                 globalStateMgr.getEditLog();
@@ -587,7 +587,7 @@ public class CatalogRecycleBinTest {
         };
         new Expectations() {
             {
-                globalStateMgr.onErasePartition((Partition) any);
+                globalStateMgr.getLocalMetastore().onErasePartition((Partition) any);
                 minTimes = 0;
 
                 globalStateMgr.getEditLog();

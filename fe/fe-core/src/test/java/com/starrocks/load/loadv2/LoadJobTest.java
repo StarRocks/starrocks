@@ -151,7 +151,7 @@ public class LoadJobTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentWarehouseMgr();
+                GlobalStateMgr.getCurrentState().getWarehouseMgr();
                 minTimes = 0;
                 result = warehouseMgr;
 

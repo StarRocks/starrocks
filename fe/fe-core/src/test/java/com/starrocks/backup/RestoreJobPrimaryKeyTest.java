@@ -159,10 +159,6 @@ public class RestoreJobPrimaryKeyTest {
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
-
-                GlobalStateMgr.getCurrentSystemInfo();
-                minTimes = 0;
-                result = systemInfoService;
             }
         };
 

@@ -85,7 +85,7 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
 
             finishedSQLNum++;
             analyzeStatus.setProgress(finishedSQLNum * 100 / totalCollectSQL);
-            GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
         }
     }
 

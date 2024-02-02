@@ -111,7 +111,7 @@ public class LakeBackupJob extends BackupJob {
     protected void prepareSnapshotTask(PhysicalPartition partition, Table tbl, Tablet tablet, MaterializedIndex index,
                                        long visibleVersion, int schemaHash) {
         try {
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo()
+            Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                     .getBackend(((LakeTablet) tablet).getPrimaryComputeNodeId());
             LakeTableSnapshotInfo snapshotInfo = new LakeTableSnapshotInfo(dbId,
                     tbl.getId(), partition.getId(), index.getId(), tablet.getId(),
@@ -134,7 +134,7 @@ public class LakeBackupJob extends BackupJob {
     @Override
     protected void sendSnapshotRequests() {
         for (Map.Entry<SnapshotInfo, LockTabletMetadataRequest> entry : lockRequests.entrySet()) {
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(entry.getKey().getBeId());
+            Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(entry.getKey().getBeId());
             LakeService lakeService = null;
             try {
                 lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
@@ -157,7 +157,7 @@ public class LakeBackupJob extends BackupJob {
             request.tabletId = info.getTabletId();
             request.version = ((LakeTableSnapshotInfo) info).getVersion();
             request.expireTime = (createTime + timeoutMs) / 1000;
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(info.getBeId());
+            Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(info.getBeId());
             LakeService lakeService = null;
             try {
                 lakeService = BrpcProxy.getLakeService(backend.getHost(),
@@ -186,7 +186,7 @@ public class LakeBackupJob extends BackupJob {
             snapshot.destPath = repo.getRepoTabletPathBySnapshotInfo(label, info);
             request.snapshots.put(lakeInfo.getTabletId(), snapshot);
         }
-        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
+        Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(beId);
         unfinishedTaskIds.put(beId, 1L);
         uploadRequests.put(backend, request);
     }

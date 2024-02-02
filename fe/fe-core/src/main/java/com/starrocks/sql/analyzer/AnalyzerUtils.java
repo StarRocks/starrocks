@@ -843,7 +843,7 @@ public class AnalyzerUtils {
         } else if (StatsConstants.DEFAULT_ALL_ID == tableId && StatsConstants.DEFAULT_ALL_ID != dbId) {
             getTableNamesInDb(tableNames, dbId);
         } else {
-            List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
+            List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
             for (Long id : dbIds) {
                 getTableNamesInDb(tableNames, id);
             }

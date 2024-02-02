@@ -115,7 +115,7 @@ public class CreateTableAutoTabletTest {
         } finally {
             db.readUnlock();
         }
-        Assert.assertEquals(GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size(), 10);
+        Assert.assertEquals(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds().size(), 10);
         Assert.assertEquals(bucketNum, 20);
     }
 
@@ -257,7 +257,7 @@ public class CreateTableAutoTabletTest {
 
         Long dbId = db.getId();
         String fullGroupName = dbId + "_g1";
-        ColocateTableIndex index = GlobalStateMgr.getCurrentColocateIndex();
+        ColocateTableIndex index = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         ColocateGroupSchema groupSchema = index.getGroupSchema(fullGroupName);
         Assert.assertEquals(groupSchema.getBucketsNum(), 10);
     }

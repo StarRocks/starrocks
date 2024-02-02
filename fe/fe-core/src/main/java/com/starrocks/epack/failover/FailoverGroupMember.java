@@ -132,7 +132,7 @@ public class FailoverGroupMember {
         NetworkAddress leaderAddress = NetworkAddress.getLocalLeaderAddress();
 
         Set<NetworkAddress> addresses = new HashSet<>();
-        List<Frontend> frontends = GlobalStateMgr.getServingState().getFrontends(null);
+        List<Frontend> frontends = GlobalStateMgr.getServingState().getNodeMgr().getFrontends(null);
         for (Frontend frontend : frontends) {
             addresses.add(new NetworkAddress(frontend.getHost(), frontend.getRpcPort()));
         }

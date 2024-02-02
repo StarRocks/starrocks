@@ -271,7 +271,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
             if (ConnectContext.get() != null) {
                 currentWh = ConnectContext.get().getCurrentWarehouseId();
             }
-            return GlobalStateMgr.getCurrentWarehouseMgr().
+            return GlobalStateMgr.getCurrentState().getWarehouseMgr().
                     getNextComputeNodeIndexFromWarehouse(currentWh).getAndIncrement();
         }
         return NEXT_COMPUTE_NODE_INDEX.getAndIncrement();
@@ -288,7 +288,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
             throws NonRecoverableException {
         if (RunMode.isSharedDataMode()) {
             try {
-                return GlobalStateMgr.getCurrentWarehouseMgr().
+                return GlobalStateMgr.getCurrentState().getWarehouseMgr().
                         getComputeNodesFromAvailableWarehouse(warehouseId);
             } catch (WarehouseUnavailableException e) {
                 throw new NonRecoverableException(e.getMessage());

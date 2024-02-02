@@ -86,7 +86,7 @@ public class ShowDataAction extends RestBaseAction {
     @Override
     public void execute(BaseRequest request, BaseResponse response) {
         String dbName = request.getSingleParameter("db");
-        ConcurrentHashMap<String, Database> fullNameToDb = GlobalStateMgr.getCurrentState().getFullNameToDb();
+        ConcurrentHashMap<String, Database> fullNameToDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getFullNameToDb();
         long totalSize = 0;
         if (dbName != null) {
             Database db = fullNameToDb.get(dbName);

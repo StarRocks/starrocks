@@ -68,7 +68,7 @@ public class MetadataViewer {
         List<List<String>> result = Lists.newArrayList();
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
 
         Database db = globalStateMgr.getDb(dbName);
         if (db == null) {
@@ -199,7 +199,7 @@ public class MetadataViewer {
         List<List<String>> result = Lists.newArrayList();
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
 
         Database db = globalStateMgr.getDb(dbName);
         if (db == null) {

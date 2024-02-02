@@ -239,7 +239,7 @@ public class Pipe implements GsonPostProcessable {
         }
         LOG.info("pipe {} start to recover", name);
 
-        GlobalTransactionMgr txnMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+        GlobalTransactionMgr txnMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         long dbId = getPipeId().getDbId();
         List<PipeFileRecord> loadingFiles =
                 pipeSource.getFileListRepo().listFilesByState(FileListRepo.PipeFileState.LOADING, -1);

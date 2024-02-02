@@ -91,16 +91,16 @@ public class BootstrapFinishAction extends RestBaseAction {
                 }
 
                 if (result.status == ActionStatus.OK) {
-                    if (clusterId != GlobalStateMgr.getCurrentState().getClusterId()) {
+                    if (clusterId != GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId()) {
                         result.status = ActionStatus.FAILED;
-                        result.msg = "invalid cluster id: " + GlobalStateMgr.getCurrentState().getClusterId();
+                        result.msg = "invalid cluster id: " + GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId();
                     }
                 }
 
                 if (result.status == ActionStatus.OK) {
-                    if (!token.equals(GlobalStateMgr.getCurrentState().getToken())) {
+                    if (!token.equals(GlobalStateMgr.getCurrentState().getNodeMgr().getToken())) {
                         result.status = ActionStatus.FAILED;
-                        result.msg = "invalid token: " + GlobalStateMgr.getCurrentState().getToken();
+                        result.msg = "invalid token: " + GlobalStateMgr.getCurrentState().getNodeMgr().getToken();
                     }
                 }
 

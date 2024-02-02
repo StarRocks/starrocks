@@ -70,7 +70,7 @@ public class WarehouseMgrTest {
 
         new MockUp<GlobalStateMgr>() {
             @Mock
-            public StarOSAgent getCurrentStarOSAgent() {
+            public StarOSAgent getStarOSAgent() {
                 return starOSAgent;
             }
         };
@@ -130,7 +130,7 @@ public class WarehouseMgrTest {
 
         new MockUp<GlobalStateMgr>() {
             @Mock
-            public StarOSAgent getCurrentStarOSAgent() {
+            public StarOSAgent getStarOSAgent() {
                 return starOSAgent;
             }
 

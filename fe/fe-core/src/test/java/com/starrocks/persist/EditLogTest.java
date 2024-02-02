@@ -159,14 +159,14 @@ public class EditLogTest {
     @Test
     public void testOpUpdateFrontend() throws Exception {
         GlobalStateMgr mgr = mockGlobalStateMgr();
-        List<Frontend> frontends = mgr.getFrontends(null);
+        List<Frontend> frontends = mgr.getNodeMgr().getFrontends(null);
         Frontend fe = frontends.get(0);
         fe.updateHostAndEditLogPort("testHost", 1000);
         JournalEntity journal = new JournalEntity();
         journal.setData(fe);
         journal.setOpCode(OperationType.OP_UPDATE_FRONTEND);
         EditLog.loadJournal(mgr, journal);
-        List<Frontend> updatedFrontends = mgr.getFrontends(null);
+        List<Frontend> updatedFrontends = mgr.getNodeMgr().getFrontends(null);
         Frontend updatedfFe = updatedFrontends.get(0);
         Assert.assertEquals("testHost", updatedfFe.getHost());
         Assert.assertTrue(updatedfFe.getEditLogPort() == 1000);

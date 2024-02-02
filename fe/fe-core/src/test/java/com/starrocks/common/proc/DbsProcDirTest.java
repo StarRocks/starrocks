@@ -160,7 +160,7 @@ public class DbsProcDirTest {
     public void testFetchResultNormal() throws AnalysisException {
         new Expectations(globalStateMgr) {
             {
-                globalStateMgr.getDbNames();
+                globalStateMgr.getLocalMetastore().listDbNames();
                 minTimes = 0;
                 result = Lists.newArrayList("db1", "db2");
 
@@ -213,7 +213,7 @@ public class DbsProcDirTest {
     public void testFetchResultInvalid() throws AnalysisException {
         new Expectations(globalStateMgr) {
             {
-                globalStateMgr.getDbNames();
+                globalStateMgr.getLocalMetastore().listDbNames();
                 minTimes = 0;
                 result = null;
             }

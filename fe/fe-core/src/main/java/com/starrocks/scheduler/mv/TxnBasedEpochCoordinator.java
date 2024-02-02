@@ -94,7 +94,7 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
         TransactionState.TxnCoordinator txnCoordinator = TransactionState.TxnCoordinator.fromThisFE();
         TransactionState.LoadJobSourceType loadSource = TransactionState.LoadJobSourceType.MV_REFRESH;
         try {
-            long txnId = GlobalStateMgr.getCurrentGlobalTransactionMgr()
+            long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                     .beginTransaction(dbId, tableIdList, label, txnCoordinator, loadSource, JOB_TIMEOUT, 
                     WarehouseManager.DEFAULT_CLUSTER_ID);
             epoch.setTxnId(txnId);
@@ -136,7 +136,7 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
         try {
             epoch.onCommitting();
 
-            boolean published = GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(database,
+            boolean published = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().commitAndPublishTransaction(database,
                     epoch.getTxnId(), epoch.getCommitInfos(), epoch.getFailedInfos(), TXN_VISIBLE_TIMEOUT_MILLIS);
             Preconditions.checkState(published, "must be published");
 
@@ -162,7 +162,7 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
         long txnId = epoch.getTxnId();
         String failReason = "";
         try {
-            GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(dbId, txnId, failReason);
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(dbId, txnId, failReason);
             epoch.onFailed();
         } catch (UserException e) {
             LOG.warn("Abort transaction failed: {}", txnId);

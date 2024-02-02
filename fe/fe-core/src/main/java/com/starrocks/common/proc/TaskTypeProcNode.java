@@ -67,7 +67,7 @@ public class TaskTypeProcNode implements ProcDirInterface {
 
         int totalFailedNum = 0;
         int totalTaskNum = 0;
-        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false);
+        List<Long> backendIds = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(false);
         for (Long backendId : backendIds) {
             int failedNum = AgentTaskQueue.getTaskNum(backendId, type, true);
             int taskNum = AgentTaskQueue.getTaskNum(backendId, type, false);

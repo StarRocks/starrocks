@@ -151,7 +151,7 @@ public class LeaderOpExecutor {
 
     // Send request to Leader
     private void forward() throws Exception {
-        Pair<String, Integer> ipAndPort = GlobalStateMgr.getCurrentState().getLeaderIpAndRpcPort();
+        Pair<String, Integer> ipAndPort = GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort();
         TNetworkAddress thriftAddress = new TNetworkAddress(ipAndPort.first, ipAndPort.second);
         TMasterOpRequest params = new TMasterOpRequest();
         params.setCluster(SystemInfoService.DEFAULT_CLUSTER);

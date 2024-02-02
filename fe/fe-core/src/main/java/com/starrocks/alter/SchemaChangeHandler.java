@@ -405,7 +405,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
     // User can modify column type and column position
     private boolean processModifyColumn(ModifyColumnClause alterClause, OlapTable olapTable,
-                                     Map<Long, LinkedList<Column>> indexSchemaMap) throws DdlException {
+                                        Map<Long, LinkedList<Column>> indexSchemaMap) throws DdlException {
         // The fast schema evolution mechanism is only supported for modified columns in shared data mode.
         boolean fastSchemaEvolution = RunMode.isSharedDataMode() && olapTable.getUseFastSchemaEvolution();
         Column modColumn = alterClause.getColumn();
@@ -658,8 +658,8 @@ public class SchemaChangeHandler extends AlterHandler {
     private void processReorderColumn(ReorderColumnsClause alterClause, OlapTable olapTable,
                                       Map<Long, LinkedList<Column>> indexSchemaMap) throws DdlException {
         if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
-            throw new DdlException("Primary key table do not support reorder table schema. Please confirm if you want to " + 
-                                   "modify the sorting columns.");
+            throw new DdlException("Primary key table do not support reorder table schema. Please confirm if you want to " +
+                    "modify the sorting columns.");
         }
         List<String> orderedColNames = alterClause.getColumnsByPos();
         String targetIndexName = alterClause.getRollupName();
@@ -739,8 +739,8 @@ public class SchemaChangeHandler extends AlterHandler {
                 Type t = col.getType();
                 if (!(t.isBoolean() || t.isIntegerType() || t.isLargeint() || t.isVarchar() || t.isDate() ||
                         t.isDatetime())) {
-                    throw new DdlException("Sort key column[" + col.getName() + "] type not supported: " + t + 
-                                           " in PrimaryKey table");
+                    throw new DdlException("Sort key column[" + col.getName() + "] type not supported: " + t +
+                            " in PrimaryKey table");
                 }
             }
         } else if (olapTable.getKeysType() == KeysType.AGG_KEYS || olapTable.getKeysType() == KeysType.UNIQUE_KEYS) {
@@ -748,7 +748,7 @@ public class SchemaChangeHandler extends AlterHandler {
             boolean res = new HashSet<>(keyColumnIdxes).equals(new HashSet<>(sortKeyIdxes));
             if (!res) {
                 throw new DdlException("The sort columns of " + olapTable.getKeysType().toSql() +
-                                       " table must be same with key columns");
+                        " table must be same with key columns");
             }
         } else {
             throw new DdlException("Table type:" + olapTable.getKeysType().toSql() + " does not support sort key column");
@@ -1173,7 +1173,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
         // check warehouse
         long warehouseId = ConnectContext.get().getCurrentWarehouseId();
-        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getAvailbleWarehouse(warehouseId);
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAvailbleWarehouse(warehouseId);
         if (warehouse.getAnyAvailableCluster().getAvailableComputeNodeIds().isEmpty()) {
             throw new DdlException("no available compute nodes in warehouse " + warehouse.getName());
         }
@@ -1300,8 +1300,8 @@ public class SchemaChangeHandler extends AlterHandler {
             MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(alterIndexId);
             // if sortKeyUniqueIds is empty, the table maybe create in old version and we should use sortKeyIdxes
             // to determine which columns are sort key columns
-            boolean useSortKeyUniqueId = (index.getSortKeyUniqueIds() != null) && 
-                                         (!index.getSortKeyUniqueIds().isEmpty());
+            boolean useSortKeyUniqueId = (index.getSortKeyUniqueIds() != null) &&
+                    (!index.getSortKeyUniqueIds().isEmpty());
             if (index.getSortKeyIdxes() != null) {
                 List<Integer> originSortKeyIdxes = index.getSortKeyIdxes();
                 for (Integer colIdx : originSortKeyIdxes) {
@@ -1485,10 +1485,11 @@ public class SchemaChangeHandler extends AlterHandler {
                 // so just return after finished handling.
                 if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
                     String colocateGroup = properties.get(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH);
-                    GlobalStateMgr.getCurrentState().modifyTableColocate(db, olapTable, colocateGroup, false, null);
+                    GlobalStateMgr.getCurrentState().getColocateTableIndex()
+                            .modifyTableColocate(db, olapTable, colocateGroup, false, null);
                     return null;
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DISTRIBUTION_TYPE)) {
-                    GlobalStateMgr.getCurrentState().convertDistributionType(db, olapTable);
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().convertDistributionType(db, olapTable);
                     return null;
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_SEND_CLEAR_ALTER_TASK)) {
                     /*
@@ -1514,30 +1515,31 @@ public class SchemaChangeHandler extends AlterHandler {
                                     "modify dynamic_partition.buckets. Colocate tables must have same bucket number.");
                         }
                     }
-                    GlobalStateMgr.getCurrentState().modifyTableDynamicPartition(db, olapTable, properties);
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().modifyTableDynamicPartition(db, olapTable, properties);
                     return null;
                 } else if (properties.containsKey("default." + PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
                     Preconditions.checkNotNull(properties.get(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM));
-                    GlobalStateMgr.getCurrentState().modifyTableDefaultReplicationNum(db, olapTable, properties);
+                    GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .modifyTableDefaultReplicationNum(db, olapTable, properties);
                     return null;
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
-                    GlobalStateMgr.getCurrentState().modifyTableReplicationNum(db, olapTable, properties);
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().modifyTableReplicationNum(db, olapTable, properties);
                     return null;
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)) {
                     return null;
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
                     return null;
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
-                    GlobalStateMgr.getCurrentState().alterTableProperties(db, olapTable, properties);
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
                     return null;
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
-                    GlobalStateMgr.getCurrentState().alterTableProperties(db, olapTable, properties);
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
                     return null;
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
-                    GlobalStateMgr.getCurrentState().alterTableProperties(db, olapTable, properties);
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
                     return null;
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)) {
-                    GlobalStateMgr.getCurrentState().alterTableProperties(db, olapTable, properties);
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
                     return null;
                 }
             }
@@ -1588,9 +1590,9 @@ public class SchemaChangeHandler extends AlterHandler {
                     List<Integer> sortKeyIdxes = new ArrayList<>();
                     List<Integer> sortKeyUniqueIds = new ArrayList<>();
                     processModifySortKeyColumn((ReorderColumnsClause) alterClause, olapTable, indexSchemaMap, sortKeyIdxes,
-                                               sortKeyUniqueIds);
+                            sortKeyUniqueIds);
                     return createJobForProcessModifySortKeyColumn(db.getId(), olapTable, indexSchemaMap, sortKeyIdxes,
-                                                                  sortKeyUniqueIds);
+                            sortKeyUniqueIds);
                 } else {
                     processReorderColumn((ReorderColumnsClause) alterClause, olapTable, indexSchemaMap);
                 }
@@ -1734,7 +1736,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
             } else {
                 throw new DdlException("does not support alter " + properties.entrySet().iterator().next().getKey() +
-                                       " in shared_data mode");
+                        " in shared_data mode");
             }
 
             long timeoutSecond = PropertyAnalyzer.analyzeTimeout(properties, Config.alter_table_timeout_second);
@@ -1847,7 +1849,7 @@ public class SchemaChangeHandler extends AlterHandler {
             return;
         }
 
-        if (metaType == TTabletMetaType.INMEMORY ||  metaType == TTabletMetaType.ENABLE_PERSISTENT_INDEX) {
+        if (metaType == TTabletMetaType.INMEMORY || metaType == TTabletMetaType.ENABLE_PERSISTENT_INDEX) {
             for (Partition partition : partitions) {
                 updatePartitionTabletMeta(db, olapTable.getName(), partition.getName(), metaValue, metaType);
             }
@@ -1855,7 +1857,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
         locker.lockDatabase(db, LockType.WRITE);
         try {
-            GlobalStateMgr.getCurrentState().modifyTableMeta(db, olapTable, properties, metaType);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().modifyTableMeta(db, olapTable, properties, metaType);
         } finally {
             locker.unLockDatabase(db, LockType.WRITE);
         }
@@ -1933,7 +1935,7 @@ public class SchemaChangeHandler extends AlterHandler {
         newBinlogConfig.incVersion();
         try {
             BinlogConfig oldBinlogConfig = olapTable.getCurBinlogConfig();
-            GlobalStateMgr.getCurrentState().modifyBinlogMeta(db, olapTable, newBinlogConfig);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().modifyBinlogMeta(db, olapTable, newBinlogConfig);
             if (oldBinlogConfig != null) {
                 LOG.info("update binlog config of table {} successfully, the binlog config after modified is : {}, " +
                                 "previous is {}",
@@ -2250,7 +2252,7 @@ public class SchemaChangeHandler extends AlterHandler {
         }
         locker.lockDatabase(db, LockType.WRITE);
         try {
-            GlobalStateMgr.getCurrentState().modifyTableConstraint(db, tableName, properties);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().modifyTableConstraint(db, tableName, properties);
         } finally {
             locker.unLockDatabase(db, LockType.WRITE);
         }
@@ -2322,7 +2324,7 @@ public class SchemaChangeHandler extends AlterHandler {
             // Bitmap index's id is always be -1
             if (IndexDef.IndexType.isCompatibleIndex(existedIdx.getIndexType()) &&
                     IndexDef.IndexType.isCompatibleIndex(newIndex.getIndexType()) &&
-                        existedIdx.getIndexId() >= newIndex.getIndexId()) {
+                    existedIdx.getIndexId() >= newIndex.getIndexId()) {
                 throw new IllegalStateException(
                         String.format("New index id %s should be lg than existed idx %s in OlapTable",
                                 newIndex.getIndexId(), existedIdx.getIndexId()));
@@ -2393,7 +2395,7 @@ public class SchemaChangeHandler extends AlterHandler {
             // for now table's state can only be NORMAL
             Preconditions.checkState(olapTable.getState() == OlapTableState.NORMAL, olapTable.getState().name());
             SchemaChangeJobV2 schemaChangeJob = new SchemaChangeJobV2(jobId, db.getId(), olapTable.getId(),
-                                                                      olapTable.getName(), 1000);
+                    olapTable.getName(), 1000);
             // update base index schema
             Set<String> modifiedColumns = Sets.newHashSet();
             boolean hasMv = !olapTable.getRelatedMaterializedViews().isEmpty();
@@ -2403,11 +2405,11 @@ public class SchemaChangeHandler extends AlterHandler {
                 // modify the copied indexMeta and put the update result in the indexIdToMeta
                 MaterializedIndexMeta currentIndexMeta = olapTable.getIndexMetaByIndexId(idx).shallowCopy();
                 List<Column> originSchema = currentIndexMeta.getSchema();
-                
+
                 if (hasMv && indexSchema.size() < originSchema.size()) {
                     // drop column
                     List<Column> differences = originSchema.stream().filter(element ->
-                                   !indexSchema.contains(element)).collect(Collectors.toList());
+                            !indexSchema.contains(element)).collect(Collectors.toList());
                     // can just drop one column one time, so just one element in differences
                     int dropIdx = originSchema.indexOf(differences.get(0));
                     modifiedColumns.add(originSchema.get(dropIdx).getName());
@@ -2442,8 +2444,8 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
 
                 schemaChangeJob.addIndexSchema(idx, idx, olapTable.getIndexNameById(idx), newSchemaVersion,
-                                               currentIndexMeta.getSchemaHash(), currentIndexMeta.getShortKeyColumnCount(),
-                                               indexSchema);
+                        currentIndexMeta.getSchemaHash(), currentIndexMeta.getShortKeyColumnCount(),
+                        indexSchema);
             }
             olapTable.setIndexes(indexes);
             olapTable.rebuildFullSchema();
@@ -2499,7 +2501,7 @@ public class SchemaChangeHandler extends AlterHandler {
         try {
             locker.lockDatabase(db, LockType.WRITE);
             modifyTableAddOrDropColumns(db, olapTable, indexSchemaMap, indexes, jobId, info.getTxnId(),
-                                        indexToNewSchemaId, true);
+                    indexToNewSchemaId, true);
         } catch (DdlException e) {
             // should not happen
             LOG.warn("failed to replay modify table add or drop columns", e);
@@ -2515,8 +2517,8 @@ public class SchemaChangeHandler extends AlterHandler {
         Preconditions.checkState(RunMode.isSharedNothingMode());
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         long jobId = globalStateMgr.getNextId();
-        long txnId =
-                GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
+        long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getTransactionIDGenerator().getNextTransactionId();
         long baseIndexId = schemaChangeData.getTable().getBaseIndexId();
         // for schema change add/drop value column optimize, direct modify table meta.
         // when modify this, please also pay attention to the OlapTable#copyOnlyForQuery() operation.

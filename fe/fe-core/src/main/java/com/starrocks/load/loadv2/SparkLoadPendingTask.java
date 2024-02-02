@@ -190,7 +190,7 @@ public class SparkLoadPendingTask extends LoadTask {
                     tables.put(tableId, etlTable);
 
                     // add table indexes to transaction state
-                    TransactionState txnState = GlobalStateMgr.getCurrentGlobalTransactionMgr()
+                    TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                             .getTransactionState(dbId, transactionId);
                     if (txnState == null) {
                         throw new LoadException("txn does not exist. id: " + transactionId);

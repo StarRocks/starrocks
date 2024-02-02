@@ -351,7 +351,7 @@ public class CompactionScheduler extends Daemon {
 
     static long getCompactionWorkerGroupId() throws WarehouseUnavailableException {
         String warehouseName = Config.lake_compaction_warehouse;
-        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getAvailbleWarehouse(warehouseName);
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAvailbleWarehouse(warehouseName);
         return warehouse.getAnyAvailableCluster().getWorkerGroupId();
     }
 

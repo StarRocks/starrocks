@@ -226,13 +226,13 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         this.indexId = idxId;
         this.tabletId = tabletId;
         this.createTime = createTime;
-        this.infoService = GlobalStateMgr.getCurrentSystemInfo();
+        this.infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         this.state = State.PENDING;
     }
 
     @VisibleForTesting
     public TabletSchedCtx(Type type, long dbId, long tblId, long partId,
-                           long idxId, long tabletId, long createTime) {
+                          long idxId, long tabletId, long createTime) {
         this(type, dbId, tblId, partId, partId, idxId, tabletId, createTime);
     }
 
@@ -812,7 +812,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
         // if this is a balance task, or this is a repair task with REPLICA_MISSING/REPLICA_RELOCATING,
         // we create a new replica with state CLONE
-        Database db = GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(dbId);
         if (db == null) {
             throw new SchedException(Status.UNRECOVERABLE, "db " + dbId + " not exist");
         }
@@ -886,15 +886,15 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 tabletId, tablet.getSingleReplica(), tablet.getSingleReplica().getBackendId(), destBackendId);
 
         final GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        Database db = globalStateMgr.getDbIncludeRecycleBin(dbId);
+        Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
         if (db == null) {
             throw new SchedException(Status.UNRECOVERABLE, "db " + dbId + " does not exist");
         }
         Locker locker = new Locker();
         try {
             locker.lockDatabase(db, LockType.WRITE);
-            OlapTable olapTable = (OlapTable) globalStateMgr.getTableIncludeRecycleBin(
-                    globalStateMgr.getDbIncludeRecycleBin(dbId),
+            OlapTable olapTable = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(
+                    globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId),
                     tblId);
             if (olapTable == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "table " + tblId + " does not exist");
@@ -979,25 +979,26 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         }
 
         // 1. check the tablet status first
-        Database db = globalStateMgr.getDbIncludeRecycleBin(dbId);
+        Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
         if (db == null) {
             throw new SchedException(Status.UNRECOVERABLE, "db does not exist");
         }
         Locker locker = new Locker();
         try {
             locker.lockDatabase(db, LockType.WRITE);
-            OlapTable olapTable = (OlapTable) globalStateMgr.getTableIncludeRecycleBin(db, tblId);
+            OlapTable olapTable = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tblId);
             if (olapTable == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "tbl does not exist");
             }
 
-            Partition partition = globalStateMgr.getPartitionIncludeRecycleBin(olapTable, partitionId);
+            Partition partition = globalStateMgr.getLocalMetastore().getPartitionIncludeRecycleBin(olapTable, partitionId);
             if (partition == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "partition does not exist");
             }
 
             short replicationNum =
-                    globalStateMgr.getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(), partitionId);
+                    globalStateMgr.getLocalMetastore()
+                            .getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(), partitionId);
             if (replicationNum == (short) -1) {
                 throw new SchedException(Status.UNRECOVERABLE, "invalid replication number");
             }

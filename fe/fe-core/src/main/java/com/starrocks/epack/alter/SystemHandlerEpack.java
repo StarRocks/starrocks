@@ -26,19 +26,19 @@ public class SystemHandlerEpack extends SystemHandler {
         AlterClause alterClause = alterClauses.get(0);
         if (alterClause instanceof DecommissionDiskClause) {
             DecommissionDiskClause clause = (DecommissionDiskClause) alterClause;
-            GlobalStateMgr.getCurrentSystemInfo()
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                     .decommissionDisks(clause.getBeHostPort(), clause.getDiskList());
         } else if (alterClause instanceof CancelDecommissionDiskClause) {
             CancelDecommissionDiskClause clause = (CancelDecommissionDiskClause) alterClause;
-            GlobalStateMgr.getCurrentSystemInfo()
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                     .cancelDecommissionDisks(clause.getBeHostPort(), clause.getDiskList());
         } else if (alterClause instanceof DisableDiskClause) {
             DisableDiskClause clause = (DisableDiskClause) alterClause;
-            GlobalStateMgr.getCurrentSystemInfo()
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                     .disableDisks(clause.getBeHostPort(), clause.getDiskList());
         } else if (alterClause instanceof CancelDisableDiskClause) {
             CancelDisableDiskClause clause = (CancelDisableDiskClause) alterClause;
-            GlobalStateMgr.getCurrentSystemInfo()
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                     .cancelDisableDisks(clause.getBeHostPort(), clause.getDiskList());
         } else {
             return super.process(alterClauses, dummyDb, dummyTbl);

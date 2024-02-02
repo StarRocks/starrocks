@@ -169,7 +169,7 @@ public class EsScanNode extends ScanNode {
     public void assignNodes() throws UserException {
         nodeMap = HashMultimap.create();
         nodeList = Lists.newArrayList();
-        for (ComputeNode node : GlobalStateMgr.getCurrentSystemInfo().
+        for (ComputeNode node : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().
                 backendAndComputeNodeStream().collect(Collectors.toList())) {
             if (node.isAlive()) {
                 nodeMap.put(node.getHost(), node);

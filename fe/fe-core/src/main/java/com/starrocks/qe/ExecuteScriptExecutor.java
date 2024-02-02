@@ -79,7 +79,7 @@ public class ExecuteScriptExecutor {
     }
 
     private static ShowResultSet executeBackendScript(ExecuteScriptStmt stmt, ConnectContext ctx) throws UserException {
-        Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(stmt.getBeId());
+        Backend be = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(stmt.getBeId());
         if (be == null) {
             throw new UserException("node not found: " + stmt.getBeId());
         }

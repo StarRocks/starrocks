@@ -61,7 +61,7 @@ public class Cluster implements Writable {
 
     public void init() throws DdlException {
         try {
-            StarOSAgentEpack starOSAgent = (StarOSAgentEpack) GlobalStateMgr.getCurrentStarOSAgent();
+            StarOSAgentEpack starOSAgent = (StarOSAgentEpack) GlobalStateMgr.getCurrentState().getStarOSAgent();
             workerGroupId = starOSAgent.createWorkerGroup("x0");
         } catch (DdlException e) {
             LOG.warn("create Cluster " + id + " failed, because : " + e);
@@ -104,13 +104,13 @@ public class Cluster implements Writable {
             List<String> computeNodeInfo = Lists.newArrayList();
 
             long warehouseId = node.getWarehouseId();
-            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
             computeNodeInfo.add(warehouse.getName());
 
             computeNodeInfo.add(String.valueOf(this.id));
             computeNodeInfo.add(String.valueOf(this.workerGroupId));
             long nodeId = node.getId();
-            long workerId = GlobalStateMgr.getCurrentStarOSAgent().getWorkerIdByBackendId(nodeId);
+            long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerIdByBackendId(nodeId);
             computeNodeInfo.add(String.valueOf(nodeId));
             computeNodeInfo.add(String.valueOf(workerId));
 
@@ -140,7 +140,7 @@ public class Cluster implements Writable {
     }
 
     public List<ComputeNode> getAllComputeNodes() {
-        final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
+        final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         List<ComputeNode> nodes = clusterInfoService.backendAndComputeNodeStream().
                 filter(cn -> cn.getWorkerGroupId() == this.getWorkerGroupId()).collect(Collectors.toList());
         return nodes;
@@ -149,13 +149,13 @@ public class Cluster implements Writable {
     public List<Long> getAvailableComputeNodeIds() {
         List<Long> nodeIds = new ArrayList<>();
         if (RunMode.isSharedNothingMode()) {
-            final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
+            final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
             return clusterInfoService.backendAndComputeNodeStream().map(ComputeNode::getId).collect(Collectors.toList());
         }
         
         try {
             // ask starMgr for node lists
-            StarOSAgentEpack starOSAgent = (StarOSAgentEpack) GlobalStateMgr.getCurrentStarOSAgent();
+            StarOSAgentEpack starOSAgent = (StarOSAgentEpack) GlobalStateMgr.getCurrentState().getStarOSAgent();
             nodeIds = starOSAgent.getWorkersByWorkerGroup(workerGroupId);
         } catch (UserException e) {
             LOG.warn("Fail to get compute node ids from starMgr : {}", e.getMessage());

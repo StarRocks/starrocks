@@ -101,7 +101,7 @@ public class DbsProcDir implements ProcDirInterface {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
 
-        List<String> dbNames = globalStateMgr.getDbNames();
+        List<String> dbNames = globalStateMgr.getLocalMetastore().listDbNames();
         if (dbNames == null || dbNames.isEmpty()) {
             // empty
             return result;

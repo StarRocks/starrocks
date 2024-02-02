@@ -87,7 +87,8 @@ public class CoordinatorPreprocessor {
         this.executionDAG = ExecutionDAG.build(jobSpec);
 
         SessionVariable sessionVariable = connectContext.getSessionVariable();
-        this.workerProvider = workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(),
+        this.workerProvider = workerProviderFactory.captureAvailableWorkers(
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
                 sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(), jobSpec.getWarehouseId());
 
         this.fragmentAssignmentStrategyFactory = new FragmentAssignmentStrategyFactory(connectContext, jobSpec, executionDAG);
@@ -103,7 +104,8 @@ public class CoordinatorPreprocessor {
         this.executionDAG = ExecutionDAG.build(jobSpec);
 
         SessionVariable sessionVariable = connectContext.getSessionVariable();
-        this.workerProvider = workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(),
+        this.workerProvider = workerProviderFactory.captureAvailableWorkers(
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
                 sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(),
                 jobSpec.getWarehouseId());
 
@@ -192,7 +194,8 @@ public class CoordinatorPreprocessor {
      */
     private void resetExec() throws UserException {
         SessionVariable sessionVariable = connectContext.getSessionVariable();
-        workerProvider = workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(),
+        workerProvider = workerProviderFactory.captureAvailableWorkers(
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
                 sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(),
                 jobSpec.getWarehouseId());
 

@@ -14,7 +14,6 @@
 
 package com.starrocks.server;
 
-
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import com.staros.util.LockCloseable;
@@ -165,7 +164,8 @@ public class WarehouseManager implements Writable {
         Warehouse warehouse = getAvailbleWarehouse(warehouseId);
         // check if warehouse available
         warehouse.getAnyAvailableCluster().getAvailableComputeNodeIds().forEach(
-                nodeId -> builder.put(nodeId, GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId)));
+                nodeId -> builder.put(nodeId,
+                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId)));
         return builder.build();
     }
 
@@ -215,7 +215,7 @@ public class WarehouseManager implements Writable {
     public void load(SRMetaBlockReader reader)
             throws SRMetaBlockEOFException, IOException, SRMetaBlockException {
         int nameToWhSize = reader.readJson(int.class);
-        for (int i = 0; i  != nameToWhSize; ++i) {
+        for (int i = 0; i != nameToWhSize; ++i) {
             Warehouse warehouse = reader.readJson(Warehouse.class);
             this.nameToWh.put(warehouse.getName(), warehouse);
             this.idToWh.put(warehouse.getId(), warehouse);

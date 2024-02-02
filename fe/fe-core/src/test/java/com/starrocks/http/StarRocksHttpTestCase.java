@@ -62,6 +62,9 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -140,7 +143,7 @@ public abstract class StarRocksHttpTestCase {
     }
 
     public static OlapTable newEmptyTable(String name) {
-        GlobalStateMgr.getCurrentInvertedIndex().clear();
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().clear();
         Column k1 = new Column("k1", Type.BIGINT);
         Column k2 = new Column("k2", Type.DOUBLE);
         Column k3 = new Column("k3", Type.DATETIME);
@@ -151,7 +154,6 @@ public abstract class StarRocksHttpTestCase {
 
         // index
         MaterializedIndex baseIndex = new MaterializedIndex(testIndexId, MaterializedIndex.IndexState.NORMAL);
-
 
         // partition
         HashDistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
@@ -173,7 +175,7 @@ public abstract class StarRocksHttpTestCase {
     }
 
     public static OlapTable newTable(String name) {
-        GlobalStateMgr.getCurrentInvertedIndex().clear();
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().clear();
         Column k1 = new Column("k1", Type.BIGINT);
         Column k2 = new Column("k2", Type.DOUBLE);
         List<Column> columns = new ArrayList<>();
@@ -267,6 +269,8 @@ public abstract class StarRocksHttpTestCase {
             db.registerTableUnlocked(newEmptyTable);
             ConcurrentHashMap<String, Database> nameToDb = new ConcurrentHashMap<>();
             nameToDb.put(db.getFullName(), db);
+            LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
+
             new Expectations(globalStateMgr) {
                 {
                     globalStateMgr.getAuth();
@@ -293,10 +297,6 @@ public abstract class StarRocksHttpTestCase {
                     minTimes = 0;
                     result = new Database();
 
-                    globalStateMgr.getDbNames();
-                    minTimes = 0;
-                    result = Lists.newArrayList("testDb");
-
                     globalStateMgr.getLoadInstance();
                     minTimes = 0;
                     result = new Load();
@@ -314,7 +314,19 @@ public abstract class StarRocksHttpTestCase {
                     globalStateMgr.initDefaultCluster();
                     minTimes = 0;
 
-                    globalStateMgr.getFullNameToDb();
+                    globalStateMgr.getLocalMetastore();
+                    minTimes = 0;
+                    result = localMetastore;
+                }
+            };
+
+            new Expectations(localMetastore) {
+                {
+                    localMetastore.listDbNames();
+                    minTimes = 0;
+                    result = Lists.newArrayList("testDb");
+
+                    localMetastore.getFullNameToDb();
                     minTimes = 0;
                     result = nameToDb;
                 }
@@ -340,6 +352,10 @@ public abstract class StarRocksHttpTestCase {
             db.registerTableUnlocked(esTable);
             OlapTable newEmptyTable = newEmptyTable("test_empty_table");
             db.registerTableUnlocked(newEmptyTable);
+
+            LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
+            MetadataMgr metadataMgr = new MetadataMgr(localMetastore, null, null);
+
             new Expectations(globalStateMgr) {
                 {
                     globalStateMgr.getAuth();
@@ -366,10 +382,6 @@ public abstract class StarRocksHttpTestCase {
                     minTimes = 0;
                     result = new Database();
 
-                    globalStateMgr.getDbNames();
-                    minTimes = 0;
-                    result = Lists.newArrayList("testDb");
-
                     globalStateMgr.getLoadInstance();
                     minTimes = 0;
                     result = new Load();
@@ -387,19 +399,28 @@ public abstract class StarRocksHttpTestCase {
                     globalStateMgr.initDefaultCluster();
                     minTimes = 0;
 
-                    globalStateMgr.getMetadataMgr().getDb("default_catalog", "testDb");
+                    globalStateMgr.getMetadataMgr();
+                    minTimes = 0;
+                    result = metadataMgr;
+                }
+            };
+
+            new Expectations(metadataMgr) {
+                {
+                    metadataMgr.getDb("default_catalog", "testDb");
                     minTimes = 0;
                     result = db;
 
-                    globalStateMgr.getMetadataMgr().getTable("default_catalog", "testDb", "testTbl");
+                    metadataMgr.getTable("default_catalog", "testDb", "testTbl");
                     minTimes = 0;
                     result = table;
 
-                    globalStateMgr.getMetadataMgr().getTable("default_catalog", "testDb", "test_empty_table");
+                    metadataMgr.getTable("default_catalog", "testDb", "test_empty_table");
                     minTimes = 0;
                     result = newEmptyTable;
                 }
             };
+            ;
 
             return globalStateMgr;
         } catch (DdlException e) {
@@ -414,9 +435,9 @@ public abstract class StarRocksHttpTestCase {
         backend2.setBePort(9300);
         Backend backend3 = new Backend(testBackendId3, "node-3", 9308);
         backend3.setBePort(9300);
-        GlobalStateMgr.getCurrentSystemInfo().addBackend(backend1);
-        GlobalStateMgr.getCurrentSystemInfo().addBackend(backend2);
-        GlobalStateMgr.getCurrentSystemInfo().addBackend(backend3);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend1);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend2);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(backend3);
     }
 
     @BeforeClass
@@ -461,6 +482,8 @@ public abstract class StarRocksHttpTestCase {
             }
         };
 
+        NodeMgr nodeMgr = new NodeMgr();
+
         new MockUp<GlobalStateMgr>() {
             @Mock
             SchemaChangeHandler getSchemaChangeHandler() {
@@ -471,20 +494,33 @@ public abstract class StarRocksHttpTestCase {
             MaterializedViewHandler getRollupHandler() {
                 return new MaterializedViewHandler();
             }
+        };
 
-            @Mock
-            GlobalStateMgr getCurrentState() {
-                return globalStateMgr;
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
             }
+        };
 
-            @Mock
-            SystemInfoService getCurrentSystemInfo() {
-                return systemInfoService;
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getNodeMgr();
+                minTimes = 0;
+                result = nodeMgr;
+
+                globalStateMgr.getTabletInvertedIndex();
+                minTimes = 0;
+                result = tabletInvertedIndex;
             }
+        };
 
-            @Mock
-            TabletInvertedIndex getCurrentInvertedIndex() {
-                return tabletInvertedIndex;
+        new Expectations(nodeMgr) {
+            {
+                nodeMgr.getClusterInfo();
+                minTimes = 0;
+                result = systemInfoService;
             }
 
             @Mock
@@ -497,6 +533,7 @@ public abstract class StarRocksHttpTestCase {
                 return warehouseMgr;
             }
         };
+
         assignBackends();
         doSetUp();
     }
@@ -505,6 +542,8 @@ public abstract class StarRocksHttpTestCase {
         GlobalStateMgr globalStateMgr = newDelegateGlobalStateMgr();
         SystemInfoService systemInfoService = new SystemInfoService();
         TabletInvertedIndex tabletInvertedIndex = new TabletInvertedIndex();
+        NodeMgr nodeMgr = new NodeMgr();
+
         new MockUp<GlobalStateMgr>() {
             @Mock
             SchemaChangeHandler getSchemaChangeHandler() {
@@ -517,22 +556,7 @@ public abstract class StarRocksHttpTestCase {
             }
 
             @Mock
-            GlobalStateMgr getCurrentState() {
-                return globalStateMgr;
-            }
-
-            @Mock
-            SystemInfoService getCurrentSystemInfo() {
-                return systemInfoService;
-            }
-
-            @Mock
-            TabletInvertedIndex getCurrentInvertedIndex() {
-                return tabletInvertedIndex;
-            }
-
-            @Mock
-            GlobalTransactionMgr getCurrentGlobalTransactionMgr() {
+            GlobalTransactionMgr getGlobalTransactionMgr() {
                 new MockUp<GlobalTransactionMgr>() {
                     @Mock
                     TransactionStatus getLabelState(long dbId, String label) {
@@ -547,6 +571,35 @@ public abstract class StarRocksHttpTestCase {
                 return new GlobalTransactionMgr(null);
             }
         };
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+            }
+        };
+
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getNodeMgr();
+                minTimes = 0;
+                result = nodeMgr;
+
+                globalStateMgr.getTabletInvertedIndex();
+                minTimes = 0;
+                result = tabletInvertedIndex;
+            }
+        };
+
+        new Expectations(nodeMgr) {
+            {
+                nodeMgr.getClusterInfo();
+                minTimes = 0;
+                result = systemInfoService;
+            }
+        };
+
         assignBackends();
         doSetUp();
     }

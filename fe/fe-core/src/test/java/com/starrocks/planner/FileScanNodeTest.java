@@ -108,7 +108,7 @@ public class FileScanNodeTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 result = systemInfoService;
                 systemInfoService.getIdToBackend();
                 result = idToBackend;

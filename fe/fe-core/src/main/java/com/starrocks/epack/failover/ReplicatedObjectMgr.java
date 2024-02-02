@@ -345,12 +345,12 @@ public class ReplicatedObjectMgr {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
 
         ReplicatedObjectMeta.SystemMeta systemMeta = new ReplicatedObjectMeta.SystemMeta(
-                globalStateMgr.getToken(), globalStateMgr.getClusterInfo());
+                globalStateMgr.getToken(), globalStateMgr.getNodeMgr().getClusterInfo());
         ReplicatedObjectMeta objectMeta = new ReplicatedObjectMeta(systemMeta);
 
         for (CatalogInfo catalogInfo : catalogInfos.values()) {
             Preconditions.checkState(CatalogMgr.isInternalCatalog(catalogInfo.getCatalogId()));
-            ConcurrentHashMap<Long, Database> databases = globalStateMgr.getIdToDb();
+            ConcurrentHashMap<Long, Database> databases = globalStateMgr.getLocalMetastore().getIdToDb();
             // Filter system database
             Map<Long, Database> normalDbs = databases.entrySet().stream().filter(
                     entry -> entry.getKey() > GlobalStateMgr.NEXT_ID_INIT_VALUE &&

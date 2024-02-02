@@ -46,7 +46,7 @@ public class FailPointExecutor {
     public FailPointExecutor(ConnectContext connectContext, StatementBase stmt) {
         this.connectContext = connectContext;
         this.stmt = stmt;
-        clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
+        clusterInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
     }
 
     public void execute() throws Exception {

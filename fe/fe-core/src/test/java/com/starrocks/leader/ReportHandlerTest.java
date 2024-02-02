@@ -95,7 +95,7 @@ public class ReportHandlerTest {
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         long dbId = db.getId();
         long backendId = 10001L;
-        List<Long> tabletIds = GlobalStateMgr.getCurrentInvertedIndex().getTabletIdsByBackendId(10001);
+        List<Long> tabletIds = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001);
         Assert.assertFalse(tabletIds.isEmpty());
 
         Map<Long, TTablet> backendTablets = new HashMap<Long, TTablet>();
@@ -120,7 +120,7 @@ public class ReportHandlerTest {
         long dbId = db.getId();
         OlapTable olapTable = (OlapTable) db.getTable("primary_index_cache_expire_sec_test");
         long backendId = 10001L;
-        List<Long> tabletIds = GlobalStateMgr.getCurrentInvertedIndex().getTabletIdsByBackendId(10001);
+        List<Long> tabletIds = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001);
         Assert.assertFalse(tabletIds.isEmpty());
 
         Map<Long, TTablet> backendTablets = new HashMap<Long, TTablet>();
@@ -145,7 +145,7 @@ public class ReportHandlerTest {
         long dbId = db.getId();
         OlapTable olapTable = (OlapTable) db.getTable("binlog_report_handler_test");
         long backendId = 10001L;
-        List<Long> tabletIds = GlobalStateMgr.getCurrentInvertedIndex().getTabletIdsByBackendId(10001);
+        List<Long> tabletIds = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001);
         Assert.assertFalse(tabletIds.isEmpty());
 
         Map<Long, TTablet> backendTablets = new HashMap<Long, TTablet>();
@@ -313,21 +313,21 @@ public class ReportHandlerTest {
 
     @Test
     public void testHandleMigration() throws TException {
-        List<Long> tabletIds = GlobalStateMgr.getCurrentInvertedIndex().getTabletIdsByBackendId(10001);
+        List<Long> tabletIds = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001);
         ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap = ArrayListMultimap.create();
         for (Long tabletId : tabletIds) {
             tabletMetaMigrationMap.put(TStorageMedium.SSD, tabletId);
         }
         ReportHandler.handleMigration(tabletMetaMigrationMap, 10001);
 
-        final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentSystemInfo();
+        final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         Backend reportBackend = currentSystemInfo.getBackend(10001);
         BackendStatus backendStatus = reportBackend.getBackendStatus();
         backendStatus.lastSuccessReportTabletsTime = TimeUtils.longToTimeString(Long.MAX_VALUE);
 
         ReportHandler.handleMigration(tabletMetaMigrationMap, 10001);
 
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         List<TabletMeta> tabletMetaList = invertedIndex.getTabletMetaList(tabletIds);
         for (int i = 0; i < tabletMetaList.size(); i++) {
             long tabletId = tabletIds.get(i);

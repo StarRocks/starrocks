@@ -170,11 +170,11 @@ public class TablePEntryObject implements PEntryObject {
     @Override
     public boolean validate(GlobalStateMgr globalStateMgr) {
         if (catalogId == InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID) {
-            Database db = globalStateMgr.getDbIncludeRecycleBin(Long.parseLong(this.databaseUUID));
+            Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(Long.parseLong(this.databaseUUID));
             if (db == null) {
                 return false;
             }
-            return globalStateMgr.getTableIncludeRecycleBin(db, Long.parseLong(this.tableUUID)) != null;
+            return globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, Long.parseLong(this.tableUUID)) != null;
         }
         // do not validate privilege of external table
         return true;

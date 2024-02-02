@@ -97,9 +97,9 @@ public class TransactionLoadAction extends RestBaseAction {
     private Map<String, Long> txnNodeMap = new LinkedHashMap<String, Long>(512, 0.75f, true) {
         protected boolean removeEldestEntry(Map.Entry<String, Long> eldest) {
             // TODO: whether it needs to adapt to multi-warehouse
-            int totalNodeNum = GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber();
+            int totalNodeNum = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber();
             if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
-                totalNodeNum += GlobalStateMgr.getCurrentSystemInfo().getAliveComputeNodeNumber();
+                totalNodeNum += GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAliveComputeNodeNumber();
             }
             return size() > totalNodeNum * 512;
         }
@@ -232,9 +232,9 @@ public class TransactionLoadAction extends RestBaseAction {
             if (db == null) {
                 throw new UserException("database " + dbName + " not exists");
             }
-            TransactionStatus txnStatus = GlobalStateMgr.getCurrentGlobalTransactionMgr().getLabelStatus(db.getId(),
+            TransactionStatus txnStatus = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getLabelStatus(db.getId(),
                     label);
-            Long txnID = GlobalStateMgr.getCurrentGlobalTransactionMgr().getLabelTxnID(db.getId(), label);
+            Long txnID = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getLabelTxnID(db.getId(), label);
             if (txnStatus == TransactionStatus.PREPARED) {
                 if (txnID == -1) {
                     throw new UserException("label " + label + " txn not exist");
@@ -245,9 +245,10 @@ public class TransactionLoadAction extends RestBaseAction {
                     if (timeout != null) {
                         timeoutMillis = Long.parseLong(timeout) * 1000;
                     }
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr().commitPreparedTransaction(db, txnID, timeoutMillis);
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                            .commitPreparedTransaction(db, txnID, timeoutMillis);
                 } else if (op.equalsIgnoreCase(TXN_ROLLBACK)) {
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(db.getId(), txnID,
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(db.getId(), txnID,
                             "User Aborted");
                 }
                 resp.addResultEntry("Label", label);
@@ -257,7 +258,7 @@ public class TransactionLoadAction extends RestBaseAction {
                 // whether txnId is valid or not is not important
                 if (op.equalsIgnoreCase(TXN_ROLLBACK)) {
                     throw new UserException(String.format(
-                        "cannot abort committed transaction %s, label %s ", Long.toString(txnID), label));
+                            "cannot abort committed transaction %s, label %s ", Long.toString(txnID), label));
                 }
                 resp.setOKMsg("label " + label + " transaction " + txnID + " has already committed");
                 resp.addResultEntry("Label", label);
@@ -267,7 +268,7 @@ public class TransactionLoadAction extends RestBaseAction {
                 // whether txnId is valid or not is not important
                 if (op.equalsIgnoreCase(TXN_COMMIT)) {
                     throw new UserException(String.format(
-                        "cannot commit aborted transaction %s, label %s ", Long.toString(txnID), label));
+                            "cannot commit aborted transaction %s, label %s ", Long.toString(txnID), label));
                 }
                 resp.setOKMsg("label " + label + " transaction " + txnID + " has already aborted");
                 resp.addResultEntry("Label", label);
@@ -281,7 +282,7 @@ public class TransactionLoadAction extends RestBaseAction {
             warehouseName = request.getRequest().headers().get(WAREHOUSE_KEY);
         }
 
-        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName);
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
         if (warehouse == null) {
             throw new UserException("Warehouse " + warehouseName + " not exist");
         }
@@ -294,7 +295,8 @@ public class TransactionLoadAction extends RestBaseAction {
                 if (op.equalsIgnoreCase(TXN_BEGIN)) {
                     if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
                         for (long nodeId : warehouse.getAnyAvailableCluster().getAvailableComputeNodeIds()) {
-                            ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
+                            ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                                    .getBackendOrComputeNode(nodeId);
                             if (node != null && node.isAvailable()) {
                                 nodeIds.add(nodeId);
                             }
@@ -304,7 +306,8 @@ public class TransactionLoadAction extends RestBaseAction {
                         }
                         Collections.shuffle(nodeIds);
                     } else {
-                        nodeIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
+                        nodeIds = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                                .seqChooseBackendIds(1, true, false);
                         if (CollectionUtils.isEmpty(nodeIds)) {
                             throw new UserException("No backend alive.");
                         }
@@ -351,7 +354,7 @@ public class TransactionLoadAction extends RestBaseAction {
                     redirectAddr, dbName, tableName, op, label);
             redirectTo(request, response, redirectAddr);
             return;
-        } 
+        }
 
         if (op.equalsIgnoreCase(TXN_PREPARE) && channelIdStr != null) {
             int channelId = Integer.parseInt(channelIdStr);
@@ -381,12 +384,11 @@ public class TransactionLoadAction extends RestBaseAction {
             return;
         }
 
-
         if (nodeID == null) {
             throw new UserException("transaction with op " + op + " label " + label + " has no backend");
         }
 
-        ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeID);
+        ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeID);
         if (node == null) {
             throw new UserException("Backend or compute node " + nodeID + " is not alive");
         }

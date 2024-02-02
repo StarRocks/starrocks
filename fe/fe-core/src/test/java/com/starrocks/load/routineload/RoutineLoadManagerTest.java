@@ -64,7 +64,6 @@ import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
 import com.starrocks.sql.ast.StopRoutineLoadStmt;
 import com.starrocks.sql.ast.UserIdentity;
-import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TKafkaRLTaskProgress;
 import com.starrocks.thrift.TLoadSourceType;
 import com.starrocks.thrift.TRLTaskTxnCommitAttachment;
@@ -316,12 +315,6 @@ public class RoutineLoadManagerTest {
             }
         };
 
-        new MockUp<GlobalStateMgr>() {
-            public SystemInfoService getCurrentSystemInfo() {
-                return systemInfoService;
-            }
-        };
-
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         routineLoadManager.updateBeTaskSlot();
         routineLoadManager.takeBeTaskSlot(WarehouseManager.DEFAULT_WAREHOUSE_ID);
@@ -339,12 +332,6 @@ public class RoutineLoadManagerTest {
                 systemInfoService.getBackendIds(true);
                 minTimes = 0;
                 result = beIds;
-            }
-        };
-
-        new MockUp<GlobalStateMgr>() {
-            public SystemInfoService getCurrentSystemInfo() {
-                return systemInfoService;
             }
         };
 
@@ -847,7 +834,6 @@ public class RoutineLoadManagerTest {
 
         Assert.assertEquals(RoutineLoadJob.JobState.STOPPED, routineLoadJob.getState());
     }
-
 
     @Test
     public void testLoadImageWithoutExpiredJob(@Mocked GlobalStateMgr globalStateMgr,

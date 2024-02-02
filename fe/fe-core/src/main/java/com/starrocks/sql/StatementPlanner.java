@@ -419,7 +419,7 @@ public class StatementPlanner {
                     "Unsupported dml statement " + stmt.getClass().getSimpleName());
         }
 
-        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         TransactionState.LoadJobSourceType sourceType = TransactionState.LoadJobSourceType.INSERT_STREAMING;
         long txnId = -1L;
         if (targetTable instanceof ExternalOlapTable) {
@@ -450,7 +450,7 @@ public class StatementPlanner {
             // schema table and iceberg and hive table does not need txn
         } else {
             long warehouseId = session.getCurrentWarehouseId();
-            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
             long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
             long dbId = db.getId();
             txnId = transactionMgr.beginTransaction(

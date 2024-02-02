@@ -140,7 +140,7 @@ public class ShowCreateViewStmtTest {
         String dropSQL = "drop table tbl1";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
         try {
-            GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
         } catch (Exception ex) {
 
         }
@@ -185,9 +185,9 @@ public class ShowCreateViewStmtTest {
         for (String[] testcase : testCases) {
             String dropViewSql = "drop view if exists " + testcase[0];
             DropTableStmt dropViewStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropViewSql, ctx);
-            GlobalStateMgr.getCurrentState().dropTable(dropViewStmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropViewStmt);
             CreateViewStmt createViewStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(testcase[1], ctx);
-            GlobalStateMgr.getCurrentState().createView(createViewStmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createView(createViewStmt);
 
             List<Table> views = GlobalStateMgr.getCurrentState().getDb(createViewStmt.getDbName()).getViews();
             List<String> res = Lists.newArrayList();
@@ -206,7 +206,7 @@ public class ShowCreateViewStmtTest {
         String createViewSql = "create view test_view (k1 COMMENT \"dt\", k2, v1) COMMENT \"view comment\" " +
                 "as select * from tbl1";
         CreateViewStmt createViewStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(createViewSql, ctx);
-        GlobalStateMgr.getCurrentState().createView(createViewStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createView(createViewStmt);
 
         List<Table> views = GlobalStateMgr.getCurrentState().getDb(createViewStmt.getDbName()).getViews();
         List<String> res = Lists.newArrayList();
@@ -243,7 +243,7 @@ public class ShowCreateViewStmtTest {
                 "\tt0.c4 as d\n" +
                 "from t0";
         CreateViewStmt createViewStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(createViewSql, ctx);
-        GlobalStateMgr.getCurrentState().createView(createViewStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createView(createViewStmt);
 
         String descViewSql = "describe v2";
 
@@ -272,7 +272,7 @@ public class ShowCreateViewStmtTest {
 
         String dropViewSql = "drop view if exists v2";
         DropTableStmt dropViewStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropViewSql, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropViewStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropViewStmt);
     }
 
     @Test

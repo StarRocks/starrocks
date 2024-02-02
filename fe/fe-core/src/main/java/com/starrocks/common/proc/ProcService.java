@@ -50,8 +50,8 @@ public final class ProcService {
 
     private ProcService() {
         root = new BaseProcDir();
-        root.register("backends", new BackendsProcDir(GlobalStateMgr.getCurrentSystemInfo()));
-        root.register("compute_nodes", new ComputeNodeProcDir(GlobalStateMgr.getCurrentSystemInfo()));
+        root.register("backends", new BackendsProcDir(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()));
+        root.register("compute_nodes", new ComputeNodeProcDir(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()));
         root.register("dbs", new DbsProcDir(GlobalStateMgr.getCurrentState()));
         root.register("jobs", new JobsDbProcDir(GlobalStateMgr.getCurrentState()));
         root.register("statistic", new StatisticProcDir(GlobalStateMgr.getCurrentState()));
@@ -70,7 +70,7 @@ public final class ProcService {
         root.register("colocation_group", new ColocationGroupProcDir());
         root.register("catalog", GlobalStateMgr.getCurrentState().getCatalogMgr().getProcNode());
         root.register("compactions", new CompactionsProcNode());
-        root.register("warehouses", new WarehouseProcDir(GlobalStateMgr.getCurrentWarehouseMgr()));
+        root.register("warehouses", new WarehouseProcDir(GlobalStateMgr.getCurrentState().getWarehouseMgr()));
     }
 
     // Get the corresponding PROC Node by the specified path

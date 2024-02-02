@@ -82,7 +82,7 @@ public class ExportJobTest {
         TabletMeta tabletMeta = new TabletMeta(0L, 1L, 2L, 3L, 4, TStorageMedium.HDD, true);
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentInvertedIndex();
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
                 result = invertedIndex;
                 invertedIndex.getTabletMeta(anyLong);
                 result = tabletMeta;
@@ -161,7 +161,7 @@ public class ExportJobTest {
         TabletMeta tabletMeta = new TabletMeta(0L, 1L, 2L, 3L, 4, TStorageMedium.HDD, false);
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentInvertedIndex();
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
                 result = invertedIndex;
                 invertedIndex.getTabletMeta(anyLong);
                 result = tabletMeta;

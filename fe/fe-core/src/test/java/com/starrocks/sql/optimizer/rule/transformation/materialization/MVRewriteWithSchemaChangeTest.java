@@ -62,7 +62,7 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
                 "                );");
         String sql = "CREATE MATERIALIZED VIEW sync_mv1 AS select a, b*10 as col2, c+1 as col3 from sync_tbl_t1;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().createMaterializedView((CreateMaterializedViewStmt) statementBase);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView((CreateMaterializedViewStmt) statementBase);
         waitingRollupJobV2Finish();
         String query = "select a, b*10 as col2, c+1 as col3 from sync_tbl_t1 order by a;";
         String plan = getFragmentPlan(query);

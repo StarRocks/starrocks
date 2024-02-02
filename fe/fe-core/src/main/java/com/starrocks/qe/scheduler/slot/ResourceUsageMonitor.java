@@ -114,7 +114,7 @@ public class ResourceUsageMonitor {
      * @return whether the resource is overloaded.
      */
     private boolean judgeResourceOverloaded() {
-        return GlobalStateMgr.getCurrentSystemInfo().backendAndComputeNodeStream()
+        return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().backendAndComputeNodeStream()
                 .anyMatch(ComputeNode::isResourceOverloaded);
     }
 
@@ -124,7 +124,7 @@ public class ResourceUsageMonitor {
      * @return whether the group resource is overloaded.
      */
     private boolean judgeGroupResourceOverloaded(long groupId) {
-        return GlobalStateMgr.getCurrentSystemInfo().backendAndComputeNodeStream()
+        return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().backendAndComputeNodeStream()
                 .anyMatch(worker -> worker.isResourceGroupOverloaded(groupId));
     }
 

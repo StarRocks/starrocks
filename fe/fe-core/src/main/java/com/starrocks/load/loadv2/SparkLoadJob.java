@@ -247,8 +247,8 @@ public class SparkLoadJob extends BulkLoadJob {
             throws LabelAlreadyUsedException, BeginTransactionException,
             RunningTxnExceedException, AnalysisException, DuplicatedRequestException {
         try {
-            Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getAvailbleWarehouse(warehouseId);
-            transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr()
+            Warehouse currentWh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAvailbleWarehouse(warehouseId);
+            transactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                 .beginTransaction(dbId, Lists.newArrayList(fileGroupAggInfo.getAllTableIds()), label, null,
                         new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                         LoadJobSourceType.FRONTEND, id, timeoutSecond, currentWh.getAnyAvailableCluster().getWorkerGroupId());
@@ -551,7 +551,7 @@ public class SparkLoadJob extends BulkLoadJob {
                                         long replicaId = replica.getId();
                                         tabletAllReplicas.add(replicaId);
                                         long backendId = replica.getBackendId();
-                                        Backend backend = GlobalStateMgr.getCurrentSystemInfo()
+                                        Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                                                 .getBackend(backendId);
 
                                         pushTask(backendId, tableId, partitionId, indexId, tabletId,
@@ -574,12 +574,12 @@ public class SparkLoadJob extends BulkLoadJob {
 
                                 } else {
                                     // lake tablet
-                                    Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().
+                                    Warehouse currentWh = GlobalStateMgr.getCurrentState().getWarehouseMgr().
                                             getAvailbleWarehouse(warehouseId);
                                     long backendId = ((LakeTablet) tablet).
                                             getPrimaryComputeNodeId(currentWh.getAnyAvailableCluster().getWorkerGroupId());
                                     // TODO: need to refactor after be split into cn + dn
-                                    ComputeNode backend = GlobalStateMgr.getCurrentSystemInfo().
+                                    ComputeNode backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().
                                             getBackendOrComputeNode(backendId);
                                     if (backend == null) {
                                         LOG.warn("replica {} not exists", backendId);
@@ -634,7 +634,7 @@ public class SparkLoadJob extends BulkLoadJob {
 
         if (!tabletToSentReplicaPushTask.containsKey(tabletId)
                 || !tabletToSentReplicaPushTask.get(tabletId).containsKey(replicaId)) {
-            long taskSignature = GlobalStateMgr.getCurrentGlobalTransactionMgr()
+            long taskSignature = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                     .getTransactionIDGenerator().getNextTransactionId();
             // deep copy TBrokerScanRange because filePath and fileSize will be updated
             // in different tablet push task
@@ -764,7 +764,7 @@ public class SparkLoadJob extends BulkLoadJob {
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.WRITE);
         try {
-            GlobalStateMgr.getCurrentGlobalTransactionMgr().commitTransaction(
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().commitTransaction(
                     dbId, transactionId, commitInfos, Lists.newArrayList(),
                     new LoadJobFinalOperation(id, loadingStatus, progress, loadStartTimestamp,
                             finishTimestamp, state, failMsg));

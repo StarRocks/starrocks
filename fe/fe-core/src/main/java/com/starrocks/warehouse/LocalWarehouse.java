@@ -129,12 +129,12 @@ public class LocalWarehouse extends Warehouse {
 
     private void deleteWorkerFromStarMgr() throws DdlException {
         long workerGroupId = cluster.getWorkerGroupId();
-        StarOSAgentEpack starOSAgent = (StarOSAgentEpack) GlobalStateMgr.getCurrentStarOSAgent();
+        StarOSAgentEpack starOSAgent = (StarOSAgentEpack) GlobalStateMgr.getCurrentState().getStarOSAgent();
         starOSAgent.deleteWorkerGroup(workerGroupId);
     }
 
     private void dropNodeFromSystem() throws DdlException {
-        GlobalStateMgr.getCurrentSystemInfo().dropNodes(this.getId());
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropNodes(this.getId());
     }
 
 }

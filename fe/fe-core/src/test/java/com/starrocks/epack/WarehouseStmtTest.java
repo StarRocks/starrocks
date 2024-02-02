@@ -84,7 +84,7 @@ public class WarehouseStmtTest {
     public void testOperateWarehouse(@Mocked StarOSAgentEpack starOSAgent) throws Exception {
         new MockUp<GlobalStateMgr>() {
             @Mock
-            public StarOSAgent getCurrentStarOSAgent() {
+            public StarOSAgent getStarOSAgent() {
                 return starOSAgent;
             }
         };

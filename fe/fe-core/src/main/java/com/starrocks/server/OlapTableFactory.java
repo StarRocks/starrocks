@@ -252,7 +252,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             } else {
                 LOG.debug("table: {} doesn't use light schema change", table.getName());
             }
-            
+
             // analyze bloom filter columns
             Set<String> bfColumns = null;
             double bfFpp = 0;
@@ -298,20 +298,22 @@ public class OlapTableFactory implements AbstractTableFactory {
                     PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_INMEMORY, false);
             table.setIsInMemory(isInMemory);
 
-            Pair<Boolean, Boolean> analyzeRet = PropertyAnalyzer.analyzeEnablePersistentIndex(properties, 
+            Pair<Boolean, Boolean> analyzeRet = PropertyAnalyzer.analyzeEnablePersistentIndex(properties,
                     table.getKeysType() == KeysType.PRIMARY_KEYS);
             boolean enablePersistentIndex = analyzeRet.first;
             boolean enablePersistentIndexByUser = analyzeRet.second;
             if (enablePersistentIndex && table.isCloudNativeTable()) {
                 // Judge there are whether compute nodes without storagePath or not.
                 // Cannot create cloud native table with persistent_index = true when ComputeNode without storagePath
-                Set<Long> cnUnSetStoragePath = GlobalStateMgr.getCurrentSystemInfo().getAvailableComputeNodeIds().
-                        stream().filter(id -> !GlobalStateMgr.getCurrentSystemInfo().getComputeNode(id).
-                                isSetStoragePath()).collect(Collectors.toSet());
+                Set<Long> cnUnSetStoragePath =
+                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAvailableComputeNodeIds().
+                                stream()
+                                .filter(id -> !GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNode(id).
+                                        isSetStoragePath()).collect(Collectors.toSet());
                 if (cnUnSetStoragePath.size() != 0) {
                     if (enablePersistentIndexByUser) {
                         throw new DdlException("Cannot create cloud native table with persistent_index = true " +
-                            "when ComputeNode without storage_path, nodeId:" + cnUnSetStoragePath);
+                                "when ComputeNode without storage_path, nodeId:" + cnUnSetStoragePath);
                     } else {
                         // if user has not requested persistent index, switch it to false
                         table.setEnablePersistentIndex(false);
@@ -328,7 +330,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             table.setEnablePersistentIndex(enablePersistentIndex);
 
             try {
-                table.setPrimaryIndexCacheExpireSec(PropertyAnalyzer.analyzePrimaryIndexCacheExpireSecProp(properties, 
+                table.setPrimaryIndexCacheExpireSec(PropertyAnalyzer.analyzePrimaryIndexCacheExpireSecProp(properties,
                         PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC, 0));
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
@@ -365,7 +367,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
             }
-                    
+
             // write quorum
             try {
                 table.setWriteQuorum(PropertyAnalyzer.analyzeWriteQuorum(properties));

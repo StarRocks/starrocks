@@ -429,7 +429,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
 
         this.watershedTxnId =
-                GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
         this.jobState = JobState.WAITING_TXN;
         span.setAttribute("watershedTxnId", this.watershedTxnId);
         span.addEvent("setWaitingTxn");
@@ -742,7 +742,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                         long baseTabletId = physicalPartitionIndexTabletMap.get(
                                 partitionId, shadowIdxId).get(shadowTablet.getId());
                         // NOTE: known for sure that only LocalTablet uses this SchemaChangeJobV2 class
-                        GlobalStateMgr.getCurrentInvertedIndex().
+                        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().
                                 markTabletForceDelete(baseTabletId, shadowTablet.getBackendIds());
                         List<Replica> replicas = ((LocalTablet) shadowTablet).getImmutableReplicas();
                         int healthyReplicaNum = 0;
@@ -824,7 +824,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     }
 
     private void onFinished(OlapTable tbl) {
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         // 
         // partition visible version won't update in schema change, so we need make global
         // dictionary invalid after schema change.
@@ -875,7 +875,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
                     // the origin tablet created by old schema can be deleted from FE meta data
                     for (Tablet originTablet : droppedIdx.getTablets()) {
-                        GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(originTablet.getId());
+                        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablet(originTablet.getId());
                     }
                 }
             }
@@ -951,7 +951,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         // clear tasks if has
         AgentTaskQueue.removeBatchTask(schemaChangeBatchTask, TTaskType.ALTER);
         // remove all shadow indexes, and set state to NORMAL
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db != null) {
             Locker locker = new Locker();
@@ -987,7 +987,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
     // Check whether transactions of the given database which txnId is less than 'watershedTxnId' are finished.
     protected boolean isPreviousLoadFinished() throws AnalysisException {
-        return GlobalStateMgr.getCurrentGlobalTransactionMgr()
+        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                 .isPreviousTransactionsFinished(watershedTxnId, dbId, Lists.newArrayList(tableId));
     }
 
@@ -1012,7 +1012,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                 return;
             }
 
-            TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+            TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
             for (Cell<Long, Long, MaterializedIndex> cell : physicalPartitionIndexMap.cellSet()) {
                 long partitionId = cell.getRowKey();
                 long shadowIndexId = cell.getColumnKey();

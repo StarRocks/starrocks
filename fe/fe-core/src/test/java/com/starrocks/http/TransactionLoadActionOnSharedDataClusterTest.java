@@ -14,7 +14,6 @@
 
 package com.starrocks.http;
 
-
 import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.server.GlobalStateMgr;
@@ -65,7 +64,7 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
         computeNode.setBePort(9300);
         computeNode.setAlive(true);
         computeNode.setHttpPort(TEST_HTTP_PORT);
-        GlobalStateMgr.getCurrentSystemInfo().addComputeNode(computeNode);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(computeNode);
         new MockUp<GlobalStateMgr>() {
             @Mock
             boolean isLeader() {
@@ -98,7 +97,8 @@ public class TransactionLoadActionOnSharedDataClusterTest extends StarRocksHttpT
      */
     @AfterClass
     public static void close() {
-        GlobalStateMgr.getCurrentSystemInfo().dropComputeNode(new ComputeNode(1234, "localhost", HTTP_PORT));
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                .dropComputeNode(new ComputeNode(1234, "localhost", HTTP_PORT));
         beServer.shutDown();
     }
 

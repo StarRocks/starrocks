@@ -224,14 +224,14 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
 
     @Override
     public int calculateCurrentConcurrentTaskNum() throws MetaNotFoundException {
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         // TODO: need to refactor after be split into cn + dn
         int aliveNodeNum = systemInfoService.getAliveBackendNumber();
         if (RunMode.isSharedDataMode()) {
-            Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
+            Warehouse currentWh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
             aliveNodeNum = 0;
             for (long nodeId : currentWh.getAnyAvailableCluster().getAvailableComputeNodeIds()) {
-                ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
+                ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
                 if (node != null && node.isAlive()) {
                     ++aliveNodeNum;
                 }

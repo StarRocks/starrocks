@@ -731,7 +731,7 @@ public class PlanFragmentBuilder {
                 // we can remove code when refactor tablet select
                 long localBeId = -1;
                 if (Config.enable_local_replica_selection) {
-                    localBeId = GlobalStateMgr.getCurrentSystemInfo()
+                    localBeId = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                             .getBackendIdByHost(FrontendOptions.getLocalHostAddress());
                 }
 
@@ -1680,7 +1680,7 @@ public class PlanFragmentBuilder {
             SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
             boolean enableLocalShuffleAgg = sessionVariable.isEnableLocalShuffleAgg()
                     && sessionVariable.isEnablePipelineEngine()
-                    && GlobalStateMgr.getCurrentSystemInfo().isSingleBackendAndComputeNode();
+                    && GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().isSingleBackendAndComputeNode();
             if (!enableLocalShuffleAgg) {
                 return inputFragment;
             }
@@ -1973,7 +1973,7 @@ public class PlanFragmentBuilder {
         // Check whether colocate Table exists in the same Fragment
         public boolean hasColocateOlapScanChildInFragment(PlanNode node) {
             if (node instanceof OlapScanNode) {
-                ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
+                ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
                 OlapScanNode scanNode = (OlapScanNode) node;
                 if (colocateIndex.isColocateTable(scanNode.getOlapTable().getId())) {
                     return true;

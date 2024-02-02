@@ -66,7 +66,7 @@ public class SystemInfoServiceEpack extends SystemInfoService {
 
     public void addComuteNodeToWarehouse(ComputeNode computeNode, String warehouseName)
             throws DdlException {
-        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName);
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
         // check if the warehouse exist
         if (warehouse == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseName);
@@ -124,7 +124,7 @@ public class SystemInfoServiceEpack extends SystemInfoService {
             throws DdlException {
 
         // check if the warehouse exist
-        if (GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName) == null) {
+        if (GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName) == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseName);
         }
 
@@ -135,7 +135,7 @@ public class SystemInfoServiceEpack extends SystemInfoService {
                 throw new DdlException("compute node does not exists[" + pair.first + ":" + pair.second + "]");
             }
             // check if warehouseName is right
-            Warehouse wh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(cn.getWarehouseId());
+            Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(cn.getWarehouseId());
             if (wh != null && !warehouseName.equalsIgnoreCase(wh.getName())) {
                 throw new DdlException("compute node [" + pair.first + ":" + pair.second +
                         "] does not exist in warehouse " + warehouseName);
@@ -161,7 +161,7 @@ public class SystemInfoServiceEpack extends SystemInfoService {
             // only need to remove worker after be reported its staretPort
             if (starletPort != 0) {
                 String workerAddr = dropComputeNode.getHost() + ":" + starletPort;
-                GlobalStateMgr.getCurrentStarOSAgent().removeWorker(workerAddr, dropComputeNode.getWorkerGroupId());
+                GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(workerAddr, dropComputeNode.getWorkerGroupId());
             }
         }
 
@@ -180,7 +180,7 @@ public class SystemInfoServiceEpack extends SystemInfoService {
         String warehouseName = dropBackendClause.getWarehouseName();
 
         // check if the warehouse exist
-        if (GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName) == null) {
+        if (GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName) == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseName);
         }
 
@@ -192,7 +192,7 @@ public class SystemInfoServiceEpack extends SystemInfoService {
             }
 
             // check if warehouseName is right
-            Warehouse wh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(be.getWarehouseId());
+            Warehouse wh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(be.getWarehouseId());
             if (wh != null && !warehouseName.equalsIgnoreCase(wh.getName())) {
                 LOG.warn("warehouseName in dropBackends is not equal, " +
                         "warehouseName from dropBackendClause is {}, while actual one is {}",
@@ -230,7 +230,7 @@ public class SystemInfoServiceEpack extends SystemInfoService {
             // only need to remove worker after be reported its staretPort
             if (starletPort != 0) {
                 String workerAddr = droppedBackend.getHost() + ":" + starletPort;
-                GlobalStateMgr.getCurrentStarOSAgent().removeWorker(workerAddr, droppedBackend.getWorkerGroupId());
+                GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(workerAddr, droppedBackend.getWorkerGroupId());
             }
         }
 

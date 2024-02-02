@@ -58,7 +58,7 @@ public class UpdateDbUsedDataQuotaDaemon extends FrontendDaemon {
 
     private void updateAllDatabaseUsedDataQuota() {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        List<Long> dbIdList = globalStateMgr.getDbIds();
+        List<Long> dbIdList = globalStateMgr.getLocalMetastore().getDbIds();
         GlobalTransactionMgr globalTransactionMgr = globalStateMgr.getGlobalTransactionMgr();
         for (Long dbId : dbIdList) {
             Database db = globalStateMgr.getDb(dbId);

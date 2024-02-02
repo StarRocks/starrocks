@@ -141,7 +141,7 @@ public class OlapTableAlterJobV2Builder extends AlterJobV2Builder {
                          * if the quorum of replica number is not satisfied.
                          */
                         for (Tablet tablet : addedTablets) {
-                            GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tablet.getId());
+                            GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablet(tablet.getId());
                         }
                         throw new DdlException(
                                 "tablet " + originTabletId + " has few healthy replica: " + healthyReplicaNum);

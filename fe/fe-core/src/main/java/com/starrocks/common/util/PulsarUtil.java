@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.common.util;
 
 import com.google.common.collect.ImmutableMap;
@@ -53,15 +52,15 @@ public class PulsarUtil {
     private static final PulsarUtil.ProxyAPI PROXY_API = new PulsarUtil.ProxyAPI();
 
     public static List<String> getAllPulsarPartitions(String serviceUrl, String topic, String subscription,
-                                                       ImmutableMap<String, String> properties,
-                                                       long warehouseId) throws UserException {
+                                                      ImmutableMap<String, String> properties,
+                                                      long warehouseId) throws UserException {
         return PROXY_API.getAllPulsarPartitions(serviceUrl, topic, subscription, properties, warehouseId);
     }
 
     public static Map<String, Long> getBacklogNums(String serviceUrl, String topic, String subscription,
-                                                    ImmutableMap<String, String> properties,
-                                                    List<String> partitions,
-                                                    long warehouseId) throws UserException {
+                                                   ImmutableMap<String, String> properties,
+                                                   List<String> partitions,
+                                                   long warehouseId) throws UserException {
         return PROXY_API.getBacklogNums(serviceUrl, topic, subscription, properties, partitions, warehouseId);
     }
 
@@ -159,9 +158,10 @@ public class PulsarUtil {
                         warehouseId = req.pulsarInfo.warehouseId;
                     }
 
-                    Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
+                    Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
                     for (long nodeId : warehouse.getAnyAvailableCluster().getAvailableComputeNodeIds()) {
-                        ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
+                        ComputeNode node =
+                                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
                         if (node != null && node.isAlive()) {
                             nodeIds.add(nodeId);
                         }
@@ -170,7 +170,7 @@ public class PulsarUtil {
                         throw new LoadException("Failed to send proxy request. No alive backends or computeNodes");
                     }
                 } else {
-                    nodeIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
+                    nodeIds = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true);
                     if (nodeIds.isEmpty()) {
                         throw new LoadException("Failed to send proxy request. No alive backends");
                     }
@@ -178,7 +178,8 @@ public class PulsarUtil {
 
                 Collections.shuffle(nodeIds);
 
-                ComputeNode be = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeIds.get(0));
+                ComputeNode be =
+                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeIds.get(0));
                 address = new TNetworkAddress(be.getHost(), be.getBrpcPort());
 
                 // get info

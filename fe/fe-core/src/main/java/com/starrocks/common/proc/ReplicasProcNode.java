@@ -68,7 +68,7 @@ public class ReplicasProcNode implements ProcNodeInterface {
 
     @Override
     public ProcResult fetchResult() {
-        ImmutableMap<Long, Backend> backendMap = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
+        ImmutableMap<Long, Backend> backendMap = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
 
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);

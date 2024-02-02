@@ -190,7 +190,8 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
     private SetMultimap<TNetworkAddress, TabletWithVersion> assignTablet2Backends() {
         SetMultimap<TNetworkAddress, TabletWithVersion> backend2Tablets = HashMultimap.create();
         scanRangeLocations.forEach(range -> {
-            ImmutableMap<Long, Backend> idToBackend = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
+            ImmutableMap<Long, Backend> idToBackend =
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
 
             TInternalScanRange internalScanRange = range.getScan_range().getInternal_scan_range();
             TabletWithVersion tabletWithVersion = new TabletWithVersion(internalScanRange.getTablet_id(),

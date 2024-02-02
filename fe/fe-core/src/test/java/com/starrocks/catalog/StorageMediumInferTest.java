@@ -59,7 +59,7 @@ public class StorageMediumInferTest {
     @BeforeClass
     public static void init() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
-        be1 = GlobalStateMgr.getCurrentSystemInfo().getBackend(10001);
+        be1 = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(10001);
         be1.getDisks().get("10001/path1").setPathHash(10001);
         be2 = UtFrameUtils.addMockBackend(10002);
         be2.getDisks().get("10002/path1").setPathHash(10002);
@@ -79,7 +79,7 @@ public class StorageMediumInferTest {
 
     private static void alterTableWithNewParser(String sql) throws Exception {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
     }
 
     @Test
@@ -94,7 +94,7 @@ public class StorageMediumInferTest {
         OlapTable tbl1 = (OlapTable) db.getTable("tbl1");
         List<Partition> partitionList1 = Lists.newArrayList(tbl1.getPartitions());
         DataProperty dataProperty1 =
-                globalStateMgr.getDataPropertyIncludeRecycleBin(tbl1.getPartitionInfo(),
+                globalStateMgr.getLocalMetastore().getDataPropertyIncludeRecycleBin(tbl1.getPartitionInfo(),
                         partitionList1.get(0).getId());
         Assert.assertEquals(TStorageMedium.HDD, dataProperty1.getStorageMedium());
 
@@ -107,7 +107,7 @@ public class StorageMediumInferTest {
         OlapTable tbl2 = (OlapTable) db.getTable("tbl2");
         List<Partition> partitionList2 = Lists.newArrayList(tbl2.getPartitions());
         DataProperty dataProperty2 =
-                globalStateMgr.getDataPropertyIncludeRecycleBin(tbl2.getPartitionInfo(),
+                globalStateMgr.getLocalMetastore().getDataPropertyIncludeRecycleBin(tbl2.getPartitionInfo(),
                         partitionList2.get(0).getId());
         Assert.assertEquals(TStorageMedium.SSD, dataProperty2.getStorageMedium());
 
@@ -119,7 +119,7 @@ public class StorageMediumInferTest {
         OlapTable tbl3 = (OlapTable) db.getTable("tbl3");
         List<Partition> partitionList3 = Lists.newArrayList(tbl3.getPartitions());
         DataProperty dataProperty3 =
-                globalStateMgr.getDataPropertyIncludeRecycleBin(tbl3.getPartitionInfo(),
+                globalStateMgr.getLocalMetastore().getDataPropertyIncludeRecycleBin(tbl3.getPartitionInfo(),
                         partitionList3.get(0).getId());
         Assert.assertEquals(TStorageMedium.SSD, dataProperty3.getStorageMedium());
 
@@ -129,7 +129,7 @@ public class StorageMediumInferTest {
         OlapTable tbl4 = (OlapTable) db.getTable("tbl4");
         List<Partition> partitionList4 = Lists.newArrayList(tbl4.getPartitions());
         DataProperty dataProperty4 =
-                globalStateMgr.getDataPropertyIncludeRecycleBin(tbl4.getPartitionInfo(),
+                globalStateMgr.getLocalMetastore().getDataPropertyIncludeRecycleBin(tbl4.getPartitionInfo(),
                         partitionList4.get(0).getId());
         Assert.assertEquals(TStorageMedium.HDD, dataProperty4.getStorageMedium());
     }
@@ -150,7 +150,7 @@ public class StorageMediumInferTest {
         Assert.assertEquals(2, partitionList2.size());
         for (Partition partition : partitionList2) {
             DataProperty dataProperty2 =
-                    globalStateMgr.getDataPropertyIncludeRecycleBin(tbl2.getPartitionInfo(),
+                    globalStateMgr.getLocalMetastore().getDataPropertyIncludeRecycleBin(tbl2.getPartitionInfo(),
                             partition.getId());
             Assert.assertEquals(TStorageMedium.SSD, dataProperty2.getStorageMedium());
         }

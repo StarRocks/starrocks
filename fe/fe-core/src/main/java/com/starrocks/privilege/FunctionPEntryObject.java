@@ -83,7 +83,7 @@ public class FunctionPEntryObject implements PEntryObject {
         if (databaseId == PrivilegeBuiltinConstants.GLOBAL_FUNCTION_DEFAULT_DATABASE_ID) {
             allFunctions = globalStateMgr.getGlobalFunctionMgr().getFunctions();
         } else {
-            Database db = globalStateMgr.getDbIncludeRecycleBin(this.databaseId);
+            Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(this.databaseId);
             if (db == null) {
                 return false;
             }

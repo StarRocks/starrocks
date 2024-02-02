@@ -136,14 +136,14 @@ public class AlterMaterializedViewTest {
             String alterMvSql = "alter materialized view mv1 set (\"session.query_timeout\" = \"10000\")";
             AlterMaterializedViewStmt stmt =
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-            currentState.alterMaterializedView(stmt);
+            currentState.getLocalMetastore().alterMaterializedView(stmt);
         }
 
         {
             String alterMvSql = "alter materialized view mv1 set (\"query_timeout\" = \"10000\")";
             AlterMaterializedViewStmt stmt =
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-            Assert.assertThrows(SemanticException.class, () -> currentState.alterMaterializedView(stmt));
+            Assert.assertThrows(SemanticException.class, () -> currentState.getLocalMetastore().alterMaterializedView(stmt));
         }
     }
 
@@ -153,7 +153,7 @@ public class AlterMaterializedViewTest {
         String alterMvSql = "alter materialized view mv1 set (\"colocate_with\" = \"group1\")";
         AlterMaterializedViewStmt stmt =
                 (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-        Assert.assertThrows(SemanticException.class, () -> currentState.alterMaterializedView(stmt));
+        Assert.assertThrows(SemanticException.class, () -> currentState.getLocalMetastore().alterMaterializedView(stmt));
     }
 
     @Test
@@ -162,14 +162,14 @@ public class AlterMaterializedViewTest {
             String alterMvSql = "alter materialized view mv1 set (\"mv_rewrite_staleness_second\" = \"60\")";
             AlterMaterializedViewStmt stmt =
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-            currentState.alterMaterializedView(stmt);
+            currentState.getLocalMetastore().alterMaterializedView(stmt);
         }
 
         {
             String alterMvSql = "alter materialized view mv1 set (\"mv_rewrite_staleness_second\" = \"abc\")";
             AlterMaterializedViewStmt stmt =
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-            Assert.assertThrows(SemanticException.class, () -> currentState.alterMaterializedView(stmt));
+            Assert.assertThrows(SemanticException.class, () -> currentState.getLocalMetastore().alterMaterializedView(stmt));
         }
     }
 

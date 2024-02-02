@@ -102,7 +102,6 @@ public class TableFunctionTable extends Table {
         parseProperties();
         parseFiles();
 
-
         List<Column> columns = new ArrayList<>();
         if (path.startsWith(FAKE_PATH)) {
             columns.add(new Column("col_int", Type.INT));
@@ -309,10 +308,10 @@ public class TableFunctionTable extends Table {
         }
         TNetworkAddress address;
         try {
-            List<Long> nodeIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
+            List<Long> nodeIds = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true);
             if (RunMode.isSharedDataMode()) {
                 long warehouseId = ConnectContext.get().getCurrentWarehouseId();
-                Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getAvailbleWarehouse(warehouseId);
+                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAvailbleWarehouse(warehouseId);
                 nodeIds = warehouse.getAnyAvailableCluster().getAvailableComputeNodeIds();
             }
 
@@ -325,7 +324,8 @@ public class TableFunctionTable extends Table {
             }
 
             Collections.shuffle(nodeIds);
-            ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeIds.get(0));
+            ComputeNode node =
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeIds.get(0));
             address = new TNetworkAddress(node.getHost(), node.getBrpcPort());
 
         } catch (WarehouseUnavailableException e) {
@@ -354,11 +354,12 @@ public class TableFunctionTable extends Table {
         }
         return columns;
     }
+
     private List<Column> getSchemaFromPath() throws DdlException {
         List<Column> columns = new ArrayList<>();
         if (!columnsFromPath.isEmpty()) {
             for (String colName : columnsFromPath) {
-                Optional<Column> column =  columns.stream().filter(col -> col.nameEquals(colName, false)).findFirst();
+                Optional<Column> column = columns.stream().filter(col -> col.nameEquals(colName, false)).findFirst();
                 if (column.isPresent()) {
                     throw new DdlException("duplicated name in columns from path, " +
                             "a column with same name already exists in the file table: " + colName);

@@ -108,7 +108,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
     @Override
     protected void runAfterCatalogReady() {
         try {
-            GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+            GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
             if (Config.lake_enable_batch_publish_version && RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
                 // batch publish
                 List<TransactionStateBatch> readyTransactionStatesBatch = globalTransactionMgr.
@@ -127,9 +127,9 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
 
             // TODO: need to refactor after be split into cn + dn
-            List<Long> allBackends = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false);
+            List<Long> allBackends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(false);
             if (RunMode.isSharedDataMode()) {
-                allBackends.addAll(GlobalStateMgr.getCurrentSystemInfo().getComputeNodeIds(false));
+                allBackends.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodeIds(false));
             }
 
             if (allBackends.isEmpty()) {
@@ -280,7 +280,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
     }
 
     private void publishVersionForOlapTable(List<TransactionState> readyTransactionStates) throws UserException {
-        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
 
         // every backend-transaction identified a single task
         AgentBatchTask batchTask = new AgentBatchTask();
@@ -452,7 +452,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
     }
 
     private CompletableFuture<Void> publishLakeTransactionAsync(TransactionState txnState) {
-        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         long txnId = txnState.getTransactionId();
         long dbId = txnState.getDbId();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
@@ -630,7 +630,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
     }
 
     private CompletableFuture<Void> publishLakeTransactionBatchAsync(TransactionStateBatch txnStateBatch) {
-        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         assert txnStateBatch.size() > 1;
         // pick up all tableCommitInfo
         // only one table,if batch has multi transactionState for now,

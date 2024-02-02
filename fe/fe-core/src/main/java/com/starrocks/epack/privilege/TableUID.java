@@ -114,11 +114,11 @@ public class TableUID {
     public boolean validate() {
         Database db;
         if (catalogId == InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID) {
-            db = GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(Long.parseLong(this.databaseUUID));
+            db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(Long.parseLong(this.databaseUUID));
             if (db == null) {
                 return false;
             }
-            return GlobalStateMgr.getCurrentState()
+            return GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTableIncludeRecycleBin(db, Long.parseLong(this.tableUUID)) != null;
         } else {
             Optional<Catalog> catalog = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogById(catalogId);

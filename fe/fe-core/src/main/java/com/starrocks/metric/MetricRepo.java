@@ -440,8 +440,8 @@ public final class MetricRepo {
                 "current unfinished restore job");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_UNFINISHED_RESTORE_JOB);
         List<Database> dbs = Lists.newArrayList();
-        if (GlobalStateMgr.getCurrentState().getIdToDb() != null) {
-            for (Map.Entry<Long, Database> entry : GlobalStateMgr.getCurrentState().getIdToDb().entrySet()) {
+        if (GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb() != null) {
+            for (Map.Entry<Long, Database> entry : GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().entrySet()) {
                 dbs.add(entry.getValue());
             }
 
@@ -534,7 +534,7 @@ public final class MetricRepo {
                 "The count of tablets") {
             @Override
             public Long getValue() {
-                return GlobalStateMgr.getCurrentInvertedIndex().getTabletCount();
+                return GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletCount();
             }
         };
         tabletCnt.addLabel(new MetricLabel("type", "tablet_count"));
@@ -544,7 +544,7 @@ public final class MetricRepo {
                 "The bytes of tablets") {
             @Override
             public Long getValue() {
-                return GlobalStateMgr.getCurrentInvertedIndex().getTabletCount()
+                return GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletCount()
                         * SizeEstimator.estimate(new LocalTablet());
             }
         };
@@ -555,7 +555,7 @@ public final class MetricRepo {
                 "The count of replicas") {
             @Override
             public Long getValue() {
-                return GlobalStateMgr.getCurrentInvertedIndex().getReplicaCount();
+                return GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicaCount();
             }
         };
         replicaCnt.addLabel(new MetricLabel("type", "replica_count"));
@@ -565,7 +565,7 @@ public final class MetricRepo {
                 "The bytes of replicas") {
             @Override
             public Long getValue() {
-                return GlobalStateMgr.getCurrentInvertedIndex().getReplicaCount()
+                return GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicaCount()
                         * SizeEstimator.estimate(new Replica());
             }
         };
@@ -576,7 +576,7 @@ public final class MetricRepo {
                 "The count of txns") {
             @Override
             public Long getValue() {
-                return (long) GlobalStateMgr.getCurrentGlobalTransactionMgr().getFinishedTransactionNum();
+                return (long) GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getFinishedTransactionNum();
             }
         };
         txnCnt.addLabel(new MetricLabel("type", "txn_count"));
@@ -586,7 +586,7 @@ public final class MetricRepo {
                 "The bytes of txns") {
             @Override
             public Long getValue() {
-                return GlobalStateMgr.getCurrentGlobalTransactionMgr().getFinishedTransactionNum()
+                return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getFinishedTransactionNum()
                         * SizeEstimator.estimate(new TransactionState());
             }
         };
@@ -597,7 +597,7 @@ public final class MetricRepo {
                 "The count of txn callbacks") {
             @Override
             public Long getValue() {
-                return GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().getCallBackCnt();
+                return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().getCallBackCnt();
             }
         };
         txnCallbackCnt.addLabel(new MetricLabel("type", "txn_callback_count"));
@@ -762,8 +762,8 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.removeMetrics(TABLET_NUM);
         STARROCKS_METRIC_REGISTER.removeMetrics(TABLET_MAX_COMPACTION_SCORE);
 
-        SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
 
         for (Long beId : infoService.getBackendIds(false)) {
             Backend be = infoService.getBackend(beId);
@@ -954,7 +954,7 @@ public final class MetricRepo {
     // collect table-level metrics
     private static void collectTableMetrics(MetricVisitor visitor, boolean minifyTableMetrics) {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        List<String> dbNames = globalStateMgr.getDbNames();
+        List<String> dbNames = globalStateMgr.getLocalMetastore().listDbNames();
         for (String dbName : dbNames) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (null == db) {
@@ -982,7 +982,7 @@ public final class MetricRepo {
 
     private static void collectDatabaseMetrics(MetricVisitor visitor) {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        List<String> dbNames = globalStateMgr.getDbNames();
+        List<String> dbNames = globalStateMgr.getLocalMetastore().listDbNames();
         GaugeMetricImpl<Integer> databaseNum = new GaugeMetricImpl<>(
                 "database_num", MetricUnit.OPERATIONS, "count of database");
         int dbNum = 0;

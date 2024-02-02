@@ -100,13 +100,13 @@ public class LakeTablet extends Tablet {
     }
 
     public long getPrimaryComputeNodeId() throws UserException {
-        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
         long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
         return getPrimaryComputeNodeId(workerGroupId);
     }
 
     public long getPrimaryComputeNodeId(long clusterId) throws UserException {
-        return GlobalStateMgr.getCurrentStarOSAgent().
+        return GlobalStateMgr.getCurrentState().getStarOSAgent().
                 getPrimaryComputeNodeIdByShard(getShardId(), clusterId);
     }
 
@@ -121,7 +121,7 @@ public class LakeTablet extends Tablet {
             return Collections.emptySet();
         }
         try {
-            return GlobalStateMgr.getCurrentStarOSAgent().getBackendIdsByShard(getShardId(), workerGroupId);
+            return GlobalStateMgr.getCurrentState().getStarOSAgent().getBackendIdsByShard(getShardId(), workerGroupId);
         } catch (UserException e) {
             LOG.warn("Failed to get backends by shard. tablet id: {}", getId(), e);
             return Sets.newHashSet();
@@ -190,8 +190,8 @@ public class LakeTablet extends Tablet {
         if (GlobalStateMgr.isCheckpointThread()) {
             throw new RuntimeException("Cannot call getShardInfo in checkpoint thread");
         }
-        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
         long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
-        return GlobalStateMgr.getCurrentStarOSAgent().getShardInfo(getShardId(), workerGroupId);
+        return GlobalStateMgr.getCurrentState().getStarOSAgent().getShardInfo(getShardId(), workerGroupId);
     }
 }

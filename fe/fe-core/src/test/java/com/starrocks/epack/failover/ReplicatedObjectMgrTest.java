@@ -30,7 +30,7 @@ public class ReplicatedObjectMgrTest {
                 "properties('replication_num' = '1'); ";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql,
                 AnalyzeTestUtil.getConnectContext());
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt);
     }
 
     @Test

@@ -120,7 +120,7 @@ class IMTCreator {
         for (CreateTableStmt create : createTables) {
             LOG.info("creating IMT {} for MV {}", create.getTableName(), view.getName());
             try {
-                GlobalStateMgr.getCurrentState().createTable(create);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(create);
             } catch (DdlException e) {
                 // TODO(murphy) cleanup created IMT, or make it atomic
                 LOG.warn("create IMT {} failed due to ", create.getTableName(), e);

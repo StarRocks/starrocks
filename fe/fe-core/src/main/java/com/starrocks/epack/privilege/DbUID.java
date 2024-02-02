@@ -83,7 +83,7 @@ public class DbUID {
 
     public boolean validate() {
         if (catalogId == InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID) {
-            return GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(Long.parseLong(this.uuid)) != null;
+            return GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(Long.parseLong(this.uuid)) != null;
         } else {
             Optional<Catalog> catalog = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogById(catalogId);
             if (!catalog.isPresent()) {

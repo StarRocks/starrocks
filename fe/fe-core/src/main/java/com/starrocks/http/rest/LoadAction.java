@@ -118,19 +118,19 @@ public class LoadAction extends RestBaseAction {
         // Choose a backend sequentially, or choose a cn in shared_data mode
         List<Long> nodeIds = new ArrayList<>();
         if (RunMode.isSharedDataMode()) {
-            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName);
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
             if (warehouse == null) {
                 throw new DdlException("Warehouse " + warehouseName + " not exists.");
             }
             for (long nodeId : warehouse.getAnyAvailableCluster().getAvailableComputeNodeIds()) {
-                ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
+                ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
                 if (node != null && node.isAvailable()) {
                     nodeIds.add(nodeId);
                 }
             }
             Collections.shuffle(nodeIds);
         } else {
-            nodeIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
+            nodeIds = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().seqChooseBackendIds(1, true, false);
         }
         
         if (CollectionUtils.isEmpty(nodeIds)) {
@@ -138,7 +138,7 @@ public class LoadAction extends RestBaseAction {
         }
 
         // TODO: need to refactor after be split into cn + dn
-        ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeIds.get(0));
+        ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeIds.get(0));
         if (node == null) {
             throw new DdlException("No backend or compute node alive.");
         }

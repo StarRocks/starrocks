@@ -101,7 +101,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             collectStatisticSync(sql, context);
             finishedSQLNum++;
             analyzeStatus.setProgress(finishedSQLNum * 100 / totalCollectSQL);
-            GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
         }
 
         flushInsertStatisticsData(context, true);

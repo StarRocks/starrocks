@@ -56,7 +56,7 @@ public class Utils {
             LOG.info("Ignored error {}", ex.getMessage());
             try {
                 // randomly choose one node from this workerGroup
-                List<Long> nodeIds = GlobalStateMgr.getCurrentStarOSAgent().getWorkersByWorkerGroup(workerGroupId);
+                List<Long> nodeIds = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkersByWorkerGroup(workerGroupId);
                 if (!nodeIds.isEmpty()) {
                     int randomIndex = new Random().nextInt(nodeIds.size());
                     return nodeIds.get(randomIndex);
@@ -77,7 +77,7 @@ public class Utils {
         if (nodeId == null) {
             return null;
         }
-        return GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
+        return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
     }
 
     // Preconditions: Has required the database's reader lock.

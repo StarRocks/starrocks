@@ -204,9 +204,10 @@ public class KafkaUtil {
                         warehouseId = req.kafkaInfo.warehouseId;
                     }
 
-                    Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
+                    Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
                     for (long nodeId : warehouse.getAnyAvailableCluster().getAvailableComputeNodeIds()) {
-                        ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
+                        ComputeNode node =
+                                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
                         if (node != null && node.isAlive()) {
                             nodeIds.add(nodeId);
                         }
@@ -215,7 +216,7 @@ public class KafkaUtil {
                         throw new LoadException("Failed to send proxy request. No alive backends or computeNodes");
                     }
                 } else {
-                    nodeIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
+                    nodeIds = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true);
                     if (nodeIds.isEmpty()) {
                         throw new LoadException("Failed to send proxy request. No alive backends");
                     }
@@ -223,7 +224,8 @@ public class KafkaUtil {
 
                 Collections.shuffle(nodeIds);
 
-                ComputeNode be = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeIds.get(0));
+                ComputeNode be =
+                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeIds.get(0));
                 address = new TNetworkAddress(be.getHost(), be.getBrpcPort());
 
                 // get info
@@ -241,7 +243,7 @@ public class KafkaUtil {
                         if (e.getMessage().contains("Ocurrs time out")) {
                             // When getting kafka info timed out, we tried again three times.
                             if (++retryTimes > 3 || (retryTimes + 1) * Config.routine_load_kafka_timeout_second >
-                                                                            Config.routine_load_task_timeout_second) {
+                                    Config.routine_load_task_timeout_second) {
                                 throw e;
                             }
                             continue;

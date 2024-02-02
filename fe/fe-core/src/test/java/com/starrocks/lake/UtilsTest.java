@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.lake;
 
 import com.starrocks.common.UserException;
@@ -39,7 +38,7 @@ public class UtilsTest {
 
         new MockUp<GlobalStateMgr>() {
             @Mock
-            public StarOSAgent getCurrentStarOSAgent() {
+            public StarOSAgent getStarOSAgent() {
                 return starOSAgentEpack;
             }
         };

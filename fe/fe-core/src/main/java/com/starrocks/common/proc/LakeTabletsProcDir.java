@@ -80,7 +80,7 @@ public class LakeTabletsProcDir implements ProcDirInterface {
         long workerGroupId;
         try {
             long warehouseId = ConnectContext.get().getCurrentWarehouseId();
-            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getAvailbleWarehouse(warehouseId);
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAvailbleWarehouse(warehouseId);
             workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
         } catch (WarehouseUnavailableException e) {
             throw new RuntimeException(e.getMessage());
@@ -176,7 +176,7 @@ public class LakeTabletsProcDir implements ProcDirInterface {
             try {
                 // get current warehouse
                 long warehouseId = ConnectContext.get().getCurrentWarehouseId();
-                Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getAvailbleWarehouse(warehouseId);
+                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAvailbleWarehouse(warehouseId);
 
                 List<String> row = Arrays.asList(
                         String.valueOf(tablet.getId()),

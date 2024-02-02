@@ -32,7 +32,7 @@ public class WarehouseLoadInfoBuilder {
             }
 
             long warehouseId = job.getCurrentWarehouseId();
-            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
             WarehouseLoadStatusInfo info =
                     warehouseToInfo.computeIfAbsent(warehouse.getId(), k -> new WarehouseLoadStatusInfo());
             if (job.isFinal()) {

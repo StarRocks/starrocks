@@ -908,7 +908,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                 }
 
                 ColumnStatistic columnStatistic =
-                        GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistic(table, column.getName());
+                        GlobalStateMgr.getCurrentState().getStatisticStorage().getColumnStatistic(table, column.getName());
                 // Condition 2: the varchar column is low cardinality string column
                 if (!FeConstants.USE_MOCK_DICT_MANAGER && (columnStatistic.isUnknown() ||
                         columnStatistic.getDistinctValuesCount() > CacheDictManager.LOW_CARDINALITY_THRESHOLD)) {

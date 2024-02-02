@@ -772,7 +772,7 @@ public class ShowExecutor {
         ShowResourceGroupUsageStmt showStmt = (ShowResourceGroupUsageStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
 
-        GlobalStateMgr.getCurrentSystemInfo().backendAndComputeNodeStream()
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().backendAndComputeNodeStream()
                 .flatMap(worker -> worker.getResourceGroupUsages().stream()
                         .map(usage -> new ShowResourceGroupUsageStmt.ShowItem(worker, usage)))
                 .filter(item -> showStmt.getGroupName() == null ||
@@ -1919,7 +1919,7 @@ public class ShowExecutor {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         if (showStmt.isShowSingleTablet()) {
             long tabletId = showStmt.getTabletId();
-            TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+            TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
             TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
             Long dbId = tabletMeta != null ? tabletMeta.getDbId() : TabletInvertedIndex.NOT_EXIST_VALUE;
             String dbName = null;
@@ -2183,7 +2183,7 @@ public class ShowExecutor {
         List<Database> dbs = Lists.newArrayList();
 
         if (filterDb == null) {
-            for (Map.Entry<Long, Database> entry : GlobalStateMgr.getCurrentState().getIdToDb().entrySet()) {
+            for (Map.Entry<Long, Database> entry : GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().entrySet()) {
                 dbs.add(entry.getValue());
             }
         } else {
@@ -2229,7 +2229,7 @@ public class ShowExecutor {
         List<Database> dbs = Lists.newArrayList();
 
         if (filterDb == null) {
-            for (Map.Entry<Long, Database> entry : GlobalStateMgr.getCurrentState().getIdToDb().entrySet()) {
+            for (Map.Entry<Long, Database> entry : GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().entrySet()) {
                 dbs.add(entry.getValue());
             }
         } else {
@@ -2644,13 +2644,13 @@ public class ShowExecutor {
         MetaUtils.checkDbNullAndReport(db, showStmt.getDbName());
 
         long txnId = showStmt.getTxnId();
-        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         resultSet = new ShowResultSet(showStmt.getMetaData(), transactionMgr.getSingleTranInfo(db.getId(), txnId));
     }
 
     private void handleShowPlugins() {
         ShowPluginsStmt pluginsStmt = (ShowPluginsStmt) stmt;
-        List<List<String>> rows = GlobalStateMgr.getCurrentPluginMgr().getPluginShowInfos();
+        List<List<String>> rows = GlobalStateMgr.getCurrentState().getPluginMgr().getPluginShowInfos();
         resultSet = new ShowResultSet(pluginsStmt.getMetaData(), rows);
     }
 
@@ -2835,7 +2835,7 @@ public class ShowExecutor {
     private void handleShowNodes() {
         ShowNodesStmt showStmt = (ShowNodesStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
-        WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentWarehouseMgr();
+        WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentState().getWarehouseMgr();
 
         // filter by pattern or warehouseName
         String warehouseName = null;
@@ -3054,7 +3054,7 @@ public class ShowExecutor {
         ShowFailPointStatement showStmt = ((ShowFailPointStatement) stmt);
         // send request and build resultSet
         PListFailPointRequest request = new PListFailPointRequest();
-        SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
+        SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         PatternMatcher matcher = null;
         if (showStmt.getPattern() != null) {
             matcher = PatternMatcher.createMysqlPattern(showStmt.getPattern(),

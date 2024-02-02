@@ -123,8 +123,10 @@ public class DefaultWorkerProviderTest {
             // Reset nextComputeNodeIndex.
             nextComputeNodeIndex.setRef(0);
 
-            workerProvider = workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(), true,
-                    numUsedComputeNodes, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+            workerProvider =
+                    workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                            true,
+                            numUsedComputeNodes, WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
             int numAvailableComputeNodes = 0;
             for (long id = 0; id < 15; id++) {
@@ -192,7 +194,8 @@ public class DefaultWorkerProviderTest {
                 nextComputeNodeIndex.setRef(0);
 
                 workerProvider =
-                        workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(), false,
+                        workerProviderFactory.captureAvailableWorkers(
+                                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(), false,
                                 numUsedComputeNodes, WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
                 for (long id = 0; id < 15; id++) {

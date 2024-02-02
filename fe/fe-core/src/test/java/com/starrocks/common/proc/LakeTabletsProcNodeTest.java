@@ -75,14 +75,14 @@ public class LakeTabletsProcNodeTest {
                 ConnectContext.get();
                 result = connectContext;
 
-                globalStateMgr.getCurrentStarOSAgent();
+                globalStateMgr.getCurrentState().getStarOSAgent();
                 result = agent;
                 agent.getBackendIdsByShard(tablet1Id, 0);
                 result = Sets.newHashSet(10000, 10001);
                 agent.getBackendIdsByShard(tablet2Id, 0);
                 result = Sets.newHashSet(10001, 10002);
 
-                globalStateMgr.getCurrentWarehouseMgr();
+                globalStateMgr.getCurrentState().getWarehouseMgr();
                 result = warehouseManager;
 
             }

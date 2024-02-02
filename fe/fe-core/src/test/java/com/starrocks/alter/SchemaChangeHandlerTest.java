@@ -123,7 +123,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
 
     @Test
     public void testAggAddOrDropColumn() throws Exception {
-        LOG.info("dbName: {}", GlobalStateMgr.getCurrentState().getDbNames());
+        LOG.info("dbName: {}", GlobalStateMgr.getCurrentState().getLocalMetastore().listDbNames());
 
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable tbl = (OlapTable) db.getTable("sc_agg");
@@ -251,7 +251,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
     @Test
     public void testUniqAddOrDropColumn() throws Exception {
 
-        LOG.info("dbName: {}", GlobalStateMgr.getCurrentState().getDbNames());
+        LOG.info("dbName: {}", GlobalStateMgr.getCurrentState().getLocalMetastore().listDbNames());
 
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable tbl = (OlapTable) db.getTable("sc_uniq");
@@ -308,7 +308,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
     @Test
     public void testDupAddOrDropColumn() throws Exception {
 
-        LOG.info("dbName: {}", GlobalStateMgr.getCurrentState().getDbNames());
+        LOG.info("dbName: {}", GlobalStateMgr.getCurrentState().getLocalMetastore().listDbNames());
 
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable tbl = (OlapTable) db.getTable("sc_dup");
@@ -404,7 +404,7 @@ public class SchemaChangeHandlerTest extends TestWithFeService {
     @Test
     public void testSetPrimaryIndexCacheExpireSec() throws Exception {
 
-        LOG.info("dbName: {}", GlobalStateMgr.getCurrentState().getDbNames());
+        LOG.info("dbName: {}", GlobalStateMgr.getCurrentState().getLocalMetastore().listDbNames());
 
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable tbl = (OlapTable) db.getTable("sc_pk");

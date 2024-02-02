@@ -91,7 +91,7 @@ public class MVActiveChecker extends FrontendDaemon {
     }
 
     private void process() {
-        Collection<Database> dbs = GlobalStateMgr.getCurrentState().getIdToDb().values();
+        Collection<Database> dbs = GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().values();
         for (Database db : CollectionUtils.emptyIfNull(dbs)) {
             for (Table table : CollectionUtils.emptyIfNull(db.getTables())) {
                 if (table.isMaterializedView()) {

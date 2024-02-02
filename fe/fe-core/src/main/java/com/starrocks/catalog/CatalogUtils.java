@@ -328,20 +328,20 @@ public class CatalogUtils {
     }
 
     public static int calPhysicalPartitionBucketNum() {
-        int backendNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size();
+        int backendNum = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds().size();
 
         if (RunMode.isSharedDataMode()) {
-            backendNum = backendNum + GlobalStateMgr.getCurrentSystemInfo().getAliveComputeNodeNumber();
+            backendNum = backendNum + GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAliveComputeNodeNumber();
         }
 
         return divisibleBucketNum(backendNum);
     }
 
     public static int calBucketNumAccordingToBackends() {
-        int backendNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size();
+        int backendNum = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds().size();
 
         if (RunMode.isSharedDataMode()) {
-            backendNum = backendNum + GlobalStateMgr.getCurrentSystemInfo().getAliveComputeNodeNumber();
+            backendNum = backendNum + GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAliveComputeNodeNumber();
         }
 
         // When POC, the backends is not greater than three most of the time.

@@ -522,16 +522,16 @@ public class FileScanNode extends LoadScanNode {
 
         // TODO: need to refactor after be split into cn + dn
         if (RunMode.isSharedDataMode()) {
-            Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getAvailbleWarehouse(warehouseId);
+            Warehouse currentWh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAvailbleWarehouse(warehouseId);
 
             for (long cnId : currentWh.getAnyAvailableCluster().getAvailableComputeNodeIds()) {
-                ComputeNode cn = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(cnId);
+                ComputeNode cn = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(cnId);
                 if (cn != null && cn.isAvailable()) {
                     nodes.add(cn);
                 }
             }
         } else {
-            for (ComputeNode be : GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().values()) {
+            for (ComputeNode be : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend().values()) {
                 if (be.isAvailable()) {
                     nodes.add(be);
                 }

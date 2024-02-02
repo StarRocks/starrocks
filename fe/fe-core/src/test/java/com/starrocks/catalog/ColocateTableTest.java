@@ -109,7 +109,7 @@ public class ColocateTableTest {
                 " \"colocate_with\" = \"" + groupName + "\"\n" +
                 ");");
 
-        ColocateTableIndex index = GlobalStateMgr.getCurrentColocateIndex();
+        ColocateTableIndex index = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);
         long tableId = db.getTable(tableName1).getId();
 
@@ -167,7 +167,7 @@ public class ColocateTableTest {
                 " \"colocate_with\" = \"" + groupName + "\"\n" +
                 ");");
 
-        ColocateTableIndex index = GlobalStateMgr.getCurrentColocateIndex();
+        ColocateTableIndex index = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);
         long firstTblId = db.getTable(tableName1).getId();
         long secondTblId = db.getTable(tableName2).getId();

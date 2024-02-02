@@ -352,7 +352,7 @@ public class StreamLoadInfo {
         if (request.getWarehouse() != null) {
             warehouseName = request.getWarehouse();
         }
-        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName);
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
         if (warehouse == null) {
             throw new UserException("Warehouse " + warehouseName + " not exist");
         }

@@ -40,6 +40,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.Util;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.HeartbeatMgr.BrokerHeartbeatHandler;
 import com.starrocks.system.HeartbeatMgr.FrontendHeartbeatHandler;
@@ -71,13 +72,16 @@ public class HeartbeatMgrTest {
     @Mocked
     private GlobalStateMgr globalStateMgr;
 
+    @Mocked
+    private NodeMgr nodeMgr;
+
     @Before
     public void setUp() {
         new Expectations() {
             {
-                globalStateMgr.getSelfNode();
+                globalStateMgr.getNodeMgr();
                 minTimes = 0;
-                result = Pair.create("192.168.1.3", 9010); // not self
+                result = nodeMgr;
 
                 globalStateMgr.isReady();
                 minTimes = 0;
@@ -86,6 +90,14 @@ public class HeartbeatMgrTest {
                 GlobalStateMgr.getCurrentState();
                 minTimes = 0;
                 result = globalStateMgr;
+            }
+        };
+
+        new Expectations(nodeMgr) {
+            {
+                nodeMgr.getSelfNode();
+                minTimes = 0;
+                result = Pair.create("192.168.1.3", 9010); // not self
             }
         };
     }

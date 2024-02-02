@@ -242,7 +242,7 @@ public class ConnectProcessor {
             ctx.getAuditEventBuilder().setStmt(LogUtil.removeLineSeparator(origStmt));
         }
 
-        GlobalStateMgr.getCurrentAuditEventProcessor().handleAuditEvent(ctx.getAuditEventBuilder().build());
+        GlobalStateMgr.getCurrentState().getAuditEventProcessor().handleAuditEvent(ctx.getAuditEventBuilder().build());
     }
 
     public String computeStatementDigest(StatementBase queryStmt) {

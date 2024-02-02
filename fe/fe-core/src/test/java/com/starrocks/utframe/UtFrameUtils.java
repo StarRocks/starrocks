@@ -275,7 +275,7 @@ public class UtFrameUtils {
 
             // sleep to wait first heartbeat
             int retry = 0;
-            while (GlobalStateMgr.getCurrentSystemInfo().getBackend(10001).getBePort() == -1 &&
+            while (GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(10001).getBePort() == -1 &&
                     retry++ < 600) {
                 Thread.sleep(100);
             }
@@ -324,13 +324,13 @@ public class UtFrameUtils {
         be.setBrpcPort(backend.getBrpcPort());
         be.setHttpPort(backend.getHttpPort());
         be.setStarletPort(backend.getStarletPort());
-        GlobalStateMgr.getCurrentSystemInfo().addBackend(be);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackend(be);
         if (RunMode.isSharedDataMode()) {
             int starletPort = backend.getStarletPort();
-            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
             long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
             String workerAddress = backend.getHost() + ":" + starletPort;
-            GlobalStateMgr.getCurrentStarOSAgent().addWorker(be.getId(), workerAddress, workerGroupId);
+            GlobalStateMgr.getCurrentState().getStarOSAgent().addWorker(be.getId(), workerAddress, workerGroupId);
         }
         return be;
     }
@@ -344,7 +344,7 @@ public class UtFrameUtils {
     }
 
     public static void dropMockBackend(int backendId) throws DdlException {
-        GlobalStateMgr.getCurrentSystemInfo().dropBackend(backendId);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropBackend(backendId);
     }
 
     public static int findValidPort() {
@@ -676,7 +676,7 @@ public class UtFrameUtils {
 
         // create table
         int backendId = 10002;
-        int backendIdSize = GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber();
+        int backendIdSize = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAliveBackendNumber();
         for (int i = 1; i < backendIdSize; ++i) {
             UtFrameUtils.dropMockBackend(backendId++);
         }
@@ -738,7 +738,7 @@ public class UtFrameUtils {
             Table replayTable = GlobalStateMgr.getCurrentState().getDb("" + dbName)
                     .getTable(entry.getKey().split("\\.")[1]);
             for (Map.Entry<String, ColumnStatistic> columnStatisticEntry : entry.getValue().entrySet()) {
-                GlobalStateMgr.getCurrentStatisticStorage()
+                GlobalStateMgr.getCurrentState().getStatisticStorage()
                         .addColumnStatistic(replayTable, columnStatisticEntry.getKey(),
                                 columnStatisticEntry.getValue());
             }
@@ -748,7 +748,7 @@ public class UtFrameUtils {
 
     private static void tearMockEnv() {
         int backendId = 10002;
-        int backendIdSize = GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber();
+        int backendIdSize = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAliveBackendNumber();
         for (int i = 1; i < backendIdSize; ++i) {
             try {
                 UtFrameUtils.dropMockBackend(backendId++);

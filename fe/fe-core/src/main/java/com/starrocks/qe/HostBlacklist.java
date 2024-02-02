@@ -169,7 +169,7 @@ public class HostBlacklist {
     public void refresh() {
         updateHistory();
 
-        SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
+        SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
 
         List<Long> offlineNode = Lists.newArrayList();
         Set<Long> reconnectNode = Sets.newHashSet();

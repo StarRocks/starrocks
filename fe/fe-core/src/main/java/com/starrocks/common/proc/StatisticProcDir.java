@@ -99,13 +99,13 @@ public class StatisticProcDir implements ProcDirInterface {
         BaseProcResult result = new BaseProcResult();
 
         result.setNames(TITLE_NAMES);
-        List<Long> dbIds = globalStateMgr.getDbIds();
+        List<Long> dbIds = globalStateMgr.getLocalMetastore().getDbIds();
         if (dbIds == null || dbIds.isEmpty()) {
             // empty
             return result;
         }
 
-        SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
 
         int totalDbNum = 0;
         int totalTableNum = 0;

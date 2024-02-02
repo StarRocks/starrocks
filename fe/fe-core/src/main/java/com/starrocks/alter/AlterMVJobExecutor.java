@@ -151,7 +151,7 @@ public class AlterMVJobExecutor extends AlterJobExecutorEPack {
         try {
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
                 String warehouseName = properties.remove(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
-                Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getAvailbleWarehouse(warehouseName);
+                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAvailbleWarehouse(warehouseName);
                 materializedView.setWarehouseId(warehouse.getId());
             }
         } catch (WarehouseUnavailableException e) {

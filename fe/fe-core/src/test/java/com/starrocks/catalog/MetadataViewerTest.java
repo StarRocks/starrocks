@@ -97,7 +97,7 @@ public class MetadataViewerTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 minTimes = 0;
                 result = infoService;
 

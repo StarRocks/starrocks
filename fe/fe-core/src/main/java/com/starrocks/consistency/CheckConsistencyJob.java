@@ -117,7 +117,7 @@ public class CheckConsistencyJob {
      *  false: cancel
      */
     public boolean sendTasks() {
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
         if (tabletMeta == null) {
             LOG.debug("tablet[{}] has been removed", tabletId);
@@ -249,7 +249,7 @@ public class CheckConsistencyJob {
         }
 
         // check again. in case tablet has already been removed
-        TabletMeta tabletMeta = GlobalStateMgr.getCurrentInvertedIndex().getTabletMeta(tabletId);
+        TabletMeta tabletMeta = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(tabletId);
         if (tabletMeta == null) {
             LOG.warn("tablet[{}] has been removed", tabletId);
             return -1;

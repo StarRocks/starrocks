@@ -63,7 +63,7 @@ public class MaterializedViewMetricsRegistry {
     // collect materialized-view-level metrics
     public static void collectMaterializedViewMetrics(MetricVisitor visitor, boolean minifyMetrics) {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        List<String> dbNames = globalStateMgr.getDbNames();
+        List<String> dbNames = globalStateMgr.getLocalMetastore().listDbNames();
         for (String dbName : dbNames) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (null == db) {

@@ -316,7 +316,7 @@ public class SchemaScanNode extends ScanNode {
     }
 
     public void computeFeNodes() {
-        for (Frontend fe : GlobalStateMgr.getCurrentState().getFrontends(null /* all */)) {
+        for (Frontend fe : GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null /* all */)) {
             if (!fe.isAlive()) {
                 continue;
             }
@@ -337,10 +337,10 @@ public class SchemaScanNode extends ScanNode {
 
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
             long warehouseId = ConnectContext.get().getCurrentWarehouseId();
-            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
             nodeList = warehouse.getAnyAvailableCluster().getAllComputeNodes();
         } else {
-            nodeList = Lists.newArrayList(GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().values());
+            nodeList = Lists.newArrayList(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend().values());
         }
 
         for (ComputeNode node : nodeList) {

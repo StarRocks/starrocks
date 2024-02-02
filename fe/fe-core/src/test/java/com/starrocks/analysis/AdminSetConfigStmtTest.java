@@ -66,7 +66,7 @@ public class AdminSetConfigStmtTest {
         String stmt = "admin set frontend config(\"alter_table_timeout_second\" = \"60\");";
         AdminSetConfigStmt adminSetConfigStmt =
                 (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
-        GlobalStateMgr.getCurrentState().setConfig(adminSetConfigStmt);
+        GlobalStateMgr.getCurrentState().getNodeMgr().setConfig(adminSetConfigStmt);
     }
 
     @Test
@@ -85,7 +85,7 @@ public class AdminSetConfigStmtTest {
                 (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
         expectedEx.expect(DdlException.class);
         expectedEx.expectMessage("Config 'unknown_config' does not exist or is not mutable");
-        GlobalStateMgr.getCurrentState().setConfig(adminSetConfigStmt);
+        GlobalStateMgr.getCurrentState().getNodeMgr().setConfig(adminSetConfigStmt);
     }
 }
 

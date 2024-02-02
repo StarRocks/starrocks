@@ -157,7 +157,7 @@ public class BinlogManager {
                     long binlogTxnId = table.getBinlogTxnId();
                     if (binlogTxnId == INVALID) {
                         // the binlog config takes effect in all tablets of the table in BE for now
-                        Long nextTxnId = GlobalStateMgr.getCurrentGlobalTransactionMgr().
+                        Long nextTxnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().
                                 getTransactionIDGenerator().getNextTransactionId();
                         table.setBinlogTxnId(binlogTxnId);
                         binlogTxnId = nextTxnId;
@@ -266,7 +266,7 @@ public class BinlogManager {
     // result : <tableId, BinlogConfig>
     public HashMap<Long, BinlogConfig> showAllBinlog() {
         HashMap<Long, BinlogConfig> allTablesWithBinlogConfigMap = new HashMap<>();
-        List<Long> allDbIds = GlobalStateMgr.getCurrentState().getDbIds();
+        List<Long> allDbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
         for (Long dbId : allDbIds) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db != null) {

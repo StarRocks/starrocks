@@ -74,7 +74,7 @@ public class TableFunctionTableTest {
                 result = WarehouseManager.DEFAULT_WAREHOUSE_ID;
                 minTimes = 0;
 
-                globalStateMgr.getCurrentSystemInfo();
+                globalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 result = systemInfoService;
                 minTimes = 0;
 

@@ -704,7 +704,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         }
 
         try {
-            GlobalStateMgr.getCurrentGlobalTransactionMgr().commitPreparedTransaction(dbId, txnId, timeoutMs);
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().commitPreparedTransaction(dbId, txnId, timeoutMs);
         } catch (Exception e) {
             this.errorMsg = new LogBuilder(LogKey.STREAM_LOAD_TASK, id, ':').add("label", label)
                     .add("error_msg", "cancel stream task for exception: " + e.getMessage()).build_http_log();
@@ -884,7 +884,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         }
         try {
             if (txnId != -1L) {
-                GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(
                         dbId, txnId, reason);
             } else {
                 writeLock();
@@ -904,12 +904,12 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
     }
 
     public void unprotectedBeginTxn(boolean replay) throws UserException {
-        Warehouse currentWh = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseId);
+        Warehouse currentWh = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
         if (currentWh == null) {
             throw new UserException("Warehouse " + warehouseId + " not exist");
         }
         long workerGroupId = currentWh.getAnyAvailableCluster().getWorkerGroupId();
-        this.txnId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
+        this.txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
                 dbId, Lists.newArrayList(tableId), label, null,
                 new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                 TransactionState.LoadJobSourceType.FRONTEND_STREAMING, id,
@@ -924,7 +924,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 beforeLoadTimeMs, startLoadingTimeMs, startPreparingTimeMs, finishPreparingTimeMs,
                 endTimeMs, numRowsNormal, numRowsAbnormal, numRowsUnselected, numLoadBytesTotal,
                 trackingUrl);
-        GlobalStateMgr.getCurrentGlobalTransactionMgr().prepareTransaction(dbId,
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().prepareTransaction(dbId,
                 txnId, commitInfos, failInfos, txnCommitAttachment);
     }
 
@@ -1149,7 +1149,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             state = State.CANCELLED;
             errorMsg = txnState.getReason();
             gcObject();
-            GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
         } finally {
             writeUnlock();
         }
@@ -1167,7 +1167,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             errorMsg = txnState.getReason();
             state = State.CANCELLED;
             endTimeMs = txnState.getFinishTime();
-            GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
         } finally {
             writeUnlock();
         }
@@ -1185,7 +1185,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             }
             state = State.FINISHED;
             endTimeMs = System.currentTimeMillis();
-            GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
             gcObject();
         } finally {
             writeUnlock();
@@ -1203,7 +1203,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
             this.preparedChannelNum = this.channelNum;
             state = State.FINISHED;
             endTimeMs = txnState.getFinishTime();
-            GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
         } finally {
             writeUnlock();
         }

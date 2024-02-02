@@ -79,7 +79,7 @@ public class UnitTestUtil {
 
     public static Database createDb(long dbId, long tableId, long partitionId, long indexId,
                                     long tabletId, long backendId, long version, KeysType type) {
-        // GlobalStateMgr.getCurrentInvertedIndex().clear();
+        // GlobalStateMgr.getCurrentState().getTabletInvertedIndex().clear();
 
         // table
         OlapTable table = createOlapTable(dbId, tableId, partitionId, indexId, tabletId,
@@ -94,7 +94,7 @@ public class UnitTestUtil {
     public static Database createDbByName(long dbId, long tableId, long partitionId, long indexId,
                                     long tabletId, long backendId, long version, KeysType type, String dbName,
                                     String tableName) {
-        // GlobalStateMgr.getCurrentInvertedIndex().clear();
+        // GlobalStateMgr.getCurrentState().getTabletInvertedIndex().clear();
 
         // table
         OlapTable table = createOlapTableByName(dbId, tableId, partitionId, indexId, tabletId,

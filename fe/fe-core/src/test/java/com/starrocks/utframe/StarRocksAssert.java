@@ -282,7 +282,7 @@ public class StarRocksAssert {
                     createTableStmtCopied = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(
                             createTableStmt.getOrigStmt().originStmt, ctx);
                 }
-                GlobalStateMgr.getCurrentState().createTable(createTableStmtCopied);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmtCopied);
                 break;
             } catch (Exception e) {
                 if (retryTime == MAX_RETRY_TIME - 1) {
@@ -466,7 +466,7 @@ public class StarRocksAssert {
 
     public StarRocksAssert withView(String sql) throws Exception {
         CreateViewStmt createTableStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().createView(createTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createView(createTableStmt);
         return this;
     }
 
@@ -488,7 +488,7 @@ public class StarRocksAssert {
     public StarRocksAssert dropView(String viewName) throws Exception {
         DropTableStmt dropViewStmt =
                 (DropTableStmt) UtFrameUtils.parseStmtWithNewParser("drop view " + viewName + ";", ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropViewStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropViewStmt);
         return this;
     }
 
@@ -508,7 +508,7 @@ public class StarRocksAssert {
 
     public StarRocksAssert alterMvProperties(String sql) throws Exception {
         AlterMaterializedViewStmt alterMvStmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().alterMaterializedView(alterMvStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterMaterializedView(alterMvStmt);
         return this;
     }
 
@@ -517,7 +517,7 @@ public class StarRocksAssert {
         Assert.assertFalse(alterTableStmt.getOps().isEmpty());
         Assert.assertTrue(alterTableStmt.getOps().get(0) instanceof ModifyTablePropertiesClause);
         Analyzer.analyze(alterTableStmt, ctx);
-        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
         return this;
     }
 
@@ -531,14 +531,14 @@ public class StarRocksAssert {
     public StarRocksAssert dropTable(String tableName) throws Exception {
         DropTableStmt dropTableStmt =
                 (DropTableStmt) UtFrameUtils.parseStmtWithNewParser("drop table " + tableName + ";", ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
         return this;
     }
 
     public StarRocksAssert dropMaterializedView(String materializedViewName) throws Exception {
         DropMaterializedViewStmt dropMaterializedViewStmt = (DropMaterializedViewStmt) UtFrameUtils.
                 parseStmtWithNewParser("drop materialized view if exists " + materializedViewName + ";", ctx);
-        GlobalStateMgr.getCurrentState().dropMaterializedView(dropMaterializedViewStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropMaterializedView(dropMaterializedViewStmt);
         return this;
     }
 
@@ -677,7 +677,7 @@ public class StarRocksAssert {
             if (isOnlySingleReplica) {
                 createMaterializedViewStmt.getProperties().put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
             }
-            GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createMaterializedViewStmt);
             checkAlterJob();
         } else {
             Preconditions.checkState(stmt instanceof CreateMaterializedViewStatement);
@@ -685,7 +685,7 @@ public class StarRocksAssert {
             if (isOnlySingleReplica) {
                 createMaterializedViewStatement.getProperties().put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
             }
-            GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStatement);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createMaterializedViewStatement);
             if (isRefresh) {
                 String mvName = createMaterializedViewStatement.getTableName().getTbl();
                 refreshMvPartition(String.format("refresh materialized view %s", mvName));
@@ -774,7 +774,7 @@ public class StarRocksAssert {
     // Add rollup
     public StarRocksAssert withRollup(String sql) throws Exception {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
         checkAlterJob();
         return this;
     }
@@ -789,7 +789,7 @@ public class StarRocksAssert {
     // With warehouse
     public StarRocksAssert withWarehouse(String sql) throws Exception {
         CreateWarehouseStmt createWarehouseStmt = (CreateWarehouseStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        WarehouseManagerEpack warehouseMgr = (WarehouseManagerEpack) GlobalStateMgr.getCurrentWarehouseMgr();
+        WarehouseManagerEpack warehouseMgr = (WarehouseManagerEpack) GlobalStateMgr.getCurrentState().getWarehouseMgr();
         warehouseMgr.createWarehouse(createWarehouseStmt);
         return this;
     }

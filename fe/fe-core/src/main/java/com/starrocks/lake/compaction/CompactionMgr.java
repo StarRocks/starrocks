@@ -73,8 +73,8 @@ public class CompactionMgr {
 
     public void start() {
         if (compactionScheduler == null) {
-            compactionScheduler = new CompactionScheduler(this, GlobalStateMgr.getCurrentSystemInfo(),
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr(), GlobalStateMgr.getCurrentState());
+            compactionScheduler = new CompactionScheduler(this, GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr(), GlobalStateMgr.getCurrentState());
             compactionScheduler.start();
         }
     }

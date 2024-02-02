@@ -130,7 +130,7 @@ public class BasicStatsMeta implements Writable {
         long updatePartitionCount = 0L;
         for (Partition partition : table.getPartitions()) {
             tableRowCount += partition.getRowCount();
-            TableStatistic tableStatistic = GlobalStateMgr.getCurrentStatisticStorage()
+            TableStatistic tableStatistic = GlobalStateMgr.getCurrentState().getStatisticStorage()
                     .getTableStatistic(table.getId(), partition.getId());
             if (tableStatistic != null) {
                 cachedTableRowCount += tableStatistic.getRowCount();

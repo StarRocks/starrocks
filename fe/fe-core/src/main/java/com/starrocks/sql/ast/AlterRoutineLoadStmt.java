@@ -288,7 +288,7 @@ public class AlterRoutineLoadStmt extends DdlStmt {
 
         if (jobProperties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
             String warehouseName = jobProperties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
-            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName);
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
             if (warehouse == null) {
                 throw new UserException("Warehouse " + warehouseName + " not exist");
             }

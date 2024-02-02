@@ -55,7 +55,7 @@ public class StatisticsCollectJobFactory {
         List<StatisticsCollectJob> statsJobs = Lists.newArrayList();
         if (StatsConstants.DEFAULT_ALL_ID == nativeAnalyzeJob.getDbId()) {
             // all database
-            List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
+            List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
 
             for (Long dbId : dbIds) {
                 Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
@@ -204,7 +204,7 @@ public class StatisticsCollectJobFactory {
     }
 
     private static void createExternalAnalyzeJob(List<StatisticsCollectJob> allTableJobMap, ExternalAnalyzeJob job,
-                                                 Database db, Table table, List<String> columns)  {
+                                                 Database db, Table table, List<String> columns) {
         if (table == null) {
             return;
         }
@@ -219,7 +219,7 @@ public class StatisticsCollectJobFactory {
             }
         }
 
-        ExternalBasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getExternalBasicStatsMetaMap()
+        ExternalBasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalBasicStatsMetaMap()
                 .get(new AnalyzeMgr.StatsMetaKey(job.getCatalogName(), db.getFullName(), table.getName()));
         if (basicStatsMeta != null) {
             // check table last update time, if last collect time is after last update time, skip this table
@@ -239,7 +239,7 @@ public class StatisticsCollectJobFactory {
                 columns = StatisticUtils.getCollectibleColumns(table);
             }
             List<ConnectorTableColumnStats> columnStatisticList =
-                    GlobalStateMgr.getCurrentStatisticStorage().getConnectorTableStatisticsSync(table, columns);
+                    GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorTableStatisticsSync(table, columns);
             List<ConnectorTableColumnStats> validColumnStatistics = columnStatisticList.stream().
                     filter(columnStatistic -> !columnStatistic.isUnknown()).collect(Collectors.toList());
 
@@ -352,7 +352,8 @@ public class StatisticsCollectJobFactory {
             }
         }
 
-        BasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(table.getId());
+        BasicStatsMeta basicStatsMeta =
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().get(table.getId());
         double healthy = 0;
         LocalDateTime tableUpdateTime = StatisticUtils.getTableLastUpdateTime(table);
         if (basicStatsMeta != null) {

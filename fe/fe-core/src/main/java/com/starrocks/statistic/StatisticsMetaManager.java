@@ -84,8 +84,8 @@ public class StatisticsMetaManager extends FrontendDaemon {
     }
 
     private boolean checkReplicateNormal(String tableName) {
-        int aliveSize = GlobalStateMgr.getCurrentSystemInfo().getAliveBackendNumber();
-        int total = GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber();
+        int aliveSize = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAliveBackendNumber();
+        int total = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber();
         // maybe cluster just shutdown, ignore
         if (aliveSize <= total / 2) {
             lossTableCount = 0;
@@ -156,7 +156,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
                     "");
 
             Analyzer.analyze(stmt, context);
-            GlobalStateMgr.getCurrentState().createTable(stmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
         } catch (UserException e) {
             LOG.warn("Failed to create sample statistics, " + e.getMessage());
             return false;
@@ -188,7 +188,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
                     "");
 
             Analyzer.analyze(stmt, context);
-            GlobalStateMgr.getCurrentState().createTable(stmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
         } catch (UserException e) {
             LOG.warn("Failed to create full statistics table, " + e.getMessage());
             return false;
@@ -219,16 +219,16 @@ public class StatisticsMetaManager extends FrontendDaemon {
                     "");
 
             Analyzer.analyze(stmt, context);
-            GlobalStateMgr.getCurrentState().createTable(stmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
         } catch (UserException e) {
             LOG.warn("Failed to create histogram statistics table, " + e.getMessage());
             return false;
         }
         LOG.info("create histogram statistics table done");
         for (Map.Entry<Pair<Long, String>, HistogramStatsMeta> entry :
-                GlobalStateMgr.getCurrentAnalyzeMgr().getHistogramStatsMetaMap().entrySet()) {
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().getHistogramStatsMetaMap().entrySet()) {
             HistogramStatsMeta histogramStatsMeta = entry.getValue();
-            GlobalStateMgr.getCurrentAnalyzeMgr().addHistogramStatsMeta(new HistogramStatsMeta(
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().addHistogramStatsMeta(new HistogramStatsMeta(
                     histogramStatsMeta.getDbId(), histogramStatsMeta.getTableId(), histogramStatsMeta.getColumn(),
                     histogramStatsMeta.getType(), LocalDateTime.MIN, histogramStatsMeta.getProperties()));
         }
@@ -257,7 +257,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
                     "");
 
             Analyzer.analyze(stmt, context);
-            GlobalStateMgr.getCurrentState().createTable(stmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
         } catch (UserException e) {
             LOG.warn("Failed to create full statistics table, " + e.getMessage());
             return false;
@@ -268,17 +268,17 @@ public class StatisticsMetaManager extends FrontendDaemon {
 
     private void refreshAnalyzeJob() {
         for (Map.Entry<Long, BasicStatsMeta> entry :
-                GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().entrySet()) {
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().entrySet()) {
             BasicStatsMeta basicStatsMeta = entry.getValue();
-            GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(
                     basicStatsMeta.getDbId(), basicStatsMeta.getTableId(), basicStatsMeta.getColumns(),
                     basicStatsMeta.getType(), LocalDateTime.MIN, basicStatsMeta.getProperties(),
                     basicStatsMeta.getUpdateRows()));
         }
 
-        for (AnalyzeJob analyzeJob : GlobalStateMgr.getCurrentAnalyzeMgr().getAllAnalyzeJobList()) {
+        for (AnalyzeJob analyzeJob : GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAllAnalyzeJobList()) {
             analyzeJob.setWorkTime(LocalDateTime.MIN);
-            GlobalStateMgr.getCurrentAnalyzeMgr().updateAnalyzeJobWithLog(analyzeJob);
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().updateAnalyzeJobWithLog(analyzeJob);
         }
     }
 
@@ -288,7 +288,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
                 new TableName(StatsConstants.STATISTICS_DB_NAME, tableName), true);
 
         try {
-            GlobalStateMgr.getCurrentState().dropTable(stmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(stmt);
         } catch (DdlException e) {
             LOG.warn("Failed to drop table" + e.getMessage());
             return false;
@@ -357,9 +357,9 @@ public class StatisticsMetaManager extends FrontendDaemon {
         refreshStatisticsTable(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME);
 
-        GlobalStateMgr.getCurrentAnalyzeMgr().clearStatisticFromDroppedPartition();
-        GlobalStateMgr.getCurrentAnalyzeMgr().clearStatisticFromDroppedTable();
-        GlobalStateMgr.getCurrentAnalyzeMgr().clearExpiredAnalyzeStatus();
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromDroppedPartition();
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromDroppedTable();
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearExpiredAnalyzeStatus();
 
         RepoCreator.getInstance().run();
     }

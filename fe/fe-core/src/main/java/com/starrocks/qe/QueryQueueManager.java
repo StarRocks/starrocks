@@ -110,7 +110,7 @@ public class QueryQueueManager {
 
     private LogicalSlot createSlot(DefaultCoordinator coord) throws UserException {
         Pair<String, Integer> selfIpAndPort = GlobalStateMgr.getCurrentState().getNodeMgr().getSelfIpAndRpcPort();
-        Frontend frontend = GlobalStateMgr.getCurrentState().getFeByHost(selfIpAndPort.first);
+        Frontend frontend = GlobalStateMgr.getCurrentState().getNodeMgr().getFeByHost(selfIpAndPort.first);
         if (frontend == null) {
             throw new UserException("cannot get frontend from the local host: " + selfIpAndPort.first);
         }
