@@ -14,12 +14,12 @@
 
 package com.starrocks.catalog.system.sys;
 
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.memory.MemoryUsageTracker;
-import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -43,8 +43,8 @@ public class SysFeMemoryUsage {
                 SystemTable.builder()
                         .column("module_name", ScalarType.createVarcharType(256))
                         .column("class_name", ScalarType.createVarcharType(256))
-                        .column("current_consumption", ScalarType.createVarcharType(64))
-                        .column("peak_consumption", ScalarType.createVarcharType(64))
+                        .column("current_consumption", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("peak_consumption", ScalarType.createType(PrimitiveType.BIGINT))
                         .build(),
                 TSchemaTableType.SYS_FE_MEMORY_USAGE);
     }
@@ -72,8 +72,8 @@ public class SysFeMemoryUsage {
                     TFeMemoryItem item = new TFeMemoryItem();
                     item.setModule_name(moduleName);
                     item.setClass_name(className);
-                    item.setCurrent_consumption(new ByteSizeValue(memoryStat.getCurrentConsumption()).toString());
-                    item.setPeak_consumption(new ByteSizeValue(memoryStat.getPeakConsumption()).toString());
+                    item.setCurrent_consumption(memoryStat.getCurrentConsumption());
+                    item.setPeak_consumption(memoryStat.getPeakConsumption());
                     response.addToItems(item);
                 });
             }

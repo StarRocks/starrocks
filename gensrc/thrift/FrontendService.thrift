@@ -1619,8 +1619,8 @@ struct TFeLocksRes {
 struct TFeMemoryItem {
     1: optional string module_name
     2: optional string class_name
-    3: optional string current_consumption
-    4: optional string peak_consumption
+    3: optional i64 current_consumption
+    4: optional i64 peak_consumption
 }
 
 struct TFeMemoryReq {
