@@ -111,7 +111,8 @@ public:
         return VectorizedStrictBinaryFunction<OP>::template evaluate<Type, TYPE_BOOLEAN>(l, r);
     }
 
-    bool is_compilable() const override { return IRHelper::support_jit(Type); }
+    // disable it temporarily as no perf benefit, and have to handle pushing down to storage
+    // bool is_compilable() const override { return IRHelper::support_jit(Type); }
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
         if constexpr (lt_is_decimal<Type>) {
@@ -382,7 +383,8 @@ public:
         return builder.build(ColumnHelper::is_all_const(list));
     }
 
-    bool is_compilable() const override { return IRHelper::support_jit(Type); }
+    // disable it temporarily as no perf benefit, and have to handle pushing down to storage
+    // bool is_compilable() const override { return IRHelper::support_jit(Type); }
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
         std::vector<LLVMDatum> datums(2);
