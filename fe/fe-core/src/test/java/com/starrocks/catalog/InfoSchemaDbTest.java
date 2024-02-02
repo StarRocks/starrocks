@@ -356,7 +356,7 @@ public class InfoSchemaDbTest {
             }
         };
 
-        ctx.getGlobalStateMgr().changeCatalog(ctx, "hive_catalog_1");
+        ctx.changeCatalog("hive_catalog_1");
 
         String sql = "grant usage on catalog hive_catalog_1 to test_user";
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);

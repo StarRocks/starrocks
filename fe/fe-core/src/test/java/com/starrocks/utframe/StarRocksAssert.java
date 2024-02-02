@@ -205,7 +205,7 @@ public class StarRocksAssert {
     }
 
     public StarRocksAssert useCatalog(String catalogName) throws DdlException {
-        ctx.getGlobalStateMgr().changeCatalog(ctx, catalogName);
+        ctx.changeCatalog(catalogName);
         return this;
     }
 

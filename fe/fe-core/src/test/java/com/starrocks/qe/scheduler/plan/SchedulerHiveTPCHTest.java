@@ -16,7 +16,6 @@ package com.starrocks.qe.scheduler.plan;
 
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.scheduler.SchedulerConnectorTestBase;
-import com.starrocks.server.GlobalStateMgr;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -35,7 +34,7 @@ public class SchedulerHiveTPCHTest extends SchedulerConnectorTestBase {
 
     @Before
     public void before() throws DdlException {
-        GlobalStateMgr.getCurrentState().changeCatalogDb(connectContext, "hive0.tpch");
+        connectContext.changeCatalogDb("hive0.tpch");
     }
 
     @Test

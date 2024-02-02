@@ -17,7 +17,6 @@ package com.starrocks.catalog;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.UtFrameUtils;
@@ -53,20 +52,20 @@ public class ChangeCatalogDBTest {
             }
         };
 
-        GlobalStateMgr.getCurrentState().changeCatalog(ctx, "default_catalog");
+        ctx.changeCatalog("default_catalog");
         Assertions.assertEquals("default_catalog", ctx.getCurrentCatalog());
         Assertions.assertEquals("", ctx.getDatabase());
 
-        GlobalStateMgr.getCurrentState().changeCatalog(ctx, "hive_catalog");
+        ctx.changeCatalog("hive_catalog");
         Assertions.assertEquals("hive_catalog", ctx.getCurrentCatalog());
         Assertions.assertEquals("", ctx.getDatabase());
 
         Assertions.assertThrows(DdlException.class, () -> {
-            GlobalStateMgr.getCurrentState().changeCatalog(ctx, "nonexistent_catalog");
+            ctx.changeCatalog("nonexistent_catalog");
         });
 
         Assertions.assertThrows(DdlException.class, () -> {
-            GlobalStateMgr.getCurrentState().changeCatalog(ctx, "");
+            ctx.changeCatalog("");
         });
     }
 
@@ -83,10 +82,10 @@ public class ChangeCatalogDBTest {
         };
 
         ctx.setCurrentCatalog("default_catalog");
-        GlobalStateMgr.getCurrentState().changeCatalogDb(ctx, "db");
+        ctx.changeCatalogDb("db");
         Assertions.assertEquals("db", ctx.getDatabase());
         Assertions.assertThrows(DdlException.class, () -> {
-            GlobalStateMgr.getCurrentState().changeCatalogDb(ctx, "nonexistent_db");
+            ctx.changeCatalogDb("nonexistent_db");
         });
     }
 
@@ -100,6 +99,7 @@ public class ChangeCatalogDBTest {
                 catalogMgr.catalogExists("hive_catalog");
                 result = true;
             }
+
             {
                 metadataMgr.getDb("default_catalog", "db");
                 result = new Database(101, "db");
@@ -115,20 +115,20 @@ public class ChangeCatalogDBTest {
             }
         };
 
-        GlobalStateMgr.getCurrentState().changeCatalogDb(ctx, "default_catalog.db");
+        ctx.changeCatalogDb("default_catalog.db");
         Assertions.assertEquals("default_catalog", ctx.getCurrentCatalog());
         Assertions.assertEquals("db", ctx.getDatabase());
 
-        GlobalStateMgr.getCurrentState().changeCatalogDb(ctx, "hive_catalog.db");
+        ctx.changeCatalogDb("hive_catalog.db");
         Assertions.assertEquals("hive_catalog", ctx.getCurrentCatalog());
         Assertions.assertEquals("db", ctx.getDatabase());
 
         Assertions.assertThrows(DdlException.class, () -> {
-            GlobalStateMgr.getCurrentState().changeCatalogDb(ctx, "default_catalog.nonexistent_db");
+            ctx.changeCatalogDb("default_catalog.nonexistent_db");
         });
 
         Assertions.assertThrows(DdlException.class, () -> {
-            GlobalStateMgr.getCurrentState().changeCatalogDb(ctx, "hive_catalog.nonexistent_db");
+            ctx.changeCatalogDb("hive_catalog.nonexistent_db");
         });
     }
 }

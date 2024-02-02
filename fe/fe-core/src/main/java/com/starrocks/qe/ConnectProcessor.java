@@ -65,6 +65,7 @@ import com.starrocks.plugin.AuditEvent.EventType;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.ExecuteStmt;
@@ -118,14 +119,19 @@ public class ConnectProcessor {
             String[] parts = identifier.trim().split("\\s+");
             if (parts.length == 2) {
                 if (parts[0].equalsIgnoreCase("catalog")) {
-                    ctx.getGlobalStateMgr().changeCatalog(ctx, parts[1]);
+                    ctx.changeCatalog(parts[1]);
                 } else if (parts[0].equalsIgnoreCase("warehouse")) {
-                    ctx.getGlobalStateMgr().changeWarehouse(ctx, parts[1]);
+                    WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                    String newWarehouseName = parts[1];
+                    if (!warehouseMgr.warehouseExists(newWarehouseName)) {
+                        ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_WAREHOUSE_ERROR, newWarehouseName);
+                    }
+                    ctx.setCurrentWarehouse(newWarehouseName);
                 } else {
                     ctx.getState().setError("not supported command");
                 }
             } else {
-                ctx.getGlobalStateMgr().changeCatalogDb(ctx, identifier);
+                ctx.changeCatalogDb(identifier);
             }
         } catch (Exception e) {
             ctx.getState().setError(e.getMessage());
