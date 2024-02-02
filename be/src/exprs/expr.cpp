@@ -232,7 +232,7 @@ Status Expr::create_tree_from_thrift_with_jit(ObjectPool* pool, const std::vecto
                                               int* node_idx, Expr** root_expr, ExprContext** ctx, RuntimeState* state) {
     Status status = create_tree_from_thrift(pool, nodes, parent, node_idx, root_expr, ctx, state);
 
-    // Enable JIT based on the "enable_jit" parameters.
+    // Enable JIT based on the "jit_level" parameters.
     if (state == nullptr || !status.ok() || !state->is_jit_enabled()) {
         return status;
     }
@@ -244,7 +244,7 @@ Status Expr::create_tree_from_thrift_with_jit(ObjectPool* pool, const std::vecto
     }
 
     const auto* prev_e = *root_expr;
-    status = (*root_expr)->replace_compilable_exprs(root_expr, pool);
+    status = (*root_expr)->replace_compilable_exprs(root_expr, pool, state);
     if (!status.ok()) {
         LOG(WARNING) << "Can't replace compilable exprs.\n" << status.message() << "\n" << (*root_expr)->debug_string();
         // Fall back to the non-JIT path.
@@ -699,7 +699,7 @@ ColumnRef* Expr::get_column_ref() {
 }
 
 StatusOr<LLVMDatum> Expr::generate_ir_impl(ExprContext* context, JITContext* jit_ctx) {
-    if (is_compilable()) {
+    if (is_compilable(context->_runtime_state)) {
 #if BE_TEST
         throw std::runtime_error("[JIT] compilable expressions must not be here : " + debug_string());
 #else
@@ -729,34 +729,34 @@ StatusOr<LLVMDatum> Expr::generate_ir_impl(ExprContext* context, JITContext* jit
     return datum;
 }
 
-void Expr::get_uncompilable_exprs(std::vector<Expr*>& exprs) {
-    if (!this->is_compilable()) {
+void Expr::get_uncompilable_exprs(std::vector<Expr*>& exprs, RuntimeState* state) {
+    if (!this->is_compilable(state)) {
         exprs.emplace_back(this);
         return;
     }
     for (auto child : this->children()) {
-        child->get_uncompilable_exprs(exprs);
+        child->get_uncompilable_exprs(exprs, state);
     }
 }
 
 // This method attempts to traverse the entire expression tree from the current expression downwards, seeking to replace expressions with JITExprs.
 // This method searches from top to bottom for compilable expressions.
 // Once a compilable expression is found, it skips over its compilable subexpressions and continues the search downwards.
-Status Expr::replace_compilable_exprs(Expr** expr, ObjectPool* pool) {
-    if ((*expr)->should_compile()) {
+Status Expr::replace_compilable_exprs(Expr** expr, ObjectPool* pool, RuntimeState* state) {
+    if ((*expr)->should_compile(state)) {
         // If the current expression is compilable, we will replace it with a JITExpr.
         // This expression and its compilable subexpressions will be compiled into a single function.
         *expr = JITExpr::create(pool, *expr);
     }
 
     for (auto& child : (*expr)->_children) {
-        RETURN_IF_ERROR(child->replace_compilable_exprs(&child, pool));
+        RETURN_IF_ERROR(child->replace_compilable_exprs(&child, pool, state));
     }
     return Status::OK();
 }
 
-bool Expr::should_compile() const {
-    if (!is_compilable() || _children.empty() || is_constant()) {
+bool Expr::should_compile(RuntimeState* state) const {
+    if (!is_compilable(state) || _children.empty() || is_constant()) {
         return false;
     }
 
@@ -764,7 +764,7 @@ bool Expr::should_compile() const {
         // If an expr is compilable, and it has compilable child nodes that are not leaf nodes,
         // compiling these compilable nodes into one node via JIT will provide benefits.
         // The 'literal' is special. It is compilable, but it doesn't have any child nodes
-        if (child->is_compilable() && !child->children().empty()) {
+        if (child->is_compilable(state) && !child->children().empty()) {
             return true;
         }
     }

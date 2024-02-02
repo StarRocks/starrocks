@@ -29,6 +29,7 @@
 #include "exprs/unary_function.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Value.h"
+#include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -123,7 +124,9 @@ public:
         }
     }
 
-    bool is_compilable() const override { return IRHelper::support_jit(Type); }
+    bool is_compilable(RuntimeState* state) const override {
+        return state->is_jit_arithmetic_op() && IRHelper::support_jit(Type);
+    }
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
         std::vector<LLVMDatum> datums(2);
@@ -187,7 +190,9 @@ public:
         }
     }
 
-    bool is_compilable() const override { return Type != TYPE_LARGEINT && IRHelper::support_jit(Type); }
+    bool is_compilable(RuntimeState* state) const override {
+        return state->is_jit_div_op() && Type != TYPE_LARGEINT && IRHelper::support_jit(Type);
+    }
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
         std::vector<LLVMDatum> datums(2);
@@ -260,7 +265,9 @@ public:
         }
     }
 
-    bool is_compilable() const override { return Type != TYPE_LARGEINT && IRHelper::support_jit(Type); }
+    bool is_compilable(RuntimeState* state) const override {
+        return state->is_jit_mod_op() && Type != TYPE_LARGEINT && IRHelper::support_jit(Type);
+    }
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
         std::vector<LLVMDatum> datums(2);
@@ -298,7 +305,9 @@ public:
         return VectorizedStrictUnaryFunction<ArithmeticBitNot>::template evaluate<Type>(l);
     }
 
-    bool is_compilable() const override { return IRHelper::support_jit(Type); }
+    bool is_compilable(RuntimeState* state) const override {
+        return state->is_jit_arithmetic_op() && IRHelper::support_jit(Type);
+    }
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
         ASSIGN_OR_RETURN(auto datum, _children[0]->generate_ir_impl(context, jit_ctx))
@@ -329,7 +338,9 @@ public:
         return VectorizedStrictBinaryFunction<ArithmeticOp>::template evaluate<Type, TYPE_BIGINT, Type>(l, r);
     }
 
-    bool is_compilable() const override { return IRHelper::support_jit(Type); }
+    bool is_compilable(RuntimeState* state) const override {
+        return state->is_jit_arithmetic_op() && IRHelper::support_jit(Type);
+    }
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
         std::vector<LLVMDatum> datums(2);

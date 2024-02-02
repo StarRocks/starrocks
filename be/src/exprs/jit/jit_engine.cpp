@@ -78,7 +78,8 @@ Status JITEngine::init() {
     return Status::OK();
 }
 
-StatusOr<JITScalarFunction> JITEngine::compile_scalar_function(ExprContext* context, Expr* expr) {
+StatusOr<JITScalarFunction> JITEngine::compile_scalar_function(ExprContext* context, Expr* expr,
+                                                               const std::vector<Expr*>& uncompilable_exprs) {
     auto* instance = JITEngine::get_instance();
     if (!instance->initialized()) {
         return Status::JitCompileError("JIT engine is not initialized");
@@ -97,7 +98,7 @@ StatusOr<JITScalarFunction> JITEngine::compile_scalar_function(ExprContext* cont
     instance->setup_module(module.get());
 
     // Generate scalar function IR.
-    RETURN_IF_ERROR(generate_scalar_function_ir(context, *module, expr));
+    RETURN_IF_ERROR(generate_scalar_function_ir(context, *module, expr, uncompilable_exprs));
     std::string error;
     llvm::raw_string_ostream errs(error);
     if (llvm::verifyModule(*module, &errs)) {
@@ -124,12 +125,10 @@ StatusOr<JITScalarFunction> JITEngine::compile_scalar_function(ExprContext* cont
     return compiled_function;
 }
 
-Status JITEngine::generate_scalar_function_ir(ExprContext* context, llvm::Module& module, Expr* expr) {
+Status JITEngine::generate_scalar_function_ir(ExprContext* context, llvm::Module& module, Expr* expr,
+                                              const std::vector<Expr*>& uncompilable_exprs) {
     llvm::IRBuilder<> b(module.getContext());
-
-    std::vector<Expr*> input_exprs;
-    expr->get_uncompilable_exprs(input_exprs); // duplicated
-    size_t args_size = input_exprs.size();
+    size_t args_size = uncompilable_exprs.size();
 
     /// Create function type.
     auto* size_type = b.getInt64Ty();
@@ -157,7 +156,7 @@ Status JITEngine::generate_scalar_function_ir(ExprContext* context, llvm::Module
         // i == args_size is the result column.
         auto* jit_column = b.CreateLoad(data_type, b.CreateConstInBoundsGEP1_64(data_type, columns_arg, i));
 
-        const auto& type = i == args_size ? expr->type() : input_exprs[i]->type();
+        const auto& type = i == args_size ? expr->type() : uncompilable_exprs[i]->type();
         columns[i].values = b.CreateExtractValue(jit_column, {0});
         columns[i].null_flags = b.CreateExtractValue(jit_column, {1});
         ASSIGN_OR_RETURN(columns[i].value_type, IRHelper::logical_to_ir_type(b, type.type));

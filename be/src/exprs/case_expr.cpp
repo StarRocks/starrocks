@@ -25,6 +25,7 @@
 #include "common/object_pool.h"
 #include "exprs/jit/ir_helper.h"
 #include "gutil/casts.h"
+#include "runtime/runtime_state.h"
 #include "simd/mulselector.h"
 #include "types/logical_type_infra.h"
 #include "util/percentile_value.h"
@@ -70,11 +71,11 @@ public:
         return _children.size() % 2 == 1 ? Status::OK() : Status::InvalidArgument("case when children is error!");
     }
 
-    bool is_compilable() const override {
+    bool is_compilable(RuntimeState* state) const override {
         if (_has_case_expr) {
-            return IRHelper::support_jit(WhenType) && IRHelper::support_jit(ResultType);
+            return state->is_jit_case_op() && IRHelper::support_jit(WhenType) && IRHelper::support_jit(ResultType);
         } else {
-            return IRHelper::support_jit(ResultType);
+            return state->is_jit_case_op() && IRHelper::support_jit(ResultType);
         }
     }
 

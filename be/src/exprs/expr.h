@@ -103,15 +103,6 @@ public:
     void clear_children() { _children.clear(); }
     Expr* get_child(int i) const { return _children[i]; }
     int get_num_children() const { return _children.size(); }
-    int get_num_jit_children() const {
-        int num = 0;
-        if (is_compilable()) {
-            for (auto& child : _children) {
-                num += child->get_num_jit_children();
-            }
-        }
-        return num + 1;
-    };
 
     const TypeDescriptor& type() const { return _type; }
     const std::vector<Expr*>& children() const { return _children; }
@@ -234,20 +225,20 @@ public:
     virtual StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx);
 
     // Return true if this expression supports JIT compilation.
-    virtual bool is_compilable() const { return false; }
+    virtual bool is_compilable(RuntimeState* state) const { return false; }
 
     // This function will collect all uncompiled expressions in this expression tree.
     // The uncompiled expressions are those expressions which are not supported by JIT, it will become the input of JIT function.
-    void get_uncompilable_exprs(std::vector<Expr*>& exprs);
+    void get_uncompilable_exprs(std::vector<Expr*>& exprs, RuntimeState* state);
 
     // This method attempts to traverse the entire expression tree from the current expression downwards, seeking to replace expressions with JITExprs.
     // This method searches from top to bottom for compilable expressions.
     // Once a compilable expression is found, it skips over its compilable subexpressions and continues the search downwards.
     // TODO(Yueyang): The algorithm is imperfect and may further be optimized in the future.
-    Status replace_compilable_exprs(Expr** expr, ObjectPool* pool);
+    Status replace_compilable_exprs(Expr** expr, ObjectPool* pool, RuntimeState* state);
 
     // Establishes whether the current expression should undergo compilation.
-    bool should_compile() const;
+    bool should_compile(RuntimeState* state) const;
 
 #if BE_TEST
     void set_type(TypeDescriptor t) { _type = t; }

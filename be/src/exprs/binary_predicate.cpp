@@ -24,6 +24,7 @@
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Value.h"
+#include "runtime/runtime_state.h"
 #include "storage/column_predicate.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
@@ -112,7 +113,9 @@ public:
     }
 
     // disable it temporarily as no perf benefit, and have to handle pushing down to storage
-    // bool is_compilable() const override { return IRHelper::support_jit(Type); }
+    bool is_compilable(RuntimeState* state) const override {
+        return state->is_jit_comparison_op() && IRHelper::support_jit(Type);
+    }
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
         if constexpr (lt_is_decimal<Type>) {
@@ -384,7 +387,9 @@ public:
     }
 
     // disable it temporarily as no perf benefit, and have to handle pushing down to storage
-    // bool is_compilable() const override { return IRHelper::support_jit(Type); }
+    bool is_compilable(RuntimeState* state) const override {
+        return state->is_jit_comparison_op() && IRHelper::support_jit(Type);
+    }
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
         std::vector<LLVMDatum> datums(2);

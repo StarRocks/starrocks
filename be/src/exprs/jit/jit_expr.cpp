@@ -41,7 +41,7 @@ JITExpr* JITExpr::create(ObjectPool* pool, Expr* expr) {
 }
 
 JITExpr::JITExpr(ObjectPool* pool, const TExprNode& node, Expr* expr) : Expr(node), _pool(pool), _expr(expr) {
-    _expr->get_uncompilable_exprs(_children);
+    _children.push_back(_expr); // let _expr be prepared/open/next/closed in specific cases
 }
 
 Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
@@ -51,6 +51,8 @@ Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
         return Status::OK();
     }
     _is_prepared = true;
+    _children.clear();
+    _expr->get_uncompilable_exprs(_children, state);
 
     if (!is_constant()) {
         auto start = MonotonicNanos();
@@ -61,7 +63,7 @@ Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
             return Status::JitCompileError("JIT is not supported");
         }
 
-        auto function = jit_engine->compile_scalar_function(context, _expr);
+        auto function = jit_engine->compile_scalar_function(context, _expr, _children);
 
         auto elapsed = MonotonicNanos() - start;
         if (!function.ok()) {
@@ -78,10 +80,9 @@ Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
         if (_jit_expr_name.empty()) {
             return Status::RuntimeError("[JIT] expr debug_string() is empty");
         }
-    } else {
+    } else { // reset children, so it can fall back the original expr safely
         _children.clear();
         _children.push_back(_expr);
-        RETURN_IF_ERROR(Expr::prepare(state, context)); // jitExpr becomes an empty node, fallback to original expr.
     }
     return Status::OK();
 }

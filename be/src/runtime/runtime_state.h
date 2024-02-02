@@ -431,7 +431,22 @@ public:
                _query_options.enable_collect_table_level_scan_stats;
     }
 
-    bool is_jit_enabled() const { return _query_options.__isset.enable_jit && _query_options.enable_jit; }
+    bool is_jit_enabled() const { return _query_options.__isset.jit_level && _query_options.jit_level; }
+
+    void set_jit_level(const int level) { _query_options.__set_jit_level(level); }
+
+    // except /, %
+    bool is_jit_arithmetic_op() const { return (_query_options.jit_level == 1) || ((_query_options.jit_level & 2)); }
+
+    bool is_jit_cast_op() const { return (_query_options.jit_level == 1) || ((_query_options.jit_level & 4)); }
+
+    bool is_jit_case_op() const { return (_query_options.jit_level == 1) || ((_query_options.jit_level & 8)); }
+
+    bool is_jit_comparison_op() const { return (_query_options.jit_level == 1) || ((_query_options.jit_level & 16)); }
+
+    bool is_jit_div_op() const { return (_query_options.jit_level == 1) || ((_query_options.jit_level & 32)); }
+
+    bool is_jit_mod_op() const { return (_query_options.jit_level == 1) || ((_query_options.jit_level & 64)); }
 
     std::string_view get_sql_dialect() const { return _query_options.sql_dialect; }
 

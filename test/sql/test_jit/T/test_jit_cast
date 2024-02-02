@@ -52,7 +52,7 @@ INSERT INTO jit_cast (k1, k2, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10) VALUES
 (12,  -732,  233, 23, 0, 0, 234, 0, 0, 0, 0, TRUE),
 (754,  -14,  9223372036854775807, 1234, 0, 0, 0, 0, 0,  0, 0, FALSE);
 
-set enable_jit = true;
+set jit_level = -1;
 
 -- +
 SELECT k1 + k2 + v2 as result FROM jit_cast ORDER BY result;

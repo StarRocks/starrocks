@@ -30,7 +30,7 @@ public:
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
 
-    bool is_compilable() const override;
+    bool is_compilable(RuntimeState* state) const override;
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override;
 

@@ -165,7 +165,7 @@ StatusOr<ColumnPtr> VectorizedLiteral::evaluate_checked(ExprContext* context, Ch
     return column;
 }
 
-bool VectorizedLiteral::is_compilable() const {
+bool VectorizedLiteral::is_compilable(RuntimeState* state) const {
     return IRHelper::support_jit(_type.type);
 }
 

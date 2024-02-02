@@ -217,7 +217,8 @@ public:
         if (!jit_engine->support_jit()) {
             return;
         }
-
+        DCHECK(runtime_state != nullptr);
+        runtime_state->set_jit_level(-1);
         ObjectPool pool;
         auto* jit_expr = JITExpr::create(&pool, expr);
 
@@ -240,7 +241,8 @@ public:
         if (!jit_engine->support_jit()) {
             return;
         }
-
+        DCHECK(runtime_state != nullptr);
+        runtime_state->set_jit_level(-1);
         ObjectPool pool;
         auto* jit_expr = JITExpr::create(&pool, expr);
         ExprContext exprContext(jit_expr);

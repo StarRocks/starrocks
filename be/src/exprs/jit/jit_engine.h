@@ -67,18 +67,18 @@ public:
 
     /**
      * @brief Compile the expr into LLVM IR and return the function pointer.
-     * TODO(Yueyang): Add a cache to speed up the compilation.
      */
-    static StatusOr<JITScalarFunction> compile_scalar_function(ExprContext* context, Expr* expr);
+    static StatusOr<JITScalarFunction> compile_scalar_function(ExprContext* context, Expr* expr,
+                                                               const std::vector<Expr*>& uncompilable_exprs);
 
     /**
      * @brief Remove the function and its related resources(resource tracker and module) from the JIT engine.
-     * TODO(Yueyang): Add a cache to speed up the removal.
      */
     static Status remove_function(const std::string& expr_name);
 
 private:
-    static Status generate_scalar_function_ir(ExprContext* context, llvm::Module& module, Expr* expr);
+    static Status generate_scalar_function_ir(ExprContext* context, llvm::Module& module, Expr* expr,
+                                              const std::vector<Expr*>& uncompilable_exprs);
     /**
      * @brief Sets up an LLVM module by specifying its data layout and target triple.
      * The data layout guides the compiler on how to arrange data.
