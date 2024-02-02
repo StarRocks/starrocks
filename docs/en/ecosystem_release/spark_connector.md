@@ -32,6 +32,23 @@ displayed_sidebar: "English"
 
 ### 1.1
 
+### 1.1.2
+
+**Features**
+
+- Support the version of Spark to be 3.5. [#89](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/89)
+- Support for the `starrocks.filter.query` parameter when  Spark SQL is used to read data from StarRocks. [#92](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/92)
+- Support for reading columns of JSON type from StarRocks. [#100](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/100)
+
+**Improvements**
+
+- Optimize error messages. When Spark connector reads data from StarRocks, and columns specified in the starrocks.columns parameter do not exist in the StarRocks table, the returned error message explicitly shows the names of columns that do not exist. [#97](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/97)
+- If an exception occurs when Spark connector requests a query plan from StarRocks FE via HTTP, the FE will return the exception information to the Spark connector through the HTTP status and entity. [#98](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/98)
+
+**Tests**
+
+Add a unit test to verify whether the issue of not obtaining the names of output columns when Spark connector read data from StarRocks is fixed. [#99](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/99)
+
 #### 1.1.1
 
 This release mainly includes some features and improvements for loading data to StarRocks.
