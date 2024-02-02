@@ -4146,28 +4146,28 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(starrocks_be_txn_request{app_kubernetes_io_component=\"be\", namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"begin\"})",
+          "expr": "sum(starrocks_be_txn_request{job=~\"${service:pipe}\", namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"begin\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "begin",
           "refId": "A"
         },
         {
-          "expr": "sum(starrocks_be_txn_request{app_kubernetes_io_component=\"be\", namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"exec\"})",
+          "expr": "sum(starrocks_be_txn_request{job=~\"${service:pipe}\", namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"exec\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "exec",
           "refId": "B"
         },
         {
-          "expr": "sum(starrocks_be_txn_request{app_kubernetes_io_component=\"be\", namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"commit\"})",
+          "expr": "sum(starrocks_be_txn_request{job=~\"${service:pipe}\", namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"commit\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "commit",
           "refId": "C"
         },
         {
-          "expr": "sum(starrocks_be_txn_request{app_kubernetes_io_component=\"be\", namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"rollback\"})",
+          "expr": "sum(starrocks_be_txn_request{job=~\"${service:pipe}\", namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"rollback\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "rollback",
@@ -4266,14 +4266,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(starrocks_be_stream_load{app_kubernetes_io_component=\"be\", namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"receive_bytes\"}[$interval]))",
+          "expr": "sum(rate(starrocks_be_stream_load{job=~\"${service:pipe}\", namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"receive_bytes\"}[$interval]))",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "bytes",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(starrocks_be_stream_load{app_kubernetes_io_component=\"be\", namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"load_rows\"}[$interval]))",
+          "expr": "sum(rate(starrocks_be_stream_load{job=~\"${service:pipe}\", namespace=\"$namespace\", service=~\"${service:pipe}\", type=\"load_rows\"}[$interval]))",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "rows",
