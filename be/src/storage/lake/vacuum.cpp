@@ -396,8 +396,12 @@ static Status vacuum_txn_log(std::string_view root_location, int64_t min_active_
         *vacuumed_files += 1;
         *vacuumed_file_size += entry.size.value_or(0);
 
-        ret.update(deleter.delete_file(join_path(log_dir, entry.name)));
-        return ret.ok(); // Stop list if delete failed
+        auto st = deleter.delete_file(join_path(log_dir, entry.name));
+        if (!st.ok()) {
+            LOG(WARNING) << "Fail to delete " << join_path(log_dir, entry.name) << ": " << st;
+            ret.update(st);
+        }
+        return st.ok(); // Stop list if delete failed
     }));
     ret.update(iter_st);
     ret.update(deleter.finish());
