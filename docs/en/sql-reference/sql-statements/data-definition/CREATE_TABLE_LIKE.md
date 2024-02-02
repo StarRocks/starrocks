@@ -112,7 +112,7 @@ PROPERTIES (
 Example 2: Create an empty table `order_2` based on `orders` and specify properties for `order_2`.
 
 ```sql
-CREATE TABLE order_3
+CREATE TABLE order_2
 PARTITION BY date_trunc('day',dt)
 DISTRIBUTED BY hash(dt)
 PROPERTIES ("replication_num" = "1")
@@ -120,10 +120,10 @@ LIKE orders;
 ```
 
 ```plaintext
-show create table order_3\G
+show create table order_2\G
 *************************** 1. row ***************************
-       Table: order_3
-Create Table: CREATE TABLE `order_3` (
+       Table: order_2
+Create Table: CREATE TABLE `order_2` (
   `dt` date NOT NULL COMMENT "",
   `order_id` bigint(20) NOT NULL COMMENT "",
   `user_id` int(11) NOT NULL COMMENT "",
