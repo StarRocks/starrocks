@@ -36,7 +36,7 @@ displayed_sidebar: "English"
 >
 > In general, the latest version of the Flink connector only maintains compatibility with the three most recent versions of Flink.
 
-## Release note
+## Release notes
 
 ### 1.2
 

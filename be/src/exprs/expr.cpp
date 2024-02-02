@@ -67,7 +67,6 @@
 #include "exprs/java_function_call_expr.h"
 #include "exprs/jit/jit_engine.h"
 #include "exprs/jit/jit_expr.h"
-#include "exprs/jit/jit_functions.h"
 #include "exprs/lambda_function.h"
 #include "exprs/literal.h"
 #include "exprs/map_apply_expr.h"
@@ -213,6 +212,7 @@ Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext*
                    << apache::thrift::ThriftDebugString(texpr);
         return status;
     }
+
     return status;
 }
 
@@ -697,20 +697,34 @@ ColumnRef* Expr::get_column_ref() {
     return nullptr;
 }
 
-StatusOr<LLVMDatum> Expr::generate_ir(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
-                                      const std::vector<LLVMDatum>& datums) const {
-    if (!is_compilable()) {
-        return Status::NotSupported("JIT expr not supported");
+StatusOr<LLVMDatum> Expr::generate_ir_impl(ExprContext* context, JITContext* jit_ctx) {
+    if (is_compilable()) {
+#if BE_TEST
+        throw std::runtime_error("[JIT] compilable expressions must not be here : " + debug_string());
+#else
+        return Status::NotSupported("[JIT] compilable expressions must override generate_ir_impl()");
+#endif
     }
-
-    ASSIGN_OR_RETURN(auto datum, generate_ir_impl(context, module, b, datums))
-    // Unoin null.
-    if (this->is_nullable()) {
-        // TODO(Yueyang): Check this.
-        for (auto& input : datums) {
-            datum.null_flag = b.CreateOr(datum.null_flag, input.null_flag);
-        }
+    if (jit_ctx->input_index >= jit_ctx->columns.size() - 1) {
+#if BE_TEST
+        throw std::runtime_error("[JIT] vector overflow for expr :" + debug_string());
+#else
+        return Status::RuntimeError("[JIT] vector overflow for uncompilable expr");
+#endif
     }
+    LLVMDatum datum(jit_ctx->builder);
+    datum.value = jit_ctx->builder.CreateLoad(
+            jit_ctx->columns[jit_ctx->input_index].value_type,
+            jit_ctx->builder.CreateInBoundsGEP(jit_ctx->columns[jit_ctx->input_index].value_type,
+                                               jit_ctx->columns[jit_ctx->input_index].values, jit_ctx->index_phi));
+    if (is_nullable()) {
+        datum.null_flag = jit_ctx->builder.CreateLoad(
+                jit_ctx->builder.getInt8Ty(),
+                jit_ctx->builder.CreateInBoundsGEP(jit_ctx->builder.getInt8Ty(),
+                                                   jit_ctx->columns[jit_ctx->input_index].null_flags,
+                                                   jit_ctx->index_phi));
+    }
+    jit_ctx->input_index++;
     return datum;
 }
 
@@ -724,41 +738,24 @@ void Expr::get_uncompilable_exprs(std::vector<Expr*>& exprs) {
     }
 }
 
-void Expr::get_jit_exprs(std::vector<Expr*>& exprs) {
-    if (!this->is_compilable()) {
-        exprs.emplace_back(this);
-        return;
-    }
-    for (auto child : this->children()) {
-        child->get_jit_exprs(exprs);
-    }
-    exprs.emplace_back(this);
-}
-
 // This method attempts to traverse the entire expression tree from the current expression downwards, seeking to replace expressions with JITExprs.
 // This method searches from top to bottom for compilable expressions.
 // Once a compilable expression is found, it skips over its compilable subexpressions and continues the search downwards.
 Status Expr::replace_compilable_exprs(Expr** expr, ObjectPool* pool) {
-    std::vector<Expr*> next_exprs;
     if ((*expr)->should_compile()) {
         // If the current expression is compilable, we will replace it with a JITExpr.
         // This expression and its compilable subexpressions will be compiled into a single function.
         *expr = JITExpr::create(pool, *expr);
-        // Skip over the compilable subexpressions.
-        (*expr)->get_uncompilable_exprs(next_exprs);
-    } else {
-        // Search for compilable expressions in the subexpressions.
-        next_exprs = _children;
     }
 
-    for (auto& child : next_exprs) {
+    for (auto& child : (*expr)->_children) {
         RETURN_IF_ERROR(child->replace_compilable_exprs(&child, pool));
     }
     return Status::OK();
 }
 
 bool Expr::should_compile() const {
-    if (!is_compilable() || _children.empty()) {
+    if (!is_compilable() || _children.empty() || is_constant()) {
         return false;
     }
 

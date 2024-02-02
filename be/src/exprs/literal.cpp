@@ -169,12 +169,9 @@ bool VectorizedLiteral::is_compilable() const {
     return IRHelper::support_jit(_type.type);
 }
 
-StatusOr<LLVMDatum> VectorizedLiteral::generate_ir_impl(ExprContext* context, const llvm::Module& module,
-                                                        llvm::IRBuilder<>& b,
-                                                        const std::vector<LLVMDatum>& datums) const {
-    ASSIGN_OR_RETURN(auto result, IRHelper::create_ir_number(b, _type.type, _value->raw_data()));
-    LLVMDatum datum(b);
-    datum.value = result;
+StatusOr<LLVMDatum> VectorizedLiteral::generate_ir_impl(ExprContext* context, JITContext* jit_ctx) {
+    LLVMDatum datum(jit_ctx->builder, _value->only_null());
+    ASSIGN_OR_RETURN(datum.value, IRHelper::create_ir_number(jit_ctx->builder, _type.type, _value->raw_data()));
     return datum;
 }
 

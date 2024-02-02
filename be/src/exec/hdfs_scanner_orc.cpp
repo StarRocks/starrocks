@@ -54,13 +54,6 @@ private:
     friend class HdfsOrcScanner;
     std::unordered_map<SlotId, FilterPtr> _dict_filter_eval_cache;
     bool _can_do_filter_on_orc_cvb{true}; // cvb: column vector batch.
-    // key: end of range.
-    // value: start of range.
-    // ranges are not overlapped.
-    // check `offset` in a range or not:
-    // 1. use `upper_bound` to find the first range.end > `offset`
-    // 2. and check if range.start <= `offset`
-    std::map<uint64_t, uint64_t> _scan_ranges;
     OrcChunkReader* _reader;
     int64_t _writer_tzoffset_in_seconds;
 };
@@ -86,18 +79,17 @@ OrcRowReaderFilter::OrcRowReaderFilter(const HdfsScannerContext& scanner_ctx, Or
             VLOG_FILE << "OrcRowReaderFilter: min_max_ctx = " << ctx->root()->debug_string();
         }
     }
-    for (const auto& r : _scanner_ctx.scan_ranges) {
-        _scan_ranges.insert(std::make_pair(r->offset + r->length, r->offset));
-    }
 }
 
 bool OrcRowReaderFilter::filterOnOpeningStripe(uint64_t stripeIndex,
                                                const orc::proto::StripeInformation* stripeInformation) {
     _current_stripe_index = stripeIndex;
     uint64_t offset = stripeInformation->offset();
-    // range end must > offset
-    auto it = _scan_ranges.upper_bound(offset);
-    if ((it != _scan_ranges.end()) && (offset >= it->second) && (offset < it->first)) {
+
+    const auto* scan_range = _scanner_ctx.scan_range;
+    size_t scan_start = scan_range->offset;
+    size_t scan_end = scan_range->length + scan_start;
+    if (offset >= scan_start && offset < scan_end) {
         return false;
     }
     return true;
@@ -440,7 +432,6 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
 
     DCHECK_EQ(rows_read, chunk->get()->num_rows());
 
-    _scanner_ctx.append_not_existed_columns_to_chunk(chunk, rows_read);
     _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, rows_read);
 
     return Status::OK();
@@ -488,6 +479,9 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
                 *chunk = std::move(ret.value());
             }
 
+            // we need to append none existed column before do eval, just for count(*) optimization
+            _scanner_ctx.append_not_existed_columns_to_chunk(chunk, rows_read);
+
             // do stats before we filter rows which does not match.
             _app_stats.raw_rows_read += rows_read;
             _chunk_filter.assign(rows_read, 1);
@@ -501,6 +495,8 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
                     ASSIGN_OR_RETURN(rows_read,
                                      ExecNode::eval_conjuncts_into_filter(it.second, ck.get(), &_chunk_filter));
                     if (rows_read == 0) {
+                        // If rows_read = 0, we need to set chunk size = 0 and bypass filter chunk directly
+                        ck->set_num_rows(0);
                         break;
                     }
                 }
@@ -515,7 +511,6 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
                 ck->filter(_chunk_filter);
             }
         }
-        ck->set_num_rows(rows_read);
 
         if (!_orc_reader->has_lazy_load_context()) {
             return rows_read;

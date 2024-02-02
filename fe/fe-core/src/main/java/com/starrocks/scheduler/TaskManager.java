@@ -133,7 +133,6 @@ public class TaskManager implements MemoryTrackable {
     }
 
     private void registerPeriodicalTask() {
-        LocalDateTime scheduleTime = LocalDateTime.now();
         for (Task task : nameToTaskMap.values()) {
             if (task.getType() != Constants.TaskType.PERIODICAL) {
                 continue;
@@ -147,9 +146,7 @@ public class TaskManager implements MemoryTrackable {
             if (taskSchedule == null) {
                 continue;
             }
-            registerScheduler(task, scheduleTime);
-
-            scheduleTime = scheduleTime.plusSeconds(5);
+            registerScheduler(task);
         }
     }
 
@@ -159,7 +156,14 @@ public class TaskManager implements MemoryTrackable {
         long initialDelay = duration.getSeconds();
         // if startTime < now, start scheduling from the next period
         if (initialDelay < 0) {
-            return ((initialDelay % periodSeconds) + periodSeconds) % periodSeconds;
+            // if schedule time is not a complete second, add extra 1 second to avoid less than expect scheduler time.
+            // eg:
+            //  Register scheduler, task:mv-271809, initialDay:22, periodSeconds:60, startTime:2023-12-29T17:50,
+            //  scheduleTime:2024-01-30T15:27:37.342356010
+            // Before:schedule at : Hour:MINUTE:59
+            // After: schedule at : HOUR:MINUTE:00
+            int extra = scheduleTime.getNano() > 0 ? 1 : 0;
+            return ((initialDelay % periodSeconds) + periodSeconds + extra) % periodSeconds;
         } else {
             return initialDelay;
         }
@@ -204,9 +208,7 @@ public class TaskManager implements MemoryTrackable {
     }
 
     public void createTask(Task task, boolean isReplay) throws DdlException {
-        if (!tryTaskLock()) {
-            throw new DdlException("Failed to get task lock when create Task [" + task.getName() + "]");
-        }
+        takeTaskLock();
         try {
             if (nameToTaskMap.containsKey(task.getName())) {
                 throw new DdlException("Task [" + task.getName() + "] already exists");
@@ -223,7 +225,7 @@ public class TaskManager implements MemoryTrackable {
                     if (schedule == null) {
                         throw new DdlException("Task [" + task.getName() + "] has no scheduling information");
                     }
-                    registerScheduler(task, LocalDateTime.now());
+                    registerScheduler(task);
                 }
             }
             nameToTaskMap.put(task.getName(), task);
@@ -346,10 +348,7 @@ public class TaskManager implements MemoryTrackable {
     }
 
     public void dropTasks(List<Long> taskIdList, boolean isReplay) {
-        // keep nameToTaskMap and manualTaskMap consist
-        if (!tryTaskLock()) {
-            return;
-        }
+        takeTaskLock();
         try {
             for (long taskId : taskIdList) {
                 Task task = idToTaskMap.get(taskId);
@@ -426,7 +425,7 @@ public class TaskManager implements MemoryTrackable {
             TaskSchedule schedule = changedTask.getSchedule();
             currentTask.setSchedule(schedule);
             if (!isReplay) {
-                registerScheduler(currentTask, LocalDateTime.now());
+                registerScheduler(currentTask);
             }
             hasChanged = true;
         }
@@ -439,11 +438,14 @@ public class TaskManager implements MemoryTrackable {
         }
     }
 
-    private void registerScheduler(Task task, LocalDateTime scheduleTime) {
+    private void registerScheduler(Task task) {
+        LocalDateTime scheduleTime = LocalDateTime.now();
         TaskSchedule schedule = task.getSchedule();
         LocalDateTime startTime = Utils.getDatetimeFromLong(schedule.getStartTime());
         long periodSeconds = TimeUtils.convertTimeUnitValueToSecond(schedule.getPeriod(), schedule.getTimeUnit());
         long initialDelay = getInitialDelayTime(periodSeconds, startTime, scheduleTime);
+        LOG.info("Register scheduler, task:{}, initialDelay:{}, periodSeconds:{}, startTime:{}, scheduleTime:{}",
+                task.getName(), initialDelay, periodSeconds, startTime, scheduleTime);
         ExecuteOption option = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(), true, task.getProperties());
         ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() ->
                 executeTask(task.getName(), option), initialDelay, periodSeconds, TimeUnit.SECONDS);
@@ -471,6 +473,17 @@ public class TaskManager implements MemoryTrackable {
             LOG.warn("got exception while getting task lock", e);
         }
         return false;
+    }
+
+    /**
+     * Keep trying to get the lock until succeed
+     */
+    private void takeTaskLock() {
+        int i = 1;
+        while (!tryTaskLock()) {
+            LOG.warn("fail to get TaskManager lock after retry {} times", i);
+            i++;
+        }
     }
 
     public void taskUnlock() {
@@ -920,9 +933,7 @@ public class TaskManager implements MemoryTrackable {
     }
 
     public boolean containTask(String taskName) {
-        if (!tryTaskLock()) {
-            throw new DmlException("Failed to get task lock when check Task [" + taskName + "]");
-        }
+        takeTaskLock();
         try {
             return nameToTaskMap.containsKey(taskName);
         } finally {
@@ -931,9 +942,7 @@ public class TaskManager implements MemoryTrackable {
     }
 
     public Task getTask(String taskName) {
-        if (!tryTaskLock()) {
-            throw new DmlException("Failed to get task lock when get Task [" + taskName + "]");
-        }
+        takeTaskLock();
         try {
             return nameToTaskMap.get(taskName);
         } finally {

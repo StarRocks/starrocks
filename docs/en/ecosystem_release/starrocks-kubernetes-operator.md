@@ -19,7 +19,7 @@ The Operator provided by StarRocks is used to deploy StarRocks clusters in the K
 
 **Download URL of the resources:**
 
-- **URL prefix**:
+- **URL prefix**
 
     `https://github.com/StarRocks/starrocks-kubernetes-operator/releases/download/v${operator_version}/${resource_name}`
 
@@ -40,9 +40,60 @@ For example, the download URL for kube-starrocks chart v1.8.6 is:
 
 ## Release notes
 
-## 1.8
+### 1.9
 
-### 1.8.6
+#### 1.9.1
+
+**Improvements**
+
+- **[Helm Chart]** The operator will not create PersistentVolumeClaim (PVC) for log storage when `logStorageSize` is set to `0`.  [#398](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/398)
+- **[Operator]** The operator can detect whether the values of `mountPath` and `name` in `storageVolumes` are duplicated. An error is returned when duplicate values exist. [#388](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/388)
+- **[Operator]** The number of FE nodes cannot be scaled down to 1. [#394](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/394)
+- **[Operator]** The values of the `feEnvVars`, `beEnvVars` and `cnEnvVars` fields in multiple values YAML files can be merged. [#396](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/396)
+- **[Operator]** Add `spec.containers.securityContext.capabilities` in the StarRocksCluster CRD to customize the Linux capabilities of containers. [#404](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/404)
+
+**Bug Fixes**
+
+Fixed the following issues:
+
+- **[Operator]** The `annotations` field in `service` can be updated. [#402](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/402) [#399](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/399)
+- **[Operator]** The modification of statefulset and deployment is patched instead of updated. It solves the problem that upgrading CN will cause all CN pods to be terminated and restarted when CN and HPA are enabled. [#397](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/397)
+- **[Operator]** The modification of service object is patched instead of updated. It prevents the operator from overwriting the modification, for example, when a Kubernetes Cloud provider is used and the service object is modified by that Kubernetes Cloud provider. [#387](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/387)
+
+#### 1.9.0
+
+**New features**
+
+- Add StarRocksWarehouse CRD to support StarRocks Warehouse. Note that StarRocks Warehouse is currently a feature of the StarRocks Enterprise Edition. [#323](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/323)
+
+**Enhancements**
+
+- Add the `status.reason` field in StarRocksCluster CRD. When the apply operation of a subcontroller fails during cluster deployment, you can execute `kubectl get starrockscluster <name_of_the_starrocks_cluster_object> -oyaml`, and view error logs shown in `status.reason` field in the returned result. [#359](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/359)
+- An empty directory can be mounted in the `storageVolumes` field. [#324](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/324)
+
+**Bug Fixes**
+
+Fixed the following issues:
+
+- The status of the StarRocks cluster was inconsistent with the status of the cluster's FE, BE and CN components. [#380](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/380)
+- The HPA resource is not deleted when `autoScalingPolicy` is deleted. [#379](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/379)
+- The HPA resource is not removed when `starRocksCnSpec` is deleted. [#357](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/357)
+
+### 1.8
+
+#### 1.8.8
+
+**Bugfixes**
+
+- **[Operator]** The operator no longer annotates on search service (which is an internal service) when annotations are added by using `StarRocksFeSpec.service`, `StarRocksBeSpec.service`, and `StarRocksCnSpec.service`.  [#370](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/370)
+
+#### 1.8.7
+
+**Enhancements**
+
+- Add the `livenessProbeFailureSeconds` and `readinessProbeFailureSeconds` fields in StarRocksCluster CRD. When StarRocks is under heavy workload and the time of liveness and readiness probes still use default values, the liveness and readiness probes may fail and cause the containers to restart. In this case, you can add larger values to these two fields. [#309](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/309)
+
+#### 1.8.6
 
 **Bug Fixes**
 
@@ -55,7 +106,7 @@ Fixed the following issue:
 - [Load data from outside the Kubernetes network to StarRocks through FE proxy](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/load_data_using_stream_load_howto.md)
 - [Update the root user's password using Helm](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/change_root_password_howto.md)
 
-### 1.8.5
+#### 1.8.5
 
 **Improvements**
 
@@ -64,13 +115,15 @@ Fixed the following issue:
 
 **Bug Fixes**
 
+Fixed the following issue:
+
 - **[Helm Chart]** The root user's password in StarRocks may not be initialized successfully when `starrocks.initPassword.enabled` is true and the value of `starrocks.starrocksCluster.name` is specified. It is caused by the wrong FE service domain name used by the initpwd pod to connect FE service. More specifically, in this scenario, FE service domain name uses the value specified in `starrocks.starrocksCluster.name`, while the initpwd pod still uses the value of the `starrocks.nameOverride` field to form the FE service domain name. ([#292](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/292))
 
 **Upgrade notes**
 
 - **[Helm Chart]** When the value specified in `starrocks.starrocksCluster.name` is different from the value of `starrocks.nameOverride`, the old configmaps for FE, BE, and CN will be deleted. New configmaps with new names for the FE, BE, and CN will be created. **This may result in the restart of the FE, BE, and CN pods.**
 
-### 1.8.4
+#### 1.8.4
 
 **Features**
 
@@ -91,7 +144,7 @@ Fixed the following issue:
 - Add more user guides on how to deploy a StarRocks cluster with different configurations. For example, how to [deploy a StarRocks cluster with all supported features](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/examples/starrocks/deploy_a_starrocks_cluster_with_all_features.yaml). For more user guides, see [docs](https://github.com/StarRocks/starrocks-kubernetes-operator/tree/main/examples/starrocks).
 - Add more user guides on how to manage the StarRocks cluster. For example, how to configure [logging and related fields](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/logging_and_related_configurations_howto.md) and [mount external configmaps or secrets](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/mount_external_configmaps_or_secrets_howto.md). For more user guides, see [docs](https://github.com/StarRocks/starrocks-kubernetes-operator/tree/main/doc).
 
-### 1.8.3
+#### 1.8.3
 
 **Upgrade notes**
 
@@ -106,13 +159,13 @@ Fixed the following issue:
 
 - The value of the `proxy_read_timeout` parameter is changed in the **nginx.conf** file to 600s from 60s, in order to avoid timeout.
 
-### 1.8.2
+#### 1.8.2
 
 **Improvements**
 
 - Increase the maximum memory usage allowed for the operator pods to avoid OOM. [#254](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/254)
 
-### 1.8.1
+#### 1.8.1
 
 **Features**
 
@@ -123,7 +176,7 @@ Fixed the following issue:
 
 - Remove the related Kubernetes resources when the `BeSpec` or `CnSpec` of the StarRocks cluster is deleted, ensuring a clean and consistent state of the cluster. [#245](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/245)
 
-### 1.8.0
+#### 1.8.0
 
 **Upgrade notes and behavior changes**
 
@@ -133,7 +186,7 @@ Fixed the following issue:
 
   - To upgrade the Helm Chart, you need to perform the following:
 
-    1. Use the **values migration tool** to adjust the format of the previous **values.yaml** file to the new format. The values migration tool for different operating systems can be downloaded from the [Assets](https://github.com/StarRocks/starrocks-kubernetes-operator/releases/tag/v1.8.0) section.  You can get help information of this tool by running the `migrate-chart-value --help` command. [#206](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/206)
+    1. Use the **values migration tool** to adjust the format of the previous **values.yaml** file to the new format. The values migration tool for different operating systems can be downloaded from the [Assets](https://github.com/StarRocks/starrocks-kubernetes-operator/releases/tag/v1.8.0) section. You can get help information of this tool by running the `migrate-chart-value --help` command. [#206](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/206)
 
        ```Bash
        migrate-chart-value --input values.yaml --target-version v1.8.0 --output ./values-v1.8.0.yaml

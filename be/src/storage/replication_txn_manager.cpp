@@ -155,20 +155,23 @@ Status ReplicationTxnManager::init(const std::vector<starrocks::DataDir*>& data_
 
 Status ReplicationTxnManager::remote_snapshot(const TRemoteSnapshotRequest& request, std::string* src_snapshot_path,
                                               bool* incremental_snapshot) {
+    if (StorageEngine::instance()->bg_worker_stopped()) {
+        return Status::InternalError("Process is going to quit. The remote snapshot will stop");
+    }
+
     ASSIGN_OR_RETURN(auto tablet, prepare_txn(request.transaction_id, request.partition_id, request.tablet_id));
 
     ReplicationTxnMetaPB txn_meta_pb;
     Status status = load_tablet_txn_meta(request.transaction_id, request.tablet_id, txn_meta_pb);
-    if (status.ok()) {
-        if (txn_meta_pb.txn_state() >= ReplicationTxnStatePB::TXN_SNAPSHOTED &&
-            txn_meta_pb.snapshot_version() == request.src_visible_version) {
-            LOG(INFO) << "Tablet " << request.tablet_id << " already made remote snapshot"
-                      << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
-                      << ", src_tablet_id: " << request.src_tablet_id
-                      << ", visible_version: " << request.visible_version
-                      << ", snapshot_version: " << request.src_visible_version;
-            return Status::OK();
-        }
+    RETURN_IF_ERROR(status);
+
+    if (txn_meta_pb.txn_state() >= ReplicationTxnStatePB::TXN_SNAPSHOTED &&
+        txn_meta_pb.snapshot_version() == request.src_visible_version) {
+        LOG(INFO) << "Tablet " << request.tablet_id << " already made remote snapshot"
+                  << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
+                  << ", src_tablet_id: " << request.src_tablet_id << ", visible_version: " << request.visible_version
+                  << ", snapshot_version: " << request.src_visible_version;
+        return Status::OK();
     }
 
     std::vector<Version> missed_versions;
@@ -235,20 +238,23 @@ Status ReplicationTxnManager::remote_snapshot(const TRemoteSnapshotRequest& requ
 }
 
 Status ReplicationTxnManager::replicate_snapshot(const TReplicateSnapshotRequest& request) {
-    ASSIGN_OR_RETURN(auto tablet, get_tablet(request.tablet_id));
+    if (StorageEngine::instance()->bg_worker_stopped()) {
+        return Status::InternalError("Process is going to quit. The replicate snapshot will stop");
+    }
+
+    ASSIGN_OR_RETURN(auto tablet, prepare_txn(request.transaction_id, request.partition_id, request.tablet_id));
 
     ReplicationTxnMetaPB txn_meta_pb;
     Status status = load_tablet_txn_meta(request.transaction_id, request.tablet_id, txn_meta_pb);
-    if (status.ok()) {
-        if (txn_meta_pb.txn_state() >= ReplicationTxnStatePB::TXN_REPLICATED &&
-            txn_meta_pb.snapshot_version() == request.src_visible_version) {
-            LOG(INFO) << "Tablet " << request.tablet_id << " already replicated remote snapshot"
-                      << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
-                      << ", src_tablet_id: " << request.src_tablet_id
-                      << ", visible_version: " << request.visible_version
-                      << ", snapshot_version: " << request.src_visible_version;
-            return Status::OK();
-        }
+    RETURN_IF_ERROR(status);
+
+    if (txn_meta_pb.txn_state() >= ReplicationTxnStatePB::TXN_REPLICATED &&
+        txn_meta_pb.snapshot_version() == request.src_visible_version) {
+        LOG(INFO) << "Tablet " << request.tablet_id << " already replicated remote snapshot"
+                  << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
+                  << ", src_tablet_id: " << request.src_tablet_id << ", visible_version: " << request.visible_version
+                  << ", snapshot_version: " << request.src_visible_version;
+        return Status::OK();
     }
 
     std::string tablet_snapshot_dir_path = get_tablet_snapshot_dir_path(tablet->data_dir(), request.transaction_id,
@@ -288,7 +294,7 @@ Status ReplicationTxnManager::replicate_snapshot(const TReplicateSnapshotRequest
 }
 
 void ReplicationTxnManager::get_txn_related_tablets(const TTransactionId transaction_id, TPartitionId partition_id,
-                                                    std::vector<TTabletId>* tablet_ids) {
+                                                    std::vector<TTabletId>* tablet_ids) const {
     std::shared_lock guard(_mutex);
     auto transaction_iter = _transaction_map.find(transaction_id);
     if (transaction_iter == _transaction_map.end()) {
@@ -308,7 +314,8 @@ void ReplicationTxnManager::get_txn_related_tablets(const TTransactionId transac
     }
 }
 
-void ReplicationTxnManager::get_tablet_related_txns(TTabletId tablet_id, std::set<TTransactionId>* transaction_ids) {
+void ReplicationTxnManager::get_tablet_related_txns(TTabletId tablet_id,
+                                                    std::set<TTransactionId>* transaction_ids) const {
     std::shared_lock guard(_mutex);
     auto tablet_iter = _tablet_map.find(tablet_id);
     if (tablet_iter == _tablet_map.end()) {
@@ -320,8 +327,17 @@ void ReplicationTxnManager::get_tablet_related_txns(TTabletId tablet_id, std::se
     }
 }
 
+bool ReplicationTxnManager::has_txn(TTransactionId transaction_id) const {
+    std::shared_lock guard(_mutex);
+    return _transaction_map.contains(transaction_id);
+}
+
 Status ReplicationTxnManager::publish_txn(TTransactionId transaction_id, TPartitionId partition_id,
                                           const TabletSharedPtr& tablet, int64_t version) {
+    if (StorageEngine::instance()->bg_worker_stopped()) {
+        return Status::InternalError("Process is going to quit. The publish snapshot will stop");
+    }
+
     ReplicationTxnMetaPB txn_meta_pb;
     RETURN_IF_ERROR(load_tablet_txn_meta(transaction_id, tablet->tablet_id(), txn_meta_pb));
     if (txn_meta_pb.txn_state() == ReplicationTxnStatePB::TXN_PUBLISHED) {
@@ -492,6 +508,14 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
 
     auto file_converters = [&](const std::string& file_name,
                                uint64_t file_size) -> StatusOr<std::unique_ptr<FileStreamConverter>> {
+        if (!has_txn(request.transaction_id)) {
+            LOG(WARNING) << "Transaction is aborted, txn_id: " << request.transaction_id
+                         << ", tablet_id: " << request.tablet_id << ", src_tablet_id: " << request.src_tablet_id
+                         << ", visible_version: " << request.visible_version
+                         << ", snapshot_version: " << request.src_visible_version;
+            return Status::InternalError("Transaction is aborted");
+        }
+
         WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
         ASSIGN_OR_RETURN(auto output_file, fs::new_writable_file(opts, tablet_snapshot_dir_path + file_name));
 
@@ -508,16 +532,32 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
             tablet->data_dir()));
 
     if (tablet->updates() == nullptr) {
-        RETURN_IF_ERROR(convert_snapshot_for_none_primary(tablet_snapshot_dir_path, column_unique_id_map, request));
+        RETURN_IF_ERROR(convert_snapshot_for_none_primary(tablet_snapshot_dir_path, &column_unique_id_map, request));
     } else {
-        RETURN_IF_ERROR(convert_snapshot_for_primary(tablet_snapshot_dir_path, column_unique_id_map, request));
+        RETURN_IF_ERROR(convert_snapshot_for_primary(tablet_snapshot_dir_path, &column_unique_id_map, request));
     }
 
     return Status::OK();
 }
 
+static Status convert_rowset_meta_pb(RowsetMetaPB* rowset_meta_pb,
+                                     std::unordered_map<uint32_t, uint32_t>* column_unique_id_map,
+                                     const TReplicateSnapshotRequest& request) {
+    rowset_meta_pb->set_partition_id(request.partition_id);
+    rowset_meta_pb->set_tablet_id(request.tablet_id);
+    if (rowset_meta_pb->has_tablet_schema()) {
+        ReplicationUtils::convert_column_unique_ids(rowset_meta_pb->mutable_tablet_schema()->mutable_column(),
+                                                    column_unique_id_map);
+    }
+    if (rowset_meta_pb->has_txn_meta()) {
+        RETURN_IF_ERROR(
+                ReplicationUtils::convert_rowset_txn_meta(rowset_meta_pb->mutable_txn_meta(), *column_unique_id_map));
+    }
+    return Status::OK();
+}
+
 Status ReplicationTxnManager::convert_snapshot_for_none_primary(
-        const std::string& tablet_snapshot_path, const std::unordered_map<uint32_t, uint32_t>& column_unique_id_map,
+        const std::string& tablet_snapshot_path, std::unordered_map<uint32_t, uint32_t>* column_unique_id_map,
         const TReplicateSnapshotRequest& request) {
     std::string src_header_file_path = tablet_snapshot_path + std::to_string(request.src_tablet_id) + ".hdr";
     TabletMeta tablet_meta;
@@ -533,20 +573,10 @@ Status ReplicationTxnManager::convert_snapshot_for_none_primary(
     ReplicationUtils::convert_column_unique_ids(tablet_meta_pb.mutable_schema()->mutable_column(),
                                                 column_unique_id_map);
     for (auto& rowset_meta : *tablet_meta_pb.mutable_rs_metas()) {
-        rowset_meta.set_partition_id(request.partition_id);
-        rowset_meta.set_tablet_id(request.tablet_id);
-        if (rowset_meta.has_tablet_schema()) {
-            ReplicationUtils::convert_column_unique_ids(rowset_meta.mutable_tablet_schema()->mutable_column(),
-                                                        column_unique_id_map);
-        }
+        RETURN_IF_ERROR(convert_rowset_meta_pb(&rowset_meta, column_unique_id_map, request));
     }
     for (auto& rowset_meta : *tablet_meta_pb.mutable_inc_rs_metas()) {
-        rowset_meta.set_partition_id(request.partition_id);
-        rowset_meta.set_tablet_id(request.tablet_id);
-        if (rowset_meta.has_tablet_schema()) {
-            ReplicationUtils::convert_column_unique_ids(rowset_meta.mutable_tablet_schema()->mutable_column(),
-                                                        column_unique_id_map);
-        }
+        RETURN_IF_ERROR(convert_rowset_meta_pb(&rowset_meta, column_unique_id_map, request));
     }
 
     std::string header_file_path = tablet_snapshot_path + std::to_string(request.tablet_id) + ".hdr";
@@ -564,9 +594,9 @@ Status ReplicationTxnManager::convert_snapshot_for_none_primary(
     return Status::OK();
 }
 
-Status ReplicationTxnManager::convert_snapshot_for_primary(
-        const std::string& tablet_snapshot_path, const std::unordered_map<uint32_t, uint32_t>& column_unique_id_map,
-        const TReplicateSnapshotRequest& request) {
+Status ReplicationTxnManager::convert_snapshot_for_primary(const std::string& tablet_snapshot_path,
+                                                           std::unordered_map<uint32_t, uint32_t>* column_unique_id_map,
+                                                           const TReplicateSnapshotRequest& request) {
     std::string snapshot_meta_file_path = tablet_snapshot_path + "meta";
     ASSIGN_OR_RETURN(auto snapshot_meta, SnapshotManager::instance()->parse_snapshot_meta(snapshot_meta_file_path));
 
@@ -576,29 +606,14 @@ Status ReplicationTxnManager::convert_snapshot_for_primary(
     tablet_meta_pb.set_tablet_id(request.tablet_id);
     tablet_meta_pb.set_schema_hash(request.schema_hash);
     for (auto& rowset_meta : *tablet_meta_pb.mutable_rs_metas()) {
-        rowset_meta.set_partition_id(request.partition_id);
-        rowset_meta.set_tablet_id(request.tablet_id);
-        if (rowset_meta.has_tablet_schema()) {
-            ReplicationUtils::convert_column_unique_ids(rowset_meta.mutable_tablet_schema()->mutable_column(),
-                                                        column_unique_id_map);
-        }
+        RETURN_IF_ERROR(convert_rowset_meta_pb(&rowset_meta, column_unique_id_map, request));
     }
     for (auto& rowset_meta : *tablet_meta_pb.mutable_inc_rs_metas()) {
-        rowset_meta.set_partition_id(request.partition_id);
-        rowset_meta.set_tablet_id(request.tablet_id);
-        if (rowset_meta.has_tablet_schema()) {
-            ReplicationUtils::convert_column_unique_ids(rowset_meta.mutable_tablet_schema()->mutable_column(),
-                                                        column_unique_id_map);
-        }
+        RETURN_IF_ERROR(convert_rowset_meta_pb(&rowset_meta, column_unique_id_map, request));
     }
 
     for (auto& rowset_meta : snapshot_meta.rowset_metas()) {
-        rowset_meta.set_partition_id(request.partition_id);
-        rowset_meta.set_tablet_id(request.tablet_id);
-        if (rowset_meta.has_tablet_schema()) {
-            ReplicationUtils::convert_column_unique_ids(rowset_meta.mutable_tablet_schema()->mutable_column(),
-                                                        column_unique_id_map);
-        }
+        RETURN_IF_ERROR(convert_rowset_meta_pb(&rowset_meta, column_unique_id_map, request));
     }
 
     RETURN_IF_ERROR(snapshot_meta.serialize_to_file(snapshot_meta_file_path));

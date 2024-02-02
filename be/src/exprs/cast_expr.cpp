@@ -14,6 +14,7 @@
 
 #include "exprs/cast_expr.h"
 
+#include <llvm/ADT/APInt.h>
 #include <ryu/ryu.h>
 
 #include <stdexcept>
@@ -27,11 +28,18 @@
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
+#include "common/status.h"
+#include "common/statusor.h"
 #include "exprs/binary_function.h"
 #include "exprs/column_ref.h"
 #include "exprs/decimal_cast_expr.h"
+#include "exprs/jit/ir_helper.h"
 #include "exprs/unary_function.h"
 #include "gutil/casts.h"
+#include "gutil/strings/substitute.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/Value.h"
 #include "runtime/datetime_value.h"
 #include "runtime/large_int_value.h"
 #include "runtime/runtime_state.h"
@@ -1127,6 +1135,63 @@ public:
         }
         return result_column;
     };
+
+    bool is_compilable() const override {
+        return !AllowThrowException && FromType != TYPE_LARGEINT && ToType != TYPE_LARGEINT &&
+               IRHelper::support_jit(FromType) && IRHelper::support_jit(ToType);
+    }
+
+    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
+        ASSIGN_OR_RETURN(auto datum, _children[0]->generate_ir_impl(context, jit_ctx))
+        auto* l = datum.value;
+        auto& b = jit_ctx->builder;
+        if constexpr (FromType == TYPE_JSON || ToType == TYPE_JSON) {
+            return Status::NotSupported("JIT casting does not support JSON");
+        } else if constexpr (lt_is_decimal<FromType> || lt_is_decimal<ToType>) {
+            return Status::NotSupported("JIT casting does not support decimal");
+        } else {
+            ASSIGN_OR_RETURN(datum.value, IRHelper::cast_to_type(b, l, FromType, ToType));
+            if constexpr ((lt_is_integer<FromType> || lt_is_float<FromType>)&&(lt_is_integer<ToType> ||
+                                                                               lt_is_float<ToType>)) {
+                typedef RunTimeCppType<FromType> FromCppType;
+                typedef RunTimeCppType<ToType> ToCppType;
+                if constexpr (std::numeric_limits<ToCppType>::max() < std::numeric_limits<FromCppType>::max()) {
+                    // Check overflow.
+
+                    llvm::Value* max_overflow = nullptr;
+                    llvm::Value* min_overflow = nullptr;
+                    if constexpr (lt_is_integer<FromType>) {
+                        RETURN_IF(!l->getType()->isIntegerTy(),
+                                  Status::JitCompileError("Check overflow failed, data type is not integer"));
+
+                        // TODO(Yueyang): fix __int128
+                        auto* max = llvm::ConstantInt::get(l->getType(), std::numeric_limits<ToCppType>::max(), true);
+                        auto* min =
+                                llvm::ConstantInt::get(l->getType(), std::numeric_limits<ToCppType>::lowest(), true);
+                        max_overflow = b.CreateICmpSGT(l, max);
+                        min_overflow = b.CreateICmpSLT(l, min);
+                    } else if constexpr (lt_is_float<FromType>) {
+                        RETURN_IF(!l->getType()->isFloatingPointTy(),
+                                  Status::JitCompileError("Check overflow failed, data type is not float point"));
+
+                        auto* max = llvm::ConstantFP::get(l->getType(),
+                                                          static_cast<double>(std::numeric_limits<ToCppType>::max()));
+                        auto* min = llvm::ConstantFP::get(
+                                l->getType(), static_cast<double>(std::numeric_limits<ToCppType>::lowest()));
+                        max_overflow = b.CreateFCmpOGT(l, max);
+                        min_overflow = b.CreateFCmpOLT(l, min);
+                    }
+
+                    auto* is_overflow = b.CreateOr(max_overflow, min_overflow);
+                    datum.null_flag = b.CreateSelect(
+                            is_overflow, llvm::ConstantInt::get(datum.null_flag->getType(), 1, false), datum.null_flag);
+                }
+            }
+
+            return datum;
+        }
+    }
+
     std::string debug_string() const override {
         std::stringstream out;
         auto expr_debug_string = Expr::debug_string();

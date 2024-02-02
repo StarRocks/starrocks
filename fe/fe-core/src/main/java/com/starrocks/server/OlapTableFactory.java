@@ -82,6 +82,13 @@ public class OlapTableFactory implements AbstractTableFactory {
     private OlapTableFactory() {
     }
 
+    private void analyzeLocationOnCreateTable(OlapTable table, Map<String, String> properties) {
+        String location = PropertyAnalyzer.analyzeLocation(properties, true);
+        if (location != null) {
+            table.setLocation(location);
+        }
+    }
+
     @Override
     @NotNull
     public Table createTable(LocalMetastore metastore, Database db, CreateTableStmt stmt) throws DdlException {
@@ -214,7 +221,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                     throw new DdlException(String.format("Storage volume %s not exists", volume));
                 }
                 String storageVolumeId = svm.getStorageVolumeIdOfTable(tableId);
-                metastore.setLakeStorageInfo(table, storageVolumeId, properties);
+                metastore.setLakeStorageInfo(db, table, storageVolumeId, properties);
                 useFastSchemaEvolution = false;
             } else {
                 table = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
@@ -291,6 +298,9 @@ public class OlapTableFactory implements AbstractTableFactory {
                 throw new DdlException(String.format("%s table=%s, properties.replication_num=%s",
                         ex.getMessage(), table.getName(), logReplicationNum));
             }
+
+            // analyze location property
+            analyzeLocationOnCreateTable(table, properties);
 
             // set in memory
             boolean isInMemory =
@@ -481,12 +491,11 @@ public class OlapTableFactory implements AbstractTableFactory {
                     throw new DdlException("random distribution does not support 'colocate_with'");
                 }
 
-                boolean addedToColocateGroup = colocateTableIndex.addTableToGroup(db, table,
-                        colocateGroup, false /* expectLakeTable */);
+                colocateTableIndex.addTableToGroup(db, table, colocateGroup, false /* expectLakeTable */);
             }
 
             // get base index storage type. default is COLUMN
-            TStorageType baseIndexStorageType = null;
+            TStorageType baseIndexStorageType;
             try {
                 baseIndexStorageType = PropertyAnalyzer.analyzeStorageType(properties, table);
             } catch (AnalysisException e) {
@@ -544,7 +553,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             }
             Preconditions.checkNotNull(version);
 
-            // storage_format is not necessary, remove storage_format if exist.
+            // storage_format is not necessary, remove storage_format if exists.
             if (properties != null) {
                 properties.remove("storage_format");
             }
@@ -666,15 +675,11 @@ public class OlapTableFactory implements AbstractTableFactory {
     private void processConstraint(
             Database db, OlapTable olapTable, Map<String, String> properties) throws AnalysisException {
         List<UniqueConstraint> uniqueConstraints = PropertyAnalyzer.analyzeUniqueConstraint(properties, db, olapTable);
-        if (uniqueConstraints != null) {
-            olapTable.setUniqueConstraints(uniqueConstraints);
-        }
+        olapTable.setUniqueConstraints(uniqueConstraints);
 
         List<ForeignKeyConstraint> foreignKeyConstraints =
                 PropertyAnalyzer.analyzeForeignKeyConstraint(properties, db, olapTable);
-        if (foreignKeyConstraints != null) {
-            olapTable.setForeignKeyConstraints(foreignKeyConstraints);
-        }
+        olapTable.setForeignKeyConstraints(foreignKeyConstraints);
     }
 
 }

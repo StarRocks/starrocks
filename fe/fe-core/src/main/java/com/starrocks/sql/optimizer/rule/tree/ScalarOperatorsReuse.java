@@ -32,6 +32,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
+import com.starrocks.sql.optimizer.operator.scalar.DictionaryGetOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
@@ -39,6 +40,7 @@ import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.rewrite.scalar.NormalizePredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
 
@@ -146,7 +148,8 @@ public class ScalarOperatorsReuse {
         public ScalarOperator visitCollectionElement(CollectionElementOperator elemOp, Void context) {
             ScalarOperator operator = new CollectionElementOperator(elemOp.getType(),
                     elemOp.getChild(0).accept(this, null),
-                    elemOp.getChild(1).accept(this, null));
+                    elemOp.getChild(1).accept(this, null),
+                    elemOp.isCheckOutOfBounds());
             return tryRewrite(operator);
         }
 
@@ -236,6 +239,27 @@ public class ScalarOperatorsReuse {
             ScalarOperator operator = new LikePredicateOperator(predicate.getLikeType(),
                     predicate.getChildren().stream().map(argument -> argument.accept(this, null))
                             .toArray(ScalarOperator[]::new));
+            return tryRewrite(operator);
+        }
+
+        @Override
+        public ScalarOperator visitSubfield(SubfieldOperator predicate, Void context) {
+            // only rewrite subfield operator if and only if child is DictionaryGetOperator
+            if (predicate.getChild(0) instanceof DictionaryGetOperator) {
+                ScalarOperator operator = new SubfieldOperator(predicate.getChild(0).accept(this, null),
+                                predicate.getType(), predicate.getFieldNames(), predicate.getCopyFlag());
+                return tryRewrite(operator);
+            }
+            return predicate;
+        }
+
+        @Override
+        public ScalarOperator visitDictionaryGetOperator(DictionaryGetOperator predicate, Void context) {
+            ScalarOperator operator = new DictionaryGetOperator(
+                    predicate.getChildren().stream().map(
+                        argument -> argument.accept(this, null)).collect(Collectors.toList()),
+                            predicate.getType(), predicate.getDictionaryId(),
+                                predicate.getDictionaryTxnId(), predicate.getKeySize());
             return tryRewrite(operator);
         }
 

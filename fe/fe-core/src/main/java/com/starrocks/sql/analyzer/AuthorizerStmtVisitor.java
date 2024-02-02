@@ -19,6 +19,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
@@ -87,6 +88,7 @@ import com.starrocks.sql.ast.CancelCompactionStmt;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
+import com.starrocks.sql.ast.ColumnAssignment;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
@@ -218,9 +220,14 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
+    // For show tablet detail command, if user has any privilege on the corresponding table, user can run it
+    // TODO(yiming): match "/dbs", not only show tablet detail cmd, need to change privilege check for other proc node
+    private static final Pattern SHOW_TABLET_DETAIL_CMD_PATTERN =
+            Pattern.compile("/dbs/\\d+/\\d+/partitions/\\d+/\\d+/\\d+/?");
 
     private static final Logger LOG = LogManager.getLogger(AuthorizerStmtVisitor.class);
 
@@ -299,8 +306,8 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
                         // no need to check COLUMN SELECT privilege when user already has COLUMN INSERT privilege
                         Set<String> usedCols = allTouchedColumns.get(statement.getTableName());
                         if (usedCols.contains("*")) {
-                            usedCols = statement.getTargetTable().getColumns().stream()
-                                    .map(column -> column.getName()).collect(Collectors.toSet());
+                            usedCols = statement.getTargetTable().getColumns().stream().map(Column::getName)
+                                    .collect(Collectors.toSet());
                             allTouchedColumns.put(statement.getTableName(), usedCols);
                         }
                         if (columnNames.contains("*")) {
@@ -377,8 +384,8 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
                 updatePrivLevel = PrivilegeLevel.TABLE;
             } catch (AccessDeniedException e) {
                 try {
-                    assignmentColumns = statement.getAssignments().stream()
-                            .map(columnAssignment -> columnAssignment.getColumn()).collect(Collectors.toSet());
+                    assignmentColumns = statement.getAssignments().stream().map(ColumnAssignment::getColumn)
+                            .collect(Collectors.toSet());
                     Authorizer.checkColumnsAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                             statement.getTableName(), assignmentColumns, PrivilegeType.UPDATE);
                     updatePrivLevel = PrivilegeLevel.COLUMN;
@@ -406,8 +413,8 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
                     if (tableColumns.containsKey(statement.getTableName())) {
                         Set<String> usedCols = tableColumns.get(statement.getTableName());
                         if (usedCols.contains("*")) {
-                            usedCols = statement.getTable().getColumns().stream()
-                                    .map(column -> column.getName()).collect(Collectors.toSet());
+                            usedCols = statement.getTable().getColumns().stream().map(Column::getName)
+                                    .collect(Collectors.toSet());
                             tableColumns.put(statement.getTableName(), usedCols);
                         }
                         usedCols.removeAll(assignmentColumns);
@@ -1993,14 +2000,7 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitShowTabletStatement(ShowTabletStmt statement, ConnectContext context) {
-        try {
-            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.OPERATE);
-        } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(
-                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
-        }
+        // Privilege is checked in execution logic, see `ShowExecutor#handleShowTablet()` for details.
         return null;
     }
 
@@ -2146,7 +2146,10 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitShowProcStmt(ShowProcStmt statement, ConnectContext context) {
         try {
-            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.OPERATE);
+            if (!SHOW_TABLET_DETAIL_CMD_PATTERN.matcher(statement.getPath()).matches()) {
+                Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.OPERATE);
+            }
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
                     InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,

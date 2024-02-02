@@ -119,9 +119,10 @@ public class CreateLakeTableTest {
                         "properties('replication_num' = '1');"));
         checkLakeTable("lake_test", "multi_partition_unique_key");
 
+        Database db = GlobalStateMgr.getCurrentState().getDb("lake_test");
         LakeTable table = getLakeTable("lake_test", "multi_partition_unique_key");
         String defaultFullPath = getDefaultStorageVolumeFullPath();
-        String defaultTableFullPath = String.format("%s/%s", defaultFullPath, table.getId());
+        String defaultTableFullPath = String.format("%s/db%d/%d", defaultFullPath, db.getId(), table.getId());
         Assert.assertEquals(defaultTableFullPath, Objects.requireNonNull(table.getDefaultFilePathInfo()).getFullPath());
         Assert.assertEquals(defaultTableFullPath + "/100",
                 Objects.requireNonNull(table.getPartitionFilePathInfo(100)).getFullPath());

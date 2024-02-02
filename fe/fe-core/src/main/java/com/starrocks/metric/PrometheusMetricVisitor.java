@@ -43,6 +43,8 @@ import com.starrocks.monitor.jvm.JvmStats.GarbageCollector;
 import com.starrocks.monitor.jvm.JvmStats.MemoryPool;
 import com.starrocks.monitor.jvm.JvmStats.Threads;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
+import com.starrocks.system.SystemInfoService;
 
 import java.util.HashSet;
 import java.util.List;
@@ -205,20 +207,27 @@ public class PrometheusMetricVisitor extends MetricVisitor {
     @Override
     public void getNodeInfo() {
         final String NODE_INFO = "node_info";
+        final NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
+        final SystemInfoService systemInfoService = nodeMgr.getClusterInfo();
         sb.append(Joiner.on(" ").join(TYPE, NODE_INFO, "gauge\n"));
         sb.append(NODE_INFO).append("{type=\"fe_node_num\", state=\"total\"} ")
-                .append(GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null).size()).append("\n");
+                .append(nodeMgr.getFrontends(null).size()).append("\n");
         sb.append(NODE_INFO).append("{type=\"be_node_num\", state=\"total\"} ")
-                .append(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber()).append("\n");
+                .append(systemInfoService.getTotalBackendNumber()).append("\n");
         sb.append(NODE_INFO).append("{type=\"be_node_num\", state=\"alive\"} ")
-                .append(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAliveBackendNumber()).append("\n");
+                .append(systemInfoService.getAliveBackendNumber()).append("\n");
         sb.append(NODE_INFO).append("{type=\"be_node_num\", state=\"decommissioned\"} ")
-                .append(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getDecommissionedBackendIds().size())
+                .append(systemInfoService.getDecommissionedBackendIds().size())
                 .append("\n");
         sb.append(NODE_INFO).append("{type=\"broker_node_num\", state=\"dead\"} ").append(
                         GlobalStateMgr.getCurrentState().getBrokerMgr().getAllBrokers().stream().filter(b -> !b.isAlive)
                                 .count())
                 .append("\n");
+
+        sb.append(NODE_INFO).append("{type=\"cn_node_num\", state=\"total\"} ")
+            .append(systemInfoService.getTotalComputeNodeNumber()).append("\n");
+        sb.append(NODE_INFO).append("{type=\"cn_node_num\", state=\"alive\"} ")
+            .append(systemInfoService.getAliveComputeNodeNumber()).append("\n");
 
         // only master FE has this metrics, to help the Grafana knows who is the leader
         if (GlobalStateMgr.getCurrentState().isLeader()) {

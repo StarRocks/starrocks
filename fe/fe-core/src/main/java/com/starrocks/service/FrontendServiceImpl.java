@@ -114,13 +114,6 @@ import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
-import com.starrocks.mysql.privilege.Auth;
-import com.starrocks.mysql.privilege.DbPrivEntry;
-import com.starrocks.mysql.privilege.PrivBitSet;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.mysql.privilege.Privilege;
-import com.starrocks.mysql.privilege.TablePrivEntry;
-import com.starrocks.mysql.privilege.UserPrivTable;
 import com.starrocks.persist.AutoIncrementInfo;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.StreamLoadPlanner;
@@ -198,6 +191,8 @@ import com.starrocks.thrift.TGetLoadTxnStatusRequest;
 import com.starrocks.thrift.TGetLoadTxnStatusResult;
 import com.starrocks.thrift.TGetLoadsParams;
 import com.starrocks.thrift.TGetLoadsResult;
+import com.starrocks.thrift.TGetPartitionsMetaRequest;
+import com.starrocks.thrift.TGetPartitionsMetaResponse;
 import com.starrocks.thrift.TGetProfileRequest;
 import com.starrocks.thrift.TGetProfileResponse;
 import com.starrocks.thrift.TGetRoleEdgesRequest;
@@ -327,7 +322,7 @@ import static com.starrocks.thrift.TStatusCode.SERVICE_UNAVAILABLE;
 // Frontend service used to serve all request for this frontend through
 // thrift protocol
 public class FrontendServiceImpl implements FrontendService.Iface {
-    private static final Logger LOG = LogManager.getLogger(LeaderImpl.class);
+    private static final Logger LOG = LogManager.getLogger(FrontendServiceImpl.class);
     private final LeaderImpl leaderImpl;
     private final ExecuteEnv exeEnv;
     public AtomicLong partitionRequestNum = new AtomicLong(0);
@@ -849,43 +844,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TGetDBPrivsResult result = new TGetDBPrivsResult();
         List<TDBPrivDesc> tDBPrivs = Lists.newArrayList();
         result.setDb_privs(tDBPrivs);
-        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            // TODO(yiming): support showing user privilege info in information_schema later
-            return result;
-        }
-
-        UserIdentity currentUser = UserIdentity.fromThrift(params.current_user_ident);
-        List<DbPrivEntry> dbPrivEntries = GlobalStateMgr.getCurrentState().getAuth().getDBPrivEntries(currentUser);
-        // flatten privileges
-        for (DbPrivEntry entry : dbPrivEntries) {
-            PrivBitSet savedPrivs = entry.getPrivSet();
-            String clusterPrefix = SystemInfoService.DEFAULT_CLUSTER + ClusterNamespace.CLUSTER_DELIMITER;
-            String userIdentStr = currentUser.toString().replace(clusterPrefix, "");
-            String dbName = entry.getOrigDb();
-            boolean isGrantable = savedPrivs.satisfy(PrivPredicate.GRANT);
-            List<TDBPrivDesc> tPrivs = savedPrivs.toPrivilegeList().stream().map(
-                    priv -> {
-                        TDBPrivDesc privDesc = new TDBPrivDesc();
-                        privDesc.setDb_name(dbName);
-                        privDesc.setIs_grantable(isGrantable);
-                        privDesc.setUser_ident_str(userIdentStr);
-                        privDesc.setPriv(priv.getUpperNameForMysql());
-                        return privDesc;
-                    }
-            ).collect(Collectors.toList());
-            if (savedPrivs.satisfy(PrivPredicate.LOAD)) {
-                // add `INSERT` `UPDATE` and `DELETE` to adapt `Aliyun DTS`
-                tPrivs.addAll(Lists.newArrayList("INSERT", "UPDATE", "DELETE").stream().map(priv -> {
-                    TDBPrivDesc privDesc = new TDBPrivDesc();
-                    privDesc.setDb_name(dbName);
-                    privDesc.setIs_grantable(isGrantable);
-                    privDesc.setUser_ident_str(userIdentStr);
-                    privDesc.setPriv(priv);
-                    return privDesc;
-                }).collect(Collectors.toList()));
-            }
-            tDBPrivs.addAll(tPrivs);
-        }
+        // TODO(yiming): support showing user privilege info in information_schema later
         return result;
     }
 
@@ -895,46 +854,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TGetTablePrivsResult result = new TGetTablePrivsResult();
         List<TTablePrivDesc> tTablePrivs = Lists.newArrayList();
         result.setTable_privs(tTablePrivs);
-        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            // TODO(yiming): support showing user privilege info in information_schema later
-            return result;
-        }
-
-        UserIdentity currentUser = UserIdentity.fromThrift(params.current_user_ident);
-        List<TablePrivEntry> tablePrivEntries =
-                GlobalStateMgr.getCurrentState().getAuth().getTablePrivEntries(currentUser);
-        // flatten privileges
-        for (TablePrivEntry entry : tablePrivEntries) {
-            PrivBitSet savedPrivs = entry.getPrivSet();
-            String clusterPrefix = SystemInfoService.DEFAULT_CLUSTER + ClusterNamespace.CLUSTER_DELIMITER;
-            String userIdentStr = currentUser.toString().replace(clusterPrefix, "");
-            String dbName = entry.getOrigDb();
-            boolean isGrantable = savedPrivs.satisfy(PrivPredicate.GRANT);
-            List<TTablePrivDesc> tPrivs = savedPrivs.toPrivilegeList().stream().map(
-                    priv -> {
-                        TTablePrivDesc privDesc = new TTablePrivDesc();
-                        privDesc.setDb_name(dbName);
-                        privDesc.setTable_name(entry.getOrigTbl());
-                        privDesc.setIs_grantable(isGrantable);
-                        privDesc.setUser_ident_str(userIdentStr);
-                        privDesc.setPriv(priv.getUpperNameForMysql());
-                        return privDesc;
-                    }
-            ).collect(Collectors.toList());
-            if (savedPrivs.satisfy(PrivPredicate.LOAD)) {
-                // add `INSERT` `UPDATE` and `DELETE` to adapt `Aliyun DTS`
-                tPrivs.addAll(Lists.newArrayList("INSERT", "UPDATE", "DELETE").stream().map(priv -> {
-                    TTablePrivDesc privDesc = new TTablePrivDesc();
-                    privDesc.setDb_name(dbName);
-                    privDesc.setTable_name(entry.getOrigTbl());
-                    privDesc.setIs_grantable(isGrantable);
-                    privDesc.setUser_ident_str(userIdentStr);
-                    privDesc.setPriv(priv);
-                    return privDesc;
-                }).collect(Collectors.toList()));
-            }
-            tTablePrivs.addAll(tPrivs);
-        }
+        // TODO(yiming): support showing user privilege info in information_schema later
         return result;
     }
 
@@ -962,49 +882,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TGetUserPrivsResult result = new TGetUserPrivsResult();
         List<TUserPrivDesc> tUserPrivs = Lists.newArrayList();
         result.setUser_privs(tUserPrivs);
-        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            // TODO(yiming): support showing user privilege info in information_schema later
-            return result;
-        }
 
-        UserIdentity currentUser = UserIdentity.fromThrift(params.current_user_ident);
-        Auth currAuth = GlobalStateMgr.getCurrentState().getAuth();
-        UserPrivTable userPrivTable = currAuth.getUserPrivTable();
-        List<UserIdentity> userIdents = Lists.newArrayList();
-        // users can only see the privileges of themselves at this moment
-        userIdents.add(currentUser);
-
-        // TODO: users with super privilege can view all the privileges like below
-        // if (!userPrivTable.hasPriv(currentUser.getHost(), currentUser.getQualifiedUser(), PrivPredicate.GRANT)) {
-        //     // user who doesn't have GRANT privilege could only see the privilege of it self
-        //     userIdents.add(currentUser);
-        // } else {
-        //     // user who has GRANT privilege will get all user privileges
-        //     userIdents = Lists.newArrayList(currAuth.getAllUserIdents(false /* get all user */));
-        // }
-
-        // fullfill the result
-        for (UserIdentity userIdent : userIdents) {
-            PrivBitSet savedPrivs = new PrivBitSet();
-            userPrivTable.getPrivs(userIdent, savedPrivs);
-            String clusterPrefix = SystemInfoService.DEFAULT_CLUSTER + ClusterNamespace.CLUSTER_DELIMITER;
-            String userIdentStr = currentUser.toString().replace(clusterPrefix, "");
-            // flatten privileges
-            List<TUserPrivDesc> tPrivs = savedPrivs.toPrivilegeList().stream().map(
-                    priv -> {
-                        boolean isGrantable =
-                                Privilege.NODE_PRIV != priv // NODE_PRIV counld not be granted event with GRANT_PRIV
-                                        && userPrivTable.hasPriv(userIdent,
-                                        PrivPredicate.GRANT);
-                        TUserPrivDesc privDesc = new TUserPrivDesc();
-                        privDesc.setIs_grantable(isGrantable);
-                        privDesc.setUser_ident_str(userIdentStr);
-                        privDesc.setPriv(priv.getUpperNameForMysql());
-                        return privDesc;
-                    }
-            ).collect(Collectors.toList());
-            tUserPrivs.addAll(tPrivs);
-        }
+        // TODO(yiming): support showing user privilege info in information_schema later
         return result;
     }
 
@@ -1673,6 +1552,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         long dbId = db.getId();
         GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(dbId, request.getTxnId(),
                 request.isSetReason() ? request.getReason() : "system cancel",
+                TabletCommitInfo.fromThrift(request.getCommitInfos()),
+                TabletFailInfo.fromThrift(request.getFailInfos()),
                 TxnCommitAttachment.fromThrift(request.getTxnCommitAttachment()));
 
         TxnCommitAttachment attachment = TxnCommitAttachment.fromThrift(request.txnCommitAttachment);
@@ -2532,6 +2413,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TGetTablesConfigResponse getTablesConfig(TGetTablesConfigRequest request) throws TException {
         return InformationSchemaDataSource.generateTablesConfigResponse(request);
+    }
+
+    @Override
+    public TGetPartitionsMetaResponse getPartitionsMeta(TGetPartitionsMetaRequest request) throws TException {
+        return InformationSchemaDataSource.generatePartitionsMetaResponse(request);
     }
 
     @Override

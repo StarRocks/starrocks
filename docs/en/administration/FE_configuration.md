@@ -315,6 +315,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Threshold to determine whether a table in an external data source (Hive, Iceberg, Hudi) is a small table during automatic collection. If the table has rows less than this value, the table is considered a small table.
 - Introduced in: v3.2
 
+#### enable_statistic_collect_on_first_load
+
+- Unit: -
+- Default: true
+- Description: Whether to automatically collect statistics when data is loaded into a table for the first time. If a table has multiple partitions, any data loading into an empty partition of this table will trigger automatic statistics collection on this partition. If new tables are frequently created and data is frequently loaded, the memory and CPU overhead will increase.
+- Introduced in: v3.1
+
 #### enable_local_replica_selection
 
 - Unit: -
@@ -368,8 +375,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 #### max_running_txn_num_per_db
 
 - **Unit**: -
-- **Default**: 100
-- **Description**: The maximum number of load transactions allowed to be running for each database within a StarRocks cluster. The default value is `100`. When the actual number of load transactions running for a database exceeds the value of this parameter, new load requests will not be processed. New requests for synchronous load jobs will be denied, and new requests for asynchronous load jobs will be placed in queue. We do not recommend you increase the value of this parameter because this will increase system load.
+- **Default**: 1000
+- **Description**: The maximum number of load transactions allowed to be running for each database within a StarRocks cluster. The default value is `1000`. From v3.1 onwards, the default value is changed to `1000` from `100`. When the actual number of load transactions running for a database exceeds the value of this parameter, new load requests will not be processed. New requests for synchronous load jobs will be denied, and new requests for asynchronous load jobs will be placed in queue. We do not recommend you increase the value of this parameter because this will increase system load.
 
 #### load_parallel_instance_num
 
@@ -1465,17 +1472,15 @@ DO NOT change run_mode after the cluster is deployed. Otherwise, the cluster fai
 #### jdbc_connection_pool_size
 
 - **Default:** 8
-- **Description:** The maximum capacity of the JDBC Connection Pool when accessing the JDBC Catalog.
-
+- **Description:** The maximum capacity of the JDBC connection pool for accessing JDBC catalogs.
 
 #### jdbc_minimum_idle_connections
 
 - **Default:** 1
-- **Description:** The minimum number of idle connections in the JDBC Connection Pool when accessing the JDBC Catalog.
-
+- **Description:** The minimum number of idle connections in the JDBC connection pool for accessing JDBC catalogs.
 
 #### jdbc_connection_idle_timeout_ms
 
+- **Unit**: ms
 - **Default:** 600000
-- **Description:** When accessing the JDBC Catalog, connections exceeding this time are considered idle. Unit: Millisecond.
-
+- **Description:** The maximum amount of time after which a connection for accessing a JDBC catalog times out. Timed-out connections are considered idle.

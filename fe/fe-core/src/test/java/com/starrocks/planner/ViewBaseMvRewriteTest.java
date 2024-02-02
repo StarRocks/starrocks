@@ -1,7 +1,22 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package com.starrocks.planner;
 
 import com.starrocks.common.Config;
 import org.junit.AfterClass;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -433,5 +448,84 @@ public class ViewBaseMvRewriteTest extends MaterializedViewTestBase {
         }
         starRocksAssert.dropView("view_1");
         starRocksAssert.dropView("view_2");
+    }
+
+    @Test
+    public void testViewWithInvalidPlan() {
+        String view = "create view invalid_view0 as select count(distinct cnt) as ndv from " +
+                "(select count(*) cnt from lineitem group by l_returnflag) t";
+        try {
+            starRocksAssert.withView(view);
+        } catch (Exception e) {
+            Assert.fail();
+        }
+        String sql = "create materialized view invalid_plan_mv distributed by random as select * from invalid_view0";
+        starRocksAssert.withMaterializedView(sql, () -> {
+            sql("select * from invalid_view0").contains("invalid_plan_mv");
+            sql("select * from invalid_view0 where ndv > 10").contains("invalid_plan_mv");
+        });
+    }
+
+    @Test
+    public void testSingleCte() throws Exception {
+        String createViewSql = "CREATE VIEW `v_q15` (`s_suppkey`, `s_name`, `s_address`, `s_phone`, `total_revenue`) AS " +
+                "WITH `revenue0` (`supplier_no`, `total_revenue`)" +
+                " AS (" +
+                "SELECT " +
+                "   `lineitem`.`l_suppkey`, " +
+                "   sum(`lineitem`.`l_extendedprice` * (1 - `lineitem`.`l_discount`)) " +
+                "       AS `sum(l_extendedprice * (1 - l_discount))`\n" +
+                "FROM `lineitem`\n" +
+                "WHERE (`lineitem`.`l_shipdate` >= '1996-01-01') " +
+                "   AND (`lineitem`.`l_shipdate` < ('1996-01-01 00:00:00' + INTERVAL '3' MONTH))\n" +
+                "GROUP BY `lineitem`.`l_suppkey`)" +
+                " SELECT " +
+                "   `supplier`.`s_suppkey`, " +
+                "   `supplier`.`s_name`, " +
+                "   `supplier`.`s_address`, " +
+                "   `supplier`.`s_phone`, " +
+                "   `revenue0`.`total_revenue`\n" +
+                "FROM `supplier` , `revenue0`\n" +
+                "WHERE (`supplier`.`s_suppkey` = `revenue0`.`supplier_no`) " +
+                "   AND (`revenue0`.`total_revenue` = ((SELECT max(`revenue0`.`total_revenue`) AS `max(total_revenue)`\n" +
+                "FROM `revenue0`))) " +
+                "ORDER BY `supplier`.`s_suppkey` ASC ;";
+
+        starRocksAssert.withView(createViewSql);
+
+        String createMvSql = "create materialized view mv_q15 " +
+                "refresh manual " +
+                "as " +
+                "select * from v_q15";
+        starRocksAssert.withMaterializedView(createMvSql);
+        {
+            String query = "select * from v_q15";
+            sql(query).contains("mv_q15");
+        }
+    }
+
+    @Test
+    public void testViewRewriteWithNestedMVs() throws Exception {
+        String tbl1 = "CREATE TABLE test_t1 (\n" +
+                " k1 INT,\n" +
+                " v1 INT,\n" +
+                " v2 INT)\n" +
+                " DUPLICATE KEY(k1)\n" +
+                " DISTRIBUTED BY HASH(k1);";
+        starRocksAssert.withTable(tbl1);
+        String view1 = "create view v1 as select k1,sum(v1) as sum_v1 from test_t1 group by k1;";
+        String view2 = "create view v2 as select k1,sum(v2) as sum_v2 from test_t1 group by k1;";
+        starRocksAssert.withView(view1);
+        starRocksAssert.withView(view2);
+
+        String mv = "create materialized view mv1 refresh manual as select v1.k1,v1.sum_v1,v2.sum_v2 from " +
+                "v1 join v2 on v1.k1=v2.k1;";
+        starRocksAssert.withMaterializedView(mv, () -> {
+            sql(" select v1.k1,v1.sum_v1,v2.sum_v2 from v1 join v2 on v1.k1=v2.k1 order by 1;")
+                    .contains("mv1");
+        });
+        starRocksAssert.dropView("v1");
+        starRocksAssert.dropView("v2");
+        starRocksAssert.dropTable("test_t1");
     }
 }

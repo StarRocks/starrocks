@@ -191,6 +191,11 @@ if [ ${RUN_CN} -eq 1 ]; then
     LOG_FILE=${LOG_DIR}/cn.out
 fi
 
+# enable DD profile
+if [ "${ENABLE_DATADOG_PROFILE}" == "true" ] && [ -f "${STARROCKS_HOME}/datadog/ddprof" ]; then
+    START_BE_CMD="${STARROCKS_HOME}/datadog/ddprof -l debug ${START_BE_CMD}"
+fi
+
 if [ ${RUN_LOG_CONSOLE} -eq 1 ] ; then
     # force glog output to console (stderr)
     export GLOG_logtostderr=1

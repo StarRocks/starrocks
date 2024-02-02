@@ -912,6 +912,34 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
     }
 
     @Test
+    public void testJsonLongPath() throws Exception {
+        String sql = "select j1->'1'->'2'->'3'->'4'->'5'->'6'->'7'->'8'->'9'->\n" +
+                "'10'->'11'->'12'->'13'->'14'->'15' " +
+                "from js0;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/j1/1/2]");
+    }
+
+    @Test
+    public void testJsonFlag() throws Exception {
+        try {
+            connectContext.getSessionVariable().setCboPruneJsonSubfield(false);
+            String sql = "select " +
+                    "JSON_EXISTS(j1, '$.a.b.c2'), " +
+                    "get_json_int(j1, 'asd') " +
+                    "from js0;";
+            String plan = getVerboseExplain(sql);
+            assertNotContains(plan, "ColumnAccessPath:");
+
+            sql = "select sc0.st1.s1, st1.s2 from t0 join sc0 on sc0.v1 = t0.v1";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "ColumnAccessPath: [/st1/s1, /st1/s2]");
+        } finally {
+            connectContext.getSessionVariable().setCboPruneJsonSubfield(true);
+        }
+    }
+
+    @Test
     public void testJsonErrorPath() throws Exception {
         String sql = "select " +
                 "get_json_int(j1, '$asdfsdf') " +
@@ -983,5 +1011,22 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "from js0;";
         plan = getVerboseExplain(sql);
         assertNotContains(plan, "ColumnAccessPath");
+    }
+
+    @Test
+    public void testSubfieldPathLose() throws Exception {
+        String sql = "select v1 from pc0 where (a1 is not null) NOT IN (select t0.v1 from t0 where false)";
+        String plan = getVerboseExplain(sql);
+
+        assertContains(plan, "  RESULT SINK\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  output columns:\n" +
+                "  |  1 <-> [1: v1, BIGINT, true]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     table: pc0, rollup: pc0");
+        assertContains(plan, "ColumnAccessPath");
     }
 }

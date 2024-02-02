@@ -147,6 +147,18 @@ public class TransactionStateBatch implements Writable {
         return transactionStates;
     }
 
+    public void writeLock() {
+        for (TransactionState transactionState : transactionStates) {
+            transactionState.writeLock();
+        }
+    }
+
+    public void writeUnlock() {
+        for (TransactionState transactionState : transactionStates) {
+            transactionState.writeUnlock();
+        }
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, GsonUtils.GSON.toJson(this));

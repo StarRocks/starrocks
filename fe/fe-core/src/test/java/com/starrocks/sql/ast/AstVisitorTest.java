@@ -29,9 +29,9 @@ public class AstVisitorTest {
     }
 
     @Test
-    public void testVisitModifyBackendHostClause() {
+    public void testVisitModifyBackendClause() {
         AstVisitor<String, String> visitor = new AstVisitor<String, String>() {};
-        Object ret = visitor.visitModifyBackendHostClause(null, null);
+        Object ret = visitor.visitModifyBackendClause(null, null);
         Assert.assertNull(ret);
     }
 }

@@ -330,7 +330,6 @@ Status MemTable::flush(SegmentPB* seg_info) {
                 fmt::format("memtable of tablet {} reache the capacity limit, detail msg: {}", _tablet_id, msg));
     }
     auto scope = IOProfiler::scope(IOProfiler::TAG_LOAD, _tablet_id);
-
     int64_t duration_ns = 0;
     {
         SCOPED_RAW_TIMER(&duration_ns);
@@ -340,9 +339,14 @@ Status MemTable::flush(SegmentPB* seg_info) {
             RETURN_IF_ERROR(_sink->flush_chunk(*_result_chunk, seg_info));
         }
     }
+    auto io_stat = scope.current_scoped_tls_io();
     StarRocksMetrics::instance()->memtable_flush_total.increment(1);
     StarRocksMetrics::instance()->memtable_flush_duration_us.increment(duration_ns / 1000);
-    VLOG(1) << "memtable of tablet " << _tablet_id << " flush: " << duration_ns / 1000 << "us";
+    StarRocksMetrics::instance()->memtable_flush_io_time_us.increment(io_stat.write_time_ns / 1000);
+    auto flush_bytes = memory_usage();
+    StarRocksMetrics::instance()->memtable_flush_bytes_total.increment(flush_bytes);
+    VLOG(1) << "memtable of tablet " << _tablet_id << " flush duration: " << duration_ns / 1000 << "us, "
+            << "io time: " << io_stat.write_time_ns / 1000 << "us, bytes: " << flush_bytes;
     return Status::OK();
 }
 

@@ -14,6 +14,8 @@
 
 #include "exprs/array_element_expr.h"
 
+#include <gutil/strings/substitute.h>
+
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
@@ -24,7 +26,9 @@ namespace starrocks {
 
 class ArrayElementExpr final : public Expr {
 public:
-    explicit ArrayElementExpr(const TExprNode& node) : Expr(node) {}
+    explicit ArrayElementExpr(const TExprNode& node, const bool check_is_out_of_bounds) : Expr(node) {
+        _check_is_out_of_bounds = check_is_out_of_bounds;
+    }
 
     ArrayElementExpr(const ArrayElementExpr&) = default;
     ArrayElementExpr(ArrayElementExpr&&) = default;
@@ -47,6 +51,27 @@ public:
 
         const int32_t* subscripts = down_cast<Int32Column*>(get_data_column(arg1.get()))->get_data().data();
         const uint32_t* offsets = array_column->offsets_column()->get_data().data();
+
+        if (_check_is_out_of_bounds) {
+            uint32_t prev = offsets[0];
+            for (size_t i = 1; i <= num_rows; i++) {
+                uint32_t curr = offsets[i];
+                DCHECK_GE(curr, prev);
+                auto subscript = (uint32_t)subscripts[i - 1];
+                if (subscript == 0) {
+                    return Status::InvalidArgument("Array subscript start at 1");
+                }
+
+                // if curr==prev, means this line is null
+                // in Trino, null row's any subscript is still null
+                if ((curr != prev) && (subscript > (curr - prev))) {
+                    return Status::InvalidArgument(
+                            strings::Substitute("Array subscript must be less than or equal to array length: $0 > $1",
+                                                subscript, curr - prev));
+                }
+                prev = curr;
+            }
+        }
 
         std::vector<uint8_t> null_flags;
         raw::make_room(&null_flags, num_rows);
@@ -116,11 +141,16 @@ public:
 
 private:
     Column* get_data_column(Column* column) { return ColumnHelper::get_data_column(column); }
+    bool _check_is_out_of_bounds = false;
 };
 
 Expr* ArrayElementExprFactory::from_thrift(const TExprNode& node) {
     DCHECK_EQ(TExprNodeType::ARRAY_ELEMENT_EXPR, node.node_type);
-    return new ArrayElementExpr(node);
+    bool check_is_out_of_bounds = false;
+    if (node.__isset.check_is_out_of_bounds) {
+        check_is_out_of_bounds = node.check_is_out_of_bounds;
+    }
+    return new ArrayElementExpr(node, check_is_out_of_bounds);
 }
 
 } // namespace starrocks

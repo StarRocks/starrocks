@@ -38,7 +38,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.proc.BaseProcResult;
-import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateResourceStmt;
@@ -79,8 +78,7 @@ public class SparkResourceTest {
     }
 
     @Test
-    public void testFromStmt(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr,
-                             @Injectable Auth auth)
+    public void testFromStmt(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr)
             throws UserException {
         new Expectations() {
             {
@@ -150,8 +148,8 @@ public class SparkResourceTest {
     }
 
     @Test(expected = DdlException.class)
-    public void testYarnHaExceptionFromStmt(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr,
-                                            @Injectable Auth auth) throws UserException {
+    public void testYarnHaExceptionFromStmt(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr)
+            throws UserException {
         // master: yarn, deploy_mode: cluster
         // yarn resource manager ha
         properties.put("spark.master", "yarn");
@@ -167,8 +165,7 @@ public class SparkResourceTest {
     }
 
     @Test
-    public void testUpdate(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr,
-                           @Injectable Auth auth)
+    public void testUpdate(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr)
             throws UserException {
         new Expectations() {
             {
@@ -201,8 +198,7 @@ public class SparkResourceTest {
     }
 
     @Test(expected = DdlException.class)
-    public void testNoBroker(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr,
-                             @Injectable Auth auth)
+    public void testNoBroker(@Injectable BrokerMgr brokerMgr, @Mocked GlobalStateMgr globalStateMgr)
             throws UserException {
         new Expectations() {
             {

@@ -60,6 +60,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.IdGenerator;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.planner.AggregationNode;
@@ -673,8 +674,12 @@ public class PlanFragmentBuilder {
                 return scan.getColumnAccessPaths();
             }
 
+            Set<String> checkNames = scan.getColRefToColumnMetaMap().keySet().stream().map(ColumnRefOperator::getName)
+                    .collect(Collectors.toSet());
             if (scan.getPredicate() == null) {
-                return scan.getColumnAccessPaths();
+                // remove path which has pruned
+                return scan.getColumnAccessPaths().stream().filter(p -> checkNames.contains(p.getPath()))
+                        .collect(Collectors.toList());
             }
 
             SubfieldExpressionCollector collector = new SubfieldExpressionCollector(
@@ -766,29 +771,11 @@ public class PlanFragmentBuilder {
             }
 
             // set slot
-            Map<String, Column> mvColumnMap = Maps.newHashMap();
-            boolean scanBaseTable = node.getSelectedIndexId() == referenceTable.getBaseIndexId();
-            if (!scanBaseTable) {
-                MaterializedIndexMeta indexMeta = referenceTable.getIndexMetaByIndexId(node.getSelectedIndexId());
-                mvColumnMap = indexMeta.getSchema().stream()
-                        .filter(x -> CollectionUtils.isNotEmpty(x.getRefColumns()))
-                        .collect(Collectors.toMap(x -> x.getRefColumns().get(0).getColumnName().toLowerCase(), x -> x));
-            }
             for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
                 SlotDescriptor slotDescriptor =
                         context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
-                Column column = entry.getValue();
-                if (scanBaseTable || !mvColumnMap.containsKey(column.getName())) {
-                    slotDescriptor.setColumn(entry.getValue());
-                    slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
-                } else {
-                    // Replace the column to mv column for special case:
-                    // If the MV is for aggregate table, and the query doesn't contain aggregate function
-                    // The MV would be chosen but the columns would not be rewritten
-                    Column mvColumn = mvColumnMap.get(column.getName());
-                    slotDescriptor.setColumn(mvColumn);
-                    slotDescriptor.setIsNullable(mvColumn.isAllowNull());
-                }
+                slotDescriptor.setColumn(entry.getValue());
+                slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
                 slotDescriptor.setIsMaterialized(true);
                 if (slotDescriptor.getOriginType().isComplexType()) {
                     slotDescriptor.setOriginType(entry.getKey().getType());
@@ -1405,6 +1392,12 @@ public class PlanFragmentBuilder {
             if (scanNode.getTableName().equalsIgnoreCase("load_tracking_logs") && scanNode.getLabel() == null
                     && scanNode.getJobId() == null) {
                 throw UnsupportedException.unsupportedException("load_tracking_logs must specify label or job_id");
+            }
+
+            if (scanNode.getTableName().equalsIgnoreCase("load_tracking_logs")) {
+                Pair<String, Integer> ipPort = GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort();
+                scanNode.setFrontendIP(ipPort.first);
+                scanNode.setFrontendPort(ipPort.second.intValue());
             }
 
             if (scanNode.getTableName().equalsIgnoreCase("fe_metrics")) {
