@@ -34,6 +34,7 @@
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
 #include "testutil/sync_point.h"
+#include "util/bthreads/util.h"
 #include "util/countdown_latch.h"
 #include "util/defer_op.h"
 
@@ -975,6 +976,7 @@ TEST_F(LakeServiceTest, test_drop_table) {
 
     cntl.Reset();
     request.set_tablet_id(_tablet_id);
+    request.set_path("/any/path/is/fine");
     _lake_service.drop_table(&cntl, &request, &response, nullptr);
     ASSERT_FALSE(cntl.Failed());
     ASSERT_TRUE(response.has_status());
@@ -1514,6 +1516,37 @@ TEST_F(LakeServiceTest, test_drop_table_no_thread_pool) {
     _lake_service.drop_table(&cntl, &request, &response, nullptr);
     ASSERT_TRUE(cntl.Failed());
     ASSERT_EQ("no thread pool to run task", cntl.ErrorText());
+}
+
+// NOLINTNEXTLINE
+TEST_F(LakeServiceTest, test_drop_table_duplicate_request) {
+    ASSERT_OK(FileSystem::Default()->path_exists(kRootLocation));
+    SyncPoint::GetInstance()->LoadDependency(
+            {{"LakeService::drop_table:task_run", "LakeService::drop_table:duplicate_path_id"}});
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() { SyncPoint::GetInstance()->DisableProcessing(); });
+
+    auto path = "/path/for/test/drop/table";
+
+    bthread_t tids[2];
+    std::string error_texts[2];
+    for (int i = 0; i < 2; i++) {
+        ASSIGN_OR_ABORT(tids[i], bthreads::start_bthread([&, id = i]() {
+                            lake::DropTableRequest request;
+                            lake::DropTableResponse response;
+                            request.set_tablet_id(100);
+                            request.set_path(path);
+                            brpc::Controller cntl;
+                            _lake_service.drop_table(&cntl, &request, &response, nullptr);
+                            error_texts[id] = cntl.ErrorText();
+                        }));
+    }
+    bthread_join(tids[0], nullptr);
+    bthread_join(tids[1], nullptr);
+    auto expect_error_msg = "Previous delete task for the same path has not yet finished";
+    ASSERT_TRUE(error_texts[0] == expect_error_msg || error_texts[1] == expect_error_msg)
+            << error_texts[0] << ", " << error_texts[1];
+
 }
 
 // NOLINTNEXTLINE
