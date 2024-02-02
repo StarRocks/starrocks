@@ -1180,7 +1180,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
             String plan5 = getFragmentPlan(query5);
             PlanTestBase.assertContains(plan5, "mv_on_view_1");
             PlanTestBase.assertContains(plan5, "UNION",
-                    "PREDICATES: (14: id_date < '1991-03-31') OR (14: id_date >= '1991-04-03')");
+                    "PREDICATES: (12: id_date < '1991-03-31') OR (12: id_date >= '1991-04-03')");
             dropMv("test", "mv_on_view_1");
             starRocksAssert.dropView("view_with_expr");
         }

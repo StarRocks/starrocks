@@ -17,18 +17,21 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Objects;
+import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.TableName;
 import com.starrocks.common.MaterializedViewExceptions;
-import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.parquet.Strings;
 
 import java.util.Optional;
 
-import static com.starrocks.server.CatalogMgr.isInternalCatalog;
-
+/**
+ * BaseTableInfo is used for MaterializedView persisted as a base table's meta info which can be an olap
+ * table or an external table.
+ */
 public class BaseTableInfo {
     private static final Logger LOG = LogManager.getLogger(BaseTableInfo.class);
 
@@ -47,35 +50,20 @@ public class BaseTableInfo {
     @SerializedName(value = "tableIdentifier")
     private String tableIdentifier;
 
-    // table name must be set to be used in backup/restore
     @SerializedName(value = "tableName")
     private String tableName;
 
+    // used for olap table
     public BaseTableInfo(long dbId, String dbName, String tableName, long tableId) {
         this.catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         this.dbId = dbId;
+        this.tableId = tableId;
+        Preconditions.checkArgument(!Strings.isNullOrEmpty(dbName),
+                String.format("BaseTableInfo's dbName %s should not null", dbName));
         this.dbName = dbName;
-        this.tableId = tableId;
+        Preconditions.checkArgument(!Strings.isNullOrEmpty(tableName),
+                String.format("BaseTableInfo's tableName %s should not null", tableName));
         this.tableName = tableName;
-    }
-
-    public BaseTableInfo(long dbId, long tableId) {
-        this.catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
-        this.dbId = dbId;
-        this.tableId = tableId;
-
-        Optional<ConnectorMetadata> connectorMetadata =
-                GlobalStateMgr.getCurrentState().getMetadataMgr().getOptionalMetadata(catalogName);
-        if (connectorMetadata.isPresent()) {
-            Database db = connectorMetadata.get().getDb(dbId);
-            if (db != null) {
-                this.dbName = db.getFullName();
-                Table table = db.getTable(tableId);
-                if (table != null) {
-                    this.tableName = table.getName();
-                }
-            }
-        }
     }
 
     // used for external table
@@ -86,17 +74,8 @@ public class BaseTableInfo {
         this.tableIdentifier = tableIdentifier;
     }
 
-    public static BaseTableInfo fromTableName(TableName name, Table table) {
-        Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(name.getCatalog(), name.getDb());
-        if (isInternalCatalog(name.getCatalog())) {
-            return new BaseTableInfo(database.getId(), database.getFullName(), table.getName(), table.getId());
-        } else {
-            return new BaseTableInfo(name.getCatalog(), name.getDb(), table.getName(), table.getTableIdentifier());
-        }
-    }
-
     public String getTableInfoStr() {
-        if (isInternalCatalog(catalogName)) {
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
             return Joiner.on(".").join(dbId, tableId);
         } else {
             return Joiner.on(".").join(catalogName, dbName, tableName);
@@ -104,11 +83,15 @@ public class BaseTableInfo {
     }
 
     public String getDbInfoStr() {
-        if (isInternalCatalog(catalogName)) {
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
             return String.valueOf(dbId);
         } else {
             return Joiner.on(".").join(catalogName, dbName);
         }
+    }
+
+    public boolean isInternalCatalog() {
+        return CatalogMgr.isInternalCatalog(catalogName);
     }
 
     public String getCatalogName() {
@@ -116,16 +99,11 @@ public class BaseTableInfo {
     }
 
     public String getDbName() {
-        return this.dbName != null ? this.dbName : getDb().getFullName();
+        return this.dbName;
     }
 
     public String getTableName() {
-        if (this.tableName != null) {
-            return this.tableName;
-        } else {
-            Table table = getTable();
-            return table == null ? null : table.getName();
-        }
+        return this.tableName;
     }
 
     public String getTableIdentifier() {
@@ -140,82 +118,8 @@ public class BaseTableInfo {
         return this.tableId;
     }
 
-    /**
-     * A checked version of getTable, which enforce checking existence of table
-     *
-     * @return the table if exists
-     */
-    public Optional<Table> mayGetTable() {
-        return Optional.ofNullable(getTable());
-    }
-
-    /**
-     * A checked version of getTable, which enforce checking the existence of table
-     *
-     * @return the table if exists
-     */
-    public Table getTableChecked() {
-        Table table = getTable();
-        if (table != null) {
-            return table;
-        }
-        throw MaterializedViewExceptions.reportBaseTableNotExists(this);
-    }
-
-    @Deprecated
-    public Table getTable() {
-        if (isInternalCatalog(catalogName)) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-            if (db == null) {
-                return null;
-            } else {
-                return db.getTable(tableId);
-            }
-        } else {
-            if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
-                LOG.warn("catalog {} not exist", catalogName);
-                return null;
-            }
-            Table table = getTableByName();
-            if (table == null) {
-                LOG.warn("table {}.{}.{} not exist", catalogName, dbName, tableName);
-                return null;
-            }
-
-            if (tableIdentifier != null && table.getTableIdentifier().equals(tableIdentifier)) {
-                return table;
-            }
-            return null;
-        }
-    }
-
-    public Table getTableByName() {
-        if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
-            LOG.warn("catalog {} not exist", catalogName);
-            return null;
-        }
-        // upgrade from 3.1 to 3.2, dbName/tableName maybe null after dbs or tables are dropped
-        if (dbName == null || tableName == null) {
-            return null;
-        }
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
-        if (table == null) {
-            LOG.warn("table {}.{}.{} not exist", catalogName, dbName, tableName);
-            return null;
-        }
-        return table;
-    }
-
-    public Database getDb() {
-        if (isInternalCatalog(catalogName)) {
-            return GlobalStateMgr.getCurrentState().getDb(dbId);
-        } else {
-            return GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
-        }
-    }
-
     public String toString() {
-        if (isInternalCatalog(catalogName)) {
+        if (isInternalCatalog()) {
             return Joiner.on(".").join(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbId, tableId);
         } else {
             return Joiner.on(".").join(catalogName, dbName, tableIdentifier);
@@ -249,5 +153,88 @@ public class BaseTableInfo {
     @Override
     public int hashCode() {
         return Objects.hashCode(catalogName, dbId, tableId, dbName, tableIdentifier, tableName);
+    }
+
+    ///////// Methods to help to use {@code BaseTableInfo} which cannot be got from metadata directly. /////////
+
+    /**
+     * A checked version of getTable, which enforce checking existence of table
+     *
+     * @return the table if exists
+     */
+    public Optional<Table> mayGetTable() {
+        return Optional.ofNullable(getTable());
+    }
+
+    /**
+     * A checked version of getTable, which enforce checking the existence of table
+     *
+     * @return the table if exists
+     */
+    public Table getTableChecked() {
+        Table table = getTable();
+        if (table != null) {
+            return table;
+        }
+        throw MaterializedViewExceptions.reportBaseTableNotExists(this);
+    }
+
+    /**
+     * Get {@link Table} from {@code BaseTableInfo} which it can be an OlapTable or ExternalTable.
+     * </p>
+     * NOTE: Prefer {@link BaseTableInfo#getTableChecked()} or {@link BaseTableInfo#mayGetTable()}
+     * because this method may return null if base table has already dropped or schema changed.
+     * </p>
+     * @return {@link Table} if BaseTableInfo is health otherwise null will be returned.
+     */
+    @Deprecated
+    public Table getTable() {
+        if (isInternalCatalog()) {
+            // olap table
+            Database db = GlobalStateMgr.getCurrentState().getDb(getDbId());
+            if (db == null) {
+                return null;
+            }
+            return db.getTable(getTableId());
+        } else {
+            // external table
+            String catalogName = getCatalogName();
+            if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
+                LOG.warn("catalog {} not exist", catalogName);
+                return null;
+            }
+
+            // upgrade from 3.1 to 3.2, dbName/tableName maybe null after dbs or tables are dropped
+            String dbName = getDbName();
+            String tableName = getTableName();
+            if (dbName == null || tableName == null) {
+                return null;
+            }
+            Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+            if (table == null) {
+                LOG.warn("table {}.{}.{} not exist", catalogName, dbName, tableName);
+                return null;
+            }
+            String tableIdentifier = getTableIdentifier();
+            if (tableIdentifier != null && tableIdentifier.equals(table.getTableIdentifier())) {
+                return table;
+            }
+            return null;
+        }
+    }
+
+    /**
+     * Get {@link Database} from {@code BaseTableInfo}.
+     * @return {@link Database} if BaseTableInfo is health otherwise null will be returned.
+     */
+    public Database getDb() {
+        if (isInternalCatalog()) {
+            // olap table
+            return GlobalStateMgr.getCurrentState().getDb(this.getDbId());
+        } else {
+            // external table
+            return GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getDb(this.getCatalogName(), this.getDbName());
+        }
     }
 }

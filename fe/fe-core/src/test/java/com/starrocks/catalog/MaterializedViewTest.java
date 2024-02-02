@@ -108,9 +108,9 @@ public class MaterializedViewTest {
         Assert.assertEquals(false, mv2.isActive());
 
         List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
-        BaseTableInfo baseTableInfo1 = new BaseTableInfo(100L, 10L);
+        BaseTableInfo baseTableInfo1 = new BaseTableInfo(100L, "db", "tbl1", 10L);
         baseTableInfos.add(baseTableInfo1);
-        BaseTableInfo baseTableInfo2 = new BaseTableInfo(100L, 20L);
+        BaseTableInfo baseTableInfo2 = new BaseTableInfo(100L, "db", "tbl2", 20L);
         baseTableInfos.add(baseTableInfo2);
         mv2.setBaseTableInfos(baseTableInfos);
         List<BaseTableInfo> baseTableInfosCheck = mv2.getBaseTableInfos();
@@ -283,11 +283,11 @@ public class MaterializedViewTest {
         mv.addPartition(partition);
 
         List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
-        BaseTableInfo baseTableInfo1 = new BaseTableInfo(100L, 10L);
+        BaseTableInfo baseTableInfo1 = new BaseTableInfo(100L, "db", "tbl1", 10L);
         baseTableInfos.add(baseTableInfo1);
-        BaseTableInfo baseTableInfo2 = new BaseTableInfo(100L, 20L);
+        BaseTableInfo baseTableInfo2 = new BaseTableInfo(100L, "db", "tbl2", 20L);
         baseTableInfos.add(baseTableInfo2);
-        BaseTableInfo baseTableInfo3 = new BaseTableInfo(100L, 30L);
+        BaseTableInfo baseTableInfo3 = new BaseTableInfo(100L, "db", "tbl3", 30L);
         baseTableInfos.add(baseTableInfo3);
 
         mv.setBaseTableInfos(baseTableInfos);
@@ -389,7 +389,8 @@ public class MaterializedViewTest {
         mv.addPartition(partition);
 
         List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
-        BaseTableInfo baseTableInfo = new BaseTableInfo(testDb.getId(), baseTable.getId());
+        BaseTableInfo baseTableInfo = new BaseTableInfo(testDb.getId(), testDb.getFullName(),
+                baseTable.getName(), baseTable.getId());
         baseTableInfos.add(baseTableInfo);
         mv.setBaseTableInfos(baseTableInfos);
         mv.setViewDefineSql("select * from test.tbl1");
@@ -674,7 +675,7 @@ public class MaterializedViewTest {
         MaterializedView mv = new MaterializedView(1000, testDb.getId(), "mv", columns, KeysType.AGG_KEYS,
                 singlePartitionInfo, hashDistributionInfo, refreshScheme);
         List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
-        BaseTableInfo baseTableInfo = new BaseTableInfo(testDb.getId(), baseMv.getId());
+        BaseTableInfo baseTableInfo = new BaseTableInfo(testDb.getId(), testDb.getFullName(), baseMv.getName(), baseMv.getId());
         baseTableInfos.add(baseTableInfo);
         mv.setBaseTableInfos(baseTableInfos);
         mv.onReload();
