@@ -540,7 +540,7 @@ Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, cons
         int64_t t_rewrite_end = MonotonicMillis();
         LOG(INFO) << strings::Substitute(
                 "lake apply partial segment tablet:$0 rowset:$1 seg:$2 #column:$3 #rewrite:$4ms [$5 -> $6] "
-                "skip_because_file_exist $7",
+                "skip_because_file_exist:$7",
                 tablet->id(), rowset_meta.id(), i, read_column_ids.size(), t_rewrite_end - t_rewrite_start, src_path,
                 dest_path, skip_because_file_exist);
     }

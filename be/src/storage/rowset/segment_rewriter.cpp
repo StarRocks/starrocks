@@ -63,10 +63,10 @@ Status SegmentRewriter::rewrite(const std::string& src_path, FileInfo* dest_path
     uint64_t segment_file_size;
     RETURN_IF_ERROR(writer.append_chunk(*chunk));
     RETURN_IF_ERROR(writer.finalize_columns(&index_size));
+    TEST_ERROR_POINT("SegmentRewriter::rewrite1");
     RETURN_IF_ERROR(writer.finalize_footer(&segment_file_size));
 
     dest_path->size = segment_file_size;
-    TEST_ERROR_POINT("SegmentRewriter::rewrite");
     return Status::OK();
 }
 
@@ -154,9 +154,9 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
     uint64_t segment_file_size;
     RETURN_IF_ERROR(writer.append_chunk(*chunk));
     RETURN_IF_ERROR(writer.finalize_columns(&index_size));
+    TEST_ERROR_POINT("SegmentRewriter::rewrite2");
     RETURN_IF_ERROR(writer.finalize_footer(&segment_file_size));
 
-    TEST_ERROR_POINT("SegmentRewriter::rewrite");
     return Status::OK();
 }
 
@@ -251,10 +251,10 @@ Status SegmentRewriter::rewrite(const std::string& src_path, FileInfo* dest_path
     uint64_t segment_file_size;
     RETURN_IF_ERROR(writer.append_chunk(*chunk));
     RETURN_IF_ERROR(writer.finalize_columns(&index_size));
+    TEST_ERROR_POINT("SegmentRewriter::rewrite3");
     RETURN_IF_ERROR(writer.finalize_footer(&segment_file_size));
 
     dest_path->size = segment_file_size;
-    TEST_ERROR_POINT("SegmentRewriter::rewrite");
     return Status::OK();
 }
 
@@ -286,9 +286,9 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const TabletSchemaC
     uint64_t segment_file_size;
     RETURN_IF_ERROR(writer.append_chunk(*chunk));
     RETURN_IF_ERROR(writer.finalize_columns(&index_size));
+    TEST_ERROR_POINT("SegmentRewriter::rewrite4");
     RETURN_IF_ERROR(writer.finalize_footer(&segment_file_size));
 
-    TEST_ERROR_POINT("SegmentRewriter::rewrite");
     return Status::OK();
 }
 
