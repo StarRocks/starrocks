@@ -70,6 +70,8 @@ public:
     }
 
     virtual void set_page_num(size_t page_num) {}
+
+    virtual void set_page_change_on_record_boundry() {}
 };
 
 class StoredColumnReaderImpl : public StoredColumnReader {

@@ -64,38 +64,55 @@ public class HiveRemoteFileIO implements RemoteFileIO {
     }
 
     public Map<RemotePathKey, List<RemoteFileDesc>> getRemoteFiles(RemotePathKey pathKey) {
+        return getRemoteFiles(pathKey, false);
+    }
+
+    public Map<RemotePathKey, List<RemoteFileDesc>> getRemoteFiles(RemotePathKey pathKey, boolean expandWildCards) {
         ImmutableMap.Builder<RemotePathKey, List<RemoteFileDesc>> resultPartitions = ImmutableMap.builder();
         String path = ObjectStorageUtils.formatObjectStoragePath(pathKey.getPath());
         List<RemoteFileDesc> fileDescs = Lists.newArrayList();
         try {
             URI uri = new Path(path).toUri();
             FileSystem fileSystem;
-
             if (!FeConstants.runningUnitTest) {
                 fileSystem = FileSystem.get(uri, configuration);
             } else {
                 fileSystem = this.fileSystem;
             }
-
-            RemoteIterator<LocatedFileStatus> blockIterator;
-            if (!pathKey.isRecursive()) {
-                blockIterator = fileSystem.listLocatedStatus(new Path(uri.getPath()));
+            List<Path> expandedPaths = Lists.newArrayList();
+            if (!expandWildCards) {
+                expandedPaths.add(new Path(uri.getPath()));
             } else {
-                blockIterator = listFilesRecursive(fileSystem, new Path(uri.getPath()));
-            }
-            while (blockIterator.hasNext()) {
-                LocatedFileStatus locatedFileStatus = blockIterator.next();
-                if (!isValidDataFile(locatedFileStatus)) {
-                    continue;
+                FileStatus[] status = fileSystem.globStatus(new Path(uri.getPath()));
+                for (FileStatus s : status) {
+                    expandedPaths.add(s.getPath());
                 }
-                String locateName = locatedFileStatus.getPath().toUri().getPath();
-                String fileName = PartitionUtil.getSuffixName(uri.getPath(), locateName);
+            }
+            for (Path expandedPath : expandedPaths) {
+                RemoteIterator<LocatedFileStatus> blockIterator;
+                if (!pathKey.isRecursive()) {
+                    blockIterator = fileSystem.listLocatedStatus(expandedPath);
+                } else {
+                    blockIterator = listFilesRecursive(fileSystem, expandedPath);
+                }
+                while (blockIterator.hasNext()) {
+                    LocatedFileStatus locatedFileStatus = blockIterator.next();
+                    if (!isValidDataFile(locatedFileStatus)) {
+                        continue;
+                    }
+                    String locateName = locatedFileStatus.getPath().toUri().getPath();
+                    String fileName = PartitionUtil.getSuffixName(expandedPath.toUri().getPath(), locateName);
 
-                BlockLocation[] blockLocations = locatedFileStatus.getBlockLocations();
-                List<RemoteFileBlockDesc> fileBlockDescs = getRemoteFileBlockDesc(blockLocations);
-                fileDescs.add(new RemoteFileDesc(fileName, "", locatedFileStatus.getLen(),
-                              locatedFileStatus.getModificationTime(), ImmutableList.copyOf(fileBlockDescs),
-                              ImmutableList.of()));
+                    BlockLocation[] blockLocations = locatedFileStatus.getBlockLocations();
+                    List<RemoteFileBlockDesc> fileBlockDescs = getRemoteFileBlockDesc(blockLocations);
+                    RemoteFileDesc fileDesc = new RemoteFileDesc(fileName, "", locatedFileStatus.getLen(),
+                            locatedFileStatus.getModificationTime(), ImmutableList.copyOf(fileBlockDescs),
+                            ImmutableList.of());
+                    if (expandWildCards) {
+                        fileDesc.setFullPath(locatedFileStatus.getPath().toString());
+                    }
+                    fileDescs.add(fileDesc);
+                }
             }
         } catch (FileNotFoundException e) {
             LOG.warn("Hive remote file on path: {} not existed, ignore it", path, e);

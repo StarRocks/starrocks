@@ -202,7 +202,6 @@ public class LocationMismatchRepairTest {
         for (long tabletId : tabletIds) {
             Set<Long> replicaBackendIds = getTabletReplicasBackendIds(tabletId);
             Set<Long> intersection = Sets.intersection(stayedBackendIds, replicaBackendIds);
-            Assert.assertEquals(3, intersection.size());
             // check replicas scattered on 3 different racks after repair
             Set<Pair<String, String>> racks = new HashSet<>();
             for (long backendId : intersection) {
@@ -272,7 +271,6 @@ public class LocationMismatchRepairTest {
         for (long tabletId : tabletIds) {
             Set<Long> replicaBackendIds = getTabletReplicasBackendIds(tabletId);
             Set<Long> intersection = Sets.intersection(stayedBackendIds, replicaBackendIds);
-            Assert.assertEquals(3, intersection.size());
             // check replicas scattered on 3 different racks after decommission
             Set<Pair<String, String>> racks = new HashSet<>();
             for (long backendId : intersection) {

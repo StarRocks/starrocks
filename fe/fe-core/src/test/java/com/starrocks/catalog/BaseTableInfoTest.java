@@ -15,56 +15,36 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.MetadataMgr;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.util.Optional;
-
 public class BaseTableInfoTest {
     @Test
     public void testBaseTableInfo(@Mocked GlobalStateMgr globalStateMgr,
-                                  @Mocked MetadataMgr metadataMgr,
                                   @Mocked CatalogMgr catalogManager,
-                                  @Mocked ConnectorMetadata connectorMetadata,
                                   @Mocked Database database) {
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState();
                 result = globalStateMgr;
 
-                globalStateMgr.getCatalogMgr();
-                result = catalogManager;
-
-                catalogManager.catalogExists(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+                catalogManager.isInternalCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
                 result = true;
-
-                globalStateMgr.getMetadataMgr();
-                result = metadataMgr;
-
-                metadataMgr.getOptionalMetadata(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
-                result = Optional.of(connectorMetadata);
-
-                connectorMetadata.getDb(100L);
-                result = database;
-
-                connectorMetadata.getDb(200L);
-                result = null;
 
                 database.getTable(10L);
                 result = null;
             }
         };
-        BaseTableInfo baseTableInfo = new BaseTableInfo(100L, 10L);
+
+        BaseTableInfo baseTableInfo = new BaseTableInfo(100L, "db", "tbl1", 10L);
+        Assert.assertTrue(baseTableInfo.getDb() != null);
         Assert.assertNull(baseTableInfo.getTable());
-        Assert.assertNull(baseTableInfo.getTableByName());
-        BaseTableInfo baseTableInfo2 = new BaseTableInfo(200L, 10L);
-        Assert.assertNull(baseTableInfo2.getTable());
-        Assert.assertNull(baseTableInfo2.getTableByName());
+        BaseTableInfo baseTableInfo2 = new BaseTableInfo(200L, "db", "tbl2", 10L);
+        Assert.assertTrue(baseTableInfo.getDb() != null);
+        Assert.assertNull(baseTableInfo.getTable());
     }
 }
