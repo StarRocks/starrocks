@@ -429,6 +429,11 @@ public class ListPartitionInfo extends PartitionInfo {
             this.idToValues.put(partitionId, values);
             this.setLiteralExprValues(partitionId, values);
         }
+<<<<<<< HEAD
+=======
+        this.idToStorageCacheInfo.put(partitionId, dataCacheInfo);
+        idToIsTempPartition.put(partitionId, false);
+>>>>>>> 7414f9228d ([BugFix] Fix partition prune error after truncate list partition (#40495))
     }
 
     @Override
