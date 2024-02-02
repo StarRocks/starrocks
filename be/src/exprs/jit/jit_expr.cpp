@@ -18,13 +18,13 @@
 #include <vector>
 
 #include "column/chunk.h"
+#include "column/column_helper.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
 #include "exprs/anyval_util.h"
 #include "exprs/expr.h"
 #include "exprs/function_context.h"
 #include "exprs/jit/jit_engine.h"
-#include "exprs/jit/jit_functions.h"
 #include "llvm/IR/IRBuilder.h"
 
 namespace starrocks {
@@ -75,6 +75,9 @@ Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
     }
     if (_jit_function != nullptr) {
         _jit_expr_name = _expr->debug_string();
+        if (_jit_expr_name.empty()) {
+            return Status::RuntimeError("[JIT] expr debug_string() is empty");
+        }
     } else {
         _children.clear();
         _children.push_back(_expr);

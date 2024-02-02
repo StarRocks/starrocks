@@ -14,6 +14,7 @@
 
 #include "exprs/jit/jit_engine.h"
 
+#include <fmt/format.h>
 #include <glog/logging.h>
 
 #include <memory>
@@ -22,7 +23,7 @@
 
 #include "common/compiler_util.h"
 #include "common/status.h"
-#include "exprs/jit/jit_functions.h"
+#include "exprs/expr.h"
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/Orc/LLJIT.h"
 #include "llvm/IR/DataLayout.h"
@@ -96,7 +97,7 @@ StatusOr<JITScalarFunction> JITEngine::compile_scalar_function(ExprContext* cont
     instance->setup_module(module.get());
 
     // Generate scalar function IR.
-    RETURN_IF_ERROR(JITFunction::generate_scalar_function_ir(context, *module, expr));
+    RETURN_IF_ERROR(generate_scalar_function_ir(context, *module, expr));
     std::string error;
     llvm::raw_string_ostream errs(error);
     if (llvm::verifyModule(*module, &errs)) {
@@ -121,6 +122,91 @@ StatusOr<JITScalarFunction> JITEngine::compile_scalar_function(ExprContext* cont
 
     // Return function pointer.
     return compiled_function;
+}
+
+Status JITEngine::generate_scalar_function_ir(ExprContext* context, llvm::Module& module, Expr* expr) {
+    llvm::IRBuilder<> b(module.getContext());
+
+    std::vector<Expr*> input_exprs;
+    expr->get_uncompilable_exprs(input_exprs); // duplicated
+    size_t args_size = input_exprs.size();
+
+    /// Create function type.
+    auto* size_type = b.getInt64Ty();
+    // Same with JITColumn.
+    auto* data_type = llvm::StructType::get(b.getInt8PtrTy(), b.getInt8PtrTy());
+    // Same with JITScalarFunction.
+    auto* func_type = llvm::FunctionType::get(b.getVoidTy(), {size_type, data_type->getPointerTo()}, false);
+
+    /// Create function in module.
+    // Pseudo code: void "expr->debug_string()"(int64_t rows_count, JITColumn* columns);
+    auto* func = llvm::Function::Create(func_type, llvm::Function::ExternalLinkage, expr->debug_string(), module);
+    auto* func_args = func->args().begin();
+    llvm::Value* rows_count_arg = func_args++;
+    llvm::Value* columns_arg = func_args++;
+
+    /// Initialize ColumnDataPlaceholder llvm representation of ColumnData
+
+    auto* entry = llvm::BasicBlock::Create(b.getContext(), "entry", func);
+    b.SetInsertPoint(entry);
+
+    // Extract data and null data from function input parameters.
+    std::vector<LLVMColumn> columns(args_size + 1);
+
+    for (size_t i = 0; i < args_size + 1; ++i) {
+        // i == args_size is the result column.
+        auto* jit_column = b.CreateLoad(data_type, b.CreateConstInBoundsGEP1_64(data_type, columns_arg, i));
+
+        const auto& type = i == args_size ? expr->type() : input_exprs[i]->type();
+#if JIT_DEBUG
+        auto tmp = i == args_size ? expr : input_exprs[i];
+        LOG(INFO) << "[JIT] " << i << " col type = " << logical_type_to_string(type.type)
+                  << "  nullable = " << tmp->is_nullable() << " is const " << tmp->is_constant();
+#endif
+        columns[i].values = b.CreateExtractValue(jit_column, {0});
+        columns[i].null_flags = b.CreateExtractValue(jit_column, {1});
+        ASSIGN_OR_RETURN(columns[i].value_type, IRHelper::logical_to_ir_type(b, type.type));
+    }
+
+    /// Initialize loop.
+    auto* end = llvm::BasicBlock::Create(b.getContext(), "end", func);
+    auto* loop = llvm::BasicBlock::Create(b.getContext(), "loop", func);
+    // If rows_count == 0, jump to end.
+    // Pseudo code: if (rows_count == 0) goto end;
+    b.CreateCondBr(b.CreateICmpEQ(rows_count_arg, llvm::ConstantInt::get(size_type, 0)), end, loop);
+
+    b.SetInsertPoint(loop);
+
+    /// Loop.
+    // Pseudo code: for (int64_t counter = 0; counter < rows_count; counter++)
+    auto* counter_phi = b.CreatePHI(rows_count_arg->getType(), 2);
+    counter_phi->addIncoming(llvm::ConstantInt::get(size_type, 0), entry);
+
+    JITContext jc = {counter_phi, columns, module, b, 0};
+    ASSIGN_OR_RETURN(auto result, expr->generate_ir_impl(context, &jc))
+
+    // Pseudo code:
+    // values_last[counter] = result_value;
+    // null_flags_last[counter] = result_null_flag;
+    b.CreateStore(result.value, b.CreateInBoundsGEP(columns.back().value_type, columns.back().values, counter_phi));
+    if (expr->is_nullable()) {
+        b.CreateStore(result.null_flag, b.CreateInBoundsGEP(b.getInt8Ty(), columns.back().null_flags, counter_phi));
+    }
+
+    /// End of loop.
+    auto* current_block = b.GetInsertBlock();
+    // Pseudo code: counter++;
+    auto* incremeted_counter = b.CreateAdd(counter_phi, llvm::ConstantInt::get(size_type, 1));
+    counter_phi->addIncoming(incremeted_counter, current_block);
+
+    // Pseudo code: if (counter == rows_count) goto end;
+    b.CreateCondBr(b.CreateICmpEQ(incremeted_counter, rows_count_arg), end, loop);
+
+    b.SetInsertPoint(end);
+    // Pseudo code: return;
+    b.CreateRetVoid();
+
+    return Status::OK();
 }
 
 Status JITEngine::remove_function(const std::string& expr_name) {
@@ -186,6 +272,7 @@ void* JITEngine::compile_module(std::unique_ptr<llvm::Module> module, std::uniqu
 Status JITEngine::remove_module(const std::string& expr_name) {
     std::lock_guard<std::mutex> lock(_mutex);
     if (!_resource_ref_count_map.contains(expr_name)) {
+        DCHECK(false) << "Remove a non-existing jit module";
         return Status::RuntimeError("Remove a non-existing jit module");
     }
     if (_resource_ref_count_map[expr_name].fetch_sub(1) > 1) {

@@ -42,12 +42,35 @@ struct LLVMDatum {
 };
 
 /**
+ * JITColumn is a struct used to store the data and null data of a column.
+ */
+struct JITColumn {
+    const int8_t* datums = nullptr;
+    const int8_t* null_flags = nullptr;
+};
+
+/**
+ * JITScalarFunction is a function pointer to a JIT compiled scalar function.
+ * @param int64_t: the number of rows.
+ * @param JITColumn*: the pointer to the columns.
+ */
+using JITScalarFunction = void (*)(int64_t, JITColumn*);
+
+/**
  * @brief The LLVMDatum struct is utilized to store the column's values and nullity flags within LLVM IR.
  */
 struct LLVMColumn {
     llvm::Value* values = nullptr;     ///< Represents the actual values of the column.
     llvm::Value* null_flags = nullptr; ///< Represents the nullity status of the column.
     llvm::Type* value_type = nullptr;  ///< Represents the type of the column's values.
+};
+
+struct JITContext {
+    llvm::Value* index_phi;
+    std::vector<LLVMColumn>& columns;
+    llvm::Module& module;
+    llvm::IRBuilder<>& builder;
+    int input_index;
 };
 
 class IRHelper {
