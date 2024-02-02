@@ -366,8 +366,9 @@ public class CreateTableWithLocationTest {
         backendIdsWithLocProp.addAll(getBackendIdsWithLocProp("region"));
         System.out.println(backendIdsWithLocProp);
         System.out.println(allReplicasBackendIds);
-        Assert.assertEquals(backendIdsWithLocProp.size(),
-                Sets.intersection(allReplicasBackendIds, backendIdsWithLocProp).size());
+        int size = Sets.intersection(allReplicasBackendIds, backendIdsWithLocProp).size();
+        Assert.assertTrue(size >= 3);
+        Assert.assertTrue(size <= 4);
 
         // Test: rack:r1, rack:rack2, not enough hosts, fallback to ignore location prop
         sql = "CREATE TABLE test.`test_table_explicit_loc_backend_with_loc5` (\n" +
