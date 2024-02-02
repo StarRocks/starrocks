@@ -37,12 +37,12 @@ displayed_sidebar: "English"
 **Features**
 
 - Supports Spark v3.5. [#89](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/89)
-- Supports for the `starrocks.filter.query` parameter when Spark SQL is used to read data from StarRocks. [#92](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/92)
-- Supports for reading columns of JSON type from StarRocks. [#100](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/100)
+- Supports the `starrocks.filter.query` parameter when Spark SQL is used to read data from StarRocks. [#92](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/92)
+- Supports reading columns of JSON type from StarRocks. [#100](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/100)
 
 **Improvements**
 
-- Optimizes error messages. When Spark connector reads data from StarRocks, and columns specified in the `starrocks.columns` parameter do not exist in the StarRocks table, the returned error message explicitly shows the names of columns that do not exist. [#97](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/97)
+- Optimized error messages. When Spark connector reads data from StarRocks, and columns specified in the `starrocks.columns` parameter do not exist in the StarRocks table, the returned error message explicitly shows the names of columns that do not exist. [#97](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/97)
 - If an exception occurs when Spark connector requests a query plan from StarRocks FE via HTTP, the FE will return the exception information to the Spark connector through the HTTP status and entity. [#98](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/98)
 
 #### 1.1.1
