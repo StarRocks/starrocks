@@ -81,7 +81,6 @@ public:
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
         if constexpr (lt_is_decimal<WhenType> || lt_is_decimal<ResultType>) {
             // TODO(yueyang): Implement case...when in LLVM IR.
-            LOG(ERROR) << "JIT of case..when..else...end not support decimal";
             return Status::NotSupported("JIT of case..when..else...end not support");
         } else if constexpr (lt_is_number<WhenType> && lt_is_number<ResultType>) {
             auto& b = jit_ctx->builder;
@@ -162,8 +161,7 @@ public:
             if (_has_else_expr) {
                 ASSIGN_OR_RETURN(else_val, _children.back()->generate_ir_impl(context, jit_ctx))
             } else {
-                ASSIGN_OR_RETURN(else_val.value,
-                                 IRHelper::create_ir_number<ResultType>(b, (RunTimeCppType<ResultType>)(0)))
+                ASSIGN_OR_RETURN(else_val.value, IRHelper::create_ir_number(b, ResultType, 0))
                 else_val.null_flag = llvm::ConstantInt::get(b.getInt8Ty(), 1);
             }
             b.CreateStore(else_val.value, res);
@@ -175,7 +173,6 @@ public:
             result.null_flag = b.CreateLoad(b.getInt8Ty(), res_null);
             return result;
         } else {
-            LOG(ERROR) << "JIT of case..when..else...end not support other types";
             return Status::NotSupported("JIT of case..when..else...end not support");
         }
     }

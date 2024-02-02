@@ -64,7 +64,43 @@ StatusOr<llvm::Type*> IRHelper::logical_to_ir_type(llvm::IRBuilder<>& b, const L
     }
 }
 
-StatusOr<llvm::Value*> IRHelper::create_ir_number(llvm::IRBuilder<>& b, const LogicalType& type, const uint8_t* value) {
+StatusOr<llvm::Value*> IRHelper::create_ir_number(llvm::IRBuilder<>& b, const LogicalType& type, int64_t value) {
+    switch (type) {
+    case TYPE_BOOLEAN:
+    case TYPE_TINYINT:
+        return b.getInt8(value);
+    case TYPE_SMALLINT:
+        return b.getInt16(value);
+    case TYPE_INT:
+    case TYPE_DECIMAL32:
+        return b.getInt32(value);
+    case TYPE_BIGINT:
+    case TYPE_DECIMAL64:
+        return b.getInt64(value);
+    case TYPE_LARGEINT:
+    case TYPE_DECIMAL128: {
+        // TODO(Yueyang): test this.
+        llvm::APInt value_128(128, value, true);
+        return llvm::ConstantInt::get(b.getContext(), value_128);
+    }
+    case TYPE_FLOAT:
+        return llvm::ConstantFP::get(b.getFloatTy(), value);
+    case TYPE_DOUBLE:
+        return llvm::ConstantFP::get(b.getDoubleTy(), value);
+    case TYPE_CHAR:
+    case TYPE_VARCHAR:
+    case TYPE_TIME:
+    case TYPE_DATE:
+    case TYPE_DATETIME:
+    case TYPE_DECIMALV2:
+    case TYPE_VARBINARY:
+    default:
+        // Not supported.
+        return Status::NotSupported("JIT type not supported.");
+    }
+}
+
+StatusOr<llvm::Value*> IRHelper::load_ir_number(llvm::IRBuilder<>& b, const LogicalType& type, const uint8_t* value) {
     switch (type) {
     case TYPE_BOOLEAN:
         return b.getInt8(reinterpret_cast<const uint8_t*>(value)[0]);

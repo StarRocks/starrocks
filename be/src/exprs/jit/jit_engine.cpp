@@ -158,11 +158,6 @@ Status JITEngine::generate_scalar_function_ir(ExprContext* context, llvm::Module
         auto* jit_column = b.CreateLoad(data_type, b.CreateConstInBoundsGEP1_64(data_type, columns_arg, i));
 
         const auto& type = i == args_size ? expr->type() : input_exprs[i]->type();
-#if JIT_DEBUG
-        auto tmp = i == args_size ? expr : input_exprs[i];
-        LOG(INFO) << "[JIT] " << i << " col type = " << logical_type_to_string(type.type)
-                  << "  nullable = " << tmp->is_nullable() << " is const " << tmp->is_constant();
-#endif
         columns[i].values = b.CreateExtractValue(jit_column, {0});
         columns[i].null_flags = b.CreateExtractValue(jit_column, {1});
         ASSIGN_OR_RETURN(columns[i].value_type, IRHelper::logical_to_ir_type(b, type.type));
