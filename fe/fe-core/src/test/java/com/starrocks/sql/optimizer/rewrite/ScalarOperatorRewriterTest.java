@@ -97,10 +97,10 @@ public class ScalarOperatorRewriterTest {
         assertEquals(root, result);
         assertEquals(OperatorType.BINARY, result.getChild(0).getOpType());
         assertEquals(OperatorType.VARIABLE, result.getChild(0).getChild(0).getOpType());
-        assertEquals(OperatorType.CONSTANT, result.getChild(0).getChild(1).getOpType());
+        assertEquals(OperatorType.CALL, result.getChild(0).getChild(1).getOpType());
 
-        assertEquals(Type.VARCHAR, result.getChild(0).getChild(0).getType());
-        assertEquals(Type.VARCHAR, result.getChild(0).getChild(1).getType());
+        assertEquals(Type.VARCHAR.getPrimitiveType(), result.getChild(0).getChild(0).getType().getPrimitiveType());
+        assertEquals(Type.VARCHAR.getPrimitiveType(), result.getChild(0).getChild(1).getType().getPrimitiveType());
 
         assertEquals(OperatorType.COMPOUND, result.getChild(1).getOpType());
         assertEquals(OperatorType.BINARY, result.getChild(1).getChild(0).getOpType());
