@@ -128,7 +128,6 @@ public:
     // TODO: implements reset_state
 private:
     void _init_chunk_stream() const;
-    spill::IOTaskExecutor& _executor();
     // current build finish
     bool _is_current_build_probe_finished() const { return _current_build_probe_finished; }
     void _set_current_build_probe_finished(bool build_finished) { _current_build_probe_finished = build_finished; }

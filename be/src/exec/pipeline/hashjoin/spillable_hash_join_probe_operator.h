@@ -133,7 +133,6 @@ private:
     mutable std::mutex _mutex;
     mutable Status _operator_status;
 
-    std::shared_ptr<spill::IOTaskExecutor> _executor;
     bool _need_post_probe = false;
 };
 

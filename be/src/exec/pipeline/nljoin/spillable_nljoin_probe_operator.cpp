@@ -173,7 +173,7 @@ Status SpillableNLJoinProbeOperator::set_finished(RuntimeState* state) {
 StatusOr<ChunkPtr> SpillableNLJoinProbeOperator::pull_chunk(RuntimeState* state) {
     TRACE_SPILL_LOG << "pull_chunk:" << _driver_sequence;
     if (_prober.probe_finished() || _build_chunk == nullptr || _build_chunk->is_empty()) {
-        auto chunk_st = _chunk_stream->get_next(state, _executor());
+        auto chunk_st = _chunk_stream->get_next(state);
         if (chunk_st.status().is_end_of_file()) {
             _prober.reset();
             _set_current_build_probe_finished(true);
@@ -208,7 +208,7 @@ Status SpillableNLJoinProbeOperator::push_chunk(RuntimeState* state, const Chunk
     _set_current_build_probe_finished(false);
     RETURN_IF_ERROR(_prober.push_probe_chunk(chunk));
     RETURN_IF_ERROR(_chunk_stream->reset(state, _spiller.get()));
-    RETURN_IF_ERROR(_chunk_stream->prefetch(state, _executor()));
+    RETURN_IF_ERROR(_chunk_stream->prefetch(state));
     return Status::OK();
 }
 
@@ -216,10 +216,6 @@ void SpillableNLJoinProbeOperator::_init_chunk_stream() const {
     if (_chunk_stream == nullptr) {
         _chunk_stream = _cross_join_context->builder().build_stream();
     }
-}
-
-spill::IOTaskExecutor& SpillableNLJoinProbeOperator::_executor() {
-    return *_cross_join_context->spill_channel_factory()->executor();
 }
 
 void SpillableNLJoinProbeOperatorFactory::_init_row_desc() {

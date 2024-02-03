@@ -96,46 +96,48 @@ struct SpillIOTaskContext {
 };
 using SpillIOTaskContextPtr = std::shared_ptr<SpillIOTaskContext>;
 
+struct ExecutorT {
+    static Status submit(workgroup::ScanTask task) { return Status::OK(); }
+};
+
 struct IOTaskExecutor {
-    workgroup::ScanExecutor* local_io_executor;
-    workgroup::ScanExecutor* remote_io_executor;
-    workgroup::WorkGroupPtr wg;
-
-    IOTaskExecutor(workgroup::ScanExecutor* local_io_executor, workgroup::ScanExecutor* remote_io_executor,
-                   workgroup::WorkGroupPtr wg)
-            : local_io_executor(local_io_executor), remote_io_executor(remote_io_executor), wg(std::move(wg)) {}
-
-    Status submit(workgroup::ScanTask task) {
+    static Status submit(workgroup::ScanTask task) {
         const auto& task_ctx = task.get_work_context();
         bool use_local_io_executor = true;
         if (task_ctx.task_context_data.has_value()) {
             auto io_ctx = std::any_cast<SpillIOTaskContextPtr>(task_ctx.task_context_data);
             use_local_io_executor = io_ctx->use_local_io_executor;
         }
-        auto* pool = use_local_io_executor ? local_io_executor : remote_io_executor;
+        auto* pool = get_executor(use_local_io_executor);
         if (pool->submit(std::move(task))) {
             return Status::OK();
         } else {
             return Status::InternalError("offer task failed");
         }
     }
-    void force_submit(workgroup::ScanTask task) {
+    static void force_submit(workgroup::ScanTask task) {
         const auto& task_ctx = task.get_work_context();
         auto io_ctx = std::any_cast<SpillIOTaskContextPtr>(task_ctx.task_context_data);
-        auto* pool = io_ctx->use_local_io_executor ? local_io_executor : remote_io_executor;
+        auto* pool = get_executor(io_ctx->use_local_io_executor);
         pool->force_submit(std::move(task));
+    }
+
+private:
+    inline static workgroup::ScanExecutor* get_executor(bool use_local_io_executor) {
+        return use_local_io_executor ? ExecEnv::GetInstance()->scan_executor()
+                                     : ExecEnv::GetInstance()->connector_scan_executor();
     }
 };
 
 struct SyncTaskExecutor {
-    Status submit(workgroup::ScanTask task) {
+    static Status submit(workgroup::ScanTask task) {
         do {
             task.run();
         } while (!task.is_finished());
         return Status::OK();
     }
 
-    void force_submit(workgroup::ScanTask task) { (void)submit(std::move(task)); }
+    static void force_submit(workgroup::ScanTask task) { (void)submit(std::move(task)); }
 };
 
 #define BREAK_IF_YIELD(wg, yield, time_spent_ns)                                                \
