@@ -28,13 +28,14 @@
 #include "exec/spill/serde.h"
 #include "exec/spill/spill_components.h"
 #include "exec/spill/spiller.h"
+#include "exec/workgroup/work_group_fwd.h"
 #include "storage/chunk_helper.h"
 #include "util/defer_op.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::spill {
 template <class TaskExecutor, class MemGuard>
-Status Spiller::spill(RuntimeState* state, const ChunkPtr& chunk, TaskExecutor&& executor, MemGuard&& guard) {
+Status Spiller::spill(RuntimeState* state, const ChunkPtr& chunk, MemGuard&& guard) {
     SCOPED_TIMER(_metrics.append_data_timer);
     RETURN_IF_ERROR(task_status());
     DCHECK(!chunk->is_empty());
@@ -51,15 +52,15 @@ Status Spiller::spill(RuntimeState* state, const ChunkPtr& chunk, TaskExecutor&&
     }
 
     if (_opts.init_partition_nums > 0) {
-        return _writer->as<PartitionedSpillerWriter*>()->spill(state, chunk, executor, guard);
+        return _writer->as<PartitionedSpillerWriter*>()->spill<TaskExecutor>(state, chunk, guard);
     } else {
-        return _writer->as<RawSpillerWriter*>()->spill(state, chunk, executor, guard);
+        return _writer->as<RawSpillerWriter*>()->spill<TaskExecutor>(state, chunk, guard);
     }
 }
 
-template <class Processer, class TaskExecutor, class MemGuard>
+template <class TaskExecutor, class Processer, class MemGuard>
 Status Spiller::partitioned_spill(RuntimeState* state, const ChunkPtr& chunk, SpillHashColumn* hash_column,
-                                  Processer&& processer, TaskExecutor&& executor, MemGuard&& guard) {
+                                  Processer&& processer, MemGuard&& guard) {
     SCOPED_TIMER(_metrics.append_data_timer);
     RETURN_IF_ERROR(task_status());
     DCHECK(!chunk->is_empty());
@@ -79,39 +80,47 @@ Status Spiller::partitioned_spill(RuntimeState* state, const ChunkPtr& chunk, Sp
         writer->process_partition_data(chunk, indexs, std::forward<Processer>(processer));
     }
     COUNTER_SET(_metrics.partition_writer_peak_memory_usage, writer->mem_consumption());
-    RETURN_IF_ERROR(writer->flush_if_full(state, executor, guard));
+    RETURN_IF_ERROR(writer->flush_if_full<TaskExecutor>(state, guard));
     return Status::OK();
 }
 
 template <class TaskExecutor, class MemGuard>
-Status Spiller::flush(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
+Status Spiller::flush(RuntimeState* state, MemGuard&& guard) {
     RETURN_IF_ERROR(task_status());
     if (_opts.init_partition_nums > 0) {
-        return _writer->as<PartitionedSpillerWriter*>()->flush(state, true, executor, guard);
+        return _writer->as<PartitionedSpillerWriter*>()->flush<TaskExecutor>(state, true, guard);
     } else {
-        return _writer->as<RawSpillerWriter*>()->flush(state, executor, guard);
+        return _writer->as<RawSpillerWriter*>()->flush<TaskExecutor>(state, guard);
     }
 }
 
+template <class Executor, class MemGuard>
+Status Spiller::test(MemGuard&& guard) {
+    workgroup::ScanTask task;
+    RETURN_IF(!guard.scoped_begin(), Status::Cancelled("cancelled"));
+    RETURN_IF_ERROR(Executor::submit(std::move(task)));
+    return Status::OK();
+}
+
 template <class TaskExecutor, class MemGuard>
-StatusOr<ChunkPtr> Spiller::restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
+StatusOr<ChunkPtr> Spiller::restore(RuntimeState* state, MemGuard&& guard) {
     RETURN_IF_ERROR(task_status());
 
-    ASSIGN_OR_RETURN(auto chunk, _reader->restore(state, executor, guard));
+    ASSIGN_OR_RETURN(auto chunk, _reader->restore<TaskExecutor>(state, guard));
     chunk->check_or_die();
     _restore_read_rows += chunk->num_rows();
 
-    RETURN_IF_ERROR(trigger_restore(state, std::forward<TaskExecutor>(executor), std::forward<MemGuard>(guard)));
+    RETURN_IF_ERROR(trigger_restore<TaskExecutor>(state, std::forward<MemGuard>(guard)));
     return chunk;
 }
 
 template <class TaskExecutor, class MemGuard>
-Status Spiller::trigger_restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
-    return _reader->trigger_restore(state, executor, guard);
+Status Spiller::trigger_restore(RuntimeState* state, MemGuard&& guard) {
+    return _reader->trigger_restore<TaskExecutor>(state, guard);
 }
 
 template <class TaskExecutor, class MemGuard>
-Status RawSpillerWriter::spill(RuntimeState* state, const ChunkPtr& chunk, TaskExecutor&& executor, MemGuard&& guard) {
+Status RawSpillerWriter::spill(RuntimeState* state, const ChunkPtr& chunk, MemGuard&& guard) {
     if (_mem_table == nullptr) {
         _mem_table = _acquire_mem_table_from_pool();
         DCHECK(_mem_table != nullptr);
@@ -120,14 +129,14 @@ Status RawSpillerWriter::spill(RuntimeState* state, const ChunkPtr& chunk, TaskE
     RETURN_IF_ERROR(_mem_table->append(chunk));
 
     if (_mem_table->is_full()) {
-        return flush(state, std::forward<TaskExecutor>(executor), std::forward<MemGuard>(guard));
+        return flush<TaskExecutor>(state, std::forward<MemGuard>(guard));
     }
 
     return Status::OK();
 }
 
 template <class TaskExecutor, class MemGuard>
-Status RawSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
+Status RawSpillerWriter::flush(RuntimeState* state, MemGuard&& guard) {
     MemTablePtr captured_mem_table;
     {
         std::lock_guard l(_mutex);
@@ -186,20 +195,24 @@ Status RawSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, Mem
 
         return Status::OK();
     };
-    auto yield_func = [&](workgroup::ScanTask&& task) { executor.force_submit(std::move(task)); };
+
+    RETURN_IF_ERROR(_spiller->test(guard));
+
+    auto yield_func = [&](workgroup::ScanTask&& task) { TaskExecutor::force_submit(std::move(task)); };
     auto io_task = workgroup::ScanTask(_spiller->options().wg.get(), std::move(task), std::move(yield_func));
-    RETURN_IF_ERROR(executor.submit(std::move(io_task)));
+    // RETURN_IF_ERROR(executor.submit(std::move(io_task)));
+    RETURN_IF_ERROR(TaskExecutor::submit(std::move(io_task)));
     COUNTER_UPDATE(_spiller->metrics().flush_io_task_count, 1);
     COUNTER_SET(_spiller->metrics().peak_flush_io_task_count, _running_flush_tasks);
     return Status::OK();
 }
 
 template <class TaskExecutor, class MemGuard>
-StatusOr<ChunkPtr> SpillerReader::restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
+StatusOr<ChunkPtr> SpillerReader::restore(RuntimeState* state, MemGuard&& guard) {
     SCOPED_TIMER(_spiller->metrics().restore_from_buffer_timer);
     workgroup::YieldContext mock_ctx;
     ASSIGN_OR_RETURN(auto chunk, _stream->get_next(mock_ctx, _spill_read_ctx));
-    RETURN_IF_ERROR(trigger_restore(state, std::forward<TaskExecutor>(executor), std::forward<MemGuard>(guard)));
+    RETURN_IF_ERROR(trigger_restore<TaskExecutor>(state, std::forward<MemGuard>(guard)));
     _read_rows += chunk->num_rows();
     COUNTER_UPDATE(_spiller->metrics().restore_rows, chunk->num_rows());
     TRACE_SPILL_LOG << "restore rows: " << chunk->num_rows() << ", total restored: " << _read_rows << ", " << this;
@@ -207,7 +220,7 @@ StatusOr<ChunkPtr> SpillerReader::restore(RuntimeState* state, TaskExecutor&& ex
 }
 
 template <class TaskExecutor, class MemGuard>
-Status SpillerReader::trigger_restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
+Status SpillerReader::trigger_restore(RuntimeState* state, MemGuard&& guard) {
     if (_stream == nullptr) {
         return Status::OK();
     }
@@ -253,11 +266,11 @@ Status SpillerReader::trigger_restore(RuntimeState* state, TaskExecutor&& execut
         };
         auto yield_func = [&](workgroup::ScanTask&& task) {
             auto ctx = std::any_cast<SpillIOTaskContextPtr>(task.get_work_context().task_context_data);
-            executor.force_submit(std::move(task));
+            TaskExecutor::force_submit(std::move(task));
         };
         auto io_task =
                 workgroup::ScanTask(_spiller->options().wg.get(), std::move(restore_task), std::move(yield_func));
-        RETURN_IF_ERROR(executor.submit(std::move(io_task)));
+        RETURN_IF_ERROR(TaskExecutor::submit(std::move(io_task)));
         COUNTER_UPDATE(_spiller->metrics().restore_io_task_count, 1);
         COUNTER_SET(_spiller->metrics().peak_flush_io_task_count, _running_restore_tasks);
     }
@@ -265,8 +278,7 @@ Status SpillerReader::trigger_restore(RuntimeState* state, TaskExecutor&& execut
 }
 
 template <class TaskExecutor, class MemGuard>
-Status PartitionedSpillerWriter::spill(RuntimeState* state, const ChunkPtr& chunk, TaskExecutor&& executor,
-                                       MemGuard&& guard) {
+Status PartitionedSpillerWriter::spill(RuntimeState* state, const ChunkPtr& chunk, MemGuard&& guard) {
     DCHECK(!chunk->is_empty());
     DCHECK(!is_full());
 
@@ -289,22 +301,21 @@ Status PartitionedSpillerWriter::spill(RuntimeState* state, const ChunkPtr& chun
 
     DCHECK_EQ(_spiller->spilled_append_rows(), _partition_rows());
 
-    RETURN_IF_ERROR(flush_if_full(state, executor, guard));
+    RETURN_IF_ERROR(flush_if_full<TaskExecutor>(state, guard));
 
     return Status::OK();
 }
 
 template <class TaskExecutor, class MemGuard>
-Status PartitionedSpillerWriter::flush_if_full(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
+Status PartitionedSpillerWriter::flush_if_full(RuntimeState* state, MemGuard&& guard) {
     if (_mem_tracker->consumption() > options().spill_mem_table_bytes_size) {
-        return flush(state, false, executor, guard);
+        return flush<TaskExecutor>(state, false, guard);
     }
     return Status::OK();
 }
 
 template <class TaskExecutor, class MemGuard>
-Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush, TaskExecutor&& executor,
-                                       MemGuard&& guard) {
+Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush, MemGuard&& guard) {
     std::vector<SpilledPartition*> splitting_partitions, spilling_partitions;
     RETURN_IF_ERROR(_choose_partitions_to_flush(is_final_flush, splitting_partitions, spilling_partitions));
 
@@ -348,9 +359,9 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
         }
         return Status::OK();
     };
-    auto yield_func = [&](workgroup::ScanTask&& task) { executor.force_submit(std::move(task)); };
+    auto yield_func = [&](workgroup::ScanTask&& task) { TaskExecutor::force_submit(std::move(task)); };
     auto io_task = workgroup::ScanTask(_spiller->options().wg.get(), std::move(task), std::move(yield_func));
-    RETURN_IF_ERROR(executor.submit(std::move(io_task)));
+    RETURN_IF_ERROR(TaskExecutor::submit(std::move(io_task)));
     COUNTER_UPDATE(_spiller->metrics().flush_io_task_count, 1);
     COUNTER_SET(_spiller->metrics().peak_flush_io_task_count, _running_flush_tasks);
 

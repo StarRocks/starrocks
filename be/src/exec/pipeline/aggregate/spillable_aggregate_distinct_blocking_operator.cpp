@@ -43,24 +43,23 @@ Status SpillableAggregateDistinctBlockingSinkOperator::set_finishing(RuntimeStat
         return Status::OK();
     }
 
-    auto io_executor = _aggregator->spill_channel()->io_executor();
-    auto flush_function = [this](RuntimeState* state, auto io_executor) {
+    auto flush_function = [this](RuntimeState* state) {
         auto spiller = _aggregator->spiller();
-        return spiller->flush(state, *io_executor, TRACKER_WITH_SPILLER_READER_GUARD(state, spiller));
+        return spiller->flush(state, TRACKER_WITH_SPILLER_READER_GUARD(state, spiller));
     };
 
     _aggregator->ref();
-    auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {
+    auto set_call_back_function = [this](RuntimeState* state) {
         return _aggregator->spiller()->set_flush_all_call_back(
                 [this, state]() {
                     auto defer = DeferOp([&]() { _aggregator->unref(state); });
                     RETURN_IF_ERROR(AggregateDistinctBlockingSinkOperator::set_finishing(state));
                     return Status::OK();
                 },
-                state, *io_executor, TRACKER_WITH_SPILLER_READER_GUARD(state, _aggregator->spiller()));
+                state, TRACKER_WITH_SPILLER_READER_GUARD(state, _aggregator->spiller()));
     };
 
-    SpillProcessTasksBuilder task_builder(state, io_executor);
+    SpillProcessTasksBuilder task_builder(state);
     task_builder.then(flush_function).finally(set_call_back_function);
 
     RETURN_IF_ERROR(_aggregator->spill_channel()->execute(task_builder));
@@ -257,10 +256,8 @@ StatusOr<ChunkPtr> SpillableAggregateDistinctBlockingSourceOperator::_pull_spill
 
     if (!_aggregator->is_spilled_eos()) {
         DCHECK(_accumulator.need_input());
-        auto executor = _aggregator->spill_channel()->io_executor();
         auto& spiller = _aggregator->spiller();
-        ASSIGN_OR_RETURN(auto chunk,
-                         spiller->restore(state, *executor, TRACKER_WITH_SPILLER_READER_GUARD(state, spiller)));
+        ASSIGN_OR_RETURN(auto chunk, spiller->restore(state, TRACKER_WITH_SPILLER_READER_GUARD(state, spiller)));
         if (chunk->is_empty()) {
             return chunk;
         }

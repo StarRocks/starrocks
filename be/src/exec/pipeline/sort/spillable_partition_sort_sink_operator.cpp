@@ -68,10 +68,9 @@ Status SpillablePartitionSortSinkOperator::set_finishing(RuntimeState* state) {
     //
     // if has spill task. we should wait all spill task finished then to call finished
     // TODO: test cancel case
-    auto io_executor = _chunks_sorter->spill_channel()->io_executor();
     auto chunk_sorter = _chunks_sorter.get();
     _sort_context->ref();
-    auto set_call_back_function = [this, chunk_sorter](RuntimeState* state, auto io_executor) {
+    auto set_call_back_function = [this, chunk_sorter](RuntimeState* state) {
         return _chunks_sorter->spiller()->set_flush_all_call_back(
                 [this, chunk_sorter]() {
                     // Current partition sort is ended, and
@@ -82,12 +81,12 @@ Status SpillablePartitionSortSinkOperator::set_finishing(RuntimeState* state) {
                     _is_finished = true;
                     return Status::OK();
                 },
-                state, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, _chunks_sorter->spiller()));
+                state, TRACKER_WITH_SPILLER_GUARD(state, _chunks_sorter->spiller()));
     };
 
     Status ret_status;
     auto defer = DeferOp([&]() {
-        SpillProcessTasksBuilder task_builder(state, io_executor);
+        SpillProcessTasksBuilder task_builder(state);
         task_builder.finally(set_call_back_function);
         Status st = _chunks_sorter->spill_channel()->execute(task_builder);
         ret_status = ret_status.ok() ? st : ret_status;

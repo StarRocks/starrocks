@@ -631,11 +631,11 @@ Status PartitionedSpillerWriter::_split_partition(workgroup::YieldContext& yield
         while (true) {
             {
                 SCOPED_RAW_TIMER(&yield_ctx.time_spent_ns);
-                RETURN_IF_ERROR(reader->trigger_restore(_runtime_state, SyncTaskExecutor{}, EmptyMemGuard{}));
+                RETURN_IF_ERROR(reader->trigger_restore<SyncTaskExecutor>(_runtime_state, EmptyMemGuard{}));
                 if (!reader->has_output_data()) {
                     break;
                 }
-                ASSIGN_OR_RETURN(auto chunk, reader->restore(_runtime_state, SyncTaskExecutor{}, EmptyMemGuard{}));
+                ASSIGN_OR_RETURN(auto chunk, reader->restore<SyncTaskExecutor>(_runtime_state, EmptyMemGuard{}));
                 if (chunk->is_empty()) {
                     continue;
                 }
