@@ -270,8 +270,6 @@ drop materialized view case_when_mv2;
 -- !result
 drop table if exists case_when_tbl1;
 -- result:
-<<<<<<< HEAD
-=======
 -- !result
 CREATE TABLE IF NOT EXISTS test_base_table1
 (
@@ -364,5 +362,4 @@ set enable_sync_materialized_view_rewrite=true;
 -- !result
 drop table test_base_table1;
 -- result:
->>>>>>> d229a2b469 ([BugFix] Synchronous materialized view rewrite should respect original base index (#40622))
 -- !result

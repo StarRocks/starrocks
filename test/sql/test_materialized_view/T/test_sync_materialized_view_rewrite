@@ -121,8 +121,6 @@ SELECT k1, (CASE k2 WHEN 'beijing' THEN concat(k1, 'bigcity') ELSE concat(k1, 's
 drop materialized view case_when_mv1;
 drop materialized view case_when_mv2;
 drop table if exists case_when_tbl1;
-<<<<<<< HEAD
-=======
 
 --case: test_mv_with_dict
 -- 1.test_base_table1建表
@@ -174,4 +172,3 @@ select * from (select col0, col2, col3, id, col1 from test_base_table1 where col
 set enable_sync_materialized_view_rewrite=true;
 
 drop table test_base_table1;
->>>>>>> d229a2b469 ([BugFix] Synchronous materialized view rewrite should respect original base index (#40622))
