@@ -270,4 +270,99 @@ drop materialized view case_when_mv2;
 -- !result
 drop table if exists case_when_tbl1;
 -- result:
+<<<<<<< HEAD
+=======
+-- !result
+CREATE TABLE IF NOT EXISTS test_base_table1
+(
+    `col0`             int(11) NULL,
+    `col2`           datetime NULL,
+    `col3`         varchar(32) NULL,
+    `id`               bigint(20) NULL,
+    `col1`           bigint(20) NULL
+) DUPLICATE KEY(col0, col2, col3)
+  PARTITION BY RANGE(col2)(
+  START ("2022-04-17") END ("2022-05-01") EVERY (INTERVAL 1 day))
+  DISTRIBUTED BY HASH(col0)
+  PROPERTIES
+(
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO test_base_table1 (col0, col2, col3, id, col1) VALUES (123456789, '2022-04-30 12:00:00', 'Guangdong', 1, 10001);
+-- result:
+-- !result
+INSERT INTO test_base_table1 (col0, col2, col3) VALUES (987654321, '2022-04-30 13:00:00', 'Fujian');
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_test_base_table1 AS
+SELECT col2,col3,col0,id,col1 FROM test_base_table1 ORDER BY col2,col3,col0;
+-- result:
+-- !result
+analyze full table test_base_table1 with sync mode;
+-- result:
+test_db_44197a8ac1a011eea0bfdbbedfe51b53.test_base_table1	analyze	status	OK
+-- !result
+function: wait_materialized_view_finish()
+-- result:
+None
+-- !result
+function: wait_global_dict_ready("col3", "test_base_table1")
+-- result:
+
+-- !result
+function: check_hit_materialized_view("select col3, min(col1) startTime, max(col1) endTime from test_base_table1 where col2 BETWEEN '2022-04-29 15:12:23' and '2022-04-30 15:12:23' group by col3;", "mv_test_base_table1")
+-- result:
+None
+-- !result
+select col3, min(col1) startTime, max(col1) endTime from test_base_table1 where col2 BETWEEN '2022-04-29 00:00:00' and '2022-04-30 23:00:00' group by col3;
+-- result:
+Guangdong	10001	10001
+Fujian	None	None
+-- !result
+function: check_hit_materialized_view("select * from test_base_table1 where col0=123456789", "rollup: test_base_table1")
+-- result:
+None
+-- !result
+select * from test_base_table1 where col0=123456789;
+-- result:
+123456789	2022-04-30 12:00:00	Guangdong	1	10001
+-- !result
+function: check_hit_materialized_view("select * from test_base_table1 where col2 >='2022-04-30 12:00:00'", "rollup: mv_test_base_table1")
+-- result:
+None
+-- !result
+select * from test_base_table1 where col2 >='2022-04-30 12:00:00';
+-- result:
+123456789	2022-04-30 12:00:00	Guangdong	1	10001
+987654321	2022-04-30 13:00:00	Fujian	None	None
+-- !result
+function: check_hit_materialized_view("select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 union select col0, col2, col3, id, col1 from test_base_table1 where col2 >='2022-04-30 12:00:00') t;", "rollup: mv_test_base_table1",  "rollup: test_base_table1")
+-- result:
+None
+-- !result
+select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 union select col0, col2, col3, id, col1 from test_base_table1 where col2 >='2022-04-30 12:00:00') t;
+-- result:
+123456789	2022-04-30 12:00:00	Guangdong	1	10001
+987654321	2022-04-30 13:00:00	Fujian	None	None
+-- !result
+set enable_sync_materialized_view_rewrite=false;
+-- result:
+-- !result
+function: check_hit_materialized_view("select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 union select col0, col2, col3, id, col1 from mv_test_base_table1 [_SYNC_MV_] where col2 >='2022-04-30 12:00:00') t;", "rollup: mv_test_base_table1",  "rollup: test_base_table1")
+-- result:
+None
+-- !result
+select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 union select col0, col2, col3, id, col1 from mv_test_base_table1 [_SYNC_MV_] where col2 >='2022-04-30 12:00:00') t;
+-- result:
+987654321	2022-04-30 13:00:00	Fujian	None	None
+123456789	2022-04-30 12:00:00	Guangdong	1	10001
+-- !result
+set enable_sync_materialized_view_rewrite=true;
+-- result:
+-- !result
+drop table test_base_table1;
+-- result:
+>>>>>>> d229a2b469 ([BugFix] Synchronous materialized view rewrite should respect original base index (#40622))
 -- !result
