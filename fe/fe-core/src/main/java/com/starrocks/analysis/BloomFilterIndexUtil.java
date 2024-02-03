@@ -23,6 +23,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.NgramBfIndexParamsKey;
 import com.starrocks.sql.analyzer.SemanticException;
 
+import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -84,7 +85,7 @@ public class BloomFilterIndexUtil {
     }
 
     public static void analyseBfWithNgramBf(Set<Index> newIndexs, Set<String> bfColumns) throws AnalysisException {
-        if (newIndexs.isEmpty() || bfColumns.isEmpty()) {
+        if (newIndexs.isEmpty() || bfColumns == null || bfColumns.isEmpty()) {
             return;
         }
 
