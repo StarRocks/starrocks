@@ -805,7 +805,7 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/build_join_projection"), null,
                         TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("22:Project\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("Project\n" +
                 "  |  <slot 425> : 425: row_id\n" +
                 "  |  <slot 426> : 426: enter_time\n" +
                 "  |  <slot 433> : 433: telephone2\n" +
@@ -819,7 +819,7 @@ public class ReplayFromDumpTest {
                 "  |  <slot 608> : 608: create_time\n" +
                 "  |  <slot 620> : 620: ter_user_phone\n" +
                 "  |  \n" +
-                "  21:HASH JOIN\n" +
+                "  20:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 590: user_id = 622: ter_user_id\n" +

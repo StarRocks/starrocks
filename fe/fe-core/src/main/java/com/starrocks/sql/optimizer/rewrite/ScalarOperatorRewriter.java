@@ -19,7 +19,6 @@ import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedPredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedScanColumnRule;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 public class ScalarOperatorRewriter {
     public static final List<ScalarOperatorRewriteRule> DEFAULT_TYPE_CAST_RULE = Lists.newArrayList(
