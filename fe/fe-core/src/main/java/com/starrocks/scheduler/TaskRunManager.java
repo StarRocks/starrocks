@@ -93,6 +93,7 @@ public class TaskRunManager {
         if (taskRun == null) {
             return false;
         }
+        taskRun.kill();
         ConnectContext runCtx = taskRun.getRunCtx();
         if (runCtx != null) {
             runCtx.kill(false);
