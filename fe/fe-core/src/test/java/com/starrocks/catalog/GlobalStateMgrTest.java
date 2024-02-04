@@ -36,12 +36,9 @@ import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.load.Load;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.EditLog;
-<<<<<<< HEAD:fe/fe-core/src/test/java/com/starrocks/catalog/GlobalStateMgrTest.java
+import com.starrocks.persist.OperationType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
-=======
-import com.starrocks.persist.OperationType;
->>>>>>> 763e2aaad4 ([BugFix] Remove version and role file after failing to start fe at first time. (#39672)):fe/fe-core/src/test/java/com/starrocks/server/GlobalStateMgrTest.java
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.system.Frontend;
 import mockit.Expectations;
@@ -65,11 +62,8 @@ import java.lang.reflect.Field;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.List;
-<<<<<<< HEAD:fe/fe-core/src/test/java/com/starrocks/catalog/GlobalStateMgrTest.java
 import java.util.Random;
-=======
 import java.util.UUID;
->>>>>>> 763e2aaad4 ([BugFix] Remove version and role file after failing to start fe at first time. (#39672)):fe/fe-core/src/test/java/com/starrocks/server/GlobalStateMgrTest.java
 import java.util.concurrent.ConcurrentHashMap;
 
 public class GlobalStateMgrTest {
@@ -79,7 +73,6 @@ public class GlobalStateMgrTest {
 
     @Before
     public void setUp() {
-<<<<<<< HEAD:fe/fe-core/src/test/java/com/starrocks/catalog/GlobalStateMgrTest.java
         MetaContext metaContext = new MetaContext();
         new Expectations(metaContext) {
             {
@@ -88,11 +81,9 @@ public class GlobalStateMgrTest {
                 result = metaContext;
             }
         };
-=======
         Config.meta_dir = UUID.randomUUID().toString();
         Config.plugin_dir = UUID.randomUUID().toString();
         UtFrameUtils.PseudoImage.setUpImageVersion();
->>>>>>> 763e2aaad4 ([BugFix] Remove version and role file after failing to start fe at first time. (#39672)):fe/fe-core/src/test/java/com/starrocks/server/GlobalStateMgrTest.java
     }
 
     public void mkdir(String dirString) {
