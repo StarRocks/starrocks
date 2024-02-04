@@ -220,7 +220,7 @@ public class DecimalTypeTest extends PlanTestBase {
         try {
             String sql = "select array_agg(distinct c_1_6) from tab1 group by c_1_0,c_1_1;";
             String plan = getVerboseExplain(sql);
-            assertContains(plan, "array_agg_distinct");
+            assertNotContains(plan, "array_agg_distinct");
         } finally {
             connectContext.getSessionVariable().setNewPlanerAggStage(stage);
         }

@@ -418,16 +418,14 @@ public class SelectStmtTest {
     void testMultiDistinctMultiColumnWithLimit(String sql, String pattern) throws Exception {
         starRocksAssert.getCtx().getSessionVariable().setOptimizerExecuteTimeout(30000000);
         String plan = UtFrameUtils.getFragmentPlan(starRocksAssert.getCtx(), sql);
-        System.out.println(plan);
         Assert.assertTrue(plan, plan.contains(pattern));
     }
 
     @Test
-    public void test() throws Exception {
+    public void testSingleMultiColumnDistinct() throws Exception {
         starRocksAssert.getCtx().getSessionVariable().setOptimizerExecuteTimeout(30000000);
         String plan = UtFrameUtils.getFragmentPlan(starRocksAssert.getCtx(),
                 "select count(distinct k1, k2), count(distinct k3) from db1.tbl1 limit 1");
-        System.out.println(plan);
         Assert.assertTrue(plan, plan.contains("18:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
                 "  |  colocate: false, reason: \n" +

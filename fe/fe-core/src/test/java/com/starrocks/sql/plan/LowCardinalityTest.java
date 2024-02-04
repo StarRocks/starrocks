@@ -339,7 +339,7 @@ public class LowCardinalityTest extends PlanTestBase {
             sql = "select count(distinct S_ADDRESS), count(distinct S_NATIONKEY) from supplier " +
                     "having count(1) > 0";
             plan = getVerboseExplain(sql);
-            Assert.assertFalse(plan, plan.contains("dict_col="));
+            Assert.assertTrue(plan, plan.contains("dict_col=S_ADDRESS"));
             Assert.assertFalse(plan, plan.contains("Decode"));
         } finally {
             connectContext.getSessionVariable().setCboCteReuse(cboCteReuse);

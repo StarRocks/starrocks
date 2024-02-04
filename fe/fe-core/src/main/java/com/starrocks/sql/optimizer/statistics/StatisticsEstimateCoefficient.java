@@ -46,6 +46,8 @@ public class StatisticsEstimateCoefficient {
     // the aggregate has good effect.
     public static final double LOW_AGGREGATE_EFFECT_COEFFICIENT = 1000;
     public static final double MEDIUM_AGGREGATE_EFFECT_COEFFICIENT = 100;
+
+    public static final double EXTREME_HIGH_AGGREGATE_EFFECT_COEFFICIENT = 3;
     // default selectivity for anti join
     public static final double DEFAULT_ANTI_JOIN_SELECTIVITY_COEFFICIENT = 0.4;
     // default shuffle column row count limit

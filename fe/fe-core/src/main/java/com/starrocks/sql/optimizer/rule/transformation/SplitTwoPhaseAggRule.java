@@ -33,6 +33,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
@@ -126,10 +127,10 @@ public class SplitTwoPhaseAggRule extends SplitAggregateRule {
     private boolean isSuitableForTwoStageDistinct(OptExpression input, LogicalAggregationOperator operator,
                                                   List<ColumnRefOperator> distinctColumns) {
         int aggMode = ConnectContext.get().getSessionVariable().getNewPlannerAggStage();
-        boolean canTwoStage = canGenerateTwoStageAggregate(operator, distinctColumns);
-
-        if (!canTwoStage) {
-            return false;
+        for (CallOperator callOperator : operator.getAggregations().values()) {
+            if (callOperator.isDistinct() && !canGenerateTwoStageAggregate(callOperator)) {
+                return false;
+            }
         }
 
         if (aggMode == TWO_STAGE.ordinal()) {
@@ -141,26 +142,25 @@ public class SplitTwoPhaseAggRule extends SplitAggregateRule {
                 && isTwoStageMoreEfficient(input, distinctColumns);
     }
 
-    private boolean canGenerateTwoStageAggregate(LogicalAggregationOperator operator,
-                                                 List<ColumnRefOperator> distinctColumns) {
-
+    private boolean canGenerateTwoStageAggregate(CallOperator distinctCall) {
+        List<ColumnRefOperator> distinctCols = distinctCall.getColumnRefs();
+        List<ScalarOperator> children = distinctCall.getChildren();
         // 1. multiple cols distinct is not support two stage aggregate
         // 2. array type col is not support two stage aggregate
-        if (distinctColumns.size() > 1 || distinctColumns.get(0).getType().isArrayType()) {
+        if (distinctCols.size() > 1 || children.get(0).getType().isComplexType()) {
             return false;
         }
 
-        // 3. group_concat distinct with columnRef is not support two stage aggregate
-        // 4. array_agg with order by clause is not support two stage aggregate
-        for (CallOperator aggCall : operator.getAggregations().values()) {
-            String fnName = aggCall.getFnName();
-            if (FunctionSet.GROUP_CONCAT.equalsIgnoreCase(fnName)) {
+        // 3. group_concat distinct or avg distinct is not support two stage aggregate
+        // 4. array_agg with order by clause or decimal distinct col is not support two stage aggregate
+        String fnName = distinctCall.getFnName();
+        if (FunctionSet.GROUP_CONCAT.equalsIgnoreCase(fnName) || FunctionSet.AVG.equalsIgnoreCase(fnName)) {
+            return false;
+        } else if (FunctionSet.ARRAY_AGG.equalsIgnoreCase(fnName)) {
+            AggregateFunction aggregateFunction = (AggregateFunction) distinctCall.getFunction();
+            if (CollectionUtils.isNotEmpty(aggregateFunction.getIsAscOrder()) ||
+                    children.get(0).getType().isDecimalOfAnyVersion()) {
                 return false;
-            } else if (FunctionSet.ARRAY_AGG.equalsIgnoreCase(fnName)) {
-                AggregateFunction aggregateFunction = (AggregateFunction) aggCall.getFunction();
-                if (CollectionUtils.isNotEmpty(aggregateFunction.getIsAscOrder())) {
-                    return false;
-                }
             }
         }
         return true;
@@ -199,12 +199,20 @@ public class SplitTwoPhaseAggRule extends SplitAggregateRule {
             return new CallOperator(
                     FunctionSet.MULTI_DISTINCT_SUM, fnCall.getType(), fnCall.getChildren(), multiDistinctSumFn, false);
         } else if (functionName.equalsIgnoreCase(FunctionSet.ARRAY_AGG)) {
-            return new CallOperator(FunctionSet.ARRAY_AGG_DISTINCT, fnCall.getType(), fnCall.getChildren(),
-                    Expr.getBuiltinFunction(FunctionSet.ARRAY_AGG_DISTINCT, new Type[] {fnCall.getChild(0).getType()},
-                            IS_NONSTRICT_SUPERTYPE_OF), false);
+            if (fnCall.getUsedColumns().isEmpty() && fnCall.getChild(0).getType().isDecimalOfAnyVersion()) {
+                return fnCall;
+            } else {
+                return new CallOperator(FunctionSet.ARRAY_AGG_DISTINCT, fnCall.getType(), fnCall.getChildren(),
+                        Expr.getBuiltinFunction(FunctionSet.ARRAY_AGG_DISTINCT, new Type[] {fnCall.getChild(0).getType()},
+                                IS_NONSTRICT_SUPERTYPE_OF), false);
+            }
+
         } else if (functionName.equals(FunctionSet.GROUP_CONCAT)) {
-            // all children of group_concat is constant
+            // all children of group_concat are constant
             return fnCall;
+        } else if (functionName.equals(FunctionSet.AVG)) {
+            // all children of avg are constant
+            return new CallOperator(FunctionSet.AVG, fnCall.getType(), fnCall.getChildren(), fnCall.getFunction(), false);
         }
         throw new StarRocksPlannerException(ErrorType.INTERNAL_ERROR, "unsupported distinct agg functions: %s in two phase agg",
                 fnCall);

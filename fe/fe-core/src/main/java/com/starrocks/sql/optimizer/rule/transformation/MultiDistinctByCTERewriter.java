@@ -23,7 +23,6 @@ import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -34,7 +33,6 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
-import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
@@ -42,7 +40,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
-import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -51,7 +48,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.ImplicitCastRule;
-import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.LinkedList;
 import java.util.List;
@@ -123,48 +119,11 @@ import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_
  *
  *
  */
-public class RewriteMultiDistinctByCTERule extends TransformationRule {
+public class MultiDistinctByCTERewriter {
+
     private final ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
 
-    public RewriteMultiDistinctByCTERule() {
-        super(RuleType.TF_REWRITE_MULTI_DISTINCT_BY_CTE,
-                Pattern.create(OperatorType.LOGICAL_AGGR).addChildren(Pattern.create(
-                        OperatorType.PATTERN_LEAF)));
-    }
-
-    @Override
-    public boolean check(OptExpression input, OptimizerContext context) {
-        // check cte is disabled or hasNoGroup false
-        LogicalAggregationOperator agg = (LogicalAggregationOperator) input.getOp();
-        List<CallOperator> distinctAggOperatorList = agg.getAggregations().values().stream()
-                .filter(CallOperator::isDistinct).collect(Collectors.toList());
-        boolean hasMultiColumns = distinctAggOperatorList.stream().anyMatch(f -> f.getDistinctChildren().size() > 1);
-        if (hasMultiColumns && distinctAggOperatorList.size() > 1) {
-            return true;
-        }
-
-        if (!context.getSessionVariable().isCboCteReuse()) {
-            return false;
-        }
-
-        if (agg.hasSkew() && distinctAggOperatorList.size() > 1 && !agg.getGroupingKeys().isEmpty()) {
-            return true;
-        }
-
-        if (agg.hasLimit() && !ConnectContext.get().getSessionVariable().isPreferCTERewrite()) {
-            return false;
-        }
-
-        if (!hasMultiColumns && agg.getGroupingKeys().size() > 1) {
-            return false;
-        }
-
-        return distinctAggOperatorList.size() > 1 || agg.getAggregations().values().stream()
-                .anyMatch(call -> call.isDistinct() && call.getFnName().equals(FunctionSet.AVG));
-    }
-
-    @Override
-    public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
+    public List<OptExpression> transformImpl(OptExpression input, OptimizerContext context) {
         ColumnRefFactory columnRefFactory = context.getColumnRefFactory();
         // define cteId
         int cteId = context.getCteContext().getNextCteId();
@@ -453,4 +412,5 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
 
         return new LogicalCTEConsumeOperator(cteId, consumeOutputMap);
     }
+
 }
