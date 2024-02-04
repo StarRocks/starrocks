@@ -11,7 +11,7 @@ displayed_sidebar: "Chinese"
 ## 语法
 
 ```Haskell
-locate(substr, str, pos)
+locate(substr, str[, pos])
 ```
 
 ## 参数说明
