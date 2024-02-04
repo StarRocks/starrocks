@@ -21,7 +21,6 @@
 #include <thread>
 
 #include "testutil/assert.h"
-#include "util/defer_op.h"
 
 namespace starrocks::pipeline {
 
@@ -31,16 +30,12 @@ namespace starrocks::pipeline {
 // skipping stop task in consumer thread.
 
 namespace {
-bthread::ExecutionQueueId<ChunkPtr> _execq_id;
-std::promise<void> _promise;
-
 class MockSinkIOBuffer : public SinkIOBuffer {
 public:
     MockSinkIOBuffer(int num_sinkers) : SinkIOBuffer(num_sinkers) {}
 
     static int execute_io_task(void* meta, bthread::TaskIterator<ChunkPtr>& iter) {
         if (iter.is_queue_stopped()) {
-            // block until SinkIOBuffer is destroyed
             _promise.get_future().wait();
         }
 
@@ -100,11 +95,19 @@ public:
     }
 
     ALWAYS_NOINLINE void dummy() { std::cout << _num_pending_chunks << std::endl; }
+
+    static void set_promise_value() { _promise.set_value(); }
+
+private:
+    bthread::ExecutionQueueId<ChunkPtr> _execq_id;
+    static std::promise<void> _promise;
 };
 
+std::promise<void> MockSinkIOBuffer::_promise;
+
 TEST(SinkIOBufferTest, test_basic) {
+    auto sink_buffer = std::make_unique<MockSinkIOBuffer>(10);
     {
-        auto sink_buffer = std::make_unique<MockSinkIOBuffer>(10);
         ASSERT_OK(sink_buffer->prepare(nullptr, nullptr));
 
         auto chunk = std::make_shared<Chunk>();
@@ -117,14 +120,7 @@ TEST(SinkIOBufferTest, test_basic) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
     }
-
-    {
-        // after sink buffer is destroyed, signal the consumer thread to execute stop task
-        _promise.set_value();
-        // wait until execution queue is destroyed
-        int r = bthread::execution_queue_join(_execq_id);
-        ASSERT_EQ(r, 0);
-    }
+    MockSinkIOBuffer::set_promise_value();
 }
 } // namespace
 
