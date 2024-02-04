@@ -733,19 +733,6 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         if (!this.isSameDefaultValue(other)) {
             return false;
         }
-
-        if (this.getType().isScalarType() && other.getType().isScalarType()) {
-            if (this.getStrLen() != other.getStrLen()) {
-                return false;
-            }
-            if (this.getPrecision() != other.getPrecision()) {
-                return false;
-            }
-            if (this.getScale() != other.getScale()) {
-                return false;
-            }
-        }
-
         if (this.isGeneratedColumn() && !other.isGeneratedColumn()) {
             return false;
         }
@@ -776,17 +763,6 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         }
         if (this.isAllowNull != other.isAllowNull) {
             return false;
-        }
-        if (this.getType().isScalarType() && other.getType().isScalarType()) {
-            if (this.getStrLen() != other.getStrLen()) {
-                return false;
-            }
-            if (this.getPrecision() != other.getPrecision()) {
-                return false;
-            }
-            if (this.getScale() != other.getScale()) {
-                return false;
-            }
         }
         return true;
     }
