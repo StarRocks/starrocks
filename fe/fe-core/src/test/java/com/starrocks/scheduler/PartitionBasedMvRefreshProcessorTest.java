@@ -2957,8 +2957,148 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).properties(taskRunProperties).build();
         initAndExecuteTaskRun(taskRun);
         List<String> partitions = materializedView.getPartitions().stream()
+<<<<<<< HEAD
                 .map(Partition::getName).collect(Collectors.toList());
         Assert.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
+=======
+                .map(Partition::getName).sorted().collect(Collectors.toList());
+        Assert.assertEquals(ImmutableList.of("p20230801_20230802"), partitions);
+    }
+
+    @Test
+    public void testDropBaseVersionMetaOfOlapTable() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view test_drop_partition_mv1\n" +
+                "PARTITION BY k1\n" +
+                "distributed by hash(k2) buckets 3\n" +
+                "refresh async \n" +
+                "as select k1, k2, sum(v1) as total from tbl1 group by k1, k2;");
+
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        Table tbl1 = testDb.getTable("tbl1");
+        MaterializedView mv = ((MaterializedView) testDb.getTable("test_drop_partition_mv1"));
+        Map<Long, Map<String, MaterializedView.BasePartitionInfo>> versionMap =
+                mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
+        Map<String, Set<String>> mvPartitionNameRefBaseTablePartitionMap =
+                mv.getRefreshScheme().getAsyncRefreshContext().getMvPartitionNameRefBaseTablePartitionMap();
+        Map<String, MaterializedView.BasePartitionInfo> tableMap = Maps.newHashMap();
+        // case1: version map cannot decide whether it's safe to drop p1, drop the table from version map.
+        {
+            tableMap.put("p1", new MaterializedView.BasePartitionInfo(1, 2, -1));
+            tableMap.put("p2", new MaterializedView.BasePartitionInfo(3, 4, -1));
+            versionMap.put(tbl1.getId(), tableMap);
+
+            SyncPartitionUtils.dropBaseVersionMeta(mv, "p1", null);
+            Assert.assertFalse(versionMap.containsKey(tbl1.getId()));
+        }
+        {
+            tableMap.put("p1", new MaterializedView.BasePartitionInfo(1, 2, -1));
+            tableMap.put("p2", new MaterializedView.BasePartitionInfo(3, 4, -1));
+            versionMap.put(tbl1.getId(), tableMap);
+
+            mvPartitionNameRefBaseTablePartitionMap.put("p1", Sets.newHashSet("p1"));
+            mvPartitionNameRefBaseTablePartitionMap.put("p2", Sets.newHashSet("p2"));
+
+            SyncPartitionUtils.dropBaseVersionMeta(mv, "p1", null);
+            Assert.assertTrue(versionMap.containsKey(tbl1.getId()));
+            Assert.assertTrue(tableMap.containsKey("p2"));
+        }
+        {
+            tableMap.put("p1", new MaterializedView.BasePartitionInfo(1, 2, -1));
+            tableMap.put("p2", new MaterializedView.BasePartitionInfo(3, 4, -1));
+            versionMap.put(tbl1.getId(), tableMap);
+
+            mvPartitionNameRefBaseTablePartitionMap.put("p1", Sets.newHashSet("p1"));
+            mvPartitionNameRefBaseTablePartitionMap.put("p2", Sets.newHashSet("p2"));
+
+            SyncPartitionUtils.dropBaseVersionMeta(mv, "p3", null);
+            Assert.assertTrue(versionMap.containsKey(tbl1.getId()));
+            Assert.assertTrue(tableMap.containsKey("p2"));
+        }
+        starRocksAssert.dropMaterializedView("test_drop_partition_mv1");
+    }
+
+    @Test
+    public void testCancelRefreshMV() throws Exception {
+        starRocksAssert.useDatabase("test")
+                .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`hive_parttbl_mv1`\n" +
+                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                        "PARTITION BY (`l_shipdate`)\n" +
+                        "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"storage_medium\" = \"HDD\"\n" +
+                        ")\n" +
+                        "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` as a;");
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable("hive_parttbl_mv1"));
+
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+
+        taskRun.kill();
+        try {
+            initAndExecuteTaskRun(taskRun);
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("error-msg : User Cancelled"));
+            starRocksAssert.dropMaterializedView("hive_parttbl_mv1");
+            return;
+        }
+        Assert.fail("should throw exception");
+    }
+
+    @Test
+    public void testDropBaseVersionMetaOfExternalTable() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view test_drop_partition_mv1\n" +
+                "PARTITION BY date_trunc('day', l_shipdate) \n" +
+                "distributed by hash(l_orderkey) buckets 3\n" +
+                "refresh async every (interval 1 day)\n" +
+                "as SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` as a;");
+
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView mv = ((MaterializedView) testDb.getTable("test_drop_partition_mv1"));
+        Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> versionMap =
+                mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoVisibleVersionMap();
+        Map<String, Set<String>> mvPartitionNameRefBaseTablePartitionMap =
+                mv.getRefreshScheme().getAsyncRefreshContext().getMvPartitionNameRefBaseTablePartitionMap();
+        Map<String, MaterializedView.BasePartitionInfo> tableMap = Maps.newHashMap();
+        // TODO: how to get hive table meta from catalog.
+        BaseTableInfo baseTableInfo = new BaseTableInfo("hive0", "partitioned_db", "lineitem_par", "lineitem_par:0");
+        // case1: version map cannot decide whether it's safe to drop p1, drop the table from version map.
+        {
+            tableMap.put("p1", new MaterializedView.BasePartitionInfo(1, 2, -1));
+            tableMap.put("p2", new MaterializedView.BasePartitionInfo(3, 4, -1));
+            versionMap.put(baseTableInfo, tableMap);
+
+            SyncPartitionUtils.dropBaseVersionMeta(mv, "p1", null);
+            Assert.assertFalse(versionMap.containsKey(baseTableInfo));
+        }
+        {
+            tableMap.put("p1", new MaterializedView.BasePartitionInfo(1, 2, -1));
+            tableMap.put("p2", new MaterializedView.BasePartitionInfo(3, 4, -1));
+            versionMap.put(baseTableInfo, tableMap);
+
+            mvPartitionNameRefBaseTablePartitionMap.put("p1", Sets.newHashSet("p1"));
+            mvPartitionNameRefBaseTablePartitionMap.put("p2", Sets.newHashSet("p2"));
+
+            SyncPartitionUtils.dropBaseVersionMeta(mv, "p1", null);
+            Assert.assertTrue(versionMap.containsKey(baseTableInfo));
+            Assert.assertTrue(tableMap.containsKey("p2"));
+        }
+        {
+            tableMap.put("p1", new MaterializedView.BasePartitionInfo(1, 2, -1));
+            tableMap.put("p2", new MaterializedView.BasePartitionInfo(3, 4, -1));
+            versionMap.put(baseTableInfo, tableMap);
+
+            mvPartitionNameRefBaseTablePartitionMap.put("p1", Sets.newHashSet("p1"));
+            mvPartitionNameRefBaseTablePartitionMap.put("p2", Sets.newHashSet("p2"));
+
+            SyncPartitionUtils.dropBaseVersionMeta(mv, "p3", null);
+            Assert.assertTrue(versionMap.containsKey(baseTableInfo));
+            Assert.assertTrue(tableMap.containsKey("p2"));
+        }
+        starRocksAssert.dropMaterializedView("test_drop_partition_mv1");
+>>>>>>> 54e73cd039 ([BugFix] fix cancel refresh mv command cannot stop task (#40649))
     }
 
 

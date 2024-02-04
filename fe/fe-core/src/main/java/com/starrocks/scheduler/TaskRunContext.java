@@ -29,6 +29,11 @@ public class TaskRunContext {
     Constants.TaskType type;
     TaskRunStatus status;
     ExecuteOption executeOption;
+<<<<<<< HEAD
+=======
+    String taskRunId;
+    TaskRun taskRun;
+>>>>>>> 54e73cd039 ([BugFix] fix cancel refresh mv command cannot stop task (#40649))
 
     public TaskRunContext() {
     }
@@ -43,6 +48,11 @@ public class TaskRunContext {
         this.type = context.type;
         this.status = context.status;
         this.executeOption = context.executeOption;
+<<<<<<< HEAD
+=======
+        this.taskRunId = context.taskRunId;
+        this.taskRun = context.taskRun;
+>>>>>>> 54e73cd039 ([BugFix] fix cancel refresh mv command cannot stop task (#40649))
     }
 
     public ConnectContext getCtx() {
@@ -116,4 +126,23 @@ public class TaskRunContext {
     public void setExecuteOption(ExecuteOption executeOption) {
         this.executeOption = executeOption;
     }
+<<<<<<< HEAD
+=======
+
+    public String getTaskRunId() {
+        return taskRunId;
+    }
+
+    public void setTaskRunId(String uuid) {
+        this.taskRunId = uuid;
+    }
+
+    public TaskRun getTaskRun() {
+        return taskRun;
+    }
+
+    public void setTaskRun(TaskRun taskRun) {
+        this.taskRun = taskRun;
+    }
+>>>>>>> 54e73cd039 ([BugFix] fix cancel refresh mv command cannot stop task (#40649))
 }
