@@ -1,0 +1,188 @@
+-- name: test_spill_to_remote_storage @sequential
+CREATE STORAGE VOLUME "spill_test_${uuid0}" 
+TYPE = S3
+LOCATIONS = ("s3://${oss_bucket}/test_spill_${uuid0}/")
+PROPERTIES
+(
+    "aws.s3.region" = "${oss_region}",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "aws.s3.use_aws_sdk_default_behavior" = "false",
+    "aws.s3.use_instance_profile" = "false",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}"
+);
+-- result:
+-- !result
+create table t0 (
+    c0 INT,
+    c1 BIGINT
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t0 SELECT generate_series, 4096 - generate_series FROM TABLE(generate_series(1,  4096));
+-- result:
+-- !result
+insert into t0 select * from t0;
+-- result:
+-- !result
+create table t1 like t0;
+-- result:
+-- !result
+insert into t1 SELECT generate_series, 4096 - generate_series FROM TABLE(generate_series(4096,  8192));
+-- result:
+-- !result
+create table t3 like t0;
+-- result:
+-- !result
+insert into t3 SELECT generate_series, 40960 - generate_series FROM TABLE(generate_series(1,  40960));
+-- result:
+-- !result
+set enable_spill=true;
+-- result:
+-- !result
+set spill_mode='force';
+-- result:
+-- !result
+set pipeline_dop=1;
+-- result:
+-- !result
+set enable_spill_to_remote_storage=true;
+-- result:
+-- !result
+set spill_storage_volume="spill_test_${uuid0}";
+-- result:
+-- !result
+set disable_spill_to_local_disk=true;
+-- result:
+-- !result
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l left join [broadcast] t1 r on l.c0 = r.c0 and l.c1 < r.c1;
+-- result:
+8192	2048.5	8192	8192	0
+-- !result
+select count(l.c0), avg(l.c0), count(l.c1) from t0 l left semi join [broadcast] t1 r on l.c0 = r.c0 and l.c1 < r.c1;
+-- result:
+0	None	0
+-- !result
+select count(l.c0), avg(l.c0), count(l.c1) from t0 l left semi join [broadcast] t1 r on l.c0 = r.c0 and l.c1 >= r.c1;
+-- result:
+2	4096.0	2
+-- !result
+select count(l.c0), avg(l.c0), count(l.c1) from t0 l left anti join [broadcast] t1 r on l.c0 = r.c0 and l.c1 >= r.c1;
+-- result:
+8190	2048.0	8190
+-- !result
+select count(r.c0), avg(r.c0), count(r.c1) from t0 l right semi join [bucket] t1 r on l.c0 = r.c0;
+-- result:
+1	4096.0	1
+-- !result
+select count(r.c0), avg(r.c0), count(r.c1) from t0 l right semi join [bucket] t1 r on l.c0 = r.c0 and l.c1 < r.c1;
+-- result:
+0	None	0
+-- !result
+select count(r.c0), avg(r.c0), count(r.c1) from t0 l right anti join [bucket] t1 r on l.c0 = r.c0 and l.c1 < r.c1;
+-- result:
+4097	6144.0	4097
+-- !result
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l right join [bucket] t1 r on l.c0 = r.c0 and l.c1 < r.c1;
+-- result:
+0	None	0	0	4097
+-- !result
+select distinct c0, c1 from t3 order by 1, 2 limit 2;
+-- result:
+1	40959
+2	40958
+-- !result
+select count(*), max(tb.c0), min(tb.c1) from (select distinct c0, c1 from t3) tb;
+-- result:
+40960	40960	0
+-- !result
+select count(*) from (select distinct c0, c1 from t3 limit 100) tb;
+-- result:
+100
+-- !result
+select count(*), max(c0), min(c1) from (select c0, c1 from t3 group by c0, c1) tb;
+-- result:
+40960	40960	0
+-- !result
+select count(*), max(c0), min(sc1) from (select c0, sum(c1) as sc1 from t3 group by c0 having c0 > 100) tb;
+-- result:
+40860	40960	0
+-- !result
+select count(*), max(c0), min(sc1) from (select c0, sum(c1) as sc1 from t3 group by c0 having c0 > 100 limit 10) tb;
+-- result:
+10	110	40850
+-- !result
+select count(*), max(c0), min(sc1) from (select c0, sum(c1) as sc1 from t3 group by c0 limit 100) tb;
+-- result:
+100	100	40860
+-- !result
+set disable_spill_to_local_disk=false;
+-- result:
+-- !result
+admin enable failpoint 'force_allocate_remote_block' with 0.5 probability;
+-- result:
+-- !result
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l left join [broadcast] t1 r on l.c0 = r.c0 and l.c1 < r.c1;
+-- result:
+8192	2048.5	8192	8192	0
+-- !result
+select count(l.c0), avg(l.c0), count(l.c1) from t0 l left semi join [broadcast] t1 r on l.c0 = r.c0 and l.c1 < r.c1;
+-- result:
+0	None	0
+-- !result
+select count(l.c0), avg(l.c0), count(l.c1) from t0 l left semi join [broadcast] t1 r on l.c0 = r.c0 and l.c1 >= r.c1;
+-- result:
+2	4096.0	2
+-- !result
+select count(l.c0), avg(l.c0), count(l.c1) from t0 l left anti join [broadcast] t1 r on l.c0 = r.c0 and l.c1 >= r.c1;
+-- result:
+8190	2048.0	8190
+-- !result
+select count(r.c0), avg(r.c0), count(r.c1) from t0 l right semi join [bucket] t1 r on l.c0 = r.c0;
+-- result:
+1	4096.0	1
+-- !result
+select count(r.c0), avg(r.c0), count(r.c1) from t0 l right semi join [bucket] t1 r on l.c0 = r.c0 and l.c1 < r.c1;
+-- result:
+0	None	0
+-- !result
+select count(r.c0), avg(r.c0), count(r.c1) from t0 l right anti join [bucket] t1 r on l.c0 = r.c0 and l.c1 < r.c1;
+-- result:
+4097	6144.0	4097
+-- !result
+select count(l.c0), avg(l.c0), count(l.c1), count(l.c0), count(r.c1) from t0 l right join [bucket] t1 r on l.c0 = r.c0 and l.c1 < r.c1;
+-- result:
+0	None	0	0	4097
+-- !result
+select distinct c0, c1 from t3 order by 1, 2 limit 2;
+-- result:
+1	40959
+2	40958
+-- !result
+select count(*), max(tb.c0), min(tb.c1) from (select distinct c0, c1 from t3) tb;
+-- result:
+40960	40960	0
+-- !result
+select count(*) from (select distinct c0, c1 from t3 limit 100) tb;
+-- result:
+100
+-- !result
+select count(*), max(c0), min(c1) from (select c0, c1 from t3 group by c0, c1) tb;
+-- result:
+40960	40960	0
+-- !result
+select count(*), max(c0), min(sc1) from (select c0, sum(c1) as sc1 from t3 group by c0 having c0 > 100) tb;
+-- result:
+40860	40960	0
+-- !result
+select count(*), max(c0), min(sc1) from (select c0, sum(c1) as sc1 from t3 group by c0 having c0 > 100 limit 10) tb;
+-- result:
+10	110	40850
+-- !result
+select count(*), max(c0), min(sc1) from (select c0, sum(c1) as sc1 from t3 group by c0 limit 100) tb;
+-- result:
+100	100	40860
+-- !result
+admin disable failpoint 'force_allocate_remote_block';
+-- result:
+-- !result
