@@ -525,6 +525,7 @@ struct TMasterOpRequest {
     30: optional Types.TUniqueId queryId
     31: optional bool isLastStmt
     32: optional string modified_variables_sql
+    34: optional i32 forward_times
 }
 
 struct TColumnDefinition {

@@ -474,11 +474,11 @@ bool ArrayColumn::set_null(size_t idx) {
     return false;
 }
 
-size_t ArrayColumn::element_memory_usage(size_t from, size_t size) const {
+size_t ArrayColumn::reference_memory_usage(size_t from, size_t size) const {
     DCHECK_LE(from + size, this->size()) << "Range error";
     size_t start_offset = _offsets->get_data()[from];
     size_t elements_num = _offsets->get_data()[from + size] - start_offset;
-    return _elements->element_memory_usage(start_offset, elements_num) + _offsets->element_memory_usage(from, size);
+    return _elements->reference_memory_usage(start_offset, elements_num) + _offsets->reference_memory_usage(from, size);
 }
 
 void ArrayColumn::swap_column(Column& rhs) {

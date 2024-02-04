@@ -7,6 +7,7 @@
 #include <chrono>
 
 #include "fmt/core.h"
+#include "util/defer_op.h"
 #include "util/time.h"
 #include "util/uid_util.h"
 
@@ -331,6 +332,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         }
 
         closure->addFailedHandler([this](const ClosureContext& ctx) noexcept {
+            auto defer = DeferOp([this]() { --_total_in_flight_rpc; });
             _is_finishing = true;
             {
                 std::lock_guard<Mutex> l(*_mutexes[ctx.instance_id.lo]);
@@ -343,6 +345,8 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             LOG(WARNING) << err_msg;
         });
         closure->addSuccessHandler([this](const ClosureContext& ctx, const PTransmitChunkResult& result) noexcept {
+            // when _total_in_flight_rpc desc to 0, _fragment_ctx may be destructed
+            auto defer = DeferOp([this]() { --_total_in_flight_rpc; });
             Status status(result.status());
             {
                 std::lock_guard<Mutex> l(*_mutexes[ctx.instance_id.lo]);
@@ -360,7 +364,6 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
                     _process_send_window(ctx.instance_id, ctx.sequence);
                 });
             }
-            --_total_in_flight_rpc;
         });
 
         ++_total_in_flight_rpc;
@@ -413,7 +416,7 @@ Status SinkBuffer::_send_rpc(DisposableClosure<PTransmitChunkResult, ClosureCont
         }
         closure->cntl.http_request().set_content_type("application/proto");
         // create http_stub as needed
-        auto res = BrpcStubCache::create_http_stub(request.brpc_addr);
+        auto res = HttpBrpcStubCache::getInstance()->get_http_stub(request.brpc_addr);
         if (!res.ok()) {
             return res.status();
         }

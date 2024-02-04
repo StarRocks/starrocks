@@ -518,7 +518,7 @@ TEST(StructColumnTest, test_assign) {
     ASSERT_EQ("{id:1,name:'smith'}", column->debug_item(1));
 }
 
-TEST(StructColumnTest, test_element_memory_usage) {
+TEST(StructColumnTest, test_reference_memory_usage) {
     auto field_name = BinaryColumn::create();
     field_name->append_string("id");
     field_name->append_string("name");
@@ -531,18 +531,7 @@ TEST(StructColumnTest, test_element_memory_usage) {
     column->append_datum(DatumStruct{uint64_t(1), Slice("4")});
     column->append_datum(DatumStruct{uint64_t(1), Slice("6")});
 
-    ASSERT_EQ(45, column->Column::element_memory_usage());
-
-    std::vector<size_t> element_mem_usages = {15, 15, 15};
-    size_t element_num = element_mem_usages.size();
-    for (size_t start = 0; start < element_num; start++) {
-        size_t expected_usage = 0;
-        ASSERT_EQ(0, column->element_memory_usage(start, 0));
-        for (size_t size = 1; start + size <= element_num; size++) {
-            expected_usage += element_mem_usages[start + size - 1];
-            ASSERT_EQ(expected_usage, column->element_memory_usage(start, size));
-        }
-    }
+    ASSERT_EQ(0, column->Column::reference_memory_usage());
 }
 
 } // namespace starrocks::vectorized

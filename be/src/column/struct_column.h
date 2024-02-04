@@ -134,7 +134,7 @@ public:
 
     size_t container_memory_usage() const override;
 
-    size_t element_memory_usage(size_t from, size_t size) const override;
+    size_t reference_memory_usage(size_t from, size_t size) const override;
 
     void swap_column(Column& rhs) override;
 

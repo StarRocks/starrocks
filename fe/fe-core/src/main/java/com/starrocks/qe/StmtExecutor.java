@@ -309,6 +309,27 @@ public class StmtExecutor {
             return false;
         }
 
+        // If this node is transferring to the leader, we should wait for it to complete to avoid forwarding to its own node.
+        if (GlobalStateMgr.getCurrentState().isInTransferringToLeader()) {
+            long lastPrintTime = -1L;
+            while (true) {
+                try {
+                    Thread.sleep(1);
+                } catch (InterruptedException ignored) {
+                    Thread.currentThread().interrupt();
+                }
+
+                if (System.currentTimeMillis() - lastPrintTime > 1000L) {
+                    lastPrintTime = System.currentTimeMillis();
+                    LOG.info("waiting for current FE node transferring to LEADER state");
+                }
+
+                if (GlobalStateMgr.getCurrentState().isLeader()) {
+                    return false;
+                }
+            }
+        }
+
         // this is a query stmt, but this non-master FE can not read, forward it to master
         if (parsedStmt instanceof QueryStatement) {
             // When FollowerQueryForwardMode is not default, forward it to leader or follower by default.
@@ -327,6 +348,10 @@ public class StmtExecutor {
         } else {
             return redirectStatus.isForwardToLeader();
         }
+    }
+
+    public LeaderOpExecutor getLeaderOpExecutor() {
+        return leaderOpExecutor;
     }
 
     public ByteBuffer getOutputPacket() {
@@ -571,21 +596,22 @@ public class StmtExecutor {
             // the exception happens when interact with client
             // this exception shows the connection is gone
             context.getState().setError(e.getMessage());
-            throw e;
         } catch (UserException e) {
             String sql = originStmt != null ? originStmt.originStmt : "";
             // analysis exception only print message, not print the stack
             LOG.info("execute Exception, sql: {}, error: {}", sql, e.getMessage());
             context.getState().setError(e.getMessage());
-            context.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+            if (parsedStmt instanceof KillStmt) {
+                // ignore kill stmt execute err(not monitor it)
+                context.getState().setErrType(QueryState.ErrType.IGNORE_ERR);
+            } else {
+                context.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+            }
         } catch (Throwable e) {
             String sql = originStmt != null ? originStmt.originStmt : "";
             LOG.warn("execute Exception, sql " + sql, e);
             context.getState().setError(e.getMessage());
-            if (parsedStmt instanceof KillStmt) {
-                // ignore kill stmt execute err(not monitor it)
-                context.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
-            }
+            context.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
         } finally {
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
             if (context.getState().isError() && coord != null) {

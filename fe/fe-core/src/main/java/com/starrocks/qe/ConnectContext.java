@@ -71,6 +71,7 @@ public class ConnectContext {
     // set this id before analyze
     protected long stmtId;
     protected long forwardedStmtId;
+    private int forwardTimes = 0;
 
     // The queryId of the last query processed by this session.
     // In some scenarios, the user can get the output of a request by queryId,
@@ -619,6 +620,14 @@ public class ConnectContext {
 
     public ConnectContext getParent() {
         return parent;
+    }
+
+    public void setForwardTimes(int forwardTimes) {
+        this.forwardTimes = forwardTimes;
+    }
+
+    public int getForwardTimes() {
+        return this.forwardTimes;
     }
 
     // kill operation with no protect.
