@@ -29,6 +29,8 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import static org.junit.Assert.fail;
+
 public class QueryPlanLockFreeTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
@@ -72,6 +74,7 @@ public class QueryPlanLockFreeTest {
         table.lastVersionUpdateEndTime.set(1);
         try {
             UtFrameUtils.getPlanAndFragment(connectContext, sql);
+            fail("should fail here");
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage(),
                     e.getMessage().contains("The tablet write operation update metadata take a long time"));
