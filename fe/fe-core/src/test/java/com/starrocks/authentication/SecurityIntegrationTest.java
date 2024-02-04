@@ -225,7 +225,8 @@ public class SecurityIntegrationTest {
 
         // test replay OP_CREATE_SECURITY_INTEGRATION edit log
         AuthenticationMgr followerManager = new AuthenticationMgrEPack();
-        followerManager.loadV2(new SRMetaBlockReader(emptyImage.getDataInputStream()));
+        SRMetaBlockReader srMetaBlockReader = new SRMetaBlockReader(emptyImage.getDataInputStream());
+        followerManager.loadV2(srMetaBlockReader);
         Assert.assertNull(followerManager.getSecurityIntegration("ldap3"));
         SecurityIntegrationPersistInfo info = (SecurityIntegrationPersistInfo)
                 UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationTypeEPack.OP_CREATE_SECURITY_INTEGRATION);
@@ -252,7 +253,8 @@ public class SecurityIntegrationTest {
 
         // simulate restart (load from image)
         AuthenticationMgr imageManager = new AuthenticationMgrEPack();
-        imageManager.loadV2(new SRMetaBlockReader(finalImage.getDataInputStream()));
+        srMetaBlockReader = new SRMetaBlockReader(finalImage.getDataInputStream());
+        imageManager.loadV2(srMetaBlockReader);
         Assert.assertNotNull(imageManager.getSecurityIntegration("ldap3"));
         Assert.assertNull(imageManager.getSecurityIntegration("ldap4"));
         Assert.assertEquals("bbb",

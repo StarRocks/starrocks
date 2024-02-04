@@ -40,7 +40,6 @@ import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
@@ -566,92 +565,6 @@ public class AuthenticationMgr {
             this.hostnameToIpSet = hostnameToIpSet;
         } finally {
             this.hostnameToIpLock.writeLock().unlock();
-        }
-    }
-
-    /**
-     * Use new image format by SRMetaBlockWriter/SRMetaBlockReader
-     * <p>
-     * +------------------+
-     * |     header       |
-     * +------------------+
-     * |                  |
-     * |  Authentication  |
-     * |     Manager      |
-     * |                  |
-     * +------------------+
-     * |     numUser      |
-     * +------------------+
-     * | User Identify 1  |
-     * +------------------+
-     * |      User        |
-     * |  Authentication  |
-     * |     Info 1       |
-     * +------------------+
-     * | User Identify 2  |
-     * +------------------+
-     * |      User        |
-     * |  Authentication  |
-     * |     Info 2       |
-     * +------------------+
-     * |       ...        |
-     * +------------------+
-     * |      footer      |
-     * +------------------+
-     */
-    public void save(DataOutputStream dos) throws IOException {
-        try {
-            // 1 json for myself,1 json for number of users, 2 json for each user(kv)
-            final int cnt = 1 + 1 + userToAuthenticationInfo.size() * 2;
-            SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, "com.starrocks.authentication.AuthenticationManager", cnt);
-            // 1 json for myself
-            writer.writeJson(this);
-            // 1 json for num user
-            writer.writeJson(userToAuthenticationInfo.size());
-            for (Map.Entry<UserIdentity, UserAuthenticationInfo> entry : userToAuthenticationInfo.entrySet()) {
-                // 2 json for each user(kv)
-                writer.writeJson(entry.getKey());
-                writer.writeJson(entry.getValue());
-            }
-            LOG.info("saved {} users", userToAuthenticationInfo.size());
-            writer.close();
-        } catch (SRMetaBlockException e) {
-            IOException exception = new IOException("failed to save AuthenticationManager!");
-            exception.initCause(e);
-            throw exception;
-        }
-    }
-
-    public static AuthenticationMgr load(DataInputStream dis) throws IOException, DdlException {
-        try {
-            SRMetaBlockReader reader = new SRMetaBlockReader(dis, "com.starrocks.authentication.AuthenticationManager");
-            AuthenticationMgr ret = null;
-            try {
-                // 1 json for myself
-                ret = reader.readJson(AuthenticationMgr.class);
-                ret.userToAuthenticationInfo = new UserAuthInfoTreeMap();
-                // 1 json for num user
-                int numUser = reader.readJson(int.class);
-                LOG.info("loading {} users", numUser);
-                for (int i = 0; i != numUser; ++i) {
-                    // 2 json for each user(kv)
-                    UserIdentity userIdentity = reader.readJson(UserIdentity.class);
-                    UserAuthenticationInfo userAuthenticationInfo = reader.readJson(UserAuthenticationInfo.class);
-                    userAuthenticationInfo.analyze();
-                    ret.userToAuthenticationInfo.put(userIdentity, userAuthenticationInfo);
-                }
-            } catch (SRMetaBlockEOFException eofException) {
-                LOG.warn("got EOF exception, ignore, ", eofException);
-            } finally {
-                reader.close();
-            }
-            assert ret != null; // can't be NULL
-            LOG.info("loaded {} users", ret.userToAuthenticationInfo.size());
-            // mark data is loaded
-            ret.isLoaded = true;
-            return ret;
-        } catch (SRMetaBlockException | AuthenticationException e) {
-            throw new DdlException("failed to load AuthenticationManager!", e);
         }
     }
 
