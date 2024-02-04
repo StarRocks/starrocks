@@ -749,7 +749,7 @@ jobs:
       - name: Restart BE (${{needs.deploy.outputs.be_list}})
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          [[ "${{ needs.deploy.outputs.is_self_build }}" == "true" ]] && skip_gcov="--skip-gcov"
+          [[ "${{ needs.deploy.outputs.is_self_build }}" != "true" ]] && skip_gcov="--skip-gcov"
           ./bin/system-cov-be.sh --pr ${PR_NUMBER} --branch ${{ github.base_ref }} --build Release --repository ${{ github.repository }} ${skip_gcov}
 
       - name: Clean ENV
