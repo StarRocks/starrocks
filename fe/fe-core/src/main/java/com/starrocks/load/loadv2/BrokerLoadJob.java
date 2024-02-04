@@ -357,9 +357,9 @@ public class BrokerLoadJob extends BulkLoadJob {
                 return;
             }
 
+            failMsg = new FailMsg(FailMsg.CancelType.TIMEOUT, txnStatusChangeReason + ". Retry again");
+            LOG.warn("Retry timeout load jobs. job: {}, remaining retryTime: {}", id, retryTime);
             retryTime--;
-            failMsg = new FailMsg(FailMsg.CancelType.TIMEOUT, txnStatusChangeReason);
-            LOG.warn("Retry timeout load jobs. job: {}, retryTime: {}", id, retryTime);
             unprotectedClearTasksBeforeRetry(failMsg);
             try {
                 state = JobState.PENDING;

@@ -233,6 +233,11 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         return id;
     }
 
+    // unit test
+    public void setId(long id) {
+        this.id = id;
+    }
+
     public Database getDb() throws MetaNotFoundException {
         // get db
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
@@ -284,7 +289,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         }
         idToTasks.clear();
         finishedTaskIds.clear();
-        loadingStatus.setProgress(0);
+        loadingStatus.reset();
     }
 
     public boolean isTimeout() {
@@ -1011,6 +1016,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             progress = 99;
             transactionId = txnState.getTransactionId();
             state = JobState.COMMITTED;
+            failMsg = null;
         } finally {
             writeUnlock();
         }
@@ -1056,7 +1062,11 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             failMsg = new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, txnState.getReason());
             finishTimestamp = txnState.getFinishTime();
             state = JobState.CANCELLED;
-            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
+            if (retryTime <= 0 || !failMsg.getMsg().contains("timeout") || !isTimeout()) {
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
+                return;
+            }
+            retryTime--;
         } finally {
             writeUnlock();
         }
@@ -1110,6 +1120,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             progress = 100;
             finishTimestamp = txnState.getFinishTime();
             state = JobState.FINISHED;
+            failMsg = null;
             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
         } finally {
             writeUnlock();
