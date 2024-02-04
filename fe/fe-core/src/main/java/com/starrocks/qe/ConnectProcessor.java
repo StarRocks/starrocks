@@ -286,6 +286,7 @@ public class ConnectProcessor {
         queryDetail.setResourceGroupName(ctx.getResourceGroup() != null ? ctx.getResourceGroup().getName() : "");
         // add execution statistics into queryDetail
         queryDetail.setReturnRows(ctx.getReturnRows());
+        queryDetail.setDigest(ctx.getAuditEventBuilder().build().digest);
         PQueryStatistics statistics = executor.getQueryStatisticsForAuditLog();
         if (statistics != null) {
             queryDetail.setScanBytes(statistics.scanBytes);
