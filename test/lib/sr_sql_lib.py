@@ -173,7 +173,7 @@ class StarrocksSQLApiLib(object):
                 env_value = os.environ.get(env_key, "")
             else:
                 # save secrets info
-                if 'aws' in env_key:
+                if 'aws' in env_key or 'oss_' in env_key:
                     SECRET_INFOS[env_key] = env_value
 
             self.__setattr__(env_key, env_value)
