@@ -48,6 +48,8 @@ import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.system.Frontend;
 import com.starrocks.utframe.UtFrameUtils;
