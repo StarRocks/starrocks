@@ -161,32 +161,37 @@ TEST_F(SpillBlockManagerTest, dir_choose_strategy) {
 }
 
 TEST_F(SpillBlockManagerTest, log_block_allocation_test) {
-    auto log_block_mgr = std::make_shared<spill::LogBlockManager>(dummy_query_id);
-    log_block_mgr->set_dir_manager(local_dir_mgr.get());
+    auto log_block_mgr = std::make_shared<spill::LogBlockManager>(dummy_query_id, local_dir_mgr.get());
     ASSERT_OK(log_block_mgr->open());
 
     std::vector<spill::BlockPtr> blocks;
     {
         // 1. allocate the first block but not release it
-        spill::AcquireBlockOptions opts{
-                .query_id = dummy_query_id, .plan_node_id = 1, .name = "node1", .block_size = 10};
+        spill::AcquireBlockOptions opts{.query_id = dummy_query_id,
+                                        .fragment_instance_id = dummy_query_id,
+                                        .plan_node_id = 1,
+                                        .name = "node1",
+                                        .block_size = 10};
         auto res = log_block_mgr->acquire_block(opts);
         ASSERT_TRUE(res.ok());
         auto block = res.value();
-        std::string expected =
-                fmt::format("LogBlock[container={}/{}/{}]", local_path, print_id(dummy_query_id), "node1-1-0");
+        std::string expected = fmt::format("LogBlock[container={}/{}/{}-{}]", local_path, print_id(dummy_query_id),
+                                           print_id(dummy_query_id), "node1-1-0");
         ASSERT_EQ(block->debug_string(), expected);
         blocks.emplace_back(std::move(block));
     }
     {
         // 2. allocate the second block, since the first block didn't release, a new container should be created.
-        spill::AcquireBlockOptions opts{
-                .query_id = dummy_query_id, .plan_node_id = 1, .name = "node1", .block_size = 10};
+        spill::AcquireBlockOptions opts{.query_id = dummy_query_id,
+                                        .fragment_instance_id = dummy_query_id,
+                                        .plan_node_id = 1,
+                                        .name = "node1",
+                                        .block_size = 10};
         auto res = log_block_mgr->acquire_block(opts);
         ASSERT_TRUE(res.ok());
         auto block = res.value();
-        std::string expected =
-                fmt::format("LogBlock[container={}/{}/{}]", local_path, print_id(dummy_query_id), "node1-1-1");
+        std::string expected = fmt::format("LogBlock[container={}/{}/{}-{}]", local_path, print_id(dummy_query_id),
+                                           print_id(dummy_query_id), "node1-1-1");
         ASSERT_EQ(block->debug_string(), expected);
         blocks.emplace_back(std::move(block));
     }
@@ -194,13 +199,16 @@ TEST_F(SpillBlockManagerTest, log_block_allocation_test) {
     ASSERT_OK(log_block_mgr->release_block(blocks.at(0)));
     {
         // 4. allocate the third block, it will use the first container
-        spill::AcquireBlockOptions opts{
-                .query_id = dummy_query_id, .plan_node_id = 1, .name = "node1", .block_size = 10};
+        spill::AcquireBlockOptions opts{.query_id = dummy_query_id,
+                                        .fragment_instance_id = dummy_query_id,
+                                        .plan_node_id = 1,
+                                        .name = "node1",
+                                        .block_size = 10};
         auto res = log_block_mgr->acquire_block(opts);
         ASSERT_TRUE(res.ok());
         auto block = res.value();
-        std::string expected =
-                fmt::format("LogBlock[container={}/{}/{}]", local_path, print_id(dummy_query_id), "node1-1-0");
+        std::string expected = fmt::format("LogBlock[container={}/{}/{}-{}]", local_path, print_id(dummy_query_id),
+                                           print_id(dummy_query_id), "node1-1-0");
         ASSERT_EQ(block->debug_string(), expected);
     }
 }
@@ -212,25 +220,31 @@ TEST_F(SpillBlockManagerTest, file_block_allocation_test) {
     std::vector<spill::BlockPtr> blocks;
     {
         // 1. allocate the first block but not release it
-        spill::AcquireBlockOptions opts{
-                .query_id = dummy_query_id, .plan_node_id = 1, .name = "node1", .block_size = 10};
+        spill::AcquireBlockOptions opts{.query_id = dummy_query_id,
+                                        .fragment_instance_id = dummy_query_id,
+                                        .plan_node_id = 1,
+                                        .name = "node1",
+                                        .block_size = 10};
         auto res = file_block_mgr->acquire_block(opts);
         ASSERT_TRUE(res.ok());
         auto block = res.value();
-        std::string expected =
-                fmt::format("FileBlock[container={}/{}/{}]", local_path, print_id(dummy_query_id), "node1-1-0");
+        std::string expected = fmt::format("FileBlock[container={}/{}/{}-{}]", local_path, print_id(dummy_query_id),
+                                           print_id(dummy_query_id), "node1-1-0");
         ASSERT_EQ(block->debug_string(), expected);
         blocks.emplace_back(std::move(block));
     }
     {
         // 2. allocate the second block, since the first block didn't release, a new container should be created.
-        spill::AcquireBlockOptions opts{
-                .query_id = dummy_query_id, .plan_node_id = 1, .name = "node1", .block_size = 10};
+        spill::AcquireBlockOptions opts{.query_id = dummy_query_id,
+                                        .fragment_instance_id = dummy_query_id,
+                                        .plan_node_id = 1,
+                                        .name = "node1",
+                                        .block_size = 10};
         auto res = file_block_mgr->acquire_block(opts);
         ASSERT_TRUE(res.ok());
         auto block = res.value();
-        std::string expected =
-                fmt::format("FileBlock[container={}/{}/{}]", local_path, print_id(dummy_query_id), "node1-1-1");
+        std::string expected = fmt::format("FileBlock[container={}/{}/{}-{}]", local_path, print_id(dummy_query_id),
+                                           print_id(dummy_query_id), "node1-1-1");
         ASSERT_EQ(block->debug_string(), expected);
         blocks.emplace_back(std::move(block));
     }
@@ -238,13 +252,16 @@ TEST_F(SpillBlockManagerTest, file_block_allocation_test) {
     ASSERT_OK(file_block_mgr->release_block(blocks.at(0)));
     {
         // 4. allocate the third block, it will use a new container, this is differ from LogBlockManager
-        spill::AcquireBlockOptions opts{
-                .query_id = dummy_query_id, .plan_node_id = 1, .name = "node1", .block_size = 10};
+        spill::AcquireBlockOptions opts{.query_id = dummy_query_id,
+                                        .fragment_instance_id = dummy_query_id,
+                                        .plan_node_id = 1,
+                                        .name = "node1",
+                                        .block_size = 10};
         auto res = file_block_mgr->acquire_block(opts);
         ASSERT_TRUE(res.ok());
         auto block = res.value();
-        std::string expected =
-                fmt::format("FileBlock[container={}/{}/{}]", local_path, print_id(dummy_query_id), "node1-1-2");
+        std::string expected = fmt::format("FileBlock[container={}/{}/{}-{}]", local_path, print_id(dummy_query_id),
+                                           print_id(dummy_query_id), "node1-1-2");
         ASSERT_EQ(block->debug_string(), expected);
     }
 }
@@ -252,8 +269,7 @@ TEST_F(SpillBlockManagerTest, file_block_allocation_test) {
 TEST_F(SpillBlockManagerTest, hybird_block_allocation_test) {
     std::shared_ptr<spill::HyBirdBlockManager> hybird_block_mgr;
     {
-        auto local_block_mgr = std::make_unique<spill::LogBlockManager>(dummy_query_id);
-        local_block_mgr->set_dir_manager(local_dir_mgr.get());
+        auto local_block_mgr = std::make_unique<spill::LogBlockManager>(dummy_query_id, local_dir_mgr.get());
         ASSERT_OK(local_block_mgr->open());
 
         auto remote_block_mgr = std::make_unique<spill::FileBlockManager>(dummy_query_id, remote_dir_mgr.get());
@@ -265,36 +281,45 @@ TEST_F(SpillBlockManagerTest, hybird_block_allocation_test) {
     }
     {
         // 1. allocate the first block, local block manager can hold it
-        spill::AcquireBlockOptions opts{
-                .query_id = dummy_query_id, .plan_node_id = 1, .name = "node1", .block_size = 10};
+        spill::AcquireBlockOptions opts{.query_id = dummy_query_id,
+                                        .fragment_instance_id = dummy_query_id,
+                                        .plan_node_id = 1,
+                                        .name = "node1",
+                                        .block_size = 10};
         auto res = hybird_block_mgr->acquire_block(opts);
         ASSERT_TRUE(res.ok());
         auto block = res.value();
-        std::string expected =
-                fmt::format("LogBlock[container={}/{}/{}]", local_path, print_id(dummy_query_id), "node1-1-0");
+        std::string expected = fmt::format("LogBlock[container={}/{}/{}-{}]", local_path, print_id(dummy_query_id),
+                                           print_id(dummy_query_id), "node1-1-0");
         ASSERT_EQ(block->debug_string(), expected);
         ASSERT_OK(hybird_block_mgr->release_block(block));
     }
     {
         // 2. allocate the second block, local block manager's capacity exceeds limit, and it will be put in remote block manger
-        spill::AcquireBlockOptions opts{
-                .query_id = dummy_query_id, .plan_node_id = 1, .name = "node1", .block_size = 100};
+        spill::AcquireBlockOptions opts{.query_id = dummy_query_id,
+                                        .fragment_instance_id = dummy_query_id,
+                                        .plan_node_id = 1,
+                                        .name = "node1",
+                                        .block_size = 100};
         auto res = hybird_block_mgr->acquire_block(opts);
         ASSERT_TRUE(res.ok());
         auto block = res.value();
-        std::string expected =
-                fmt::format("FileBlock[container={}/{}/{}]", remote_path, print_id(dummy_query_id), "node1-1-0");
+        std::string expected = fmt::format("FileBlock[container={}/{}/{}-{}]", remote_path, print_id(dummy_query_id),
+                                           print_id(dummy_query_id), "node1-1-0");
         ASSERT_EQ(block->debug_string(), expected);
     }
     {
         // 3. allocate the third block, it's small enough that local block manger can hold it
-        spill::AcquireBlockOptions opts{
-                .query_id = dummy_query_id, .plan_node_id = 1, .name = "node1", .block_size = 90};
+        spill::AcquireBlockOptions opts{.query_id = dummy_query_id,
+                                        .fragment_instance_id = dummy_query_id,
+                                        .plan_node_id = 1,
+                                        .name = "node1",
+                                        .block_size = 90};
         auto res = hybird_block_mgr->acquire_block(opts);
         ASSERT_TRUE(res.ok());
         auto block = res.value();
-        std::string expected =
-                fmt::format("LogBlock[container={}/{}/{}]", local_path, print_id(dummy_query_id), "node1-1-0");
+        std::string expected = fmt::format("LogBlock[container={}/{}/{}-{}]", local_path, print_id(dummy_query_id),
+                                           print_id(dummy_query_id), "node1-1-0");
         ASSERT_EQ(block->debug_string(), expected);
     }
 }

@@ -33,6 +33,8 @@ public:
     Dir(std::string dir, std::shared_ptr<FileSystem> fs, int64_t max_dir_size)
             : _dir(std::move(dir)), _fs(fs), _max_size(max_dir_size) {}
 
+    virtual ~Dir() = default;
+
     FileSystem* fs() const { return _fs.get(); }
     std::string dir() const { return _dir; }
 
@@ -53,13 +55,28 @@ public:
 
     int64_t get_max_size() const { return _max_size; }
 
-private:
+    virtual bool is_remote() const { return false; }
+
+protected:
     std::string _dir;
     std::shared_ptr<FileSystem> _fs;
     int64_t _max_size;
     std::atomic<int64_t> _current_size = 0;
 };
 using DirPtr = std::shared_ptr<Dir>;
+
+class RemoteDir : public Dir {
+public:
+    RemoteDir(std::string dir, std::shared_ptr<FileSystem> fs, std::shared_ptr<TCloudConfiguration> cloud_conf,
+              int64_t max_dir_size)
+            : Dir(std::move(dir), std::move(fs), max_dir_size), _cloud_conf(std::move(cloud_conf)) {}
+    ~RemoteDir() override = default;
+
+    bool is_remote() const override { return true; }
+
+private:
+    std::shared_ptr<TCloudConfiguration> _cloud_conf;
+};
 
 struct AcquireDirOptions {
     // @TOOD(silverbullet233): support more properties when acquiring dir, such as the preference of dir selection
@@ -72,14 +89,12 @@ struct AcquireDirOptions {
 class DirManager {
 public:
     DirManager() = default;
-#ifdef BE_TEST
     DirManager(const std::vector<DirPtr>& dirs) : _dirs(dirs) {}
-#endif
     ~DirManager() = default;
 
     Status init(const std::string& spill_dirs);
 
-    StatusOr<Dir*> acquire_writable_dir(const AcquireDirOptions& opts);
+    StatusOr<DirPtr> acquire_writable_dir(const AcquireDirOptions& opts);
 
 private:
     bool is_same_disk(const std::string& path1, const std::string& path2) {

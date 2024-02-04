@@ -289,6 +289,7 @@ set(EXEC_FILES
     spill/file_block_manager.cpp
     spill/hybird_block_manager.cpp
     spill/operator_mem_resource_manager.cpp
+    spill/query_spill_manager.cpp
     stream/state/mem_state_table.cpp
     stream/aggregate/agg_state_data.cpp
     stream/aggregate/agg_group_state.cpp

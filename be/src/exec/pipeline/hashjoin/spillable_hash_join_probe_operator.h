@@ -94,7 +94,7 @@ private:
     Status _load_all_partition_build_side(RuntimeState* state);
 
     Status _load_partition_build_side(workgroup::YieldContext& ctx, RuntimeState* state,
-                                      const std::shared_ptr<spill::SpillerReader>& reader, size_t idx, int* yield);
+                                      const std::shared_ptr<spill::SpillerReader>& reader, size_t idx);
 
     void _update_status(Status&& status) const;
 
@@ -133,7 +133,6 @@ private:
     mutable std::mutex _mutex;
     mutable Status _operator_status;
 
-    std::shared_ptr<spill::IOTaskExecutor> _executor;
     bool _need_post_probe = false;
 };
 
