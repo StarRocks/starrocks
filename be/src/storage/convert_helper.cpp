@@ -593,12 +593,12 @@ public:
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
                          MemPool* mem_pool) const override {
-        std::string source;
         if (src.is_null()) {
-            source = "null";
-        } else {
-            source = src.get_slice().to_string();
+            dst->set_null();
+            return Status::OK();
         }
+        std::string source = src.get_slice().to_string();
+
         CppType value;
         RETURN_IF_ERROR(dst_typeinfo->from_string(&value, source));
         dst->set(value);
@@ -624,15 +624,14 @@ public:
                           MemPool* mem_pool) const override {
         for (size_t i = 0; i < src.size(); i++) {
             Datum src_datum = src.get(i);
-            Slice source;
             if (src_datum.is_null()) {
-                source = "null";
+                dst->append_nulls(1);
             } else {
-                source = src_datum.get_slice();
+                Slice source = src_datum.get_slice();
+                JsonValue json;
+                RETURN_IF_ERROR(JsonValue::parse(source, &json));
+                dst->append_datum(&json);
             }
-            JsonValue json;
-            RETURN_IF_ERROR(JsonValue::parse(source, &json));
-            dst->append_datum(&json);
         }
         return Status::OK();
     }
@@ -658,13 +657,12 @@ public:
 
     Status convert_datum(TypeInfo* src_typeinfo, const Datum& src, TypeInfo* dst_typeinfo, Datum* dst,
                          MemPool* mem_pool) const override {
-        std::string source;
         if (src.is_null()) {
-            source = "null";
-        } else {
-            auto value = src.template get<CppType>();
-            source = src_typeinfo->to_string(&value);
+            dst->set_null();
+            return Status::OK();
         }
+        auto value = src.template get<CppType>();
+        std::string source = src_typeinfo->to_string(&value);
         Slice slice;
         slice.size = source.size();
         if (mem_pool == nullptr) {
