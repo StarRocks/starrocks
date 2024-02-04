@@ -1432,6 +1432,8 @@ struct TResourceLogicalSlot {
 
     100: optional i32 num_fragments
     101: optional i32 pipeline_dop
+
+    1002: optional i64 plan_mem_costs
 }
 
 struct TRequireSlotRequest {

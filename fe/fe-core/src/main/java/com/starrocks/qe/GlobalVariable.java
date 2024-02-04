@@ -67,6 +67,8 @@ public final class GlobalVariable {
     public static final String QUERY_QUEUE_FRESH_RESOURCE_USAGE_INTERVAL_MS =
             "query_queue_fresh_resource_usage_interval_ms";
     public static final String QUERY_QUEUE_CONCURRENCY_LIMIT = "query_queue_concurrency_limit";
+    public static final String QUERY_QUEUE_PLAN_MEM_COST_LIMIT = "query_queue_plan_mem_cost_limit";
+    public static final String QUERY_QUEUE_SKIP_LARGE_PLAN_MEM_COST_TIMES = "query_queue_skip_large_plan_mem_cost_times";
     public static final String QUERY_QUEUE_DRIVER_HIGH_WATER = "query_queue_driver_high_water";
     public static final String QUERY_QUEUE_DRIVER_LOW_WATER = "query_queue_driver_low_water";
     public static final String QUERY_QUEUE_MEM_USED_PCT_LIMIT = "query_queue_mem_used_pct_limit";
@@ -149,6 +151,12 @@ public final class GlobalVariable {
     @VariableMgr.VarAttr(name = QUERY_QUEUE_CONCURRENCY_LIMIT, flag = VariableMgr.GLOBAL)
     private static int queryQueueConcurrencyLimit = 0;
 
+    @VariableMgr.VarAttr(name = QUERY_QUEUE_PLAN_MEM_COST_LIMIT, flag = VariableMgr.GLOBAL)
+    private static long queryQueuePlanMemCostLimit = 0;
+
+    @VariableMgr.VarAttr(name = QUERY_QUEUE_SKIP_LARGE_PLAN_MEM_COST_TIMES, flag = VariableMgr.GLOBAL)
+    private static int queryQueueSkipLargePlanMemCostTimes = 0;
+
     // Effective iff it is non-negative.
     @VariableMgr.VarAttr(name = QUERY_QUEUE_DRIVER_HIGH_WATER, flag = VariableMgr.GLOBAL)
     private static int queryQueueDriverHighWater = -1;
@@ -223,6 +231,18 @@ public final class GlobalVariable {
 
     public static void setQueryQueueConcurrencyLimit(int queryQueueConcurrencyLimit) {
         GlobalVariable.queryQueueConcurrencyLimit = queryQueueConcurrencyLimit;
+    }
+
+    public static boolean isQueryQueuePlanMemCostLimitEffective() {
+        return queryQueuePlanMemCostLimit > 0;
+    }
+
+    public static long getQueryQueuePlanMemCostLimit() {
+        return queryQueuePlanMemCostLimit;
+    }
+
+    public static int getQueryQueueSkipLargePlanMemCostTimes() {
+        return queryQueueSkipLargePlanMemCostTimes;
     }
 
     public static boolean isQueryQueueDriverHighWaterEffective() {

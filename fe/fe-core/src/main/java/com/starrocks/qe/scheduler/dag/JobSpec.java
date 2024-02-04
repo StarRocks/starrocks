@@ -444,6 +444,10 @@ public class JobSpec {
         return planProtocol;
     }
 
+    public double getPlanMemCosts() {
+        return connectContext.getAuditEventBuilder().build().planMemCosts;
+    }
+
     public void reset() {
         fragments.forEach(PlanFragment::reset);
     }

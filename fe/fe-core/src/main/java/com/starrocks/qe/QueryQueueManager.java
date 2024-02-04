@@ -130,8 +130,15 @@ public class QueryQueueManager {
                 && ConnectContext.get() != null && ConnectContext.get().getSessionVariable().isEnablePipelineAdaptiveDop()) {
             pipelineDop = 0;
         }
+        final double planMemCost = coord.getJobSpec().getPlanMemCosts();
+        long longPlanMemCost = 0;
+        if (planMemCost >= Long.MAX_VALUE) {
+            longPlanMemCost = Long.MAX_VALUE;
+        } else if (planMemCost > 0) {
+            longPlanMemCost = (long) planMemCost;
+        }
 
         return new LogicalSlot(coord.getQueryId(), frontend.getNodeName(), groupId, 1, expiredPendingTimeMs,
-                expiredAllocatedTimeMs, frontend.getStartTime(), numFragments, pipelineDop);
+                expiredAllocatedTimeMs, frontend.getStartTime(), numFragments, longPlanMemCost, pipelineDop);
     }
 }

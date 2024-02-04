@@ -32,6 +32,7 @@ public class AllocatedSlots {
             Comparator.comparingLong(LogicalSlot::getExpiredAllocatedTimeMs).thenComparing(LogicalSlot::getSlotId));
     private int totalSlotCount = 0;
     private int numDrivers = 0;
+    private long planMemCosts = 0;
     private final Map<Long, Integer> groupIdToSlotCount = new HashMap<>();
 
     public int getNumSlots() {
@@ -46,12 +47,17 @@ public class AllocatedSlots {
         return numDrivers;
     }
 
+    public long getPlanMemCosts() {
+        return planMemCosts;
+    }
+
     public void allocateSlot(LogicalSlot slot) {
         slots.put(slot.getSlotId(), slot);
         slotsOrderByExpiredTime.add(slot);
 
         totalSlotCount += slot.getNumPhysicalSlots();
         numDrivers += slot.getNumDrivers();
+        planMemCosts += slot.getPlanMemCosts();
         groupIdToSlotCount.compute(slot.getGroupId(),
                 (k, prevCount) -> prevCount == null ? slot.getNumPhysicalSlots() : prevCount + slot.getNumPhysicalSlots());
     }
@@ -66,6 +72,7 @@ public class AllocatedSlots {
 
         totalSlotCount -= slot.getNumPhysicalSlots();
         numDrivers -= slot.getNumDrivers();
+        planMemCosts -= slot.getPlanMemCosts();
         groupIdToSlotCount.computeIfPresent(slot.getGroupId(), (k, v) -> v - slot.getNumPhysicalSlots());
 
         return slot;

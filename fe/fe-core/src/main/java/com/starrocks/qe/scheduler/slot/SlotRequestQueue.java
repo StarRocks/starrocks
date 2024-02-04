@@ -101,6 +101,7 @@ public class SlotRequestQueue {
 
         int numAllocatedSlots = allocatedSlots.getNumSlots();
         int numAllocatedDrivers = allocatedSlots.getNumDrivers();
+        long allocatedPlanMemCosts = allocatedSlots.getPlanMemCosts();
         if (!isGlobalSlotAvailable(numAllocatedSlots) || isGlobalResourceOverloaded.getAsBoolean()) {
             return slotsToAllocate;
         }
@@ -128,9 +129,11 @@ public class SlotRequestQueue {
             ResourceGroup group = GlobalStateMgr.getCurrentState().getResourceGroupMgr().getResourceGroup(groupId);
             int numAllocatedSlotsOfGroup = allocatedSlots.getNumSlotsOfGroup(groupId);
             AllocatedResource allocatedResource = peakSlotsToAllocateFromSubQueue(
-                    subQueue, group, numAllocatedSlots, numAllocatedSlotsOfGroup, numAllocatedDrivers, slotsToAllocate);
+                    subQueue, group, numAllocatedSlots, numAllocatedSlotsOfGroup, numAllocatedDrivers, allocatedPlanMemCosts,
+                    slotsToAllocate);
             numAllocatedSlots += allocatedResource.numSlots;
             numAllocatedDrivers += allocatedResource.numDrivers;
+            allocatedPlanMemCosts += allocatedResource.planMemCosts;
 
             // If the group of the current index peaks slots to allocate, update nextGroupIndex to make the next turn starts
             // from the next group index.
@@ -145,6 +148,13 @@ public class SlotRequestQueue {
     private boolean isGlobalSlotAvailable(int numAllocatedSlots) {
         return !GlobalVariable.isQueryQueueConcurrencyLimitEffective() ||
                 numAllocatedSlots < GlobalVariable.getQueryQueueConcurrencyLimit();
+    }
+
+    private boolean isPlanMemAvailable(long allocatedPlanMemCosts, long allocatingPlanMemCosts) {
+        return !GlobalVariable.isQueryQueuePlanMemCostLimitEffective() ||
+                allocatedPlanMemCosts <= 0 ||
+                (allocatedPlanMemCosts + allocatingPlanMemCosts <= GlobalVariable.getQueryQueuePlanMemCostLimit()
+                        && allocatedPlanMemCosts + allocatingPlanMemCosts > 0);
     }
 
     private boolean isGroupSlotAvailable(ResourceGroup group, int numAllocatedSlotsOfGroup) {
@@ -198,10 +208,13 @@ public class SlotRequestQueue {
                                                               final int numAllocatedSlots,
                                                               final int numAllocatedSlotsOfGroup,
                                                               final int numAllocatedDrivers,
+                                                              final long allocatedPlanMemCosts,
                                                               List<LogicalSlot> slotsToAllocate) {
         int numSlotsToAllocate = 0;
         int numFragmentsToAllocate = 0;
         int numDriversToAllocate = 0;
+        long planMemCostsToAllocate = 0;
+        List<LogicalSlot> skipSlots = new ArrayList<>();
         for (LogicalSlot slot : subQueue.values()) {
             if (!isGlobalSlotAvailable(numAllocatedSlots + numSlotsToAllocate)) {
                 break;
@@ -211,8 +224,17 @@ public class SlotRequestQueue {
                 break;
             }
 
+            if (!isPlanMemAvailable(allocatedPlanMemCosts + planMemCostsToAllocate, slot.getPlanMemCosts())) {
+                if (slot.getSkipTimes() >= GlobalVariable.getQueryQueueSkipLargePlanMemCostTimes()) {
+                    break;
+                }
+                skipSlots.add(slot);
+                continue;
+            }
+
             slotsToAllocate.add(slot);
             numSlotsToAllocate += slot.getNumPhysicalSlots();
+            planMemCostsToAllocate += slot.getPlanMemCosts();
 
             if (slot.isAdaptiveDop()) {
                 numFragmentsToAllocate += slot.getNumFragments();
@@ -230,16 +252,22 @@ public class SlotRequestQueue {
             }
         }
 
-        return new AllocatedResource(numSlotsToAllocate, numDriversToAllocate);
+        for (LogicalSlot slot : skipSlots) {
+            slot.incrSkipTimes();
+        }
+
+        return new AllocatedResource(numSlotsToAllocate, numDriversToAllocate, planMemCostsToAllocate);
     }
 
     private static class AllocatedResource {
         private final int numSlots;
         private final int numDrivers;
+        private final long planMemCosts;
 
-        public AllocatedResource(int numSlots, int numDrivers) {
+        public AllocatedResource(int numSlots, int numDrivers, long planMemCosts) {
             this.numSlots = numSlots;
             this.numDrivers = numDrivers;
+            this.planMemCosts = planMemCosts;
         }
     }
 }

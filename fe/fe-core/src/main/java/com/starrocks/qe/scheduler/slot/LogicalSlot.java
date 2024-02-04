@@ -50,13 +50,16 @@ public class LogicalSlot {
      */
     private final long startTimeMs;
     private final int numFragments;
+    private final long planMemCosts;
     private int pipelineDop;
+
+    private int skipTimes = 0;
 
     private State state = State.CREATED;
 
     public LogicalSlot(TUniqueId slotId, String requestFeName, long groupId, int numPhysicalSlots,
                        long expiredPendingTimeMs, long expiredAllocatedTimeMs, long feStartTimeMs,
-                       int numFragments, int pipelineDop) {
+                       int numFragments, long planMemCosts, int pipelineDop) {
         this.slotId = slotId;
         this.requestFeName = requestFeName;
         this.groupId = groupId;
@@ -66,6 +69,7 @@ public class LogicalSlot {
         this.feStartTimeMs = feStartTimeMs;
         this.startTimeMs = System.currentTimeMillis();
         this.numFragments = numFragments;
+        this.planMemCosts = planMemCosts;
         this.pipelineDop = pipelineDop;
     }
 
@@ -103,6 +107,7 @@ public class LogicalSlot {
                 .setExpired_allocated_time_ms(expiredAllocatedTimeMs)
                 .setFe_start_time_ms(feStartTimeMs)
                 .setNum_fragments(numFragments)
+                .setPlan_mem_costs(planMemCosts)
                 .setPipeline_dop(pipelineDop);
 
         return tslot;
@@ -111,7 +116,7 @@ public class LogicalSlot {
     public static LogicalSlot fromThrift(TResourceLogicalSlot tslot) {
         return new LogicalSlot(tslot.getSlot_id(), tslot.getRequest_fe_name(), tslot.getGroup_id(), tslot.getNum_slots(),
                 tslot.getExpired_pending_time_ms(), tslot.getExpired_allocated_time_ms(), tslot.getFe_start_time_ms(),
-                tslot.getNum_fragments(), tslot.getPipeline_dop());
+                tslot.getNum_fragments(), tslot.getPlan_mem_costs(), tslot.getPipeline_dop());
     }
 
     public TUniqueId getSlotId() {
@@ -162,6 +167,10 @@ public class LogicalSlot {
         return numFragments;
     }
 
+    public long getPlanMemCosts() {
+        return planMemCosts;
+    }
+
     public boolean isAdaptiveDop() {
         return pipelineDop == 0;
     }
@@ -172,6 +181,14 @@ public class LogicalSlot {
 
     public void setPipelineDop(int pipelineDop) {
         this.pipelineDop = pipelineDop;
+    }
+
+    public void incrSkipTimes() {
+        skipTimes++;
+    }
+
+    public int getSkipTimes() {
+        return skipTimes;
     }
 
     @Override
