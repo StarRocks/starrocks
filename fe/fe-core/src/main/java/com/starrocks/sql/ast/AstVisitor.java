@@ -48,6 +48,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.analysis.UserVariableHint;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.connector.parser.trino.PlaceholderExpr;
 import com.starrocks.sql.ast.pipe.AlterPipeClause;
@@ -1294,6 +1295,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitSetVarHint(SetVarHint node, C context) {
+        return visitNode(node, context);
+    }
+
+    public R visitUserVariableHint(UserVariableHint node, C context) {
         return visitNode(node, context);
     }
 }

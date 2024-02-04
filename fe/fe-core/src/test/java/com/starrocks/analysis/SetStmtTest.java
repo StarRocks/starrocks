@@ -52,6 +52,7 @@ import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.common.QueryDebugOptions;
+import com.starrocks.sql.parser.NodePosition;
 import mockit.Mocked;
 import org.apache.commons.lang3.EnumUtils;
 import org.junit.Assert;
@@ -74,7 +75,8 @@ public class SetStmtTest {
 
     @Test
     public void testNormal() throws UserException {
-        List<SetListItem> vars = Lists.newArrayList(new UserVariable("times", new IntLiteral(100L)),
+        List<SetListItem> vars = Lists.newArrayList(new UserVariable("times", new IntLiteral(100L),
+                        NodePosition.ZERO),
                 new SetNamesVar("utf8"));
         SetStmt stmt = new SetStmt(vars);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);

@@ -302,7 +302,7 @@ public class SetStmtAnalyzer {
         }
     }
 
-    private static void analyzeUserVariable(UserVariable var) {
+    public static void analyzeUserVariable(UserVariable var) {
         if (var.getVariable().length() > 64) {
             throw new SemanticException("User variable name '" + var.getVariable() + "' is illegal");
         }

@@ -35,11 +35,15 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.sql.parser.NodePosition;
+import org.apache.commons.collections4.CollectionUtils;
+
+import java.util.List;
 
 public abstract class StatementBase implements ParseNode {
 
@@ -73,6 +77,12 @@ public abstract class StatementBase implements ParseNode {
 
     // Original statement to further usage, eg: enable_sql_blacklist.
     protected OriginStatement origStmt;
+
+    // hint in each part of ast. used to ast to sql
+    protected List<HintNode> hintNodes;
+
+    // all query scope hints for the whole ast. used to initialize the hint context for a query
+    protected List<HintNode> allQueryScopeHints;
 
     public void setIsExplain(boolean isExplain, ExplainLevel explainLevel) {
         this.isExplain = isExplain;
@@ -125,5 +135,26 @@ public abstract class StatementBase implements ParseNode {
     @Override
     public NodePosition getPos() {
         return pos;
+    }
+
+
+    public List<HintNode> getHintNodes() {
+        return hintNodes;
+    }
+
+    public void setHintNodes(List<HintNode> hintNodes) {
+        this.hintNodes = hintNodes;
+    }
+
+    public List<HintNode> getAllQueryScopeHints() {
+        return allQueryScopeHints;
+    }
+
+    public void setAllQueryScopeHints(List<HintNode> hintNodes) {
+        this.allQueryScopeHints = hintNodes;
+    }
+
+    public boolean isExistQueryScopeHint() {
+        return CollectionUtils.isNotEmpty(allQueryScopeHints);
     }
 }

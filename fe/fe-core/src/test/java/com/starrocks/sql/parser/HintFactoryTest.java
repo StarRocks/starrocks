@@ -17,6 +17,7 @@ package com.starrocks.sql.parser;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.HintNode;
+import com.starrocks.qe.SessionVariable;
 import org.antlr.v4.runtime.CommonToken;
 import org.junit.Assert;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -30,35 +31,31 @@ import java.util.stream.Stream;
 class HintFactoryTest {
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
-    @MethodSource("generateHint")
+    @MethodSource("generateValidHint")
     void buildHintNode(String hintStr, Map<String, String> expectMap) {
         CommonToken token = new CommonToken(1, hintStr);
-        HintNode hint = HintFactory.buildHintNode(token);
-        if (hint == null) {
-            Assert.assertEquals(0, expectMap.size());
-        } else {
-            String message = "actual: " + hint.getValue() + ". expect: " + expectMap;
-            for (Map.Entry<String, String> entry : hint.getValue().entrySet()) {
-                Assert.assertEquals(message, expectMap.get(entry.getKey()), entry.getValue());
-            }
+        HintNode hint = HintFactory.buildHintNode(token, new SessionVariable());
+        String message = "actual: " + hint.getValue() + ". expect: " + expectMap;
+        for (Map.Entry<String, String> entry : hint.getValue().entrySet()) {
+            Assert.assertEquals(message, expectMap.get(entry.getKey()), entry.getValue());
+        }
+    }
+
+    @ParameterizedTest(name = "sql_{index}: {0}.")
+    @MethodSource("generateInvalidHint")
+    void invalidHintNode(String hintStr) {
+        CommonToken token = new CommonToken(1, hintStr);
+        try {
+            HintNode hint = HintFactory.buildHintNode(token, new SessionVariable());
+            Assert.assertEquals(null, hint);
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage(), e.getMessage().contains("Invalid hint value"));
         }
     }
 
 
-    private static Stream<Arguments> generateHint() {
+    private static Stream<Arguments> generateValidHint() {
         List<Arguments> arguments = Lists.newArrayList();
-        arguments.add(Arguments.of("/*+ invalid_test */", ImmutableMap.of()));
-        arguments.add(Arguments.of("/*+ set _VAR() */", ImmutableMap.of()));
-        arguments.add(Arguments.of("/*+ set _VAR((abc = abc)) */", ImmutableMap.of()));
-        arguments.add(Arguments.of("/*+     \r \n \u3000 set_VAR  (abc=abc,, abc = abc) */",
-                ImmutableMap.of()));
-        arguments.add(Arguments.of("/*+     \n\r \n \u3000 set_VAR  (abc==abc) */",
-                ImmutableMap.of()));
-        arguments.add(Arguments.of("/*+     \r \n \u3000 set_VAR  (('abc'='abc')) */",
-                ImmutableMap.of()));
-        arguments.add(Arguments.of("/*+ set_VAR('abc'='abc', \r\n 'ab' ='ab')) */",
-                ImmutableMap.of()));
-
         arguments.add(Arguments.of("/*+     \r \n \u3000 set_VAR (abc=abc) */",
                 ImmutableMap.of("abc", "abc")));
         arguments.add(Arguments.of("/*+  set_VAR \r \n \u3000 (abc=abc) */",
@@ -68,9 +65,27 @@ class HintFactoryTest {
 
         arguments.add(Arguments.of("/*+     \r \n \u3000 set_VAR ('abc'=abc,  ab     = '\r\na   b') */",
                 ImmutableMap.of("abc", "abc", "ab", "\r\na   b")));
+        arguments.add(Arguments.of("/*+     \r \n \u3000 set_user_variable (@a = 1) */",
+                ImmutableMap.of("a", "1")));
+        arguments.add(Arguments.of("/*+  set_user_variable \r \n \u3000 (@`a` = 1) */",
+                ImmutableMap.of("a", "1")));
+        arguments.add(Arguments.of("/*+     \r \n \u3000 SET_USER_VARIABLE (@`a` = 1) */",
+                ImmutableMap.of("a", "1")));
 
+        arguments.add(Arguments.of("/*+     \r \n \u3000 set_USER_VARIABLE (@`a` = 1,  @ab     = '\r\na   b') */",
+                ImmutableMap.of("a", "1", "ab", "'\r\na   b'")));
+        return arguments.stream();
+    }
 
-
+    private static Stream<Arguments> generateInvalidHint() {
+        List<Arguments> arguments = Lists.newArrayList();
+        arguments.add(Arguments.of("/*+ invalid_test */"));
+        arguments.add(Arguments.of("/*+ set _VAR() */"));
+        arguments.add(Arguments.of("/*+ set _VAR((abc = abc)) */"));
+        arguments.add(Arguments.of("/*+     \r \n \u3000 set_VAR  (abc=abc,, abc = abc) */"));
+        arguments.add(Arguments.of("/*+     \n\r \n \u3000 set_VAR  (abc==abc) */"));
+        arguments.add(Arguments.of("/*+     \r \n \u3000 set_VAR  (('abc'='abc')) */"));
+        arguments.add(Arguments.of("/*+ set_VAR('abc'='abc', \r\n 'ab' ='ab')) */"));
         return arguments.stream();
     }
 }

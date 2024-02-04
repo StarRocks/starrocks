@@ -571,7 +571,7 @@ public class MaterializedViewTest {
         Assert.assertTrue(taskProperties.containsKey("query_timeout"));
         Assert.assertEquals("500", taskProperties.get("query_timeout"));
         Assert.assertEquals(Constants.TaskType.EVENT_TRIGGERED, task.getType());
-        Assert.assertTrue(task.getDefinition(), task.getDefinition().contains("query_timeout='500'"));
+        Assert.assertTrue(task.getDefinition(), task.getDefinition().contains("query_timeout = 500"));
     }
 
     @Test

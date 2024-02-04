@@ -123,7 +123,7 @@ public class SetExecutorTest {
         SetStmt stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         SetExecutor executor = new SetExecutor(ctx, stmt);
         executor.execute();
-        UserVariable userVariable = ctx.getUserVariables("var");
+        UserVariable userVariable = ctx.getUserVariable("var");
         Assert.assertTrue(userVariable.getEvaluatedExpression().getType().matchesType(type));
         Assert.assertEquals(value.getStringValue(), userVariable.getEvaluatedExpression().getStringValue());
         String planFragment = UtFrameUtils.getPlanAndFragment(ctx, "select @var").second.
@@ -155,7 +155,7 @@ public class SetExecutorTest {
         SetStmt stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         SetExecutor executor = new SetExecutor(ctx, stmt);
         executor.execute();
-        UserVariable userVariable = ctx.getUserVariables("var");
+        UserVariable userVariable = ctx.getUserVariable("var");
         Assert.assertTrue(userVariable.getEvaluatedExpression().getType().isDecimalV3());
         Assert.assertEquals("10", userVariable.getEvaluatedExpression().getStringValue());
 
@@ -163,7 +163,7 @@ public class SetExecutorTest {
         stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         executor = new SetExecutor(ctx, stmt);
         executor.execute();
-        userVariable = ctx.getUserVariables("var");
+        userVariable = ctx.getUserVariable("var");
         Assert.assertTrue(userVariable.getEvaluatedExpression().getType().isBoolean());
         BoolLiteral literal = (BoolLiteral) userVariable.getEvaluatedExpression();
         Assert.assertTrue(literal.getValue());
@@ -172,7 +172,7 @@ public class SetExecutorTest {
         stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         executor = new SetExecutor(ctx, stmt);
         executor.execute();
-        userVariable = ctx.getUserVariables("var");
+        userVariable = ctx.getUserVariable("var");
         Assert.assertTrue(userVariable.getEvaluatedExpression().getType().isBoolean());
         literal = (BoolLiteral) userVariable.getEvaluatedExpression();
         Assert.assertFalse(literal.getValue());

@@ -1,0 +1,85 @@
+-- name: test_hint
+CREATE TABLE `t1` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 5
+PROPERTIES (
+"colocate_with" = "group1",
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+CREATE TABLE `t2` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 5
+PROPERTIES (
+"colocate_with" = "group1",
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4");
+
+INSERT INTO t1 (c0, c1, c2, c3) VALUES
+  (1, 'a', 'Value1', 10),
+  (2, 'b', 'Value2', 20),
+  (null, 'c', 'Value3', 30),
+  (4, 'd', 'Value4', 40),
+  (5, null, 'Value5', 50),
+  (5, 'f', 'Value6', 60);
+
+
+insert /*+ set_user_variable(@a = (select max(c3) from t1)) */ into t2 select /*+ set_user_variable(@b = (select min(c1) from t1)) */
+c0, @b, c2, @a from t1;
+
+select @a, @b from t1;
+
+select * from t2;
+
+select /*+ set_user_variable(@a = (select max(c3) from t1)) */ /*+ set_user_variable(@b = (select min(c3) from t1)) */ @a, @b from t1;
+
+with cte_1 as (select * from t2) select /*+ set_user_variable(@a = (select max(c3) from t1)) */ /*+ set_user_variable(@b = (select min(c3) from t1)) */ @a, @b from cte_1;
+
+with cte_1 as (select * from t1)
+select /*+ set_user_variable(@a = (select max(c3) from t1)), @b = 1) */ /*+ set_user_variable(@c = (select min(c3) from t1)) */  /*+ set_var(sql_mode ='GROUP_CONCAT_LEGACY') */
+group_concat(@a) from cte_1;
+
+with cte_1 as (select * from t1)
+select /*+ set_user_variable(@a = (select max(c3) from t1)), @b = 1) */ /*+ set_user_variable(@c = (select min(c3) from t1)) */
+group_concat(@a) from cte_1;
+
+
+select /*+ set_user_variable(@a = select from t0) */ @a from t1;
+
+set @a = 1;
+select /*+ set_user_variable(@a = 1) */ @a from t1;
+
+with cte_1 as (select * from t1)
+select /*+ set_user_variable(@a = (select max(c3) from t1)), @b = 1) */ /*+ set_user_variable(@c = (select min(c3) from t1)) */
+group_concat(@a, @b, @c) from cte_1;
+
+CREATE MATERIALIZED VIEW test_mv
+REFRESH DEFERRED MANUAL
+properties (
+    "replication_num" = "1",
+    "partition_refresh_number" = "1"
+) as select /*+ set_user_variable(@c = (select min(c3) from t1)) */ * from t1;
+
+
+

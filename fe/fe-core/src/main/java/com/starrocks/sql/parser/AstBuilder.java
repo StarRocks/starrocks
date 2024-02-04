@@ -516,7 +516,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitSingleStatement(StarRocksParser.SingleStatementContext context) {
         if (context.statement() != null) {
-            return visit(context.statement());
+            StatementBase stmt = (StatementBase) visit(context.statement());
+            if (MapUtils.isNotEmpty(hintMap)) {
+                stmt.setAllQueryScopeHints(extractQueryScopeHintNode());
+            }
+            return stmt;
         } else {
             return visit(context.emptyStatement());
         }
@@ -1425,7 +1429,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         // properties
         Map<String, String> properties = buildProperties(context.properties());
-        properties.putAll(extractVarHints(hintMap.get(context)));
+        properties.putAll(extractVarHintValues(hintMap.get(context)));
         CreateTableAsSelectStmt createTableAsSelectStmt = null;
         InsertStmt insertStmt = null;
         if (context.createTableAsSelectStatement() != null) {
@@ -1782,7 +1786,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     context.label == null ? null : ((Identifier) visit(context.label)).getValue(),
                     getColumnNames(context.columnAliases()), queryStatement, context.OVERWRITE() != null,
                     createPos(context));
-            stmt.setOptHints(extractVarHints(hintMap.get(context)));
+            stmt.setHintNodes(hintMap.get(context));
             return stmt;
         }
 
@@ -1793,7 +1797,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         // INSERT INTO FILES(...)
         Map<String, String> tableFunctionProperties = getPropertyList(context.propertyList());
         InsertStmt res = new InsertStmt(tableFunctionProperties, queryStatement, createPos(context));
-        res.setOptHints(extractVarHints(hintMap.get(context)));
+        res.setHintNodes(hintMap.get(context));
         return res;
     }
 
@@ -1824,7 +1828,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 throw new ParsingException(PARSER_ERROR_MSG.unsupportedOp("analyze"));
             }
         }
-        ret.setOptHints(extractVarHints(hintMap.get(context)));
+        ret.setHintNodes(hintMap.get(context));
         return ret;
     }
 
@@ -1850,7 +1854,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 throw new ParsingException(PARSER_ERROR_MSG.unsupportedOp("analyze"));
             }
         }
-        ret.setOptHints(extractVarHints(hintMap.get(context)));
+        ret.setHintNodes(hintMap.get(context));
         return ret;
     }
 
@@ -2427,7 +2431,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             cluster = ((Identifier) visit(context.system)).getValue();
         }
         LoadStmt stmt = new LoadStmt(label, dataDescriptions, brokerDesc, cluster, properties, pos);
-        stmt.setOptHints(extractVarHints(hintMap.get(context)));
+        stmt.setHintNodes(hintMap.get(context));
         return stmt;
     }
 
@@ -4245,7 +4249,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
     }
 
-    private Map<String, String> extractVarHints(List<HintNode> hints) {
+    private Map<String, String> extractVarHintValues(List<HintNode> hints) {
         Map<String, String> selectHints = new HashMap<>();
         if (CollectionUtils.isEmpty(hints)) {
             return selectHints;
@@ -4296,7 +4300,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         boolean isDistinct = context.setQuantifier() != null && context.setQuantifier().DISTINCT() != null;
         SelectList selectList = new SelectList(selectItems, isDistinct);
-        selectList.setOptHints(extractVarHints(hintMap.get(context)));
+        selectList.setHintNodes(hintMap.get(context));
 
         SelectRelation resultSelectRelation = new SelectRelation(
                 selectList,
@@ -7294,6 +7298,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         return new LabelName(dbName, name, createPos(start, stop));
+    }
+
+    private List<HintNode> extractQueryScopeHintNode() {
+        List<HintNode> res = Lists.newArrayList();
+        for (Map.Entry<ParserRuleContext, List<HintNode>> entry : hintMap.entrySet()) {
+            for (HintNode hintNode : entry.getValue()) {
+                if (hintNode.getScope() == HintNode.Scope.QUERY) {
+                    res.add(hintNode);
+                }
+            }
+        }
+        Collections.sort(res);
+        return res;
     }
 }
 

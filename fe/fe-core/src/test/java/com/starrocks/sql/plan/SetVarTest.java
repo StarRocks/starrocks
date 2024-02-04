@@ -14,6 +14,8 @@
 
 package com.starrocks.sql.plan;
 
+import com.google.common.collect.Maps;
+import com.starrocks.analysis.HintNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.SessionVariable;
@@ -115,13 +117,16 @@ public class SetVarTest extends PlanTestBase {
     }
 
     public static Stream<Arguments> genArguments() {
+        Map<String, String> hints1 = Map.of("query_timeout", "10");
         Map<String, String> hints2 = Map.of("query_timeout", "1");
         Map<String, String> hints3 = Map.of("query_timeout", "10", "query_mem_limit", "1");
+        Map<String, String> hints4 = Map.of("a", "1", "b", "abs(1)", "c", "(SELECT max(`c1`)\n" +
+                "FROM `tbl`)");
 
         return Stream.of(
                 // multi-block select
                 Arguments.of("(select /*+set_var(query_timeout=1)*/avg(c1) from tbl) " +
-                        "union all (select /*+set_var(query_timeout=10)*/sum(c1) from tbl) ", hints2),
+                        "union all (select /*+set_var(query_timeout=10)*/sum(c1) from tbl) ", hints1),
                 Arguments.of("(select /*+set_var(query_timeout=10)*/avg(c1) from tbl) " +
                         "union all (select /*+set_var(query_mem_limit=1)*/sum(c1) from tbl) ", hints3),
                 Arguments.of("(select /*+set_var(query_timeout=10)*/ avg(c1) from tbl ) " +
@@ -135,14 +140,22 @@ public class SetVarTest extends PlanTestBase {
                 // insert select
                 Arguments.of("insert into tbl select /*+set_var(query_timeout=1) */ * from tbl", hints2),
                 Arguments.of("insert /*+set_var(query_timeout=1)*/ into tbl " +
-                        "select /*+set_var(query_timeout=10) */ * from tbl", hints2),
+                        "select /*+set_var(query_timeout=10) */ * from tbl", hints1),
                 Arguments.of("insert /*+set_var(query_timeout=10)*/ into tbl " +
-                        "select /*+set_var(query_mem_limit=1) */ * from tbl", hints3)
+                        "select /*+set_var(query_mem_limit=1) */ * from tbl", hints3),
+                Arguments.of("select /*+ SET_USER_VARIABLE(@a= 1, @ b = abs(1), " +
+                        "@ c = (select max(c1) from tbl)) */ * from tbl", hints4)
         );
     }
 
     private static Map<String, String> parseAndGetHints(String sql) {
         List<StatementBase> stmts = SqlParser.parse(sql, new SessionVariable());
-        return StmtExecutor.VarHintVisitor.extractAllHints(stmts.get(0));
+        Map<String, String> hints = Maps.newHashMap();
+        if (stmts.get(0).isExistQueryScopeHint()) {
+            for (HintNode hintNode : stmts.get(0).getAllQueryScopeHints()) {
+                hints.putAll(hintNode.getValue());
+            }
+        }
+        return hints;
     }
 }
