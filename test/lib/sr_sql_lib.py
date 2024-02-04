@@ -1023,12 +1023,8 @@ class StarrocksSQLApiLib(object):
         time.sleep(1)
         sql = "explain %s" % (query)
         res = self.execute_sql(sql, True)
-<<<<<<< HEAD
-        tools.assert_false(str(res["result"]).find(mv_name) > 0, "assert mv %s is not found" % (mv_name))
-=======
         for expect in expects:
             tools.assert_false(str(res["result"]).find(expect) > 0, "assert expect %s should not be found" % (expect))
->>>>>>> 2f7a095c07 ([BugFix] Fix or preddicates use different short key indexes bug (#40693))
 
     def wait_alter_table_finish(self, alter_type="COLUMN", off=9):
         """
