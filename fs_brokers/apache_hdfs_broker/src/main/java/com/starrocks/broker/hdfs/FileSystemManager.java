@@ -36,6 +36,7 @@
 
 package com.starrocks.broker.hdfs;
 
+import com.google.common.collect.Sets;
 import com.starrocks.common.WildcardURI;
 import com.starrocks.thrift.TBrokerFD;
 import com.starrocks.thrift.TBrokerFileStatus;
@@ -63,6 +64,8 @@ import java.net.InetAddress;
 import java.net.URISyntaxException;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
+import java.nio.file.Files;
+import java.nio.file.attribute.PosixFilePermission;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivilegedExceptionAction;
@@ -361,6 +364,12 @@ public class FileSystemManager {
                         Random random = new Random(currentTime);
                         int randNumber = random.nextInt(10000);
                         tmpFilePath = "/tmp/." + Long.toString(currentTime) + "_" + Integer.toString(randNumber);
+                        File tmpFile = new File(tmpFilePath);
+                        if (!tmpFile.exists() && !tmpFile.createNewFile()) {
+                            throw new BrokerException(TBrokerOperationStatusCode.NOT_AUTHORIZED, "create tmp file failed");
+                        }
+                        Files.setPosixFilePermissions(tmpFile.toPath(),
+                                Sets.newHashSet(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE));
                         FileOutputStream fileOutputStream = new FileOutputStream(tmpFilePath);
                         fileOutputStream.write(base64decodedBytes);
                         fileOutputStream.close();

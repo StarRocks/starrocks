@@ -93,13 +93,12 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
         _join_builder->spiller()->cancel();
     }
 
-    auto flush_function = [this](RuntimeState* state, auto io_executor) {
+    auto flush_function = [this](RuntimeState* state) {
         auto& spiller = _join_builder->spiller();
-        return spiller->flush(state, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, spiller));
+        return spiller->flush(state, TRACKER_WITH_SPILLER_GUARD(state, spiller));
     };
 
-    auto io_executor = _join_builder->spill_channel()->io_executor();
-    auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {
+    auto set_call_back_function = [this](RuntimeState* state) {
         auto& spiller = _join_builder->spiller();
         return spiller->set_flush_all_call_back(
                 [this]() {
@@ -107,13 +106,13 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
                     _join_builder->enter_probe_phase();
                     return Status::OK();
                 },
-                state, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, spiller));
+                state, TRACKER_WITH_SPILLER_GUARD(state, spiller));
     };
 
     WARN_IF_ERROR(publish_runtime_filters(state),
                   fmt::format("spillable hash join operator of query {} publish runtime filter failed, ignore it...",
                               print_id(state->query_id())));
-    SpillProcessTasksBuilder task_builder(state, io_executor);
+    SpillProcessTasksBuilder task_builder(state);
     task_builder.then(flush_function).finally(set_call_back_function);
 
     RETURN_IF_ERROR(_join_builder->spill_channel()->execute(task_builder));
@@ -248,6 +247,7 @@ Status SpillableHashJoinBuildOperatorFactory::prepare(RuntimeState* state) {
     _spill_options->name = "hash-join-build";
     _spill_options->plan_node_id = _plan_node_id;
     _spill_options->encode_level = state->spill_encode_level();
+    _spill_options->wg = state->fragment_ctx()->workgroup();
     // TODO: Our current adaptive dop for non-broadcast functions will also result in a build hash_joiner corresponding to multiple prob hash_join prober.
     //
     _spill_options->read_shared =
