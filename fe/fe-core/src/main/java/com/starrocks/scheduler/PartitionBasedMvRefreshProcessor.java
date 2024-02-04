@@ -370,6 +370,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 .setClientIp(mvContext.getRemoteIp())
                 .setUser(ctx.getQualifiedUser())
                 .setDb(ctx.getDatabase());
+        ctx.setThreadLocalInfo();
 
         // 2. Prepare variables
         changeDefaultConnectContextIfNeeded(ctx);
