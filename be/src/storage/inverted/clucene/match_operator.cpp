@@ -34,35 +34,6 @@ Status MatchTermOperator::_match_internal(lucene::search::HitCollector* hit_coll
     return Status::OK();
 }
 
-Status MatchChineseTermOperator::_match_internal(lucene::search::HitCollector* hit_collector) {
-    auto string_reader = std::make_unique<lucene::util::AStringReader>(_term.c_str());
-    auto reader = std::make_unique<lucene::util::SimpleInputStreamReader>(string_reader.get(),
-                                                                          lucene::util::SimpleInputStreamReader::UTF8);
-
-    lucene::analysis::TokenStream* token_stream = _analyzer->tokenStream(_field_name.c_str(), reader.get());
-
-    lucene::analysis::Token token;
-    std::vector<std::wstring> analyse_result;
-
-    while (token_stream->next(&token)) {
-        if (token.termLength() != 0) {
-            analyse_result.emplace_back(token.termBuffer(), token.termLength());
-        }
-    }
-
-    token_stream->close();
-
-    lucene::search::BooleanQuery query;
-    for (const auto& t : analyse_result) {
-        auto* term = _CLNEW lucene::index::Term(_field_name.c_str(), t.c_str());
-        query.add(_CLNEW lucene::search::TermQuery(term), true, lucene::search::BooleanClause::SHOULD);
-        _CLDECDELETE(term)
-    }
-
-    _searcher->_search(&query, nullptr, hit_collector);
-    return Status::OK();
-}
-
 Status MatchRangeOperator::_match_internal(lucene::search::HitCollector* hit_collector) {
     std::wstring search_word(_bound.begin(), _bound.end());
     lucene::index::Term term(_field_name.c_str(), search_word.c_str());
@@ -84,8 +55,7 @@ Status MatchWildcardOperator::_match_internal(lucene::search::HitCollector* hit_
 Status MatchPhraseOperator::_match_internal(lucene::search::HitCollector* hit_collector) {
     lucene::search::PhraseQuery phrase_query;
     ASSIGN_OR_RETURN(auto analyzer, get_analyzer(_parser_type));
-    std::wstring wstr(_compound_term.begin(), _compound_term.end());
-    lucene::util::StringReader reader(wstr.c_str(), wstr.size(), false);
+    lucene::util::StringReader reader(_compound_term.c_str(), _compound_term.size(), false);
     auto stream = analyzer->reusableTokenStream(L"", &reader);
     lucene::analysis::Token token;
     while (stream->next(&token)) {

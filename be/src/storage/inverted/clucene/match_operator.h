@@ -41,45 +41,32 @@ protected:
 class MatchTermOperator : public MatchOperator {
 public:
     MatchTermOperator(lucene::search::IndexSearcher* searcher, lucene::store::Directory* dir, std::wstring field_name,
-                      std::string term)
+                      std::wstring term)
             : MatchOperator(searcher, dir, std::move(field_name)), _term(std::move(term)){};
 
 protected:
-    std::string _term;
+    std::wstring _term;
     Status _match_internal(lucene::search::HitCollector* hit_collector) override;
-};
-
-class MatchChineseTermOperator final : public MatchTermOperator {
-public:
-    MatchChineseTermOperator(lucene::search::IndexSearcher* searcher, lucene::store::Directory* dir,
-                             std::wstring field_name, std::string term, lucene::analysis::Analyzer* analyzer)
-            : MatchTermOperator(searcher, dir, std::move(field_name), std::move(term)), _analyzer(analyzer){};
-
-protected:
-    Status _match_internal(lucene::search::HitCollector* hit_collector) override;
-
-private:
-    lucene::analysis::Analyzer* _analyzer;
 };
 
 class MatchRangeOperator : public MatchOperator {
 public:
     MatchRangeOperator(lucene::search::IndexSearcher* searcher, lucene::store::Directory* dir, std::wstring field_name,
-                       std::string bound, bool inclusive)
+                       std::wstring bound, bool inclusive)
             : MatchOperator(searcher, dir, std::move(field_name)), _bound(std::move(bound)), _inclusive(inclusive){};
 
 protected:
     virtual std::unique_ptr<lucene::search::RangeQuery> create_query(lucene::index::Term* term) = 0;
     Status _match_internal(lucene::search::HitCollector* hit_collector) override;
 
-    std::string _bound;
+    std::wstring _bound;
     bool _inclusive;
 };
 
 class MatchGreatThanOperator final : public MatchRangeOperator {
 public:
     MatchGreatThanOperator(lucene::search::IndexSearcher* searcher, lucene::store::Directory* dir,
-                           std::wstring field_name, std::string bound, bool inclusive)
+                           std::wstring field_name, std::wstring bound, bool inclusive)
             : MatchRangeOperator(searcher, dir, std::move(field_name), std::move(bound), inclusive){};
 
 protected:
@@ -91,7 +78,7 @@ protected:
 class MatchLessThanOperator final : public MatchRangeOperator {
 public:
     MatchLessThanOperator(lucene::search::IndexSearcher* searcher, lucene::store::Directory* dir,
-                          std::wstring field_name, std::string bound, bool inclusive)
+                          std::wstring field_name, std::wstring bound, bool inclusive)
             : MatchRangeOperator(searcher, dir, std::move(field_name), std::move(bound), inclusive){};
 
 protected:
@@ -103,20 +90,20 @@ protected:
 class MatchWildcardOperator final : public MatchOperator {
 public:
     MatchWildcardOperator(lucene::search::IndexSearcher* searcher, lucene::store::Directory* dir,
-                          std::wstring field_name, std::string wildard)
+                          std::wstring field_name, std::wstring wildard)
             : MatchOperator(searcher, dir, std::move(field_name)), _wildcard(std::move(wildard)) {}
 
 protected:
     Status _match_internal(lucene::search::HitCollector* hit_collector) override;
 
 private:
-    std::string _wildcard;
+    std::wstring _wildcard;
 };
 
 class MatchPhraseOperator final : public MatchOperator {
 public:
     MatchPhraseOperator(lucene::search::IndexSearcher* searcher, lucene::store::Directory* dir, std::wstring field_name,
-                        std::string terms, int slop, InvertedIndexParserType parser_type)
+                        std::wstring terms, int slop, InvertedIndexParserType parser_type)
             : MatchOperator(searcher, dir, std::move(field_name)),
               _compound_term(std::move(terms)),
               _slop(slop),
@@ -126,7 +113,7 @@ protected:
     Status _match_internal(lucene::search::HitCollector* hit_collector) override;
 
 private:
-    std::string _compound_term;
+    std::wstring _compound_term;
     int _slop;
     InvertedIndexParserType _parser_type;
 };

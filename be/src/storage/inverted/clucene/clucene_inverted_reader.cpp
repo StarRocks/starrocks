@@ -16,6 +16,7 @@
 
 #include <fmt/format.h>
 
+#include <boost/locale/encoding_utf.hpp>
 #include <memory>
 
 #include "match_operator.h"
@@ -50,6 +51,7 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
     const auto* search_query = reinterpret_cast<const Slice*>(query_value);
     auto act_len = strnlen(search_query->data, search_query->size);
     std::string search_str(search_query->data, act_len);
+    std::wstring search_wstr = boost::locale::conv::utf_to_utf<TCHAR>(search_str);
     DLOG(INFO) << "begin to query the inverted index from clucene"
                << ", column_name: " << column_name << ", search_str: " << search_str;
     std::wstring column_name_ws = std::wstring(column_name.begin(), column_name.end());
@@ -68,32 +70,32 @@ Status FullTextCLuceneInvertedReader::query(OlapReaderStatistics* stats, const s
     case InvertedIndexQueryType::MATCH_ALL_QUERY:
     case InvertedIndexQueryType::EQUAL_QUERY:
         match_operator =
-                std::make_unique<MatchTermOperator>(&index_searcher, nullptr, column_name_ws.c_str(), search_str);
+                std::make_unique<MatchTermOperator>(&index_searcher, nullptr, column_name_ws.c_str(), search_wstr);
         break;
     case InvertedIndexQueryType::MATCH_PHRASE_QUERY:
         // in phrase query
         match_operator = std::make_unique<MatchPhraseOperator>(&index_searcher, nullptr, column_name_ws.c_str(),
-                                                               search_str, 0, _parser_type);
+                                                               search_wstr, 0, _parser_type);
         break;
     case InvertedIndexQueryType::LESS_THAN_QUERY:
         match_operator = std::make_unique<MatchLessThanOperator>(&index_searcher, nullptr, column_name_ws.c_str(),
-                                                                 search_str, false);
+                                                                 search_wstr, false);
         break;
     case InvertedIndexQueryType::LESS_EQUAL_QUERY:
         match_operator = std::make_unique<MatchLessThanOperator>(&index_searcher, nullptr, column_name_ws.c_str(),
-                                                                 search_str, true);
+                                                                 search_wstr, true);
         break;
     case InvertedIndexQueryType::GREATER_THAN_QUERY:
         match_operator = std::make_unique<MatchGreatThanOperator>(&index_searcher, nullptr, column_name_ws.c_str(),
-                                                                  search_str, false);
+                                                                  search_wstr, false);
         break;
     case InvertedIndexQueryType::GREATER_EQUAL_QUERY:
         match_operator = std::make_unique<MatchGreatThanOperator>(&index_searcher, nullptr, column_name_ws.c_str(),
-                                                                  search_str, true);
+                                                                  search_wstr, true);
         break;
     case InvertedIndexQueryType::MATCH_ANY_QUERY:
         match_operator =
-                std::make_unique<MatchWildcardOperator>(&index_searcher, nullptr, column_name_ws.c_str(), search_str);
+                std::make_unique<MatchWildcardOperator>(&index_searcher, nullptr, column_name_ws.c_str(), search_wstr);
         break;
     default:
         return Status::InvertedIndexInvalidParams("Unknown query type");
