@@ -31,6 +31,7 @@ import com.starrocks.statistic.StatsConstants;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -83,18 +84,26 @@ public class StatisticsCalcUtils {
     public static long getTableRowCount(Table table, Operator node, OptimizerContext optimizerContext) {
         if (table.isNativeTableOrMaterializedView()) {
             OlapTable olapTable = (OlapTable) table;
-            List<Partition> selectedPartitions;
+            Collection<Partition> selectedPartitions;
             if (node.getOpType() == OperatorType.LOGICAL_BINLOG_SCAN ||
                     node.getOpType() == OperatorType.PHYSICAL_STREAM_SCAN) {
                 return 1;
             } else if (node.isLogical()) {
                 LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) node;
-                selectedPartitions = olapScanOperator.getSelectedPartitionId().stream().map(
-                        olapTable::getPartition).collect(Collectors.toList());
+                if (olapScanOperator.getSelectedPartitionId() == null) {
+                    selectedPartitions = olapScanOperator.getTable().getPartitions();
+                } else {
+                    selectedPartitions = olapScanOperator.getSelectedPartitionId().stream().map(
+                            olapTable::getPartition).collect(Collectors.toList());
+                }
             } else {
                 PhysicalOlapScanOperator olapScanOperator = (PhysicalOlapScanOperator) node;
-                selectedPartitions = olapScanOperator.getSelectedPartitionId().stream().map(
-                        olapTable::getPartition).collect(Collectors.toList());
+                if (olapScanOperator.getSelectedPartitionId() == null) {
+                    selectedPartitions = olapScanOperator.getTable().getPartitions();
+                } else {
+                    selectedPartitions = olapScanOperator.getSelectedPartitionId().stream().map(
+                            olapTable::getPartition).collect(Collectors.toList());
+                }
             }
             long rowCount = 0;
 

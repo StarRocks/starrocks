@@ -1016,14 +1016,19 @@ class StarrocksSQLApiLib(object):
         for expect in expects:
             tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan" % (expect))
 
-    def check_no_hit_materialized_view(self, query, mv_name):
+    def check_no_hit_materialized_view(self, query, *expects):
         """
         assert mv_name is hit in query
         """
         time.sleep(1)
         sql = "explain %s" % (query)
         res = self.execute_sql(sql, True)
+<<<<<<< HEAD
         tools.assert_false(str(res["result"]).find(mv_name) > 0, "assert mv %s is not found" % (mv_name))
+=======
+        for expect in expects:
+            tools.assert_false(str(res["result"]).find(expect) > 0, "assert expect %s should not be found" % (expect))
+>>>>>>> 2f7a095c07 ([BugFix] Fix or preddicates use different short key indexes bug (#40693))
 
     def wait_alter_table_finish(self, alter_type="COLUMN", off=9):
         """
