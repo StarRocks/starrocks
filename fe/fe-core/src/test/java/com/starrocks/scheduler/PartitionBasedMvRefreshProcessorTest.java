@@ -1738,7 +1738,7 @@ public class PartitionBasedMvRefreshProcessorTest {
         try {
             taskRun.executeTaskRun();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("tatusUser Cancelled"));
+            Assert.assertTrue(e.getMessage().contains("User Cancelled"));
             starRocksAssert.dropMaterializedView("hive_parttbl_mv1");
             return;
         }
