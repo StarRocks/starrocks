@@ -37,6 +37,17 @@ jobs:
         run: |
           echo "pass=true" >> $GITHUB_OUTPUT
 
+      - name: Upload info
+        run: |
+          echo $PR_NUMBER > pr_num.txt
+
+      - name: Upload the PR number
+        uses: actions/upload-artifact@v3
+        with:
+          name: pr_num
+          path: ./pr_num.txt
+          retention-days: 3
+
       - name: Check Blacklist
         id: check_blacklist
         env:
@@ -567,6 +578,7 @@ jobs:
       cluster_name: ${{steps.deploy_sr.outputs.cluster_name}}
       be_list: ${{steps.deploy_sr.outputs.be_list}}
       shared_data: ${{steps.choose-mode.outputs.cloud}}
+      is_self_build: ${{ needs.build.outputs.is_self_build }}
     steps:
       - name: Clean Workspace
         uses: AutoModality/action-clean@v1.1.0
@@ -737,7 +749,8 @@ jobs:
       - name: Restart BE (${{needs.deploy.outputs.be_list}})
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/system-cov-be.sh --pr ${PR_NUMBER} --branch ${{ github.base_ref }} --build Release --repository ${{ github.repository }}
+          [[ "${{ needs.deploy.outputs.is_self_build }}" == "true" ]] && skip_gcov="--skip-gcov"
+          ./bin/system-cov-be.sh --pr ${PR_NUMBER} --branch ${{ github.base_ref }} --build Release --repository ${{ github.repository }} ${skip_gcov}
 
       - name: Clean ENV
         if: always()
@@ -823,18 +836,6 @@ jobs:
         if: always() && needs.SQL-Tester.outputs.MYSQL_ECI_ID != ''
         run: |
           eci rm ${{ needs.SQL-Tester.outputs.MYSQL_ECI_ID }}
-
-      - name: upload info
-        if: always()
-        run: |
-          echo $PR_NUMBER > pr_num.txt
-
-      - name: Upload the PR number
-        uses: actions/upload-artifact@v3
-        with:
-          name: pr_num
-          path: ./pr_num.txt
-          retention-days: 3
 
       - name: Clean
         if: always()
