@@ -1839,7 +1839,6 @@ Status SegmentIterator::_apply_inverted_index() {
     RETURN_IF(!_has_inverted_index, Status::OK());
     SCOPED_RAW_TIMER(&_opts.stats->gin_index_filter_timer);
 
-
     roaring::Roaring row_bitmap = range2roaring(_scan_range);
     size_t input_rows = row_bitmap.cardinality();
     std::vector<const ColumnPredicate*> erased_preds;
