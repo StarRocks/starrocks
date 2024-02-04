@@ -105,8 +105,9 @@ void ExportSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
     }
     const auto& chunk = *iter;
     if (chunk == nullptr) {
-        // this is the last chunk
-        DCHECK_EQ(_num_pending_chunks, 0);
+        // this is the last chunk, finish task is first put into queue and then ++_num_pending_chunks,
+        // So _num_pending_chunks maybe 0 or 1 here.
+        DCHECK_LE(_num_pending_chunks, 1);
         close(_state);
         return;
     }

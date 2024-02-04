@@ -51,7 +51,14 @@ class SinkIOBuffer {
 public:
     SinkIOBuffer(int32_t num_sinkers) : _num_result_sinkers(num_sinkers) {}
 
-    virtual ~SinkIOBuffer() = default;
+    virtual ~SinkIOBuffer() {
+        if (_exec_queue_id != nullptr) {
+            // If `Operator` prepare failed, there is no chance to stop queue, so will should stop queue here.
+            // It is safe to call stop multiple times.
+            bthread::execution_queue_stop(*_exec_queue_id);
+            bthread::execution_queue_join(*_exec_queue_id);
+        }
+    }
 
     virtual Status prepare(RuntimeState* state, RuntimeProfile* parent_profile) = 0;
 

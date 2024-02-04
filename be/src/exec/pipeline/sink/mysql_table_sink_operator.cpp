@@ -102,7 +102,7 @@ void MysqlTableSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& ite
     const auto& chunk = *iter;
     if (chunk == nullptr) {
         // this is the last chunk
-        DCHECK_EQ(_num_pending_chunks, 0);
+        DCHECK_LE(_num_pending_chunks, 1);
         close(_state);
         return;
     }
