@@ -24,6 +24,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -81,6 +82,12 @@ public class QueryPlanLockFreeTest {
         GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.FOLLOWER);
         plan = UtFrameUtils.getPlanAndFragment(connectContext, sql);
         Assert.assertTrue(plan.first, plan.first.contains("SCAN"));
+    }
+
+    @AfterClass
+    public static void afterClass() {
+        connectContext.getSessionVariable().setCboUseDBLock(false);
+        GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.LEADER);
     }
 
 }
