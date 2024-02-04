@@ -34,7 +34,10 @@
 
 package com.starrocks.common;
 
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
+import groovy.lang.Tuple3;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.LoggerContext;
 import org.apache.logging.log4j.core.config.ConfigurationSource;
@@ -44,15 +47,16 @@ import org.apache.logging.log4j.core.lookup.StrSubstitutor;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.Set;
 
 // 
 // don't use trace. use INFO, WARN, ERROR, FATAL
-//
 public class Log4jConfig extends XmlConfiguration {
-    private static final long serialVersionUID = 1L;
+    private static final Set<String> DEBUG_LEVELS = ImmutableSet.of("FATAL", "ERROR", "WARN", "INFO", "DEBUG");
 
-    private static String xmlConfTemplateAppenders = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" +
+    private static final String APPENDER_TEMPLATE = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" +
             "\n" +
             "<Configuration status=\"info\" packages=\"com.starrocks.common\">\n" +
             "  <Appenders>\n" +
@@ -134,11 +138,25 @@ public class Log4jConfig extends XmlConfiguration {
             "        </Delete>\n" +
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
+            "    <RollingFile name=\"InternalFile\" fileName=\"${internal_log_dir}/fe.internal.log\" filePattern=\"${internal_log_dir}/fe.internal.log.${internal_file_pattern}-%i\">\n" +
+            "      <PatternLayout charset=\"UTF-8\">\n" +
+            "        <Pattern>%d{yyyy-MM-dd HH:mm:ss,SSS} %p (%t|%tid) [%C{1}.%M():%L] %m%n</Pattern>\n" +
+            "      </PatternLayout>\n" +
+            "      <Policies>\n" +
+            "        <TimeBasedTriggeringPolicy/>\n" +
+            "        <SizeBasedTriggeringPolicy size=\"${internal_roll_maxsize}MB\"/>\n" +
+            "      </Policies>\n" +
+            "      <DefaultRolloverStrategy max=\"${sys_roll_num}\" fileIndex=\"min\">\n" +
+            "        <Delete basePath=\"${internal_log_dir}/\" maxDepth=\"1\" followLinks=\"true\">\n" +
+            "          <IfFileName glob=\"fe.internal.log.*\" />\n" +
+            "          <IfLastModified age=\"${internal_log_delete_age}\" />\n" +
+            "        </Delete>\n" +
+            "      </DefaultRolloverStrategy>\n" +
+            "    </RollingFile>\n" +
             "  </Appenders>\n";
 
     // Predefined loggers to write log to file
-    private static String xmlConfTemplateFileLoggers =
-            "  <Loggers>\n" +
+    private static final String FILE_LOGGER_TEMPLATE = "  <Loggers>\n" +
             "    <Root level=\"${sys_log_level}\">\n" +
             "      <AppenderRef ref=\"Sys\"/>\n" +
             "      <AppenderRef ref=\"SysWF\" level=\"WARN\"/>\n" +
@@ -169,8 +187,7 @@ public class Log4jConfig extends XmlConfiguration {
             "</Configuration>";
 
     // Predefined console logger, all logs will be written to console
-    private static String xmlConfTemplateConsoleLoggers =
-            "  <Loggers>\n" +
+    private static final String CONSOLE_LOGGER_TEMPLATE = "  <Loggers>\n" +
             "    <Root level=\"${sys_log_level}\">\n" +
             "      <AppenderRef ref=\"ConsoleErr\"/>\n" +
             "    </Root>\n" +
@@ -183,131 +200,66 @@ public class Log4jConfig extends XmlConfiguration {
     private static String[] auditModules;
     private static String[] dumpModules;
     private static String[] bigQueryModules;
+    private static String[] internalModules;
 
     private static void reconfig() throws IOException {
-        String newXmlConfTemplate = xmlConfTemplateAppenders;
-        newXmlConfTemplate += Config.sys_log_to_console ? xmlConfTemplateConsoleLoggers : xmlConfTemplateFileLoggers;
+        Map<String, String> properties = Maps.newHashMap();
 
         // sys log config
-        String sysLogDir = Config.sys_log_dir;
-        String sysRollNum = String.valueOf(Config.sys_log_roll_num);
-        String sysDeleteAge = String.valueOf(Config.sys_log_delete_age);
-
-        if (!(sysLogLevel.equalsIgnoreCase("DEBUG") ||
-                sysLogLevel.equalsIgnoreCase("INFO") ||
-                sysLogLevel.equalsIgnoreCase("WARN") ||
-                sysLogLevel.equalsIgnoreCase("ERROR") ||
-                sysLogLevel.equalsIgnoreCase("FATAL"))) {
+        if (!DEBUG_LEVELS.contains(StringUtils.upperCase(sysLogLevel))) {
             throw new IOException("sys_log_level config error");
         }
-
-        String sysLogRollPattern = "%d{yyyyMMdd}";
-        String sysRollMaxSize = String.valueOf(Config.log_roll_size_mb);
-        if (Config.sys_log_roll_interval.equals("HOUR")) {
-            sysLogRollPattern = "%d{yyyyMMddHH}";
-        } else if (Config.sys_log_roll_interval.equals("DAY")) {
-            sysLogRollPattern = "%d{yyyyMMdd}";
-        } else {
-            throw new IOException("sys_log_roll_interval config error: " + Config.sys_log_roll_interval);
-        }
+        properties.put("sys_log_dir", Config.sys_log_dir);
+        properties.put("sys_roll_maxsize", String.valueOf(Config.log_roll_size_mb));
+        properties.put("sys_roll_num", String.valueOf(Config.sys_log_roll_num));
+        properties.put("sys_log_delete_age", String.valueOf(Config.sys_log_delete_age));
+        properties.put("sys_log_level", sysLogLevel);
+        properties.put("sys_file_pattern", getIntervalPattern("sys_log_roll_interval", Config.sys_log_roll_interval));
 
         // audit log config
-        String auditLogDir = Config.audit_log_dir;
-        String auditLogRollPattern = "%d{yyyyMMdd}";
-        String auditRollNum = String.valueOf(Config.audit_log_roll_num);
-        String auditRollMaxSize = String.valueOf(Config.log_roll_size_mb);
-        String auditDeleteAge = String.valueOf(Config.audit_log_delete_age);
-        if (Config.audit_log_roll_interval.equals("HOUR")) {
-            auditLogRollPattern = "%d{yyyyMMddHH}";
-        } else if (Config.audit_log_roll_interval.equals("DAY")) {
-            auditLogRollPattern = "%d{yyyyMMdd}";
-        } else {
-            throw new IOException("audit_log_roll_interval config error: " + Config.audit_log_roll_interval);
-        }
+        properties.put("audit_log_dir", Config.audit_log_dir);
+        properties.put("audit_roll_maxsize", String.valueOf(Config.log_roll_size_mb));
+        properties.put("audit_roll_num", String.valueOf(Config.audit_log_roll_num));
+        properties.put("audit_log_delete_age", String.valueOf(Config.audit_log_delete_age));
+        properties.put("audit_file_pattern",
+                getIntervalPattern("audit_log_roll_interval", Config.audit_log_roll_interval));
 
         // dump log config
-        String dumpLogDir = Config.dump_log_dir;
-        String dumpLogRollPattern = "%d{yyyyMMdd}";
-        String dumpRollNum = String.valueOf(Config.dump_log_roll_num);
-        String dumpRollMaxSize = String.valueOf(Config.log_roll_size_mb);
-        String dumpDeleteAge = String.valueOf(Config.dump_log_delete_age);
-        if (Config.dump_log_roll_interval.equals("HOUR")) {
-            dumpLogRollPattern = "%d{yyyyMMddHH}";
-        } else if (Config.dump_log_roll_interval.equals("DAY")) {
-            dumpLogRollPattern = "%d{yyyyMMdd}";
-        } else {
-            throw new IOException("dump_log_roll_interval config error: " + Config.dump_log_roll_interval);
-        }
+        properties.put("dump_log_dir", Config.dump_log_dir);
+        properties.put("dump_roll_maxsize", String.valueOf(Config.log_roll_size_mb));
+        properties.put("dump_roll_num", String.valueOf(Config.dump_log_roll_num));
+        properties.put("dump_log_delete_age", String.valueOf(Config.dump_log_delete_age));
+        properties.put("dump_file_pattern",
+                getIntervalPattern("dump_log_roll_interval", Config.dump_log_roll_interval));
 
         // big query log config
-        String bigQueryLogDir = Config.big_query_log_dir;
-        String bigQueryLogRollPattern = "%d{yyyyMMdd}";
-        String bigQueryLogRollNum = String.valueOf(Config.big_query_log_roll_num);
-        String bigQueryLogRollMaxSize = String.valueOf(Config.log_roll_size_mb);
-        String bigQueryLogDeleteAge = String.valueOf(Config.big_query_log_delete_age);
-        if (Config.big_query_log_roll_interval.equals("HOUR")) {
-            bigQueryLogRollPattern = "%d{yyyyMMddHH}";
-        } else if (Config.big_query_log_roll_interval.equals("DAY")) {
-            bigQueryLogRollPattern = "%d{yyyyMMdd}";
-        } else {
-            throw new IOException("big_query_log_roll_interval config error: " + Config.big_query_log_roll_interval);
-        }
+        properties.put("big_query_log_dir", Config.big_query_log_dir);
+        properties.put("big_query_roll_maxsize", String.valueOf(Config.log_roll_size_mb));
+        properties.put("big_query_roll_num", String.valueOf(Config.big_query_log_roll_num));
+        properties.put("big_query_log_delete_age", String.valueOf(Config.big_query_log_delete_age));
+        properties.put("big_query_file_pattern",
+                getIntervalPattern("big_query_log_roll_interval", Config.big_query_log_roll_interval));
 
-        // verbose modules and audit log modules
-        StringBuilder sb = new StringBuilder();
-        for (String s : verboseModules) {
-            sb.append("<Logger name='" + s + "' level='DEBUG'/>");
-        }
-        for (String s : auditModules) {
-            sb.append("<Logger name='audit." + s + "' level='INFO'/>");
-        }
-        for (String s : dumpModules) {
-            sb.append("<Logger name='dump." + s + "' level='INFO'/>");
-        }
-        for (String s : bigQueryModules) {
-            sb.append("<Logger name='big_query." + s + "' level='INFO'/>");
-        }
+        // internal log config
+        properties.put("internal_log_dir", Config.internal_log_dir);
+        properties.put("internal_roll_maxsize", String.valueOf(Config.log_roll_size_mb));
+        properties.put("internal_roll_num", String.valueOf(Config.internal_log_roll_num));
+        properties.put("internal_log_delete_age", String.valueOf(Config.internal_log_delete_age));
+        properties.put("internal_file_pattern",
+                getIntervalPattern("big_query_log_roll_interval", Config.internal_log_roll_interval));
 
-        newXmlConfTemplate = newXmlConfTemplate.replaceAll("<!--REPLACED BY AUDIT AND VERBOSE MODULE NAMES-->",
-                sb.toString());
-
-        Map<String, String> properties = Maps.newHashMap();
-        properties.put("sys_log_dir", sysLogDir);
-        properties.put("sys_file_pattern", sysLogRollPattern);
-        properties.put("sys_roll_maxsize", sysRollMaxSize);
-        properties.put("sys_roll_num", sysRollNum);
-        properties.put("sys_log_delete_age", sysDeleteAge);
-        properties.put("sys_log_level", sysLogLevel);
-
-        properties.put("audit_log_dir", auditLogDir);
-        properties.put("audit_file_pattern", auditLogRollPattern);
-        properties.put("audit_roll_maxsize", auditRollMaxSize);
-        properties.put("audit_roll_num", auditRollNum);
-        properties.put("audit_log_delete_age", auditDeleteAge);
-
-        properties.put("dump_log_dir", dumpLogDir);
-        properties.put("dump_file_pattern", dumpLogRollPattern);
-        properties.put("dump_roll_maxsize", dumpRollMaxSize);
-        properties.put("dump_roll_num", dumpRollNum);
-        properties.put("dump_log_delete_age", dumpDeleteAge);
-
-        properties.put("big_query_log_dir", bigQueryLogDir);
-        properties.put("big_query_file_pattern", bigQueryLogRollPattern);
-        properties.put("big_query_roll_maxsize", bigQueryLogRollMaxSize);
-        properties.put("big_query_roll_num", bigQueryLogRollNum);
-        properties.put("big_query_log_delete_age", bigQueryLogDeleteAge);
-
+        String xmlConfTemplate = generateXmlConfTemplate();
         strSub = new StrSubstitutor(new Interpolator(properties));
-        newXmlConfTemplate = strSub.replace(newXmlConfTemplate);
+        xmlConfTemplate = strSub.replace(xmlConfTemplate);
 
         if (!FeConstants.runningUnitTest && !FeConstants.isReplayFromQueryDump) {
             System.out.println("=====");
-            System.out.println(newXmlConfTemplate);
+            System.out.println(xmlConfTemplate);
             System.out.println("=====");
         }
 
         // new SimpleLog4jConfiguration with xmlConfTemplate
-        ByteArrayInputStream bis = new ByteArrayInputStream(newXmlConfTemplate.getBytes("UTF-8"));
+        ByteArrayInputStream bis = new ByteArrayInputStream(xmlConfTemplate.getBytes(StandardCharsets.UTF_8));
         ConfigurationSource source = new ConfigurationSource(bis);
         Log4jConfig config = new Log4jConfig(source);
 
@@ -316,15 +268,43 @@ public class Log4jConfig extends XmlConfiguration {
         context.start(config);
     }
 
-    public static class Tuple<X, Y, Z> {
-        public final X x;
-        public final Y y;
-        public final Z z;
+    private static String generateXmlConfTemplate() {
+        // verbose modules and audit log modules
+        StringBuilder sb = new StringBuilder();
 
-        public Tuple(X x, Y y, Z z) {
-            this.x = x;
-            this.y = y;
-            this.z = z;
+        for (String s : internalModules) {
+            sb.append("<Logger name='internal.").append(s).append("' level=\"INFO\"> \n");
+            sb.append("   <AppenderRef ref=\"InternalFile\"/>\n");
+            sb.append("</Logger>\n");
+        }
+
+        for (String s : verboseModules) {
+            sb.append("<Logger name='").append(s).append("' level='DEBUG'/>");
+        }
+        for (String s : auditModules) {
+            sb.append("<Logger name='audit.").append(s).append("' level='INFO'/>");
+        }
+        for (String s : dumpModules) {
+            sb.append("<Logger name='dump.").append(s).append("' level='INFO'/>");
+        }
+        for (String s : bigQueryModules) {
+            sb.append("<Logger name='big_query.").append(s).append("' level='INFO'/>");
+        }
+
+        String newXmlConfTemplate = APPENDER_TEMPLATE;
+        newXmlConfTemplate += Config.sys_log_to_console ? CONSOLE_LOGGER_TEMPLATE : FILE_LOGGER_TEMPLATE;
+        newXmlConfTemplate = newXmlConfTemplate.replaceAll("<!--REPLACED BY AUDIT AND VERBOSE MODULE NAMES-->",
+                sb.toString());
+        return newXmlConfTemplate;
+    }
+
+    private static String getIntervalPattern(String name, String config) throws IOException {
+        if (config.equalsIgnoreCase("HOUR")) {
+            return "%d{yyyyMMddHH}";
+        } else if (config.equalsIgnoreCase("DAY")) {
+            return "%d{yyyyMMdd}";
+        } else {
+            throw new IOException(name + " config error: " + config);
         }
     }
 
@@ -343,10 +323,11 @@ public class Log4jConfig extends XmlConfiguration {
         auditModules = Config.audit_log_modules;
         dumpModules = Config.dump_log_modules;
         bigQueryModules = Config.big_query_log_modules;
+        internalModules = Config.internal_log_modules;
         reconfig();
     }
 
-    public static synchronized Tuple<String, String[], String[]> updateLogging(
+    public static synchronized Tuple3<String, String[], String[]> updateLogging(
             String level, String[] verboseNames, String[] auditNames) throws IOException {
         boolean toReconfig = false;
         if (level != null) {
@@ -364,6 +345,6 @@ public class Log4jConfig extends XmlConfiguration {
         if (toReconfig) {
             reconfig();
         }
-        return new Tuple<String, String[], String[]>(sysLogLevel, verboseModules, auditModules);
+        return new Tuple3<>(sysLogLevel, verboseModules, auditModules);
     }
 }
