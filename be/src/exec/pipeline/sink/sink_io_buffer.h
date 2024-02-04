@@ -57,12 +57,8 @@ public:
         if (_exec_queue_id != nullptr) {
             // If `Operator` prepare failed, there is no chance to stop queue, so will should stop queue here.
             // It is safe to call stop multiple times.
-            if (bthread::execution_queue_stop(*_exec_queue_id) != 0) {
-                LOG(WARNING) << "SinkIOBuffer stop queue failed: " << _exec_queue_id->value;
-            }
-            if (bthread::execution_queue_join(*_exec_queue_id) != 0) {
-                LOG(WARNING) << "SinkIOBuffer join queue failed: " << _exec_queue_id->value;
-            }
+            bthread::execution_queue_stop(*_exec_queue_id);
+            bthread::execution_queue_join(*_exec_queue_id);
         }
     }
 
