@@ -2,13 +2,13 @@
 
 #include "agent/report_task.h"
 
-#include "agent/client_cache.h"
 #include "agent/utils.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks {
 
 AgentStatus report_task(const TReportRequest& request, TMasterResult* result) {
-    MasterServerClient client(&g_frontend_service_client_cache);
+    MasterServerClient client(ExecEnv::GetInstance()->frontend_client_cache());
     return client.report(request, result);
 }
 
