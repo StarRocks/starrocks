@@ -1062,14 +1062,8 @@ public class GlobalStateMgr {
             // 6. start task cleaner thread
             createTaskCleaner();
 
-<<<<<<< HEAD
-        // 7. init starosAgent
-        if (RunMode.allowCreateLakeTable() && !starOSAgent.init(null)) {
-            LOG.error("init starOSAgent failed");
-            System.exit(-1);
-=======
             // 7. init starosAgent
-            if (RunMode.isSharedDataMode() && !starOSAgent.init(null)) {
+            if (RunMode.allowCreateLakeTable() && !starOSAgent.init(null)) {
                 LOG.error("init starOSAgent failed");
                 System.exit(-1);
             }
@@ -1084,7 +1078,6 @@ public class GlobalStateMgr {
                 e.addSuppressed(t);
             }
             throw e;
->>>>>>> 763e2aaad4 ([BugFix] Remove version and role file after failing to start fe at first time. (#39672))
         }
     }
 
