@@ -29,14 +29,14 @@ public class UKFKConstraints {
     // ColumnRefOperator::id -> UniqueConstraint
     private final Map<Integer, UniqueConstraintWrapper> uniqueKeys = Maps.newHashMap();
     // ColumnRefOperator::id -> ForeignKeyConstraint
-    private final Map<Integer, ForeignKeyConstraint> foreignKeys = Maps.newHashMap();
+    private final Map<Integer, ForeignKeyConstraintWrapper> foreignKeys = Maps.newHashMap();
     private JoinProperty joinProperty;
 
     public void addUniqueKey(int id, UniqueConstraintWrapper uniqueKey) {
         uniqueKeys.put(id, uniqueKey);
     }
 
-    public void addForeignKey(int id, ForeignKeyConstraint foreignKey) {
+    public void addForeignKey(int id, ForeignKeyConstraintWrapper foreignKey) {
         foreignKeys.put(id, foreignKey);
     }
 
@@ -44,7 +44,7 @@ public class UKFKConstraints {
         return uniqueKeys.get(id);
     }
 
-    public ForeignKeyConstraint getForeignKeyConstraint(Integer id) {
+    public ForeignKeyConstraintWrapper getForeignKeyConstraint(Integer id) {
         return foreignKeys.get(id);
     }
 
@@ -87,19 +87,29 @@ public class UKFKConstraints {
         }
     }
 
+    public static final class ForeignKeyConstraintWrapper {
+        public final ForeignKeyConstraint constraint;
+        public final boolean isOrderByFK;
+
+        public ForeignKeyConstraintWrapper(ForeignKeyConstraint constraint, boolean isOrderByFK) {
+            this.constraint = constraint;
+            this.isOrderByFK = isOrderByFK;
+        }
+    }
+
     public static final class JoinProperty {
         public final BinaryPredicateOperator predicate;
         public final UniqueConstraintWrapper ukConstraint;
-        public final ForeignKeyConstraint fkConstraint;
+        public final ForeignKeyConstraintWrapper fkConstraint;
         public final ColumnRefOperator ukColumnRef;
         public final ColumnRefOperator fkColumnRef;
-        public boolean isLeftUK;
+        public final boolean isLeftUK;
         public Expr ukColumn;
         public Expr fkColumn;
 
         public JoinProperty(BinaryPredicateOperator predicate,
                             UniqueConstraintWrapper ukConstraint,
-                            ForeignKeyConstraint fkConstraint,
+                            ForeignKeyConstraintWrapper fkConstraint,
                             ColumnRefOperator ukColumnRef,
                             ColumnRefOperator fkColumnRef, boolean isLeftUK) {
             this.predicate = predicate;

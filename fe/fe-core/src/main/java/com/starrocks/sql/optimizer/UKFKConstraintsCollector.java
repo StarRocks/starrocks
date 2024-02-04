@@ -156,13 +156,17 @@ public class UKFKConstraintsCollector extends OptExpressionVisitor<Void, Void> {
             }
         }
         if (table.hasForeignKeyConstraints()) {
+            Column firstKeyColumn = table.getKeyColumns().get(0);
+            ColumnRefOperator firstKeyColumnRef = columnNameToColRefMap.get(firstKeyColumn.getName());
             List<ForeignKeyConstraint> fkConstraints = table.getForeignKeyConstraints();
             for (ForeignKeyConstraint fkConstraint : fkConstraints) {
                 if (fkConstraint.getColumnRefPairs().size() == 1) {
                     Pair<String, String> pair = fkConstraint.getColumnRefPairs().get(0);
-                    ColumnRefOperator columnRefOperator = columnNameToColRefMap.get(pair.first);
-                    if (columnRefOperator != null && outputColumns.contains(columnRefOperator)) {
-                        constraint.addForeignKey(columnRefOperator.getId(), fkConstraint);
+                    ColumnRefOperator fkColumnRef = columnNameToColRefMap.get(pair.first);
+                    if (fkColumnRef != null && outputColumns.contains(fkColumnRef)) {
+                        constraint.addForeignKey(fkColumnRef.getId(),
+                                new UKFKConstraints.ForeignKeyConstraintWrapper(fkConstraint,
+                                        Objects.equals(firstKeyColumnRef, fkColumnRef)));
                     }
                 }
             }
@@ -269,7 +273,8 @@ public class UKFKConstraintsCollector extends OptExpressionVisitor<Void, Void> {
 
             UKFKConstraints.UniqueConstraintWrapper ukConstraint =
                     leftConstraints.getUniqueConstraint(colRef1.getId());
-            ForeignKeyConstraint fkConstraint = rightConstraints.getForeignKeyConstraint(colRef2.getId());
+            UKFKConstraints.ForeignKeyConstraintWrapper fkConstraint =
+                    rightConstraints.getForeignKeyConstraint(colRef2.getId());
             if (isMatch(fkConstraint, ukConstraint)) {
                 return new UKFKConstraints.JoinProperty(predicate, ukConstraint,
                         fkConstraint,
@@ -304,12 +309,12 @@ public class UKFKConstraintsCollector extends OptExpressionVisitor<Void, Void> {
         return null;
     }
 
-    private static boolean isMatch(ForeignKeyConstraint fkConstraint,
+    private static boolean isMatch(UKFKConstraints.ForeignKeyConstraintWrapper fkConstraint,
                                    UKFKConstraints.UniqueConstraintWrapper ukConstraint) {
         if (fkConstraint == null || ukConstraint == null) {
             return false;
         }
-        BaseTableInfo parentTableInfo = fkConstraint.getParentTableInfo();
+        BaseTableInfo parentTableInfo = fkConstraint.constraint.getParentTableInfo();
         if (parentTableInfo == null) {
             return false;
         }
@@ -322,7 +327,7 @@ public class UKFKConstraintsCollector extends OptExpressionVisitor<Void, Void> {
         if (!Objects.equals(parentTableInfo.getTableName(), ukConstraint.constraint.getTableName())) {
             return false;
         }
-        return Objects.equals(fkConstraint.getColumnRefPairs().get(0).second,
+        return Objects.equals(fkConstraint.constraint.getColumnRefPairs().get(0).second,
                 ukConstraint.constraint.getUniqueColumns().get(0));
     }
 }

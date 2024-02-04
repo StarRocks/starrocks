@@ -367,22 +367,20 @@ public abstract class JoinOrder {
         boolean reverse = false;
         if (joinProperty != null && joinProperty.ukConstraint.isIntact) {
             if (joinProperty.isLeftUK) {
-                if (allowFKAsRightTable(leftExprInfo, rightExprInfo)) {
+                if (allowFKAsRightTable(joinProperty, leftExprInfo, rightExprInfo)) {
                     // Use the fk table as the right table
                     joinExpr = OptExpression.create(newJoin, leftExprInfo.expr,
                             rightExprInfo.expr);
                 } else {
                     // If the uk table is too small or the fk table is too large, then use it as right table
                     reverse = true;
-                    joinProperty.isLeftUK = false;
                     joinExpr = OptExpression.create(newJoin, rightExprInfo.expr,
                             leftExprInfo.expr);
                 }
             } else {
-                if (allowFKAsRightTable(rightExprInfo, leftExprInfo)) {
+                if (allowFKAsRightTable(joinProperty, rightExprInfo, leftExprInfo)) {
                     // Use the fk table as the right table
                     reverse = true;
-                    joinProperty.isLeftUK = true;
                     joinExpr = OptExpression.create(newJoin, rightExprInfo.expr,
                             leftExprInfo.expr);
                 } else {
@@ -416,9 +414,14 @@ public abstract class JoinOrder {
         }
     }
 
-    private boolean allowFKAsRightTable(ExpressionInfo ukExprInfo, ExpressionInfo fkExprInfo) {
+    private boolean allowFKAsRightTable(UKFKConstraints.JoinProperty joinProperty,
+                                        ExpressionInfo ukExprInfo, ExpressionInfo fkExprInfo) {
         SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
         if (!sessionVariable.isEnableUKFKJoinReorder()) {
+            return false;
+        }
+        // If the fk table is ordered by the fk column, then it's more efficient to use it as the left table
+        if (joinProperty.fkConstraint.isOrderByFK) {
             return false;
         }
         RowOutputInfo ukRowOutputInfo = ukExprInfo.expr.getRowOutputInfo();

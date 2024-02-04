@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.planner.TablePruningTestBase;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 
 import java.io.BufferedReader;
@@ -24,6 +25,7 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -236,5 +238,29 @@ public class TPCDSPlanTestBase extends PlanTestBase {
         } catch (NoSuchFieldException | IllegalAccessException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    protected static void prepareUniqueKeys() {
+        TablePruningTestBase.getSqlList("sql/tpcds_constraints/", "AddUniqueKeys")
+                .forEach(stmts -> Arrays.stream(stmts.split("\n")).forEach(q -> {
+                            try {
+                                starRocksAssert.alterTableProperties(q);
+                            } catch (Exception e) {
+                                Assert.fail();
+                            }
+                        }
+                ));
+    }
+
+    protected static void prepareForeignKeys() {
+        TablePruningTestBase.getSqlList("sql/tpcds_constraints/", "AddForeignKeys")
+                .forEach(stmts -> Arrays.stream(stmts.split("\n")).forEach(q -> {
+                            try {
+                                starRocksAssert.alterTableProperties(q);
+                            } catch (Exception e) {
+                                Assert.fail();
+                            }
+                        }
+                ));
     }
 }

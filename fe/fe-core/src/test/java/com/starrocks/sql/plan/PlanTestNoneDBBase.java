@@ -198,6 +198,16 @@ public class PlanTestNoneDBBase {
         assertContains(plan, "  MultiCastDataSinks");
     }
 
+    public static void assertMatches(String text, String pattern) {
+        Pattern regex = Pattern.compile(pattern);
+        Assert.assertTrue(text, regex.matcher(text).find());
+    }
+
+    public static void assertNotMatches(String text, String pattern) {
+        Pattern regex = Pattern.compile(pattern);
+        Assert.assertFalse(text, regex.matcher(text).find());
+    }
+
     public static void assertContains(String text, List<String> patterns) {
         for (String s : patterns) {
             Assert.assertTrue(text, text.contains(s));

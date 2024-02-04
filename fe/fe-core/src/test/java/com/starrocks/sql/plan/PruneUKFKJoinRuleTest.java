@@ -13,7 +13,6 @@
 // limitations under the License.
 package com.starrocks.sql.plan;
 
-import com.starrocks.planner.TablePruningTestBase;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -21,36 +20,10 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.Arrays;
 import java.util.Map;
-import java.util.regex.Pattern;
 
 public class PruneUKFKJoinRuleTest extends TPCDSPlanTestBase {
     Map<String, Long> tpcdsStats = null;
-
-    private static void prepareUniqueKeys() {
-        TablePruningTestBase.getSqlList("sql/tpcds_constraints/", "AddUniqueKeys")
-                .forEach(stmts -> Arrays.stream(stmts.split("\n")).forEach(q -> {
-                            try {
-                                starRocksAssert.alterTableProperties(q);
-                            } catch (Exception e) {
-                                Assert.fail();
-                            }
-                        }
-                ));
-    }
-
-    private static void prepareForeignKeys() {
-        TablePruningTestBase.getSqlList("sql/tpcds_constraints/", "AddForeignKeys")
-                .forEach(stmts -> Arrays.stream(stmts.split("\n")).forEach(q -> {
-                            try {
-                                starRocksAssert.alterTableProperties(q);
-                            } catch (Exception e) {
-                                Assert.fail();
-                            }
-                        }
-                ));
-    }
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -103,16 +76,6 @@ public class PruneUKFKJoinRuleTest extends TPCDSPlanTestBase {
     @After
     public void tearDown() {
         setTPCDSTableStats(tpcdsStats);
-    }
-
-    private void assertMatches(String text, String pattern) {
-        Pattern regex = Pattern.compile(pattern);
-        Assert.assertTrue(text, regex.matcher(text).find());
-    }
-
-    private void assertNotMatches(String text, String pattern) {
-        Pattern regex = Pattern.compile(pattern);
-        Assert.assertFalse(text, regex.matcher(text).find());
     }
 
     private void assertPlans(String query, boolean equals, String... patterns) throws Exception {
