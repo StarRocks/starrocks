@@ -198,9 +198,15 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         refreshMaterializedView(mvContext, mvContext.getExecPlan(), insertStmt);
 
         // insert execute successfully, update the meta of materialized view according to ExecPlan
+<<<<<<< HEAD
         updateMeta(mvContext.getExecPlan());
 
         if (mvContext.hasNextBatchPartition()) {
+=======
+        updateMeta(mvToRefreshedPartitions, mvContext.getExecPlan(), refTableRefreshPartitions);
+        // do not generate next task run if the current task run is killed
+        if (mvContext.hasNextBatchPartition() && !mvContext.getTaskRun().isKilled()) {
+>>>>>>> 54e73cd039 ([BugFix] fix cancel refresh mv command cannot stop task (#40649))
             generateNextTaskRun();
         }
     }
@@ -992,6 +998,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         Preconditions.checkNotNull(execPlan);
         Preconditions.checkNotNull(insertStmt);
         ConnectContext ctx = mvContext.getCtx();
+
+        if (mvContext.getTaskRun().isKilled()) {
+            LOG.warn("[QueryId:{}] refresh materialized view {} is killed", ctx.getQueryId(),
+                    materializedView.getName());
+            throw new UserException("User Cancelled");
+        }
+
         StmtExecutor executor = new StmtExecutor(ctx, insertStmt);
         ctx.setExecutor(executor);
         if (ctx.getParent() != null && ctx.getParent().getExecutor() != null) {

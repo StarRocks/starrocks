@@ -33,6 +33,12 @@ public class TaskRun implements Comparable<TaskRun> {
     public static final String PARTITION_START = "PARTITION_START";
     public static final String PARTITION_END = "PARTITION_END";
     public static final String FORCE = "FORCE";
+<<<<<<< HEAD
+=======
+    public static final String START_TASK_RUN_ID = "START_TASK_RUN_ID";
+    public static final String IS_TEST = "__IS_TEST__";
+    private boolean isKilled = false;
+>>>>>>> 54e73cd039 ([BugFix] fix cancel refresh mv command cannot stop task (#40649))
 
     private long taskId;
 
@@ -103,7 +109,31 @@ public class TaskRun implements Comparable<TaskRun> {
         return this.type;
     }
 
+<<<<<<< HEAD
     public Map<String, String>  refreshTaskProperties(ConnectContext ctx) {
+=======
+    public ExecuteOption getExecuteOption() {
+        return executeOption;
+    }
+
+    public void setExecuteOption(ExecuteOption executeOption) {
+        this.executeOption = executeOption;
+    }
+
+    public String getUUID() {
+        return taskRunId;
+    }
+
+    public void kill() {
+        isKilled = true;
+    }
+
+    public boolean isKilled() {
+        return isKilled;
+    }
+
+    public Map<String, String> refreshTaskProperties(ConnectContext ctx) {
+>>>>>>> 54e73cd039 ([BugFix] fix cancel refresh mv command cannot stop task (#40649))
         Map<String, String> newProperties = Maps.newHashMap();
         if (task.getSource() != Constants.TaskSource.MV) {
             return newProperties;
@@ -173,6 +203,13 @@ public class TaskRun implements Comparable<TaskRun> {
         taskRunContext.setProperties(taskRunContextProperties);
         taskRunContext.setPriority(status.getPriority());
         taskRunContext.setTaskType(type);
+<<<<<<< HEAD
+=======
+        taskRunContext.setStatus(status);
+        taskRunContext.setExecuteOption(executeOption);
+        taskRunContext.setTaskRun(this);
+
+>>>>>>> 54e73cd039 ([BugFix] fix cancel refresh mv command cannot stop task (#40649))
         processor.processTaskRun(taskRunContext);
         QueryState queryState = runCtx.getState();
         LOG.info("finished to execute task run, task_id:{}, query_id:{}, query_state:{}",
