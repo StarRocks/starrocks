@@ -252,7 +252,7 @@ public class MVRestoreUpdater {
         Database db = GlobalStateMgr.getCurrentState().getDb(localDbName);
         String localTableName = mvBaseTableBackupInfo.getLocalTableName();
         if (db == null) {
-            LOG.warn("BaseTable(local) %s's db %s is not found, remote db/table: %s/%s",
+            LOG.warn("BaseTable(local) {}'s db {} is not found, remote db/table: {}/{}",
                     localTableName, localDbName, remoteDbName, remoteTableName);
             return Pair.create(false, Optional.empty());
         }
