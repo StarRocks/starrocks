@@ -124,7 +124,8 @@ public class TabletScheduler extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(TabletScheduler.class);
 
     // the minimum interval of updating cluster statistics and priority of tablet info
-    private static final long STAT_UPDATE_INTERVAL_MS = 20L * 1000L; // 20s
+    @VisibleForTesting
+    public static long stateUpdateIntervalMs = 20L * 1000L; // 20s
 
     private static final long SCHEDULE_INTERVAL_MS = 1000; // 1s
 
@@ -442,7 +443,7 @@ public class TabletScheduler extends FrontendDaemon {
         }
 
         boolean loadStatUpdated = false;
-        if (System.currentTimeMillis() - lastStatUpdateTime > STAT_UPDATE_INTERVAL_MS) {
+        if (System.currentTimeMillis() - lastStatUpdateTime > stateUpdateIntervalMs) {
             updateClusterLoadStatisticsAndPriority();
             loadStatUpdated = true;
         }
@@ -1877,7 +1878,7 @@ public class TabletScheduler extends FrontendDaemon {
             }
         }
 
-        if (System.currentTimeMillis() - lastSlotAdjustTime < STAT_UPDATE_INTERVAL_MS) {
+        if (System.currentTimeMillis() - lastSlotAdjustTime < stateUpdateIntervalMs) {
             return;
         }
 
