@@ -143,6 +143,24 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long slow_lock_log_every_ms = 3000L;
 
+    @ConfField
+    public static String custom_config_dir = "/conf";
+
+    /*
+     * internal log:
+     * This specifies FE MV/Statistics log dir.
+     */
+    @ConfField
+    public static String internal_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
+    @ConfField
+    public static int internal_log_roll_num = 90;
+    @ConfField
+    public static String[] internal_log_modules = {"base", "statistic"};
+    @ConfField
+    public static String internal_log_roll_interval = "DAY";
+    @ConfField
+    public static String internal_log_delete_age = "7d";
+
     /**
      * dump_log_dir:
      * This specifies FE dump log dir.
