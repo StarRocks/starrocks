@@ -16,7 +16,7 @@
 
 #ifdef __x86_64__
 #include <immintrin.h>
-#elif defined(__aarch__64)
+#elif defined(__aarch64__) && defined(USE_AVX2KI)
 #include "avx2ki.h"
 #endif
 
@@ -102,7 +102,7 @@ NullColumnPtr FunctionHelper::union_null_column(const NullColumnPtr& v1, const N
     auto null1_curr = null1_begin;
     auto null2_curr = null2_begin;
     auto result_curr = result_begin;
-#if defined(__AVX2__) || defined(__aarch64__)
+#if defined(__AVX2__) || defined(USE_AVX2KI)
     constexpr auto AVX2_SIZE = sizeof(__m256i);
     const auto null1_avx2_end = null1_begin + (bytes_size & ~(AVX2_SIZE - 1));
     for (; null1_curr < null1_avx2_end; null1_curr += AVX2_SIZE, null2_curr += AVX2_SIZE, result_curr += AVX2_SIZE) {

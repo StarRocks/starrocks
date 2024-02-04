@@ -21,7 +21,7 @@
 #include "util/crc32c.h"
 #ifdef __SSE4_2__
 #include <nmmintrin.h>
-#elif defined(__aarch64__)
+#elif defined(__aarch64__) && defined(USE_AVX2KI)
 #include "avx2ki.h"
 #endif
 #include "util/coding.h"
@@ -154,7 +154,7 @@ static inline uint32_t LE_LOAD32(const uint8_t* p) {
     return decode_fixed32_le(p);
 }
 
-#if defined(__SSE4_2__) && (defined(__LP64__) || defined(_WIN64)) || defined (__aarch64__)
+#if defined(__SSE4_2__) && (defined(__LP64__) || defined(_WIN64)) || defined (USE_AVX2KI)
 static inline uint64_t LE_LOAD64(const uint8_t* p) {
     return decode_fixed64_le(p);
 }
@@ -171,7 +171,7 @@ static inline uint64_t LE_LOAD64(const uint8_t* p) {
 }
 
 static inline void Fast_CRC32(uint64_t* l, uint8_t const** p) {
-#if !defined(__SSE4_2__) && !defined(__aarch64__)
+#if !defined(__SSE4_2__) && !defined(USE_AVX2KI)
     Slow_CRC32(l, p);
 #elif defined(__LP64__) || defined(_WIN64)
     *l = _mm_crc32_u64(*l, LE_LOAD64(*p));
@@ -228,7 +228,7 @@ uint32_t ExtendImpl(uint32_t crc, const char* buf, size_t size) {
 }
 
 uint32_t Extend(uint32_t crc, const char* buf, size_t size) {
-#if defined(__SSE4_2__) || defined(__aarch64__)
+#if defined(__SSE4_2__) || defined(USE_AVX2KI)
     return ExtendImpl<Fast_CRC32>(crc, buf, size);
 #else
     return ExtendImpl<Slow_CRC32>(crc, buf, size);

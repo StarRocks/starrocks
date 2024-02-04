@@ -18,7 +18,7 @@
 #ifdef __AVX2__
 #include <emmintrin.h>
 #include <immintrin.h>
-#elif defined (__aarch64__)
+#elif defined (__aarch64__) && defined (USE_AVX2KI)
 #include "avx2ki.h"
 #endif
 

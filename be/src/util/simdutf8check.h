@@ -19,7 +19,7 @@
 
 #ifdef __x86_64__
 #include <x86intrin.h>
-#elif defined (__aarch64__)
+#elif defined (__aarch64__) && defined(USE_AVX2KI)
 #include "avx2ki.h"
 #endif
 
@@ -185,7 +185,7 @@ static bool validate_utf8_fast(const char* src, size_t len) {
     return _mm_testz_si128(has_error, has_error);
 }
 
-#if defined(__AVX2__)  || defined(__aarch64__)
+#if defined(__AVX2__)  || defined(USE_AVX2KI)
 
 /*****************************/
 static inline __m256i push_last_byte_of_a_to_b(__m256i a, __m256i b) {

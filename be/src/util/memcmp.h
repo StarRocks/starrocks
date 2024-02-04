@@ -41,7 +41,7 @@
 // Must include headers out of namespace
 #if defined(__SSE4_1__) && !defined(ADDRESS_SANITIZER)
 #include <smmintrin.h>
-#elif defined(__aarch64__) && !defined(ADDRESS_SANITIZER)
+#elif defined(__aarch64__) && defined(USE_AVX2KI) && !defined(ADDRESS_SANITIZER)
 #include "avx2ki.h"
 #endif
 
@@ -66,7 +66,7 @@ inline int compare(T lhs, T rhs) {
 // TODO: If know the size in advance, call the function by constant parameter
 //       like memequal(p1, 10, p2, 10) is efficient
 
-#if (defined(__SSE4_1__) || defined(__aarch64__)) && !defined(ADDRESS_SANITIZER)
+#if (defined(__SSE4_1__) || defined(USE_AVX2KI)) && !defined(ADDRESS_SANITIZER)
 
 inline bool memequal(const char* p1, size_t size1, const char* p2, size_t size2) {
     if (size1 != size2) {

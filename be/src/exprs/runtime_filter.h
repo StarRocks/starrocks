@@ -113,7 +113,7 @@ public:
 
     void insert_hash(const uint64_t hash) noexcept {
         const uint32_t bucket_idx = hash & _directory_mask;
-#if defined(__AVX2__) || defined(__aarch64__)
+#if defined(__AVX2__) || defined(USE_AVX2KI)
         const __m256i mask = make_mask(hash >> _log_num_buckets);
         __m256i* const bucket = &reinterpret_cast<__m256i*>(_directory)[bucket_idx];
         _mm256_store_si256(bucket, _mm256_or_si256(*bucket, mask));
@@ -205,7 +205,7 @@ private:
     }
 #endif
 
-#if defined(__AVX2__) || defined(__aarch64__)
+#if defined(__AVX2__) || defined(USE_AVX2KI)
     // For simd version:
     __m256i make_mask(const uint32_t hash) const noexcept {
         // Load hash into a YMM register, repeated eight times
@@ -271,7 +271,7 @@ public:
         size_t h1_hash = hash >> 7;
         size_t offset_ = h1_hash & _capacity;
         char h2_hash = hash & 0x7F;
-#if defined(__SSE2__) || defined(__aarch64__)
+#if defined(__SSE2__) || defined(USE_AVX2KI)
         __m128i ctrl = _mm_loadu_si128(reinterpret_cast<__m128i*>(_ctrl + offset_));
         auto match = _mm_set1_epi8(h2_hash);
         return _mm_movemask_epi8(_mm_cmpeq_epi8(match, ctrl));

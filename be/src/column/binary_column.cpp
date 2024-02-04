@@ -16,8 +16,8 @@
 
 #ifdef __x86_64__
 #include <immintrin.h>
-#elif defined(__aarch64__)
-+#include "avx2ki.h"
+#elif defined(__aarch64__) && defined(USE_AVX2KI)
+#include "avx2ki.h"
 #endif
 
 #include "column/bytes.h"
@@ -248,7 +248,7 @@ bool BinaryColumnBase<T>::append_continuous_fixed_length_strings(const char* dat
 
     int i = 0;
 
-#if defined(__AVX2__) || defined(__aarch64__)
+#if defined(__AVX2__) || defined(USE_AVX2KI)
     if constexpr (std::is_same_v<T, uint32_t>) {
         if ((bytes_size + fixed_length * size) < std::numeric_limits<uint32_t>::max()) {
             const int times = static_cast<const int>(size / 8);
@@ -428,7 +428,7 @@ size_t BinaryColumnBase<T>::filter_range(const Filter& filter, size_t from, size
 
     uint8_t* data = _bytes.data();
 
-#if defined(__AVX2__) || defined (__aarch64__)
+#if defined(__AVX2__) || defined(USE_AVX2KI)
     const uint8_t* f_data = filter.data();
 
     int simd_bits = 256;
@@ -600,7 +600,7 @@ int64_t BinaryColumnBase<T>::xor_checksum(uint32_t from, uint32_t to) const {
         size_t num = _offsets[i + 1] - _offsets[i];
         const auto* src = reinterpret_cast<const uint8_t*>(_bytes.data() + _offsets[i]);
 
-#if defined(__AVX2__) || defined(__aarch64__)
+#if defined(__AVX2__) || defined(USE_AVX2KI)
         // AVX2 intructions can improve the speed of XOR procedure of one string.
         __m256i avx2_checksum = _mm256_setzero_si256();
         size_t step = sizeof(__m256i) / sizeof(uint8_t);

@@ -19,7 +19,7 @@
 
 #ifdef __SSE4_2__
 #include <emmintrin.h>
-#elif defined(__aarch64__)
+#elif defined(__aarch64__) && defined(USE_AVX2KI)
 #include "avx2ki.h"
 #endif
 #include <unistd.h>
@@ -119,7 +119,7 @@ StatusOr<ColumnPtr> UtilityFunctions::uuid(FunctionContext* ctx, const Columns& 
         offsets[i + 1] = offsets[i] + 36;
     }
 
-#if defined(__SSE4_2__) || defined(__aarch64__)
+#if defined(__SSE4_2__) || defined(USE_AVX2KI)
     alignas(16) static constexpr const char hex_chars[16] = {'0', '1', '2', '3', '4', '5', '6', '7',
                                                              '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'};
     const __m128i mask = _mm_set1_epi8(0xF);
@@ -129,7 +129,7 @@ StatusOr<ColumnPtr> UtilityFunctions::uuid(FunctionContext* ctx, const Columns& 
     for (int i = 0; i < num_rows; ++i) {
         char buff[32];
         memset(ptr, '-', 36);
-#if defined(__SSE4_2__) || defined(__aarch64__)
+#if defined(__SSE4_2__) || defined(USE_AVX2KI)
         // SIMD::to_hex
         __m128i value = _mm_loadu_si64(reinterpret_cast<const __m128i*>(&uuid_data[i]));
         // 0x1234

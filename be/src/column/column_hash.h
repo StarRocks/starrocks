@@ -31,7 +31,9 @@
 
 #if defined(__aarch64__)
 #include "arm_acle.h"
+#ifdef USE_AVX2KI
 #include "avx2ki.h"
+#endif
 #endif
 
 namespace starrocks {
@@ -226,7 +228,7 @@ public:
     }
 };
 
-#if (defined(__SSE2__) || defined(_aarch64__)) && !defined(ADDRESS_SANITIZER)
+#if (defined(__SSE2__) || defined(USE_AVX2KI)) && !defined(ADDRESS_SANITIZER)
 
 // NOTE: This function will access 15 excessive bytes after p1 and p2, which should has padding bytes when allocating
 // memory. if withoud pad, please use memequal.

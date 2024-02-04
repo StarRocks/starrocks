@@ -24,7 +24,7 @@
 #include <emmintrin.h>
 #endif
 
-#ifdef __aarch64__
+#if defined(__aarch64__) && defined(USE_AVX2KI)
 #include "avx2ki.h"
 #endif
 
@@ -59,7 +59,7 @@ public:
         if (_left == 0) {
             return BatchCount(0, 0, true);
         }
-#if defined(__AVX2__) || defined(__aarch64__)
+#if defined(__AVX2__) || defined(USE_AVX2KI)
         const __m256i all0 = _mm256_setzero_si256();
 
         if (batch_size >= 32 && _left >= 32) {
@@ -80,7 +80,7 @@ public:
         }
 #endif
 
-#if defined(__SSE2__) || defined(__aarch64__)
+#if defined(__SSE2__) || defined(USE_AVX2KI)
         const __m128i zero16 = _mm_setzero_si128();
 
         if (batch_size >= 16 && _left >= 16) {

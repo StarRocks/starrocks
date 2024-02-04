@@ -119,7 +119,7 @@ static inline const char* skip_trailing_utf8(const char* p, const char* begin, s
 inline static int utf8_len(const char* begin, const char* end) {
     int len = 0;
     const char* p = begin;
-#if defined(__AVX2__) || defined(__aarch64__)
+#if defined(__AVX2__) || defined(USE_AVX2KI)
     size_t str_size = end - begin;
     constexpr auto bytes_avx2 = sizeof(__m256i);
     // Bytes processed by SIMD operations must be mutiples of bytes_avx2, so:
@@ -178,7 +178,7 @@ static inline Slice utf8_char_start(const char* end) {
 
 // Modify from https://github.com/lemire/fastvalidate-utf-8/blob/master/include/simdasciicheck.h
 static inline bool validate_ascii_fast(const char* src, size_t len) {
-#if defined(__AVX2__) || defined(__aarch64__)
+#if defined(__AVX2__) || defined(USE_AVX2KI)
     size_t i = 0;
     __m256i has_error = _mm256_setzero_si256();
     if (len >= 32) {

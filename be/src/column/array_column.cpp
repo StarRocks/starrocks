@@ -305,7 +305,7 @@ size_t ArrayColumn::filter_range(const Filter& filter, size_t from, size_t to) {
     auto check_offset = from;
     auto result_offset = from;
 
-#if defined(__AVX2__) || defined(__aarch64__)
+#if defined(__AVX2__) || defined(USE_AVX2KI)
     const uint8_t* f_data = filter.data();
 
     constexpr size_t kBatchSize = /*width of AVX registers*/ 256 / 8;

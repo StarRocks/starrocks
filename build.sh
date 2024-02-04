@@ -163,6 +163,14 @@ fi
 if [[ -z ${CCACHE} ]]; then
     CCACHE=ccache
 fi
+if [[ -z ${USE_AVX2KI} ]]; then
+    ## Disable it by default
+    USE_AVX2KI=OFF
+fi
+
+if [[ "${MACHINE_TYPE}" == "aarch64"  && -f ${STARROCKS_THIRDPARTY}/installed/ksl/lib/libavx2ki.so ]]; then
+    USE_AVX2KI=ON
+fi
 
 if [ -e /proc/cpuinfo ] ; then
     # detect cpuinfo
@@ -272,6 +280,7 @@ echo "Get params:
     ENABLE_SHARED_DATA  -- $USE_STAROS
     USE_AVX2            -- $USE_AVX2
     USE_AVX512          -- $USE_AVX512
+    USE_AVX2KI          -- $USE_AVX2KI
     JEMALLOC_DEBUG      -- $JEMALLOC_DEBUG
     PARALLEL            -- $PARALLEL
     ENABLE_QUERY_DEBUG_TRACE -- $ENABLE_QUERY_DEBUG_TRACE
@@ -357,6 +366,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                   -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}                \
                   -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV}              \
                   -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 \
+                  -DUSE_AVX2KI=$USE_AVX2KI          \
                   -DJEMALLOC_DEBUG=$JEMALLOC_DEBUG  \
                   -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE  \
                   -DWITH_BENCH=${WITH_BENCH}                            \

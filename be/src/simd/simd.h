@@ -19,7 +19,7 @@
 #include <vector>
 #ifdef __SSE2__
 #include <emmintrin.h>
-#elif defined(__aarch64__)
+#elif defined(__aarch64__) && defined(USE_AVX2KI)
 #include "avx2ki.h"
 #endif
 
@@ -30,7 +30,7 @@ inline size_t count_zero(const int8_t* data, size_t size) {
     size_t count = 0;
     const int8_t* end = data + size;
 
-#if (defined(__SSE2__) || defined(__aarch64__)) && defined(__POPCNT__)
+#if (defined(__SSE2__) || defined(USE_AVX2KI)) && defined(__POPCNT__)
     const __m128i zero16 = _mm_setzero_si128();
     const int8_t* end64 = data + (size / 64 * 64);
 

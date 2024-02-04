@@ -131,7 +131,7 @@ inline int CountTrailingZerosNonZero32(uint32_t n) {
 #ifdef __AVX2__
 #include <immintrin.h>
 #endif
-#elif defined(__aarch64__)
+#elif defined(__aarch64__) && defined(USE_AVX2KI)
 #include "avx2ki.h"
 #endif
 
@@ -142,7 +142,7 @@ void DataBuffer<T>::filter(const uint8_t* f_data, size_t f_size, size_t true_siz
     size_t dst = 0;
     size_t end = src + f_size;
 
-#if defined(__AVX2__) || defined(__aarch64__)
+#if defined(__AVX2__) || defined(USE_AVX2KI)
     const int simd_bits = 256;
     const int batch_nums = simd_bits / (8 * (int)sizeof(uint8_t));
     __m256i all0 = _mm256_setzero_si256();

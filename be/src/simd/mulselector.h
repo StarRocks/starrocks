@@ -22,7 +22,7 @@
 #ifdef __AVX2__
 #include <emmintrin.h>
 #include <immintrin.h>
-#elif defined(__aarch64__)
+#elif defined(__aarch64__) && defined(USE_AVX2KI)
 #include "avx2ki.h"
 #endif
 
@@ -44,7 +44,7 @@ public:
         int row_sz = select_list[0]->size();
         int processed_rows = 0;
 
-#if defined(__AVX2__) || defined (__aarch64__)
+#if defined(__AVX2__) || defined (USE_AVX2KI)
         // SIMD multi select if Algorithm
         // INPUT: select_vecs = [vec1, vec2] select_datas = [vdata1, vdata2, vdata3]
         // # padding len(selecter) == len(datas)
