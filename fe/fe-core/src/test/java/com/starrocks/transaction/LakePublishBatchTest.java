@@ -230,6 +230,70 @@ public class LakePublishBatchTest {
     }
 
     @Test
+    public void testTransformBatchToSingle() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getDb(DB);
+        Table table = db.getTable(TABLE);
+        List<TabletCommitInfo> transTablets1 = Lists.newArrayList();
+        List<TabletCommitInfo> transTablets2 = Lists.newArrayList();
+
+        int num = 0;
+        for (Partition partition : table.getPartitions()) {
+            MaterializedIndex baseIndex = partition.getBaseIndex();
+            for (Long tabletId : baseIndex.getTabletIdsInOrder()) {
+                for (Long backendId : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds()) {
+                    TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tabletId, backendId);
+                    if (num % 2 == 0) {
+                        transTablets1.add(tabletCommitInfo);
+                    } else {
+                        transTablets2.add(tabletCommitInfo);
+                    }
+                }
+            }
+            num++;
+        }
+
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        long transactionId1 = globalTransactionMgr.
+                beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                        "label1",
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        // commit a transaction
+        VisibleStateWaiter waiter1 = globalTransactionMgr.commitTransaction(db.getId(), transactionId1, transTablets1,
+                Lists.newArrayList(), null);
+
+        long transactionId2 = globalTransactionMgr.
+                beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                        "label2",
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        // commit a transaction
+        VisibleStateWaiter waiter2 = globalTransactionMgr.commitTransaction(db.getId(), transactionId2, transTablets2,
+                Lists.newArrayList(), null);
+
+        PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
+        publishVersionDaemon.runAfterCatalogReady();
+
+        Assert.assertTrue(waiter1.await(10, TimeUnit.SECONDS));
+        Assert.assertTrue(waiter2.await(10, TimeUnit.SECONDS));
+
+        Config.lake_enable_batch_publish_version = false;
+        long transactionId3 = globalTransactionMgr.
+                beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                        "label3",
+                        transactionSource,
+                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        // commit a transaction
+        VisibleStateWaiter waiter3 = globalTransactionMgr.commitTransaction(db.getId(), transactionId3, transTablets1,
+                Lists.newArrayList(), null);
+
+        publishVersionDaemon.runAfterCatalogReady();
+        Assert.assertTrue(waiter3.await(10, TimeUnit.SECONDS));
+
+        Config.lake_enable_batch_publish_version = true;
+    }
+
+    @Test
     public void testPublishTransactionState() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getDb(DB);
         Table table = db.getTable(TABLE);
