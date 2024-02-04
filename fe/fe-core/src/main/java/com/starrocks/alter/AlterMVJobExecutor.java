@@ -16,11 +16,13 @@ package com.starrocks.alter;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Range;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.UniqueConstraint;
@@ -47,6 +49,7 @@ import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
+import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
@@ -57,6 +60,7 @@ import com.starrocks.sql.optimizer.Utils;
 import org.apache.commons.lang3.StringUtils;
 import org.threeten.extra.PeriodDuration;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
@@ -337,10 +341,26 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 if (materializedView.isActive()) {
                     return null;
                 }
+                // Get mv partition range, use it to refresh mv
+                PartitionRangeDesc partitionRangeDesc = null;
+                if (materializedView.getPartitionInfo().isRangePartition()) {
+                    Collection<Range<PartitionKey>> mvPartitionKeyRanges =
+                            materializedView.getRangePartitionMap().values();
+                    PartitionKey startPartitionKey = mvPartitionKeyRanges.stream().map(Range::lowerEndpoint).
+                            min(PartitionKey::compareTo).orElse(null);
+                    PartitionKey endPartitionKey = mvPartitionKeyRanges.stream().map(Range::upperEndpoint).
+                            max(PartitionKey::compareTo).orElse(null);
+
+                    if (startPartitionKey != null && endPartitionKey != null) {
+                        partitionRangeDesc = new PartitionRangeDesc(startPartitionKey.getKeys().get(0).getStringValue(),
+                                endPartitionKey.getKeys().get(0).getStringValue());
+                    }
+                }
+
                 GlobalStateMgr.getCurrentState().getAlterJobMgr().
                         alterMaterializedViewStatus(materializedView, status, false);
                 GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .refreshMaterializedView(dbName, materializedView.getName(), true, null,
+                        .refreshMaterializedView(dbName, materializedView.getName(), true, partitionRangeDesc,
                                 Constants.TaskRunPriority.NORMAL.value(), true, false);
             } else if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(status)) {
                 if (!materializedView.isActive()) {
