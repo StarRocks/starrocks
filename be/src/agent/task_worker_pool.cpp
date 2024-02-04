@@ -692,8 +692,7 @@ void* ReportOlapTableTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         }
         request.tablets.clear();
 
-        int64_t report_version = g_report_version.load(std::memory_order_relaxed);
-        request.__set_report_version(report_version);
+        request.__set_report_version(g_report_version.load(std::memory_order_relaxed));
         Status st_report = StorageEngine::instance()->tablet_manager()->report_all_tablets_info(&request.tablets);
         if (!st_report.ok()) {
             LOG(WARNING) << "Fail to report all tablets info, err=" << st_report.to_string();
@@ -710,8 +709,6 @@ void* ReportOlapTableTaskWorkerPool::_worker_thread_callback(void* arg_this) {
 
         TMasterResult result;
         status = report_task(request, &result);
-
-        LOG(INFO) << "start to report tablets, report version: " << report_version;
 
         if (status != STARROCKS_SUCCESS) {
             StarRocksMetrics::instance()->report_all_tablets_requests_failed.increment(1);
