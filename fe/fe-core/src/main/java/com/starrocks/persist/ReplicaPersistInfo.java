@@ -121,6 +121,7 @@ public class ReplicaPersistInfo implements Writable {
 
     @SerializedName("vs")
     private long version;
+    @SerializedName("minReadableVersion")
     private long minReadableVersion = 0;
     @SerializedName("sh")
     private int schemaHash = -1;
