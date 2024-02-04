@@ -23,7 +23,7 @@ jobs:
     outputs:
       output1: ${{ steps.proto-check-info.outputs.proto }}
     steps:
-      - uses: dorny/paths-filter@v2
+      - uses: dorny/paths-filter@v3
         id: changes
         with:
           filters: |
