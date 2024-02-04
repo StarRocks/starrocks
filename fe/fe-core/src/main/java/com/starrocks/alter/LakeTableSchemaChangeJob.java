@@ -47,6 +47,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.journal.JournalTask;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarMgrMetaSyncer;
@@ -79,7 +80,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
@@ -257,7 +257,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     }
 
     @VisibleForTesting
-    public static Future<Boolean> writeEditLogAsync(LakeTableSchemaChangeJob job) {
+    public static JournalTask writeEditLogAsync(LakeTableSchemaChangeJob job) {
         return GlobalStateMgr.getCurrentState().getEditLog().logAlterJobNoWait(job);
     }
 
@@ -525,8 +525,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             return;
         }
 
-        long startWriteTs;
-        Future<Boolean> editLogFuture;
+        JournalTask editLogFuture;
         // Replace the current index with shadow index.
         Set<String> modifiedColumns;
         List<MaterializedIndex> droppedIndexes;
@@ -548,11 +547,10 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             this.jobState = JobState.FINISHED;
             this.finishedTimeMs = System.currentTimeMillis();
 
-            startWriteTs = System.nanoTime();
             editLogFuture = writeEditLogAsync(this);
         }
 
-        EditLog.waitInfinity(startWriteTs, editLogFuture);
+        EditLog.waitInfinity(editLogFuture);
 
         // Delete tablet and shards
         for (MaterializedIndex droppedIndex : droppedIndexes) {
