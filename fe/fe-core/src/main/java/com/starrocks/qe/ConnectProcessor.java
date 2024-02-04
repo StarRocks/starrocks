@@ -274,6 +274,21 @@ public class ConnectProcessor {
         queryDetail.setEndTime(endTime);
         queryDetail.setLatency(elapseMs);
         queryDetail.setResourceGroupName(ctx.getResourceGroup() != null ? ctx.getResourceGroup().getName() : "");
+<<<<<<< HEAD
+=======
+        // add execution statistics into queryDetail
+        queryDetail.setReturnRows(ctx.getReturnRows());
+        queryDetail.setDigest(ctx.getAuditEventBuilder().build().digest);
+        PQueryStatistics statistics = executor.getQueryStatisticsForAuditLog();
+        if (statistics != null) {
+            queryDetail.setScanBytes(statistics.scanBytes);
+            queryDetail.setScanRows(statistics.scanRows);
+            queryDetail.setCpuCostNs(statistics.cpuCostNs == null ? -1 : statistics.cpuCostNs);
+            queryDetail.setMemCostBytes(statistics.memCostBytes == null ? -1 : statistics.memCostBytes);
+            queryDetail.setSpillBytes(statistics.spillBytes == null ? -1 : statistics.spillBytes);
+        }
+
+>>>>>>> 387db2a137 ([Enhancement] Add digest into QueryDetail (#40039))
         QueryDetailQueue.addQueryDetail(queryDetail);
     }
 

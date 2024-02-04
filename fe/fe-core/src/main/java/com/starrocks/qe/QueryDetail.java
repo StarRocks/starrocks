@@ -72,6 +72,16 @@ public class QueryDetail implements Serializable {
     private String explain;
     private String profile;
     private String resourceGroupName;
+<<<<<<< HEAD
+=======
+    private long scanRows = -1;
+    private long scanBytes = -1;
+    private long returnRows = -1;
+    private long cpuCostNs = -1;
+    private long memCostBytes = -1;
+    private long spillBytes = -1;
+    private String digest;
+>>>>>>> 387db2a137 ([Enhancement] Add digest into QueryDetail (#40039))
 
     public QueryDetail() {
     }
@@ -118,6 +128,16 @@ public class QueryDetail implements Serializable {
         queryDetail.errorMessage = this.errorMessage;
         queryDetail.explain = this.explain;
         queryDetail.profile = this.profile;
+<<<<<<< HEAD
+=======
+        queryDetail.scanRows = this.scanRows;
+        queryDetail.scanBytes = this.scanBytes;
+        queryDetail.returnRows = this.returnRows;
+        queryDetail.cpuCostNs = this.cpuCostNs;
+        queryDetail.memCostBytes = this.memCostBytes;
+        queryDetail.spillBytes = this.spillBytes;
+        queryDetail.digest = this.digest;
+>>>>>>> 387db2a137 ([Enhancement] Add digest into QueryDetail (#40039))
         return queryDetail;
     }
 
@@ -240,4 +260,59 @@ public class QueryDetail implements Serializable {
     public void setResourceGroupName(String workGroupName) {
         this.resourceGroupName = workGroupName;
     }
+<<<<<<< HEAD
+=======
+
+    public long getScanRows() {
+        return scanRows;
+    }
+
+    public void setScanRows(long scanRows) {
+        this.scanRows = scanRows;
+    }
+
+    public long getScanBytes() {
+        return scanBytes;
+    }
+
+    public void setScanBytes(long scanBytes) {
+        this.scanBytes = scanBytes;
+    }
+
+    public long getReturnRows() {
+        return returnRows;
+    }
+
+    public void setReturnRows(long returnRows) {
+        this.returnRows = returnRows;
+    }
+
+    public long getCpuCostNs() {
+        return cpuCostNs;
+    }
+
+    public void setCpuCostNs(long cpuCostNs) {
+        this.cpuCostNs = cpuCostNs;
+    }
+
+    public long getMemCostBytes() {
+        return memCostBytes;
+    }
+
+    public void setMemCostBytes(long memCostBytes) {
+        this.memCostBytes = memCostBytes;
+    }
+
+    public void setSpillBytes(long spillBytes) {
+        this.spillBytes = spillBytes;
+    }
+
+    public String getDigest() {
+        return digest;
+    }
+
+    public void setDigest(String digest) {
+        this.digest = digest;
+    }
+>>>>>>> 387db2a137 ([Enhancement] Add digest into QueryDetail (#40039))
 }
