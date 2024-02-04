@@ -1,0 +1,29 @@
+-- name: test_iceberg_catalog_timestamp_type
+create external catalog ice_cat_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+set catalog ice_cat_${uuid0};
+create database ice_db_${uuid0};
+use ice_db_${uuid0};
+create table ice_tbl_${uuid0} (
+  col_str int,
+  col_int datetime
+);
+insert into ice_tbl_${uuid0} values (1, '2024-01-29 01:00:00'),(2, '2024-01-30 20:10:00'),(3,null);
+-- result:
+-- !result
+select * from ice_cat_${uuid0}.ice_db_${uuid0}.ice_tbl_${uuid0};
+-- result:
+1	2024-01-29 01:00:00
+2	2024-01-30 20:10:00
+3	None
+-- !result
+drop table ice_tbl_${uuid0} force;
+drop database ice_db_${uuid0};
+drop catalog ice_cat_${uuid0};
+-- result:
+-- !result
