@@ -98,6 +98,7 @@ public class TaskRunManager implements MemoryTrackable {
         if (taskRun == null) {
             return false;
         }
+        taskRun.kill();
         ConnectContext runCtx = taskRun.getRunCtx();
         if (runCtx != null) {
             runCtx.kill(false, "kill TaskRun");
