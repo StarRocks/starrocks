@@ -55,31 +55,15 @@ public:
 
     virtual ~SinkIOBuffer() = default;
 
-    virtual Status prepare(RuntimeState* state, RuntimeProfile* parent_profile) = 0;
+    virtual Status prepare(RuntimeState* state, RuntimeProfile* parent_profile);
 
-    virtual Status append_chunk(RuntimeState* state, const ChunkPtr& chunk) {
-        if (Status status = get_io_status(); !status.ok()) {
-            return status;
-        }
-        if (bthread::execution_queue_execute(*_exec_queue_id, chunk) != 0) {
-            return Status::InternalError("submit io task failed");
-        }
-        ++_num_pending_chunks;
-        return Status::OK();
-    }
+    virtual Status append_chunk(RuntimeState* state, const ChunkPtr& chunk);
 
     virtual bool need_input() { return _num_pending_chunks < kExecutionQueueSizeLimit; }
 
-    virtual Status set_finishing() {
-        if (--_num_result_sinkers == 0) {
-            // when all writes are over, we add a nullptr as a special mark to trigger close
-            if (bthread::execution_queue_execute(*_exec_queue_id, nullptr) != 0) {
-                return Status::InternalError("submit task failed");
-            }
-            ++_num_pending_chunks;
-        }
-        return Status::OK();
-    }
+    virtual Status set_finishing();
+
+    bool is_prepared() const { return _is_prepared; }
 
     virtual bool is_finished() { return _is_finished && _num_pending_chunks == 0; }
 
@@ -104,36 +88,42 @@ public:
         return _io_status;
     }
 
-    static int execute_io_task(void* meta, bthread::TaskIterator<ChunkPtr>& iter) {
+private:
+    // A wrapper of the payload to the item in the execution queue, so the end-of-queue marker can be distinguished from the nullptr payload.
+    // That is, calling append_chunk() with a nullptr, won't accidentially stop the entire queue.
+    struct QueueItem {
+        ChunkPtr chunk_ptr;
+        QueueItem(const ChunkPtr& chunkPtr) : chunk_ptr(chunkPtr) {}
+    };
+    typedef std::shared_ptr<QueueItem> QueueItemPtr;
+
+    static int execute_io_task(void* meta, bthread::TaskIterator<QueueItemPtr>& iter) {
         if (iter.is_queue_stopped()) {
             return 0;
         }
-        auto* sink_io_buffer = static_cast<SinkIOBuffer*>(meta);
-        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(sink_io_buffer->_state->query_mem_tracker_ptr().get());
-        for (; iter; ++iter) {
-            sink_io_buffer->_process_chunk(iter);
-            (*iter).reset();
-        }
-        return 0;
+        // turn to member function execution
+        return static_cast<SinkIOBuffer*>(meta)->_process_chunk_entrypoint(iter);
     }
 
 protected:
-    virtual void _process_chunk(bthread::TaskIterator<ChunkPtr>& iter) = 0;
+    virtual void _process_chunk(ChunkPtr chunk) = 0;
 
-    std::unique_ptr<bthread::ExecutionQueueId<ChunkPtr>> _exec_queue_id;
+    mutable std::shared_mutex _io_status_mutex;
+    Status _io_status;
+    RuntimeState* _state = nullptr;
+    static const int32_t kExecutionQueueSizeLimit = 64;
 
+private:
+    int _process_chunk_entrypoint(bthread::TaskIterator<QueueItemPtr>& iter);
+
+    std::unique_ptr<bthread::ExecutionQueueId<QueueItemPtr>> _exec_queue_id;
+    // Counter of the result sinkers, trigger auto-finish when the counter is down to zero
     std::atomic_int32_t _num_result_sinkers = 0;
+    // Counter of the queue length
     std::atomic_int64_t _num_pending_chunks = 0;
     std::atomic_bool _is_prepared = false;
     std::atomic_bool _is_cancelled = false;
     std::atomic_bool _is_finished = false;
-
-    mutable std::shared_mutex _io_status_mutex;
-    Status _io_status;
-
-    RuntimeState* _state = nullptr;
-
-    static const int32_t kExecutionQueueSizeLimit = 64;
 };
 
 } // namespace starrocks::pipeline

@@ -203,6 +203,7 @@ set(EXEC_FILES
     pipeline/sink/export_sink_operator.cpp
     pipeline/sink/mysql_table_sink_operator.cpp
     pipeline/sink/memory_scratch_sink_operator.cpp
+    pipeline/sink/sink_io_buffer.cpp
     pipeline/select_operator.cpp
     pipeline/nljoin/nljoin_context.cpp
     pipeline/nljoin/nljoin_build_operator.cpp
