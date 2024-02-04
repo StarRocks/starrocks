@@ -103,10 +103,10 @@ struct IOStat {
 
     std::string print_str() {
         return fmt::format(
-                "get_in_shard_cnt: {} get_in_shard_cost: {} read_io_bytes: {} l0_write_cost: {} "
+                "IOStat get_in_shard_cnt: {} get_in_shard_cost: {} read_io_bytes: {} l0_write_cost: {} "
                 "l1_l2_read_cost: {} flush_or_wal_cost: {} compaction_cost: {} reload_meta_cost: {} "
                 "dump_snapshot_bytes: {} append_wal_bytes: {} total_write_l1_bytes: {} flush_l1_bytes: {} "
-                "merge_advance_bytes: {} merge_compaction_bytes: {} ",
+                "merge_advance_bytes: {} merge_compaction_bytes: {}",
                 get_in_shard_cnt, get_in_shard_cost, read_io_bytes, l0_write_cost, l1_l2_read_cost, flush_or_wal_cost,
                 compaction_cost, reload_meta_cost, dump_snapshot_bytes, append_wal_bytes, total_write_l1_bytes,
                 flush_l1_bytes, merge_advance_bytes, merge_compaction_bytes);
