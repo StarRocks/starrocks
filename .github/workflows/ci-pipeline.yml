@@ -567,17 +567,19 @@ jobs:
       deploy_conf_file: ${{steps.apply_resource.outputs.deploy_conf_file}}
       cluster_name: ${{steps.deploy_sr.outputs.cluster_name}}
       be_list: ${{steps.deploy_sr.outputs.be_list}}
-      shared_data: ${{steps.path-filter.outputs.cloud}}
+      shared_data: ${{steps.choose-mode.outputs.cloud}}
     steps:
       - name: Clean Workspace
         uses: AutoModality/action-clean@v1.1.0
 
-      - uses: dorny/paths-filter@v3
-        id: path-filter
-        with:
-          filters: |
-            cloud:
-            - 'test/**'
+      - name: Choose mode
+        id: choose-mode
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          cluster_type=$(./bin/choose-mode.sh)
+          if [[ "${cluster_type}" == "cloud" ]]; then
+            echo "cloud=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: BRANCH INFO
         id: branch
@@ -590,7 +592,7 @@ jobs:
         env:
           CLUSTER_NAME: ci-admit
         run: |
-          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          cd ci-tool && source lib/init.sh
           ./bin/elastic-cluster.sh --template ${CLUSTER_NAME}
           cp conf/starrocks_deploy.conf /var/local/env/${PR_NUMBER}-starrocks_deploy.conf
           echo "deploy_conf_file=/var/local/env/${PR_NUMBER}-starrocks_deploy.conf" >> $GITHUB_OUTPUT
@@ -598,7 +600,7 @@ jobs:
       - name: Deploy SR
         id: deploy_sr
         env:
-          CLUSTER_NAME: "${{ steps.path-filter.outputs.cloud == 'true' && 'ci-admit-cloud' || 'ci-admit' }}"
+          CLUSTER_NAME: "${{ steps.choose-mode.outputs.cloud == 'true' && 'ci-admit-cloud' || 'ci-admit' }}"
           repo: ${{ github.repository }}
         run: |
           cd ci-tool && source lib/init.sh
