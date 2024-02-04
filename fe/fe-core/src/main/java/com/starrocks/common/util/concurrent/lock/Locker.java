@@ -240,7 +240,7 @@ public class Locker implements Cloneable {
     /**
      * Before the new version of LockManager is fully enabled, it is used to be compatible with the original db lock logic.
      */
-    public void unLockTables(Database database, List<Long> tableList, LockType lockType) {
+    public void unLockTablesWithIntensiveDbLock(Database database, List<Long> tableList, LockType lockType) {
         if (Config.use_lock_manager) {
             if (lockType == LockType.WRITE) {
                 this.release(database.getId(), LockType.INTENTION_EXCLUSIVE);
