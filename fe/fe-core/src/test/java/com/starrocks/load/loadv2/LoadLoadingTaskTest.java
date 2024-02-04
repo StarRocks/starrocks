@@ -60,7 +60,8 @@ public class LoadLoadingTaskTest {
 
         // table not exist
         exceptionThrown = false;
-        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateCluster(new Cluster(SystemInfoService.DEFAULT_CLUSTER, 1));
+        GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .replayCreateCluster(new Cluster(SystemInfoService.DEFAULT_CLUSTER, 1));
         GlobalStateMgr.getCurrentState().getLocalMetastore().unprotectCreateDb(database);
         try {
             loadLoadingTask.executeTask();
