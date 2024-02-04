@@ -475,6 +475,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_SYNC_MATERIALIZED_VIEW_REWRITE = "enable_sync_materialized_view_rewrite";
     public static final String ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE =
             "enable_rule_based_materialized_view_rewrite";
+    public static final String ENABLE_FORCE_RULE_BASED_MV_REWRITE =
+            "eable_force_rule_based_mv_rewrite";
 
     public static final String ENABLE_MATERIALIZED_VIEW_VIEW_DELTA_REWRITE =
             "enable_materialized_view_view_delta_rewrite";
@@ -1365,6 +1367,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      */
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_REWRITE_PARTITION_COMPENSATE, flag = VariableMgr.INVISIBLE)
     private boolean enableMaterializedViewRewritePartitionCompensate = true;
+
+    @VarAttr(name = ENABLE_FORCE_RULE_BASED_MV_REWRITE)
+    private boolean enableForceRuleBasedMvRewrite = false;
 
     @VarAttr(name = ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE)
     private boolean enableRuleBasedMaterializedViewRewrite = true;
@@ -2673,6 +2678,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableRuleBasedMaterializedViewRewrite(boolean enableRuleBasedMaterializedViewRewrite) {
         this.enableRuleBasedMaterializedViewRewrite = enableRuleBasedMaterializedViewRewrite;
+    }
+
+    public boolean isEnableForceRuleBasedMvRewrite() {
+        return enableForceRuleBasedMvRewrite;
+    }
+
+    public void setEnableForceRuleBasedMvRewrite(boolean enableForceRuleBasedMvRewrite) {
+        this.enableForceRuleBasedMvRewrite = enableForceRuleBasedMvRewrite;
     }
 
     public boolean isEnableMaterializedViewRewritePartitionCompensate() {
