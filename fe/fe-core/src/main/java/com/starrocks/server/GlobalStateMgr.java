@@ -571,24 +571,11 @@ public class GlobalStateMgr {
         this(isCkptGlobalState, new NodeMgr());
     }
 
-<<<<<<< HEAD
     // if isCheckpointCatalog is true, it means that we should not collect thread pool metric
-    private GlobalStateMgr(boolean isCheckpointCatalog) {
-=======
-    // if isCkptGlobalState is true, it means that we should not collect thread pool metric
-    private GlobalStateMgr(boolean isCkptGlobalState, NodeMgr nodeMgr) {
-        if (!isCkptGlobalState) {
-            RunMode.detectRunMode();
-        }
-
-        if (RunMode.isSharedDataMode()) {
-            this.starOSAgent = new StarOSAgent();
-        }
-
+    private GlobalStateMgr(boolean isCheckpointCatalog, NodeMgr nodeMgr) {
         // System Manager
         this.nodeMgr = Objects.requireNonNullElseGet(nodeMgr, NodeMgr::new);
-        this.heartbeatMgr = new HeartbeatMgr(!isCkptGlobalState);
->>>>>>> 763e2aaad4 ([BugFix] Remove version and role file after failing to start fe at first time. (#39672))
+        this.heartbeatMgr = new HeartbeatMgr(!isCheckpointCatalog);
         this.portConnectivityChecker = new PortConnectivityChecker();
         this.load = new Load();
         this.streamLoadManager = new StreamLoadManager();
@@ -1012,14 +999,8 @@ public class GlobalStateMgr {
             // 6. start task cleaner thread
             createTaskCleaner();
 
-<<<<<<< HEAD
-        // 7. init starosAgent
-        if (Config.use_staros && !starOSAgent.init()) {
-            LOG.error("init starOSAgent failed");
-            System.exit(-1);
-=======
             // 7. init starosAgent
-            if (RunMode.isSharedDataMode() && !starOSAgent.init(null)) {
+            if (Config.use_staros && !starOSAgent.init()) {
                 LOG.error("init starOSAgent failed");
                 System.exit(-1);
             }
@@ -1034,7 +1015,6 @@ public class GlobalStateMgr {
                 e.addSuppressed(t);
             }
             throw e;
->>>>>>> 763e2aaad4 ([BugFix] Remove version and role file after failing to start fe at first time. (#39672))
         }
     }
 
