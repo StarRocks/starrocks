@@ -135,6 +135,9 @@ public:
     std::string name() const { return _name; }
     bool enable_colocate_mv_index() const { return _enable_colocate_mv_index; }
 
+    bool has_primary_replica() const { return _has_primary_replica; }
+    void set_has_primary_replica(bool has_primary_replica) { _has_primary_replica = has_primary_replica; }
+
 private:
     Status _wait_request(ReusableClosure<PTabletWriterAddBatchResult>* closure);
     Status _wait_all_prev_request();
@@ -207,6 +210,8 @@ private:
     bool _enable_colocate_mv_index = config::enable_load_colocate_mv;
 
     WriteQuorumTypePB _write_quorum_type = WriteQuorumTypePB::MAJORITY;
+
+    bool _has_primary_replica = false;
 };
 
 class IndexChannel {
@@ -222,11 +227,11 @@ public:
         }
     }
 
-    void mark_as_failed(const NodeChannel* ch) { _failed_channels.insert(ch->node_id()); }
-
     bool is_failed_channel(const NodeChannel* ch) { return _failed_channels.count(ch->node_id()) != 0; }
 
     bool has_intolerable_failure();
+
+    void mark_as_failed(const NodeChannel* ch);
 
 private:
     friend class OlapTableSink;
@@ -243,6 +248,8 @@ private:
     std::set<int64_t> _failed_channels;
 
     TWriteQuorumType::type _write_quorum_type = TWriteQuorumType::MAJORITY;
+
+    bool _has_intolerable_failure = false;
 };
 
 // Write data to Olap Table.
