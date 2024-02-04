@@ -15,18 +15,14 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
 
 import com.github.benmanes.caffeine.cache.Cache;
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.metric.MaterializedViewMetricsEntity;
 import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
-import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -48,12 +44,9 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MVPartiti
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
-import com.starrocks.sql.optimizer.statistics.Statistics;
-import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 
-import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;

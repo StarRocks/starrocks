@@ -17,7 +17,6 @@ package com.starrocks.sql.plan;
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
-import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -59,7 +58,8 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         sessionVariable.setEnableForceRuleBasedMvRewrite(true);
         Pair<QueryDumpInfo, String> replayPair =
                 getCostPlanFragment(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_month"), sessionVariable);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("partition_flat_consumptions_partition_drinks_roll_month"));
+        Assert.assertTrue(replayPair.second,
+                replayPair.second.contains("partition_flat_consumptions_partition_drinks_roll_month"));
     }
 
     @Test
