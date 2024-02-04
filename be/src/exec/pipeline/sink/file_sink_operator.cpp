@@ -140,12 +140,7 @@ void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
     const auto& chunk = *iter;
     if (chunk == nullptr) {
         // this is the last chunk
-<<<<<<< HEAD
-        DCHECK_EQ(_num_pending_chunks, 0);
-=======
-        auto nc = _num_pending_chunks.load();
-        DCHECK_LE(nc, 1L);
->>>>>>> fe7476022a ([BugFix] Fix the bug of SinkIOBuffer user-after-free (#40674))
+        DCHECK_LE(_num_pending_chunks, 1);
         close(_state);
         return;
     }
