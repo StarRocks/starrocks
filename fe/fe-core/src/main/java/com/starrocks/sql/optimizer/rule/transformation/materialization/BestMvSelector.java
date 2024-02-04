@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
+package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -26,49 +25,42 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
-import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 
 import java.util.Comparator;
 import java.util.List;
 
-public abstract class SingleTableRewriteBaseRule extends BaseMaterializedViewRewriteRule {
-    public SingleTableRewriteBaseRule(RuleType type, Pattern pattern) {
-        super(type, pattern);
+public class BestMvSelector {
+    private final List<OptExpression> expressions;
+    private final OptimizerContext context;
+    private final boolean isAggQuery;
+
+    public BestMvSelector(List<OptExpression> expressions, OptimizerContext context, boolean isAggQuery) {
+        this.expressions = expressions;
+        this.context = context;
+        this.isAggQuery = isAggQuery;
     }
 
-    // select OptExpression based on statistics
-    @Override
-    public List<OptExpression> transform(OptExpression queryExpression, OptimizerContext context) {
-        List<OptExpression> expressions = super.transform(queryExpression, context);
-        if (expressions == null || expressions.isEmpty()) {
-            return Lists.newArrayList();
-        } else {
-            if (context.isInMemoPhase()) {
-                return expressions;
-            }
-            if (expressions.size() == 1) {
-                return expressions;
-            }
-            // compute the statistics of OptExpression
-            for (OptExpression expression : expressions) {
-                calculateStatistics(expression, context);
-            }
-            List<CandidateContext> contexts = Lists.newArrayList();
-            for (int i = 0; i < expressions.size(); i++) {
-                CandidateContext mvContext = getMVContext(
-                        expressions.get(i), queryExpression.getOp() instanceof LogicalAggregationOperator, context);
-                Preconditions.checkState(mvContext != null);
-                mvContext.setIndex(i);
-                mvContext.setOutputStatistics(expressions.get(i).getStatistics());
-                contexts.add(mvContext);
-            }
-            // sort expressions based on statistics output row count and compute size
-            contexts.sort(new CandidateContextComparator());
-            return Lists.newArrayList(expressions.get(contexts.get(0).getIndex()));
+    public OptExpression selectBest() {
+        if (expressions.size() == 1) {
+            return expressions.get(0);
         }
+        // compute the statistics of OptExpression
+        for (OptExpression expression : expressions) {
+            calculateStatistics(expression, context);
+        }
+        List<CandidateContext> contexts = Lists.newArrayList();
+        for (int i = 0; i < expressions.size(); i++) {
+            CandidateContext mvContext =
+                    getMVContext(expressions.get(i), isAggQuery, context);
+            Preconditions.checkState(mvContext != null);
+            mvContext.setIndex(i);
+            contexts.add(mvContext);
+        }
+        // sort expressions based on statistics output row count and compute size
+        contexts.sort(new CandidateContextComparator());
+        return expressions.get(contexts.get(0).getIndex());
     }
 
     @VisibleForTesting
@@ -80,7 +72,6 @@ public abstract class SingleTableRewriteBaseRule extends BaseMaterializedViewRew
         // else set it to Integer.MAX_VALUE
         private int groupbyColumnNum;
         private int index;
-        private Statistics outputStatistics;
 
         public CandidateContext(Statistics mvStatistics, int schemaColumnNum) {
             this(mvStatistics, schemaColumnNum, 0);
@@ -116,14 +107,6 @@ public abstract class SingleTableRewriteBaseRule extends BaseMaterializedViewRew
         public void setIndex(int index) {
             this.index = index;
         }
-
-        public Statistics getOutputStatistics() {
-            return outputStatistics;
-        }
-
-        public void setOutputStatistics(Statistics outputStatistics) {
-            this.outputStatistics = outputStatistics;
-        }
     }
 
     @VisibleForTesting
@@ -148,11 +131,6 @@ public abstract class SingleTableRewriteBaseRule extends BaseMaterializedViewRew
             }
 
             ret = Double.compare(context1.getMvStatistics().getComputeSize(), context2.getMvStatistics().getComputeSize());
-            if (ret != 0) {
-                return ret;
-            }
-            ret = Double.compare(context1.getOutputStatistics().getOutputRowCount(),
-                    context2.getOutputStatistics().getOutputRowCount());
             return ret != 0 ? ret : Integer.compare(context1.getIndex(), context2.getIndex());
         }
     }
@@ -183,11 +161,13 @@ public abstract class SingleTableRewriteBaseRule extends BaseMaterializedViewRew
                         new CandidateContext(expression.getStatistics(), scanOperator.getTable().getBaseSchema().size());
                 if (isAggregate) {
                     MaterializedView mv = (MaterializedView) scanOperator.getTable();
-                    MvPlanContext planContext = CachingMvPlanContextBuilder.getInstance().getPlanContext(
+                    List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(
                             mv, optimizerContext.getSessionVariable().isEnableMaterializedViewPlanCache());
-                    if (planContext.getLogicalPlan().getOp() instanceof LogicalAggregationOperator) {
-                        LogicalAggregationOperator aggregationOperator = planContext.getLogicalPlan().getOp().cast();
-                        candidateContext.setGroupbyColumnNum(aggregationOperator.getGroupingKeys().size());
+                    for (MvPlanContext planContext : planContexts) {
+                        if (planContext.getLogicalPlan().getOp() instanceof LogicalAggregationOperator) {
+                            LogicalAggregationOperator aggregationOperator = planContext.getLogicalPlan().getOp().cast();
+                            candidateContext.setGroupbyColumnNum(aggregationOperator.getGroupingKeys().size());
+                        }
                     }
                 }
                 return candidateContext;
