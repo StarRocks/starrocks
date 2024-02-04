@@ -18,13 +18,17 @@ import com.starrocks.catalog.CatalogIdGenerator;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.cluster.Cluster;
 import com.starrocks.common.LoadException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TLoadJobType;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.util.ArrayList;
 
 public class LoadLoadingTaskTest {
     @Test
@@ -37,7 +41,7 @@ public class LoadLoadingTaskTest {
             }};
 
         Database database = new Database(10000L, "test");
-        OlapTable olapTable = new OlapTable(10001L, "tbl", null, KeysType.AGG_KEYS, null, null);
+        OlapTable olapTable = new OlapTable(10001L, "tbl", new ArrayList<>(), KeysType.AGG_KEYS, null, null);
         LoadLoadingTask loadLoadingTask = new LoadLoadingTask(database, olapTable, null, null, 0,
                 0, true, 1, new BrokerLoadJob(), "UTC", 10,
                 System.currentTimeMillis(), false, null, null, null,
@@ -56,6 +60,7 @@ public class LoadLoadingTaskTest {
 
         // table not exist
         exceptionThrown = false;
+        GlobalStateMgr.getCurrentState().getLocalMetastore().replayCreateCluster(new Cluster(SystemInfoService.DEFAULT_CLUSTER, 1));
         GlobalStateMgr.getCurrentState().getLocalMetastore().unprotectCreateDb(database);
         try {
             loadLoadingTask.executeTask();
