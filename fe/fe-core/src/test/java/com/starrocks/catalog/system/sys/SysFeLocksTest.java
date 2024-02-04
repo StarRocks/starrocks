@@ -15,6 +15,8 @@
 package com.starrocks.catalog.system.sys;
 
 import com.starrocks.catalog.Database;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TFeLocksItem;
 import com.starrocks.thrift.TFeLocksReq;
@@ -54,7 +56,8 @@ public class SysFeLocksTest {
 
         // exclusive owner
         {
-            db.writeLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.WRITE);
             TFeLocksItem item = SysFeLocks.resolveLockInfo(db);
 
             assertEquals("EXCLUSIVE", item.getLock_mode());
@@ -65,8 +68,8 @@ public class SysFeLocksTest {
 
             // add a waiter
             Thread waiter = new Thread(() -> {
-                db.writeLock();
-                db.writeUnlock();
+                locker.lockDatabase(db, LockType.WRITE);
+                locker.unLockDatabase(db, LockType.WRITE);
             }, "waiter");
             waiter.start();
 
@@ -78,12 +81,13 @@ public class SysFeLocksTest {
             assertEquals(String.format("[{\"threadId\":%d,\"threadName\":\"%s\"}]", waiter.getId(), waiter.getName()),
                     item.getWaiter_list());
 
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
 
         // shared lock
         {
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             TFeLocksItem item = SysFeLocks.resolveLockInfo(db);
 
             assertEquals("SHARED", item.getLock_mode());
@@ -94,8 +98,8 @@ public class SysFeLocksTest {
 
             // add a waiter
             Thread waiter = new Thread(() -> {
-                db.writeLock();
-                db.writeUnlock();
+                locker.lockDatabase(db, LockType.WRITE);
+                locker.unLockDatabase(db, LockType.WRITE);
             }, "waiter");
             waiter.start();
 
@@ -111,7 +115,7 @@ public class SysFeLocksTest {
             item = SysFeLocks.resolveLockInfo(db);
             assertEquals(String.format("[{\"threadId\":%d,\"threadName\":\"%s\"}]", waiter.getId(), waiter.getName()),
                     item.getWaiter_list());
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
     }
 

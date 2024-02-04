@@ -20,6 +20,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
@@ -55,7 +57,8 @@ public class CreateTableAutoTabletTest {
         if (db == null) {
             return;
         }
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         int bucketNum = 0;
         try {
             OlapTable table = (OlapTable) db.getTable("test_table1");
@@ -66,7 +69,7 @@ public class CreateTableAutoTabletTest {
                 bucketNum += partition.getDistributionInfo().getBucketNum();
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
         Assert.assertEquals(bucketNum, 20);
     }
@@ -108,12 +111,13 @@ public class CreateTableAutoTabletTest {
         checkTableStateToNormal(table);
 
         int bucketNum = 0;
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             Partition partition = table.getPartition("p20220811");
             bucketNum = partition.getDistributionInfo().getBucketNum();
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
         Assert.assertEquals(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds().size(), 10);
         Assert.assertEquals(bucketNum, 20);
@@ -154,12 +158,13 @@ public class CreateTableAutoTabletTest {
         }
 
         int bucketNum = 0;
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             List<Partition> partitions = (List<Partition>) table.getRecentPartitions(3);
             bucketNum = partitions.get(0).getDistributionInfo().getBucketNum();
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
         Assert.assertEquals(bucketNum, 10);
     }
@@ -204,12 +209,13 @@ public class CreateTableAutoTabletTest {
         cluster.runSql("db_for_auto_tablets", "ALTER TABLE test_modify_dynamic_partition_property SET ('dynamic_partition.enable' = 'true')");
 
         int bucketNum = 0;
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             Partition partition = table.getPartition("p20230306");
             bucketNum = partition.getDistributionInfo().getBucketNum();
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
         Assert.assertEquals(bucketNum, 10);
     }
@@ -246,12 +252,13 @@ public class CreateTableAutoTabletTest {
         checkTableStateToNormal(table);
 
         int bucketNum = 0;
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             Partition partition = table.getPartition("p20230312");
             bucketNum = partition.getDistributionInfo().getBucketNum();
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
         Assert.assertEquals(bucketNum, 10);
 
