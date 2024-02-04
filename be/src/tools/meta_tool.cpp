@@ -32,6 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#include <aws/core/Aws.h>
 #include <gflags/gflags.h>
 
 #include <iostream>
@@ -42,6 +43,7 @@
 #include "common/status.h"
 #include "fs/fs.h"
 #include "fs/fs_posix.h"
+#include "fs/fs_s3.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "gen_cpp/olap_file.pb.h"
@@ -54,6 +56,7 @@
 #include "storage/data_dir.h"
 #include "storage/delta_column_group.h"
 #include "storage/key_coder.h"
+#include "storage/lake/vacuum.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/options.h"
@@ -105,6 +108,10 @@ DEFINE_string(tablet_file, "", "file to save a set of tablets");
 DEFINE_string(file, "", "segment file path");
 DEFINE_int32(column_index, -1, "column index");
 DEFINE_int32(key_column_count, 0, "key column count");
+DEFINE_int64(expired_sec, 86400, "expired seconds");
+DEFINE_string(conf_file, "", "conf file path");
+DEFINE_string(audit_file, "", "audit file path");
+DEFINE_bool(do_delete, false, "do delete files");
 
 std::string get_usage(const std::string& progname) {
     std::stringstream ss;
@@ -141,8 +148,16 @@ std::string get_usage(const std::string& progname) {
           "--table_id=tableid\n";
     ss << "./meta_tool.sh --operation=scan_dcgs --root_path=/path/to/storage/path "
           "--tablet_id=tabletid\n";
+<<<<<<< HEAD
     ss << "cat 0001000000001394_0000000000000004.meta | ./meta_tool --operation=print_lake_metadata\n";
     ss << "cat 0001000000001391_0000000000000001.log | ./meta_tool --operation=print_lake_txn_log\n";
+=======
+    ss << "cat 0001000000001394_0000000000000004.meta | ./meta_tool.sh --operation=print_lake_metadata\n";
+    ss << "cat 0001000000001391_0000000000000001.log | ./meta_tool.sh --operation=print_lake_txn_log\n";
+    ss << "cat SCHEMA_000000000004204C | ./meta_tool.sh --operation=print_lake_schema\n";
+    ss << "./meta_tool.sh --operation=lake_datafile_gc --root_path=path --expired_sec=86400 --conf_file=path "
+          "--audit_file=path --do_delete=false\n";
+>>>>>>> 666b7c0dca ([Tool] Add data file gc tool for cloud-native table (#39306))
     return ss.str();
 }
 
@@ -1126,6 +1141,46 @@ int meta_tool_main(int argc, char** argv) {
             return -1;
         }
         std::cout << json << '\n';
+<<<<<<< HEAD
+=======
+    } else if (FLAGS_operation == "print_lake_schema") {
+        starrocks::TabletSchemaPB schema;
+        if (!schema.ParseFromIstream(&std::cin)) {
+            std::cerr << "Fail to parse schema\n";
+            return -1;
+        }
+        json2pb::Pb2JsonOptions options;
+        options.pretty_json = true;
+        std::string json;
+        std::string error;
+        if (!json2pb::ProtoMessageToJson(schema, &json, options, &error)) {
+            std::cerr << "Fail to convert protobuf to json: " << error << '\n';
+            return -1;
+        }
+        std::cout << json << '\n';
+    } else if (FLAGS_operation == "lake_datafile_gc") {
+        if (!starrocks::config::init(FLAGS_conf_file.c_str(), false)) {
+            std::cerr << "Init config failed, conf file: " << FLAGS_conf_file << std::endl;
+            return -1;
+        }
+        if (!starrocks::init_glog("lake_datafile_gc", true)) {
+            std::cerr << "Init glog failed" << std::endl;
+            return -1;
+        }
+        if (FLAGS_expired_sec < 600) {
+            std::cerr << "expired_sec is less than 10min" << std::endl;
+            return -1;
+        }
+        Aws::SDKOptions options;
+        Aws::InitAPI(options);
+        auto status =
+                starrocks::lake::datafile_gc(FLAGS_root_path, FLAGS_audit_file, FLAGS_expired_sec, FLAGS_do_delete);
+        if (!status.ok()) {
+            std::cout << status << std::endl;
+        }
+        starrocks::close_s3_clients();
+        Aws::ShutdownAPI(options);
+>>>>>>> 666b7c0dca ([Tool] Add data file gc tool for cloud-native table (#39306))
     } else {
         // operations that need root path should be written here
         std::set<std::string> valid_operations = {"get_meta",
