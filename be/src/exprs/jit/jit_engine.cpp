@@ -158,11 +158,6 @@ Status JITEngine::generate_scalar_function_ir(ExprContext* context, llvm::Module
         auto* jit_column = b.CreateLoad(data_type, b.CreateConstInBoundsGEP1_64(data_type, columns_arg, i));
 
         const auto& type = i == args_size ? expr->type() : input_exprs[i]->type();
-#if JIT_DEBUG
-        auto tmp = i == args_size ? expr : input_exprs[i];
-        LOG(INFO) << "[JIT] " << i << " col type = " << logical_type_to_string(type.type)
-                  << "  nullable = " << tmp->is_nullable() << " is const " << tmp->is_constant();
-#endif
         columns[i].values = b.CreateExtractValue(jit_column, {0});
         columns[i].null_flags = b.CreateExtractValue(jit_column, {1});
         ASSIGN_OR_RETURN(columns[i].value_type, IRHelper::logical_to_ir_type(b, type.type));
@@ -171,12 +166,9 @@ Status JITEngine::generate_scalar_function_ir(ExprContext* context, llvm::Module
     /// Initialize loop.
     auto* end = llvm::BasicBlock::Create(b.getContext(), "end", func);
     auto* loop = llvm::BasicBlock::Create(b.getContext(), "loop", func);
-    // If rows_count == 0, jump to end.
-    // Pseudo code: if (rows_count == 0) goto end;
-    b.CreateCondBr(b.CreateICmpEQ(rows_count_arg, llvm::ConstantInt::get(size_type, 0)), end, loop);
 
+    b.CreateBr(loop);
     b.SetInsertPoint(loop);
-
     /// Loop.
     // Pseudo code: for (int64_t counter = 0; counter < rows_count; counter++)
     auto* counter_phi = b.CreatePHI(rows_count_arg->getType(), 2);
@@ -242,11 +234,11 @@ void JITEngine::optimize_module(llvm::Module* module) {
     fpm.doFinalization();
 }
 
-void* JITEngine::compile_module(std::unique_ptr<llvm::Module> module, std::unique_ptr<llvm::LLVMContext> context,
-                                const std::string& expr_name) {
+JITScalarFunction JITEngine::compile_module(std::unique_ptr<llvm::Module> module,
+                                            std::unique_ptr<llvm::LLVMContext> context, const std::string& expr_name) {
     // print_module(*module);
     std::lock_guard<std::mutex> lock(_mutex);
-    auto* func = lookup_function(expr_name, false);
+    auto func = lookup_function(expr_name, false);
     // The function has already been compiled.
     if (func != nullptr) {
         return func;
@@ -304,7 +296,7 @@ void JITEngine::print_module(const llvm::Module& module) {
     LOG(INFO) << "JIT: Generated IR:\n" << str;
 }
 
-void* JITEngine::lookup_function(const std::string& expr_name, bool must_exist) {
+JITScalarFunction JITEngine::lookup_function(const std::string& expr_name, bool must_exist) {
     auto addr = _jit->lookup(expr_name);
     if (UNLIKELY(!addr || UNLIKELY(addr->isNull()))) {
         if (!must_exist) {
@@ -319,10 +311,10 @@ void* JITEngine::lookup_function(const std::string& expr_name, bool must_exist) 
         return nullptr;
     }
     _resource_ref_count_map[expr_name].fetch_add(1);
-    return reinterpret_cast<void*>(addr->toPtr<JITScalarFunction>());
+    return addr->toPtr<JITScalarFunction>();
 }
 
-void* JITEngine::lookup_function_with_lock(const std::string& expr_name, bool must_exist) {
+JITScalarFunction JITEngine::lookup_function_with_lock(const std::string& expr_name, bool must_exist) {
     std::lock_guard<std::mutex> lock(_mutex);
     return lookup_function(expr_name, must_exist);
 }

@@ -85,6 +85,7 @@ SELECT (k1 * k2 + v1) * (k1 - v2) as result FROM jit_basic ORDER BY result;
 SELECT k1 + k2 - v1 * v2 + v3 as result FROM jit_basic ORDER BY result;
 SELECT (v1 - v2) * (k1 + k2 - v3) as result FROM jit_basic ORDER BY result;
 SELECT (k1 * k2 + v1) * v2 + v3 * v4 - v5 as result FROM jit_basic ORDER BY result;
+SELECT (k1 * k2 + v1) * v2 + v3 * v4 - v5 + null, K1 +v1+null, K1/null as result FROM jit_basic ORDER BY result;
 -- hard
 select bitnot(cast(power(-2,127) as largeint)+1);
 

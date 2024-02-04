@@ -16,6 +16,7 @@
 
 #include <cstdint>
 
+#include "column/type_traits.h"
 #include "common/statusor.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Value.h"
@@ -31,11 +32,7 @@ struct LLVMDatum {
     llvm::Value* null_flag = nullptr; ///< Represents the nullity status of the datum.
 
     LLVMDatum(llvm::IRBuilder<>& b, bool null = false) {
-        if (null) {
-            null_flag = llvm::ConstantInt::get(b.getInt8Ty(), 1);
-        } else {
-            null_flag = llvm::ConstantInt::get(b.getInt8Ty(), 0);
-        }
+        null_flag = llvm::ConstantInt::get(b.getInt8Ty(), null, false);
     }
 
     LLVMDatum() = default;
@@ -70,7 +67,7 @@ struct JITContext {
     std::vector<LLVMColumn>& columns;
     llvm::Module& module;
     llvm::IRBuilder<>& builder;
-    int input_index;
+    int input_index = 0;
 };
 
 class IRHelper {
@@ -89,10 +86,14 @@ public:
     /**
      * @brief Create a LLVM IR value from a C++ value.
      */
-    template <typename Type>
-    static StatusOr<llvm::Value*> create_ir_number(llvm::IRBuilder<>& b, const LogicalType& type, Type value);
+    static StatusOr<llvm::Value*> create_ir_number(llvm::IRBuilder<>& b, const LogicalType& type, int64_t value);
 
-    static StatusOr<llvm::Value*> create_ir_number(llvm::IRBuilder<>& b, const LogicalType& type, const uint8_t* value);
+    // cast bool of int8 to llvm bool int1
+    static llvm::Value* bool_to_cond(llvm::IRBuilder<>& b, llvm::Value* int8) {
+        return b.CreateICmpNE(int8, llvm::ConstantInt::get(int8->getType(), 0));
+    }
+
+    static StatusOr<llvm::Value*> load_ir_number(llvm::IRBuilder<>& b, const LogicalType& type, const uint8_t* value);
 
     /** 
      * @brief Convert a LLVM IR value from one type to another.
