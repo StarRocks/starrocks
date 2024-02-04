@@ -68,7 +68,6 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaReplayState;
 import com.starrocks.catalog.MetaVersion;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RefreshDictionaryCacheTaskDaemon;
 import com.starrocks.catalog.ResourceGroupMgr;
@@ -115,8 +114,6 @@ import com.starrocks.consistency.LockChecker;
 import com.starrocks.epack.failover.FailoverGroupMgr;
 import com.starrocks.epack.lake.StarOSAgentEpack;
 import com.starrocks.epack.persist.SRMetaBlockIDEPack;
-import com.starrocks.epack.privilege.AuthenticationMgrEPack;
-import com.starrocks.epack.privilege.AuthorizationMgrEpack;
 import com.starrocks.epack.privilege.SecurityPolicyMgr;
 import com.starrocks.epack.server.WarehouseManagerEpack;
 import com.starrocks.ha.FrontendNodeType;
@@ -160,9 +157,6 @@ import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
-import com.starrocks.mysql.privilege.Auth;
-import com.starrocks.mysql.privilege.AuthUpgrader;
-import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ImageHeader;
@@ -191,7 +185,6 @@ import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MVJobExecutor;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
-import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.RefreshRoleMappingStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.SetType;
@@ -353,15 +346,6 @@ public class GlobalStateMgr {
     private final GlobalTransactionMgr globalTransactionMgr;
 
     private final TabletStatMgr tabletStatMgr;
-
-    private Auth auth;
-
-    // We're developing a new privilege & authentication framework
-    // This is used to turned on in hard code.
-    public static final boolean USING_NEW_PRIVILEGE = true;
-
-    // change to true in UT
-    private AtomicBoolean usingNewPrivilege;
 
     private AuthenticationMgr authenticationMgr;
     private AuthorizationMgr authorizationMgr;
@@ -631,7 +615,9 @@ public class GlobalStateMgr {
 
         this.globalTransactionMgr = new GlobalTransactionMgr(this);
         this.tabletStatMgr = new TabletStatMgr();
-        initAuth(USING_NEW_PRIVILEGE);
+        this.authenticationMgr = new AuthenticationMgr();
+        this.domainResolver = new DomainResolver(authenticationMgr);
+        this.authorizationMgr = new AuthorizationMgr(this, null);
 
         this.resourceGroupMgr = new ResourceGroupMgr();
 
@@ -805,16 +791,20 @@ public class GlobalStateMgr {
         return analyzeMgr;
     }
 
-    public Auth getAuth() {
-        return auth;
-    }
-
     public AuthenticationMgr getAuthenticationMgr() {
         return authenticationMgr;
     }
 
+    public void setAuthenticationMgr(AuthenticationMgr authenticationMgr) {
+        this.authenticationMgr = authenticationMgr;
+    }
+
     public AuthorizationMgr getAuthorizationMgr() {
         return authorizationMgr;
+    }
+
+    public void setAuthorizationMgr(AuthorizationMgr authorizationMgr) {
+        this.authorizationMgr = authorizationMgr;
     }
 
     public SecurityPolicyMgr getSecurityPolicyManager() {
@@ -1093,37 +1083,6 @@ public class GlobalStateMgr {
         }
     }
 
-    // set usingNewPrivilege = true in UT
-    public void initAuth(boolean usingNewPrivilege) {
-        this.auth = new Auth();
-        this.usingNewPrivilege = new AtomicBoolean(usingNewPrivilege);
-        if (usingNewPrivilege) {
-            this.authenticationMgr = new AuthenticationMgrEPack();
-            this.domainResolver = new DomainResolver(authenticationMgr);
-            this.authorizationMgr = new AuthorizationMgrEpack(this, null);
-            this.securityPolicyManager = new SecurityPolicyMgr();
-            this.ldapGroupCacheMgr = new LDAPGroupCacheMgr(authenticationMgr, authorizationMgr);
-            LOG.info("using new privilege framework..");
-        } else {
-            this.domainResolver = new DomainResolver(auth);
-            this.authenticationMgr = null;
-            this.authorizationMgr = null;
-        }
-    }
-
-    @VisibleForTesting
-    public void setAuth(Auth auth) {
-        this.auth = auth;
-    }
-
-    public boolean isUsingNewPrivilege() {
-        return usingNewPrivilege.get();
-    }
-
-    private boolean needUpgradedToNewPrivilege() {
-        return !authorizationMgr.isLoaded() || !authenticationMgr.isLoaded();
-    }
-
     protected void initJournal() throws JournalException, InterruptedException {
         BlockingQueue<JournalTask> journalQueue =
                 new ArrayBlockingQueue<JournalTask>(Config.metadata_journal_queue_size);
@@ -1140,15 +1099,6 @@ public class GlobalStateMgr {
             if (isReady()) {
                 LOG.info("globalStateMgr is ready. FE type: {}", feType);
                 feStartTime = System.currentTimeMillis();
-
-                // For follower/observer, defer setting auth to null when we have replayed all the journal,
-                // because we may encounter old auth journal when replaying log in which case we still
-                // need the auth object.
-                if (isUsingNewPrivilege() && !needUpgradedToNewPrivilege()) {
-                    // already upgraded, set auth = null
-                    auth = null;
-                }
-
                 break;
             }
 
@@ -1248,20 +1198,6 @@ public class GlobalStateMgr {
             // MUST set leader ip before starting checkpoint thread.
             // because checkpoint thread need this info to select non-leader FE to push image
             nodeMgr.setLeaderInfo();
-
-            if (USING_NEW_PRIVILEGE) {
-                if (needUpgradedToNewPrivilege()) {
-                    reInitializeNewPrivilegeOnUpgrade();
-                    AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationMgr, authorizationMgr, this);
-                    // upgrade metadata in old privilege framework to the new one
-                    upgrader.upgradeAsLeader();
-                    this.domainResolver.setAuthenticationManager(authenticationMgr);
-                    this.ldapGroupCacheMgr.setAuthzManager(authenticationMgr, authorizationMgr);
-                }
-                LOG.info("set usingNewPrivilege to true after transfer to leader");
-                usingNewPrivilege.set(true);
-                auth = null;  // remove references to useless objects to release memory
-            }
 
             // start all daemon threads that only running on MASTER FE
             startLeaderOnlyDaemonThreads();
@@ -1488,7 +1424,6 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockID.RESOURCE_MGR, resourceMgr::loadResourcesV2)
                 .put(SRMetaBlockID.EXPORT_MGR, exportMgr::loadExportJobV2)
                 .put(SRMetaBlockID.BACKUP_MGR, backupHandler::loadBackupHandlerV2)
-                .put(SRMetaBlockID.AUTH, auth::load)
                 .put(SRMetaBlockID.GLOBAL_TRANSACTION_MGR, globalTransactionMgr::loadTransactionStateV2)
                 .put(SRMetaBlockID.COLOCATE_TABLE_INDEX, colocateTableIndex::loadColocateTableIndexV2)
                 .put(SRMetaBlockID.ROUTINE_LOAD_MGR, routineLoadMgr::loadRoutineLoadJobsV2)
@@ -1561,12 +1496,6 @@ public class GlobalStateMgr {
         } catch (SRMetaBlockException e) {
             LOG.error("load meta block failed ", e);
             throw new IOException("load meta block failed ", e);
-        }
-
-        if (isUsingNewPrivilege() && needUpgradedToNewPrivilege() && !isLeader() && !isCheckpointThread()) {
-            LOG.warn("follower has to wait for leader to upgrade the privileges, set usingNewPrivilege = false for now");
-            usingNewPrivilege.set(false);
-            domainResolver = new DomainResolver(auth);
         }
 
         try {
@@ -1668,7 +1597,6 @@ public class GlobalStateMgr {
                 resourceMgr.saveResourcesV2(dos);
                 exportMgr.saveExportJobV2(dos);
                 backupHandler.saveBackupHandlerV2(dos);
-                auth.save(dos);
                 globalTransactionMgr.saveTransactionStateV2(dos);
                 colocateTableIndex.saveColocateTableIndexV2(dos);
                 routineLoadMgr.saveRoutineLoadJobsV2(dos);
@@ -2454,14 +2382,6 @@ public class GlobalStateMgr {
         return dumpFilePath;
     }
 
-    public List<Partition> createTempPartitionsFromPartitions(Database db, Table table,
-                                                              String namePostfix, List<Long> sourcePartitionIds,
-                                                              List<Long> tmpPartitionIds, DistributionDesc distributionDesc,
-                                                              long warehouseId) {
-        return localMetastore.createTempPartitionsFromPartitions(db, table, namePostfix, sourcePartitionIds,
-                tmpPartitionIds, distributionDesc, warehouseId);
-    }
-
     /**
      * Run on leader, need to forward to all followers and observers.
      *
@@ -2469,31 +2389,6 @@ public class GlobalStateMgr {
      */
     public void refreshRoleMapping(RefreshRoleMappingStatement stmt) throws DdlException {
         nodeMgr.refreshRoleMapping(ldapGroupCacheMgr);
-    }
-
-    public void removeAutoIncrementIdByTableId(Long tableId, boolean isReplay) {
-        localMetastore.removeAutoIncrementIdByTableId(tableId, isReplay);
-    }
-
-    private void reInitializeNewPrivilegeOnUpgrade() {
-        // In the case where we upgrade again, i.e. upgrade->rollback->upgrade,
-        // we may already load the image from last upgrade, in this case we should
-        // discard the privilege data from last upgrade and only use the data from
-        // current image to upgrade, so we initialize a new AuthorizationMgr and AuthenticationMgr
-        // instance here
-        LOG.info("reinitialize privilege info before upgrade");
-        this.authenticationMgr = new AuthenticationMgrEPack();
-        this.authorizationMgr = new AuthorizationMgrEpack(this, null);
-    }
-
-    public void replayAuthUpgrade(AuthUpgradeInfo info) throws AuthUpgrader.AuthUpgradeUnrecoverableException {
-        reInitializeNewPrivilegeOnUpgrade();
-        AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationMgr, authorizationMgr, this);
-        upgrader.replayUpgrade(info.getRoleNameToId());
-        LOG.info("set usingNewPrivilege to true after auth upgrade log replayed");
-        usingNewPrivilege.set(true);
-        domainResolver.setAuthenticationManager(authenticationMgr);
-        ldapGroupCacheMgr.setAuthzManager(authenticationMgr, authorizationMgr);
     }
 
     public long getImageJournalId() {

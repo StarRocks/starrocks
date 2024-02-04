@@ -88,7 +88,6 @@ import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.AlterUserInfo;
 import com.starrocks.persist.AlterViewInfo;
-import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.AutoIncrementInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
@@ -128,7 +127,6 @@ import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.PipeOpEntry;
-import com.starrocks.persist.PrivInfo;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.RemoveAlterJobV2OperationLog;
 import com.starrocks.persist.RenameMaterializedViewLog;
@@ -551,18 +549,6 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_NEW_DROP_USER: {
                 data = UserIdentity.read(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_CREATE_USER:
-            case OperationType.OP_GRANT_PRIV:
-            case OperationType.OP_REVOKE_PRIV:
-            case OperationType.OP_SET_PASSWORD:
-            case OperationType.OP_CREATE_ROLE:
-            case OperationType.OP_DROP_ROLE:
-            case OperationType.OP_GRANT_ROLE:
-            case OperationType.OP_REVOKE_ROLE: {
-                data = PrivInfo.read(in);
                 isRead = true;
                 break;
             }
@@ -1111,11 +1097,6 @@ public class JournalEntity implements Writable {
             case OperationType.OP_DROP_ROLE_V2:
             case OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2: {
                 data = RolePrivilegeCollectionInfo.read(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_AUTH_UPGRADE_V2: {
-                data = AuthUpgradeInfo.read(in);
                 isRead = true;
                 break;
             }

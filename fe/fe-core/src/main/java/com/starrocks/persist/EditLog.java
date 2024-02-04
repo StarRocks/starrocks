@@ -1145,11 +1145,6 @@ public class EditLog {
                     globalStateMgr.getAuthorizationMgr().replayDropRole(info);
                     break;
                 }
-                case OperationType.OP_AUTH_UPGRADE_V2: {
-                    AuthUpgradeInfo info = (AuthUpgradeInfo) journal.getData();
-                    globalStateMgr.replayAuthUpgrade(info);
-                    break;
-                }
                 case OperationTypeEPack.OP_CREATE_MASKING_POLICY:
                 case OperationTypeEPack.OP_CREATE_ROW_ACCESS_POLICY: {
                     CreatePolicyLog policy = (CreatePolicyLog) journal.getData();
@@ -1673,50 +1668,6 @@ public class EditLog {
         } else {
             logEdit(OperationType.OP_BACKEND_STATE_CHANGE, be);
         }
-    }
-
-    public void logCreateUser(PrivInfo info) {
-        logEdit(OperationType.OP_CREATE_USER, info);
-    }
-
-    public void logNewDropUser(UserIdentity userIdent) {
-        logEdit(OperationType.OP_NEW_DROP_USER, userIdent);
-    }
-
-    public void logGrantPriv(PrivInfo info) {
-        logEdit(OperationType.OP_GRANT_PRIV, info);
-    }
-
-    public void logRevokePriv(PrivInfo info) {
-        logEdit(OperationType.OP_REVOKE_PRIV, info);
-    }
-
-    public void logGrantImpersonate(ImpersonatePrivInfo info) {
-        logEdit(OperationType.OP_GRANT_IMPERSONATE, info);
-    }
-
-    public void logRevokeImpersonate(ImpersonatePrivInfo info) {
-        logEdit(OperationType.OP_REVOKE_IMPERSONATE, info);
-    }
-
-    public void logSetPassword(PrivInfo info) {
-        logEdit(OperationType.OP_SET_PASSWORD, info);
-    }
-
-    public void logCreateRole(PrivInfo info) {
-        logEdit(OperationType.OP_CREATE_ROLE, info);
-    }
-
-    public void logDropRole(PrivInfo info) {
-        logEdit(OperationType.OP_DROP_ROLE, info);
-    }
-
-    public void logGrantRole(PrivInfo info) {
-        logEdit(OperationType.OP_GRANT_ROLE, info);
-    }
-
-    public void logRevokeRole(PrivInfo info) {
-        logEdit(OperationType.OP_REVOKE_ROLE, info);
     }
 
     public void logDatabaseRename(DatabaseInfo databaseInfo) {
@@ -2291,10 +2242,6 @@ public class EditLog {
             short pluginVersion) {
         RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(rolePrivCollectionModified, pluginId, pluginVersion);
         logEdit(OperationType.OP_DROP_ROLE_V2, info);
-    }
-
-    public void logAuthUpgrade(Map<String, Long> roleNameToId) {
-        logEdit(OperationType.OP_AUTH_UPGRADE_V2, new AuthUpgradeInfo(roleNameToId));
     }
 
     public void logCreateMaskingPolicy(Policy policy) {

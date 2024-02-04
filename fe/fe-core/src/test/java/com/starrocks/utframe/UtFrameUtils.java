@@ -1084,7 +1084,6 @@ public class UtFrameUtils {
         ctx.setQualifiedUser(userIdentity.getUser());
         ctx.setQueryId(UUIDUtil.genUUID());
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        globalStateMgr.initAuth(true);
         ctx.setGlobalStateMgr(globalStateMgr);
         ctx.setThreadLocalInfo();
         ctx.setDumpInfo(new MockDumpInfo());

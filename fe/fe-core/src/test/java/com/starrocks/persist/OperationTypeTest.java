@@ -225,7 +225,6 @@ public class OperationTypeTest {
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_ADD_SUB_PARTITIONS_V2));
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_ADD_UNUSED_SHARD));
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_ALTER_JOB_V2));
-        Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_AUTH_UPGRADE_V2));
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_BACKEND_TABLETS_INFO));
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_BACKEND_TABLETS_INFO_V2));
         Assert.assertFalse(OperationType.IGNORABLE_OPERATIONS.contains(OperationType.OP_BATCH_DELETE_REPLICA));

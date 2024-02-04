@@ -40,7 +40,6 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
-import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.MockedAuth;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -66,13 +65,10 @@ import java.util.List;
 public class SetStmtTest {
 
     @Mocked
-    private Auth auth;
-    @Mocked
     private ConnectContext ctx;
 
     @Before
     public void setUp() {
-        MockedAuth.mockedAuth(auth);
         MockedAuth.mockedConnectContext(ctx, "root", "192.168.1.1");
     }
 

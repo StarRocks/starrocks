@@ -34,24 +34,14 @@
 
 package com.starrocks.mysql.privilege;
 
-import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.UserDesc;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.DdlException;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.persist.EditLog;
-import com.starrocks.persist.PrivInfo;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
-import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.analyzer.SetStmtAnalyzer;
-import com.starrocks.sql.ast.CreateUserStmt;
-import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
@@ -62,13 +52,10 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.Collections;
-
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.parseSql;
 
 public class SetPasswordTest {
 
-    private Auth auth;
     @Mocked
     private Analyzer analyzer;
     @Mocked
@@ -82,13 +69,7 @@ public class SetPasswordTest {
 
     @Before
     public void setUp() throws NoSuchMethodException, SecurityException, AnalysisException {
-        auth = new Auth();
         new MockUp<GlobalStateMgr>() {
-            @Mock
-            public Auth getAuth() {
-                return auth;
-            }
-
             @Mock
             public EditLog getEditLog() {
                 return editLog;
@@ -97,75 +78,11 @@ public class SetPasswordTest {
 
         new Expectations() {
             {
-
-                editLog.logCreateUser((PrivInfo) any);
-                minTimes = 0;
-
                 MysqlPassword.checkPassword(anyString);
                 minTimes = 0;
                 result = new byte[10];
             }
         };
-    }
-
-    @Test
-    public void test() throws DdlException {
-        UserIdentity userIdentity = new UserIdentity("cmy", "%");
-        CreateUserStmt stmt = new CreateUserStmt(false, new UserDesc(userIdentity), Collections.emptyList());
-        auth.createUser(stmt);
-
-        ConnectContext ctx = new ConnectContext(null);
-        // set password for 'cmy'@'%'
-        UserIdentity currentUser1 = new UserIdentity("cmy", "%");
-        ctx.setCurrentUserIdentity(currentUser1);
-        ctx.setThreadLocalInfo();
-
-        UserIdentity user1 = new UserIdentity("cmy", "%");
-        SetPassVar setPassVar = new SetPassVar(user1, null);
-        try {
-            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setPassVar)), ctx);
-        } catch (SemanticException e) {
-            e.printStackTrace();
-            Assert.fail();
-        }
-
-        // set password without for
-        SetPassVar setPassVar2 = new SetPassVar(null, null);
-        try {
-            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setPassVar2)), ctx);
-        } catch (SemanticException e) {
-            e.printStackTrace();
-            Assert.fail();
-        }
-
-        // create user cmy2@'192.168.1.1'
-        UserIdentity userIdentity2 = new UserIdentity("cmy2", "192.168.1.1");
-        stmt = new CreateUserStmt(false, new UserDesc(userIdentity2), Collections.emptyList());
-        auth.createUser(stmt);
-
-        UserIdentity currentUser2 = new UserIdentity("cmy2", "192.168.1.1");
-        ctx.setCurrentUserIdentity(currentUser2);
-        ctx.setThreadLocalInfo();
-
-        // set password without for
-        SetPassVar setPassVar3 = new SetPassVar(null, null);
-        try {
-            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setPassVar3)), ctx);
-        } catch (SemanticException e) {
-            e.printStackTrace();
-            Assert.fail();
-        }
-
-        // set password for cmy2@'192.168.1.1'
-        UserIdentity user2 = new UserIdentity("cmy2", "192.168.1.1");
-        SetPassVar setPassVar4 = new SetPassVar(user2, null);
-        try {
-            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setPassVar4)), ctx);
-        } catch (SemanticException e) {
-            e.printStackTrace();
-            Assert.fail();
-        }
-
     }
 
     @Test

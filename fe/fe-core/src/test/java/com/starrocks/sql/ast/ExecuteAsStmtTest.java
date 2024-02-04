@@ -49,10 +49,6 @@ public class ExecuteAsStmtTest {
                 minTimes = 0;
                 result = auth;
 
-                globalStateMgr.isUsingNewPrivilege();
-                minTimes = 0;
-                result = false;
-
                 GlobalStateMgr.getCurrentState().getAuthorizationMgr().getDefaultRoleIdsByUser((UserIdentity) any);
                 minTimes = 0;
                 result = new HashSet<>();
