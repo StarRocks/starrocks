@@ -25,6 +25,7 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import groovy.lang.Tuple3;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -69,29 +70,29 @@ public class LogAction extends WebBaseAction {
     private void appendLogConf(StringBuilder buffer) {
         buffer.append("<h2>Log Configuration</h2>");
         try {
-            Log4jConfig.Tuple<String, String[], String[]> configs = Log4jConfig.updateLogging(null, null, null);
+            Tuple3<String, String[], String[]> configs = Log4jConfig.updateLogging(null, null, null);
             if (!Strings.isNullOrEmpty(addVerboseName)) {
                 addVerboseName = addVerboseName.trim();
-                List<String> verboseNames = Lists.newArrayList(configs.y);
+                List<String> verboseNames = Lists.newArrayList(configs.getV1());
                 if (!verboseNames.contains(addVerboseName)) {
                     verboseNames.add(addVerboseName);
-                    configs = Log4jConfig.updateLogging(null, verboseNames.toArray(new String[verboseNames.size()]),
+                    configs = Log4jConfig.updateLogging(null, verboseNames.toArray(new String[0]),
                             null);
                 }
             }
             if (!Strings.isNullOrEmpty(delVerboseName)) {
                 delVerboseName = delVerboseName.trim();
-                List<String> verboseNames = Lists.newArrayList(configs.y);
+                List<String> verboseNames = Lists.newArrayList(configs.getV2());
                 if (verboseNames.contains(delVerboseName)) {
                     verboseNames.remove(delVerboseName);
-                    configs = Log4jConfig.updateLogging(null, verboseNames.toArray(new String[verboseNames.size()]),
+                    configs = Log4jConfig.updateLogging(null, verboseNames.toArray(new String[0]),
                             null);
                 }
             }
 
-            buffer.append("Level: " + configs.x + "<br/>");
-            buffer.append("Verbose Names: " + StringUtils.join(configs.y, ",") + "<br/>");
-            buffer.append("Audit Names: " + StringUtils.join(configs.z, ",") + "<br/>");
+            buffer.append("Level: ").append(configs.getV1()).append("<br/>");
+            buffer.append("Verbose Names: ").append(StringUtils.join(configs.getV2(), ",")).append("<br/>");
+            buffer.append("Audit Names: ").append(StringUtils.join(configs.getV3(), ",")).append("<br/>");
             appendUpdateVerboseButton(buffer, "add_verbose");
             appendUpdateVerboseButton(buffer, "del_verbose");
         } catch (IOException e) {
