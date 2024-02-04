@@ -403,7 +403,7 @@ bool NodeChannel::is_full() {
 
 Status NodeChannel::add_chunk(Chunk* input, const std::vector<int64_t>& tablet_ids,
                               const std::vector<uint32_t>& indexes, uint32_t from, uint32_t size) {
-    if (_cancelled || _send_finished) {
+    if (_cancelled || _closed) {
         return _err_st;
     }
 
@@ -463,7 +463,7 @@ Status NodeChannel::add_chunk(Chunk* input, const std::vector<int64_t>& tablet_i
 
 Status NodeChannel::add_chunks(Chunk* input, const std::vector<std::vector<int64_t>>& index_tablet_ids,
                                const std::vector<uint32_t>& indexes, uint32_t from, uint32_t size) {
-    if (_cancelled || _send_finished) {
+    if (_cancelled || _closed) {
         return _err_st;
     }
 
@@ -534,8 +534,8 @@ Status NodeChannel::_filter_indexes_with_where_expr(Chunk* input, const std::vec
     return Status::OK();
 }
 
-Status NodeChannel::_send_request(bool eos, bool wait_all_sender_close) {
-    if (eos) {
+Status NodeChannel::_send_request(bool eos, bool finished) {
+    if (eos || finished) {
         if (_request_queue.empty()) {
             if (_cur_chunk.get() == nullptr) {
                 _cur_chunk = std::make_unique<Chunk>();
@@ -548,6 +548,7 @@ Status NodeChannel::_send_request(bool eos, bool wait_all_sender_close) {
         // try to send chunk in queue first
         if (_request_queue.size() > 1) {
             eos = false;
+            finished = false;
         }
     }
 
@@ -568,9 +569,6 @@ Status NodeChannel::_send_request(bool eos, bool wait_all_sender_close) {
         if (UNLIKELY(eos)) {
             req->set_eos(true);
 
-            if (wait_all_sender_close) {
-                req->set_wait_all_sender_close(true);
-            }
             auto& partition_ids = _parent->_index_id_partition_ids[req->index_id()];
             if (!partition_ids.empty()) {
                 VLOG(2) << "partition_ids:" << std::string(partition_ids.begin(), partition_ids.end());
@@ -580,7 +578,15 @@ Status NodeChannel::_send_request(bool eos, bool wait_all_sender_close) {
             }
 
             // eos request must be the last request
-            _send_finished = true;
+            _closed = true;
+        }
+
+        // This is added for automatic partition. We need to ensure that
+        // all data has been sent before the incremental channel is closed.
+        if (UNLIKELY(finished)) {
+            req->set_wait_all_sender_close(true);
+
+            _finished = true;
         }
 
         req->set_packet_seq(_next_packet_seq);
@@ -818,13 +824,30 @@ Status NodeChannel::_wait_one_prev_request() {
     return Status::OK();
 }
 
-Status NodeChannel::try_close(bool wait_all_sender_close) {
-    if (_cancelled || _send_finished) {
+Status NodeChannel::try_close() {
+    if (_cancelled || _closed) {
         return _err_st;
     }
 
     if (_check_prev_request_done()) {
-        auto st = _send_request(true /* eos */, wait_all_sender_close);
+        auto st = _send_request(true /* eos */, false /* finished */);
+        if (!st.ok()) {
+            _cancelled = true;
+            _err_st = st;
+            return _err_st;
+        }
+    }
+
+    return Status::OK();
+}
+
+Status NodeChannel::try_finish() {
+    if (_cancelled || _finished || _closed) {
+        return _err_st;
+    }
+
+    if (_check_prev_request_done()) {
+        auto st = _send_request(false /* eos */, true /* finished */);
         if (!st.ok()) {
             _cancelled = true;
             _err_st = st;
@@ -836,7 +859,11 @@ Status NodeChannel::try_close(bool wait_all_sender_close) {
 }
 
 bool NodeChannel::is_close_done() {
-    return (_send_finished && _check_all_prev_request_done()) || _cancelled;
+    return (_closed && _check_all_prev_request_done()) || _cancelled;
+}
+
+bool NodeChannel::is_finished() {
+    return (_finished && _check_all_prev_request_done()) || _cancelled;
 }
 
 Status NodeChannel::close_wait(RuntimeState* state) {
@@ -845,7 +872,7 @@ Status NodeChannel::close_wait(RuntimeState* state) {
     }
 
     // 1. send eos request to commit write util finish
-    while (!_send_finished) {
+    while (!_closed) {
         RETURN_IF_ERROR(_send_request(true /* eos */));
     }
 

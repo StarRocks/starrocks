@@ -136,10 +136,12 @@ public:
     // async close interface: try_close() -> [is_close_done()] -> close_wait()
     // if is_close_done() return true, close_wait() will not block
     // otherwise close_wait() will block
-    Status try_close(bool wait_all_sender_close = false);
+    Status try_close();
     bool is_close_done();
     Status close_wait(RuntimeState* state);
 
+    Status try_finish();
+    bool is_finished();
     void cancel(const Status& err_st);
 
     void time_report(std::unordered_map<int64_t, AddBatchCounter>* add_batch_counter_map, int64_t* serialize_batch_ns,
@@ -200,8 +202,11 @@ private:
     // user cancel or get some errors
     bool _cancelled{false};
 
-    // send finished means the consumer thread which send the rpc can exit
-    bool _send_finished{false};
+    // channel is closed
+    bool _closed{false};
+
+    // data sending is finished
+    bool _finished{false};
 
     std::unique_ptr<RowDescriptor> _row_desc;
 
