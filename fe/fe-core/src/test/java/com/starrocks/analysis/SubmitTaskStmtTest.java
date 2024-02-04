@@ -207,4 +207,15 @@ public class SubmitTaskStmtTest {
         Assert.assertNull(tm.getTask(taskName));
         starRocksAssert.dropMaterializedView(name);
     }
+
+    @Test
+    public void createTaskWithUser() throws Exception {
+        TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
+        connectContext.executeSql("CREATE USER 'test2' IDENTIFIED BY ''");
+        connectContext.executeSql("GRANT all on DATABASE test to test2");
+        connectContext.executeSql("GRANT all on test.* to test2");
+        connectContext.executeSql("EXECUTE AS test2 WITH NO REVERT");
+        connectContext.executeSql(("submit task task_with_user as create table t_tmp as select * from test.tbl1"));
+        Assert.assertEquals("test2", tm.getTask("task_with_user").getCreateUser());
+    }
 }
