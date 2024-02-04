@@ -45,7 +45,7 @@ public class LoadLoadingTaskTest {
         LoadLoadingTask loadLoadingTask = new LoadLoadingTask(database, olapTable, null, null, 0,
                 0, true, 1, new BrokerLoadJob(), "UTC", 10,
                 System.currentTimeMillis(), false, null, null, null,
-                TLoadJobType.BROKER, 0, null);
+                TLoadJobType.BROKER, 0, null, null);
 
         // database not exist
         boolean exceptionThrown = false;
