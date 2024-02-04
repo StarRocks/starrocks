@@ -43,8 +43,8 @@ public:
 
 private:
     // @TODO(silverbullet233): some information is needed to uniquely identify each BE
-    StatusOr<FileBlockContainerPtr> get_or_create_container(Dir* dir, int32_t plan_node_id,
-                                                            const std::string& plan_node_name);
+    StatusOr<FileBlockContainerPtr> get_or_create_container(DirPtr dir, TUniqueId fragment_instance_id,
+                                                            int32_t plan_node_id, const std::string& plan_node_name);
 
     TUniqueId _query_id;
     std::atomic<uint64_t> _next_container_id = 0;
