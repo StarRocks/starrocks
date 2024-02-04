@@ -77,6 +77,7 @@ public class QueryDetail implements Serializable {
     private long cpuCostNs = -1;
     private long memCostBytes = -1;
     private long spillBytes = -1;
+    private String digest;
 
     public QueryDetail() {
     }
@@ -129,6 +130,7 @@ public class QueryDetail implements Serializable {
         queryDetail.cpuCostNs = this.cpuCostNs;
         queryDetail.memCostBytes = this.memCostBytes;
         queryDetail.spillBytes = this.spillBytes;
+        queryDetail.digest = this.digest;
         return queryDetail;
     }
 
@@ -294,5 +296,13 @@ public class QueryDetail implements Serializable {
 
     public void setSpillBytes(long spillBytes) {
         this.spillBytes = spillBytes;
+    }
+
+    public String getDigest() {
+        return digest;
+    }
+
+    public void setDigest(String digest) {
+        this.digest = digest;
     }
 }
