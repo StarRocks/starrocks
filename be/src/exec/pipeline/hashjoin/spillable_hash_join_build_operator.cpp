@@ -95,7 +95,7 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
 
     auto flush_function = [this](RuntimeState* state, auto io_executor) {
         auto& spiller = _join_builder->spiller();
-        return spiller->flush(state, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, spiller));
+        return spiller->flush(state, TRACKER_WITH_SPILLER_GUARD(state, spiller));
     };
 
     auto io_executor = _join_builder->spill_channel()->io_executor();
@@ -107,7 +107,7 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
                     _join_builder->enter_probe_phase();
                     return Status::OK();
                 },
-                state, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, spiller));
+                state, TRACKER_WITH_SPILLER_GUARD(state, spiller));
     };
 
     WARN_IF_ERROR(publish_runtime_filters(state),
@@ -248,6 +248,7 @@ Status SpillableHashJoinBuildOperatorFactory::prepare(RuntimeState* state) {
     _spill_options->name = "hash-join-build";
     _spill_options->plan_node_id = _plan_node_id;
     _spill_options->encode_level = state->spill_encode_level();
+    _spill_options->wg = state->fragment_ctx()->workgroup();
     // TODO: Our current adaptive dop for non-broadcast functions will also result in a build hash_joiner corresponding to multiple prob hash_join prober.
     //
     _spill_options->read_shared =

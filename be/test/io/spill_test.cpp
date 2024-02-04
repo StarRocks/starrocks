@@ -143,27 +143,15 @@ public:
     }
 };
 
-struct SyncExecutor {
-    template <class Runnable>
-    Status submit(Runnable&& runnable) {
-        workgroup::YieldContext yield_ctx;
-        do {
-            std::forward<Runnable>(runnable)(yield_ctx);
-        } while (!yield_ctx.is_finished());
-        return Status::OK();
-    }
-};
-
-struct ASyncExecutor {
+struct TestAsyncExecutor final : public starrocks::spill::IOTaskExecutor {
     using ExecFunction = std::function<void(workgroup::YieldContext&)>;
-    template <class Runnable>
-    Status submit(Runnable&& runnable) {
-        ExecFunction func = std::forward<Runnable>(runnable);
+    ;
+    Status submit(std::function<void(workgroup::YieldContext&)> runnable) override {
         _ctxs.emplace_back(std::make_unique<workgroup::YieldContext>());
-        _threads.emplace_back(func, std::ref(*_ctxs.back()));
+        _threads.emplace_back(std::move(runnable), std::ref(*_ctxs.back()));
         return Status::OK();
     }
-    ~ASyncExecutor() {
+    ~TestAsyncExecutor() {
         for (auto& thread : _threads) {
             thread.join();
         }
@@ -243,34 +231,31 @@ template <class Writer, class Reader>
 struct SpillerCaller {
     SpillerCaller(spill::Spiller* spiller) : _spiller(spiller) {}
 
-    template <class TaskExecutor, class MemGuard>
-    Status spill(RuntimeState* state, const ChunkPtr& chunk, TaskExecutor&& executor, MemGuard&& guard) {
+    template <class MemGuard>
+    Status spill(RuntimeState* state, const ChunkPtr& chunk, MemGuard&& guard) {
         if (_spiller->_chunk_builder.chunk_schema()->empty()) {
             _spiller->_chunk_builder.chunk_schema()->set_schema(chunk);
         }
-        return _spiller->_writer->as<Writer>()->spill(state, chunk, std::forward<TaskExecutor>(executor),
-                                                      std::forward<MemGuard>(guard));
+        return _spiller->_writer->as<Writer>()->spill(state, chunk, std::forward<MemGuard>(guard));
     }
 
-    template <class TaskExecutor, class MemGuard>
-    Status flush(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
-        return _spiller->_writer->as<Writer>()->flush(state, std::forward<TaskExecutor>(executor),
-                                                      std::forward<MemGuard>(guard));
+    template <class MemGuard>
+    Status flush(RuntimeState* state, MemGuard&& guard) {
+        return _spiller->_writer->as<Writer>()->flush(state, std::forward<MemGuard>(guard));
     }
 
-    template <class TaskExecutor, class MemGuard>
-    StatusOr<ChunkPtr> restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
-        return _spiller->_reader->restore(state, std::forward<TaskExecutor>(executor), std::forward<MemGuard>(guard));
+    template <class MemGuard>
+    StatusOr<ChunkPtr> restore(RuntimeState* state, MemGuard&& guard) {
+        return _spiller->_reader->restore(state, std::forward<MemGuard>(guard));
     }
 
-    template <class TaskExecutor, class MemGuard>
-    Status trigger_restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
+    template <class MemGuard>
+    Status trigger_restore(RuntimeState* state, MemGuard&& guard) {
         if (!acquire_once) {
             acquire_once = true;
             RETURN_IF_ERROR(_spiller->_acquire_input_stream(state));
         }
-        return _spiller->_reader->trigger_restore(state, std::forward<TaskExecutor>(executor),
-                                                  std::forward<MemGuard>(guard));
+        return _spiller->_reader->trigger_restore(state, std::forward<MemGuard>(guard));
     }
 
     bool acquire_once = false;
@@ -335,19 +320,22 @@ TEST_F(SpillTest, unsorted_process) {
 
     auto spiller = factory->create(spill_options);
     spiller->set_metrics(metrics);
+    spill::IOTaskExecutorPtr sync_executor = std::make_shared<spill::SyncTaskExecutor>();
+    spill::IOTaskExecutorPtr async_executor = std::make_shared<TestAsyncExecutor>();
     SpillerCaller<spill::RawSpillerWriter*, spill::SpillerReader*> caller(spiller.get());
     ASSERT_OK(spiller->prepare(&dummy_rt_st));
 
     size_t test_loop = 1024;
     std::vector<ChunkPtr> holder;
     {
+        spiller->set_local_io_executor(sync_executor);
         for (size_t i = 0; i < test_loop; ++i) {
             auto chunk = chunk_builder.gen(tuple, nullables);
-            ASSERT_OK(caller.spill(&dummy_rt_st, chunk, SyncExecutor{}, EmptyMemGuard{}));
+            ASSERT_OK(caller.spill(&dummy_rt_st, chunk, EmptyMemGuard{}));
             ASSERT_OK(spiller->_spilled_task_status);
             holder.push_back(chunk);
         }
-        ASSERT_OK(caller.flush(&dummy_rt_st, SyncExecutor{}, EmptyMemGuard{}));
+        ASSERT_OK(caller.flush(&dummy_rt_st, EmptyMemGuard{}));
     }
     size_t input_rows = 0;
     for (const auto& chunk : holder) {
@@ -356,10 +344,11 @@ TEST_F(SpillTest, unsorted_process) {
 
     // test restore
     {
+        spiller->set_local_io_executor(sync_executor);
         std::vector<ChunkPtr> restored;
-        ASSERT_OK(caller.trigger_restore(&dummy_rt_st, SyncExecutor{}, EmptyMemGuard{}));
+        ASSERT_OK(caller.trigger_restore(&dummy_rt_st, EmptyMemGuard{}));
         for (size_t i = 0; i < test_loop; ++i) {
-            auto chunk_st = caller.restore(&dummy_rt_st, SyncExecutor{}, EmptyMemGuard{});
+            auto chunk_st = caller.restore(&dummy_rt_st, EmptyMemGuard{});
             ASSERT_OK(chunk_st.status());
             ASSERT_OK(spiller->_spilled_task_status);
             if (chunk_st.value() != nullptr) {
@@ -367,7 +356,7 @@ TEST_F(SpillTest, unsorted_process) {
             }
         }
 
-        auto chunk_st = caller.restore(&dummy_rt_st, SyncExecutor{}, EmptyMemGuard{});
+        auto chunk_st = caller.restore(&dummy_rt_st, EmptyMemGuard{});
         ASSERT_TRUE(chunk_st.status().is_end_of_file());
 
         size_t output_rows = 0;
@@ -379,11 +368,11 @@ TEST_F(SpillTest, unsorted_process) {
 
     // test 2
     {
-        ASyncExecutor executor;
+        spiller->set_local_io_executor(async_executor);
         for (size_t i = 0; i < test_loop; ++i) {
             if (!spiller->is_full()) {
                 auto chunk = chunk_builder.gen(tuple, nullables);
-                ASSERT_OK(caller.spill(&dummy_rt_st, chunk, executor, EmptyMemGuard{}));
+                ASSERT_OK(caller.spill(&dummy_rt_st, chunk, EmptyMemGuard{}));
                 ASSERT_OK(spiller->_spilled_task_status);
             }
         }
@@ -452,9 +441,11 @@ TEST_F(SpillTest, order_by_process) {
     // Test 1
     {
         auto spiller = factory->create(spill_options);
+        spill::IOTaskExecutorPtr sync_executor = std::make_shared<spill::SyncTaskExecutor>();
         spiller->set_metrics(metrics);
         SpillerCaller<spill::RawSpillerWriter*, spill::SpillerReader*> caller(spiller.get());
         ASSERT_OK(spiller->prepare(&dummy_rt_st));
+        spiller->set_local_io_executor(sync_executor);
 
         size_t test_loop = 1024;
         std::vector<ChunkPtr> holder;
@@ -462,21 +453,21 @@ TEST_F(SpillTest, order_by_process) {
         {
             for (size_t i = 0; i < test_loop; ++i) {
                 auto chunk = chunk_builder.gen(tuple, nullables);
-                ASSERT_OK(caller.spill(&dummy_rt_st, chunk, SyncExecutor{}, EmptyMemGuard{}));
+                ASSERT_OK(caller.spill(&dummy_rt_st, chunk, EmptyMemGuard{}));
                 ASSERT_OK(spiller->_spilled_task_status);
                 holder.push_back(chunk);
                 contain_rows += chunk->num_rows();
             }
-            ASSERT_OK(caller.flush(&dummy_rt_st, SyncExecutor{}, EmptyMemGuard{}));
+            ASSERT_OK(caller.flush(&dummy_rt_st, EmptyMemGuard{}));
         }
 
         std::vector<ChunkPtr> restored;
         size_t restored_rows = 0;
         {
-            ASSERT_OK(caller.trigger_restore(&dummy_rt_st, SyncExecutor{}, EmptyMemGuard{}));
+            ASSERT_OK(caller.trigger_restore(&dummy_rt_st, EmptyMemGuard{}));
             ASSERT_TRUE(caller._spiller->has_output_data());
             for (size_t i = 0; i < test_loop; ++i) {
-                auto chunk_st = caller.restore(&dummy_rt_st, SyncExecutor{}, EmptyMemGuard{});
+                auto chunk_st = caller.restore(&dummy_rt_st, EmptyMemGuard{});
                 ASSERT_OK(chunk_st.status());
                 ASSERT_OK(spiller->_spilled_task_status);
                 if (chunk_st.value() != nullptr) {
@@ -486,7 +477,7 @@ TEST_F(SpillTest, order_by_process) {
                 }
             }
 
-            auto chunk_st = caller.restore(&dummy_rt_st, SyncExecutor{}, EmptyMemGuard{});
+            auto chunk_st = caller.restore(&dummy_rt_st, EmptyMemGuard{});
             ASSERT_TRUE(chunk_st.status().is_end_of_file());
         }
         ASSERT_EQ(contain_rows, restored_rows);
@@ -532,6 +523,7 @@ TEST_F(SpillTest, partition_process) {
     auto chunk_empty = chunk_builder.gen(tuple, nullables);
 
     auto spiller = factory->create(spill_options);
+    auto sync_executor = std::make_shared<spill::SyncTaskExecutor>();
     spiller->set_metrics(metrics);
     SpillerCaller<spill::PartitionedSpillerWriter*, spill::SpillerReader*> caller(spiller.get());
     ASSERT_OK(spiller->prepare(&dummy_rt_st));
@@ -539,15 +531,16 @@ TEST_F(SpillTest, partition_process) {
     size_t test_loop = 1024;
     std::vector<ChunkPtr> holder;
     {
+        spiller->set_local_io_executor(sync_executor);
         for (size_t i = 0; i < test_loop; ++i) {
             auto chunk = chunk_builder.gen(tuple, nullables);
             auto hash_column = spill::SpillHashColumn::create(chunk->num_rows());
             chunk->append_column(std::move(hash_column), -1);
-            ASSERT_OK(spiller->spill(&dummy_rt_st, chunk, SyncExecutor{}, EmptyMemGuard{}));
+            ASSERT_OK(spiller->spill(&dummy_rt_st, chunk, EmptyMemGuard{}));
             ASSERT_OK(spiller->_spilled_task_status);
             holder.push_back(chunk);
         }
-        ASSERT_OK(spiller->flush(&dummy_rt_st, SyncExecutor{}, EmptyMemGuard{}));
+        ASSERT_OK(spiller->flush(&dummy_rt_st, EmptyMemGuard{}));
     }
 }
 

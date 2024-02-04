@@ -80,13 +80,21 @@ void ScanExecutor::worker_thread() {
 
         // task
         if (!task.is_finished()) {
-            _task_queue->force_put(std::move(task));
+            if (task.has_yield_function()) {
+                task.execute_yield_function();
+            } else {
+                _task_queue->force_put(std::move(task));
+            }
         }
     }
 }
 
 bool ScanExecutor::submit(ScanTask task) {
     return _task_queue->try_offer(std::move(task));
+}
+
+void ScanExecutor::force_submit(ScanTask task) {
+    _task_queue->force_put(std::move(task));
 }
 
 } // namespace starrocks::workgroup

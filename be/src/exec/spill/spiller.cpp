@@ -30,10 +30,12 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/sort_exec_exprs.h"
+#include "exec/spill/executor.h"
 #include "exec/spill/input_stream.h"
 #include "exec/spill/mem_table.h"
 #include "exec/spill/options.h"
 #include "exec/spill/spiller.hpp"
+#include "executor.h"
 #include "gutil/port.h"
 #include "runtime/runtime_state.h"
 #include "serde/column_array_serde.h"
@@ -89,6 +91,10 @@ SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile, std::atomic_in
 Status Spiller::prepare(RuntimeState* state) {
     _chunk_builder.chunk_schema() = std::make_shared<SpilledChunkBuildSchema>();
 
+#ifndef BE_TEST
+    DCHECK(_opts.wg != nullptr) << "workgroup must be set";
+    _local_io_executor = std::make_shared<AsyncIOTaskExecutor>(ExecEnv::GetInstance()->scan_executor(), _opts.wg);
+#endif
     ASSIGN_OR_RETURN(_serde, Serde::create_serde(this));
 
     if (_opts.init_partition_nums > 0) {

@@ -20,6 +20,7 @@
 
 #include "common/statusor.h"
 #include "exec/spill/common.h"
+#include "exec/spill/options.h"
 #include "exec/spill/spiller_factory.h"
 
 namespace starrocks::pipeline {
@@ -125,7 +126,10 @@ Status SpillableNLJoinProbeOperator::prepare(RuntimeState* state) {
     _accumulator.set_desired_size(state->chunk_size());
     RETURN_IF_ERROR(_prober.prepare(state, _unique_metrics.get()));
     _spill_factory = std::make_shared<spill::SpillerFactory>();
-    _spiller = _spill_factory->create({});
+    spill::SpilledOptions options;
+    options.wg = state->fragment_ctx()->workgroup();
+    _spiller = _spill_factory->create(options);
+    RETURN_IF_ERROR(_spiller->prepare(state));
     _spiller->set_metrics(spill::SpillProcessMetrics(_unique_metrics.get(), state->mutable_total_spill_bytes()));
     _cross_join_context->incr_prober();
     return Status::OK();

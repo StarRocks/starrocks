@@ -65,7 +65,7 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
 
     auto flush_function = [this](RuntimeState* state, auto io_executor) {
         auto& spiller = _aggregator->spiller();
-        return spiller->flush(state, *io_executor, TRACKER_WITH_SPILLER_READER_GUARD(state, spiller));
+        return spiller->flush(state, TRACKER_WITH_SPILLER_READER_GUARD(state, spiller));
     };
 
     _aggregator->ref();
@@ -76,9 +76,10 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
                     RETURN_IF_ERROR(AggregateBlockingSinkOperator::set_finishing(state));
                     return Status::OK();
                 },
-                state, *io_executor, TRACKER_WITH_SPILLER_READER_GUARD(state, _aggregator->spiller()));
+                state, TRACKER_WITH_SPILLER_READER_GUARD(state, _aggregator->spiller()));
     };
 
+    // @TODO remove
     SpillProcessTasksBuilder task_builder(state, io_executor);
     task_builder.then(flush_function).finally(set_call_back_function);
 
@@ -297,6 +298,7 @@ Status SpillableAggregateBlockingSinkOperatorFactory::prepare(RuntimeState* stat
     _spill_options->name = "agg-blocking-spill";
     _spill_options->plan_node_id = _plan_node_id;
     _spill_options->encode_level = state->spill_encode_level();
+    _spill_options->wg = state->fragment_ctx()->workgroup();
 
     return Status::OK();
 }
