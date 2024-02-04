@@ -103,6 +103,8 @@ private:
     static std::promise<void> _promise;
 };
 
+std::promise<void> MockSinkIOBuffer::_promise;
+
 TEST(SinkIOBufferTest, test_basic) {
     auto sink_buffer = std::make_unique<MockSinkIOBuffer>(10);
     {
