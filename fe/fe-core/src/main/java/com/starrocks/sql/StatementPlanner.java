@@ -155,8 +155,8 @@ public class StatementPlanner {
 
     private static boolean isLockFree(boolean isOnlyOlapTable, ConnectContext session) {
         // condition can use conflict detection to replace db lock
-        // 1. all tables are olap table
-        // 2. node is master node
+        // 1. all tables are olap tables
+        // 2. node is leader node
         // 3. cbo_use_lock_db = false
         return isOnlyOlapTable
                 && GlobalStateMgr.getCurrentState().isLeader()
