@@ -498,13 +498,11 @@ jobs:
           build_type: Release
         run: |
           echo "package=${package}" >> "$GITHUB_ENV"
-          set -x
           if [[ "${be_change}" != "true" && "${fe_change}" != "true" ]]; then
             oss_path=oss://${bucket_prefix}-ci-release/daily/commit/${BRANCH}/${build_type}
             package=$(ossutil64 --config-file ~/.ossutilconfig ls ${oss_path} | grep "tar.gz" | sort -n -r | head -n 1 | awk '{print $NF}')
             echo "package=${package}" >> $GITHUB_ENV
           fi
-          exit 1
 
       - name: UPDATE ECI & RUN BUILD
         id: run_build
