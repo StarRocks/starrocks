@@ -40,6 +40,19 @@ COPY . /build/starrocks
 WORKDIR /build/starrocks
 RUN --mount=type=cache,target=/root/.m2/ STARROCKS_VERSION=${RELEASE_VERSION} BUILD_TYPE=${BUILD_TYPE} MAVEN_OPTS=${MAVEN_OPTS} ./build.sh --be --enable-shared-data --clean -j `nproc`
 
+FROM ubuntu:22.04 as datadog-downloader
+
+RUN apt-get update -y && apt-get install -y --no-install-recommends wget tar xz-utils
+
+# download the latest dd-java-agent
+ADD 'https://dtdg.co/latest-java-tracer' /datadog/dd-java-agent.jar
+
+# Get ddprof for BE profiling
+RUN imagearch=$(arch | sed s/aarch64/arm64/ | sed s/x86_64/amd64/) \
+    && wget --no-check-certificate "https://github.com/DataDog/ddprof/releases/download/v0.15.3/ddprof-0.15.3-${imagearch}-linux.tar.xz" -O ddprof-linux.tar.xz \
+    && tar xvf ddprof-linux.tar.xz && mkdir -p /datadog/  \
+    && mv ddprof/bin/ddprof /datadog/ \
+    && chmod 755 /datadog/ddprof
 
 FROM busybox:latest
 ARG RELEASE_VERSION
@@ -52,14 +65,7 @@ COPY --from=fe-builder /build/starrocks/output /release/fe_artifacts
 COPY --from=be-builder /build/starrocks/output /release/be_artifacts
 COPY --from=broker-builder /build/starrocks/fs_brokers/apache_hdfs_broker/output /release/broker_artifacts
 
-# download the latest dd-java-agent
-ADD 'https://dtdg.co/latest-java-tracer' /release/fe_artifacts/fe/datadog/dd-java-agent.jar
-
-# Get ddprof for BE profiling
-ADD https://github.com/DataDog/ddprof/releases/download/v0.15.3/ddprof-0.15.3-${TARGETARCH}-linux.tar.xz ddprof-linux.tar.xz
-RUN tar xvf ddprof-linux.tar.xz && mkdir -p /release/be_artifacts/be/datadog/  \
-    && mv ddprof/bin/ddprof /release/be_artifacts/be/datadog/ \
-    && chmod 755 /release/be_artifacts/be/datadog/ddprof \
-    && rm -f ddprof-linux.tar.xz
+COPY --from=datadog-downloader /datadog/dd-java-agent.jar /release/fe_artifacts/fe/datadog/dd-java-agent.jar
+COPY --from=datadog-downloader /datadog/ddprof /release/be_artifacts/be/datadog/ddprof
 
 WORKDIR /release
