@@ -23,7 +23,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
  * Materialized View Rewrite Rule for pattern:
  * - Scan
  */
-public class OnlyScanRule extends SingleTableRewriteBaseRule {
+public class OnlyScanRule extends BaseMaterializedViewRewriteRule {
     private static final OnlyScanRule INSTANCE = new OnlyScanRule();
 
     public OnlyScanRule() {

@@ -157,6 +157,8 @@ import com.starrocks.sql.optimizer.rule.transformation.pruner.CboTablePruneRule;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class RuleSet {
     private static final Map<RuleSetType, List<Rule>> REWRITE_RULES = Maps.newHashMap();
@@ -395,6 +397,11 @@ public class RuleSet {
                 AggregateJoinRule.getInstance(),
                 OnlyJoinRule.getInstance()
         ));
+
+        REWRITE_RULES.put(RuleSetType.ALL_MV_REWRITE, Stream.concat(
+                REWRITE_RULES.get(RuleSetType.MULTI_TABLE_MV_REWRITE).stream(),
+                REWRITE_RULES.get(RuleSetType.SINGLE_TABLE_MV_REWRITE).stream())
+                        .collect(Collectors.toList()));
 
         REWRITE_RULES.put(RuleSetType.PRUNE_EMPTY_OPERATOR, ImmutableList.of(
                 PruneEmptyScanRule.OLAP_SCAN,
