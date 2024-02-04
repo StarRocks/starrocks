@@ -97,8 +97,8 @@ private:
     /**
      * @brief Compile the module and return the function pointer.
      */
-    void* compile_module(std::unique_ptr<llvm::Module> module, std::unique_ptr<llvm::LLVMContext> context,
-                         const std::string& expr_name);
+    JITScalarFunction compile_module(std::unique_ptr<llvm::Module> module, std::unique_ptr<llvm::LLVMContext> context,
+                                     const std::string& expr_name);
 
     /**
      * @brief Remove the function and its related resources(resource tracker and module) from the JIT engine.
@@ -110,9 +110,9 @@ private:
      */
     static void print_module(const llvm::Module& module);
 
-    inline void* lookup_function(const std::string& expr_name, bool must_exist);
+    inline JITScalarFunction lookup_function(const std::string& expr_name, bool must_exist);
 
-    void* lookup_function_with_lock(const std::string& expr_name, bool must_exist);
+    JITScalarFunction lookup_function_with_lock(const std::string& expr_name, bool must_exist);
 
     std::mutex _mutex;
 
