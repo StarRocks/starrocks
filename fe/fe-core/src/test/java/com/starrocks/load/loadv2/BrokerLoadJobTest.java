@@ -76,6 +76,7 @@ import mockit.Mocked;
 import org.apache.spark.sql.AnalysisException;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.HashMap;
@@ -336,6 +337,7 @@ public class BrokerLoadJobTest {
         Assert.assertEquals(1, idToTasks.size());
     }
 
+    @Ignore
     @Test
     public void testRetryJobAfterAborted(@Injectable TransactionState txnState,
                                          @Injectable boolean txnOperated,

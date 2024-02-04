@@ -11,8 +11,9 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package com.starrocks.epack.privilege;
+package com.starrocks.epack.privilege.ranger.starrocks;
 
+import com.starrocks.epack.privilege.ObjectTypeEPack;
 import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.privilege.ObjectType;
 import org.apache.ranger.plugin.policyengine.RangerAccessResourceImpl;

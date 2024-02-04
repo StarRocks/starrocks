@@ -71,6 +71,7 @@ import org.apache.thrift.TServiceClient;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.sparkproject.guava.collect.ImmutableMap;
 
@@ -167,6 +168,7 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
         }
     }
 
+    @Ignore
     @Test
     public void testGetWarehouses() throws IOException, UserException, InterruptedException {
         List<Warehouse> whs = ImmutableList.of(

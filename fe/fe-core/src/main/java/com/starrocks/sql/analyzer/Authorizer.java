@@ -26,7 +26,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.epack.privilege.AccessControllerEPack;
 import com.starrocks.epack.privilege.NativeAccessControllerEPack;
-import com.starrocks.epack.privilege.RangerStarRocksAccessControllerEPack;
+import com.starrocks.epack.privilege.ranger.starrocks.RangerStarRocksAccessControllerEPack;
 import com.starrocks.epack.sql.analyzer.AuthorizerStmtVisitorEPack;
 import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.privilege.AccessControlProvider;

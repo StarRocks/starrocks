@@ -12,8 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.epack.privilege;
+package com.starrocks.epack.privilege.ranger.starrocks;
 
+import com.starrocks.epack.privilege.AccessControllerEPack;
+import com.starrocks.epack.privilege.DbUID;
+import com.starrocks.epack.privilege.Policy;
+import com.starrocks.epack.privilege.SecurityPolicyMgr;
 import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
