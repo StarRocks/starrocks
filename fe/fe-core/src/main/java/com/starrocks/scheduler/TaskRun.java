@@ -49,6 +49,7 @@ public class TaskRun implements Comparable<TaskRun> {
     public static final String PARTITION_START = "PARTITION_START";
     public static final String PARTITION_END = "PARTITION_END";
     public static final String FORCE = "FORCE";
+    private boolean isKilled = false;
 
     private long taskId;
 
@@ -133,6 +134,14 @@ public class TaskRun implements Comparable<TaskRun> {
         this.executeOption = executeOption;
     }
 
+    public void kill() {
+        isKilled = true;
+    }
+
+    public boolean isKilled() {
+        return isKilled;
+    }
+
     public Map<String, String> refreshTaskProperties(ConnectContext ctx) {
         Map<String, String> newProperties = Maps.newHashMap();
         if (task.getSource() != Constants.TaskSource.MV) {
@@ -210,6 +219,7 @@ public class TaskRun implements Comparable<TaskRun> {
         taskRunContext.setTaskType(type);
         taskRunContext.setStatus(status);
         taskRunContext.setExecuteOption(executeOption);
+        taskRunContext.setTaskRun(this);
 
         processor.processTaskRun(taskRunContext);
         QueryState queryState = runCtx.getState();

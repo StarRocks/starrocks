@@ -2961,6 +2961,35 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         Assert.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
     }
 
+    @Test
+    public void testCancelRefreshMV() throws Exception {
+        starRocksAssert.useDatabase("test")
+                .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`hive_parttbl_mv1`\n" +
+                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                        "PARTITION BY (`l_shipdate`)\n" +
+                        "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"storage_medium\" = \"HDD\"\n" +
+                        ")\n" +
+                        "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` as a;");
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable("hive_parttbl_mv1"));
+
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+
+        taskRun.kill();
+        try {
+            initAndExecuteTaskRun(taskRun);
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("error-msg : User Cancelled"));
+            starRocksAssert.dropMaterializedView("hive_parttbl_mv1");
+            return;
+        }
+        Assert.fail("should throw exception");
+    }
 
     @Test
     public void testStr2DateMVRefresh_Rewrite() throws Exception {
