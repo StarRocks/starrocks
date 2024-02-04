@@ -473,7 +473,7 @@ PARALLEL_TEST(ConvertHelperTest, testSameTypeConvertColumn_TIMESTAMP) {
 
 PARALLEL_TEST(ConvertHelperTest, testNullableIntConvertString) {
     std::unique_ptr<MemPool> mem_pool(new MemPool());
-    auto conv = get_field_converter(OLAP_FIELD_TYPE_INT, OLAP_FIELD_TYPE_VARCHAR);
+    auto conv = get_type_converter(OLAP_FIELD_TYPE_INT, OLAP_FIELD_TYPE_VARCHAR);
     auto c0 = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_INT, true);
     auto c1 = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_VARCHAR, true);
     auto t0 = get_scalar_type_info(OLAP_FIELD_TYPE_INT);
@@ -490,7 +490,7 @@ PARALLEL_TEST(ConvertHelperTest, testNullableIntConvertString) {
 
 PARALLEL_TEST(ConvertHelperTest, testNullableStringConvertInt) {
     std::unique_ptr<MemPool> mem_pool(new MemPool());
-    auto conv = get_field_converter(OLAP_FIELD_TYPE_VARCHAR, OLAP_FIELD_TYPE_INT);
+    auto conv = get_type_converter(OLAP_FIELD_TYPE_VARCHAR, OLAP_FIELD_TYPE_INT);
     auto c0 = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_VARCHAR, true);
     auto c1 = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_INT, true);
     auto t0 = get_scalar_type_info(OLAP_FIELD_TYPE_VARCHAR);
@@ -507,7 +507,7 @@ PARALLEL_TEST(ConvertHelperTest, testNullableStringConvertInt) {
 
 PARALLEL_TEST(ConvertHelperTest, testNullableStringConvertJson) {
     std::unique_ptr<MemPool> mem_pool(new MemPool());
-    auto conv = get_field_converter(OLAP_FIELD_TYPE_VARCHAR, OLAP_FIELD_TYPE_JSON);
+    auto conv = get_type_converter(OLAP_FIELD_TYPE_VARCHAR, OLAP_FIELD_TYPE_JSON);
     auto c0 = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_VARCHAR, true);
     auto c1 = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_JSON, true);
     auto t0 = get_scalar_type_info(OLAP_FIELD_TYPE_VARCHAR);
