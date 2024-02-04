@@ -149,7 +149,12 @@ public:
     std::string name() const { return _name; }
     bool enable_colocate_mv_index() const { return _enable_colocate_mv_index; }
 
+<<<<<<< HEAD
     bool is_incremental() const { return _is_incremental; }
+=======
+    bool has_primary_replica() const { return _has_primary_replica; }
+    void set_has_primary_replica(bool has_primary_replica) { _has_primary_replica = has_primary_replica; }
+>>>>>>> a74142123e ([Enhancement] Fix replicated storage black list mechanism invalid when backend service down (backport #37301) (#39263))
 
 private:
     Status _wait_request(ReusableClosure<PTabletWriterAddBatchResult>* closure);
@@ -225,7 +230,11 @@ private:
 
     WriteQuorumTypePB _write_quorum_type = WriteQuorumTypePB::MAJORITY;
 
+<<<<<<< HEAD
     bool _is_incremental;
+=======
+    bool _has_primary_replica = false;
+>>>>>>> a74142123e ([Enhancement] Fix replicated storage black list mechanism invalid when backend service down (backport #37301) (#39263))
 };
 
 class IndexChannel {
@@ -241,6 +250,7 @@ public:
         }
     }
 
+<<<<<<< HEAD
     void for_each_initial_node_channel(const std::function<void(NodeChannel*)>& func) {
         for (auto& it : _node_channels) {
             if (!it.second->is_incremental()) {
@@ -259,11 +269,17 @@ public:
 
     void mark_as_failed(const NodeChannel* ch) { _failed_channels.insert(ch->node_id()); }
 
+=======
+>>>>>>> a74142123e ([Enhancement] Fix replicated storage black list mechanism invalid when backend service down (backport #37301) (#39263))
     bool is_failed_channel(const NodeChannel* ch) { return _failed_channels.count(ch->node_id()) != 0; }
 
     bool has_intolerable_failure();
 
+<<<<<<< HEAD
     bool has_incremental_node_channel() const { return _has_incremental_node_channel; }
+=======
+    void mark_as_failed(const NodeChannel* ch);
+>>>>>>> a74142123e ([Enhancement] Fix replicated storage black list mechanism invalid when backend service down (backport #37301) (#39263))
 
 private:
     friend class OlapTableSink;
@@ -281,7 +297,11 @@ private:
 
     TWriteQuorumType::type _write_quorum_type = TWriteQuorumType::MAJORITY;
 
+<<<<<<< HEAD
     bool _has_incremental_node_channel = false;
+=======
+    bool _has_intolerable_failure = false;
+>>>>>>> a74142123e ([Enhancement] Fix replicated storage black list mechanism invalid when backend service down (backport #37301) (#39263))
 };
 
 // Write data to Olap Table.

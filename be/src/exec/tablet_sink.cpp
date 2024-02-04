@@ -865,7 +865,9 @@ Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPart
             return Status::NotFound(msg);
         }
         std::vector<int64_t> bes;
-        for (auto& node_id : location->node_ids) {
+        auto node_ids_size = location->node_ids.size();
+        for (size_t i = 0; i < node_ids_size; ++i) {
+            auto& node_id = location->node_ids[i];
             NodeChannel* channel = nullptr;
             auto it = _node_channels.find(node_id);
             if (it == std::end(_node_channels)) {
@@ -879,6 +881,13 @@ Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPart
                 channel = it->second.get();
             }
             channel->add_tablet(_index_id, tablet);
+<<<<<<< HEAD
+=======
+            if (_parent->_enable_replicated_storage && i == 0) {
+                channel->set_has_primary_replica(true);
+            }
+            channels.push_back(channel);
+>>>>>>> a74142123e ([Enhancement] Fix replicated storage black list mechanism invalid when backend service down (backport #37301) (#39263))
             bes.emplace_back(node_id);
         }
         _tablet_to_be.emplace(tablet.tablet_id(), std::move(bes));
@@ -890,7 +899,19 @@ Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPart
     return Status::OK();
 }
 
+void IndexChannel::mark_as_failed(const NodeChannel* ch) {
+    // primary replica use for replicated storage
+    // if primary replica failed, we should mark this index as failed
+    if (ch->has_primary_replica()) {
+        _has_intolerable_failure = true;
+    }
+    _failed_channels.insert(ch->node_id());
+}
+
 bool IndexChannel::has_intolerable_failure() {
+    if (_has_intolerable_failure) {
+        return _has_intolerable_failure;
+    }
     if (_write_quorum_type == TWriteQuorumType::ALL) {
         return _failed_channels.size() > 0;
     } else if (_write_quorum_type == TWriteQuorumType::ONE) {
@@ -1093,6 +1114,9 @@ Status OlapTableSink::_init_node_channels(RuntimeState* state) {
                             node_channel = it->second.get();
                         }
                         node_channel->add_tablet(index->index_id, tablet_info);
+                        if (_enable_replicated_storage && i == 0) {
+                            node_channel->set_has_primary_replica(true);
+                        }
                     }
                 }
 
@@ -1168,7 +1192,7 @@ Status OlapTableSink::open_wait() {
         });
 
         // when enable replicated storage, we only send to primary replica, one node channel fail lead to indicate whole load fail
-        if (has_intolerable_failure() || (_enable_replicated_storage && !err_st.ok())) {
+        if (has_intolerable_failure()) {
             LOG(WARNING) << "Open channel failed. load_id: " << _load_id << ", error: " << err_st.to_string();
             return err_st;
         }
@@ -1185,7 +1209,7 @@ Status OlapTableSink::open_wait() {
                 }
             });
 
-            if (index_channel->has_intolerable_failure() || (_enable_replicated_storage && !err_st.ok())) {
+            if (index_channel->has_intolerable_failure()) {
                 LOG(WARNING) << "Open channel failed. load_id: " << _load_id << ", error: " << err_st.to_string();
                 return err_st;
             }
@@ -1664,7 +1688,7 @@ Status OlapTableSink::try_close(RuntimeState* state) {
         }
     }
 
-    if (intolerable_failure || (_enable_replicated_storage && !err_st.ok())) {
+    if (intolerable_failure) {
         return err_st;
     } else {
         return Status::OK();
@@ -1818,7 +1842,7 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
                     }
                     ch->time_report(&node_add_batch_counter_map, &serialize_batch_ns, &actual_consume_ns);
                 });
-                if (has_intolerable_failure() || (_enable_replicated_storage && !err_st.ok())) {
+                if (has_intolerable_failure()) {
                     status = err_st;
                     for_each_node_channel([&status](NodeChannel* ch) { ch->cancel(status); });
                 }
@@ -1837,7 +1861,7 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
                         }
                         ch->time_report(&node_add_batch_counter_map, &serialize_batch_ns, &actual_consume_ns);
                     });
-                    if (index_channel->has_intolerable_failure() || (_enable_replicated_storage && !err_st.ok())) {
+                    if (index_channel->has_intolerable_failure()) {
                         status = err_st;
                         index_channel->for_each_node_channel([&status](NodeChannel* ch) { ch->cancel(status); });
                     }
