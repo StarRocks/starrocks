@@ -160,7 +160,9 @@ public class TaskBuilder {
         task.setDefinition(materializedView.getTaskDefinition());
         task.setPostRun(getAnalyzeMVStmt(materializedView.getName()));
         task.setExpireTime(0L);
-        task.setCreateUser(ConnectContext.get().getCurrentUserIdentity().getUser());
+        if (ConnectContext.get() != null) {
+            task.setCreateUser(ConnectContext.get().getCurrentUserIdentity().getUser());
+        }
         handleSpecialTaskProperties(task);
         return task;
     }

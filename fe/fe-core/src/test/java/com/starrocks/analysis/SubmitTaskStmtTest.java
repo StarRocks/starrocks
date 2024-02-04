@@ -32,6 +32,7 @@ import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.TaskAnalyzer;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubmitTaskStmt;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.LocalWarehouse;
@@ -217,5 +218,9 @@ public class SubmitTaskStmtTest {
         connectContext.executeSql("EXECUTE AS test2 WITH NO REVERT");
         connectContext.executeSql(("submit task task_with_user as create table t_tmp as select * from test.tbl1"));
         Assert.assertEquals("test2", tm.getTask("task_with_user").getCreateUser());
+
+        starRocksAssert.getCtx().setCurrentUserIdentity(UserIdentity.ROOT);
+        starRocksAssert.getCtx().setCurrentRoleIds(starRocksAssert.getCtx().getGlobalStateMgr()
+                .getAuthorizationMgr().getRoleIdsByUser(UserIdentity.ROOT));
     }
 }
