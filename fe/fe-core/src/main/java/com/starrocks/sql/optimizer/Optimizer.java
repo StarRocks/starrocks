@@ -421,6 +421,8 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.MULTI_DISTINCT_REWRITE);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
 
+        // rewrite before SplitScanORToUnionRule
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new SplitDatePredicateRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_EMPTY_OPERATOR);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_PROJECT);
@@ -446,8 +448,7 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.INTERSECT_REWRITE);
         ruleRewriteIterative(tree, rootTaskContext, new RemoveAggregationFromAggTable());
 
-        // rewrite before SplitScanORToUnionRule
-        ruleRewriteOnlyOnce(tree, rootTaskContext, new SplitDatePredicateRule());
+
         ruleRewriteOnlyOnce(tree, rootTaskContext, SplitScanORToUnionRule.getInstance());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownTopNBelowUnionRule());
 
