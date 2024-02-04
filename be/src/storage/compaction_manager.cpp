@@ -76,7 +76,7 @@ void CompactionManager::_schedule() {
                       << ", task_id:" << task_id << ", tablet_id:" << compaction_candidate.tablet->tablet_id()
                       << ", compaction_type:" << starrocks::to_string(compaction_candidate.type)
                       << ", compaction_score:" << compaction_candidate.score << " for round:" << _round
-                      << ", task_queue_size:" << candidates_size();
+                      << ", candidates_size:" << candidates_size();
             auto st = _compaction_pool->submit_func([compaction_candidate, task_id] {
                 auto compaction_task = compaction_candidate.tablet->create_compaction_task();
                 if (compaction_task != nullptr) {
