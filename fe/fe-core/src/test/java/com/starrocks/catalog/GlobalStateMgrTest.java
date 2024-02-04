@@ -47,12 +47,7 @@ import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.EditLog;
-<<<<<<< HEAD:fe/fe-core/src/test/java/com/starrocks/catalog/GlobalStateMgrTest.java
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.NodeMgr;
-=======
 import com.starrocks.persist.OperationType;
->>>>>>> 763e2aaad4 ([BugFix] Remove version and role file after failing to start fe at first time. (#39672)):fe/fe-core/src/test/java/com/starrocks/server/GlobalStateMgrTest.java
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.system.Frontend;
 import com.starrocks.utframe.UtFrameUtils;
