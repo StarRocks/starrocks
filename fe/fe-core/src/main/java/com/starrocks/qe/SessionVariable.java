@@ -1621,7 +1621,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enablePrepareStmt = true;
 
     @VarAttr(name = JIT_LEVEL)
-    private boolean jitLevel = true;
+    private int jitLevel = 1;
 
     private int exprChildrenLimit = -1;
 
