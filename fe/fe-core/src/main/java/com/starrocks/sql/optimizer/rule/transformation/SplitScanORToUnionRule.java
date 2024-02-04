@@ -220,7 +220,7 @@ public class SplitScanORToUnionRule extends TransformationRule {
         return splitMaxSelectRatio < existSelectRatio / childrenNumOfUnion;
     }
 
-    private boolean isForceRewrite() {
+    public static boolean isForceRewrite() {
         // TODO: If or predicates contain olap table's sort key, we can force it to union all so to use
         //  short key optimization.
         return ConnectContext.get().getSessionVariable().getSelectRatioThreshold() < 0;

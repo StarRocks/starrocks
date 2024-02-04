@@ -417,10 +417,14 @@ public class Optimizer {
             ruleRewriteOnlyOnce(tree, rootTaskContext, new ForceCTEReuseRule());
         }
 
+        // Add a config to decide whether to rewrite sync mv.
         if (!optimizerConfig.isRuleDisable(TF_MATERIALIZED_VIEW)
                 && sessionVariable.isEnableSyncMaterializedViewRewrite()) {
-            // Add a config to decide whether to rewrite sync mv.
-            ruleRewriteOnlyOnce(tree, rootTaskContext, SplitScanORToUnionRule.getInstance());
+            // Split or predicates to union all so can be used by mv rewrite to choose the best sort key indexes.
+            // TODO: support adaptive for or-predicates to union all.
+            if (SplitScanORToUnionRule.isForceRewrite()) {
+                ruleRewriteOnlyOnce(tree, rootTaskContext, SplitScanORToUnionRule.getInstance());
+            }
 
             OptimizerTraceUtil.logOptExpression("before MaterializedViewRule:\n%s", tree);
             tree = new MaterializedViewRule().transform(tree, context).get(0);
