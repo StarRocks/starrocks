@@ -67,6 +67,19 @@ public class DateUtilsTest {
                 long ts = Utils.getLongFromDateTime(lt2);
                 Assert.assertEquals(ts, 1682600771);
             }
+
+            {
+                String datetime1 = "2024-01-27T21:06";
+                LocalDateTime lt1 = DateUtils.parseStrictDateTime(datetime1);
+                Assert.assertEquals(lt1.toString(), "2024-01-27T21:06");
+                String datetime2 = "2024-01-27T21:06:00";
+                LocalDateTime lt2 = DateUtils.parseStrictDateTime(datetime2);
+                Assert.assertEquals(lt2.toString(), "2024-01-27T21:06");
+                Assert.assertEquals(Utils.getLongFromDateTime(lt1), Utils.getLongFromDateTime(lt2));
+                String datetime3 = "2024-01-27 21:06:01";
+                LocalDateTime lt3 = DateUtils.parseStrictDateTime(datetime3);
+                Assert.assertEquals(lt3.toString(), "2024-01-27T21:06:01");
+            }
         } catch (Exception e) {
             Assert.fail();
         }
