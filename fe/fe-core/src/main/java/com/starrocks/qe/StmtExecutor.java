@@ -354,6 +354,27 @@ public class StmtExecutor {
             return false;
         }
 
+        // If this node is transferring to the leader, we should wait for it to complete to avoid forwarding to its own node.
+        if (GlobalStateMgr.getCurrentState().isInTransferringToLeader()) {
+            long lastPrintTime = -1L;
+            while (true) {
+                try {
+                    Thread.sleep(1);
+                } catch (InterruptedException ignored) {
+                    Thread.currentThread().interrupt();
+                }
+
+                if (System.currentTimeMillis() - lastPrintTime > 1000L) {
+                    lastPrintTime = System.currentTimeMillis();
+                    LOG.info("waiting for current FE node transferring to LEADER state");
+                }
+
+                if (GlobalStateMgr.getCurrentState().isLeader()) {
+                    return false;
+                }
+            }
+        }
+
         // this is a query stmt, but this non-master FE can not read, forward it to master
         if (parsedStmt instanceof QueryStatement) {
             // When FollowerQueryForwardMode is not default, forward it to leader or follower by default.
@@ -372,6 +393,10 @@ public class StmtExecutor {
         } else {
             return redirectStatus.isForwardToLeader();
         }
+    }
+
+    public LeaderOpExecutor getLeaderOpExecutor() {
+        return leaderOpExecutor;
     }
 
     public ByteBuffer getOutputPacket() {
@@ -2022,7 +2047,9 @@ public class StmtExecutor {
                                 externalTable.getSourceTableHost(),
                                 externalTable.getSourceTablePort(),
                                 TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " +
-                                        trackingSql
+                                        trackingSql,
+                                coord == null ? Collections.emptyList() : coord.getCommitInfos(),
+                                coord == null ? Collections.emptyList() : coord.getFailInfos()
                         );
                     } else if (targetTable instanceof SystemTable || targetTable.isHiveTable() ||
                             targetTable.isIcebergTable() || targetTable.isTableFunctionTable() ||
@@ -2034,8 +2061,7 @@ public class StmtExecutor {
                                 transactionId,
                                 TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " +
                                         trackingSql,
-                                TabletFailInfo.fromThrift(coord.getFailInfos())
-                        );
+                                Coordinator.getCommitInfos(coord), Coordinator.getFailInfos(coord), null);
                     }
                     context.getState().setError("Insert has filtered data in strict mode, txn_id = " + transactionId +
                             " tracking sql = " + trackingSql);
@@ -2056,7 +2082,8 @@ public class StmtExecutor {
                             targetTable.isHiveTable() || targetTable.isTableFunctionTable() ||
                             targetTable.isBlackHoleTable())) {
                         // schema table and iceberg table does not need txn
-                        mgr.abortTransaction(database.getId(), transactionId, errorMsg);
+                        mgr.abortTransaction(database.getId(), transactionId, errorMsg,
+                                Coordinator.getCommitInfos(coord), Coordinator.getFailInfos(coord), null);
                     }
                     context.getState().setOk();
                     insertError = true;
@@ -2114,7 +2141,8 @@ public class StmtExecutor {
                 txnStatus = TransactionStatus.VISIBLE;
                 label = "FAKE_BLACKHOLE_TABLE_SINK_LABEL";
             } else if (isExplainAnalyze) {
-                transactionMgr.abortTransaction(database.getId(), transactionId, "Explain Analyze");
+                transactionMgr.abortTransaction(database.getId(), transactionId, "Explain Analyze",
+                        Coordinator.getCommitInfos(coord), Coordinator.getFailInfos(coord), null);
                 txnStatus = TransactionStatus.ABORTED;
             } else {
                 VisibleStateWaiter visibleWaiter = transactionMgr.retryCommitOnRateLimitExceeded(
@@ -2160,15 +2188,15 @@ public class StmtExecutor {
                             externalTable.getSourceTableDbId(), transactionId,
                             externalTable.getSourceTableHost(),
                             externalTable.getSourceTablePort(),
-                            errMsg);
+                            errMsg,
+                            coord == null ? Collections.emptyList() : coord.getCommitInfos(),
+                            coord == null ? Collections.emptyList() : coord.getFailInfos());
                 } else if (targetTable.isExternalTableWithFileSystem()) {
                     GlobalStateMgr.getCurrentState().getMetadataMgr().abortSink(
                             catalogName, dbName, tableName, coord.getSinkCommitInfos());
                 } else {
-                    transactionMgr.abortTransaction(
-                            database.getId(), transactionId,
-                            errMsg,
-                            coord == null ? Lists.newArrayList() : TabletFailInfo.fromThrift(coord.getFailInfos()));
+                    transactionMgr.abortTransaction(database.getId(), transactionId, errMsg,
+                            Coordinator.getCommitInfos(coord), Coordinator.getFailInfos(coord), null);
                 }
             } catch (Exception abortTxnException) {
                 // just print a log if abort txn failed. This failure do not need to pass to user.

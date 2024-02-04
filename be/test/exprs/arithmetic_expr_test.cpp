@@ -442,16 +442,13 @@ TEST_F(VectorizedArithmeticExprTest, constConstAddExpr) {
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
-        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
-            ASSERT_TRUE(ptr->is_constant());
+        ASSERT_TRUE(ptr->is_constant());
+        auto v = std::static_pointer_cast<ConstColumn>(ptr)->data_column();
+        ASSERT_EQ(1, v->size());
 
-            auto v = std::static_pointer_cast<ConstColumn>(ptr)->data_column();
-            ASSERT_EQ(1, v->size());
-
-            for (int j = 0; j < v->size(); ++j) {
-                ASSERT_EQ(13, std::static_pointer_cast<Int32Column>(v)->get_data()[j]);
-            }
-        });
+        for (int j = 0; j < v->size(); ++j) {
+            ASSERT_EQ(13, std::static_pointer_cast<Int32Column>(v)->get_data()[j]);
+        }
     }
 }
 
@@ -536,20 +533,18 @@ TEST_F(VectorizedArithmeticExprTest, constBitNotExpr) {
         expr->_children.push_back(&col1);
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
-        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
-            ASSERT_TRUE(ptr->is_constant());
+        ASSERT_TRUE(ptr->is_constant());
 
-            auto re = std::static_pointer_cast<ConstColumn>(ptr);
-            auto v = std::static_pointer_cast<Int32Column>(re->data_column());
+        auto re = std::static_pointer_cast<ConstColumn>(ptr);
+        auto v = std::static_pointer_cast<Int32Column>(re->data_column());
 
-            for (int j = 0; j < ptr->size(); ++j) {
-                ASSERT_EQ(~2, v->get_data()[j]);
-            }
+        for (int j = 0; j < ptr->size(); ++j) {
+            ASSERT_EQ(~2, v->get_data()[j]);
+        }
 
-            for (int j = 0; j < ptr->size(); ++j) {
-                ASSERT_FALSE(v->is_null(j));
-            }
-        });
+        for (int j = 0; j < ptr->size(); ++j) {
+            ASSERT_FALSE(v->is_null(j));
+        }
     }
 }
 
@@ -569,42 +564,36 @@ TEST_F(VectorizedArithmeticExprTest, constModExpr) {
     {
         ColumnPtr v1 = col1.evaluate(nullptr, nullptr);
 
-        ExprsTestHelper::verify_with_jit(v1, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
-            ASSERT_FALSE(ptr->is_nullable());
+        ASSERT_FALSE(v1->is_nullable());
 
-            for (int j = 0; j < ptr->size(); ++j) {
-                ASSERT_FALSE(ptr->is_null(j));
-            }
-        });
+        for (int j = 0; j < v1->size(); ++j) {
+            ASSERT_FALSE(v1->is_null(j));
+        }
 
         ColumnPtr v2 = col2.evaluate(nullptr, nullptr);
 
-        ExprsTestHelper::verify_with_jit(v2, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
-            ASSERT_FALSE(ptr->is_nullable());
-            ASSERT_TRUE(ptr->is_constant());
-            ASSERT_EQ(1, ptr->size());
-        });
+        ASSERT_FALSE(v2->is_nullable());
+        ASSERT_TRUE(v2->is_constant());
+        ASSERT_EQ(1, v2->size());
     }
 
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
-        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
-            ASSERT_FALSE(ptr->is_nullable());
-            ASSERT_TRUE(ptr->is_constant());
-            ASSERT_FALSE(ptr->is_numeric());
+        ASSERT_FALSE(ptr->is_nullable());
+        ASSERT_TRUE(ptr->is_constant());
+        ASSERT_FALSE(ptr->is_numeric());
 
-            auto v = std::static_pointer_cast<ConstColumn>(ptr);
-            ASSERT_EQ(1, v->size());
+        auto v = std::static_pointer_cast<ConstColumn>(ptr);
+        ASSERT_EQ(1, v->size());
 
-            for (int j = 0; j < v->size(); ++j) {
-                ASSERT_EQ(0, ColumnHelper::cast_to_raw<TYPE_BIGINT>(v->data_column())->get_data()[j]);
-            }
+        for (int j = 0; j < v->size(); ++j) {
+            ASSERT_EQ(0, ColumnHelper::cast_to_raw<TYPE_BIGINT>(v->data_column())->get_data()[j]);
+        }
 
-            for (int j = 0; j < v->size(); ++j) {
-                ASSERT_FALSE(v->is_null(j));
-            }
-        });
+        for (int j = 0; j < v->size(); ++j) {
+            ASSERT_FALSE(v->is_null(j));
+        }
     }
 }
 

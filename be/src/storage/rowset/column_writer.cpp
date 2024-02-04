@@ -53,6 +53,7 @@
 #include "storage/rowset/bloom_filter.h"
 #include "storage/rowset/bloom_filter_index_writer.h"
 #include "storage/rowset/encoding_info.h"
+#include "storage/rowset/json_column_writer.h"
 #include "storage/rowset/map_column_writer.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/ordinal_page_index.h"
@@ -162,6 +163,8 @@ public:
                 LOG(ERROR) << "bitshuffle compress failed: " << bitshuffle_error_msg(r);
                 return {};
             }
+            // before build(), update buffer length to the actual compressed size
+            _encode_buf.resize(r);
             return _encode_buf.build();
         } else if (_null_encoding == NullEncodingPB::LZ4_NULL) {
             const BlockCompressionCodec* codec = nullptr;
@@ -318,6 +321,9 @@ StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterO
         dict_opts.need_speculate_encoding = true;
         auto column_writer = std::make_unique<ScalarColumnWriter>(dict_opts, type_info, wfile);
         return std::make_unique<DictColumnWriter>(dict_opts, std::move(type_info), std::move(column_writer));
+    } else if (column->type() == LogicalType::TYPE_JSON) {
+        auto column_writer = std::make_unique<ScalarColumnWriter>(opts, type_info, wfile);
+        return create_json_column_writer(opts, std::move(type_info), wfile, std::move(column_writer));
     } else if (is_scalar_field_type(delegate_type(column->type()))) {
         ColumnWriterOptions str_opts = opts;
         str_opts.field_name = column->name();

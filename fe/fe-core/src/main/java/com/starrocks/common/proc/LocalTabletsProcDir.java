@@ -93,7 +93,8 @@ public class LocalTabletsProcDir implements ProcDirInterface {
         throw new AnalysisException("Title name[" + columnName + "] does not exist");
     }
 
-    public List<List<Comparable>> fetchComparableResult(long version, long backendId, Replica.ReplicaState state) {
+    public List<List<Comparable>> fetchComparableResult(long version, long backendId, Replica.ReplicaState state,
+                                                        Boolean hideIpPort) {
         Preconditions.checkNotNull(db);
         Preconditions.checkNotNull(index);
         Preconditions.checkState(table.isOlapTableOrMaterializedView());
@@ -107,30 +108,8 @@ public class LocalTabletsProcDir implements ProcDirInterface {
             for (Tablet tablet : index.getTablets()) {
                 LocalTablet localTablet = (LocalTablet) tablet;
                 long tabletId = tablet.getId();
-                if (localTablet.getImmutableReplicas().size() == 0) {
-                    List<Comparable> tabletInfo = new ArrayList<Comparable>();
-                    tabletInfo.add(tabletId);
-                    tabletInfo.add(-1); // replica id
-                    tabletInfo.add(-1); // backend id
-                    tabletInfo.add(-1); // schema hash
-                    tabletInfo.add(-1); // version
-                    tabletInfo.add(0); // version hash
-                    tabletInfo.add(-1); // lst success version
-                    tabletInfo.add(0); // lst success version hash
-                    tabletInfo.add(-1); // lst failed version
-                    tabletInfo.add(0); // lst failed version hash
-                    tabletInfo.add(-1); // lst failed time
-                    tabletInfo.add(-1); // data size
-                    tabletInfo.add(-1); // row count
-                    tabletInfo.add(FeConstants.NULL_STRING); // state
-                    tabletInfo.add(-1); // lst consistency check time
-                    tabletInfo.add(-1); // check version
-                    tabletInfo.add(0); // check version hash
-                    tabletInfo.add(-1); // version count
-                    tabletInfo.add(-1); // path hash
-                    tabletInfo.add(FeConstants.NULL_STRING); // meta url
-                    tabletInfo.add(FeConstants.NULL_STRING); // compaction status
-
+                if (localTablet.getImmutableReplicas().isEmpty()) {
+                    List<Comparable> tabletInfo = createTabletInfo(tabletId);
                     tabletInfos.add(tabletInfo);
                 } else {
                     for (Replica replica : localTablet.getImmutableReplicas()) {
@@ -166,13 +145,13 @@ public class LocalTabletsProcDir implements ProcDirInterface {
                         String compactionUrl;
                         if (backend != null) {
                             metaUrl = String.format("http://%s:%d/api/meta/header/%d",
-                                    backend.getHost(),
-                                    backend.getHttpPort(),
+                                    hideIpPort ? "*" : backend.getHost(),
+                                    hideIpPort ? 0 : backend.getHttpPort(),
                                     tabletId);
                             compactionUrl = String.format(
                                     "http://%s:%d/api/compaction/show?tablet_id=%d",
-                                    backend.getHost(),
-                                    backend.getHttpPort(),
+                                    hideIpPort ? "*" : backend.getHost(),
+                                    hideIpPort ? 0 : backend.getHttpPort(),
                                     tabletId);
                         } else {
                             metaUrl = "N/A";
@@ -191,8 +170,34 @@ public class LocalTabletsProcDir implements ProcDirInterface {
         return tabletInfos;
     }
 
+    private static List<Comparable> createTabletInfo(long tabletId) {
+        List<Comparable> tabletInfo = new ArrayList<Comparable>();
+        tabletInfo.add(tabletId);
+        tabletInfo.add(-1); // replica id
+        tabletInfo.add(-1); // backend id
+        tabletInfo.add(-1); // schema hash
+        tabletInfo.add(-1); // version
+        tabletInfo.add(0); // version hash
+        tabletInfo.add(-1); // lst success version
+        tabletInfo.add(0); // lst success version hash
+        tabletInfo.add(-1); // lst failed version
+        tabletInfo.add(0); // lst failed version hash
+        tabletInfo.add(-1); // lst failed time
+        tabletInfo.add(-1); // data size
+        tabletInfo.add(-1); // row count
+        tabletInfo.add(FeConstants.NULL_STRING); // state
+        tabletInfo.add(-1); // lst consistency check time
+        tabletInfo.add(-1); // check version
+        tabletInfo.add(0); // check version hash
+        tabletInfo.add(-1); // version count
+        tabletInfo.add(-1); // path hash
+        tabletInfo.add(FeConstants.NULL_STRING); // meta url
+        tabletInfo.add(FeConstants.NULL_STRING); // compaction status
+        return tabletInfo;
+    }
+
     private List<List<Comparable>> fetchComparableResult() {
-        return fetchComparableResult(-1, -1, null);
+        return fetchComparableResult(-1, -1, null, false);
     }
 
     @Override
@@ -227,7 +232,7 @@ public class LocalTabletsProcDir implements ProcDirInterface {
         Preconditions.checkNotNull(db);
         Preconditions.checkNotNull(index);
 
-        long tabletId = -1L;
+        long tabletId;
         try {
             tabletId = Long.valueOf(tabletIdStr);
         } catch (NumberFormatException e) {
@@ -236,7 +241,7 @@ public class LocalTabletsProcDir implements ProcDirInterface {
 
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         List<Replica> replicas = invertedIndex.getReplicasByTabletId(tabletId);
-        return new ReplicasProcNode(tabletId, replicas);
+        return new ReplicasProcNode(db, table, tabletId, replicas);
     }
 }
 

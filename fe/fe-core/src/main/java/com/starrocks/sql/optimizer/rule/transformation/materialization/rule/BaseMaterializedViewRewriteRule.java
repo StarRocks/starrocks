@@ -96,7 +96,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         try {
             return doTransform(queryExpression, context);
         } catch (Exception e) {
-            String errMsg = ExceptionUtils.getMessage(e);
+            String errMsg = ExceptionUtils.getStackTrace(e);
             // for mv rewrite rules, do not disturb query when exception.
             logMVRewrite(context, this, "mv rewrite exception, exception message:{}", errMsg);
             return Lists.newArrayList();
@@ -116,6 +116,8 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             mvCandidateContexts.addAll(context.getCandidateMvs());
         }
         mvCandidateContexts.removeIf(x -> !x.prune(context, queryExpression));
+
+        // Order all candidate mvs by priority so can be rewritten fast.
         MaterializationContext.RewriteOrdering ordering =
                 new MaterializationContext.RewriteOrdering(queryExpression, context.getColumnRefFactory());
         mvCandidateContexts.sort(ordering);
@@ -139,6 +141,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         QueryMaterializationContext queryMaterializationContext = context.getQueryMaterializationContext();
         onPredicates = onPredicates.stream()
                 .map(p -> MvUtils.canonizePredicateForRewrite(queryMaterializationContext, p))
+                .map(predicate -> queryColumnRefRewriter.rewrite(predicate))
                 .collect(Collectors.toList());
         List<Table> queryTables = MvUtils.getAllTables(queryExpression);
         ConnectContext connectContext = ConnectContext.get();
@@ -210,7 +213,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             return null;
         }
         // only add valid predicates into query split predicate
-        Set<ScalarOperator> queryConjuncts = MvUtils.getAllValidPredicates(queryExpression);
+        Set<ScalarOperator> queryConjuncts = MvUtils.getPredicateForRewrite(queryExpression);
         if (!ConstantOperator.TRUE.equals(queryPartitionPredicate)) {
             logMVRewrite(mvContext.getOptimizerContext(), this, "Query compensate partition predicate:{}",
                     queryPartitionPredicate);

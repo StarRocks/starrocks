@@ -1899,6 +1899,13 @@ public class ShowExecutor {
                         break;
                     }
                     tableName = table.getName();
+                    Pair<Boolean, Boolean> privResult = Authorizer.checkPrivForShowTablet(connectContext, dbName, table);
+                    if (!privResult.first) {
+                        AccessDeniedException.reportAccessDenied(
+                                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                                connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                                PrivilegeType.ANY.name(), ObjectType.TABLE.name(), null);
+                    }
 
                     OlapTable olapTable = (OlapTable) table;
                     PhysicalPartition physicalPartition = olapTable.getPhysicalPartition(partitionId);
@@ -1966,6 +1973,16 @@ public class ShowExecutor {
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_NOT_OLAP_TABLE, showStmt.getTableName());
                 }
 
+                Pair<Boolean, Boolean> privResult = Authorizer.checkPrivForShowTablet(
+                        connectContext, db.getFullName(), table);
+                if (!privResult.first) {
+                    AccessDeniedException.reportAccessDenied(
+                            InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                            connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                            PrivilegeType.ANY.name(), ObjectType.TABLE.name(), null);
+                }
+                Boolean hideIpPort = privResult.second;
+
                 OlapTable olapTable = (OlapTable) table;
                 long sizeLimit = -1;
                 if (showStmt.hasOffset() && showStmt.hasLimit()) {
@@ -2013,7 +2030,8 @@ public class ShowExecutor {
                             } else {
                                 LocalTabletsProcDir procDir = new LocalTabletsProcDir(db, olapTable, index);
                                 tabletInfos.addAll(procDir.fetchComparableResult(
-                                        showStmt.getVersion(), showStmt.getBackendId(), showStmt.getReplicaState()));
+                                        showStmt.getVersion(), showStmt.getBackendId(), showStmt.getReplicaState(),
+                                        hideIpPort));
                             }
                             if (sizeLimit > -1 && CollectionUtils.isEmpty(showStmt.getOrderByPairs())
                                     && tabletInfos.size() >= sizeLimit) {

@@ -773,20 +773,21 @@ public class ShowExecutorTest {
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
 
-        Assert.assertEquals(29, resultSet.getMetaData().getColumnCount());
+        Assert.assertEquals(30, resultSet.getMetaData().getColumnCount());
         Assert.assertEquals("BackendId", resultSet.getMetaData().getColumn(0).getName());
         Assert.assertEquals("NumRunningQueries", resultSet.getMetaData().getColumn(23).getName());
         Assert.assertEquals("MemUsedPct", resultSet.getMetaData().getColumn(24).getName());
         Assert.assertEquals("CpuUsedPct", resultSet.getMetaData().getColumn(25).getName());
         Assert.assertEquals("DataCacheMetrics", resultSet.getMetaData().getColumn(26).getName());
-        Assert.assertEquals("StarletPort", resultSet.getMetaData().getColumn(27).getName());
-        Assert.assertEquals("WorkerId", resultSet.getMetaData().getColumn(28).getName());
+        Assert.assertEquals("StarletPort", resultSet.getMetaData().getColumn(28).getName());
+        Assert.assertEquals("WorkerId", resultSet.getMetaData().getColumn(29).getName());
 
         Assert.assertTrue(resultSet.next());
+        System.out.println(resultSet);
         Assert.assertEquals("1", resultSet.getString(0));
         Assert.assertEquals("0", resultSet.getString(23));
         Assert.assertEquals("N/A", resultSet.getString(26));
-        Assert.assertEquals("5", resultSet.getString(28));
+        Assert.assertEquals("5", resultSet.getString(29));
     }
 
     @Test

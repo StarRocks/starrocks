@@ -569,7 +569,7 @@ public class MaterializedViewRewriter {
         final ReplaceColumnRefRewriter mvColumnRefRewriter =
                 MvUtils.getReplaceColumnRefWriter(mvExpression, mvColumnRefFactory);
 
-        final Set<ScalarOperator> mvConjuncts = MvUtils.getAllValidPredicates(mvExpression);
+        final Set<ScalarOperator> mvConjuncts = MvUtils.getPredicateForRewrite(mvExpression);
         ScalarOperator mvPartitionCompensate = compensateMVPartitionPredicate(mvConjuncts, mvColumnRefRewriter);
         if (mvPartitionCompensate != ConstantOperator.TRUE) {
             mvConjuncts.addAll(MvUtils.getAllValidPredicates(mvPartitionCompensate));
@@ -1816,10 +1816,7 @@ public class MaterializedViewRewriter {
             return null;
         }
         // query predicate and (not viewToQueryCompensationPredicate) is the final query compensation predicate
-        ScalarOperator queryCompensationPredicate = MvUtils.canonizePredicate(
-                Utils.compoundAnd(
-                        rewriteContext.getQueryPredicateSplit().toScalarOperator(),
-                        CompoundPredicateOperator.not(compensationPredicates)));
+        ScalarOperator queryCompensationPredicate = CompoundPredicateOperator.not(compensationPredicates);
         List<ScalarOperator> predicates = Utils.extractConjuncts(queryCompensationPredicate);
         predicates.removeAll(mvRewriteContext.getOnPredicates());
         queryCompensationPredicate = Utils.compoundAnd(predicates);
@@ -1893,9 +1890,10 @@ public class MaterializedViewRewriter {
                 // predicate can not be pushdown, we should add it it optExpression
                 Operator.Builder builder = OperatorBuilderFactory.build(optExpression.getOp());
                 builder.withOperator(optExpression.getOp());
-                // builder.setPredicate(Utils.compoundAnd(predicate, optExpression.getOp().getPredicate()));
+                PredicateSplit predicateSplit = PredicateSplit.splitPredicate(
+                        Utils.compoundAnd(predicate, optExpression.getOp().getPredicate()));
                 ScalarOperator canonizePredicates = MvUtils.canonizePredicateForRewrite(
-                        queryMaterializationContext, Utils.compoundAnd(predicate, optExpression.getOp().getPredicate()));
+                        queryMaterializationContext, predicateSplit.toScalarOperator());
                 builder.setPredicate(canonizePredicates);
                 Operator newQueryOp = builder.build();
                 return OptExpression.create(newQueryOp, optExpression.getInputs());
@@ -1916,8 +1914,10 @@ public class MaterializedViewRewriter {
         // To ensure join's property is deduced which is needed in `predicate-push-down`, derive its logical property.
         deriveLogicalProperty(joinOptExpression);
         Preconditions.checkState(joinOptExpression.getOp() instanceof LogicalJoinOperator);
+        optimizerContext.reset();
         JoinPredicatePushdown joinPredicatePushdown = new JoinPredicatePushdown(joinOptExpression,
-                false, true, materializationContext.getQueryRefFactory(), true);
+                false, true, materializationContext.getQueryRefFactory(),
+                true, optimizerContext);
         return joinPredicatePushdown.pushdown(predicate);
     }
 

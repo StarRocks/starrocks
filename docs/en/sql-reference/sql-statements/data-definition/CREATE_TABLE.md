@@ -8,9 +8,9 @@ displayed_sidebar: "English"
 
 Creates a new table in StarRocks.
 
-> **NOTE**
->
-> This operation requires the CREATE TABLE privilege on the destination database.
+:::tip
+This operation requires the CREATE TABLE privilege on the destination database.
+:::
 
 ## Syntax
 
@@ -31,6 +31,13 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 
 ## Parameters
 
+:::tip
+
+- The table name, partition name, column name, and index name you create must follow the naming conventions in [System limits](../../../reference/System_limit.md).
+- When you specify database name, table name, column name, or partition name, note that some literals are used as reserved keywords in StarRocks. Do not directly use these keywords in SQL statements. If you want to use such a keyword in an SQL statement, enclose it in a pair of backticks (`). See [Keywords](../../../sql-reference/sql-statements/keywords.md) for these reserved keywords.
+
+:::
+
 ### column_definition
 
 Syntax:
@@ -39,7 +46,7 @@ Syntax:
 col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_INCREMENT] [AS generation_expr]
 ```
 
-**col_name**: Column name.
+**col_name**: column name.
 
 Note that normally you cannot create a column whose name is initiated with `__op` or `__row` because these name formats are reserved for special purposes in StarRocks and creating such columns may result in undefined behavior. If you do need to create such column, set the FE dynamic parameter [`allow_system_reserved_names`](../../../administration/FE_configuration.md#allow_system_reserved_names) to `TRUE`.
 
@@ -97,11 +104,11 @@ This aggregation type applies ONLY to the Aggregate table whose key_desc type is
 
 ### index_definition
 
-You can only create bitmap indexes when you create tables. For more information about parameter descriptions and usage notes, see [Bitmap indexing](../../../using_starrocks/Bitmap_index.md#create-a-bitmap-index).
-
 ```SQL
 INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] COMMENT 'xxxxxx'
 ```
+
+For more information about parameter descriptions and usage notes, see [Bitmap indexing](../../../table_design/indexes/Bitmap_index.md#create-a-bitmap-index).
 
 ### ENGINE type
 
@@ -250,7 +257,7 @@ Note:
 
 Please use specified key columns and specified value ranges for partitioning.
 
-- Partition name only supports [A-z0-9_]
+- For the naming conventions of partitions, see [System limits](../../../reference/System_limit.md).
 - Columns in Range partition only support the following types: TINYINT, SMALLINT, INT, BIGINT, LARGEINT, DATE, and DATETIME.
 - Partitions are left closed and right open. The left boundary of the first partition is of minimum value.
 - NULL value is stored only in partitions that contain minimum values. When the partition containing the minimum value is deleted, NULL values can no longer be imported.
@@ -469,7 +476,7 @@ The following limits apply when you use bloom filter index:
 - TINYINT, FLOAT, DOUBLE, and DECIMAL columns do not support creating bloom filter indexes.
 - Bloom filter indexes can only improve the performance of queries that contain the `in` and `=` operators, such as `Select xxx from table where x in {}` and `Select xxx from table where column = xxx`. More discrete values in this column will result in more precise queries.
 
-For more information, see [Bloom filter indexing](../../../using_starrocks/Bloomfilter_index.md)
+For more information, see [Bloom filter indexing](../../../table_design/indexes/Bloomfilter_index.md)
 
 ```SQL
 PROPERTIES (
@@ -626,7 +633,7 @@ PROPERTIES (
 
   > **NOTE**
   >
-  > To enable the local disk cache, you must specify the directory of the disk in the BE configuration item `storage_root_path`. For more information, see [BE Configuration items](../../../administration/BE_configuration.md#be-configuration-items).
+  > To enable the local disk cache, you must specify the directory of the disk in the BE configuration item `storage_root_path`. For more information, see [BE Configuration items](../../../administration/BE_configuration.md).
 
 - `datacache.partition_duration`: The validity duration of the hot data. When the local disk cache is enabled, all data is loaded into the cache. When the cache is full, StarRocks deletes the less recently used data from the cache. When a query needs to scan the deleted data, StarRocks checks if the data is within the duration of validity. If the data is within the duration, StarRocks loads the data into the cache again. If the data is not within the duration, StarRocks does not load it into the cache. This property is a string value that can be specified with the following units: `YEAR`, `MONTH`, `DAY`, and `HOUR`, for example, `7 DAY` and `12 HOUR`. If it is not specified, all data is cached as the hot data.
 

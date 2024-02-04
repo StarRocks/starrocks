@@ -104,6 +104,7 @@ struct EditVersionInfo {
 // maintain all states for updatable tablets
 class TabletUpdates {
 public:
+    friend class LocalPrimaryKeyRecover;
     using ColumnUniquePtr = std::unique_ptr<Column>;
     using segment_rowid_t = uint32_t;
     using DeletesMap = std::unordered_map<uint32_t, vector<segment_rowid_t>>;
@@ -341,8 +342,12 @@ public:
     Status get_rowset_stats(std::map<uint32_t, std::string>* output_rowset_stats);
 
     Status primary_index_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb);
+    // recover
+    Status recover();
 
-    Status generate_pk_dump();
+    void set_error(const string& msg) { _set_error(msg); }
+
+    Status generate_pk_dump_if_in_error_state();
 
 private:
     friend class Tablet;

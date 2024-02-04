@@ -532,16 +532,32 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
             tablet->data_dir()));
 
     if (tablet->updates() == nullptr) {
-        RETURN_IF_ERROR(convert_snapshot_for_none_primary(tablet_snapshot_dir_path, column_unique_id_map, request));
+        RETURN_IF_ERROR(convert_snapshot_for_none_primary(tablet_snapshot_dir_path, &column_unique_id_map, request));
     } else {
-        RETURN_IF_ERROR(convert_snapshot_for_primary(tablet_snapshot_dir_path, column_unique_id_map, request));
+        RETURN_IF_ERROR(convert_snapshot_for_primary(tablet_snapshot_dir_path, &column_unique_id_map, request));
     }
 
     return Status::OK();
 }
 
+static Status convert_rowset_meta_pb(RowsetMetaPB* rowset_meta_pb,
+                                     std::unordered_map<uint32_t, uint32_t>* column_unique_id_map,
+                                     const TReplicateSnapshotRequest& request) {
+    rowset_meta_pb->set_partition_id(request.partition_id);
+    rowset_meta_pb->set_tablet_id(request.tablet_id);
+    if (rowset_meta_pb->has_tablet_schema()) {
+        ReplicationUtils::convert_column_unique_ids(rowset_meta_pb->mutable_tablet_schema()->mutable_column(),
+                                                    column_unique_id_map);
+    }
+    if (rowset_meta_pb->has_txn_meta()) {
+        RETURN_IF_ERROR(
+                ReplicationUtils::convert_rowset_txn_meta(rowset_meta_pb->mutable_txn_meta(), *column_unique_id_map));
+    }
+    return Status::OK();
+}
+
 Status ReplicationTxnManager::convert_snapshot_for_none_primary(
-        const std::string& tablet_snapshot_path, const std::unordered_map<uint32_t, uint32_t>& column_unique_id_map,
+        const std::string& tablet_snapshot_path, std::unordered_map<uint32_t, uint32_t>* column_unique_id_map,
         const TReplicateSnapshotRequest& request) {
     std::string src_header_file_path = tablet_snapshot_path + std::to_string(request.src_tablet_id) + ".hdr";
     TabletMeta tablet_meta;
@@ -557,20 +573,10 @@ Status ReplicationTxnManager::convert_snapshot_for_none_primary(
     ReplicationUtils::convert_column_unique_ids(tablet_meta_pb.mutable_schema()->mutable_column(),
                                                 column_unique_id_map);
     for (auto& rowset_meta : *tablet_meta_pb.mutable_rs_metas()) {
-        rowset_meta.set_partition_id(request.partition_id);
-        rowset_meta.set_tablet_id(request.tablet_id);
-        if (rowset_meta.has_tablet_schema()) {
-            ReplicationUtils::convert_column_unique_ids(rowset_meta.mutable_tablet_schema()->mutable_column(),
-                                                        column_unique_id_map);
-        }
+        RETURN_IF_ERROR(convert_rowset_meta_pb(&rowset_meta, column_unique_id_map, request));
     }
     for (auto& rowset_meta : *tablet_meta_pb.mutable_inc_rs_metas()) {
-        rowset_meta.set_partition_id(request.partition_id);
-        rowset_meta.set_tablet_id(request.tablet_id);
-        if (rowset_meta.has_tablet_schema()) {
-            ReplicationUtils::convert_column_unique_ids(rowset_meta.mutable_tablet_schema()->mutable_column(),
-                                                        column_unique_id_map);
-        }
+        RETURN_IF_ERROR(convert_rowset_meta_pb(&rowset_meta, column_unique_id_map, request));
     }
 
     std::string header_file_path = tablet_snapshot_path + std::to_string(request.tablet_id) + ".hdr";
@@ -588,9 +594,9 @@ Status ReplicationTxnManager::convert_snapshot_for_none_primary(
     return Status::OK();
 }
 
-Status ReplicationTxnManager::convert_snapshot_for_primary(
-        const std::string& tablet_snapshot_path, const std::unordered_map<uint32_t, uint32_t>& column_unique_id_map,
-        const TReplicateSnapshotRequest& request) {
+Status ReplicationTxnManager::convert_snapshot_for_primary(const std::string& tablet_snapshot_path,
+                                                           std::unordered_map<uint32_t, uint32_t>* column_unique_id_map,
+                                                           const TReplicateSnapshotRequest& request) {
     std::string snapshot_meta_file_path = tablet_snapshot_path + "meta";
     ASSIGN_OR_RETURN(auto snapshot_meta, SnapshotManager::instance()->parse_snapshot_meta(snapshot_meta_file_path));
 
@@ -600,29 +606,14 @@ Status ReplicationTxnManager::convert_snapshot_for_primary(
     tablet_meta_pb.set_tablet_id(request.tablet_id);
     tablet_meta_pb.set_schema_hash(request.schema_hash);
     for (auto& rowset_meta : *tablet_meta_pb.mutable_rs_metas()) {
-        rowset_meta.set_partition_id(request.partition_id);
-        rowset_meta.set_tablet_id(request.tablet_id);
-        if (rowset_meta.has_tablet_schema()) {
-            ReplicationUtils::convert_column_unique_ids(rowset_meta.mutable_tablet_schema()->mutable_column(),
-                                                        column_unique_id_map);
-        }
+        RETURN_IF_ERROR(convert_rowset_meta_pb(&rowset_meta, column_unique_id_map, request));
     }
     for (auto& rowset_meta : *tablet_meta_pb.mutable_inc_rs_metas()) {
-        rowset_meta.set_partition_id(request.partition_id);
-        rowset_meta.set_tablet_id(request.tablet_id);
-        if (rowset_meta.has_tablet_schema()) {
-            ReplicationUtils::convert_column_unique_ids(rowset_meta.mutable_tablet_schema()->mutable_column(),
-                                                        column_unique_id_map);
-        }
+        RETURN_IF_ERROR(convert_rowset_meta_pb(&rowset_meta, column_unique_id_map, request));
     }
 
     for (auto& rowset_meta : snapshot_meta.rowset_metas()) {
-        rowset_meta.set_partition_id(request.partition_id);
-        rowset_meta.set_tablet_id(request.tablet_id);
-        if (rowset_meta.has_tablet_schema()) {
-            ReplicationUtils::convert_column_unique_ids(rowset_meta.mutable_tablet_schema()->mutable_column(),
-                                                        column_unique_id_map);
-        }
+        RETURN_IF_ERROR(convert_rowset_meta_pb(&rowset_meta, column_unique_id_map, request));
     }
 
     RETURN_IF_ERROR(snapshot_meta.serialize_to_file(snapshot_meta_file_path));

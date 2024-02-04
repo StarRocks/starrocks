@@ -635,7 +635,7 @@ SELECT
     SUBSTRING(lcd.c4, 3) AS substring_c4,
     TRIM(CONCAT(lcd.c4, ' - ', 'a')) AS trimmed,
     UPPER(lcd.c4) AS upper_c4,
-    IF(lcd.c3 IS NOT NULL, 'a', 'b') AS if_result,
+    IF(lcd.c3 IS NOT NULL, 'a', 'b') AS if_result
 FROM
     low_card_duplicate lcd
 group by

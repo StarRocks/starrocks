@@ -30,20 +30,47 @@ struct LLVMDatum {
     llvm::Value* value = nullptr;     ///< Represents the actual value of the datum.
     llvm::Value* null_flag = nullptr; ///< Represents the nullity status of the datum.
 
-    LLVMDatum(llvm::IRBuilder<>& b) { null_flag = llvm::ConstantInt::get(b.getInt8Ty(), 0, false); }
+    LLVMDatum(llvm::IRBuilder<>& b, bool null = false) {
+        if (null) {
+            null_flag = llvm::ConstantInt::get(b.getInt8Ty(), 1);
+        } else {
+            null_flag = llvm::ConstantInt::get(b.getInt8Ty(), 0);
+        }
+    }
+
+    LLVMDatum() = default;
 };
+
+/**
+ * JITColumn is a struct used to store the data and null data of a column.
+ */
+struct JITColumn {
+    const int8_t* datums = nullptr;
+    const int8_t* null_flags = nullptr;
+};
+
+/**
+ * JITScalarFunction is a function pointer to a JIT compiled scalar function.
+ * @param int64_t: the number of rows.
+ * @param JITColumn*: the pointer to the columns.
+ */
+using JITScalarFunction = void (*)(int64_t, JITColumn*);
 
 /**
  * @brief The LLVMDatum struct is utilized to store the column's values and nullity flags within LLVM IR.
  */
 struct LLVMColumn {
-    llvm::Value* is_constant = nullptr; ///< Indicates whether the column is constant.
-    llvm::Value* values = nullptr;      ///< Represents the actual values of the column.
-    llvm::Type* value_type = nullptr;   ///< Represents the type of the column's values.
-    llvm::Value* nullable =
-            nullptr; ///< Indicates whether the column can be null. If the column is non-nullable, calculating the null flag becomes unnecessary.
-                     // The null flags is a bitset, so the type is i8*.
+    llvm::Value* values = nullptr;     ///< Represents the actual values of the column.
     llvm::Value* null_flags = nullptr; ///< Represents the nullity status of the column.
+    llvm::Type* value_type = nullptr;  ///< Represents the type of the column's values.
+};
+
+struct JITContext {
+    llvm::Value* index_phi;
+    std::vector<LLVMColumn>& columns;
+    llvm::Module& module;
+    llvm::IRBuilder<>& builder;
+    int input_index;
 };
 
 class IRHelper {

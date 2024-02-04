@@ -30,7 +30,7 @@ static
 
 SegmentStreamConverter::SegmentStreamConverter(std::string_view input_file_name, uint64_t input_file_size,
                                                std::unique_ptr<WritableFile> output_file,
-                                               const std::unordered_map<uint32_t, uint32_t>* column_unique_id_map)
+                                               std::unordered_map<uint32_t, uint32_t>* column_unique_id_map)
         : FileStreamConverter(input_file_name, input_file_size, std::move(output_file)),
           _column_unique_id_map(column_unique_id_map) {
     if (_column_unique_id_map != nullptr && !_column_unique_id_map->empty()) {
@@ -108,7 +108,7 @@ Status SegmentStreamConverter::close() {
                 Slice(_segment_footer_buffer.data(), _segment_footer_buffer.size() - segment_footer_size)));
     }
 
-    ReplicationUtils::convert_column_unique_ids(segment_footer_pb.mutable_columns(), *_column_unique_id_map);
+    ReplicationUtils::convert_column_unique_ids(segment_footer_pb.mutable_columns(), _column_unique_id_map);
 
     RETURN_IF_ERROR(Segment::write_segment_footer(_output_file.get(), segment_footer_pb));
 

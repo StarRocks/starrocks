@@ -45,6 +45,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.system.NodeSelector;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskQueue;
@@ -135,6 +136,8 @@ public class RestoreJobMaterializedViewTest {
     private EditLog editLog;
     @Mocked
     private SystemInfoService systemInfoService;
+    @Mocked
+    private NodeSelector nodeSelector;
 
     @Injectable
     private Repository repo = new Repository(repoId, "repo", false, "bos://my_repo",
@@ -185,7 +188,10 @@ public class RestoreJobMaterializedViewTest {
             }
 
             {
-                systemInfoService.seqChooseBackendIds(anyInt, anyBoolean, anyBoolean);
+                systemInfoService.getNodeSelector();
+                minTimes = 0;
+                result = nodeSelector;
+                nodeSelector.seqChooseBackendIds(anyInt, anyBoolean, anyBoolean, null);
                 minTimes = 0;
                 result = beIds;
 
@@ -437,16 +443,6 @@ public class RestoreJobMaterializedViewTest {
     @Test
     @Order(1)
     public void testMVRestore_TestOneTable1() {
-        new Expectations() {
-            {
-                globalStateMgr.getCurrentState().getCatalogMgr().catalogExists("default_catalog");
-                result = true;
-
-                globalStateMgr.getCurrentState().getMetadataMgr().getDb("default_catalog", DB_NAME);
-                minTimes = 0;
-                result = db;
-            }
-        };
         RestoreJob job = createRestoreJob(ImmutableList.of(UnitTestUtil.MATERIALIZED_VIEW_NAME));
         checkJobRun(job);
         assertMVActiveEquals(MATERIALIZED_VIEW_NAME, true);

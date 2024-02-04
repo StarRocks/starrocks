@@ -68,8 +68,13 @@
           "link": {"type": "doc", "id": "table_design/Data_distribution"},
           "items": ["table_design/expression_partitioning", "table_design/list_partitioning", "table_design/dynamic_partitioning", "table_design/Temporary_partition"]
         },
+        {
+          "type": "category",
+          "label": "Indexes",
+          "link": {"type": "doc", "id": "table_design/indexes/indexes_overview"},
+          "items": ["table_design/indexes/Prefix_index_sort_key","table_design/indexes/Bitmap_index", "table_design/indexes/Bloomfilter_index"]
+        },
         "table_design/data_compression",
-        "table_design/Sort_key",
         "table_design/hybrid_table"
       ]
     },
@@ -182,12 +187,6 @@
         "using_starrocks/query_cache",
         {
           "type": "category",
-          "label": "Index",
-          "link": {"type": "doc", "id": "cover_pages/index"},
-          "items": [ "using_starrocks/Bitmap_index", "using_starrocks/Bloomfilter_index" ]
-        },
-        {
-          "type": "category",
           "label": "Computing the number of distinct values",
           "link": {"type": "doc", "id": "cover_pages/distinct_values"},
           "items": [ "using_starrocks/Using_bitmap", "using_starrocks/Using_HLL" ]
@@ -297,7 +296,8 @@
           "label": "DBT",
           "description": "Modeling and transformation with DBT",
           "href": "https://github.com/StarRocks/starrocks/tree/main/contrib/dbt-connector/README.md"
-         }
+         },
+         "integrations/hive_bitmap_udf"
       ]
     },
     {
@@ -810,8 +810,13 @@
           "link": {"type": "doc", "id": "table_design/Data_distribution"},
           "items": ["table_design/expression_partitioning", "table_design/list_partitioning", "table_design/dynamic_partitioning", "table_design/Temporary_partition"]
         },
+        {
+          "type": "category",
+          "label": "索引",
+          "link": {"type": "doc", "id": "table_design/indexes/indexes_overview"},
+          "items": ["table_design/indexes/Prefix_index_sort_key","table_design/indexes/Bitmap_index", "table_design/indexes/Bloomfilter_index"]
+        },
         "table_design/data_compression",
-        "table_design/Sort_key",
         "table_design/hybrid_table"
       ]
     },
@@ -925,12 +930,6 @@
         "using_starrocks/query_cache",
         {
           "type": "category",
-          "label": "索引",
-          "link": {"type": "doc", "id": "cover_pages/index"},
-          "items": [ "using_starrocks/Bitmap_index", "using_starrocks/Bloomfilter_index" ]
-        },
-        {
-          "type": "category",
           "label": "数据去重",
           "link": {"type": "doc", "id": "cover_pages/distinct_values"},
           "items": [ "using_starrocks/Using_bitmap", "using_starrocks/Using_HLL" ]
@@ -1041,7 +1040,8 @@
           "label": "DBT",
           "description": "通过 DBT 实现数据建模与转换",
           "href": "https://github.com/StarRocks/starrocks/tree/main/contrib/dbt-connector/README.md"
-         }
+         },
+         "integrations/hive_bitmap_udf"
       ]
     },
     {

@@ -26,7 +26,6 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.FastByteArrayOutputStream;
@@ -55,7 +54,9 @@ import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.FixMethodOrder;
 import org.junit.Test;
+import org.junit.runners.MethodSorters;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -66,14 +67,23 @@ import java.util.Map;
 
 import static com.starrocks.sql.optimizer.MVTestUtils.waitForSchemaChangeAlterJobFinish;
 
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class MaterializedViewTest {
 
-    private static List<Column> columns;
+    private static List<Column> columns = new LinkedList<Column>();
+    private ConnectContext connectContext;
+    private StarRocksAssert starRocksAssert;
 
     @Before
     public void setUp() {
         UtFrameUtils.createMinStarRocksCluster();
-        columns = new LinkedList<Column>();
+
+        connectContext = UtFrameUtils.createDefaultCtx();
+        starRocksAssert = new StarRocksAssert(connectContext);
+
+        // set default config for async mvs
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
+
         columns.add(new Column("k1", ScalarType.createType(PrimitiveType.TINYINT), true, null, "", ""));
         columns.add(new Column("k2", ScalarType.createType(PrimitiveType.SMALLINT), true, null, "", ""));
         columns.add(new Column("v1", ScalarType.createType(PrimitiveType.INT), false, AggregateType.SUM, "", ""));
@@ -108,9 +118,9 @@ public class MaterializedViewTest {
         Assert.assertEquals(false, mv2.isActive());
 
         List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
-        BaseTableInfo baseTableInfo1 = new BaseTableInfo(100L, 10L);
+        BaseTableInfo baseTableInfo1 = new BaseTableInfo(100L, "db", "tbl1", 10L);
         baseTableInfos.add(baseTableInfo1);
-        BaseTableInfo baseTableInfo2 = new BaseTableInfo(100L, 20L);
+        BaseTableInfo baseTableInfo2 = new BaseTableInfo(100L, "db", "tbl2", 20L);
         baseTableInfos.add(baseTableInfo2);
         mv2.setBaseTableInfos(baseTableInfos);
         List<BaseTableInfo> baseTableInfosCheck = mv2.getBaseTableInfos();
@@ -283,11 +293,11 @@ public class MaterializedViewTest {
         mv.addPartition(partition);
 
         List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
-        BaseTableInfo baseTableInfo1 = new BaseTableInfo(100L, 10L);
+        BaseTableInfo baseTableInfo1 = new BaseTableInfo(100L, "db", "tbl1", 10L);
         baseTableInfos.add(baseTableInfo1);
-        BaseTableInfo baseTableInfo2 = new BaseTableInfo(100L, 20L);
+        BaseTableInfo baseTableInfo2 = new BaseTableInfo(100L, "db", "tbl2", 20L);
         baseTableInfos.add(baseTableInfo2);
-        BaseTableInfo baseTableInfo3 = new BaseTableInfo(100L, 30L);
+        BaseTableInfo baseTableInfo3 = new BaseTableInfo(100L, "db", "tbl3", 30L);
         baseTableInfos.add(baseTableInfo3);
 
         mv.setBaseTableInfos(baseTableInfos);
@@ -355,10 +365,6 @@ public class MaterializedViewTest {
 
     @Test
     public void testRangePartitionSerialization() throws Exception {
-        FeConstants.runningUnitTest = true;
-        UtFrameUtils.createMinStarRocksCluster();
-        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
-        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.tbl1\n" +
                         "(\n" +
@@ -389,7 +395,8 @@ public class MaterializedViewTest {
         mv.addPartition(partition);
 
         List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
-        BaseTableInfo baseTableInfo = new BaseTableInfo(testDb.getId(), baseTable.getId());
+        BaseTableInfo baseTableInfo = new BaseTableInfo(testDb.getId(), testDb.getFullName(),
+                baseTable.getName(), baseTable.getId());
         baseTableInfos.add(baseTableInfo);
         mv.setBaseTableInfos(baseTableInfos);
         mv.setViewDefineSql("select * from test.tbl1");
@@ -422,10 +429,6 @@ public class MaterializedViewTest {
 
     @Test
     public void testRenameMaterializedView() throws Exception {
-        FeConstants.runningUnitTest = true;
-        UtFrameUtils.createMinStarRocksCluster();
-        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
-        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.tbl1\n" +
                         "(\n" +
@@ -482,10 +485,6 @@ public class MaterializedViewTest {
 
     @Test
     public void testMvAfterDropBaseTable() throws Exception {
-        FeConstants.runningUnitTest = true;
-        UtFrameUtils.createMinStarRocksCluster();
-        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
-        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.tbl_drop\n" +
                         "(\n" +
@@ -515,10 +514,6 @@ public class MaterializedViewTest {
 
     @Test
     public void testMvAfterBaseTableRename() throws Exception {
-        FeConstants.runningUnitTest = true;
-        UtFrameUtils.createMinStarRocksCluster();
-        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
-        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.tbl_to_rename\n" +
                         "(\n" +
@@ -548,10 +543,6 @@ public class MaterializedViewTest {
 
     @Test
     public void testMaterializedViewWithHint() throws Exception {
-        FeConstants.runningUnitTest = true;
-        UtFrameUtils.createMinStarRocksCluster();
-        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
-        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.tbl1\n" +
                         "(\n" +
@@ -585,10 +576,6 @@ public class MaterializedViewTest {
 
     @Test
     public void testRollupMaterializedViewWithScalarFunction() throws Exception {
-        FeConstants.runningUnitTest = true;
-        UtFrameUtils.createMinStarRocksCluster();
-        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
-        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE `part_with_mv` (\n" +
                         "  `p_partkey` int(11) NOT NULL COMMENT \"\",\n" +
@@ -615,9 +602,6 @@ public class MaterializedViewTest {
 
     @Test(expected = SemanticException.class)
     public void testNonPartitionMvSupportedProperties() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster();
-        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
-        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE goods(\n" +
                         "item_id1 INT,\n" +
@@ -641,10 +625,6 @@ public class MaterializedViewTest {
 
     @Test
     public void testCreateMaterializedViewWithInactiveMaterializedView() throws Exception {
-        FeConstants.runningUnitTest = true;
-        UtFrameUtils.createMinStarRocksCluster();
-        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
-        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE base_table\n" +
                         "(\n" +
@@ -674,7 +654,7 @@ public class MaterializedViewTest {
         MaterializedView mv = new MaterializedView(1000, testDb.getId(), "mv", columns, KeysType.AGG_KEYS,
                 singlePartitionInfo, hashDistributionInfo, refreshScheme);
         List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
-        BaseTableInfo baseTableInfo = new BaseTableInfo(testDb.getId(), baseMv.getId());
+        BaseTableInfo baseTableInfo = new BaseTableInfo(testDb.getId(), testDb.getFullName(), baseMv.getName(), baseMv.getId());
         baseTableInfos.add(baseTableInfo);
         mv.setBaseTableInfos(baseTableInfos);
         mv.onReload();
@@ -704,8 +684,6 @@ public class MaterializedViewTest {
 
     @Test
     public void testShowSyncMV() throws Exception {
-        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
-        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.tbl_sync_mv\n" +
                         "(\n" +
@@ -731,8 +709,6 @@ public class MaterializedViewTest {
 
     @Test
     public void testAlterMVWithIndex() throws Exception {
-        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
-        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.table1\n" +
                         "(\n" +
@@ -767,7 +743,6 @@ public class MaterializedViewTest {
     @Test
     public void testShowMVWithIndex() throws Exception {
         testAlterMVWithIndex();
-        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
         String showCreateSql = "show create materialized view test.index_mv_to_check;";
         ShowCreateTableStmt showCreateTableStmt =
                 (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showCreateSql, connectContext);
@@ -779,8 +754,6 @@ public class MaterializedViewTest {
 
     @Test
     public void testAlterViewWithIndex() throws Exception {
-        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
-        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.table1\n" +
                         "(\n" +
@@ -805,8 +778,6 @@ public class MaterializedViewTest {
     }
 
     public void testCreateMV(String mvSql) throws Exception {
-        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
-        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.table1\n" +
                         "(\n" +
@@ -883,8 +854,6 @@ public class MaterializedViewTest {
 
     @Test
     public void testCreateMVWithDuplicateIndexOrDuplicateColumn() throws Exception {
-        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
-        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.table1\n" +
                         "(\n" +

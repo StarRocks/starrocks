@@ -68,7 +68,8 @@ public class JDBCMetadata implements ConnectorMetadata {
         this.properties = properties;
         this.catalogName = catalogName;
         try {
-            Class.forName(properties.get(JDBCResource.DRIVER_CLASS));
+            String driverName = getDriverName();
+            Class.forName(driverName);
         } catch (ClassNotFoundException e) {
             LOG.warn(e.getMessage());
             throw new StarRocksConnectorException("doesn't find class: " + e.getMessage());
@@ -77,6 +78,8 @@ public class JDBCMetadata implements ConnectorMetadata {
             schemaResolver = new MysqlSchemaResolver();
         } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("postgresql")) {
             schemaResolver = new PostgresSchemaResolver();
+        } else if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("mariadb")) {
+            schemaResolver = new MysqlSchemaResolver();
         } else {
             LOG.warn("{} not support yet", properties.get(JDBCResource.DRIVER_CLASS));
             throw new StarRocksConnectorException(properties.get(JDBCResource.DRIVER_CLASS) + " not support yet");
@@ -87,6 +90,24 @@ public class JDBCMetadata implements ConnectorMetadata {
         this.dataSource = dataSource;
         checkAndSetSupportPartitionInformation();
         createMetaAsyncCacheInstances(properties);
+    }
+
+    private String getDriverName() {
+        String driverName = properties.get(JDBCResource.DRIVER_CLASS);
+        // use org.mariadb.jdbc.Driver for mysql because of gpl protocol
+        if (driverName.contains("mysql")) {
+            driverName = "org.mariadb.jdbc.Driver";
+        }
+        return driverName;
+    }
+
+    private String getJdbcUrl() {
+        String jdbcUrl = properties.get(JDBCResource.URI);
+        // use org.mariadb.jdbc.Driver for mysql because of gpl protocol
+        if (jdbcUrl.contains("mysql")) {
+            jdbcUrl = jdbcUrl.replace("mysql", "mariadb");
+        }
+        return jdbcUrl;
     }
 
     private void createMetaAsyncCacheInstances(Map<String, String> properties) {
@@ -107,10 +128,10 @@ public class JDBCMetadata implements ConnectorMetadata {
 
     private HikariDataSource createHikariDataSource() {
         HikariConfig config = new HikariConfig();
-        config.setJdbcUrl(properties.get(JDBCResource.URI));
+        config.setJdbcUrl(getJdbcUrl());
         config.setUsername(properties.get(JDBCResource.USER));
         config.setPassword(properties.get(JDBCResource.PASSWORD));
-        config.setDriverClassName(properties.get(JDBCResource.DRIVER_CLASS));
+        config.setDriverClassName(getDriverName());
         config.setMaximumPoolSize(Config.jdbc_connection_pool_size);
         config.setMinimumIdle(Config.jdbc_minimum_idle_connections);
         config.setIdleTimeout(Config.jdbc_connection_idle_timeout_ms);

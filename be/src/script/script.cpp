@@ -277,7 +277,7 @@ public:
     static std::shared_ptr<TabletBasicInfo> get_tablet_info(int64_t tablet_id) {
         std::vector<TabletBasicInfo> tablet_infos;
         auto manager = StorageEngine::instance()->tablet_manager();
-        manager->get_tablets_basic_infos(-1, -1, tablet_id, tablet_infos);
+        manager->get_tablets_basic_infos(-1, -1, tablet_id, tablet_infos, nullptr);
         if (tablet_infos.empty()) {
             return nullptr;
         } else {
@@ -288,7 +288,7 @@ public:
     static std::vector<TabletBasicInfo> get_tablet_infos(int64_t table_id, int64_t partition_id) {
         std::vector<TabletBasicInfo> tablet_infos;
         auto manager = StorageEngine::instance()->tablet_manager();
-        manager->get_tablets_basic_infos(table_id, partition_id, -1, tablet_infos);
+        manager->get_tablets_basic_infos(table_id, partition_id, -1, tablet_infos, nullptr);
         return tablet_infos;
     }
 
@@ -301,6 +301,30 @@ public:
      */
     static Status do_compaction(int64_t tablet_id, const string& type) {
         return CompactionAction::do_compaction(tablet_id, type, "");
+    }
+
+    static std::string set_error_state(int64_t tablet_id) {
+        auto tablet = get_tablet(tablet_id);
+        if (!tablet) {
+            return "tablet not found";
+        }
+        if (tablet->updates() == nullptr) {
+            return "not support set error state";
+        }
+        tablet->updates()->set_error("error by script");
+        return "set error state success";
+    }
+
+    static std::string recover_tablet(int64_t tablet_id) {
+        auto tablet = get_tablet(tablet_id);
+        if (!tablet) {
+            return "tablet not found";
+        }
+        if (tablet->updates() == nullptr) {
+            return "not support recover";
+        }
+        Status st = tablet->updates()->recover();
+        return strings::Substitute("recover tablet:$0 status:$1", std::to_string(tablet_id), st.message());
     }
 
     static std::string get_tablet_meta_json(int64_t tablet_id) {
@@ -523,6 +547,8 @@ public:
             REG_STATIC_METHOD(StorageEngineRef, get_manual_compaction_status);
             REG_STATIC_METHOD(StorageEngineRef, pk_dump);
             REG_STATIC_METHOD(StorageEngineRef, ls_tablet_dir);
+            REG_STATIC_METHOD(StorageEngineRef, set_error_state);
+            REG_STATIC_METHOD(StorageEngineRef, recover_tablet);
         }
     }
 };

@@ -121,3 +121,54 @@ SELECT k1, (CASE k2 WHEN 'beijing' THEN concat(k1, 'bigcity') ELSE concat(k1, 's
 drop materialized view case_when_mv1;
 drop materialized view case_when_mv2;
 drop table if exists case_when_tbl1;
+
+--case: test_mv_with_dict
+-- 1.test_base_table1建表
+CREATE TABLE IF NOT EXISTS test_base_table1
+(
+    `col0`             int(11) NULL,
+    `col2`           datetime NULL,
+    `col3`         varchar(32) NULL,
+    `id`               bigint(20) NULL,
+    `col1`           bigint(20) NULL
+) DUPLICATE KEY(col0, col2, col3)
+  PARTITION BY RANGE(col2)(
+  START ("2022-04-17") END ("2022-05-01") EVERY (INTERVAL 1 day))
+  DISTRIBUTED BY HASH(col0)
+  PROPERTIES
+(
+    "replication_num" = "1"
+);
+
+INSERT INTO test_base_table1 (col0, col2, col3, id, col1) VALUES (123456789, '2022-04-30 12:00:00', 'Guangdong', 1, 10001);
+INSERT INTO test_base_table1 (col0, col2, col3) VALUES (987654321, '2022-04-30 13:00:00', 'Fujian');
+
+CREATE MATERIALIZED VIEW mv_test_base_table1 AS
+SELECT col2,col3,col0,id,col1 FROM test_base_table1 ORDER BY col2,col3,col0;
+
+-- analyze table to global dict rewrite
+analyze full table test_base_table1 with sync mode;
+-- check rewrite by rollup mv
+function: wait_materialized_view_finish()
+function: wait_global_dict_ready("col3", "test_base_table1")
+function: check_hit_materialized_view("select col3, min(col1) startTime, max(col1) endTime from test_base_table1 where col2 BETWEEN '2022-04-29 15:12:23' and '2022-04-30 15:12:23' group by col3;", "mv_test_base_table1")
+-- check result it's ok
+select col3, min(col1) startTime, max(col1) endTime from test_base_table1 where col2 BETWEEN '2022-04-29 00:00:00' and '2022-04-30 23:00:00' group by col3;
+
+-- check hit base table's order key
+function: check_hit_materialized_view("select * from test_base_table1 where col0=123456789", "rollup: test_base_table1")
+select * from test_base_table1 where col0=123456789;
+-- check hit sync mv's order key
+function: check_hit_materialized_view("select * from test_base_table1 where col2 >='2022-04-30 12:00:00'", "rollup: mv_test_base_table1")
+select * from test_base_table1 where col2 >='2022-04-30 12:00:00';
+
+-- check both hit base table and sync mv's order key
+function: check_hit_materialized_view("select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 union select col0, col2, col3, id, col1 from test_base_table1 where col2 >='2022-04-30 12:00:00') t;", "rollup: mv_test_base_table1",  "rollup: test_base_table1")
+select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 union select col0, col2, col3, id, col1 from test_base_table1 where col2 >='2022-04-30 12:00:00') t;
+
+set enable_sync_materialized_view_rewrite=false;
+function: check_hit_materialized_view("select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 union select col0, col2, col3, id, col1 from mv_test_base_table1 [_SYNC_MV_] where col2 >='2022-04-30 12:00:00') t;", "rollup: mv_test_base_table1",  "rollup: test_base_table1")
+select * from (select col0, col2, col3, id, col1 from test_base_table1 where col0=123456789 union select col0, col2, col3, id, col1 from mv_test_base_table1 [_SYNC_MV_] where col2 >='2022-04-30 12:00:00') t;
+set enable_sync_materialized_view_rewrite=true;
+
+drop table test_base_table1;

@@ -128,6 +128,11 @@ void Rowset::make_commit(int64_t version, uint32_t rowset_seg_id) {
     make_visible_extra(v);
 }
 
+void Rowset::make_commit(int64_t version, uint32_t rowset_seg_id, uint32_t max_compact_input_rowset_id) {
+    _rowset_meta->set_max_compact_input_rowset_id(max_compact_input_rowset_id);
+    make_commit(version, rowset_seg_id);
+}
+
 std::string Rowset::segment_file_path(const std::string& dir, const RowsetId& rowset_id, int segment_id) {
     return strings::Substitute("$0/$1_$2.dat", dir, rowset_id.to_string(), segment_id);
 }

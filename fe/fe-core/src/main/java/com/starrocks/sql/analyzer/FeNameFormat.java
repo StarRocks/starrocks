@@ -17,11 +17,9 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.mysql.privilege.Role;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -113,18 +111,6 @@ public class FeNameFormat {
     public static void checkRoleName(String role, boolean canBeAdmin, String errMsg) {
         if (Strings.isNullOrEmpty(role) || !role.matches(COMMON_NAME_REGEX)) {
             throw new SemanticException("invalid role format: " + role);
-        }
-
-        boolean res;
-        if (CaseSensibility.ROLE.getCaseSensibility()) {
-            res = role.equals(Role.OPERATOR_ROLE) || (!canBeAdmin && role.equals(Role.ADMIN_ROLE));
-        } else {
-            res = role.equalsIgnoreCase(Role.OPERATOR_ROLE)
-                    || (!canBeAdmin && role.equalsIgnoreCase(Role.ADMIN_ROLE));
-        }
-
-        if (res) {
-            throw new SemanticException(errMsg + ": " + role);
         }
     }
 

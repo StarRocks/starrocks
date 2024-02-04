@@ -1305,6 +1305,9 @@ StatusOr<uint16_t> SegmentIterator::_filter_by_expr_predicates(Chunk* chunk, vec
 }
 
 inline bool SegmentIterator::_can_using_dict_code(const FieldPtr& field) const {
+    if (field->type()->type() == TYPE_ARRAY) {
+        return false;
+    }
     if (_opts.predicates.find(field->id()) != _opts.predicates.end()) {
         return _predicate_need_rewrite[field->id()];
     } else {
@@ -1560,7 +1563,7 @@ Status SegmentIterator::_decode_dict_codes(ScanContext* ctx) {
         const FieldPtr& f = decode_schema.field(i);
         const ColumnId cid = f->id();
         if (!ctx->_is_dict_column[i] || ctx->_skip_dict_decode_indexes[i]) {
-            ctx->_dict_chunk->get_column_by_index(i)->swap_column(*ctx->_read_chunk->get_column_by_index(i));
+            ctx->_dict_chunk->get_column_by_index(i).swap(ctx->_read_chunk->get_column_by_index(i));
         } else {
             ColumnPtr& dict_codes = ctx->_read_chunk->get_column_by_index(i);
             ColumnPtr& dict_values = ctx->_dict_chunk->get_column_by_index(i);

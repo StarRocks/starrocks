@@ -19,13 +19,9 @@ package com.starrocks.http;
 
 import com.google.common.base.Strings;
 import com.starrocks.common.path.PathTrie;
-import com.starrocks.http.rest.LoadAction;
 import io.netty.handler.codec.http.HttpMethod;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 public class ActionController {
-    private static final Logger LOG = LogManager.getLogger(LoadAction.class);
     private final PathTrie<IAction> getHandlers = new PathTrie<>(WebUtils.REST_DECODER);
     private final PathTrie<IAction> postHandlers = new PathTrie<>(WebUtils.REST_DECODER);
     private final PathTrie<IAction> putHandlers = new PathTrie<>(WebUtils.REST_DECODER);
@@ -33,7 +29,7 @@ public class ActionController {
     private final PathTrie<IAction> headHandlers = new PathTrie<>(WebUtils.REST_DECODER);
     private final PathTrie<IAction> optionsHandlers = new PathTrie<>(WebUtils.REST_DECODER);
 
-    // Registers a rest handler to be execute when the provided method and path match the request.
+    // Registers a rest handler to be executed when the provided method and path match the request.
     public void registerHandler(HttpMethod method, String path, IAction handler)
             throws IllegalArgException {
         if (method.equals(HttpMethod.GET)) {

@@ -84,6 +84,8 @@ struct ColumnWriterOptions {
     // if global_dict is not nullptr, will checkout whether global_dict can cover all data
     GlobalDictMap* global_dict = nullptr;
 
+    bool need_flat = false;
+
     std::string field_name;
 };
 
