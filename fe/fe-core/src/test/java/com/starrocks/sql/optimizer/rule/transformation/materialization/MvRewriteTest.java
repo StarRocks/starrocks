@@ -170,7 +170,8 @@ public class MvRewriteTest extends MvRewriteTestBase {
                     ")\n" +
                     ") > 0\n";
             String plan = getFragmentPlan(query);
-            PlanTestBase.assertContains(plan, "mv11", "PREDICATES: 10: ct > 0");
+            Assert.assertTrue(plan.contains("mv11"));
+            Assert.assertTrue(plan.contains("PREDICATES: 10: ct > 0"));
         }
     }
 }
