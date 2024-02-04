@@ -45,7 +45,7 @@ public:
                                                                TSchemaHash remote_schema_hash,
                                                                const std::string& file_name, uint64_t timeout_sec);
 
-    static constexpr uint32_t kFakeColumnUniqueId = -1;
+    static constexpr uint32_t kFakeColumnUniqueId = INT_MAX;
 
     template <typename T>
     static void calc_column_unique_id_map(const T& source_columns, const T& target_columns,
@@ -68,7 +68,7 @@ public:
         }
 
         if (need_convert) {
-            column_unique_id_map->emplace(kFakeColumnUniqueId, 0);
+            column_unique_id_map->emplace(kFakeColumnUniqueId, INT_MAX);
         } else {
             column_unique_id_map->clear();
         }
@@ -86,10 +86,29 @@ public:
                 column.set_unique_id(iter->second);
             } else {
                 uint32_t column_unique_id = --column_unique_id_map->operator[](kFakeColumnUniqueId);
-                column.set_unique_id(column_unique_id);
                 column_unique_id_map->emplace(column.unique_id(), column_unique_id);
+                column.set_unique_id(column_unique_id);
             }
         }
+    }
+
+    template <typename T>
+    static Status convert_column_unique_ids(T* column_unique_ids,
+                                            const std::unordered_map<uint32_t, uint32_t>& column_unique_id_map) {
+        if (column_unique_id_map.empty()) {
+            return Status::OK();
+        }
+
+        for (auto& column_unique_id : *column_unique_ids) {
+            auto iter = column_unique_id_map.find(column_unique_id);
+            if (iter == column_unique_id_map.end()) {
+                LOG(ERROR) << "Column not found, column unique id: " << column_unique_id;
+                return Status::InternalError("Column not found");
+            }
+            column_unique_id = iter->second;
+        }
+
+        return Status::OK();
     }
 
     static Status convert_rowset_txn_meta(RowsetTxnMetaPB* rowset_txn_meta,
