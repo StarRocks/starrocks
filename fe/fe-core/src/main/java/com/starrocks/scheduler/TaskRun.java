@@ -48,6 +48,12 @@ public class TaskRun implements Comparable<TaskRun> {
     public static final String PARTITION_START = "PARTITION_START";
     public static final String PARTITION_END = "PARTITION_END";
     public static final String FORCE = "FORCE";
+<<<<<<< HEAD
+=======
+    public static final String START_TASK_RUN_ID = "START_TASK_RUN_ID";
+    public static final String IS_TEST = "__IS_TEST__";
+    private boolean isKilled = false;
+>>>>>>> 54e73cd039 ([BugFix] fix cancel refresh mv command cannot stop task (#40649))
 
     private long taskId;
 
@@ -131,7 +137,23 @@ public class TaskRun implements Comparable<TaskRun> {
         this.executeOption = executeOption;
     }
 
+<<<<<<< HEAD
     public Map<String, String>  refreshTaskProperties(ConnectContext ctx) {
+=======
+    public String getUUID() {
+        return taskRunId;
+    }
+
+    public void kill() {
+        isKilled = true;
+    }
+
+    public boolean isKilled() {
+        return isKilled;
+    }
+
+    public Map<String, String> refreshTaskProperties(ConnectContext ctx) {
+>>>>>>> 54e73cd039 ([BugFix] fix cancel refresh mv command cannot stop task (#40649))
         Map<String, String> newProperties = Maps.newHashMap();
         if (task.getSource() != Constants.TaskSource.MV) {
             return newProperties;
@@ -199,6 +221,11 @@ public class TaskRun implements Comparable<TaskRun> {
         taskRunContext.setPriority(status.getPriority());
         taskRunContext.setTaskType(type);
         taskRunContext.setStatus(status);
+<<<<<<< HEAD
+=======
+        taskRunContext.setExecuteOption(executeOption);
+        taskRunContext.setTaskRun(this);
+>>>>>>> 54e73cd039 ([BugFix] fix cancel refresh mv command cannot stop task (#40649))
 
         processor.processTaskRun(taskRunContext);
         QueryState queryState = runCtx.getState();
