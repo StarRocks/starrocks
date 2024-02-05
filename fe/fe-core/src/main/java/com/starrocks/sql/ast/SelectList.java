@@ -26,10 +26,10 @@ import java.util.List;
 public class SelectList {
     private boolean isDistinct;
 
+    private List<HintNode> hintNodes;
+
     // ///////////////////////////////////////
     // BEGIN: Members that need to be reset()
-
-    private List<HintNode> hintNodes;
 
     private final List<SelectListItem> items;
 

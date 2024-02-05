@@ -519,6 +519,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             StatementBase stmt = (StatementBase) visit(context.statement());
             if (MapUtils.isNotEmpty(hintMap)) {
                 stmt.setAllQueryScopeHints(extractQueryScopeHintNode());
+                hintMap.clear();
             }
             return stmt;
         } else {
