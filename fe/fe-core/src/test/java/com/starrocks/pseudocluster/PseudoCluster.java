@@ -76,7 +76,7 @@ public class PseudoCluster {
 
     private static volatile PseudoCluster instance;
 
-    public static boolean logToConsole = false;
+    public static boolean logToConsole = true;
 
     ClusterConfig config = new ClusterConfig();
 

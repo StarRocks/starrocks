@@ -146,6 +146,57 @@ public class PublishVersionDaemon extends FrontendDaemon {
         }
     }
 
+    protected void runAfterCatalogReady1() {
+        try {
+            GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+            LOG.error("enable_batch_publish_version " + Config.lake_enable_batch_publish_version);
+            System.out.println("enable_batch_publish_version " + Config.lake_enable_batch_publish_version);
+            LOG.error("run mode " + RunMode.getCurrentRunMode().toString());
+            System.out.println("run mode " + RunMode.getCurrentRunMode().toString());
+            if (Config.lake_enable_batch_publish_version && RunMode.isSharedDataMode()) {
+                // batch publish
+                List<TransactionStateBatch> readyTransactionStatesBatch = globalTransactionMgr.
+                        getReadyPublishTransactionsBatch();
+                LOG.error("readyTransactionStatesBatch " + readyTransactionStatesBatch);
+                System.out.println("readyTransactionStatesBatch " + readyTransactionStatesBatch);
+                if (readyTransactionStatesBatch.size() != 0) {
+                    publishVersionForLakeTableBatch(readyTransactionStatesBatch);
+                }
+                return;
+
+            }
+
+            List<TransactionState> readyTransactionStates =
+                    globalTransactionMgr.getReadyToPublishTransactions(Config.enable_new_publish_mechanism);
+            LOG.error("readyTransactionStates " + readyTransactionStates);
+            System.out.println("readyTransactionStates " + readyTransactionStates);
+            if (readyTransactionStates == null || readyTransactionStates.isEmpty()) {
+                return;
+            }
+
+            // TODO: need to refactor after be split into cn + dn
+            List<Long> allBackends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(false);
+            if (RunMode.isSharedDataMode()) {
+                allBackends.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodeIds(false));
+            }
+
+            if (allBackends.isEmpty()) {
+                LOG.warn("some transaction state need to publish, but no backend exists");
+                return;
+            }
+
+            if (RunMode.isSharedNothingMode()) { // share_nothing mode
+                publishVersionForOlapTable(readyTransactionStates);
+            } else { // share_data mode
+                LOG.error("readyTransactionStates " + readyTransactionStates);
+                System.out.println("readyTransactionStates " + readyTransactionStates);
+                publishVersionForLakeTable(readyTransactionStates);
+            }
+        } catch (Throwable t) {
+            LOG.error("errors while publish version to all backends", t);
+        }
+    }
+
     private int getOrFixLakeTaskExecutorThreadPoolMaxSizeConfig() {
         String configVarName = "lake_publish_version_max_threads";
         int maxSize = Config.lake_publish_version_max_threads;
@@ -408,20 +459,34 @@ public class PublishVersionDaemon extends FrontendDaemon {
     }
 
     void publishVersionForLakeTable(List<TransactionState> readyTransactionStates) {
+        LOG.error("enter publishVersionForLakeTable 1");
+        System.out.println("enter publishVersionForLakeTable 1");
         Set<Long> publishingTransactions = getPublishingLakeTransactions();
+        LOG.error("enter publishVersionForLakeTable 2");
+        System.out.println("enter publishVersionForLakeTable 2");
         for (TransactionState txnState : readyTransactionStates) {
             long txnId = txnState.getTransactionId();
+            LOG.error("publishingTransactions " + publishingTransactions + " " + readyTransactionStates);
+            System.out.println("publishingTransactions " + publishingTransactions + " " + readyTransactionStates);
             if (!publishingTransactions.contains(txnId)) { // the set did not already contain the specified element
                 Set<Long> publishingLakeTransactionsBatchTableId = getPublishingLakeTransactionsBatchTableId();
+                LOG.error("publishingLakeTransactionsBatchTableId " + publishingLakeTransactionsBatchTableId
+                        + " " + readyTransactionStates);
+                System.out.println("publishingLakeTransactionsBatchTableId " + publishingLakeTransactionsBatchTableId
+                        + " " + readyTransactionStates);
                 // When the `enable_lake_batch_publish_version` switch is just set to false,
                 // it is possible that the result of publish task has not been returned,
                 // we need to wait for the result to return if the same table is involved.
                 if (!txnState.getTableIdList().stream().allMatch(id -> !publishingLakeTransactionsBatchTableId.contains(id))) {
                     LOG.info("maybe enable_lake_batch_publish_version is set to false just now, txn {} will be published later",
                             txnState.getTransactionId());
+                    System.out.println("maybe enable_lake_batch_publish_version is set to false just now, txn {} will be " +
+                            "published later" + txnState.getTransactionId());
                     continue;
                 }
                 publishingTransactions.add(txnId);
+                LOG.error("begin to publishing version for lake table " + txnId);
+                System.out.println("begin to publishing version for lake table " + txnId);
                 CompletableFuture<Void> future = publishLakeTransactionAsync(txnState);
                 future.thenRun(() -> publishingTransactions.remove(txnId));
             }
@@ -445,7 +510,10 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 long tableId = txnStateBatch.getTableId();
                 if (publishingLakeTransactionsBatchTableId.add(tableId)) {
                     CompletableFuture<Void> future = publishLakeTransactionBatchAsync(txnStateBatch);
-                    future.thenRun(() -> publishingLakeTransactionsBatchTableId.remove(tableId));
+                    future.thenRun(() -> {
+                        publishingLakeTransactionsBatchTableId.remove(tableId);
+                        LOG.error("remove table id " + tableId + " from publishingLakeTransactionsBatchTableId");
+                    });
                 }
             }
         }
@@ -458,10 +526,12 @@ public class PublishVersionDaemon extends FrontendDaemon {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             LOG.info("the database of transaction {} has been deleted", txnId);
+            System.out.println("the database of transaction {} has been deleted" + txnId + " " + txnState);
             try {
                 globalTransactionMgr.finishTransaction(txnState.getDbId(), txnId, Sets.newHashSet());
             } catch (UserException ex) {
                 LOG.warn("Fail to finish txn " + txnId, ex);
+                System.out.println("Fail to finish txn " + txnId + ex.getMessage());
             }
             return CompletableFuture.completedFuture(null);
         }
@@ -713,6 +783,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             if (success) {
                 try {
                     globalTransactionMgr.finishTransactionBatch(dbId, txnStateBatch, null);
+                    LOG.error("finish txn state batch " + txnStateBatch);
                     //
                     for (TransactionState state : txnStateBatch.getTransactionStates()) {
                         refreshMvIfNecessary(state);

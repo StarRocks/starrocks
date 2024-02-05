@@ -132,6 +132,7 @@ public class Utils {
 
             ComputeNode node = entry.getKey();
             LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
+            System.out.println("publish version " + request.toString());
             Future<PublishVersionResponse> future = lakeService.publishVersion(request);
             responseList.add(future);
             backendList.add(node);
