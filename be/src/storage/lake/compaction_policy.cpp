@@ -176,8 +176,8 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(
     while (!rowset_queue.empty()) {
         const auto& rowset_candidate = rowset_queue.top();
         cur_compaction_result_bytes += rowset_candidate.read_bytes();
-        input_rowsets.emplace_back(
-                std::make_shared<Rowset>(_tablet_mgr, tablet_metadata, rowset_candidate.rowset_index));
+        input_rowsets.emplace_back(std::make_shared<Rowset>(_tablet_mgr, tablet_metadata, rowset_candidate.rowset_index,
+                                                            tablet_metadata->schema()));
         if (has_dels != nullptr) {
             has_dels->push_back(rowset_candidate.delete_bytes() > 0);
         }
