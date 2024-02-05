@@ -49,7 +49,6 @@
 #include "column/stream_chunk.h"
 #include "common/closure_guard.h"
 #include "common/config.h"
-#include "common/constexpr.h"
 #include "common/status.h"
 #include "exec/file_scanner.h"
 #include "exec/pipeline/fragment_context.h"
