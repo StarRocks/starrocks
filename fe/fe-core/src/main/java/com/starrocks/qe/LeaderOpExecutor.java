@@ -38,8 +38,6 @@ import com.google.common.base.Preconditions;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.AuditStatisticsUtil;
 import com.starrocks.common.util.UUIDUtil;

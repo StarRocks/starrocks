@@ -17,8 +17,7 @@ package com.starrocks.qe;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.server.GlobalStateMgr;
@@ -124,11 +123,11 @@ public class LeaderOpExecutorTest {
         connectContext.setForwardTimes(LeaderOpExecutor.MAX_FORWARD_TIMES);
 
         try {
-            new LeaderOpExecutor(new OriginStatement("show frontends"), connectContext, RedirectStatus.FORWARD_NO_SYNC)
+            new LeaderOpExecutor(new OriginStatement("show frontends", 0), connectContext,
+                    RedirectStatus.FORWARD_NO_SYNC)
                     .execute();
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof ErrorReportException);
-            Assert.assertEquals(ErrorCode.ERR_FORWARD_TOO_MANY_TIMES, ((ErrorReportException) e).getErrorCode());
+            Assert.assertTrue(e instanceof DdlException);
             return;
         }
         Assert.fail("should throw ERR_FORWARD_TOO_MANY_TIMES exception");
