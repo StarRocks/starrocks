@@ -454,6 +454,12 @@ BE dynamic parameters are as follows.
 - **Description:** Whether to allow compaction tasks to cache data on local disks in a shared-data cluster.
 - **Introduced in:** v3.1.7, v3.2.3
 
+#### lake_pk_compaction_max_input_rowsets
+
+- **Default:** 5
+- **Description:** Compaction 任务中允许的最大输入 Rowset 数量。
+- **Introduced in:** v3.1.8, v3.2.3
+
 #### compact_threads
 
 - **Default:** 4
