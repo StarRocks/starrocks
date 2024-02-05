@@ -79,7 +79,7 @@ SELECT select_expr[, select_expr ...]
 
 - WHERE (optional)
 
-  From v3.2 onwards, synchronous materialized views support the WHERE clause which can filter rows used for the materialized view.
+  From v3.1.8 onwards, synchronous materialized views support the WHERE clause which can filter rows used for the materialized view.
 
 - GROUP BY (optional)
 
