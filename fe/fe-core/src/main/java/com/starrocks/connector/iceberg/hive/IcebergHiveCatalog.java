@@ -84,6 +84,10 @@ public class IcebergHiveCatalog implements IcebergCatalog {
         copiedProperties.put(CatalogProperties.FILE_IO_IMPL, IcebergCachingFileIO.class.getName());
         copiedProperties.put(AwsProperties.CLIENT_FACTORY, IcebergAwsClientFactory.class.getName());
         copiedProperties.put(CatalogProperties.METRICS_REPORTER_IMPL, IcebergMetricsReporter.class.getName());
+        // The property is false by default, in such case, when we execute SHOW TABLES FROM CATALOG.DB,
+        // it will request all Table Objects from Hive Metastore, when there are lots of tables under the
+        // database, timeout may happen.
+        copiedProperties.put(HiveCatalog.LIST_ALL_TABLES, "true");
 
         delegate = (HiveCatalog) CatalogUtil.loadCatalog(HiveCatalog.class.getName(), name, copiedProperties, conf);
     }
