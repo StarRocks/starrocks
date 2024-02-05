@@ -48,6 +48,7 @@ public class IcebergConnector implements Connector {
     @Deprecated
     public static final String ICEBERG_METASTORE_URIS = "iceberg.catalog.hive.metastore.uris";
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
+    public static final String HIVE_METASTORE_TIMEOUT = "hive.metastore.timeout";
     public static final String ICEBERG_CUSTOM_PROPERTIES_PREFIX = "iceberg.catalog.";
     private final Map<String, String> properties;
     private final HdfsEnvironment hdfsEnvironment;

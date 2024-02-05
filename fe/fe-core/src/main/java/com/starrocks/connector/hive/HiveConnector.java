@@ -30,6 +30,7 @@ import java.util.Optional;
 public class HiveConnector implements Connector {
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     public static final String HIVE_METASTORE_TYPE = "hive.metastore.type";
+    public static final String HIVE_METASTORE_TIMEOUT = "hive.metastore.timeout";
     private final Map<String, String> properties;
     private final String catalogName;
     private final HiveConnectorInternalMgr internalMgr;
