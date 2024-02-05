@@ -15,6 +15,7 @@
 package com.starrocks.common.util.concurrent.lock;
 
 import com.google.common.base.Objects;
+import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -99,7 +100,7 @@ public class Locker {
      */
     public void lockDatabase(Database database, LockType lockType) {
         if (Config.use_lock_manager) {
-            assert database != null;
+            Preconditions.checkNotNull(database);
             try {
                 lock(database.getId(), lockType, 0);
             } catch (IllegalLockStateException e) {
@@ -127,7 +128,7 @@ public class Locker {
      */
     public boolean tryLockDatabase(Database database, LockType lockType, long timeout) {
         if (Config.use_lock_manager) {
-            assert database != null;
+            Preconditions.checkNotNull(database);
             try {
                 lock(database.getId(), lockType, timeout);
                 return true;
@@ -138,7 +139,7 @@ public class Locker {
                 return false;
             }
         } else {
-            assert lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE);
+            Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
 
             QueryableReentrantReadWriteLock rwLock = database.getRwLock();
             try {
@@ -189,7 +190,7 @@ public class Locker {
      */
     public void unLockDatabase(Database database, LockType lockType) {
         if (Config.use_lock_manager) {
-            assert database != null;
+            Preconditions.checkNotNull(database);
             release(database.getId(), lockType);
         } else {
             if (lockType.isWriteLock()) {
@@ -241,19 +242,21 @@ public class Locker {
      * Before the new version of LockManager is fully enabled, it is used to be compatible with the original db lock logic.
      */
     public void lockTablesWithIntensiveDbLock(Database database, List<Long> tableList, LockType lockType) {
-        assert lockType == LockType.WRITE || lockType == LockType.READ;
+        Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
+        List<Long> tableListClone = new ArrayList<>(tableList);
+
         if (Config.use_lock_manager) {
-            assert !tableList.isEmpty();
+            Preconditions.checkState(!tableListClone.isEmpty());
 
             try {
                 if (lockType == LockType.WRITE) {
                     this.lock(database.getId(), LockType.INTENTION_EXCLUSIVE, 0);
-                } else if (lockType == LockType.READ) {
+                } else {
                     this.lock(database.getId(), LockType.INTENTION_SHARED, 0);
                 }
 
-                Collections.sort(tableList);
-                for (Long rid : tableList) {
+                Collections.sort(tableListClone);
+                for (Long rid : tableListClone) {
                     this.lock(rid, lockType, 0);
                 }
             } catch (IllegalLockStateException e) {
@@ -266,14 +269,16 @@ public class Locker {
     }
 
     public boolean tryLockTablesWithIntensiveDbLock(Database database, List<Long> tableList, LockType lockType, long timeout) {
-        assert lockType == LockType.WRITE || lockType == LockType.READ;
+        Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
+        List<Long> tableListClone = new ArrayList<>(tableList);
+
         if (Config.use_lock_manager) {
-            assert !tableList.isEmpty();
+            Preconditions.checkState(!tableListClone.isEmpty());
 
             try {
                 if (lockType == LockType.WRITE) {
                     this.lock(database.getId(), LockType.INTENTION_EXCLUSIVE, timeout);
-                } else if (lockType == LockType.READ) {
+                } else {
                     this.lock(database.getId(), LockType.INTENTION_SHARED, timeout);
                 }
             } catch (IllegalLockStateException e) {
@@ -282,8 +287,8 @@ public class Locker {
 
             List<Long> ridLockedList = new ArrayList<>();
             try {
-                Collections.sort(tableList);
-                for (Long rid : tableList) {
+                Collections.sort(tableListClone);
+                for (Long rid : tableListClone) {
                     this.lock(rid, lockType, timeout);
                     ridLockedList.add(rid);
                 }
@@ -292,7 +297,7 @@ public class Locker {
             } catch (IllegalLockStateException e) {
                 if (lockType == LockType.WRITE) {
                     release(database.getId(), LockType.INTENTION_EXCLUSIVE);
-                } else if (lockType == LockType.READ) {
+                } else {
                     release(database.getId(), LockType.INTENTION_SHARED);
                 }
 
@@ -311,14 +316,17 @@ public class Locker {
      * Before the new version of LockManager is fully enabled, it is used to be compatible with the original db lock logic.
      */
     public void unLockTablesWithIntensiveDbLock(Database database, List<Long> tableList, LockType lockType) {
+        Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
+        List<Long> tableListClone = new ArrayList<>(tableList);
+
         if (Config.use_lock_manager) {
             if (lockType == LockType.WRITE) {
                 this.release(database.getId(), LockType.INTENTION_EXCLUSIVE);
-            } else if (lockType == LockType.READ) {
+            } else {
                 this.release(database.getId(), LockType.INTENTION_SHARED);
             }
-            Collections.sort(tableList);
-            for (Long rid : tableList) {
+            Collections.sort(tableListClone);
+            for (Long rid : tableListClone) {
                 this.release(rid, lockType);
             }
         } else {
