@@ -509,7 +509,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### lake_pk_compaction_max_input_rowsets
 
-- 含义：存算分离集群下，是否允许 Compaction 任务在执行时缓存数据到本地磁盘上。
+- 含义：存算分离集群下，主键表 Compaction 任务中允许的最大输入 Rowset 数量。
 - 默认值：5
 - 引入版本：v3.1.8、v3.2.3
 
