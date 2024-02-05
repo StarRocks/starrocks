@@ -3352,6 +3352,8 @@ public class PlanFragmentBuilder {
             analyzer.setDescTbl(context.getDescTbl());
             try {
                 scanNode.init(analyzer);
+                // table function enable flexible column mapping by default.
+                scanNode.setFlexibleColumnMapping(true);
                 scanNode.finalizeStats(analyzer);
             } catch (UserException e) {
                 throw new StarRocksPlannerException(

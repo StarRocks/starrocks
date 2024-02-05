@@ -104,6 +104,7 @@ public class LoadLoadingTask extends LoadTask {
     private final int fileNum;
 
     private final LoadJob.JSONOptions jsonOptions;
+    private Boolean flexibleColumnMapping;
 
     private LoadLoadingTask(Builder builder) {
         super(builder.callback, TaskType.LOADING, builder.priority);
@@ -130,6 +131,7 @@ public class LoadLoadingTask extends LoadTask {
         this.fileStatusList = builder.fileStatusList;
         this.fileNum = builder.fileNum;
         this.jsonOptions = builder.jsonOptions;
+        this.flexibleColumnMapping = builder.flexibleColumnMapping;
     }
 
     public void prepare() throws UserException {
@@ -139,6 +141,7 @@ public class LoadLoadingTask extends LoadTask {
         loadPlanner.setPartialUpdateMode(partialUpdateMode);
         loadPlanner.setMergeConditionStr(mergeConditionStr);
         loadPlanner.setJsonOptions(jsonOptions);
+        loadPlanner.setFlexibleColumnMapping(flexibleColumnMapping);
         loadPlanner.plan();
     }
 
@@ -310,6 +313,8 @@ public class LoadLoadingTask extends LoadTask {
 
         private LoadJob.JSONOptions jsonOptions = new LoadJob.JSONOptions();
 
+        private boolean flexibleColumnMapping;
+
         public Builder setCallback(LoadTaskCallback callback) {
             this.callback = callback;
             return this;
@@ -427,6 +432,11 @@ public class LoadLoadingTask extends LoadTask {
 
         public Builder setJSONOptions(LoadJob.JSONOptions options) {
             this.jsonOptions = options;
+            return this;
+        }
+
+        public Builder setFlexibleColumnMapping(boolean enable) {
+            this.flexibleColumnMapping = enable;
             return this;
         }
 

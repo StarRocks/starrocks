@@ -160,6 +160,7 @@ public class FileScanNode extends LoadScanNode {
     private boolean useVectorizedLoad;
 
     private LoadJob.JSONOptions jsonOptions = new LoadJob.JSONOptions();
+    private boolean flexibleColumnMapping;
 
     private boolean nullExprInAutoIncrement;
     private static class ParamCreateContext {
@@ -265,6 +266,10 @@ public class FileScanNode extends LoadScanNode {
         this.jsonOptions = options;
     }
 
+    public void setFlexibleColumnMapping(boolean enable) {
+        this.flexibleColumnMapping = enable;
+    }
+
     public boolean nullExprInAutoIncrement() {
         return nullExprInAutoIncrement;
     }
@@ -311,6 +316,7 @@ public class FileScanNode extends LoadScanNode {
         params.setEnclose(fileGroup.getEnclose());
         params.setEscape(fileGroup.getEscape());
         params.setJson_file_size_limit(Config.json_file_size_limit);
+        params.setEnable_flexible_column_mapping(flexibleColumnMapping);
         initColumns(context);
         initWhereExpr(fileGroup.getWhereExpr(), analyzer);
     }

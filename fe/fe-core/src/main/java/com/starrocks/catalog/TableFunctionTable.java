@@ -250,7 +250,6 @@ public class TableFunctionTable extends Table {
         params.setSrc_slot_ids(new ArrayList<>());
         params.setProperties(properties);
         params.setSchema_sample_file_count(autoDetectSampleFiles);
-        params.setEnable_flexible_column_mapping(true);
 
         try {
             THdfsProperties hdfsProperties = new THdfsProperties();
