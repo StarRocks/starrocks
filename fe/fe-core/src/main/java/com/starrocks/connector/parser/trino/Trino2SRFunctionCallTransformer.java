@@ -88,7 +88,7 @@ public class Trino2SRFunctionCallTransformer {
         // 1.approx_distinct
         registerFunctionTransformer("approx_distinct", 1,
                 "approx_count_distinct", ImmutableList.of(Expr.class));
-        
+
         // 2. arbitrary
         registerFunctionTransformer("arbitrary", 1,
                 "any_value", ImmutableList.of(Expr.class));
@@ -220,6 +220,9 @@ public class Trino2SRFunctionCallTransformer {
         registerFunctionTransformer("replace", 2, new FunctionCallExpr("replace",
                 ImmutableList.of(new PlaceholderExpr(1, Expr.class), new PlaceholderExpr(2, Expr.class),
                         new StringLiteral(""))));
+
+        registerFunctionTransformer("index", 2, new FunctionCallExpr("instr",
+                ImmutableList.of(new PlaceholderExpr(1, Expr.class), new PlaceholderExpr(2, Expr.class))));
     }
 
     private static void registerRegexpFunctionTransformer() {
@@ -300,7 +303,7 @@ public class Trino2SRFunctionCallTransformer {
     }
 
     private static void registerFunctionTransformerWithVarArgs(String trinoFnName, String starRocksFnName,
-                                                    List<Class<? extends Expr>> starRocksArgumentsClass) {
+                                                               List<Class<? extends Expr>> starRocksArgumentsClass) {
         Preconditions.checkState(starRocksArgumentsClass.size() == 1);
         FunctionCallExpr starRocksFunctionCall = buildStarRocksFunctionCall(starRocksFnName, starRocksArgumentsClass);
         registerFunctionTransformerWithVarArgs(trinoFnName, starRocksFunctionCall);
