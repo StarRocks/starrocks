@@ -403,6 +403,7 @@ set(EXEC_FILES
         ./util/timezone_utils_test.cpp
         ./util/concurrent_limiter_test.cpp
         ./util/stack_trace_mutex_test.cpp
+        ./util/download_util_test.cpp
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
