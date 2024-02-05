@@ -1,0 +1,25 @@
+-- name: test_math_cbrt
+select cbrt(27);
+-- result:
+3.0000000000000004
+-- !result
+select cbrt(0.0);
+-- result:
+0.0
+-- !result
+select cbrt(-27);
+-- result:
+-3.0000000000000004
+-- !result
+select cbrt(3.1415);
+-- result:
+1.464577489235049
+-- !result
+select cbrt(-3.1415);
+-- result:
+-1.464577489235049
+-- !result
+select cbrt(null);
+-- result:
+None
+-- !result

@@ -900,6 +900,29 @@ SELECT (k1 * k2 + v1) * v2 + v3 * v4 - v5 as result FROM jit_basic ORDER BY resu
 9223361033148563457
 9223372036854775807
 -- !result
+SELECT (k1 * k2 + v1) * v2 + v3 * v4 - v5 + null, K1 +v1+null, K1/null as result FROM jit_basic ORDER BY result;
+-- result:
+None	None	None
+None	None	None
+None	None	None
+None	None	None
+None	None	None
+None	None	None
+None	None	None
+None	None	None
+None	None	None
+None	None	None
+None	None	None
+None	None	None
+None	None	None
+None	None	None
+None	None	None
+None	None	None
+None	None	None
+None	None	None
+None	None	None
+None	None	None
+-- !result
 select bitnot(cast(power(-2,127) as largeint)+1);
 -- result:
 170141183460469231731687303715884105726

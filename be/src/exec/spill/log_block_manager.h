@@ -45,7 +45,7 @@ using LogBlockContainerPtr = std::shared_ptr<LogBlockContainer>;
 // so theoretically, the number of containers being written at the same time will be equivalent to the number of io threads
 class LogBlockManager : public BlockManager {
 public:
-    LogBlockManager(TUniqueId query_id);
+    LogBlockManager(TUniqueId query_id, DirManager* dir_mgr);
     ~LogBlockManager() override;
 
     Status open() override;
@@ -59,8 +59,9 @@ public:
 #endif
 
 private:
-    StatusOr<LogBlockContainerPtr> get_or_create_container(Dir* dir, int32_t plan_node_id,
-                                                           const std::string& plan_node_name, bool direct_io);
+    StatusOr<LogBlockContainerPtr> get_or_create_container(DirPtr dir, TUniqueId fragment_instance_id,
+                                                           int32_t plan_node_id, const std::string& plan_node_name,
+                                                           bool direct_io);
 
 private:
     typedef std::unordered_map<uint64_t, LogBlockContainerPtr> ContainerMap;
@@ -80,9 +81,7 @@ private:
     std::unordered_map<Dir*, std::shared_ptr<PlanNodeContainerMap>> _available_containers;
 
     std::vector<LogBlockContainerPtr> _full_containers;
-#ifdef BE_TEST
     DirManager* _dir_mgr = nullptr;
-#endif
     const static int64_t kDefaultMaxContainerBytes = 10L * 1024 * 1024 * 1024; // 10GB
 };
 } // namespace starrocks::spill

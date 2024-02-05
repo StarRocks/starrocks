@@ -332,6 +332,7 @@ public class DatabaseTransactionMgr {
 
                 // update transaction state version
                 transactionState.setTransactionStatus(TransactionStatus.PREPARED);
+                transactionState.setPreparedTime(System.currentTimeMillis());
 
                 for (TransactionStateListener listener : stateListeners) {
                     listener.preWriteCommitLog(transactionState);

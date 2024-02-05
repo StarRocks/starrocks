@@ -245,7 +245,7 @@ TEST_F(FlatJsonColumnRWTest, tesArrayFlatJson) {
     ColumnPtr write_col = JsonColumn::create();
     auto* json_col = down_cast<JsonColumn*>(write_col.get());
 
-    ASSIGN_OR_ABORT(auto jv1, JsonValue::parse(R"( [{"a": 1}, {"b": 21} ] )"));
+    ASSIGN_OR_ABORT(auto jv1, JsonValue::parse(R"( [{"a": 1}, {"b": 21}] )"));
     ASSIGN_OR_ABORT(auto jv2, JsonValue::parse("{\"a\": 2, \"b\": 22}"));
     ASSIGN_OR_ABORT(auto jv3, JsonValue::parse("{\"a\": 3, \"b\": 23}"));
     ASSIGN_OR_ABORT(auto jv4, JsonValue::parse("{\"a\": 4, \"b\": 24}"));
@@ -270,7 +270,42 @@ TEST_F(FlatJsonColumnRWTest, tesArrayFlatJson) {
     EXPECT_TRUE(read_json->is_flat_json());
     EXPECT_EQ(5, read_json->size());
     ASSERT_EQ(2, read_json->get_flat_fields().size());
-    EXPECT_EQ("{a: NULL, b: NULL}", read_json->debug_item(0));
+    EXPECT_EQ("{a: , b: }", read_json->debug_item(0));
+    EXPECT_EQ("{a: 4, b: 24}", read_json->debug_item(3));
+}
+
+TEST_F(FlatJsonColumnRWTest, testEmptyObject) {
+    config::json_flat_internal_column_min_limit = 5;
+
+    ColumnPtr write_col = JsonColumn::create();
+    auto* json_col = down_cast<JsonColumn*>(write_col.get());
+
+    ASSIGN_OR_ABORT(auto jv1, JsonValue::parse(R"( "" )"));
+    ASSIGN_OR_ABORT(auto jv2, JsonValue::parse("{\"a\": 2, \"b\": 22}"));
+    ASSIGN_OR_ABORT(auto jv3, JsonValue::parse("{\"a\": 3, \"b\": 23}"));
+    ASSIGN_OR_ABORT(auto jv4, JsonValue::parse("{\"a\": 4, \"b\": 24}"));
+    ASSIGN_OR_ABORT(auto jv5, JsonValue::parse("{\"a\": 5, \"b\": 25}"));
+
+    json_col->append(&jv1);
+    json_col->append(&jv2);
+    json_col->append(&jv3);
+    json_col->append(&jv4);
+    json_col->append(&jv5);
+
+    ASSIGN_OR_ABORT(auto root_path, ColumnAccessPath::create(TAccessPathType::FIELD, "root", 0));
+    ASSIGN_OR_ABORT(auto f1_path, ColumnAccessPath::create(TAccessPathType::FIELD, "a", 0));
+    ASSIGN_OR_ABORT(auto f2_path, ColumnAccessPath::create(TAccessPathType::FIELD, "b", 0));
+    root_path->children().emplace_back(std::move(f1_path));
+    root_path->children().emplace_back(std::move(f2_path));
+
+    ColumnPtr read_col = JsonColumn::create();
+    test_json("/test_flat_json_rw4.data", write_col, read_col, root_path.get());
+
+    auto* read_json = down_cast<JsonColumn*>(read_col.get());
+    EXPECT_TRUE(read_json->is_flat_json());
+    EXPECT_EQ(5, read_json->size());
+    ASSERT_EQ(2, read_json->get_flat_fields().size());
+    EXPECT_EQ("{a: , b: }", read_json->debug_item(0));
     EXPECT_EQ("{a: 4, b: 24}", read_json->debug_item(3));
 }
 

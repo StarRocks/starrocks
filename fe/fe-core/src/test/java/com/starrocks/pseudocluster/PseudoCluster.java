@@ -35,6 +35,8 @@ import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
@@ -294,7 +296,8 @@ public class PseudoCluster {
         if (db == null) {
             return null;
         }
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             Table table = db.getTable(tableName);
             if (table == null) {
@@ -312,7 +315,7 @@ public class PseudoCluster {
             }
             return ret;
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
     }
 

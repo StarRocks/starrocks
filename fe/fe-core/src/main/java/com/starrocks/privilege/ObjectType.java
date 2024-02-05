@@ -66,6 +66,7 @@ public class ObjectType {
     public static final ObjectType GLOBAL_FUNCTION = new ObjectType(11);
     public static final ObjectType STORAGE_VOLUME = new ObjectType(12);
     public static final ObjectType PIPE = new ObjectType(13);
+    public static final ObjectType COLUMN = new ObjectType(14);
 
     public static final Set<ObjectType> VALID_OBJECT_TYPE = new ImmutableSet.Builder<ObjectType>().add(
             TABLE,
@@ -80,7 +81,8 @@ public class ObjectType {
             RESOURCE_GROUP,
             GLOBAL_FUNCTION,
             STORAGE_VOLUME,
-            PIPE
+            PIPE,
+            COLUMN
     ).build();
 
     public static final Map<Integer, Pair<String, String>> OBJECT_TO_NAME =
@@ -98,6 +100,7 @@ public class ObjectType {
                     .put(11, new Pair<>("GLOBAL FUNCTION", "GLOBAL FUNCTIONS"))
                     .put(12, new Pair<>("STORAGE VOLUME", "STORAGE VOLUMES"))
                     .put(13, new Pair<>("PIPE", "PIPES"))
+                    .put(14, new Pair<>("COLUMN", "COLUMNS"))
                     .build();
 
     public static final Map<String, ObjectType> NAME_TO_OBJECT = VALID_OBJECT_TYPE.stream().collect(Collectors.toMap(

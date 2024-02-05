@@ -20,6 +20,7 @@
 #include "exec/sort_exec_exprs.h"
 #include "exec/sorting/sorting.h"
 #include "exec/spill/block_manager.h"
+#include "exec/workgroup/work_group_fwd.h"
 
 namespace starrocks::spill {
 struct SpilledChunkBuildSchema {
@@ -94,6 +95,7 @@ struct SpilledOptions {
     int encode_level = 0;
 
     BlockManager* block_manager = nullptr;
+    workgroup::WorkGroupPtr wg;
 };
 
 // spill strategy

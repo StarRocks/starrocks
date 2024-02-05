@@ -261,10 +261,9 @@ Status UserFunctionCache::_load_cache_entry(const std::string& url, UserFunction
 Status UserFunctionCache::_download_lib(const std::string& url, UserFunctionCacheEntryPtr& entry) {
     DCHECK(!entry->is_downloaded);
 
-    std::string tmp_file = entry->lib_file + ".tmp";
     std::string target_file = entry->lib_file;
     std::string expected_checksum = entry->checksum;
-    RETURN_IF_ERROR(DownloadUtil::download(url, tmp_file, target_file, expected_checksum));
+    RETURN_IF_ERROR(DownloadUtil::download(url, target_file, expected_checksum));
 
     entry->function_type = get_function_type(url);
 

@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
@@ -143,6 +144,13 @@ public class Authorizer {
         getInstance().getAccessControlOrDefault(catalog).checkAnyActionOnTable(currentUser, roleIds, tableName);
     }
 
+    public static void checkColumnsAction(UserIdentity currentUser, Set<Long> roleIds,
+                                          TableName tableName, Set<String> columns,
+                                          PrivilegeType privilegeType) throws AccessDeniedException {
+        getInstance().getAccessControlOrDefault(tableName.getCatalog()).checkColumnsAction(currentUser, roleIds,
+                tableName, columns, privilegeType);
+    }
+
     public static void checkViewAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
                                        PrivilegeType privilegeType) throws AccessDeniedException {
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
@@ -176,12 +184,12 @@ public class Authorizer {
     }
 
     public static void checkAnyActionOnTableLikeObject(UserIdentity currentUser, Set<Long> roleIds, String dbName,
-                                                       Table tbl) throws AccessDeniedException {
-        doCheckTableLikeObject(currentUser, roleIds, dbName, tbl, null);
+                                                       BasicTable tableBasicInfo) throws AccessDeniedException {
+        doCheckTableLikeObject(currentUser, roleIds, dbName, tableBasicInfo, null);
     }
 
     private static void doCheckTableLikeObject(UserIdentity currentUser, Set<Long> roleIds, String dbName,
-                                               Table tbl, PrivilegeType privilegeType) throws AccessDeniedException {
+                                               BasicTable tbl, PrivilegeType privilegeType) throws AccessDeniedException {
         Table.TableType type = tbl.getType();
         switch (type) {
             case OLAP:
