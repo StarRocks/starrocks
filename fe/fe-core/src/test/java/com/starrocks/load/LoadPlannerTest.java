@@ -1134,5 +1134,14 @@ public class LoadPlannerTest {
             planner.plan();
             planner.completeTableSink(100);
         }
+        {
+            // set flexible column mapping
+            LoadPlanner planner = new LoadPlanner(jobId, loadId, txnId, db.getId(), table, strictMode,
+                    timezone, timeoutS, startTime, partialUpdate, ctx, sessionVariables, loadMemLimit, execMemLimit,
+                    brokerDesc, fileGroups, fileStatusesList, 1);
+            planner.setFlexibleColumnMapping(true);
+            planner.plan();
+            Assert.assertTrue(Deencapsulation.getField(planner.getScanNodes().get(0), "flexibleColumnMapping"));
+        }
     }
 }
