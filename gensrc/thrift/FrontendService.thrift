@@ -778,6 +778,8 @@ struct TMasterOpRequest {
     31: optional bool isLastStmt
     32: optional string modified_variables_sql
     33: optional Types.TUserRoles user_roles
+    34: optional i32 forward_times
+
     101: optional i64 warehouse_id    // begin from 101, in case of conflict with other's change 
 }
 
