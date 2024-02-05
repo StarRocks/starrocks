@@ -295,8 +295,8 @@ public class TransactionLoadAction extends RestBaseAction {
                 if (op.equalsIgnoreCase(TXN_BEGIN)) {
                     if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
                         for (long nodeId : warehouse.getAnyAvailableCluster().getAvailableComputeNodeIds()) {
-                            ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
-                                    .getBackendOrComputeNode(nodeId);
+                            ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr()
+                                    .getClusterInfo().getBackendOrComputeNode(nodeId);
                             if (node != null && node.isAvailable()) {
                                 nodeIds.add(nodeId);
                             }
@@ -307,7 +307,7 @@ public class TransactionLoadAction extends RestBaseAction {
                         Collections.shuffle(nodeIds);
                     } else {
                         nodeIds = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
-                                .seqChooseBackendIds(1, true, false);
+                                .getNodeSelector().seqChooseBackendIds(1, true, false, null);
                         if (CollectionUtils.isEmpty(nodeIds)) {
                             throw new UserException("No backend alive.");
                         }
@@ -316,7 +316,7 @@ public class TransactionLoadAction extends RestBaseAction {
                     nodeID = nodeIds.get(0);
                     // txnNodeMap is LRU cache, it automic remove unused entry
                     txnNodeMap.put(label, nodeID);
-                } else if (channelIdStr == null) {
+                } else {
                     nodeID = txnNodeMap.get(label);
                 }
             }

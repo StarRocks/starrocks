@@ -190,7 +190,7 @@ public class RestoreJobTest {
         beIds.add(CatalogMocker.BACKEND3_ID);
         new Expectations() {
             {
-                systemInfoService.seqChooseBackendIds(anyInt, anyBoolean, anyBoolean);
+                systemInfoService.getNodeSelector().seqChooseBackendIds(anyInt, anyBoolean, anyBoolean, null);
                 minTimes = 0;
                 result = beIds;
 
@@ -360,7 +360,7 @@ public class RestoreJobTest {
         beIds.add(CatalogMocker.BACKEND3_ID);
         new Expectations() {
             {
-                systemInfoService.seqChooseBackendIds(anyInt, anyBoolean, anyBoolean);
+                systemInfoService.getNodeSelector().seqChooseBackendIds(anyInt, anyBoolean, anyBoolean, null);
                 minTimes = 0;
                 result = beIds;
 

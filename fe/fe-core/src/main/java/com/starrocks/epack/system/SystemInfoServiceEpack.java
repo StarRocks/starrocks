@@ -218,7 +218,7 @@ public class SystemInfoServiceEpack extends SystemInfoService {
 
         if (needCheckUnforce) {
             try {
-                checkUnforce(droppedBackend);
+                checkWhenNotForceDrop(droppedBackend);
             } catch (RuntimeException e) {
                 throw new DdlException(e.getMessage());
             }

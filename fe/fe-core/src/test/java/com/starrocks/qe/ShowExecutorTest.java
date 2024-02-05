@@ -791,14 +791,15 @@ public class ShowExecutorTest {
         Assert.assertEquals("MemUsedPct", resultSet.getMetaData().getColumn(24).getName());
         Assert.assertEquals("CpuUsedPct", resultSet.getMetaData().getColumn(25).getName());
         Assert.assertEquals("DataCacheMetrics", resultSet.getMetaData().getColumn(26).getName());
-        Assert.assertEquals("StarletPort", resultSet.getMetaData().getColumn(27).getName());
-        Assert.assertEquals("WorkerId", resultSet.getMetaData().getColumn(28).getName());
+        Assert.assertEquals("StarletPort", resultSet.getMetaData().getColumn(28).getName());
+        Assert.assertEquals("WorkerId", resultSet.getMetaData().getColumn(29).getName());
 
         Assert.assertTrue(resultSet.next());
+        System.out.println(resultSet);
         Assert.assertEquals("1", resultSet.getString(0));
         Assert.assertEquals("0", resultSet.getString(23));
         Assert.assertEquals("N/A", resultSet.getString(26));
-        Assert.assertEquals("5", resultSet.getString(28));
+        Assert.assertEquals("5", resultSet.getString(29));
     }
 
     @Test

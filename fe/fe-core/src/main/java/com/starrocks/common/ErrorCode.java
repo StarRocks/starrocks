@@ -325,6 +325,12 @@ public enum ErrorCode {
      */
     ERR_LOCK_ERROR(5300, new byte[] {'5', '5', 'P', '0', '3'}, "Attempt to acquire lock fail : %s"),
 
+    /**
+     * 5400 - 5499: DDL operation failure
+     */
+    ERR_LOC_AWARE_UNSUPPORTED_FOR_COLOCATE_TBL(5400, new byte[] {'4', '2', '0', '0', '0'},
+            "table '%s' has location property and cannot be colocated"),
+
     // warehouse
     ERR_UNKNOWN_WAREHOUSE(10001, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse '%s' not exist."),
     ERR_WAREHOUSE_EXISTS(10002, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse '%s' already exists."),
