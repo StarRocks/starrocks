@@ -194,10 +194,9 @@ public class EditLog {
                 }
                 case OperationType.OP_ALTER_DB:
                 case OperationType.OP_ALTER_DB_V2: {
+
                     DatabaseInfo dbInfo = (DatabaseInfo) journal.getData();
-                    String dbName = dbInfo.getDbName();
-                    LOG.info("Begin to unprotect alter db info {}", dbName);
-                    globalStateMgr.getLocalMetastore().replayAlterDatabaseQuota(dbName, dbInfo.getQuota(), dbInfo.getQuotaType());
+                    globalStateMgr.getLocalMetastore().replayAlterDatabaseQuota(dbInfo);
                     break;
                 }
                 case OperationType.OP_ERASE_DB: {

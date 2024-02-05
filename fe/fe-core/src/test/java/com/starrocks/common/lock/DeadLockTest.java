@@ -35,12 +35,12 @@ public class DeadLockTest {
     public void setUp() {
         GlobalStateMgr.getCurrentState().setLockManager(new LockManager());
         Config.lock_manager_dead_lock_detection_delay_time_ms = 0;
-        Config.lock_manager_enable_unlock_deadlock = true;
+        Config.lock_manager_enable_resolve_deadlock = true;
     }
 
     @After
     public void tearDown() {
-        Config.lock_manager_enable_unlock_deadlock = false;
+        Config.lock_manager_enable_resolve_deadlock = false;
     }
 
     @Test

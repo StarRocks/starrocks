@@ -347,7 +347,7 @@ public class LockManager {
     private Locker checkAndHandleDeadLock(Long rid, Locker locker, LockType lockType) throws DeadlockException {
         DeadLockChecker deadLockChecker = new DeadLockChecker(locker, rid, lockType);
         if (deadLockChecker.hasCycle()) {
-            if (Config.lock_manager_enable_unlock_deadlock) {
+            if (Config.lock_manager_enable_resolve_deadlock) {
                 Locker victim = deadLockChecker.chooseTargetedLocker();
                 if (victim != locker) {
                     return victim;

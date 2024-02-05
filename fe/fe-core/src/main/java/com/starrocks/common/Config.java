@@ -2819,13 +2819,13 @@ public class Config extends ConfigBase {
      * If turned on, LockManager will try to relieve the deadlock by killing the victim.
      */
     @ConfField(mutable = true)
-    public static boolean lock_manager_enable_unlock_deadlock = false;
+    public static boolean lock_manager_enable_resolve_deadlock = false;
 
     /**
      * Whether to use table level lock
      */
     @ConfField
-    public static boolean lock_manager_loading_using_fine_granularity_lock_enabled = false;
+    public static boolean lock_manager_enable_loading_using_fine_granularity_lock = false;
 
     /**
      * when a lock cannot be obtained, we cannot determine whether it is because the required
