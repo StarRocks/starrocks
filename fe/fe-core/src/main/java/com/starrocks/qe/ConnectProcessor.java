@@ -652,6 +652,10 @@ public class ConnectProcessor {
             ctx.setQueryId(UUIDUtil.fromTUniqueid(request.getQueryId()));
         }
 
+        if (request.isSetForward_times()) {
+            ctx.setForwardTimes(request.getForward_times());
+        }
+
         ctx.setThreadLocalInfo();
 
         if (ctx.getCurrentUserIdentity() == null) {
@@ -687,6 +691,12 @@ public class ConnectProcessor {
             LOG.warn("Process one query failed because unknown reason: ", e);
             ctx.getState().setError("Unexpected exception: " + e.getMessage());
         }
+
+        // If stmt is also forwarded during execution, just return the forward result.
+        if (executor != null && executor.getIsForwardToLeaderOrInit(false)) {
+            return executor.getLeaderOpExecutor().getResult();
+        }
+
         // no matter the master execute success or fail, the master must transfer the result to follower
         // and tell the follower the current jounalID.
         TMasterOpResult result = new TMasterOpResult();
