@@ -141,11 +141,11 @@ void FlatJsonColumnWriter::_flat_column(std::vector<ColumnPtr>& json_datas) {
             JsonValue* json = viewer.value(i);
             auto vslice = json->to_vslice();
 
-            if (vslice.isNone() || vslice.isNull()) {
+            if (vslice.isNull()) {
                 continue;
             }
 
-            if (!vslice.isObject()) {
+            if (vslice.isNone() || !vslice.isObject() || vslice.isEmptyObject()) {
                 VLOG(8) << "flat json, row isn't object, can't be flatten";
                 return;
             }

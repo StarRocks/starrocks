@@ -41,6 +41,9 @@ insert into js1 values(6,1, parse_json(null));
 insert into js1 values(6,1, parse_json(TRUE));
 -- result:
 -- !result
+insert into js1 values(7,1, parse_json('{"k1": null, "k2": 2}'));
+-- result:
+-- !result
 select get_json_string(j1, "$.key2"), get_json_double(j1, "$.key3"), get_json_string(j1, "$.key4") from js1 order by v1 limit 2;
 -- result:
 None	None	None
@@ -48,15 +51,19 @@ None	None	None
 -- !result
 select JSON_EXISTS(j1, "$.key2"), JSON_EXISTS(j1, "$.key2.key3") from js1 order by v1 limit 2;
 -- result:
-None	None
-None	None
+0	0
+0	0
 -- !result
 select JSON_LENGTH(j1, "$.key2"), JSON_LENGTH(j1, "$.key3"), JSON_LENGTH(j1, "$.key4") from js1 order by v1 limit 2;
 -- result:
-None	None	None
-None	None	None
+0	0	0
+0	0	0
 -- !result
-select json_object('"1"')->"1";
+select json_object('"1"')->"1", json_object('"1"')->"1" is null;
 -- result:
-null
+null	0
+-- !result
+select json_object(j1)->"k3", json_object(j1)->"k1", json_object(j1)->"k2.k3" from js1 where v1 = 7;
+-- result:
+None	None	None
 -- !result
