@@ -57,6 +57,27 @@ import static org.junit.Assert.fail;
 class ParserTest {
 
     @Test
+    void testParseComment() {
+        List<String> sqls = Lists.newArrayList();
+        sqls.add("select 1 # comments\n from tbl");
+        sqls.add("select 1 #comments\n from tbl");
+        sqls.add("select 1 from tbl #comments");
+        sqls.add("select 1 from tbl # comments");
+        sqls.add("# comments\nselect 1 from tbl ");
+        sqls.add("#comments\nselect 1 from tbl ");
+        sqls.add("select 1 from tbl\n#comments");
+        sqls.add("select 1 from tbl\n# comments");
+        SessionVariable sessionVariable = new SessionVariable();
+        sqls.forEach(sql -> {
+            try {
+                SqlParser.parse(sql, sessionVariable).get(0);
+            } catch (Exception e) {
+                fail("sql should success. errMsg: " + e.getMessage());
+            }
+        });
+    }
+
+    @Test
     void tokensExceedLimitTest() {
         String sql = "select 1";
         SessionVariable sessionVariable = new SessionVariable();

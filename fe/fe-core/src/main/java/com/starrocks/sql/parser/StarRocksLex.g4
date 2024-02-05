@@ -562,7 +562,7 @@ fragment LETTER
     ;
 
 SIMPLE_COMMENT
-    : '--' ~[\r\n]* '\r'? '\n'? -> channel(HIDDEN)
+    : ('--' | '#') ~[\r\n]* '\r'? '\n'? -> channel(HIDDEN)
     ;
 
 BRACKETED_COMMENT
