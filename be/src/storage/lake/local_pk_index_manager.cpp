@@ -63,7 +63,7 @@ void LocalPkIndexManager::gc(UpdateManager* update_manager, DataDir* data_dir, s
         auto tablet_pk_path = pk_path + "/" + tablet_id;
         int64_t id = 0;
         try {
-            std::stoll(tablet_id);
+            id = std::stoll(tablet_id);
         } catch (std::invalid_argument const& ex) {
             LOG(ERROR) << "Invalid tablet: " << tablet_id;
             continue;
