@@ -230,7 +230,7 @@ public class OptimizerTest {
                         "PROPERTIES('replication_num' = '1');")
                 .withMaterializedView("create materialized view mv_3\n" +
                         "distributed by hash(k2) buckets 3\n" +
-                        "refresh async\n" +
+                        "refresh manual\n" +
                         "as select k2, sum(v1) as total from tbl_with_mv group by k2;")
                 .withMaterializedView("create materialized view mv_4\n" +
                         "PARTITION BY k1\n" +
