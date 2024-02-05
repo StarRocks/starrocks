@@ -221,8 +221,7 @@ public class PlanFragmentBuilder {
 
     private static boolean enableComputeNode(ExecPlan execPlan) {
         boolean preferComputeNode = execPlan.getConnectContext().getSessionVariable().isPreferComputeNode();
-        int computeNode = execPlan.getConnectContext().getSessionVariable().getUseComputeNodes();
-        if (preferComputeNode || computeNode <= 0) {
+        if (preferComputeNode) {
             return true;
         }
         return false;
