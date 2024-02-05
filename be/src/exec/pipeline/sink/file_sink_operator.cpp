@@ -16,7 +16,6 @@
 
 #include <utility>
 
-#include "column/chunk.h"
 #include "exec/pipeline/sink/sink_io_buffer.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/scan_task_queue.h"
@@ -45,7 +44,7 @@ public:
     void close(RuntimeState* state) override;
 
 private:
-    void _process_chunk(bthread::TaskIterator<ChunkPtr>& iter) override;
+    void _add_chunk(const ChunkPtr& chunk) override;
 
     std::vector<ExprContext*> _output_expr_ctxs;
 
@@ -116,25 +115,7 @@ void FileSinkIOBuffer::close(RuntimeState* state) {
     SinkIOBuffer::close(state);
 }
 
-void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
-    DeferOp op([&]() {
-        auto nc = _num_pending_chunks.fetch_sub(1);
-        DCHECK_GE(nc, 1L);
-    });
-
-    // close is already done, just skip
-    if (_is_finished) {
-        return;
-    }
-
-    // cancelling has happened but close is not invoked
-    if (_is_cancelled && !_is_finished) {
-        if (_num_pending_chunks == 1) {
-            close(_state);
-        }
-        return;
-    }
-
+void FileSinkIOBuffer::_add_chunk(const ChunkPtr& chunk) {
     if (!_is_writer_opened) {
         if (Status status = _writer->open(_state); !status.ok()) {
             status = status.clone_and_prepend("open file writer failed, error");
@@ -146,14 +127,6 @@ void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
         _is_writer_opened = true;
     }
 
-    const auto& chunk = *iter;
-    if (chunk == nullptr) {
-        // this is the last chunk
-        auto nc = _num_pending_chunks.load();
-        DCHECK_LE(nc, 1L);
-        close(_state);
-        return;
-    }
 
     if (Status status = _writer->append_chunk(chunk.get()); !status.ok()) {
         status = status.clone_and_prepend("add chunk to file writer failed, error");

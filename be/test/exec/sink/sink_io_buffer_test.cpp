@@ -63,33 +63,7 @@ public:
         return Status::OK();
     }
 
-    void _process_chunk(bthread::TaskIterator<ChunkPtr>& iter) override {
-        DeferOp op([&]() {
-            --_num_pending_chunks;
-            DCHECK(_num_pending_chunks >= 0);
-        });
-
-        // close is already done, just skip
-        if (_is_finished) {
-            return;
-        }
-
-        // cancelling has happened but close is not invoked
-        if (_is_cancelled && !_is_finished) {
-            if (_num_pending_chunks == 1) {
-                close(_state);
-            }
-            return;
-        }
-
-        const auto& chunk = *iter;
-        if (chunk == nullptr) {
-            // this is the last chunk
-            EXPECT_EQ(_num_pending_chunks, 1);
-            close(_state);
-            return;
-        }
-
+    void _add_chunk(const ChunkPtr& chunk) override {
         // handle this chunk
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
