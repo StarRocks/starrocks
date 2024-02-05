@@ -108,12 +108,6 @@ public class SystemInfoServiceTest {
                 editLog.logBackendStateChange((Backend) any);
                 minTimes = 0;
 
-                db.readLock();
-                minTimes = 0;
-
-                db.readUnlock();
-                minTimes = 0;
-
                 globalStateMgr.getNextId();
                 minTimes = 0;
                 result = backendId;

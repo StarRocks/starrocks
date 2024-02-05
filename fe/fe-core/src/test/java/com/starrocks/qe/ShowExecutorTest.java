@@ -300,12 +300,6 @@ public class ShowExecutorTest {
         Database db = new Database();
         new Expectations(db) {
             {
-                db.readLock();
-                minTimes = 0;
-
-                db.readUnlock();
-                minTimes = 0;
-
                 db.getTable("testMv");
                 minTimes = 0;
                 result = mv;
