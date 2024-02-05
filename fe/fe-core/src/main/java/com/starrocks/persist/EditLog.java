@@ -115,7 +115,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
 
 /**
  * EditLog maintains a log of the memory modifications.
@@ -1070,21 +1069,27 @@ public class EditLog {
      * submit log to queue, wait for JournalWriter
      */
     protected void logEdit(short op, Writable writable) {
-        long start = System.nanoTime();
-        Future<Boolean> task = submitLog(op, writable, -1);
-        waitInfinity(start, task);
+        JournalTask task = submitLog(op, writable, -1);
+        waitInfinity(task);
     }
 
     /**
      * submit log in queue and return immediately
      */
-    private Future<Boolean> submitLog(short op, Writable writable, long maxWaitIntervalMs) {
+    private JournalTask submitLog(short op, Writable writable, long maxWaitIntervalMs) {
+        long startTimeNano = System.nanoTime();
         // do not check whether global state mgr is leader in non shared-nothing mode,
         // because starmgr state change happens before global state mgr state change,
         // it will write log before global state mgr becomes leader
         Preconditions.checkState(RunMode.getCurrentRunMode() != RunMode.SHARED_NOTHING ||
+<<<<<<< HEAD
                                  GlobalStateMgr.getCurrentState().isLeader(),
                 "Current node is not leader, submit log is not allowed");
+=======
+                        GlobalStateMgr.getCurrentState().isLeader(),
+                "Current node is not leader, but " +
+                        GlobalStateMgr.getCurrentState().getFeType() + ", submit log is not allowed");
+>>>>>>> 3d2a0a51e6 ([Enhancement] Optimize the lock contention of consistency checker (#40710))
         DataOutputBuffer buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
 
         // 1. serialized
@@ -1097,7 +1102,7 @@ public class EditLog {
             // The old implementation swallow exception like this
             LOG.info("failed to serialize, ", e);
         }
-        JournalTask task = new JournalTask(buffer, maxWaitIntervalMs);
+        JournalTask task = new JournalTask(startTimeNano, buffer, maxWaitIntervalMs);
 
         /*
          * for historical reasons, logEdit is not allowed to raise Exception, which is really unreasonable to me.
@@ -1125,7 +1130,8 @@ public class EditLog {
     /**
      * wait for JournalWriter commit all logs
      */
-    public static void waitInfinity(long startTime, Future<Boolean> task) {
+    public static void waitInfinity(JournalTask task) {
+        long startTimeNano = task.getStartTimeNano();
         boolean result;
         int cnt = 0;
         while (true) {
@@ -1147,7 +1153,7 @@ public class EditLog {
         // for now if journal writer fails, it will exit directly, so this property should always be true.
         assert (result);
         if (MetricRepo.hasInit) {
-            MetricRepo.HISTO_EDIT_LOG_WRITE_LATENCY.update((System.nanoTime() - startTime) / 1000000);
+            MetricRepo.HISTO_EDIT_LOG_WRITE_LATENCY.update((System.nanoTime() - startTimeNano) / 1000000);
         }
     }
 
@@ -1277,6 +1283,10 @@ public class EditLog {
 
     public void logFinishConsistencyCheck(ConsistencyCheckInfo info) {
         logEdit(OperationType.OP_FINISH_CONSISTENCY_CHECK, info);
+    }
+
+    public JournalTask logFinishConsistencyCheckNoWait(ConsistencyCheckInfo info) {
+        return submitLog(OperationType.OP_FINISH_CONSISTENCY_CHECK, info, -1);
     }
 
     public void logAddComputeNode(ComputeNode computeNode) {
@@ -1556,7 +1566,7 @@ public class EditLog {
         logEdit(OperationType.OP_ALTER_JOB_V2, alterJob);
     }
 
-    public Future<Boolean> logAlterJobNoWait(AlterJobV2 alterJob) {
+    public JournalTask logAlterJobNoWait(AlterJobV2 alterJob) {
         return submitLog(OperationType.OP_ALTER_JOB_V2, alterJob, -1);
     }
 
