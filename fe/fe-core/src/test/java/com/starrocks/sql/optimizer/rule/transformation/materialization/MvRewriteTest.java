@@ -135,7 +135,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 "(1, 1, 'b', 'c', '3', 1);");
         connectContext.executeSql("drop materialized view if exists mv11");
         starRocksAssert.withMaterializedView("create MATERIALIZED VIEW mv11 (region, ct) " +
-                "DISTRIBUTED BY RANDOM buckets 1 REFRESH MANUAL as\n" +
+                "DISTRIBUTED BY HASH(`region`) buckets 1 REFRESH MANUAL as\n" +
                 "select region,\n" +
                 "count(\n" +
                 "distinct (\n" +
