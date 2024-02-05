@@ -337,15 +337,15 @@ class PushDownAggregateBeforeMVCollector extends OptExpressionVisitor<Void, Aggr
         Preconditions.checkState(childOutput.containsAll(allGroupByColumns));
         Preconditions.checkState(childOutput.containsAll(allAggregateColumns));
 
-        ExpressionContext expressionContext = new ExpressionContext(optExpression);
-        StatisticsCalculator statisticsCalculator =
-                new StatisticsCalculator(expressionContext, factory, optimizerContext);
-        statisticsCalculator.estimatorStats();
+//        ExpressionContext expressionContext = new ExpressionContext(optExpression);
+//        StatisticsCalculator statisticsCalculator =
+//                new StatisticsCalculator(expressionContext, factory, optimizerContext);
+//        statisticsCalculator.estimatorStats();
 
-        // todo need to modify?
-        if (!checkStatistics(context, allGroupByColumns, expressionContext.getStatistics())) {
-            return AggregatePushDownBeforeMVContext.EMPTY;
-        }
+        // todo impl stastics
+//        if (!checkStatistics(context, allGroupByColumns, expressionContext.getStatistics())) {
+//            return AggregatePushDownBeforeMVContext.EMPTY;
+//        }
 
         List<AggregatePushDownBeforeMVContext> list =
                 allRewriteContext.getOrDefault(childContext.origAggregator, Lists.newArrayList());
