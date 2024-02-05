@@ -82,6 +82,7 @@ import com.starrocks.sql.optimizer.rule.tree.PredicateReorderRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneAggregateNodeRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneShuffleColumnRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneSubfieldsForComplexType;
+import com.starrocks.sql.optimizer.rule.tree.PushDownAggregateBeforeMVRule;
 import com.starrocks.sql.optimizer.rule.tree.PushDownAggregateRule;
 import com.starrocks.sql.optimizer.rule.tree.PushDownDistinctAggregateRule;
 import com.starrocks.sql.optimizer.rule.tree.ScalarOperatorsReuseRule;
@@ -417,6 +418,9 @@ public class Optimizer {
             ruleRewriteOnlyOnce(tree, rootTaskContext, new ForceCTEReuseRule());
         }
 
+        // push down aggregate after join before rewrite mv
+        tree = pushDownAggregationBeforeMV(tree, rootTaskContext, requiredColumns);
+
         if (!optimizerConfig.isRuleDisable(TF_MATERIALIZED_VIEW)
                 && sessionVariable.isEnableSyncMaterializedViewRewrite()) {
             // Add a config to decide whether to rewrite sync mv.
@@ -626,6 +630,27 @@ public class Optimizer {
             ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
         }
 
+        return tree;
+    }
+
+    private OptExpression pushDownAggregationBeforeMV(OptExpression tree, TaskContext rootTaskContext,
+                                                      ColumnRefSet requiredColumns) {
+        if (context.getSessionVariable().getCboPushDownAggregateMode() == -1) {
+            return tree;
+        }
+
+        PushDownAggregateBeforeMVRule rule =
+                new PushDownAggregateBeforeMVRule(rootTaskContext);
+        rule.getRewriter().collectRewriteContext(tree);
+
+        if(!rule.getRewriter().isNeedRewrite()) {
+            return tree;
+        }
+
+        rule.rewrite(tree, rootTaskContext);
+        deriveLogicalProperty(tree);
+        rootTaskContext.setRequiredColumns(requiredColumns.clone());
+        ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
         return tree;
     }
 

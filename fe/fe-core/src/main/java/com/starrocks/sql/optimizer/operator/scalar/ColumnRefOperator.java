@@ -32,7 +32,7 @@ import static java.util.Objects.requireNonNull;
  */
 public final class ColumnRefOperator extends ScalarOperator {
     private final int id;
-    private final String name;
+    private String name;
     private boolean nullable;
 
     public ColumnRefOperator(int id, Type type, String name, boolean nullable) {
@@ -75,6 +75,10 @@ public final class ColumnRefOperator extends ScalarOperator {
 
     public void setNullable(boolean nullable) {
         this.nullable = nullable;
+    }
+
+    public void setName(String name) {
+        this.name = name;
     }
 
     @Override
