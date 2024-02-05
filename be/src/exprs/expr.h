@@ -43,7 +43,6 @@
 #include "common/statusor.h"
 #include "exprs/expr_context.h"
 #include "exprs/function_context.h"
-#include "exprs/jit/ir_helper.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Module.h"
@@ -64,7 +63,9 @@ struct UserFunctionCacheEntry;
 class Chunk;
 class ColumnRef;
 class ColumnPredicateRewriter;
+class JITContext;
 class JITExpr;
+struct LLVMDatum;
 
 // This is the superclass of all expr evaluation nodes.
 class Expr {

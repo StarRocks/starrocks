@@ -173,7 +173,7 @@ class StarrocksSQLApiLib(object):
                 env_value = os.environ.get(env_key, "")
             else:
                 # save secrets info
-                if 'aws' in env_key:
+                if 'aws' in env_key or 'oss_' in env_key:
                     SECRET_INFOS[env_key] = env_value
 
             self.__setattr__(env_key, env_value)
@@ -1007,24 +1007,25 @@ class StarrocksSQLApiLib(object):
         """
         tools.assert_true(str(res).find(mv_name) > 0, "assert mv %s is not found" % (mv_name))
 
-    def check_hit_materialized_view(self, query, mv_name):
+    def check_hit_materialized_view(self, query, *expects):
         """
         assert mv_name is hit in query
         """
         time.sleep(1)
         sql = "explain %s" % (query)
         res = self.execute_sql(sql, True)
-        #print(res)
-        tools.assert_true(str(res["result"]).find(mv_name) > 0, "assert mv %s is not found" % (mv_name))
+        for expect in expects:
+            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan" % (expect))
 
-    def check_no_hit_materialized_view(self, query, mv_name):
+    def check_no_hit_materialized_view(self, query, *expects):
         """
         assert mv_name is hit in query
         """
         time.sleep(1)
         sql = "explain %s" % (query)
         res = self.execute_sql(sql, True)
-        tools.assert_false(str(res["result"]).find(mv_name) > 0, "assert mv %s is found" % (mv_name))
+        for expect in expects:
+            tools.assert_false(str(res["result"]).find(expect) > 0, "assert expect %s should not be found" % (expect))
 
     def wait_alter_table_finish(self, alter_type="COLUMN", off=9):
         """

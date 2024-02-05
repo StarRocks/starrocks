@@ -111,24 +111,22 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
     };
     size_t num_rows = 0;
     for (Expr* child : _children) {
-        // unfolding const columns.
         ColumnPtr column = EVALUATE_NULL_IF_ERROR(context, child, ptr);
-        args.emplace_back(column);
         num_rows = std::max<size_t>(num_rows, column->size());
+        args.emplace_back(column);
     }
-    if (ptr == nullptr) {
-        if (is_constant() && num_rows == 0) {
-            num_rows = 1;
-        }
-    } else {
+    if (ptr != nullptr) {
         num_rows = ptr->num_rows();
+    }
+    auto result_column = ColumnHelper::create_column(type(), is_nullable(), false, num_rows);
+    if (num_rows == 0) {
+        return result_column;
     }
     Columns backup_args;
     backup_args.reserve(_children.size() + 1);
     for (auto i = 0; i < _children.size(); i++) {
         auto column = args[i];
         auto child = _children[i];
-
         if (UNLIKELY((column->is_constant() ^ child->is_constant()) ||
                      (column->is_nullable() ^ child->is_nullable()))) {
             LOG(INFO) << "[JIT INPUT] expr const = " << child->is_constant() << " null= " << child->is_nullable()
@@ -139,7 +137,8 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
         if (column->is_constant()) {
             column = ColumnHelper::unfold_const_column(child->type(), num_rows, column);
         }
-        DCHECK(num_rows == column->size());
+        DCHECK(num_rows == column->size())
+                << "size unequal " + std::to_string(num_rows) + " != " + std::to_string(column->size());
 
         if (child->is_nullable() && !column->is_nullable()) {
             column = NullableColumn::create(column, NullColumn::create(column->size(), 0));
@@ -148,14 +147,17 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
                 return Status::RuntimeError("[JIT]a non-nullable column has null values");
             }
         }
-
         unfold_ptr(column);
         backup_args.emplace_back(column);
     }
 
-    auto result_column = ColumnHelper::create_column(type(), is_nullable(), false, num_rows, false);
     unfold_ptr(result_column);
+    // inputs are not empty.
     _jit_function(num_rows, jit_columns.data());
+    //TODO: _jit_function return has_null
+    if (is_nullable()) {
+        down_cast<NullableColumn*>(result_column.get())->update_has_null();
+    }
     return result_column;
 }
 

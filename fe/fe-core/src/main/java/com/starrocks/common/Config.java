@@ -146,6 +146,21 @@ public class Config extends ConfigBase {
     @ConfField
     public static String custom_config_dir = "/conf";
 
+    /*
+     * internal log:
+     * This specifies FE MV/Statistics log dir.
+     */
+    @ConfField
+    public static String internal_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
+    @ConfField
+    public static int internal_log_roll_num = 90;
+    @ConfField
+    public static String[] internal_log_modules = {"base", "statistic"};
+    @ConfField
+    public static String internal_log_roll_interval = "DAY";
+    @ConfField
+    public static String internal_log_delete_age = "7d";
+
     /**
      * dump_log_dir:
      * This specifies FE dump log dir.
@@ -1588,6 +1603,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_starrocks_external_table_auth_check = true;
+
+    /**
+     * If set to true, the granularity of auth check extends to the column level
+     */
+    @ConfField(mutable = true)
+    public static boolean authorization_enable_column_level_privilege = false;
 
     /**
      * The authentication_chain configuration specifies the sequence of security integrations

@@ -174,8 +174,13 @@ std::string VectorizedLiteral::jit_func_name() const {
 }
 
 StatusOr<LLVMDatum> VectorizedLiteral::generate_ir_impl(ExprContext* context, JITContext* jit_ctx) {
-    LLVMDatum datum(jit_ctx->builder, _value->only_null());
-    ASSIGN_OR_RETURN(datum.value, IRHelper::create_ir_number(jit_ctx->builder, _type.type, _value->raw_data()));
+    bool only_null = _value->only_null();
+    LLVMDatum datum(jit_ctx->builder, only_null);
+    if (only_null) {
+        ASSIGN_OR_RETURN(datum.value, IRHelper::create_ir_number(jit_ctx->builder, _type.type, 0));
+    } else {
+        ASSIGN_OR_RETURN(datum.value, IRHelper::load_ir_number(jit_ctx->builder, _type.type, _value->raw_data()));
+    }
     return datum;
 }
 

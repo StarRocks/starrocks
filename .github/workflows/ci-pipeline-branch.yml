@@ -52,7 +52,7 @@ jobs:
       output1: ${{ steps.be-changes-info.outputs.be }}
       output2: ${{ steps.be-changes-info.outputs.thirdparty }}
     steps:
-      - uses: dorny/paths-filter@v2
+      - uses: dorny/paths-filter@v3
         id: changes
         with:
           filters: |
@@ -216,7 +216,7 @@ jobs:
     outputs:
       output1: ${{ steps.fe-changes-info.outputs.fe }}
     steps:
-      - uses: dorny/paths-filter@v2
+      - uses: dorny/paths-filter@v3
         id: changes
         with:
           filters: |
@@ -247,7 +247,7 @@ jobs:
           rm -rf ${{ github.workspace }}
           mkdir -p ${{ github.workspace }}
 
-      - uses: dorny/paths-filter@v2
+      - uses: dorny/paths-filter@v3
         id: java-file
         name: JAVA FILE
         with:

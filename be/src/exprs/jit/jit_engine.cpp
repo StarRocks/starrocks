@@ -199,12 +199,9 @@ Status JITEngine::generate_scalar_function_ir(ExprContext* context, llvm::Module
     /// Initialize loop.
     auto* end = llvm::BasicBlock::Create(b.getContext(), "end", func);
     auto* loop = llvm::BasicBlock::Create(b.getContext(), "loop", func);
-    // If rows_count == 0, jump to end.
-    // Pseudo code: if (rows_count == 0) goto end;
-    b.CreateCondBr(b.CreateICmpEQ(rows_count_arg, llvm::ConstantInt::get(size_type, 0)), end, loop);
 
+    b.CreateBr(loop);
     b.SetInsertPoint(loop);
-
     /// Loop.
     // Pseudo code: for (int64_t counter = 0; counter < rows_count; counter++)
     auto* counter_phi = b.CreatePHI(rows_count_arg->getType(), 2);

@@ -99,7 +99,7 @@ jobs:
             mkdir fe && cd fe
             ossutil64 --config-file ~/.ossutilconfig cp ${oss_path}/ . --recursive
             tar zxf fe_ut_report.tar.gz
-          else
+          elif [[ "${BASE_REF}" == "main" ]]; then
             rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
             export JAVA_HOME=/var/local/env/jdk1.8.0_202;
             export PATH=$JAVA_HOME/bin:$PATH;
@@ -124,7 +124,7 @@ jobs:
 
       - name: Merge FE Coverage
         id: merge_report
-        if: steps.publish_report.outcome == 'success'
+        if: steps.publish_report.outcome == 'success' && env.BASE_REF == 'main'
         env:
           fe_path: ${{ github.workspace }}/fe
         run: |
@@ -205,7 +205,7 @@ jobs:
   BE-REPORT:
     runs-on: [ self-hosted, quick ]
     needs: INFO
-    if: needs.INFO.outputs.PR_NUMBER != ''
+    if: needs.INFO.outputs.PR_NUMBER != '' && needs.INFO.outputs.BASE_REF == 'main'
     env:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
@@ -297,7 +297,7 @@ jobs:
   SQL-Tester-REPORT:
     runs-on: [ self-hosted, quick ]
     needs: INFO
-    if: needs.INFO.outputs.PR_NUMBER != ''
+    if: needs.INFO.outputs.PR_NUMBER != '' && needs.INFO.outputs.BASE_REF == 'main'
     env:
       PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
       BASE_REF: ${{ needs.INFO.outputs.BASE_REF }}
@@ -348,7 +348,7 @@ jobs:
   Admit-REPORT:
     runs-on: [ self-hosted, quick ]
     needs: INFO
-    if: needs.INFO.outputs.PR_NUMBER != ''
+    if: needs.INFO.outputs.PR_NUMBER != '' && needs.INFO.outputs.BASE_REF == 'main'
     env:
       PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
       BASE_REF: ${{ needs.INFO.outputs.BASE_REF }}

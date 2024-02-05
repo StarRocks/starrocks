@@ -503,4 +503,29 @@ public class ViewBaseMvRewriteTest extends MaterializedViewTestBase {
             sql(query).contains("mv_q15");
         }
     }
+
+    @Test
+    public void testViewRewriteWithNestedMVs() throws Exception {
+        String tbl1 = "CREATE TABLE test_t1 (\n" +
+                " k1 INT,\n" +
+                " v1 INT,\n" +
+                " v2 INT)\n" +
+                " DUPLICATE KEY(k1)\n" +
+                " DISTRIBUTED BY HASH(k1);";
+        starRocksAssert.withTable(tbl1);
+        String view1 = "create view v1 as select k1,sum(v1) as sum_v1 from test_t1 group by k1;";
+        String view2 = "create view v2 as select k1,sum(v2) as sum_v2 from test_t1 group by k1;";
+        starRocksAssert.withView(view1);
+        starRocksAssert.withView(view2);
+
+        String mv = "create materialized view mv1 refresh manual as select v1.k1,v1.sum_v1,v2.sum_v2 from " +
+                "v1 join v2 on v1.k1=v2.k1;";
+        starRocksAssert.withMaterializedView(mv, () -> {
+            sql(" select v1.k1,v1.sum_v1,v2.sum_v2 from v1 join v2 on v1.k1=v2.k1 order by 1;")
+                    .contains("mv1");
+        });
+        starRocksAssert.dropView("v1");
+        starRocksAssert.dropView("v2");
+        starRocksAssert.dropTable("test_t1");
+    }
 }
