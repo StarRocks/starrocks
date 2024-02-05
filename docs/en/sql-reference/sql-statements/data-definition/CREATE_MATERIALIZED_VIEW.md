@@ -78,6 +78,13 @@ SELECT select_expr[, select_expr ...]
   >   - Each complex expression can reference only one column. Query statements such as `a + b as col1` are not supported.
   >   - You can check whether your queries are rewritten by the synchronous materialized views created with complex expressions by executing `EXPLAIN <sql_statement>`. For more information, see [Query analysis](../../../administration/Query_planning.md).
 
+<<<<<<< HEAD
+=======
+- WHERE (optional)
+
+  From v3.1.8 onwards, synchronous materialized views support the WHERE clause which can filter rows used for the materialized view.
+
+>>>>>>> d96645c3cf ([Doc] support where in sync mv for 3.1.8 (#40771))
 - GROUP BY (optional)
 
   The GROUP BY column of the query. If this parameter is not specified, the data will not be grouped by default.
