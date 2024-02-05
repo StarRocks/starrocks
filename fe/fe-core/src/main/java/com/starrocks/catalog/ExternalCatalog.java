@@ -19,8 +19,6 @@ import com.google.common.base.Preconditions;
 
 import java.util.Map;
 
-import static com.google.common.base.Preconditions.checkArgument;
-
 public class ExternalCatalog extends Catalog {
 
     public ExternalCatalog(long id, String name, String comment, Map<String, String> config) {
