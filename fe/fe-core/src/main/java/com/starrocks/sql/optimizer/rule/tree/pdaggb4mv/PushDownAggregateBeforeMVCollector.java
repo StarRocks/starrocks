@@ -31,7 +31,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
@@ -39,7 +38,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
-import com.starrocks.sql.optimizer.rule.tree.pdaggb4mv.AggregatePushDownBeforeMVContext;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.ExpressionStatisticCalculator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
@@ -226,7 +224,7 @@ class PushDownAggregateBeforeMVCollector extends OptExpressionVisitor<Void, Aggr
 
         // all constant can't push down
         if (!aggregate.getAggregations().isEmpty() &&
-                (aggregate.getAggregations().values().stream().anyMatch( c -> (c.isConstant() && !c.isCountStar())))) {
+                (aggregate.getAggregations().values().stream().anyMatch(c -> (c.isConstant() && !c.isCountStar())))) {
             return visit(optExpression, context);
         }
 
@@ -247,7 +245,7 @@ class PushDownAggregateBeforeMVCollector extends OptExpressionVisitor<Void, Aggr
         }
         // constant aggregate can't push down
         if (!context.aggregations.isEmpty() &&
-                context.aggregations.values().stream().allMatch( c -> (c.isConstant() && !c.isCountStar()))) {
+                context.aggregations.values().stream().allMatch(c -> (c.isConstant() && !c.isCountStar()))) {
             return visit(optExpression, context);
         }
 
@@ -278,8 +276,9 @@ class PushDownAggregateBeforeMVCollector extends OptExpressionVisitor<Void, Aggr
      *   1        1      Join     1        1
      *   1        1               1        1
      */
-    private AggregatePushDownBeforeMVContext splitJoinAggregate(OptExpression optExpression, AggregatePushDownBeforeMVContext context,
-                                                        int child) {
+    private AggregatePushDownBeforeMVContext splitJoinAggregate(OptExpression optExpression,
+                                                                AggregatePushDownBeforeMVContext context,
+                                                                int child) {
         LogicalJoinOperator join = (LogicalJoinOperator) optExpression.getOp();
         ColumnRefSet childOutput = optExpression.getChildOutputColumns(child);
 
@@ -305,7 +304,7 @@ class PushDownAggregateBeforeMVCollector extends OptExpressionVisitor<Void, Aggr
                         .collect(Collectors.toMap(k -> k, k -> ConstantOperator.createNull(k.getType())));
                 ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(rewriteMap);
                 childContext.groupBys.put(entry.getKey(), rewriter.rewrite(entry.getValue()));
-            }  else if(context.aggregations.values().stream().anyMatch(CallOperator::isCountStar)) {
+            }  else if (context.aggregations.values().stream().anyMatch(CallOperator::isCountStar)) {
                 // if exist group by column can't derive, and aggregate function is countStar
                 // forbidden push down
                 return AggregatePushDownBeforeMVContext.EMPTY;

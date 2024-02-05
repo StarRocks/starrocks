@@ -33,7 +33,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
@@ -41,8 +40,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
-import com.starrocks.sql.optimizer.rule.tree.pdaggb4mv.AggregatePushDownBeforeMVContext;
-import com.starrocks.sql.optimizer.rule.tree.pdaggb4mv.PushDownAggregateBeforeMVCollector;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import org.apache.commons.collections4.MapUtils;
 
@@ -299,7 +296,7 @@ public class PushDownAggregateBeforeMVRewriter extends OptExpressionVisitor<OptE
 
     private CallOperator genAggregation(CallOperator origin, ScalarOperator args, boolean enableTransform) {
         String realFunction = origin.getFunction().getFunctionName().getFunction();
-        if(enableTransform && origin.getFunction().getFunctionName().getFunction().equals(FunctionSet.COUNT)) {
+        if (enableTransform && origin.getFunction().getFunctionName().getFunction().equals(FunctionSet.COUNT)) {
             realFunction = FunctionSet.SUM;
         }
 
@@ -344,7 +341,7 @@ public class PushDownAggregateBeforeMVRewriter extends OptExpressionVisitor<OptE
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : context.groupBys.entrySet()) {
             if (childOutput.containsAll(entry.getValue().getUsedColumns())) {
                 childContext.groupBys.put(entry.getKey(), entry.getValue());
-            } else if(childContext.aggregations.values().stream().anyMatch(CallOperator::isCountStar)) {
+            } else if (childContext.aggregations.values().stream().anyMatch(CallOperator::isCountStar)) {
                 // forbidden push down when child don't contain all group by columns
                 return process(joinOpt.inputAt(child), AggregatePushDownBeforeMVContext.EMPTY);
             }
@@ -371,7 +368,9 @@ public class PushDownAggregateBeforeMVRewriter extends OptExpressionVisitor<OptE
                     .forEach(c -> refs.put(c, c));
 
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : childContext.aggregations.entrySet()) {
-                if(entry.getValue().isCountStar()) continue;
+                if (entry.getValue().isCountStar()) {
+                    continue;
+                }
                 ScalarOperator input = entry.getValue().getChild(0);
                 if (!input.isColumnRef()) {
                     ColumnRefOperator ref = factory.create(input, input.getType(), input.isNullable());
