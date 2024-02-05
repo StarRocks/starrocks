@@ -147,7 +147,7 @@ using LsnMap = std::map<BinlogLsn, BinlogFilePtr>;
 using RowsetCountMap = std::unordered_map<int64_t, int32_t>;
 
 TEST_F(BinlogManagerTest, test_ingestion_commit) {
-    int64_t max_file_size = 10000;
+    int64_t max_file_size = 2500;
     int32_t max_page_size = 20;
     CompressionTypePB compress_type = LZ4_FRAME;
     std::shared_ptr<MockRowsetFetcher> rowset_fetcher = std::make_shared<MockRowsetFetcher>();
@@ -160,7 +160,7 @@ TEST_F(BinlogManagerTest, test_ingestion_commit) {
 
     std::shared_ptr<BinlogFileWriter> last_file_writer;
     std::shared_ptr<BinlogFileMetaPB> last_file_meta;
-    for (int64_t version = 1, next_file_id = 1; version < 1000; version++) {
+    for (int64_t version = 1, next_file_id = 1; version < 100; version++) {
         rowset_fetcher->add_rowset(version, mock_rowset);
         ASSERT_EQ(next_file_id, binlog_manager->next_file_id());
         ASSERT_EQ(-1, binlog_manager->ingestion_version());

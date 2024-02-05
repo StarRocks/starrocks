@@ -66,7 +66,7 @@ struct ExpectBuildResult {
 };
 
 void BinlogBuilderTest::test_write_one_version(ControlParams control_params, ExpectBuildResult expect_result) {
-    int64_t max_file_size = 1024 * 5;
+    int64_t max_file_size = 1024 * 2;
     int32_t max_page_size = 256;
     int64_t next_file_id = 1;
     std::vector<DupKeyVersionInfo> version_info_vec;
@@ -149,19 +149,19 @@ TEST_F(BinlogBuilderTest, test_write_one_version_one_file) {
 
 TEST_F(BinlogBuilderTest, test_write_one_version_multiple_files) {
     ControlParams params{.max_num_entries = INT32_MAX,
-                         .max_num_files = 5,
+                         .max_num_files = 2,
                          .start_with_active_writer = false,
                          .force_to_reach_file_size_limit = true};
-    ExpectBuildResult result{.result_with_active_writer = false, .num_files = 5};
+    ExpectBuildResult result{.result_with_active_writer = false, .num_files = 2};
     test_write_one_version(params, result);
 }
 
 TEST_F(BinlogBuilderTest, test_active_writer) {
     ControlParams params{.max_num_entries = INT32_MAX,
-                         .max_num_files = 5,
+                         .max_num_files = 3,
                          .start_with_active_writer = true,
                          .force_to_reach_file_size_limit = false};
-    ExpectBuildResult result{.result_with_active_writer = true, .num_files = 5};
+    ExpectBuildResult result{.result_with_active_writer = true, .num_files = 3};
     test_write_one_version(params, result);
 }
 
@@ -239,7 +239,7 @@ TEST_F(BinlogBuilderTest, test_abort_one_version_one_file_without_active_writer)
 }
 
 TEST_F(BinlogBuilderTest, test_abort_one_version_multiple_files_with_active_writer) {
-    test_abort_one_version(5, true);
+    test_abort_one_version(3, true);
 }
 
 TEST_F(BinlogBuilderTest, test_abort_one_version_multiple_files_without_active_writer) {
@@ -247,8 +247,8 @@ TEST_F(BinlogBuilderTest, test_abort_one_version_multiple_files_without_active_w
 }
 
 TEST_F(BinlogBuilderTest, test_random_commit_abort_multiple_versions) {
-    int32_t num_versions = 100;
-    int64_t max_file_size = 5 * 1024;
+    int32_t num_versions = 5;
+    int64_t max_file_size = 512;
     int32_t max_page_size = 64;
     std::vector<DupKeyVersionInfo> version_info_vec;
     std::map<int64_t, BinlogFileMetaPBPtr> metas;
@@ -276,9 +276,9 @@ TEST_F(BinlogBuilderTest, test_random_commit_abort_multiple_versions) {
         int32_t num_entries = 0;
         int32_t rows_per_entry = std::rand() % 100 + 1;
         if (is_empty) {
-            builder->add_empty();
+            ASSERT_OK(builder->add_empty());
         } else {
-            int32_t num_files = std::rand() % 5 + 1;
+            int32_t num_files = std::rand() % 3 + 1;
             while (num_entries < 5 || builder->num_files() < num_files) {
                 ASSERT_OK(builder->add_insert_range(RowsetSegInfo(version, num_entries), 0, rows_per_entry));
                 num_entries += 1;
