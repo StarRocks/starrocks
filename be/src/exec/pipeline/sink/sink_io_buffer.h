@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#pragma once
+
 #include <memory>
 #include <shared_mutex>
 
@@ -124,8 +126,11 @@ public:
         return 0;
     }
 
+    int num_pending_chunks() const { return _num_pending_chunks; }
+
 protected:
-    virtual void _process_chunk(bthread::TaskIterator<ChunkPtr>& iter) = 0;
+    virtual void _process_chunk(bthread::TaskIterator<ChunkPtr>& iter);
+    virtual void _add_chunk(const ChunkPtr& chunk) = 0;
 
     std::unique_ptr<bthread::ExecutionQueueId<ChunkPtr>> _exec_queue_id;
 
