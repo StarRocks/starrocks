@@ -15,6 +15,7 @@
 
 package com.starrocks.privilege;
 
+import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
@@ -29,10 +30,6 @@ import com.starrocks.sql.common.MetaNotFoundException;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-
-import static com.google.common.base.Preconditions.checkArgument;
-import static com.starrocks.catalog.ExternalCatalog.getCompatibleDbUUID;
-import static com.starrocks.catalog.ExternalCatalog.getCompatibleTableUUID;
 
 public class TablePEntryObject implements PEntryObject {
     @SerializedName(value = "ci")
@@ -122,7 +119,7 @@ public class TablePEntryObject implements PEntryObject {
      */
     private static String getTableUUID(GlobalStateMgr mgr, String catalogName, String dbToken, String tableToken)
             throws PrivObjNotFoundException {
-        checkArgument(!dbToken.equals("*"));
+        Preconditions.checkArgument(!dbToken.equals("*"));
         if (tableToken.equals("*")) {
             return PrivilegeBuiltinConstants.ALL_TABLES_UUID;
         }
@@ -167,11 +164,11 @@ public class TablePEntryObject implements PEntryObject {
         }
         if (Objects.equals(other.tableUUID, PrivilegeBuiltinConstants.ALL_TABLES_UUID)) {
             return this.catalogId == other.catalogId &&
-                    Objects.equals(getCompatibleDbUUID(this.databaseUUID), getCompatibleDbUUID(other.databaseUUID));
+                    Objects.equals(Catalog.getCompatibleDbUUID(this.databaseUUID), Catalog.getCompatibleDbUUID(other.databaseUUID));
         }
         return this.catalogId == other.catalogId &&
-                Objects.equals(getCompatibleDbUUID(this.databaseUUID), getCompatibleDbUUID(other.databaseUUID)) &&
-                Objects.equals(getCompatibleTableUUID(other.tableUUID), getCompatibleTableUUID(this.tableUUID));
+                Objects.equals(Catalog.getCompatibleDbUUID(this.databaseUUID), Catalog.getCompatibleDbUUID(other.databaseUUID)) &&
+                Objects.equals(Catalog.getCompatibleDbUUID(other.tableUUID), Catalog.getCompatibleDbUUID(this.tableUUID));
     }
 
     @Override

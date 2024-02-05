@@ -39,16 +39,4 @@ public class ExternalCatalog extends Catalog {
         // To be in compatible with code before external table privilege is supported
         return uuid.contains(".") ? uuid.split("\\.")[2] : uuid;
     }
-
-    // old table uuid format: external_catalog_name.db_name.table_name.creation_time
-    // new table uuid format: table_name
-    public static String getCompatibleTableUUID(String uuid) {
-        return uuid.contains(".") ? uuid.split("\\.")[2] : uuid;
-    }
-
-    // old database uuid format: external_catalog_name.db_name
-    // new database uuid format: db_name
-    public static String getCompatibleDbUUID(String uuid) {
-        return uuid.contains(".") ? uuid.split("\\.")[1] : uuid;
-    }
 }

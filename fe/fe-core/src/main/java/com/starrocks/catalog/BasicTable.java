@@ -14,7 +14,11 @@
 
 package com.starrocks.catalog;
 
-public interface TableBasicInfo {
+/**
+ * BasicTable declares a subset of methods in {@link Table}, which aims to provide basic information about table while
+ * eliminating network interactions with external services.
+ */
+public interface BasicTable {
     String getCatalogName();
 
     String getName();

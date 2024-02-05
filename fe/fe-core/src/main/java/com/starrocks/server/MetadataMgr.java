@@ -31,7 +31,7 @@ import com.starrocks.catalog.ExternalCatalogTableBasicInfo;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.TableBasicInfo;
+import com.starrocks.catalog.BasicTable;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -344,7 +344,7 @@ public class MetadataMgr {
      * For default/internal catalog, this method is equivalent to {@link MetadataMgr#getTable(String, String, String)}.
      * Use this method if you are absolutely sure, otherwise use MetadataMgr#getTable.
      */
-    public TableBasicInfo getTableBasicInfo(String catalogName, String dbName, String tblName) {
+    public BasicTable getBasicTable(String catalogName, String dbName, String tblName) {
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             return getTable(catalogName, dbName, tblName);
         }

@@ -29,7 +29,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
-import com.starrocks.catalog.TableBasicInfo;
+import com.starrocks.catalog.BasicTable;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.NotImplementedException;
@@ -330,9 +330,9 @@ public class InformationSchemaDataSource {
                 try {
                     List<String> tableNames = metadataMgr.listTableNames(catalogName, dbName);
                     for (String tableName : tableNames) {
-                        TableBasicInfo table = null;
+                        BasicTable table = null;
                         try {
-                            table = metadataMgr.getTableBasicInfo(catalogName, dbName, tableName);
+                            table = metadataMgr.getBasicTable(catalogName, dbName, tableName);
                         } catch (Exception e) {
                             LOG.warn(e.getMessage());
                         }
@@ -397,7 +397,7 @@ public class InformationSchemaDataSource {
         return response;
     }
 
-    public static TTableInfo genNormalTableInfo(TableBasicInfo table, TTableInfo info) {
+    public static TTableInfo genNormalTableInfo(BasicTable table, TTableInfo info) {
 
         OlapTable olapTable = (OlapTable) table;
         Collection<PhysicalPartition> partitions = olapTable.getPhysicalPartitions();
