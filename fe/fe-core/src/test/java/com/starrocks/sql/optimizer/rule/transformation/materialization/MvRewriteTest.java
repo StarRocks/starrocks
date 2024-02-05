@@ -248,6 +248,37 @@ public class MvRewriteTest extends MvRewriteTestBase {
     }
 
     @Test
+    public void testJoinMvRewriteByForceRuleRewrite() throws Exception {
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
+        {
+            createAndRefreshMv("create materialized view join_mv_1" +
+                    " distributed by hash(v1)" +
+                    " as " +
+                    " SELECT t0.v1 as v1, test_all_type.t1d, test_all_type.t1c" +
+                    " from t0 join test_all_type" +
+                    " on t0.v1 = test_all_type.t1d" +
+                    " where t0.v1 < 100");
+            createAndRefreshMv("create materialized view join_mv_2" +
+                    " distributed by hash(v1)" +
+                    " as " +
+                    " SELECT t0.v1 as v1, test_all_type.t1d, test_all_type.t1c" +
+                    " from t0 join test_all_type" +
+                    " on t0.v1 = test_all_type.t1d" +
+                    " where t0.v1 < 100");
+
+            connectContext.getSessionVariable().setEnableForceRuleBasedMvRewrite(true);
+            String query1 = "SELECT (test_all_type.t1d + 1) * 2, test_all_type.t1c" +
+                    " from t0 join test_all_type on t0.v1 = test_all_type.t1d where t0.v1 < 100";
+            String plan1 = getFragmentPlan(query1);
+            PlanTestBase.assertContains(plan1, "join_mv_");
+
+            connectContext.getSessionVariable().setEnableForceRuleBasedMvRewrite(false);
+            starRocksAssert.dropMaterializedView("join_mv_1");
+            starRocksAssert.dropMaterializedView("join_mv_2");
+        }
+    }
+
+    @Test
     public void testJoinMvRewrite() throws Exception {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
         createAndRefreshMv("create materialized view join_mv_1" +

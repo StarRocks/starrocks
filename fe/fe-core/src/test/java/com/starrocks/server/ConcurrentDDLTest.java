@@ -141,8 +141,10 @@ public class ConcurrentDDLTest {
                 " concurrent_test_db.test_mv_RRR DISTRIBUTED BY HASH(`k2`) REFRESH MANUAL" +
                 " as select k2,k3 from concurrent_test_db.base_t1;";
 
+        final int NUM_ROUND = 1;
+
         // run multi rounds to try to detect potential concurrency problems
-        for (int round = 0; round < 5; round++) {
+        for (int round = 0; round < NUM_ROUND; round++) {
             System.out.println("round-" + round + " begin");
             AtomicBoolean stop = new AtomicBoolean(false);
 

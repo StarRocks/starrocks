@@ -60,6 +60,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownTopNBelowUnionRul
 import com.starrocks.sql.optimizer.rule.transformation.PushLimitAndFilterToCTEProduceRule;
 import com.starrocks.sql.optimizer.rule.transformation.RemoveAggregationFromAggTable;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
+import com.starrocks.sql.optimizer.rule.transformation.RewriteMultiDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.SeparateProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.SkewJoinOptimizeRule;
@@ -416,9 +417,14 @@ public class Optimizer {
             ruleRewriteOnlyOnce(tree, rootTaskContext, new ForceCTEReuseRule());
         }
 
+        // Add a config to decide whether to rewrite sync mv.
         if (!optimizerConfig.isRuleDisable(TF_MATERIALIZED_VIEW)
                 && sessionVariable.isEnableSyncMaterializedViewRewrite()) {
-            // Add a config to decide whether to rewrite sync mv.
+            // Split or predicates to union all so can be used by mv rewrite to choose the best sort key indexes.
+            // TODO: support adaptive for or-predicates to union all.
+            if (SplitScanORToUnionRule.isForceRewrite()) {
+                ruleRewriteOnlyOnce(tree, rootTaskContext, SplitScanORToUnionRule.getInstance());
+            }
 
             OptimizerTraceUtil.logOptExpression("before MaterializedViewRule:\n%s", tree);
             tree = new MaterializedViewRule().transform(tree, context).get(0);
@@ -427,13 +433,15 @@ public class Optimizer {
             deriveLogicalProperty(tree);
         }
 
-        ruleRewriteIterative(tree, rootTaskContext, RuleSetType.MULTI_DISTINCT_REWRITE);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
 
         // No heavy metadata operation before external table partition prune
         prepareMetaOnlyOnce(tree, rootTaskContext);
 
+        // rewrite before SplitScanORToUnionRule
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new SplitDatePredicateRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
+        ruleRewriteIterative(tree, rootTaskContext, new RewriteMultiDistinctRule());
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_EMPTY_OPERATOR);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_PROJECT);
 
@@ -464,8 +472,7 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.INTERSECT_REWRITE);
         ruleRewriteIterative(tree, rootTaskContext, new RemoveAggregationFromAggTable());
 
-        // rewrite before SplitScanORToUnionRule
-        ruleRewriteOnlyOnce(tree, rootTaskContext, new SplitDatePredicateRule());
+
         ruleRewriteOnlyOnce(tree, rootTaskContext, SplitScanORToUnionRule.getInstance());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownTopNBelowUnionRule());
 
@@ -475,7 +482,10 @@ public class Optimizer {
             viewBasedMvRuleRewrite(tree, rootTaskContext);
         }
 
-        if (isEnableSingleTableMVRewrite(rootTaskContext, sessionVariable, tree)) {
+        if (sessionVariable.isEnableMaterializedViewRewrite() && sessionVariable.isEnableForceRuleBasedMvRewrite()) {
+            // use rule based mv rewrite strategy to do mv rewrite for single table and multi tables query
+            ruleRewriteIterative(tree, rootTaskContext, RuleSetType.ALL_MV_REWRITE);
+        } else if (isEnableSingleTableMVRewrite(rootTaskContext, sessionVariable, tree)) {
             // now add single table materialized view rewrite rules in rule based rewrite phase to boost optimization
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
         }

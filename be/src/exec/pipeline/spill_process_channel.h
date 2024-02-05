@@ -61,16 +61,12 @@ using SpillProcessChannelPtr = std::shared_ptr<SpillProcessChannel>;
 class SpillProcessChannelFactory {
 public:
     //
-    SpillProcessChannelFactory(size_t degree, std::shared_ptr<spill::IOTaskExecutor> executor)
-            : _channels(degree), _executor(std::move(executor)) {}
+    SpillProcessChannelFactory(size_t degree) : _channels(degree) {}
 
     SpillProcessChannelPtr get_or_create(int32_t sequence);
 
-    std::shared_ptr<spill::IOTaskExecutor>& executor() { return _executor; };
-
 private:
     std::vector<SpillProcessChannelPtr> _channels;
-    std::shared_ptr<spill::IOTaskExecutor> _executor;
 };
 using SpillProcessChannelFactoryPtr = std::shared_ptr<SpillProcessChannelFactory>;
 
@@ -108,8 +104,6 @@ public:
 
     void set_reuseable(bool reuseable) { _is_reuseable = reuseable; }
 
-    auto& io_executor() { return _parent->executor(); }
-
     SpillProcessTask& current_task() { return _current_task; }
 
     bool has_output() { return (has_spill_task() || _current_task) && !_spiller->is_full(); }
@@ -135,15 +129,13 @@ private:
 
 class SpillProcessTasksBuilder {
 public:
-    SpillProcessTasksBuilder(RuntimeState* state, std::shared_ptr<spill::IOTaskExecutor> executor)
-            : _runtime_state(state), _io_executor(std::move(executor)) {}
+    SpillProcessTasksBuilder(RuntimeState* state) : _runtime_state(state) {}
 
     template <class Task>
     SpillProcessTasksBuilder& then(Task task) {
         auto runtime_state = this->_runtime_state;
-        auto& io_executor = this->_io_executor;
-        std::function<StatusOr<ChunkPtr>()> spill_task = [runtime_state, io_executor, task]() -> StatusOr<ChunkPtr> {
-            RETURN_IF_ERROR(task(runtime_state, io_executor));
+        std::function<StatusOr<ChunkPtr>()> spill_task = [runtime_state, task]() -> StatusOr<ChunkPtr> {
+            RETURN_IF_ERROR(task(runtime_state));
             return Status::EndOfFile("eos");
         };
         _spill_tasks.emplace_back(std::move(spill_task));
@@ -153,9 +145,8 @@ public:
     template <class Task>
     void finally(Task task) {
         auto runtime_state = this->_runtime_state;
-        auto& io_executor = this->_io_executor;
-        _final_task = [runtime_state, io_executor, task]() -> StatusOr<ChunkPtr> {
-            RETURN_IF_ERROR(task(runtime_state, io_executor));
+        _final_task = [runtime_state, task]() -> StatusOr<ChunkPtr> {
+            RETURN_IF_ERROR(task(runtime_state));
             return Status::EndOfFile("eos");
         };
     }
@@ -165,7 +156,6 @@ public:
 
 private:
     RuntimeState* _runtime_state;
-    std::shared_ptr<spill::IOTaskExecutor> _io_executor;
     std::vector<SpillProcessTask> _spill_tasks;
     SpillProcessTask _final_task;
 };

@@ -36,6 +36,7 @@ import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MaxLiteral;
+import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
@@ -86,10 +87,13 @@ import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DistributionDesc;
+import com.starrocks.sql.ast.FieldReference;
+import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
+import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
@@ -101,8 +105,10 @@ import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
+import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UpdateStmt;
+import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -121,8 +127,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -379,6 +388,227 @@ public class AnalyzerUtils {
         }
     }
 
+    // Get all the selected table columns
+    public static Map<TableName, Set<String>> collectAllSelectTableColumns(StatementBase statementBase) {
+        SelectTableColumnCollector selectTableColumnCollector = null;
+        if (statementBase instanceof UpdateStmt) {
+            selectTableColumnCollector = new UpdateStmtSelectTableColumnCollector((UpdateStmt) statementBase);
+        } else {
+            selectTableColumnCollector = new SelectTableColumnCollector();
+        }
+        selectTableColumnCollector.visit(statementBase);
+        return selectTableColumnCollector.getTableColumns();
+    }
+
+    private static class UpdateStmtSelectTableColumnCollector extends SelectTableColumnCollector {
+
+        private Table updateTable;
+        private TableName updateTableName;
+
+        public UpdateStmtSelectTableColumnCollector(UpdateStmt updateStmt) {
+            this.updateTable = updateStmt.getTable();
+            this.updateTableName = updateStmt.getTableName();
+        }
+
+        @Override
+        public Void visitSelect(SelectRelation node, Void context) {
+            Relation relation = node.getRelation();
+            doVisitSelect(node);
+            if (relation instanceof ValuesRelation) {
+                return null;
+            }
+            if (node.hasWithClause()) {
+                node.getCteRelations().forEach(this::visit);
+            }
+
+            if (node.getOrderBy() != null) {
+                for (OrderByElement orderByElement : node.getOrderBy()) {
+                    visit(orderByElement.getExpr());
+                }
+            }
+
+            // In the UpdateStatement, columns other than those in the assignment are taken as outputExpression for
+            // the SelectRelation (even if these columns are not mentioned in the SQL),
+            // which is not inline with expectations.
+            boolean skipOutputExpr = (relation instanceof JoinRelation) ||
+                    (relation instanceof TableRelation && ((TableRelation) relation).getTable().equals(updateTable));
+            if (node.getOutputExpression() != null) {
+                if (skipOutputExpr) {
+                    node.getOutputExpression().stream()
+                            .filter(expr -> !(expr instanceof SlotRef && ((SlotRef) expr).getQualifiedName() == null &&
+                                    ((SlotRef) expr).getTblNameWithoutAnalyzed().equals(updateTableName)))
+                            .forEach(this::visit);
+                } else {
+                    node.getOutputExpression().forEach(this::visit);
+                }
+            }
+
+            if (node.getPredicate() != null) {
+                visit(node.getPredicate());
+            }
+
+            if (node.getGroupBy() != null) {
+                node.getGroupBy().forEach(this::visit);
+            }
+
+            if (node.getAggregate() != null) {
+                node.getAggregate().forEach(this::visit);
+            }
+
+            if (node.getHaving() != null) {
+                visit(node.getHaving());
+            }
+
+            return visit(node.getRelation());
+        }
+    }
+
+    private static class SelectTableColumnCollector extends AstTraverser<Void, Void> {
+        protected Map<TableName, Set<String>> tableColumns;
+        protected Map<String, TableName> aliasMap;
+        protected Set<TableName> ctes;
+        protected Set<TableName> realTableAndViews;
+
+        public SelectTableColumnCollector() {
+            this.tableColumns = Maps.newHashMap();
+            this.aliasMap = Maps.newHashMap();
+            this.ctes = Sets.newHashSet();
+            this.realTableAndViews = Sets.newHashSet();
+        }
+
+        public Map<TableName, Set<String>> getTableColumns() {
+            Map<TableName, Set<String>> added = Maps.newHashMap();
+            Iterator<TableName> iterator = tableColumns.keySet().iterator();
+            while (iterator.hasNext()) {
+                TableName next = iterator.next();
+                if (aliasMap.containsKey(next.getTbl())) {
+                    Set<String> columns = tableColumns.get(next);
+                    iterator.remove();
+                    added.put(aliasMap.get(next.getTbl()), columns);
+                }
+            }
+            tableColumns.putAll(added);
+            for (TableName cte : ctes) {
+                // policy rewrite node tblName maybe real Table/View
+                if (!realTableAndViews.contains(cte)) {
+                    tableColumns.remove(cte);
+                }
+            }
+            return tableColumns;
+        }
+
+        @Override
+        public Void visitCTE(CTERelation node, Void context) {
+            ctes.add(node.getResolveTableName());
+            return super.visitCTE(node, context);
+        }
+
+        @Override
+        public Void visitSubquery(SubqueryRelation node, Void context) {
+            ctes.add(node.getResolveTableName());
+            return super.visitSubquery(node, context);
+        }
+
+        @Override
+        public Void visitTableFunction(TableFunctionRelation node, Void context) {
+            // TableFunctionRelation is also a subquery
+            ctes.add(node.getAlias());
+            node.getChildExpressions().forEach(this::visit);
+            return super.visitTableFunction(node, context);
+        }
+
+        /** treat {@link NormalizedTableFunctionRelation} as JoinRelation **/
+        @Override
+        public Void visitNormalizedTableFunction(NormalizedTableFunctionRelation node, Void context) {
+            return super.visitJoin(node, context);
+        }
+
+        private void visitTableAndView(TableName alias, TableName realName, boolean createByPolicyRewritten) {
+            // `select ... from t1 t2` TableRelation's name is t1, alias is t2
+            // but in SlotRef, tblName would be table's alias instead of name.
+            // So in last stage, should find slotRef's realTableName
+            if (alias != null) {
+                aliasMap.put(alias.getTbl(), realName);
+            }
+            if (!createByPolicyRewritten) {
+                realTableAndViews.add(realName);
+            } else {
+                // policy rewritten node should be invisible for user (treated as cte)
+                ctes.add(realName);
+            }
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
+            visitTableAndView(node.getAlias(), node.getName(), node.isCreateByPolicyRewritten());
+            return super.visitTable(node, context);
+        }
+
+        @Override
+        public Void visitView(ViewRelation node, Void context) {
+            visitTableAndView(node.getAlias(), node.getName(), node.isCreateByPolicyRewritten());
+            // block view definition drill-down
+            return null;
+        }
+
+        // find all TableRelations or ViewRelations in 'select * from ...'
+        private void fillStarRelation(Relation relation, Set<TableName> starRelationNames) {
+            if (relation instanceof TableRelation || relation instanceof ViewRelation) {
+                // except virtual relation like FileTableFunctionRelation
+                if (!(relation instanceof FileTableFunctionRelation)) {
+                    starRelationNames.add(relation.getResolveTableName());
+                }
+            } else if (relation instanceof JoinRelation) {
+                JoinRelation joinRelation = (JoinRelation) relation;
+                fillStarRelation(joinRelation.getLeft(), starRelationNames);
+                fillStarRelation(joinRelation.getRight(), starRelationNames);
+            }
+        }
+
+        protected void doVisitSelect(SelectRelation node) {
+            Relation relation = node.getRelation();
+            if (node.getOutputExpression().stream().allMatch(FieldReference.class::isInstance)) {
+                Set<TableName> starRelationNames = Sets.newHashSet();
+                fillStarRelation(relation, starRelationNames);
+                starRelationNames.forEach(name -> put(name, "*"));
+            }
+        }
+
+        @Override
+        public Void visitSelect(SelectRelation node, Void context) {
+            doVisitSelect(node);
+            if (node.getRelation() instanceof ValuesRelation) {
+                return null;
+            }
+            return super.visitSelect(node, context);
+        }
+
+        protected void put(TableName tableName, String column) {
+            tableColumns.compute(tableName, (k, v) -> {
+                if (v == null) {
+                    HashSet<String> strings = new HashSet<>();
+                    strings.add(column);
+                    return strings;
+                } else {
+                    v.add(column);
+                    return v;
+                }
+            });
+        }
+
+        @Override
+        public Void visitSlot(SlotRef slotRef, Void context) {
+            // filter _LAMBDA_TABLE && alias SlotRef
+            if (!slotRef.isFromLambda() && slotRef.getTblNameWithoutAnalyzed() != null) {
+                // when used `slotRef.getColumnName()`, it would like c2.c2_sub1 instead of c2 for struct data type
+                // so finally use `slotRef.getLabel()`
+                put(slotRef.getTblNameWithoutAnalyzed(), slotRef.getLabel().replace("`", ""));
+            }
+            return null;
+        }
+
+    }
+
     //Get all the table used
     public static Map<TableName, Table> collectAllTable(StatementBase statementBase) {
         Map<TableName, Table> tables = Maps.newHashMap();
@@ -595,11 +825,40 @@ public class AnalyzerUtils {
 
     private static class OlapTableCollector extends TableCollector {
         private Set<OlapTable> olapTables;
-        private Map<Long, OlapTable> idMap;
+        private Map<TableIndexId, OlapTable> idMap;
 
         public OlapTableCollector(Set<OlapTable> tables) {
             this.olapTables = tables;
             this.idMap = new HashMap<>();
+        }
+
+        /**
+         * One table may contain multi MaterializeIndexMetas. and it's different if one has tableA and baseIndex a
+         * and one has tableA and baseIndex b. So use TableId and its base table index as the key to distinguish a TableRelation.
+         */
+        class TableIndexId {
+            long tableId;
+            long baseIndexId;
+            public TableIndexId(long tableId, long indexId) {
+                this.tableId = tableId;
+                this.baseIndexId = indexId;
+            }
+            @Override
+            public boolean equals(Object o) {
+                if (this == o) {
+                    return true;
+                }
+                if (o == null || getClass() != o.getClass()) {
+                    return false;
+                }
+                TableIndexId that = (TableIndexId) o;
+                return tableId == that.tableId && baseIndexId == that.baseIndexId;
+            }
+
+            @Override
+            public int hashCode() {
+                return Objects.hash(tableId, baseIndexId);
+            }
         }
 
         @Override
@@ -624,7 +883,8 @@ public class AnalyzerUtils {
         // TODO: support cloud native table and mv
         private Table copyTable(Table originalTable) {
             OlapTable table = (OlapTable) originalTable;
-            OlapTable existed = idMap.get(table.getId());
+            TableIndexId tableIndexId = new TableIndexId(table.getId(), table.getBaseIndexId());
+            OlapTable existed = idMap.get(tableIndexId);
             if (existed != null) {
                 return existed;
             }
@@ -639,7 +899,7 @@ public class AnalyzerUtils {
             }
 
             olapTables.add(table);
-            idMap.put(table.getId(), table);
+            idMap.put(tableIndexId, table);
             table.copyOnlyForQuery(copied);
             return copied;
         }
