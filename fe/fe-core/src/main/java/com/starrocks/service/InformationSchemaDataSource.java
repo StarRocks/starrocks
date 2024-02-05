@@ -327,25 +327,21 @@ public class InformationSchemaDataSource {
                     PartitionInfo tblPartitionInfo = olapTable.getPartitionInfo();
                     // normal partition
                     for (Partition partition : olapTable.getPartitions()) {
-                        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                            TPartitionMetaInfo partitionMetaInfo = new TPartitionMetaInfo();
-                            partitionMetaInfo.setDb_name(dbName);
-                            partitionMetaInfo.setTable_name(olapTable.getName());
-                            genPartitionMetaInfo(db, olapTable, tblPartitionInfo, partition, physicalPartition,
-                                    partitionMetaInfo, false /* isTemp */);
-                            pList.add(partitionMetaInfo);
-                        }
+                        TPartitionMetaInfo partitionMetaInfo = new TPartitionMetaInfo();
+                        partitionMetaInfo.setDb_name(dbName);
+                        partitionMetaInfo.setTable_name(olapTable.getName());
+                        genPartitionMetaInfo(db, olapTable, tblPartitionInfo, partition,
+                                partitionMetaInfo, false /* isTemp */);
+                        pList.add(partitionMetaInfo);
                     }
                     // temp partition
                     for (Partition partition : olapTable.getTempPartitions()) {
-                        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                            TPartitionMetaInfo partitionMetaInfo = new TPartitionMetaInfo();
-                            partitionMetaInfo.setDb_name(dbName);
-                            partitionMetaInfo.setTable_name(olapTable.getName());
-                            genPartitionMetaInfo(db, olapTable, tblPartitionInfo, partition, physicalPartition,
-                                    partitionMetaInfo, true /* isTemp */);
-                            pList.add(partitionMetaInfo);
-                        }
+                        TPartitionMetaInfo partitionMetaInfo = new TPartitionMetaInfo();
+                        partitionMetaInfo.setDb_name(dbName);
+                        partitionMetaInfo.setTable_name(olapTable.getName());
+                        genPartitionMetaInfo(db, olapTable, tblPartitionInfo, partition,
+                                partitionMetaInfo, true /* isTemp */);
+                        pList.add(partitionMetaInfo);
                     }
                 } finally {
                     db.readUnlock();
@@ -357,16 +353,15 @@ public class InformationSchemaDataSource {
     }
 
     private static void genPartitionMetaInfo(Database db, OlapTable table,
-            PartitionInfo partitionInfo, Partition partition, PhysicalPartition physicalPartition,
-            TPartitionMetaInfo partitionMetaInfo, boolean isTemp) {
+            PartitionInfo partitionInfo, Partition partition, TPartitionMetaInfo partitionMetaInfo, boolean isTemp) {
         // PARTITION_NAME
         partitionMetaInfo.setPartition_name(partition.getName());
         // PARTITION_ID
-        partitionMetaInfo.setPartition_id(physicalPartition.getId());
+        partitionMetaInfo.setPartition_id(partition.getId());
         // VISIBLE_VERSION
-        partitionMetaInfo.setVisible_version(physicalPartition.getVisibleVersion());
+        partitionMetaInfo.setVisible_version(partition.getVisibleVersion());
         // VISIBLE_VERSION_TIME
-        partitionMetaInfo.setVisible_version_time(physicalPartition.getVisibleVersionTime() / 1000);
+        partitionMetaInfo.setVisible_version_time(partition.getVisibleVersionTime() / 1000);
         // PARTITION_KEY
         partitionMetaInfo.setPartition_key(
                 Joiner.on(", ").join(PartitionsProcDir.findPartitionColNames(partitionInfo)));
@@ -381,7 +376,7 @@ public class InformationSchemaDataSource {
         // REPLICATION_NUM
         partitionMetaInfo.setReplication_num(partitionInfo.getReplicationNum(partition.getId()));
         // DATA_SIZE
-        ByteSizeValue byteSizeValue = new ByteSizeValue(physicalPartition.storageDataSize());
+        ByteSizeValue byteSizeValue = new ByteSizeValue(partition.getDataSize());
         partitionMetaInfo.setData_size(byteSizeValue.toString());
         DataProperty dataProperty = partitionInfo.getDataProperty(partition.getId());
         // STORAGE_MEDIUM
@@ -393,13 +388,13 @@ public class InformationSchemaDataSource {
         // IS_IN_MEMORY
         partitionMetaInfo.setIs_in_memory(partitionInfo.getIsInMemory(partition.getId()));
         // ROW_COUNT
-        partitionMetaInfo.setRow_count(physicalPartition.storageRowCount());
+        partitionMetaInfo.setRow_count(partition.getRowCount());
         // IS_TEMP
         partitionMetaInfo.setIs_temp(isTemp);
         // NEXT_VERSION
-        partitionMetaInfo.setNext_version(physicalPartition.getNextVersion());
+        partitionMetaInfo.setNext_version(partition.getNextVersion());
         if (table.isCloudNativeTableOrMaterializedView()) {
-            PartitionIdentifier identifier = new PartitionIdentifier(db.getId(), table.getId(), physicalPartition.getId());
+            PartitionIdentifier identifier = new PartitionIdentifier(db.getId(), table.getId(), partition.getId());
             PartitionStatistics statistics = GlobalStateMgr.getCurrentState().getCompactionMgr().getStatistics(identifier);
             Quantiles compactionScore = statistics != null ? statistics.getCompactionScore() : null;
             // COMPACT_VERSION
@@ -415,7 +410,7 @@ public class InformationSchemaDataSource {
             partitionMetaInfo.setMax_cs(compactionScore != null ? compactionScore.getMax() : 0.0);
             // STORAGE_PATH
             partitionMetaInfo.setStorage_path(
-                    table.getPartitionFilePathInfo(physicalPartition.getId()).getFullPath());
+                    table.getPartitionFilePathInfo(partition.getId()).getFullPath());
         }
     }
 
