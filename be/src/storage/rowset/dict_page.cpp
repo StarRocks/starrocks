@@ -235,7 +235,9 @@ Status DictPageDecoder<Type>::next_batch(const SparseRange<>& range, Column* dst
         _dict_decoder->at_index(codewords[i], &value);
         numbers[i] = value;
     }
-    dst->append_numbers(numbers.data(), numbers.size() * SIZE_OF_TYPE);
+    if (dst->append_numbers(numbers.data(), numbers.size() * SIZE_OF_TYPE) == -1) {
+        return Status::InternalError("append numbers failed");
+    }
     return Status::OK();
 }
 
