@@ -117,9 +117,9 @@ public:
     size_t dop_of_source_operator(int source_node_id);
     MorselQueueFactory* morsel_queue_factory_of_source_operator(int source_node_id);
     MorselQueueFactory* morsel_queue_factory_of_source_operator(const SourceOperatorFactory* source_op);
-    SourceOperatorFactory* source_operator(OpFactories ops);
+    SourceOperatorFactory* source_operator(const OpFactories& ops);
     // Whether the building pipeline `ops` need local shuffle for the next operator.
-    bool could_local_shuffle(OpFactories ops) const;
+    bool could_local_shuffle(const OpFactories& ops) const;
 
     bool should_interpolate_cache_operator(int32_t plan_node_id, OpFactoryPtr& source_op);
     OpFactories interpolate_cache_operator(
