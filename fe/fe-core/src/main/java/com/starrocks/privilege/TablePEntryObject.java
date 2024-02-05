@@ -164,7 +164,8 @@ public class TablePEntryObject implements PEntryObject {
         }
         if (Objects.equals(other.tableUUID, PrivilegeBuiltinConstants.ALL_TABLES_UUID)) {
             return this.catalogId == other.catalogId &&
-                    Objects.equals(Catalog.getCompatibleDbUUID(this.databaseUUID), Catalog.getCompatibleDbUUID(other.databaseUUID));
+                    Objects.equals(Catalog.getCompatibleDbUUID(this.databaseUUID),
+                            Catalog.getCompatibleDbUUID(other.databaseUUID));
         }
         return this.catalogId == other.catalogId &&
                 Objects.equals(Catalog.getCompatibleDbUUID(this.databaseUUID), Catalog.getCompatibleDbUUID(other.databaseUUID)) &&
