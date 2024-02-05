@@ -49,11 +49,15 @@ import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class LakePublishBatchTest {
     private static PseudoCluster cluster;
     private static ConnectContext connectContext;
@@ -161,6 +165,7 @@ public class LakePublishBatchTest {
     }
 
     @Test
+    @Order(1)
     public void testNormal() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getDb(DB);
         Table table = db.getTable(TABLE);
@@ -230,6 +235,7 @@ public class LakePublishBatchTest {
     }
 
     @Test
+    @Order(2)
     public void testTransformBatchToSingle() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getDb(DB);
         Table table = db.getTable(TABLE);
@@ -294,6 +300,7 @@ public class LakePublishBatchTest {
     }
 
     @Test
+    @Order(3)
     public void testPublishTransactionState() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getDb(DB);
         Table table = db.getTable(TABLE);
@@ -327,6 +334,7 @@ public class LakePublishBatchTest {
     }
 
     @Test
+    @Order(4)
     public void testPublishDbDroped() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getDb(DB);
         Table table = db.getTable(TABLE);
@@ -383,6 +391,7 @@ public class LakePublishBatchTest {
     }
 
     @Test
+    @Order(5)
     public void testPublishTableDropped() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getDb(DB);
         Table table = db.getTable(TABLE);
@@ -439,6 +448,7 @@ public class LakePublishBatchTest {
     }
 
     @Test
+    @Order(6)
     public void testPublishLogVersion() throws Exception {
         new MockUp<Utils>() {
             @Mock
