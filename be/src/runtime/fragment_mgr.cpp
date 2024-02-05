@@ -808,6 +808,12 @@ void FragmentMgr::debug(std::stringstream& ss) {
  */
 Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, const TUniqueId& fragment_instance_id,
                                                 std::vector<TScanColumnDesc>* selected_columns, TUniqueId* query_id) {
+    // check chunk size first
+    auto batch_size = params.batch_size;
+    if (UNLIKELY(batch_size <= 0 || batch_size > MAX_CHUNK_SIZE)) {
+        return Status::InvalidArgument(fmt::format(
+                "batch_size is out of range, it must be in the range (0, 65536], current value is [{}]", batch_size));
+    }
     const std::string& opaqued_query_plan = params.opaqued_query_plan;
     std::string query_plan_info;
     // base64 decode query plan
