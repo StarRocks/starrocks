@@ -362,7 +362,8 @@ public class PushDownAggregateBeforeMVRewriter extends OptExpressionVisitor<OptE
         OptExpression result = joinOpt.inputAt(child);
 
         // add a aggregation node
-        if (childContext.aggregations.values().stream().filter(c -> !c.isCountStar()).map(c -> c.getChild(0)).anyMatch(s -> !s.isColumnRef())) {
+        if (childContext.aggregations.values().stream()
+                .filter(c -> !c.isCountStar()).map(c -> c.getChild(0)).anyMatch(s -> !s.isColumnRef())) {
             Map<ColumnRefOperator, ScalarOperator> refs = Maps.newHashMap();
             joinOpt.inputAt(child).getOutputColumns().getColumnRefOperators(factory)
                     .forEach(c -> refs.put(c, c));
@@ -384,8 +385,8 @@ public class PushDownAggregateBeforeMVRewriter extends OptExpressionVisitor<OptE
 
         LogicalAggregationOperator aggregate;
         List<ColumnRefOperator> groupBys = Lists.newArrayList(childContext.groupBys.keySet());
-        if ("local".equalsIgnoreCase(sessionVariable.getCboPushDownAggregate()) || ("auto".equalsIgnoreCase(sessionVariable.getCboPushDownAggregate()) && groupBys.size() <= 1)) {
-
+        if ("local".equalsIgnoreCase(sessionVariable.getCboPushDownAggregate())
+                || ("auto".equalsIgnoreCase(sessionVariable.getCboPushDownAggregate()) && groupBys.size() <= 1)) {
             // local && un-split
             aggregate = new LogicalAggregationOperator(AggType.LOCAL, groupBys, childContext.aggregations);
             aggregate.setOnlyLocalAggregate();

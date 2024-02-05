@@ -643,7 +643,7 @@ public class Optimizer {
                 new PushDownAggregateBeforeMVRule(rootTaskContext);
         rule.getRewriter().collectRewriteContext(tree);
 
-        if(!rule.getRewriter().isNeedRewrite()) {
+        if (!rule.getRewriter().isNeedRewrite()) {
             return tree;
         }
 
