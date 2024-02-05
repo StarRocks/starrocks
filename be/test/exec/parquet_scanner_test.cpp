@@ -105,15 +105,14 @@ class ParquetScannerTest : public ::testing::Test {
     std::unique_ptr<ParquetScanner> create_parquet_scanner(
             const std::string& timezone, DescriptorTbl* desc_tbl,
             const std::unordered_map<size_t, ::starrocks::TExpr>& dst_slot_exprs,
-            const std::vector<TBrokerRangeDesc>& ranges, TBrokerScanRangeParams *params) {
+            const std::vector<TBrokerRangeDesc>& ranges, TBrokerScanRangeParams* params) {
         /// Init RuntimeState
         auto query_globals = TQueryGlobals();
         query_globals.time_zone = timezone;
         RuntimeState* state = _obj_pool.add(new RuntimeState(TUniqueId(), TQueryOptions(), query_globals, nullptr));
         state->set_desc_tbl(desc_tbl);
         state->init_instance_mem_tracker();
-        
-        params->strict_mode = true;
+
         std::vector<TupleDescriptor*> tuples;
         desc_tbl->get_tuple_descs(&tuples);
         const auto num_tuples = tuples.size();
@@ -836,7 +835,8 @@ TEST_F(ParquetScannerTest, test_flexible_column_mapping) {
     auto ranges = generate_ranges(file_names, column_names.size(), {});
     auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, slot_infos});
     TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
-    params->enable_flexible_column_mapping = true;
+    params->__set_enable_flexible_column_mapping(true);
+    params->__set_strict_mode(true);
     auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges, params);
     ASSERT_OK(scanner->open());
     auto res = scanner->get_next();
