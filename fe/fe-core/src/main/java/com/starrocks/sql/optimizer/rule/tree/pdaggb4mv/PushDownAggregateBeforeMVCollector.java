@@ -21,7 +21,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -41,7 +40,6 @@ import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.ExpressionStatisticCalculator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
-import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import org.apache.commons.collections4.CollectionUtils;
@@ -337,15 +335,15 @@ class PushDownAggregateBeforeMVCollector extends OptExpressionVisitor<Void, Aggr
         Preconditions.checkState(childOutput.containsAll(allGroupByColumns));
         Preconditions.checkState(childOutput.containsAll(allAggregateColumns));
 
-//        ExpressionContext expressionContext = new ExpressionContext(optExpression);
-//        StatisticsCalculator statisticsCalculator =
-//                new StatisticsCalculator(expressionContext, factory, optimizerContext);
-//        statisticsCalculator.estimatorStats();
+        //        ExpressionContext expressionContext = new ExpressionContext(optExpression);
+        //        StatisticsCalculator statisticsCalculator =
+        //                new StatisticsCalculator(expressionContext, factory, optimizerContext);
+        //        statisticsCalculator.estimatorStats();
 
         // todo impl stastics
-//        if (!checkStatistics(context, allGroupByColumns, expressionContext.getStatistics())) {
-//            return AggregatePushDownBeforeMVContext.EMPTY;
-//        }
+        //        if (!checkStatistics(context, allGroupByColumns, expressionContext.getStatistics())) {
+        //            return AggregatePushDownBeforeMVContext.EMPTY;
+        //        }
 
         List<AggregatePushDownBeforeMVContext> list =
                 allRewriteContext.getOrDefault(childContext.origAggregator, Lists.newArrayList());
