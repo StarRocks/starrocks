@@ -131,7 +131,7 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
                 cluster.runSql("test", "alter materialized view test_cache_mv1 active;");
                 Assert.fail("could not active the mv");
             } catch (Exception e) {
-                Assert.assertTrue(e.getMessage().contains("mv schema changed"));
+                Assert.assertTrue(e.getMessage(), e.getMessage().contains("Column schema not compatible"));
             }
 
             plan = getFragmentPlan(sql);

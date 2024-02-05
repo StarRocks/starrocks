@@ -161,7 +161,6 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -455,11 +454,18 @@ public class AlterJobMgr {
         List<Column> existedColumns = materializedView.getColumns().stream()
                 .sorted(Comparator.comparing(Column::getName))
                 .collect(Collectors.toList());
-        if (!Objects.equals(newColumns, existedColumns)) {
-            String msg = String.format("mv schema changed: [%s] does not match [%s]",
-                    existedColumns, newColumns);
-            materializedView.setInactiveAndReason(msg);
-            throw new SemanticException(msg);
+        if (newColumns.size() != existedColumns.size()) {
+            throw new SemanticException(String.format("number of columns changed: %d != %d",
+                    existedColumns.size(), newColumns.size()));
+        }
+        for (int i = 0; i < existedColumns.size(); i++) {
+            Column existed = existedColumns.get(i);
+            Column created = newColumns.get(i);
+            if (!existed.isSchemaCompatible(created)) {
+                String message = String.format("Column schema not compatible: (%s) and (%s)", existed, created);
+                materializedView.setInactiveAndReason(message);
+                throw new SemanticException(message);
+            }
         }
 
         return createStmt.getQueryStatement();
