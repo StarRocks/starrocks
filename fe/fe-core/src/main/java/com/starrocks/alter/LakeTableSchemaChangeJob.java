@@ -28,6 +28,13 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.journal.JournalTask;
+>>>>>>> 3d2a0a51e6 ([Enhancement] Optimize the lock contention of consistency checker (#40710))
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.ShardDeleter;
@@ -233,6 +240,14 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     }
 
     @VisibleForTesting
+<<<<<<< HEAD
+=======
+    public static JournalTask writeEditLogAsync(LakeTableSchemaChangeJob job) {
+        return GlobalStateMgr.getCurrentState().getEditLog().logAlterJobNoWait(job);
+    }
+
+    @VisibleForTesting
+>>>>>>> 3d2a0a51e6 ([Enhancement] Optimize the lock contention of consistency checker (#40710))
     public static long getNextTransactionId() {
         return GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
     }
@@ -440,11 +455,15 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             return;
         }
 
+<<<<<<< HEAD
         this.jobState = JobState.FINISHED;
         this.finishedTimeMs = System.currentTimeMillis();
 
         writeEditLog(this);
 
+=======
+        JournalTask editLogFuture;
+>>>>>>> 3d2a0a51e6 ([Enhancement] Optimize the lock contention of consistency checker (#40710))
         // Replace the current index with shadow index.
         List<MaterializedIndex> droppedIndexes;
         try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
@@ -455,10 +474,26 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             }
             // Below this point, all query and load jobs will use the new schema.
             droppedIndexes = visualiseShadowIndex(table);
+<<<<<<< HEAD
         }
 
         // Delete shards from StarOS
         ShardDeleter shardDeleter = GlobalStateMgr.getCurrentState().getShardManager().getShardDeleter();
+=======
+
+            // inactivate related mv
+            inactiveRelatedMv(modifiedColumns, table);
+            table.onReload();
+            this.jobState = JobState.FINISHED;
+            this.finishedTimeMs = System.currentTimeMillis();
+
+            editLogFuture = writeEditLogAsync(this);
+        }
+
+        EditLog.waitInfinity(editLogFuture);
+
+        // Delete tablet and shards
+>>>>>>> 3d2a0a51e6 ([Enhancement] Optimize the lock contention of consistency checker (#40710))
         for (MaterializedIndex droppedIndex : droppedIndexes) {
             Set<Long> shards = droppedIndex.getTablets().stream().map(Tablet::getId).collect(Collectors.toSet());
             shardDeleter.addUnusedShardId(shards);

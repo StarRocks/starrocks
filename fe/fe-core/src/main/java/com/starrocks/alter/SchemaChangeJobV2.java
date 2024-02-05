@@ -56,6 +56,13 @@ import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.SchemaVersionAndHash;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.journal.JournalTask;
+>>>>>>> 3d2a0a51e6 ([Enhancement] Optimize the lock contention of consistency checker (#40710))
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
@@ -83,7 +90,6 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -559,9 +565,14 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
          * we just check whether all new replicas are healthy.
          */
         EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+<<<<<<< HEAD
         Future<Boolean> future;
         long start;
         db.writeLock();
+=======
+        JournalTask journalTask;
+        locker.lockDatabase(db, LockType.WRITE);
+>>>>>>> 3d2a0a51e6 ([Enhancement] Optimize the lock contention of consistency checker (#40710))
         try {
             OlapTable tbl = (OlapTable) db.getTable(tableId);
             if (tbl == null) {
@@ -575,8 +586,13 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                 Partition partition = tbl.getPartition(partitionId);
                 Preconditions.checkNotNull(partition, partitionId);
 
+<<<<<<< HEAD
                 long visiableVersion = partition.getVisibleVersion();
                 short expectReplicationNum = tbl.getPartitionInfo().getReplicationNum(partition.getId());
+=======
+                long visibleVersion = partition.getVisibleVersion();
+                short expectReplicationNum = tbl.getPartitionInfo().getReplicationNum(partition.getParentId());
+>>>>>>> 3d2a0a51e6 ([Enhancement] Optimize the lock contention of consistency checker (#40710))
 
                 Map<Long, MaterializedIndex> shadowIndexMap = partitionIndexMap.row(partitionId);
                 for (Map.Entry<Long, MaterializedIndex> entry : shadowIndexMap.entrySet()) {
@@ -593,7 +609,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                         int healthyReplicaNum = 0;
                         for (Replica replica : replicas) {
                             if (replica.getLastFailedVersion() < 0
-                                    && replica.checkVersionCatchUp(visiableVersion, false)) {
+                                    && replica.checkVersionCatchUp(visibleVersion, false)) {
                                 healthyReplicaNum++;
                             }
                         }
@@ -618,13 +634,16 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             this.jobState = JobState.FINISHED;
             this.finishedTimeMs = System.currentTimeMillis();
 
-            start = System.nanoTime();
-            future = editLog.logAlterJobNoWait(this);
+            journalTask = editLog.logAlterJobNoWait(this);
         } finally {
             db.writeUnlock();
         }
 
+<<<<<<< HEAD
         editLog.waitInfinity(start, future);
+=======
+        EditLog.waitInfinity(journalTask);
+>>>>>>> 3d2a0a51e6 ([Enhancement] Optimize the lock contention of consistency checker (#40710))
 
         LOG.info("schema change job finished: {}", jobId);
         this.span.end();
