@@ -144,6 +144,11 @@ public class OdpsMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public Table.TableType getTableType() {
+        return Table.TableType.ODPS;
+    }
+
+    @Override
     public List<String> listDbNames() {
         ImmutableList.Builder<String> builder = ImmutableList.builder();
         try {
