@@ -21,7 +21,15 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
+<<<<<<< HEAD
+=======
+import org.apache.iceberg.TableScan;
+import org.apache.iceberg.exceptions.NoSuchTableException;
+import org.apache.iceberg.io.CloseableIterable;
+import org.apache.iceberg.io.CloseableIterator;
+>>>>>>> 7df5f60162 ([Enhancement] using stream to get iceberg scantask in list_partition_names (#40798))
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
@@ -56,6 +64,42 @@ public interface IcebergCatalog {
 
     Table getTable(String dbName, String tableName) throws StarRocksConnectorException;
 
+<<<<<<< HEAD
+=======
+    default boolean tableExists(String dbName, String tableName) throws StarRocksConnectorException {
+        try {
+            getTable(dbName, tableName);
+            return true;
+        } catch (NoSuchTableException e) {
+            return false;
+        }
+    }
+
+    default List<String> listPartitionNames(String dbName, String tableName, ExecutorService executorService) {
+        org.apache.iceberg.Table icebergTable = getTable(dbName, tableName);
+        List<String> partitionNames = Lists.newArrayList();
+
+        if (icebergTable.specs().values().stream().allMatch(PartitionSpec::isUnpartitioned)) {
+            return partitionNames;
+        }
+
+        TableScan tableScan = icebergTable.newScan().planWith(executorService);
+        try (CloseableIterable<FileScanTask> fileScanTaskIterable = tableScan.planFiles();
+                CloseableIterator<FileScanTask> fileScanTaskIterator = fileScanTaskIterable.iterator()) {
+
+            while (fileScanTaskIterator.hasNext()) {
+                FileScanTask scanTask = fileScanTaskIterator.next();
+                StructLike partition = scanTask.file().partition();
+                partitionNames.add(convertIcebergPartitionToPartitionName(scanTask.spec(), partition));
+            }
+        } catch (IOException e) {
+            throw new StarRocksConnectorException(String.format("Failed to list iceberg partition names %s.%s",
+                    dbName, tableName), e);
+        }
+
+        return partitionNames;
+    }
+>>>>>>> 7df5f60162 ([Enhancement] using stream to get iceberg scantask in list_partition_names (#40798))
 
     default void deleteUncommittedDataFiles(List<String> fileLocations) {
     }
