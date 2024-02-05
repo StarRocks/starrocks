@@ -38,9 +38,9 @@ LIKE [database.]<source_table_name>
 - `database`：数据库。
 - `table_name`：要创建的表的名称。有关表名的命令要求，参见[系统限制](../../../reference/System_limit.md)。
 - `source_table_name`：要拷贝的表的名称。
-- `partition_desc`：分区方式。更多信息，参见 [CREATE TABLE](./CREATE_TABLE.md)。
-- `distribution_desc`：分桶方式。更多信息，参见 [CREATE TABLE](./CREATE_TABLE.md)。
-- `PROPERTIES`：表的属性。
+- `partition_desc`：分区方式。更多信息，参见 [CREATE TABLE](./CREATE_TABLE.md#partition_desc)。
+- `distribution_desc`：分桶方式。更多信息，参见 [CREATE TABLE](./CREATE_TABLE.md#distribution_desc)。
+- `PROPERTIES`：表的属性。支持所有表属性。更多信息，参见 [CREATE TABLE](./CREATE_TABLE.md#properties)。
 
 ## 示例
 

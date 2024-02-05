@@ -38,9 +38,9 @@ LIKE [database.]<source_table_name>
 - `database`: the database.
 - `table_name`: the name of the table you want to create. For the naming conventions, see [System limits](../../../reference/System_limit.md).
 - `source_table_name`: the name of the source table you want to copy.
-- - `partition_desc`: the partitioning method. For more information, see [CREATE TABLE](./CREATE_TABLE.md).
-- `distribution_desc`: the bucketing method. For more information, see [CREATE TABLE](./CREATE_TABLE.md).
-- `PROPERTIES`: the properties of the table.
+- - `partition_desc`: the partitioning method. For more information, see [CREATE TABLE](./CREATE_TABLE.md#partition_desc).
+- `distribution_desc`: the bucketing method. For more information, see [CREATE TABLE](./CREATE_TABLE.md#distribution_desc).
+- `PROPERTIES`: the properties of the table. All the table properties are supported. For more inforation, see [CREATE TABLE](./CREATE_TABLE.md#properties).
 
 ## Examples
 
