@@ -90,6 +90,10 @@ public class DbPEntryObject implements PEntryObject {
         return new DbPEntryObject(catalogId, getDatabaseUUID(mgr, catalogName, tokens.get(0)));
     }
 
+    /**
+     * for internal database, use {@link Database#getUUID()} as privilege id.
+     * for external database, use database name as privilege id.
+     */
     public static String getDatabaseUUID(GlobalStateMgr mgr, String catalogName, String dbToken) throws PrivObjNotFoundException {
         checkArgument(!dbToken.equals("*"));
         if (CatalogMgr.isInternalCatalog(catalogName)) {

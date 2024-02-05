@@ -140,7 +140,7 @@ public class StatisticsExecutorTest extends PlanTestBase {
                             "hll_union_agg(ndv), sum(null_count),  cast(max(cast(max as varchar(1073741824))) as string), " +
                             "cast(min(cast(min as varchar(1073741824))) as string) " +
                             "FROM external_column_statistics " +
-                            "WHERE table_uuid = \"hive0.partitioned_db.t1.0\" " +
+                            "WHERE table_uuid = \"hive0.partitioned_db.t1.0\"" +
                             " and column_name = \"c2\" " +
                             "GROUP BY table_uuid, column_name", sql);
                 return Lists.newArrayList();

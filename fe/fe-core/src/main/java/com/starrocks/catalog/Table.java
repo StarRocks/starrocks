@@ -247,6 +247,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
      * Get the unique id of table in string format, since we already ensure
      * the uniqueness of id for internal table, we just convert it to string
      * and return, for external table it's up to the implementation of connector.
+     * Note: for external table, we use table name as the privilege entry
+     * id, not the uuid returned by this interface.
      *
      * @return unique id of table in string format
      */

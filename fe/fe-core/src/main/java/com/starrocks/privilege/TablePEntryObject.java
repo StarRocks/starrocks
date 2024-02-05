@@ -116,6 +116,10 @@ public class TablePEntryObject implements PEntryObject {
         return new TablePEntryObject(catalogId, dbUUID, tableUUID);
     }
 
+    /**
+     * for internal table, use {@link Table#getUUID()} as privilege id.
+     * for external table, use table name as privilege id.
+     */
     private static String getTableUUID(GlobalStateMgr mgr, String catalogName, String dbToken, String tableToken)
             throws PrivObjNotFoundException {
         checkArgument(!dbToken.equals("*"));
