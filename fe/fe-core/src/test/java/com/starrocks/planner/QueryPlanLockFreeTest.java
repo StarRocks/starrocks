@@ -75,10 +75,10 @@ public class QueryPlanLockFreeTest {
             Assert.assertTrue(e.getMessage(),
                     e.getMessage().contains("The tablet write operation update metadata take a long time"));
         }
-        connectContext.getSessionVariable().setCboUserDBLock(true);
+        connectContext.getSessionVariable().setCboUseDBLock(true);
         Pair<String, ExecPlan> plan = UtFrameUtils.getPlanAndFragment(connectContext, sql);
         Assert.assertTrue(plan.first, plan.first.contains("SCAN"));
-        connectContext.getSessionVariable().setCboUserDBLock(false);
+        connectContext.getSessionVariable().setCboUseDBLock(false);
         GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.FOLLOWER);
         plan = UtFrameUtils.getPlanAndFragment(connectContext, sql);
         Assert.assertTrue(plan.first, plan.first.contains("SCAN"));
