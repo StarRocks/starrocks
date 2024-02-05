@@ -1400,12 +1400,7 @@ public class EditLog {
     }
 
     public JournalTask logFinishConsistencyCheckNoWait(ConsistencyCheckInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            return submitLog(OperationType.OP_FINISH_CONSISTENCY_CHECK_V2,
-                    out -> Text.writeString(out, GsonUtils.GSON.toJson(info)), -1);
-        } else {
-            return submitLog(OperationType.OP_FINISH_CONSISTENCY_CHECK, info, -1);
-        }
+        return submitLog(OperationType.OP_FINISH_CONSISTENCY_CHECK, info, -1);
     }
 
     public void logAddComputeNode(ComputeNode computeNode) {
