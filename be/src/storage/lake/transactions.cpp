@@ -80,7 +80,7 @@ int64_t cal_new_base_version(int64_t tablet_id, TabletManager* tablet_mgr, int64
 
     auto index_version = tablet_mgr->update_mgr()->get_primary_index_data_version(tablet_id);
     if (index_version > new_version) {
-        tablet_mgr->update_mgr()->try_remove_primary_index_cache(tablet_id);
+        tablet_mgr->update_mgr()->remove_primary_index(tablet_id);
         return version;
     }
     if (index_version > version) {
@@ -90,7 +90,7 @@ int64_t cal_new_base_version(int64_t tablet_id, TabletManager* tablet_mgr, int64
         if (res.ok()) {
             version = index_version;
         } else {
-            tablet_mgr->update_mgr()->try_remove_primary_index_cache(tablet_id);
+            tablet_mgr->update_mgr()->remove_primary_index(tablet_id);
         }
     }
 
