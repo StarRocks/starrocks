@@ -1187,6 +1187,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return cboUseDBLock;
     }
 
+    public void setCboUseDBLock(boolean cboUseDBLock) {
+        this.cboUseDBLock = cboUseDBLock;
+    }
+
     public int getStatisticCollectParallelism() {
         return statisticCollectParallelism;
     }

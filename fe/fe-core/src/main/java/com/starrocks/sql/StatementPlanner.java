@@ -71,14 +71,19 @@ public class StatementPlanner {
 
             // Note: we only could get the olap table after Analyzing phase
             boolean isOnlyOlapTableQueries = AnalyzerUtils.isOnlyHasOlapTables(stmt);
-            if (isOnlyOlapTableQueries && stmt instanceof QueryStatement) {
-                unLock(dbs);
-                needWholePhaseLock = false;
-                return planQuery(stmt, resultSinkType, session, true);
-            }
-
             if (stmt instanceof QueryStatement) {
-                return planQuery(stmt, resultSinkType, session, false);
+                QueryStatement queryStmt = (QueryStatement) stmt;
+                resultSinkType = queryStmt.hasOutFileClause() ? TResultSinkType.FILE : resultSinkType;
+                ExecPlan plan;
+                if (isLockFree(isOnlyOlapTableQueries, session)) {
+                    unLock(dbs);
+                    needWholePhaseLock = false;
+                    plan = createQueryPlanWithReTry(queryStmt, session, resultSinkType);
+                } else {
+                    plan = createQueryPlan(queryStmt.getQueryRelation(), session, resultSinkType);
+                }
+                setOutfileSink(queryStmt, plan);
+                return plan;
             } else if (stmt instanceof InsertStmt) {
                 return new InsertPlanner().plan((InsertStmt) stmt, session);
             } else if (stmt instanceof UpdateStmt) {
@@ -95,20 +100,14 @@ public class StatementPlanner {
         return null;
     }
 
-    private static ExecPlan planQuery(StatementBase stmt,
-                                      TResultSinkType resultSinkType,
-                                      ConnectContext session,
-                                      boolean isOnlyOlapTable) {
-        QueryStatement queryStmt = (QueryStatement) stmt;
-        resultSinkType = queryStmt.hasOutFileClause() ? TResultSinkType.FILE : resultSinkType;
-        ExecPlan plan;
-        if (!isOnlyOlapTable || !GlobalStateMgr.getCurrentState().isLeader() || session.getSessionVariable().isCboUseDBLock()) {
-            plan = createQueryPlan(queryStmt.getQueryRelation(), session, resultSinkType);
-        } else {
-            plan = createQueryPlanWithReTry(queryStmt, session, resultSinkType);
-        }
-        setOutfileSink(queryStmt, plan);
-        return plan;
+    private static boolean isLockFree(boolean isOnlyOlapTable, ConnectContext session) {
+        // condition can use conflict detection to replace db lock
+        // 1. all tables are olap table
+        // 2. node is master node
+        // 3. cbo_use_lock_db = false
+        return isOnlyOlapTable
+                && GlobalStateMgr.getCurrentState().isLeader()
+                && !session.getSessionVariable().isCboUseDBLock();
     }
 
     public static ExecPlan createQueryPlan(Relation relation, ConnectContext session, TResultSinkType resultSinkType) {
