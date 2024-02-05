@@ -40,7 +40,7 @@ LIKE [database.]<source_table_name>
 - `source_table_name`: the name of the source table you want to copy.
 - - `partition_desc`: the partitioning method. For more information, see [CREATE TABLE](./CREATE_TABLE.md#partition_desc).
 - `distribution_desc`: the bucketing method. For more information, see [CREATE TABLE](./CREATE_TABLE.md#distribution_desc).
-- `PROPERTIES`: the properties of the table. All the table properties are supported. For more inforation, see [CREATE TABLE](./CREATE_TABLE.md#properties).
+- `PROPERTIES`: the properties of the table. All the table properties are supported. For more information, see [ALTER TABLE](./ALTER_TABLE.md#modify-table-properties).
 
 ## Examples
 

@@ -40,7 +40,7 @@ LIKE [database.]<source_table_name>
 - `source_table_name`：要拷贝的表的名称。
 - `partition_desc`：分区方式。更多信息，参见 [CREATE TABLE](./CREATE_TABLE.md#partition_desc)。
 - `distribution_desc`：分桶方式。更多信息，参见 [CREATE TABLE](./CREATE_TABLE.md#distribution_desc)。
-- `PROPERTIES`：表的属性。支持所有表属性。更多信息，参见 [CREATE TABLE](./CREATE_TABLE.md#properties)。
+- `PROPERTIES`：表的属性。支持所有表属性。更多信息，参见 [ALTER TABLE](./ALTER_TABLE.md#修改表的属性)。
 
 ## 示例
 
