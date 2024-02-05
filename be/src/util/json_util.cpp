@@ -151,14 +151,13 @@ void JsonFlater::flatten(const Column* json_column, std::vector<ColumnPtr>* resu
 
         auto* obj = json_data->get_object(i);
         auto vslice = obj->to_vslice();
-        if (UNLIKELY(!vslice.isObject() || vslice.isNull())) {
+        if (vslice.isNone()) {
             for (size_t k = 0; k < result->size(); k++) {
                 (*result)[k]->append_nulls(1);
             }
             continue;
-        } else if (vslice.isEmptyObject() || vslice.isNone()) {
+        } else if (UNLIKELY(!vslice.isObject() || vslice.isEmptyObject())) {
             for (size_t k = 0; k < result->size(); k++) {
-                // push none
                 flat_jsons[k]->append(JsonValue::from_none());
                 flat_nulls[k]->append(0);
             }
@@ -166,7 +165,7 @@ void JsonFlater::flatten(const Column* json_column, std::vector<ColumnPtr>* resu
         }
         for (size_t k = 0; k < _flat_paths.size(); k++) {
             auto st = obj->get_obj(_flat_paths[k]);
-            if (st.ok() && !st.value().to_vslice().isNull()) {
+            if (st.ok() && !st.value().is_null()) {
                 flat_jsons[k]->append(st.value());
                 flat_nulls[k]->append(0);
             } else {
