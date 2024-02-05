@@ -21,6 +21,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -58,15 +59,19 @@ public class JoinPredicatePushdown {
     private List<ScalarOperator> leftPushDown;
     private List<ScalarOperator> rightPushDown;
 
+    private final OptimizerContext optimizerContext;
+
     public JoinPredicatePushdown(
             OptExpression joinOptExpression, boolean isOnPredicate, boolean directToChild,
-            ColumnRefFactory columnRefFactory) {
+            ColumnRefFactory columnRefFactory,
+            OptimizerContext optimizerContext) {
         this.joinOptExpression = joinOptExpression;
         this.isOnPredicate = isOnPredicate;
         this.directToChild = directToChild;
         this.columnRefFactory = columnRefFactory;
         this.leftPushDown = Lists.newArrayList();
         this.rightPushDown = Lists.newArrayList();
+        this.optimizerContext = optimizerContext;
     }
 
     public OptExpression pushdown(ScalarOperator predicateToPush) {
@@ -323,11 +328,23 @@ public class JoinPredicatePushdown {
 
         LogicalJoinOperator joinOp = ((LogicalJoinOperator) join.getOp());
         JoinOperator joinType = joinOp.getJoinType();
-        if ((joinType.isInnerJoin() || joinType.isRightSemiJoin()) && leftPushDown.isEmpty()) {
-            leftEQ.stream().map(c -> new IsNullPredicateOperator(true, c.clone(), true)).forEach(leftPushDown::add);
+        boolean isLeftEmpty = leftPushDown.isEmpty();
+        if (joinType.isInnerJoin() || joinType.isRightSemiJoin()) {
+            leftEQ.stream().map(c -> new IsNullPredicateOperator(true, c.clone(), true)).forEach(notNull -> {
+                optimizerContext.addPushdownNotNullPredicates(notNull);
+                if (isLeftEmpty) {
+                    leftPushDown.add(notNull);
+                }
+            });
         }
-        if ((joinType.isInnerJoin() || joinType.isLeftSemiJoin()) && rightPushDown.isEmpty()) {
-            rightEQ.stream().map(c -> new IsNullPredicateOperator(true, c.clone(), true)).forEach(rightPushDown::add);
+        boolean isRightEmpty = rightPushDown.isEmpty();
+        if (joinType.isInnerJoin() || joinType.isLeftSemiJoin()) {
+            rightEQ.stream().map(c -> new IsNullPredicateOperator(true, c.clone(), true)).forEach(notNull -> {
+                optimizerContext.addPushdownNotNullPredicates(notNull);
+                if (isRightEmpty) {
+                    rightPushDown.add(notNull);
+                }
+            });
         }
         joinOp.setHasDeriveIsNotNullPredicate(true);
     }
@@ -512,7 +529,8 @@ public class JoinPredicatePushdown {
         Set<ColumnRefOperator> rightOutputColumnOps = columnRefFactory.getColumnRefs(rightColumns);
 
         if (join.getJoinType().isLeftOuterJoin()) {
-            if (Utils.canEliminateNull(rightOutputColumnOps, predicateToPush)) {
+            if (Utils.canEliminateNull(rightOutputColumnOps, predicateToPush)
+                    || hasPushdownNotNull(rightOutputColumnOps, optimizerContext.getPushdownNotNullPredicates())) {
                 OptExpression newOpt = OptExpression.create(new LogicalJoinOperator.Builder().withOperator(join)
                                 .setJoinType(JoinOperator.INNER_JOIN)
                                 .build(),
@@ -520,7 +538,8 @@ public class JoinPredicatePushdown {
                 return newOpt;
             }
         } else if (join.getJoinType().isRightOuterJoin()) {
-            if (Utils.canEliminateNull(leftOutputColumnOps, predicateToPush)) {
+            if (Utils.canEliminateNull(leftOutputColumnOps, predicateToPush)
+                    || hasPushdownNotNull(leftOutputColumnOps, optimizerContext.getPushdownNotNullPredicates())) {
                 OptExpression newOpt = OptExpression.create(new LogicalJoinOperator.Builder().withOperator(join)
                                 .setJoinType(JoinOperator.INNER_JOIN)
                                 .build(),
@@ -556,5 +575,9 @@ public class JoinPredicatePushdown {
             }
         }
         return joinOpt;
+    }
+
+    private boolean hasPushdownNotNull(Set<ColumnRefOperator> outputColumnOps, List<IsNullPredicateOperator> pushdownNotNulls) {
+        return pushdownNotNulls.stream().anyMatch(p -> outputColumnOps.containsAll(p.getColumnRefs()));
     }
 }
