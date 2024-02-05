@@ -22,7 +22,7 @@ namespace starrocks {
 
 class DownloadUtil {
 public:
-    static Status download(const std::string& url, const std::string& tmp_file, const std::string& target_file,
+    static Status download(const std::string& url, const std::string& target_file,
                            const std::string& expected_checksum);
 };
 } // namespace starrocks
