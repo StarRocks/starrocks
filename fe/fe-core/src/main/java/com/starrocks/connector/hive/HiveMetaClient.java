@@ -79,9 +79,7 @@ public class HiveMetaClient {
         if (properties.containsKey(HIVE_METASTORE_URIS)) {
             conf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), properties.get(HIVE_METASTORE_URIS));
         }
-        String hmsTimeout = properties.containsKey(HIVE_METASTORE_TIMEOUT)
-                ? properties.get(HIVE_METASTORE_TIMEOUT)
-                : String.valueOf(Config.hive_meta_store_timeout_s);
+        String hmsTimeout = properties.getOrDefault(HIVE_METASTORE_TIMEOUT, String.valueOf(Config.hive_meta_store_timeout_s));
         conf.set(MetastoreConf.ConfVars.CLIENT_SOCKET_TIMEOUT.getHiveName(), hmsTimeout);
         return new HiveMetaClient(conf);
     }

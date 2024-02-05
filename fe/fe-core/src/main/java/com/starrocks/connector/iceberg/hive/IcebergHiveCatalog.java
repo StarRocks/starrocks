@@ -67,9 +67,7 @@ public class IcebergHiveCatalog implements IcebergCatalog {
     @VisibleForTesting
     public IcebergHiveCatalog(String name, Configuration conf, Map<String, String> properties) {
         this.conf = conf;
-        String hmsTimeout = properties.containsKey(HIVE_METASTORE_TIMEOUT)
-                ? properties.get(HIVE_METASTORE_TIMEOUT)
-                : String.valueOf(Config.hive_meta_store_timeout_s);
+        String hmsTimeout = properties.getOrDefault(HIVE_METASTORE_TIMEOUT, String.valueOf(Config.hive_meta_store_timeout_s));
         this.conf.set(MetastoreConf.ConfVars.CLIENT_SOCKET_TIMEOUT.getHiveName(), hmsTimeout);
         if (conf.get(METASTOREWAREHOUSE.varname) == null) {
             this.conf.set(METASTOREWAREHOUSE.varname, METASTOREWAREHOUSE.getDefaultValue());
