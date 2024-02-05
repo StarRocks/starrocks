@@ -1,8 +1,9 @@
 ---
 displayed_sidebar: "Chinese"
+keywords: ['CTAS']
 ---
 
-# CREATE TABLE AS SELECT (CTAS)
+# CREATE TABLE AS SELECT
 
 ## 功能
 

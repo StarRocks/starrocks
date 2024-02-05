@@ -1,8 +1,9 @@
 ---
 displayed_sidebar: "English"
+keywords: ['CTAS']
 ---
 
-# CREATE TABLE AS SELECT (CTAS)
+# CREATE TABLE AS SELECT
 
 ## Description
 
