@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+keywords: ['CTAS']
 ---
 
 # CREATE TABLE AS SELECT
