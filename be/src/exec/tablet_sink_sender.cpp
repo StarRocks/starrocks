@@ -199,7 +199,7 @@ Status TabletSinkSender::try_close(RuntimeState* state) {
                         index_channel->mark_as_failed(ch);
                     }
                 } else {
-                    ch->cancel(Status::Cancelled("channel failed"));
+                    ch->cancel();
                 }
                 if (index_channel->has_intolerable_failure()) {
                     intolerable_failure = true;
@@ -232,7 +232,7 @@ Status TabletSinkSender::try_close(RuntimeState* state) {
                         index_channel->mark_as_failed(ch);
                     }
                 } else {
-                    ch->cancel(Status::Cancelled("channel failed"));
+                    ch->cancel();
                 }
                 if (index_channel->has_intolerable_failure()) {
                     intolerable_failure = true;
@@ -250,7 +250,7 @@ Status TabletSinkSender::try_close(RuntimeState* state) {
                         index_channel->mark_as_failed(ch);
                     }
                 } else {
-                    ch->cancel(Status::Cancelled("channel failed"));
+                    ch->cancel();
                 }
                 if (index_channel->has_intolerable_failure()) {
                     intolerable_failure = true;
