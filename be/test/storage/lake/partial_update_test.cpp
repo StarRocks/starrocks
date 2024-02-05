@@ -70,7 +70,7 @@ public:
             c1->set_name("c1");
             c1->set_type("INT");
             c1->set_is_key(false);
-            c1->set_is_nullable(false);
+            c1->set_is_nullable(true);
             c1->set_aggregation("REPLACE");
         }
         _referenced_column_ids.push_back(0);
@@ -84,7 +84,7 @@ public:
             c2->set_name("c2");
             c2->set_type("INT");
             c2->set_is_key(false);
-            c2->set_is_nullable(false);
+            c2->set_is_nullable(true);
             c2->set_aggregation("REPLACE");
             c2->set_default_value("10");
         }
@@ -498,7 +498,7 @@ TEST_P(PartialUpdateTest, test_write_with_index_reload) {
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 3);
 
     // remove pk index, to make it reload again
-    _update_mgr->remove_primary_index_cache(tablet_id);
+    _update_mgr->try_remove_primary_index_cache(tablet_id);
 
     // partial update
     for (int i = 0; i < 3; i++) {

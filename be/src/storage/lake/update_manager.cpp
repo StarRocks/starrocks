@@ -74,6 +74,7 @@ StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(const TabletMetadata&
     auto index_entry = _index_cache.get_or_create(tablet->id());
     index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     auto& index = index_entry->value();
+    // Fetch lock guard before `lake_load`
     guard = index.fetch_guard();
     Status st = index.lake_load(tablet, metadata, base_version, builder);
     _index_cache.update_object_size(index_entry, index.memory_usage());
@@ -94,7 +95,6 @@ StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(const TabletMetadata&
         LOG(ERROR) << msg;
         return Status::InternalError(msg);
     }
-    builder->set_has_update_index();
     return index_entry;
 }
 
@@ -122,6 +122,12 @@ Status UpdateManager::commit_primary_index(IndexEntry* index_entry, Tablet* tabl
 void UpdateManager::release_primary_index_cache(IndexEntry* index_entry) {
     if (index_entry != nullptr) {
         _index_cache.release(index_entry);
+    }
+}
+
+void UpdateManager::remove_primary_index_cache(IndexEntry* index_entry) {
+    if (index_entry != nullptr) {
+        _index_cache.remove(index_entry);
     }
 }
 
@@ -333,15 +339,16 @@ Status UpdateManager::_handle_index_op(Tablet* tablet, int64_t base_version, boo
     // release index entry but keep it in cache
     DeferOp release_index_entry([&] { _index_cache.release(index_entry); });
     auto& index = index_entry->value();
-    if (!index.is_load(base_version)) {
-        return Status::Uninitialized(fmt::format("Primary index not load yet, tablet_id: {}", tablet->id()));
-    }
     std::unique_ptr<std::lock_guard<std::mutex>> guard = nullptr;
+    // Fetch lock guard before check `is_load()`
     if (need_lock) {
         guard = index.try_fetch_guard();
         if (guard == nullptr) {
             return Status::Cancelled(fmt::format("Fail to fetch primary index guard, tablet_id: {}", tablet->id()));
         }
+    }
+    if (!index.is_load(base_version)) {
+        return Status::Uninitialized(fmt::format("Primary index not load yet, tablet_id: {}", tablet->id()));
     }
     op(index);
 
@@ -609,16 +616,6 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     _print_memory_stats();
 
     return Status::OK();
-}
-
-void UpdateManager::remove_primary_index_cache(uint32_t tablet_id) {
-    bool succ = false;
-    auto index_entry = _index_cache.get(tablet_id);
-    if (index_entry != nullptr) {
-        _index_cache.remove(index_entry);
-        succ = true;
-    }
-    LOG(WARNING) << "Lake update manager remove primary index cache, tablet_id: " << tablet_id << " , succ: " << succ;
 }
 
 bool UpdateManager::try_remove_primary_index_cache(uint32_t tablet_id) {
