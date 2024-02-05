@@ -93,6 +93,7 @@ import io.trino.sql.tree.ArithmeticBinaryExpression;
 import io.trino.sql.tree.ArithmeticUnaryExpression;
 import io.trino.sql.tree.ArrayConstructor;
 import io.trino.sql.tree.AstVisitor;
+import io.trino.sql.tree.AtTimeZone;
 import io.trino.sql.tree.BetweenPredicate;
 import io.trino.sql.tree.BinaryLiteral;
 import io.trino.sql.tree.BooleanLiteral;
@@ -236,8 +237,12 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     }
 
     private <T> List<T> visit(List<? extends Node> nodes, ParseTreeContext context, Class<T> clazz) {
-        return nodes.stream().map(child -> this.process(child, context)).
-                map(clazz::cast).collect(Collectors.toList());
+        return nodes.stream().map(child -> {
+            if (child instanceof AtTimeZone) {
+                throw new ParsingException("Time zone is not supported");
+            }
+            return this.process(child, context);
+        }).map(clazz::cast).collect(Collectors.toList());
     }
 
     private ParseNode processOptional(Optional<? extends Node> node, ParseTreeContext context) {
