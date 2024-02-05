@@ -35,7 +35,6 @@ import org.junit.Test;
 
 import java.util.List;
 
-
 public class AlterMaterializedViewTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
