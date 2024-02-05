@@ -171,6 +171,12 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "select date_diff('month', timestamp '2023-07-31')";
         analyzeFail(sql, "date_diff function must have 3 arguments");
+
+        sql = "select to_date('2022-02-02', 'yyyy-mm-dd')";
+        assertPlanContains(sql, "to_tera_date('2022-02-02', 'yyyy-mm-dd')");
+
+        sql = "select to_timestamp('2022-02-02', 'yyyy-mm-dd')";
+        assertPlanContains(sql, " to_tera_timestamp('2022-02-02', 'yyyy-mm-dd')");
     }
 
     @Test
@@ -264,6 +270,9 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "SELECT replace('hello-world', '-', '$');";
         assertPlanContains(sql, "replace('hello-world', '-', '$')");
+
+        sql = "select index('hello', 'l')";
+        assertPlanContains(sql, "instr('hello', 'l')");
     }
 
     @Test
@@ -355,6 +364,9 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         sql = "select sha256(tk) from tall";
         assertPlanContains(sql, "sha2(from_binary(11: tk, 'utf8'), 256)");
         System.out.println(getFragmentPlan(sql));
+
+        sql = "select from_hex(hex('starrocks'))";
+        assertPlanContains(sql, "hex_decode_binary(hex('starrocks'))");
     }
 
     @Test

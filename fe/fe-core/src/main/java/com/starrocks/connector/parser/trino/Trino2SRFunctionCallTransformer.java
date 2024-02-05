@@ -183,6 +183,14 @@ public class Trino2SRFunctionCallTransformer {
         // parse_datetime -> str_to_jodatime
         registerFunctionTransformer("parse_datetime", 2, "str_to_jodatime",
                 ImmutableList.of(Expr.class, Expr.class));
+
+        // to_date -> to_tera_date
+        registerFunctionTransformer("to_date", 2, "to_tera_date",
+                ImmutableList.of(Expr.class, Expr.class));
+
+        // to_timestamp -> to_tera_timestamp
+        registerFunctionTransformer("to_timestamp", 2, "to_tera_timestamp",
+                ImmutableList.of(Expr.class, Expr.class));
     }
 
     private static void registerStringFunctionTransformer() {
@@ -221,8 +229,8 @@ public class Trino2SRFunctionCallTransformer {
                 ImmutableList.of(new PlaceholderExpr(1, Expr.class), new PlaceholderExpr(2, Expr.class),
                         new StringLiteral(""))));
 
-        registerFunctionTransformer("index", 2, new FunctionCallExpr("instr",
-                ImmutableList.of(new PlaceholderExpr(1, Expr.class), new PlaceholderExpr(2, Expr.class))));
+        registerFunctionTransformer("index", 2, "instr",
+                ImmutableList.of(Expr.class, Expr.class));
     }
 
     private static void registerRegexpFunctionTransformer() {
@@ -294,6 +302,9 @@ public class Trino2SRFunctionCallTransformer {
     private static void registerBinaryFunctionTransformer() {
         // to_hex -> hex
         registerFunctionTransformer("to_hex", 1, "hex", ImmutableList.of(Expr.class));
+
+        // from_hex -> hex_decode_binary
+        registerFunctionTransformer("from_hex", 1, "hex_decode_binary", ImmutableList.of(Expr.class));
     }
 
     private static void registerFunctionTransformer(String trinoFnName, int trinoFnArgNums, String starRocksFnName,
