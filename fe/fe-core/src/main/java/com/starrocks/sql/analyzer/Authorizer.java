@@ -23,12 +23,9 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
-<<<<<<< HEAD
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-=======
 import com.starrocks.common.Pair;
->>>>>>> 0e72283289 ([Enhancement] Refine the priv check for be_tablets and show tablet (backport #39762) (#40335))
 import com.starrocks.privilege.AccessControlProvider;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.NativeAccessControl;

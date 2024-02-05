@@ -44,7 +44,6 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.ObjectType;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -95,10 +94,8 @@ public class ReplicasProcNode implements ProcNodeInterface {
                     ConnectContext.get(), db.getFullName(), table);
             if (!privResult.first) {
                 ConnectContext connectContext = ConnectContext.get();
-                AccessDeniedException.reportAccessDenied(
-                        InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                        connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
-                        PrivilegeType.ANY.name(), ObjectType.TABLE.name(), null);
+                AccessDeniedException.reportAccessDenied("ANY", ObjectType.TABLE,
+                        InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
             }
             hideIpPort = privResult.second;
         }

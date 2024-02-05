@@ -32,19 +32,11 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-<<<<<<< HEAD
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
-=======
-import com.starrocks.catalog.system.sys.GrantsTo;
 import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.proc.ReplicasProcNode;
->>>>>>> 0e72283289 ([Enhancement] Refine the priv check for be_tablets and show tablet (backport #39762) (#40335))
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.load.routineload.RoutineLoadMgr;

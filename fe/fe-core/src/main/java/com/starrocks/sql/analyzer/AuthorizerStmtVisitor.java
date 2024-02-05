@@ -1155,12 +1155,6 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitShowTabletStatement(ShowTabletStmt statement, ConnectContext context) {
-<<<<<<< HEAD
-        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                PrivilegeType.OPERATE);
-=======
-        // Privilege is checked in execution logic, see `ShowExecutor#handleShowTablet()` for details.
->>>>>>> 0e72283289 ([Enhancement] Refine the priv check for be_tablets and show tablet (backport #39762) (#40335))
         return null;
     }
 
@@ -1243,22 +1237,10 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitShowProcStmt(ShowProcStmt statement, ConnectContext context) {
-<<<<<<< HEAD
-        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                PrivilegeType.OPERATE);
-=======
-        try {
-            if (!SHOW_TABLET_DETAIL_CMD_PATTERN.matcher(statement.getPath()).matches()) {
-                Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        PrivilegeType.OPERATE);
-            }
-        } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(
-                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
+        if (!SHOW_TABLET_DETAIL_CMD_PATTERN.matcher(statement.getPath()).matches()) {
+            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.OPERATE);
         }
->>>>>>> 0e72283289 ([Enhancement] Refine the priv check for be_tablets and show tablet (backport #39762) (#40335))
         return null;
     }
 

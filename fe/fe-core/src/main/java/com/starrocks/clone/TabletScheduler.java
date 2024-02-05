@@ -1360,62 +1360,6 @@ public class TabletScheduler extends FrontendDaemon {
         batchTask.addTask(tabletCtx.createCloneReplicaAndTask());
     }
 
-<<<<<<< HEAD
-=======
-    /*
-     * The key idea for disk balance filter for primary key tablet is following:
-     * 1. Cross nodes balance is always schedulable.
-     * 2. Get the max last report tablets time of all backends.
-     * 3. For the primary key tablet, if the partition latest visible version
-     *    time is larger than max last reported tablets, it means that the latest
-     *    tablet info has not been reported, the tablet is unschedulable.
-     * 4. For the primary key tablet, get the max rowset creation time
-     *    of all replica which updated in tablets reported.
-     * 5. Check (now - maxRowsetCreationTime) is greater than Config.primary_key_disk_schedule_time
-    */
-    private List<TabletSchedCtx> filterUnschedulableTablets(List<TabletSchedCtx> alternativeTablets) {
-        List<TabletSchedCtx> newAlternativeTablets = Lists.newArrayList();
-        for (TabletSchedCtx schedCtx : alternativeTablets) {
-            long dbId = schedCtx.getDbId();
-            long physicalPartitionId = schedCtx.getPhysicalPartitionId();
-            long tableId = schedCtx.getTblId();
-            long tabletId = schedCtx.getTabletId();
-            long indexId = schedCtx.getIndexId();
-
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-            if (db == null) {
-                continue;
-            }
-
-            Table tbl;
-            db.readLock();
-            try {
-                tbl = db.getTable(tableId);
-            } finally {
-                db.readUnlock();
-            }
-
-            if (!(tbl instanceof OlapTable)) {
-                newAlternativeTablets.add(schedCtx);
-                continue;
-            }
-
-            if (schedCtx.getSrcReplica().getBackendId() != schedCtx.getDestBackendId()) {
-                // schedulable if the dest node is different
-                newAlternativeTablets.add(schedCtx);
-                continue;
-            }
-
-            OlapTable olaptable = (OlapTable) tbl;
-            if (ReportHandler.migratableTablet(db, olaptable, physicalPartitionId, indexId, tabletId)) {
-                newAlternativeTablets.add(schedCtx);
-            }
-        }
-
-        return newAlternativeTablets;
-    }
-
->>>>>>> 0e72283289 ([Enhancement] Refine the priv check for be_tablets and show tablet (backport #39762) (#40335))
     /**
      * Try to select some alternative tablets for balance. Add them to pendingTablets with priority LOW,
      * and waiting to be scheduled.
