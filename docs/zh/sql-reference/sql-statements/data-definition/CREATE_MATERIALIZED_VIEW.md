@@ -77,7 +77,7 @@ SELECT select_expr[, select_expr ...]
 
 - WHERE （选填）
 
-  自 v3.2 起，同步物化视图支持通过 WHERE 子句筛选数据。
+  自 v3.1.8 起，同步物化视图支持通过 WHERE 子句筛选数据。
 
 - GROUP BY（选填）
 
