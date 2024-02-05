@@ -100,7 +100,11 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import static com.google.common.collect.ImmutableList.toImmutableList;
+import static com.starrocks.catalog.Table.TableType.ICEBERG;
+import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
+import static com.starrocks.connector.ColumnTypeConverter.fromIcebergType;
 import static com.starrocks.connector.PartitionUtil.convertIcebergPartitionToPartitionName;
+import static com.starrocks.connector.PartitionUtil.createPartitionKeyWithType;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.parsePartitionFields;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.toIcebergApiSchema;
 import static com.starrocks.connector.iceberg.IcebergCatalogType.GLUE_CATALOG;
@@ -139,6 +143,11 @@ public class IcebergMetadata implements ConnectorMetadata {
                 .maximumSize(1000)
                 .expireAfterWrite(10, SECONDS)
                 .build());
+    }
+
+    @Override
+    public Table.TableType getTableType() {
+        return ICEBERG;
     }
 
     @Override

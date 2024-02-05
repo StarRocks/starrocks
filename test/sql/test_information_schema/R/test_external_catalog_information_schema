@@ -1,0 +1,313 @@
+-- name: testExternalCatalogInformationSchema
+shell: ossutil64 mkdir oss://${oss_bucket}/test_external_catalog_information_schema/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+create external catalog `ice_hadoop${uuid0}`
+properties (
+"type"  =  "iceberg",
+"iceberg.catalog.type"  =  "hadoop",
+"iceberg.catalog.warehouse"="oss://${oss_bucket}/test_external_catalog_information_schema/${uuid0}"
+);
+-- result:
+-- !result
+create database ice_hadoop${uuid0}.ice_hadoop_db1;
+-- result:
+-- !result
+create table ice_hadoop${uuid0}.ice_hadoop_db1.test (
+    c0 int, 
+    c1 string
+);
+-- result:
+-- !result
+create database ice_hadoop${uuid0}.ice_hadoop_db2;
+-- result:
+-- !result
+create table ice_hadoop${uuid0}.ice_hadoop_db2.test (
+    c0 int, 
+    c1 string
+);
+-- result:
+-- !result
+select SCHEMA_NAME from ice_hadoop${uuid0}.information_schema.schemata;
+-- result:
+ice_hadoop_db1
+ice_hadoop_db2
+information_schema
+-- !result
+select TABLE_SCHEMA, TABLE_NAME from ice_hadoop${uuid0}.information_schema.tables;
+-- result:
+ice_hadoop_db1	test
+ice_hadoop_db2	test
+information_schema	tables
+information_schema	table_privileges
+information_schema	referential_constraints
+information_schema	key_column_usage
+information_schema	routines
+information_schema	schemata
+information_schema	columns
+information_schema	character_sets
+information_schema	collations
+information_schema	table_constraints
+information_schema	engines
+information_schema	user_privileges
+information_schema	schema_privileges
+information_schema	statistics
+information_schema	triggers
+information_schema	events
+information_schema	views
+information_schema	partitions
+information_schema	column_privileges
+-- !result
+select TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, ORDINAL_POSITION from ice_hadoop${uuid0}.information_schema.columns;
+-- result:
+ice_hadoop_db1	test	c0	1
+ice_hadoop_db1	test	c1	2
+ice_hadoop_db2	test	c0	1
+ice_hadoop_db2	test	c1	2
+information_schema	tables	TABLE_CATALOG	1
+information_schema	tables	TABLE_SCHEMA	2
+information_schema	tables	TABLE_NAME	3
+information_schema	tables	TABLE_TYPE	4
+information_schema	tables	ENGINE	5
+information_schema	tables	VERSION	6
+information_schema	tables	ROW_FORMAT	7
+information_schema	tables	TABLE_ROWS	8
+information_schema	tables	AVG_ROW_LENGTH	9
+information_schema	tables	DATA_LENGTH	10
+information_schema	tables	MAX_DATA_LENGTH	11
+information_schema	tables	INDEX_LENGTH	12
+information_schema	tables	DATA_FREE	13
+information_schema	tables	AUTO_INCREMENT	14
+information_schema	tables	CREATE_TIME	15
+information_schema	tables	UPDATE_TIME	16
+information_schema	tables	CHECK_TIME	17
+information_schema	tables	TABLE_COLLATION	18
+information_schema	tables	CHECKSUM	19
+information_schema	tables	CREATE_OPTIONS	20
+information_schema	tables	TABLE_COMMENT	21
+information_schema	table_privileges	GRANTEE	1
+information_schema	table_privileges	TABLE_CATALOG	2
+information_schema	table_privileges	TABLE_SCHEMA	3
+information_schema	table_privileges	TABLE_NAME	4
+information_schema	table_privileges	PRIVILEGE_TYPE	5
+information_schema	table_privileges	IS_GRANTABLE	6
+information_schema	referential_constraints	CONSTRAINT_CATALOG	1
+information_schema	referential_constraints	CONSTRAINT_SCHEMA	2
+information_schema	referential_constraints	CONSTRAINT_NAME	3
+information_schema	referential_constraints	UNIQUE_CONSTRAINT_CATALOG	4
+information_schema	referential_constraints	UNIQUE_CONSTRAINT_SCHEMA	5
+information_schema	referential_constraints	UNIQUE_CONSTRAINT_NAME	6
+information_schema	referential_constraints	MATCH_OPTION	7
+information_schema	referential_constraints	UPDATE_RULE	8
+information_schema	referential_constraints	DELETE_RULE	9
+information_schema	referential_constraints	TABLE_NAME	10
+information_schema	referential_constraints	REFERENCED_TABLE_NAME	11
+information_schema	key_column_usage	CONSTRAINT_CATALOG	1
+information_schema	key_column_usage	CONSTRAINT_SCHEMA	2
+information_schema	key_column_usage	CONSTRAINT_NAME	3
+information_schema	key_column_usage	TABLE_CATALOG	4
+information_schema	key_column_usage	TABLE_SCHEMA	5
+information_schema	key_column_usage	TABLE_NAME	6
+information_schema	key_column_usage	COLUMN_NAME	7
+information_schema	key_column_usage	ORDINAL_POSITION	8
+information_schema	key_column_usage	POSITION_IN_UNIQUE_CONSTRAINT	9
+information_schema	key_column_usage	REFERENCED_TABLE_SCHEMA	10
+information_schema	key_column_usage	REFERENCED_TABLE_NAME	11
+information_schema	key_column_usage	REFERENCED_COLUMN_NAME	12
+information_schema	routines	SPECIFIC_NAME	1
+information_schema	routines	ROUTINE_CATALOG	2
+information_schema	routines	ROUTINE_SCHEMA	3
+information_schema	routines	ROUTINE_NAME	4
+information_schema	routines	ROUTINE_TYPE	5
+information_schema	routines	DTD_IDENTIFIER	6
+information_schema	routines	ROUTINE_BODY	7
+information_schema	routines	ROUTINE_DEFINITION	8
+information_schema	routines	EXTERNAL_NAME	9
+information_schema	routines	EXTERNAL_LANGUAGE	10
+information_schema	routines	PARAMETER_STYLE	11
+information_schema	routines	IS_DETERMINISTIC	12
+information_schema	routines	SQL_DATA_ACCESS	13
+information_schema	routines	SQL_PATH	14
+information_schema	routines	SECURITY_TYPE	15
+information_schema	routines	CREATED	16
+information_schema	routines	LAST_ALTERED	17
+information_schema	routines	SQL_MODE	18
+information_schema	routines	ROUTINE_COMMENT	19
+information_schema	routines	DEFINER	20
+information_schema	routines	CHARACTER_SET_CLIENT	21
+information_schema	routines	COLLATION_CONNECTION	22
+information_schema	routines	DATABASE_COLLATION	23
+information_schema	schemata	CATALOG_NAME	1
+information_schema	schemata	SCHEMA_NAME	2
+information_schema	schemata	DEFAULT_CHARACTER_SET_NAME	3
+information_schema	schemata	DEFAULT_COLLATION_NAME	4
+information_schema	schemata	SQL_PATH	5
+information_schema	columns	TABLE_CATALOG	1
+information_schema	columns	TABLE_SCHEMA	2
+information_schema	columns	TABLE_NAME	3
+information_schema	columns	COLUMN_NAME	4
+information_schema	columns	ORDINAL_POSITION	5
+information_schema	columns	COLUMN_DEFAULT	6
+information_schema	columns	IS_NULLABLE	7
+information_schema	columns	DATA_TYPE	8
+information_schema	columns	CHARACTER_MAXIMUM_LENGTH	9
+information_schema	columns	CHARACTER_OCTET_LENGTH	10
+information_schema	columns	NUMERIC_PRECISION	11
+information_schema	columns	NUMERIC_SCALE	12
+information_schema	columns	DATETIME_PRECISION	13
+information_schema	columns	CHARACTER_SET_NAME	14
+information_schema	columns	COLLATION_NAME	15
+information_schema	columns	COLUMN_TYPE	16
+information_schema	columns	COLUMN_KEY	17
+information_schema	columns	EXTRA	18
+information_schema	columns	PRIVILEGES	19
+information_schema	columns	COLUMN_COMMENT	20
+information_schema	columns	COLUMN_SIZE	21
+information_schema	columns	DECIMAL_DIGITS	22
+information_schema	columns	GENERATION_EXPRESSION	23
+information_schema	columns	SRS_ID	24
+information_schema	character_sets	CHARACTER_SET_NAME	1
+information_schema	character_sets	DEFAULT_COLLATE_NAME	2
+information_schema	character_sets	DESCRIPTION	3
+information_schema	character_sets	MAXLEN	4
+information_schema	collations	COLLATION_NAME	1
+information_schema	collations	CHARACTER_SET_NAME	2
+information_schema	collations	ID	3
+information_schema	collations	IS_DEFAULT	4
+information_schema	collations	IS_COMPILED	5
+information_schema	collations	SORTLEN	6
+information_schema	table_constraints	CONSTRAINT_CATALOG	1
+information_schema	table_constraints	CONSTRAINT_SCHEMA	2
+information_schema	table_constraints	CONSTRAINT_NAME	3
+information_schema	table_constraints	TABLE_SCHEMA	4
+information_schema	table_constraints	TABLE_NAME	5
+information_schema	table_constraints	CONSTRAINT_TYPE	6
+information_schema	engines	ENGINE	1
+information_schema	engines	SUPPORT	2
+information_schema	engines	COMMENT	3
+information_schema	engines	TRANSACTIONS	4
+information_schema	engines	XA	5
+information_schema	engines	SAVEPOINTS	6
+information_schema	user_privileges	GRANTEE	1
+information_schema	user_privileges	TABLE_CATALOG	2
+information_schema	user_privileges	PRIVILEGE_TYPE	3
+information_schema	user_privileges	IS_GRANTABLE	4
+information_schema	schema_privileges	GRANTEE	1
+information_schema	schema_privileges	TABLE_CATALOG	2
+information_schema	schema_privileges	TABLE_SCHEMA	3
+information_schema	schema_privileges	PRIVILEGE_TYPE	4
+information_schema	schema_privileges	IS_GRANTABLE	5
+information_schema	statistics	TABLE_CATALOG	1
+information_schema	statistics	TABLE_SCHEMA	2
+information_schema	statistics	TABLE_NAME	3
+information_schema	statistics	NON_UNIQUE	4
+information_schema	statistics	INDEX_SCHEMA	5
+information_schema	statistics	INDEX_NAME	6
+information_schema	statistics	SEQ_IN_INDEX	7
+information_schema	statistics	COLUMN_NAME	8
+information_schema	statistics	COLLATION	9
+information_schema	statistics	CARDINALITY	10
+information_schema	statistics	SUB_PART	11
+information_schema	statistics	PACKED	12
+information_schema	statistics	NULLABLE	13
+information_schema	statistics	INDEX_TYPE	14
+information_schema	statistics	COMMENT	15
+information_schema	statistics	INDEX_COMMENT	16
+information_schema	triggers	TRIGGER_CATALOG	1
+information_schema	triggers	TRIGGER_SCHEMA	2
+information_schema	triggers	TRIGGER_NAME	3
+information_schema	triggers	EVENT_MANIPULATION	4
+information_schema	triggers	EVENT_OBJECT_CATALOG	5
+information_schema	triggers	EVENT_OBJECT_SCHEMA	6
+information_schema	triggers	EVENT_OBJECT_TABLE	7
+information_schema	triggers	ACTION_ORDER	8
+information_schema	triggers	ACTION_CONDITION	9
+information_schema	triggers	ACTION_STATEMENT	10
+information_schema	triggers	ACTION_ORIENTATION	11
+information_schema	triggers	ACTION_TIMING	12
+information_schema	triggers	ACTION_REFERENCE_OLD_TABLE	13
+information_schema	triggers	ACTION_REFERENCE_NEW_TABLE	14
+information_schema	triggers	ACTION_REFERENCE_OLD_ROW	15
+information_schema	triggers	ACTION_REFERENCE_NEW_ROW	16
+information_schema	triggers	CREATED	17
+information_schema	triggers	SQL_MODE	18
+information_schema	triggers	DEFINER	19
+information_schema	triggers	CHARACTER_SET_CLIENT	20
+information_schema	triggers	COLLATION_CONNECTION	21
+information_schema	triggers	DATABASE_COLLATION	22
+information_schema	events	EVENT_CATALOG	1
+information_schema	events	EVENT_SCHEMA	2
+information_schema	events	EVENT_NAME	3
+information_schema	events	DEFINER	4
+information_schema	events	TIME_ZONE	5
+information_schema	events	EVENT_BODY	6
+information_schema	events	EVENT_DEFINITION	7
+information_schema	events	EVENT_TYPE	8
+information_schema	events	EXECUTE_AT	9
+information_schema	events	INTERVAL_VALUE	10
+information_schema	events	INTERVAL_FIELD	11
+information_schema	events	SQL_MODE	12
+information_schema	events	STARTS	13
+information_schema	events	ENDS	14
+information_schema	events	STATUS	15
+information_schema	events	ON_COMPLETION	16
+information_schema	events	CREATED	17
+information_schema	events	LAST_ALTERED	18
+information_schema	events	LAST_EXECUTED	19
+information_schema	events	EVENT_COMMENT	20
+information_schema	events	ORIGINATOR	21
+information_schema	events	CHARACTER_SET_CLIENT	22
+information_schema	events	COLLATION_CONNECTION	23
+information_schema	events	DATABASE_COLLATION	24
+information_schema	views	TABLE_CATALOG	1
+information_schema	views	TABLE_SCHEMA	2
+information_schema	views	TABLE_NAME	3
+information_schema	views	VIEW_DEFINITION	4
+information_schema	views	CHECK_OPTION	5
+information_schema	views	IS_UPDATABLE	6
+information_schema	views	DEFINER	7
+information_schema	views	SECURITY_TYPE	8
+information_schema	views	CHARACTER_SET_CLIENT	9
+information_schema	views	COLLATION_CONNECTION	10
+information_schema	partitions	TABLE_CATALOG	1
+information_schema	partitions	TABLE_SCHEMA	2
+information_schema	partitions	TABLE_NAME	3
+information_schema	partitions	PARTITION_NAME	4
+information_schema	partitions	SUBPARTITION_NAME	5
+information_schema	partitions	PARTITION_ORDINAL_POSITION	6
+information_schema	partitions	PARTITION_METHOD	7
+information_schema	partitions	SUBPARTITION_METHOD	8
+information_schema	partitions	PARTITION_EXPRESSION	9
+information_schema	partitions	SUBPARTITION_EXPRESSION	10
+information_schema	partitions	PARTITION_DESCRIPTION	11
+information_schema	partitions	TABLE_ROWS	12
+information_schema	partitions	AVG_ROW_LENGTH	13
+information_schema	partitions	DATA_LENGTH	14
+information_schema	partitions	MAX_DATA_LENGTH	15
+information_schema	partitions	INDEX_LENGTH	16
+information_schema	partitions	DATA_FREE	17
+information_schema	partitions	CREATE_TIME	18
+information_schema	partitions	UPDATE_TIME	19
+information_schema	partitions	CHECK_TIME	20
+information_schema	partitions	CHECKSUM	21
+information_schema	partitions	PARTITION_COMMENT	22
+information_schema	partitions	NODEGROUP	23
+information_schema	partitions	TABLESPACE_NAME	24
+information_schema	column_privileges	GRANTEE	1
+information_schema	column_privileges	TABLE_CATALOG	2
+information_schema	column_privileges	TABLE_SCHEMA	3
+information_schema	column_privileges	TABLE_NAME	4
+information_schema	column_privileges	COLUMN_NAME	5
+information_schema	column_privileges	PRIVILEGE_TYPE	6
+information_schema	column_privileges	IS_GRANTABLE	7
+-- !result
+drop catalog ice_hadoop${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_external_catalog_information_schema/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

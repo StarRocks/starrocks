@@ -17,6 +17,7 @@ package com.starrocks.service;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
+import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
@@ -64,7 +65,7 @@ public class InformationSchemaDataSource {
 
     private static final String DEF = "def";
     private static final String DEFAULT_EMPTY_STRING = "";
-    private static final long DEFAULT_EMPTY_NUM = -1L;
+    public static final long DEFAULT_EMPTY_NUM = -1L;
     public static final String UTF8_GENERAL_CI = "utf8_general_ci";
 
     @NotNull
@@ -297,8 +298,19 @@ public class InformationSchemaDataSource {
             if (db != null) {
                 db.readLock();
                 try {
-                    List<Table> allTables = db.getTables();
-                    for (Table table : allTables) {
+                    List<String> tableNames = metadataMgr.listTableNames(catalogName, dbName);
+                    for (String tableName : tableNames) {
+                        BasicTable table = null;
+                        try {
+                            table = metadataMgr.getBasicTable(catalogName, dbName, tableName);
+                        } catch (Exception e) {
+                            LOG.warn(e.getMessage());
+                        }
+
+                        if (table == null) {
+                            continue;
+                        }
+
                         try {
                             Authorizer.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table);
                         } catch (AccessDeniedException e) {
@@ -339,9 +351,9 @@ public class InformationSchemaDataSource {
                             // INLINE_VIEW (use default)
                             // VIEW (use default)
                             // BROKER (use default)
+                            // EXTERNAL TABLE (use default)
                             genDefaultConfigInfo(info);
                         }
-                        // TODO(cjs): other table type (HIVE, MYSQL, ICEBERG, HUDI, JDBC, ELASTICSEARCH)
                         infos.add(info);
                     }
                 } finally {
@@ -353,7 +365,7 @@ public class InformationSchemaDataSource {
         return response;
     }
 
-    public static TTableInfo genNormalTableInfo(Table table, TTableInfo info) {
+    public static TTableInfo genNormalTableInfo(BasicTable table, TTableInfo info) {
 
         OlapTable olapTable = (OlapTable) table;
         Collection<Partition> partitions = table.getPartitions();
