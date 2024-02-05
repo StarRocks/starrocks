@@ -45,24 +45,12 @@ public class ExternalCatalog extends Catalog {
     // old table uuid format: external_catalog_name.db_name.table_name.creation_time
     // new table uuid format: table_name
     public static String getCompatibleTableUUID(String uuid) {
-        if (!uuid.contains(".")) {
-            return uuid;
-        }
-
-        String[] parts = uuid.split("\\.");
-        checkArgument(parts.length == 4, "got unexpected external table uuid format");
-        return parts[2];
+        return uuid.contains(".") ? uuid.split("\\.")[2] : uuid;
     }
 
     // old database uuid format: external_catalog_name.db_name
     // new database uuid format: db_name
     public static String getCompatibleDbUUID(String uuid) {
-        if (!uuid.contains(".")) {
-            return uuid;
-        }
-
-        String[] parts = uuid.split("\\.");
-        checkArgument(parts.length == 2, "got unexpected external database uuid format");
-        return parts[1];
+        return uuid.contains(".") ? uuid.split("\\.")[1] : uuid;
     }
 }
