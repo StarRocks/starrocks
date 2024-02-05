@@ -105,16 +105,14 @@ class ParquetScannerTest : public ::testing::Test {
     std::unique_ptr<ParquetScanner> create_parquet_scanner(
             const std::string& timezone, DescriptorTbl* desc_tbl,
             const std::unordered_map<size_t, ::starrocks::TExpr>& dst_slot_exprs,
-            const std::vector<TBrokerRangeDesc>& ranges) {
+            const std::vector<TBrokerRangeDesc>& ranges, TBrokerScanRangeParams *params) {
         /// Init RuntimeState
         auto query_globals = TQueryGlobals();
         query_globals.time_zone = timezone;
         RuntimeState* state = _obj_pool.add(new RuntimeState(TUniqueId(), TQueryOptions(), query_globals, nullptr));
         state->set_desc_tbl(desc_tbl);
         state->init_instance_mem_tracker();
-
-        /// TBrokerScanRangeParams
-        TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
+        
         params->strict_mode = true;
         std::vector<TupleDescriptor*> tuples;
         desc_tbl->get_tuple_descs(&tuples);
@@ -226,7 +224,8 @@ class ParquetScannerTest : public ::testing::Test {
                 {"nested_array_c0", TypeDescriptor::create_array_type(TypeDescriptor::create_array_type(
                                             TypeDescriptor::from_logical_type(TYPE_VARCHAR)))},
                 {"col_map", TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(1048576),
-                                                            TypeDescriptor::create_varchar_type(1048576))}};
+                                                            TypeDescriptor::create_varchar_type(1048576))},
+                {"col_not_existed", TypeDescriptor::from_logical_type(TYPE_INT)}};
         SlotTypeDescInfoArray slot_infos;
         slot_infos.reserve(column_names.size());
         for (auto& name : column_names) {
@@ -261,7 +260,8 @@ class ParquetScannerTest : public ::testing::Test {
 
         auto ranges = generate_ranges(file_names, columns_from_file.size(), column_values);
         auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {src_slot_infos, dst_slot_infos});
-        auto scanner = create_parquet_scanner("UTC", desc_tbl, dst_slot_exprs, ranges);
+        TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
+        auto scanner = create_parquet_scanner("UTC", desc_tbl, dst_slot_exprs, ranges, params);
         auto check = [](const ChunkPtr& chunk) {
             auto& columns = chunk->columns();
             for (auto& col : columns) {
@@ -287,7 +287,8 @@ class ParquetScannerTest : public ::testing::Test {
 
         auto ranges = generate_ranges(file_names, columns_from_file.size(), {});
         auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {src_slot_infos, dst_slot_infos});
-        auto scanner = create_parquet_scanner("UTC", desc_tbl, dst_slot_exprs, ranges);
+        TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
+        auto scanner = create_parquet_scanner("UTC", desc_tbl, dst_slot_exprs, ranges, params);
 
         ChunkPtr result;
         auto check = [&](const ChunkPtr& chunk) {
@@ -391,7 +392,8 @@ TEST_F(ParquetScannerTest, test_nullable_parquet_data) {
     auto slot_infos = select_columns(column_names, true);
     auto ranges = generate_ranges(_nullable_file_names, slot_infos.size(), {});
     auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, {}});
-    auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges);
+    TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
+    auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges, params);
     auto check = [](const ChunkPtr& chunk) {
         auto& columns = chunk->columns();
         for (auto& col : columns) {
@@ -408,7 +410,8 @@ TEST_F(ParquetScannerTest, test_issue_17693) {
     auto slot_infos = select_columns(column_names, true);
     auto ranges = generate_ranges(_issue_16475_file_names, slot_infos.size(), {});
     auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, {}});
-    auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges);
+    TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
+    auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges, params);
     auto check = [](const ChunkPtr& chunk) {
         auto& columns = chunk->columns();
         for (auto& col : columns) {
@@ -425,7 +428,8 @@ TEST_F(ParquetScannerTest, test_issue_17822) {
     auto slot_infos = select_columns(column_names, true);
     auto ranges = generate_ranges(_issue_17822_file_names, slot_infos.size(), {});
     auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, {}});
-    auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges);
+    TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
+    auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges, params);
     auto check = [](const ChunkPtr& chunk) {
         auto& columns = chunk->columns();
         for (auto& col : columns) {
@@ -442,7 +446,8 @@ TEST_F(ParquetScannerTest, test_nested_array) {
     auto slot_infos = select_columns(column_names, true);
     auto ranges = generate_ranges(_nested_array_file_names, slot_infos.size(), {});
     auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, {}});
-    auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges);
+    TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
+    auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges, params);
     auto check = [](const ChunkPtr& chunk) {
         auto& columns = chunk->columns();
         for (auto& col : columns) {
@@ -460,7 +465,8 @@ TEST_F(ParquetScannerTest, test_parquet_data) {
     auto slot_infos = select_columns(column_names, false);
     auto ranges = generate_ranges(_file_names, slot_infos.size(), {});
     auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, {}});
-    auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges);
+    TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
+    auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges, params);
     auto check = [](const ChunkPtr& chunk) {
         auto& columns = chunk->columns();
         for (auto& col : columns) {
@@ -627,7 +633,8 @@ TEST_F(ParquetScannerTest, test_selected_parquet_data) {
     auto slot_infos = select_columns(column_names, false);
     auto ranges = generate_split_ranges(_file_names, _file_sizes, slot_infos.size(), {});
     auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, {}});
-    auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges);
+    TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
+    auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges, params);
     auto check = [](const ChunkPtr& chunk) {
         auto& columns = chunk->columns();
         for (auto& col : columns) {
@@ -645,7 +652,8 @@ TEST_F(ParquetScannerTest, test_arrow_null) {
     auto slot_infos = select_columns(column_names, true);
     auto ranges = generate_ranges(file_names, column_names.size(), {});
     auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, slot_infos});
-    auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges);
+    TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
+    auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges, params);
     auto check = [](const ChunkPtr& chunk) {};
     validate(scanner, 3, check);
 }
@@ -817,6 +825,28 @@ TEST_F(ParquetScannerTest, optional_map_key) {
             EXPECT_EQ(expect, result);
         }
     }
+}
+
+TEST_F(ParquetScannerTest, test_flexible_column_mapping) {
+    std::vector<std::string> column_names{"col_int", "col_not_existed"};
+    std::string parquet_file_name = test_exec_dir + "/test_data/parquet_data/data_1.parquet";
+    std::vector<std::string> file_names{parquet_file_name};
+
+    auto slot_infos = select_columns(column_names, true);
+    auto ranges = generate_ranges(file_names, column_names.size(), {});
+    auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, slot_infos});
+    TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
+    params->enable_flexible_column_mapping = true;
+    auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges, params);
+    ASSERT_OK(scanner->open());
+    auto res = scanner->get_next();
+    ASSERT_OK(res.status());
+
+    auto chunk = res.value();
+    ASSERT_EQ(1, chunk->num_rows());
+    ASSERT_EQ(2, chunk->num_columns());
+    // fill null for col_not_existed
+    ASSERT_EQ("[-63310, NULL]", chunk->debug_row(0));
 }
 
 } // namespace starrocks
