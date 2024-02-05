@@ -1,0 +1,59 @@
+-- name: test_select_after_truncate_list_partition
+create database test_select_after_truncate_list_partition_zz1;
+-- result:
+-- !result
+use test_select_after_truncate_list_partition_zz1;
+-- result:
+-- !result
+CREATE TABLE IF NOT EXISTS t_ptr_label_ice(
+    obj_id string not null COMMENT'客户编号',
+    lab_numr string not null COMMENT'标签编号',
+    busi_date string not null COMMENT'业务日期',
+    lab_val VARCHAR(1048576) COMMENT'值'
+)UNIQUE KEY(obj_id, lab_numr, busi_date)
+PARTITION BY LIST (lab_numr, busi_date)(
+    PARTITION p1 VALUES IN (("lab1", "2022-01-01")),
+   PARTITION p2 VALUES IN (("lab3", "2022-01-03")),
+   PARTITION p3 VALUES IN (("lab5", "2022-01-07")),
+   PARTITION p4 VALUES IN (("lab9", "2022-01-09"))
+)
+DISTRIBUTED BY HASH(obj_id);
+-- result:
+-- !result
+INSERT INTO t_ptr_label_ice (obj_id, lab_numr, busi_date, lab_val) VALUES
+('obj1', 'lab1', '2022-01-01', 'val1'),
+('obj2', 'lab1', '2022-01-01', 'val2'),
+('obj3', 'lab3', '2022-01-03', 'val3'),
+('obj4', 'lab3', '2022-01-03', 'val4'),
+('obj5', 'lab3', '2022-01-03', 'val5'),
+('obj6', 'lab3', '2022-01-03', 'val6'),
+('obj7', 'lab5', '2022-01-07', 'val7'),
+('obj8', 'lab5', '2022-01-07', 'val8'),
+('obj9', 'lab9', '2022-01-09', 'val9'),
+('obj10', 'lab9', '2022-01-09', 'val10');
+-- result:
+-- !result
+select count(*) from t_ptr_label_ice where busi_date="2022-01-01" ;
+-- result:
+2
+-- !result
+ALTER TABLE t_ptr_label_ice truncate PARTITION p1;
+-- result:
+-- !result
+INSERT INTO t_ptr_label_ice (obj_id, lab_numr, busi_date, lab_val) VALUES
+('obj1', 'lab1', '2022-01-01', 'val1'),
+('obj2', 'lab1', '2022-01-01', 'val2'),
+('obj3', 'lab3', '2022-01-03', 'val3'),
+('obj4', 'lab3', '2022-01-03', 'val4'),
+('obj5', 'lab3', '2022-01-03', 'val5'),
+('obj6', 'lab3', '2022-01-03', 'val6'),
+('obj7', 'lab5', '2022-01-07', 'val7'),
+('obj8', 'lab5', '2022-01-07', 'val8'),
+('obj9', 'lab9', '2022-01-09', 'val9'),
+('obj10', 'lab9', '2022-01-09', 'val10');
+-- result:
+-- !result
+select count(*) from t_ptr_label_ice where busi_date="2022-01-01" ;
+-- result:
+2
+-- !result

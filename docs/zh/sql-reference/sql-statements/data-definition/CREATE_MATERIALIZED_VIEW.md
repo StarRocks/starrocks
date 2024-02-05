@@ -53,6 +53,7 @@ AS
 
 ```SQL
 SELECT select_expr[, select_expr ...]
+[WHERE where_expr]
 [GROUP BY column_name[, column_name ...]]
 [ORDER BY column_name[, column_name ...]]
 ```
@@ -69,12 +70,16 @@ SELECT select_expr[, select_expr ...]
   > - 该参数至少需包含一个单列。
   > - 同步物化视图仅支持在单列上使用聚合函数。不支持形如 `sum(a+b)` 形式的查询语句。
   > - 使用聚合函数创建同步物化视图时，必须指定 GROUP BY 子句，并在 `select_expr` 中指定至少一个 GROUP BY 列。
-  > - 同步物化视图不支持 JOIN、WHERE、以及 GROUP BY 的 HAVING 子句。
+  > - 同步物化视图不支持 JOIN、以及 GROUP BY 的 HAVING 子句。
   > - 从 v3.1 开始，每个同步物化视图支持为基表的每一列使用多个聚合函数，支持形如 `select b, sum(a), min(a) from table group by b` 形式的查询语句。
   > - 从 v3.1 开始，同步物化视图支持 SELECT 和聚合函数的复杂表达式，即形如 `select b, sum(a + 1) as sum_a1, min(cast (a as bigint)) as min_a from table group by b` 或 `select abs(b) as col1, a + 1 as col2, cast(a as bigint) as col3 from table` 的查询语句。同步物化视图的复杂表达式有以下限制：
   >   - 每个复杂表达式必须有一个列名，并且基表所有同步物化视图中的不同复杂表达式的别名必须不同。例如，查询语句 `select b, sum(a + 1) as sum_a from table group by b` 和`select b, sum(a) as sum_a from table group by b` 不能同时用于为相同的基表创建同步物化视图。
   >   - 每个复杂表达式只能引用一列。不支持形如 `a + b as col1` 形式的查询语句。
   >   - 您可以通过执行 `EXPLAIN <sql_statement>` 来查看您的查询是否被使用复杂表达式创建的同步物化视图改写。更多信息请参见[查询分析](../../../administration/Query_planning.md)。
+
+- WHERE （选填）
+
+  自 v3.1.8 起，同步物化视图支持通过 WHERE 子句筛选数据。
 
 - GROUP BY（选填）
 
@@ -473,6 +478,79 @@ mysql> desc duplicate_table;
     |                | k7    | VARCHAR(20)  | Yes  | false | N/A     | NONE  |
     +----------------+-------+--------------+------+-------+---------+-------+
     ```
+
+6. 使用 WHERE 子句和复杂表达式创建同步物化视图。
+
+  ```sql
+  -- 创建基表 user_event
+  CREATE TABLE user_event (
+      ds date   NOT NULL,
+      id  varchar(256)    NOT NULL,
+      user_id int DEFAULT NULL,
+      user_id1    varchar(256)    DEFAULT NULL,
+      user_id2    varchar(256)    DEFAULT NULL,
+      column_01   int DEFAULT NULL,
+      column_02   int DEFAULT NULL,
+      column_03   int DEFAULT NULL,
+      column_04   int DEFAULT NULL,
+      column_05   int DEFAULT NULL,
+      column_06   DECIMAL(12,2)   DEFAULT NULL,
+      column_07   DECIMAL(12,3)   DEFAULT NULL,
+      column_08   JSON   DEFAULT NULL,
+      column_09   DATETIME    DEFAULT NULL,
+      column_10   DATETIME    DEFAULT NULL,
+      column_11   DATE    DEFAULT NULL,
+      column_12   varchar(256)    DEFAULT NULL,
+      column_13   varchar(256)    DEFAULT NULL,
+      column_14   varchar(256)    DEFAULT NULL,
+      column_15   varchar(256)    DEFAULT NULL,
+      column_16   varchar(256)    DEFAULT NULL,
+      column_17   varchar(256)    DEFAULT NULL,
+      column_18   varchar(256)    DEFAULT NULL,
+      column_19   varchar(256)    DEFAULT NULL,
+      column_20   varchar(256)    DEFAULT NULL,
+      column_21   varchar(256)    DEFAULT NULL,
+      column_22   varchar(256)    DEFAULT NULL,
+      column_23   varchar(256)    DEFAULT NULL,
+      column_24   varchar(256)    DEFAULT NULL,
+      column_25   varchar(256)    DEFAULT NULL,
+      column_26   varchar(256)    DEFAULT NULL,
+      column_27   varchar(256)    DEFAULT NULL,
+      column_28   varchar(256)    DEFAULT NULL,
+      column_29   varchar(256)    DEFAULT NULL,
+      column_30   varchar(256)    DEFAULT NULL,
+      column_31   varchar(256)    DEFAULT NULL,
+      column_32   varchar(256)    DEFAULT NULL,
+      column_33   varchar(256)    DEFAULT NULL,
+      column_34   varchar(256)    DEFAULT NULL,
+      column_35   varchar(256)    DEFAULT NULL,
+      column_36   varchar(256)    DEFAULT NULL,
+      column_37   varchar(256)    DEFAULT NULL
+  )
+  PARTITION BY date_trunc("day", ds)
+  DISTRIBUTED BY hash(id);
+  
+  -- 使用 WHERE 子句和复杂表达式创建同步物化视图
+  CREATE MATERIALIZED VIEW test_mv1
+  AS 
+  SELECT
+  ds,
+  column_19,
+  column_36,
+  sum(column_01) as column_01_sum,
+  bitmap_union(to_bitmap( user_id)) as user_id_dist_cnt,
+  bitmap_union(to_bitmap(case when column_01 > 1 and column_34 IN ('1','34')   then user_id2 else null end)) as filter_dist_cnt_1,
+  bitmap_union(to_bitmap( case when column_02 > 60 and column_35 IN ('11','13') then  user_id2 else null end)) as filter_dist_cnt_2,
+  bitmap_union(to_bitmap(case when column_03 > 70 and column_36 IN ('21','23') then  user_id2 else null end)) as filter_dist_cnt_3,
+  bitmap_union(to_bitmap(case when column_04 > 20 and column_27 IN ('31','27') then  user_id2 else null end)) as filter_dist_cnt_4,
+  bitmap_union(to_bitmap( case when column_05 > 90 and column_28 IN ('41','43') then  user_id2 else null end)) as filter_dist_cnt_5
+  FROM user_event
+  WHERE ds >= '2023-11-02'
+  GROUP BY
+  ds,
+  column_19,
+  column_36;
+  ```
 
 ### 异步物化视图示例
 

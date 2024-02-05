@@ -372,8 +372,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 ##### max_running_txn_num_per_db
 
 - **Unit**: -
-- **Default**: 100
-- **Description**: The maximum number of load transactions allowed to be running for each database within a StarRocks cluster. The default value is `100`. When the actual number of load transactions running for a database exceeds the value of this parameter, new load requests will not be processed. New requests for synchronous load jobs will be denied, and new requests for asynchronous load jobs will be placed in queue. We do not recommend you increase the value of this parameter because this will increase system load.
+- **Default**: 1000
+- **Description**: The maximum number of load transactions allowed to be running for each database within a StarRocks cluster. The default value is `1000`. From v3.1 onwards, the default value is changed to `1000` from `100`. When the actual number of load transactions running for a database exceeds the value of this parameter, new load requests will not be processed. New requests for synchronous load jobs will be denied, and new requests for asynchronous load jobs will be placed in queue. We do not recommend you increase the value of this parameter because this will increase system load.
 
 ##### load_parallel_instance_num
 
@@ -1837,6 +1837,12 @@ BE dynamic parameters are as follows.
 - **Default:** false
 - **Description:** Whether to allow compaction tasks to cache data on local disks in a shared-data cluster.
 - **Introduced in:** v3.1.7, v3.2.3
+
+#### lake_pk_compaction_max_input_rowsets
+
+- **Default:** 5
+- **Description:** The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster.
+- **Introduced in:** v3.1.8, v3.2.3
 
 #### compact_threads
 
