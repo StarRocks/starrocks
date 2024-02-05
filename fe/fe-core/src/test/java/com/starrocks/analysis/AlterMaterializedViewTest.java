@@ -196,10 +196,8 @@ public class AlterMaterializedViewTest {
         // try to active the mv
         connectContext.executeSql(String.format("alter materialized view %s active", mvName));
         Assert.assertFalse(mv.isActive());
-        Assert.assertEquals("mv schema changed: " +
-                "[[`k2` bigint(20) NULL COMMENT \"\", `v1` bigint(20) NULL COMMENT \"\"]] " +
-                "does not match " +
-                "[[`k2` double NULL COMMENT \"\", `v1` bigint(20) NULL COMMENT \"\"]]", mv.getInactiveReason());
+        Assert.assertEquals("Column schema not compatible: (`k2` bigint(20) NULL COMMENT \"\") " +
+                "and (`k2` double NULL COMMENT \"\")", mv.getInactiveReason());
 
         // use a illegal view schema, should active the mv correctly
         connectContext.executeSql("alter view view1 as select v1, max(v2) as k2 from t0 group by v1");
