@@ -87,7 +87,7 @@ public class Locker implements Cloneable {
      * Before the new version of LockManager is fully enabled, it is used to be compatible with the original db lock logic.
      */
     public void lockDatabase(Database database, LockType lockType) {
-        if (Config.use_lock_manager) {
+        if (Config.lock_manager_enabled) {
             assert database != null;
             try {
                 lock(database.getId(), lockType, 0);
@@ -107,7 +107,7 @@ public class Locker implements Cloneable {
      * Before the new version of LockManager is fully enabled, it is used to be compatible with the original db lock logic.
      */
     public boolean tryLockDatabase(Database database, LockType lockType, long timeout) {
-        if (Config.use_lock_manager) {
+        if (Config.lock_manager_enabled) {
             assert database != null;
             try {
                 lock(database.getId(), lockType, timeout);
@@ -144,7 +144,7 @@ public class Locker implements Cloneable {
      * Before the new version of LockManager is fully enabled, it is used to be compatible with the original db lock logic.
      */
     public void unLockDatabase(Database database, LockType lockType) {
-        if (Config.use_lock_manager) {
+        if (Config.lock_manager_enabled) {
             assert database != null;
             release(database.getId(), lockType);
         } else {
@@ -160,7 +160,7 @@ public class Locker implements Cloneable {
      * Before the new version of LockManager is fully enabled, it is used to be compatible with the original db lock logic.
      */
     public boolean isWriteLockHeldByCurrentThread(Database database) {
-        if (Config.use_lock_manager) {
+        if (Config.lock_manager_enabled) {
             return true;
         } else {
             return database.isWriteLockHeldByCurrentThread();
@@ -172,7 +172,7 @@ public class Locker implements Cloneable {
      */
     public void lockTablesWithIntensiveDbLock(Database database, List<Long> tableList, LockType lockType) {
         assert lockType == LockType.WRITE || lockType == LockType.READ;
-        if (Config.use_lock_manager) {
+        if (Config.lock_manager_enabled) {
             assert !tableList.isEmpty();
 
             try {
@@ -197,7 +197,7 @@ public class Locker implements Cloneable {
 
     public boolean tryLockTablesWithIntensiveDbLock(Database database, List<Long> tableList, LockType lockType, long timeout) {
         assert lockType == LockType.WRITE || lockType == LockType.READ;
-        if (Config.use_lock_manager) {
+        if (Config.lock_manager_enabled) {
             assert !tableList.isEmpty();
 
             try {
@@ -241,7 +241,7 @@ public class Locker implements Cloneable {
      * Before the new version of LockManager is fully enabled, it is used to be compatible with the original db lock logic.
      */
     public void unLockTablesWithIntensiveDbLock(Database database, List<Long> tableList, LockType lockType) {
-        if (Config.use_lock_manager) {
+        if (Config.lock_manager_enabled) {
             if (lockType == LockType.WRITE) {
                 this.release(database.getId(), LockType.INTENTION_EXCLUSIVE);
             } else if (lockType == LockType.READ) {

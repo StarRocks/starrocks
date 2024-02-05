@@ -31,15 +31,15 @@ public class TestLockInterface {
     @Before
     public void setUp() {
         GlobalStateMgr.getCurrentState().setLockManager(new LockManager());
-        Config.dead_lock_detection_delay_time_ms = 0;
-        Config.use_lock_manager = true;
-        Config.enable_unlock_deadlock = true;
+        Config.lock_manager_dead_lock_detection_delay_time_ms = 0;
+        Config.lock_manager_enabled = true;
+        Config.lock_manager_enable_unlock_deadlock = true;
     }
 
     @After
     public void tearDown() {
-        Config.use_lock_manager = false;
-        Config.enable_unlock_deadlock = false;
+        Config.lock_manager_enabled = false;
+        Config.lock_manager_enable_unlock_deadlock = false;
     }
 
     @Test
@@ -63,9 +63,9 @@ public class TestLockInterface {
         Database database = new Database(rid, "db");
         Locker locker = new Locker();
         Assert.assertTrue(locker.tryLockDatabase(database, LockType.READ, 10));
-        Config.enable_unlock_deadlock = false;
+        Config.lock_manager_enable_unlock_deadlock = false;
         Assert.assertFalse(locker.tryLockDatabase(database, LockType.WRITE, 10));
-        Config.enable_unlock_deadlock = true;
+        Config.lock_manager_enable_unlock_deadlock = true;
         Assert.assertThrows(ErrorReportException.class, () -> locker.lockDatabase(database, LockType.WRITE));
     }
 
