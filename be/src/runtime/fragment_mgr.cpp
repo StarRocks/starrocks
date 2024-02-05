@@ -809,6 +809,9 @@ void FragmentMgr::debug(std::stringstream& ss) {
 Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, const TUniqueId& fragment_instance_id,
                                                 std::vector<TScanColumnDesc>* selected_columns, TUniqueId* query_id) {
     // check chunk size first
+    if (UNLIKELY(!params.__isset.batch_size)) {
+        return Status::InvalidArgument("batch_size is not set");
+    }
     auto batch_size = params.batch_size;
     if (UNLIKELY(batch_size <= 0 || batch_size > MAX_CHUNK_SIZE)) {
         return Status::InvalidArgument(
