@@ -323,7 +323,9 @@ public class Database extends MetaObject implements Writable {
     /**
      * Get the unique id of database in string format, since we already ensure
      * the uniqueness of id for internal database, we just convert it to string
-     * and return, for external database it's up to the implementation of connector.
+     * and return.
+     * Note: for external database, we use database name as the privilege entry
+     * id, not the uuid returned by this interface.
      *
      * @return unique id of database in string format
      */
