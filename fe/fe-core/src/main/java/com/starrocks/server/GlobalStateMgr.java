@@ -3925,43 +3925,8 @@ public class GlobalStateMgr {
     public MetaContext getMetaContext() {
         return metaContext;
     }
-<<<<<<< HEAD
-=======
-
-    public void createBuiltinStorageVolume() {
-        try {
-            String builtinStorageVolumeId = storageVolumeMgr.createBuiltinStorageVolume();
-            if (!builtinStorageVolumeId.isEmpty()) {
-                authorizationMgr.grantStorageVolumeUsageToPublicRole(builtinStorageVolumeId);
-            }
-        } catch (InvalidConfException e) {
-            LOG.fatal(e.getMessage());
-            System.exit(-1);
-        } catch (DdlException | AlreadyExistsException e) {
-            LOG.warn("Failed to create or update builtin storage volume", e);
-        } catch (PrivilegeException e) {
-            LOG.warn("Failed to grant builtin storage volume usage to public role", e);
-        }
-    }
-
-    public SlotManager getSlotManager() {
-        return slotManager;
-    }
-
-    public SlotProvider getSlotProvider() {
-        return slotProvider;
-    }
-
-    public ResourceUsageMonitor getResourceUsageMonitor() {
-        return resourceUsageMonitor;
-    }
-
-    public DictionaryMgr getDictionaryMgr() {
-        return dictionaryMgr;
-    }
 
     public boolean isInTransferringToLeader() {
         return isInTransferringToLeader;
     }
->>>>>>> d8bb832929 ([BugFix] Fix forward to self node bug (#39587))
 }

@@ -154,20 +154,16 @@ public class LeaderOpExecutor {
 
     // Send request to Leader
     private void forward() throws Exception {
-<<<<<<< HEAD
-        Pair<String, Integer> ipAndPort = GlobalStateMgr.getCurrentState().getLeaderIpAndRpcPort();
-=======
         int forwardTimes = ctx.getForwardTimes() + 1;
         if (forwardTimes > 1) {
             LOG.info("forward multi times: {}", forwardTimes);
         }
         if (forwardTimes > MAX_FORWARD_TIMES) {
             LOG.warn("too many forward times, max allowed forward time is {}", MAX_FORWARD_TIMES);
-            ErrorReportException.report(ErrorCode.ERR_FORWARD_TOO_MANY_TIMES, forwardTimes);
+            throw new DdlException("forward too many times");
         }
 
         Pair<String, Integer> ipAndPort = GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort();
->>>>>>> d8bb832929 ([BugFix] Fix forward to self node bug (#39587))
         TNetworkAddress thriftAddress = new TNetworkAddress(ipAndPort.first, ipAndPort.second);
         TMasterOpRequest params = new TMasterOpRequest();
         params.setCluster(SystemInfoService.DEFAULT_CLUSTER);
