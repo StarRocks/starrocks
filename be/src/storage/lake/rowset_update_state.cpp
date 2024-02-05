@@ -509,44 +509,30 @@ Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, cons
         if (op_write.txn_meta().has_auto_increment_partial_update_column_id() &&
             !_auto_increment_partial_update_states[i].skip_rewrite) {
             FileInfo file_info{.path = tablet->segment_location(dest_path)};
-<<<<<<< HEAD
-            RETURN_IF_ERROR(SegmentRewriter::rewrite(
-                    tablet->segment_location(src_path), &file_info, *tablet_schema,
-                    _auto_increment_partial_update_states[i], read_column_ids,
-                    _partial_update_states.size() != 0 ? &_partial_update_states[i].write_columns : nullptr, op_write,
-                    tablet));
-=======
             ASSIGN_OR_RETURN(bool skip_rewrite, file_exist(file_info.path));
             if (!skip_rewrite) {
                 RETURN_IF_ERROR(SegmentRewriter::rewrite(
-                        tablet->segment_location(src_path), &file_info, tablet_schema,
+                        tablet->segment_location(src_path), &file_info, *tablet_schema,
                         _auto_increment_partial_update_states[i], read_column_ids,
                         _partial_update_states.size() != 0 ? &_partial_update_states[i].write_columns : nullptr,
                         op_write, tablet));
             } else {
                 skip_because_file_exist = true;
             }
->>>>>>> 0831e5b67b ([BugFix] check partial update segment file exist before rewrite (#40609))
             file_info.path = dest_path;
             (*replace_segments)[i] = file_info;
         } else if (_partial_update_states.size() != 0) {
             FooterPointerPB partial_rowset_footer = txn_meta.partial_rowset_footers(i);
             FileInfo file_info{.path = tablet->segment_location(dest_path)};
             // if rewrite fail, let segment gc to clean dest segment file
-<<<<<<< HEAD
-            RETURN_IF_ERROR(SegmentRewriter::rewrite(tablet->segment_location(src_path), &file_info, *tablet_schema,
-                                                     read_column_ids, _partial_update_states[i].write_columns, i,
-                                                     partial_rowset_footer));
-=======
             ASSIGN_OR_RETURN(bool skip_rewrite, file_exist(file_info.path));
             if (!skip_rewrite) {
-                RETURN_IF_ERROR(SegmentRewriter::rewrite(tablet->segment_location(src_path), &file_info, tablet_schema,
+                RETURN_IF_ERROR(SegmentRewriter::rewrite(tablet->segment_location(src_path), &file_info, *tablet_schema,
                                                          read_column_ids, _partial_update_states[i].write_columns, i,
                                                          partial_rowset_footer));
             } else {
                 skip_because_file_exist = true;
             }
->>>>>>> 0831e5b67b ([BugFix] check partial update segment file exist before rewrite (#40609))
             file_info.path = dest_path;
             (*replace_segments)[i] = file_info;
         } else {
