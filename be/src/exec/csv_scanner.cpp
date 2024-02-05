@@ -542,8 +542,8 @@ Status CSVScanner::get_schema(std::vector<SlotDescriptor>* schema) {
     return _get_schema(schema);
 }
 
-Status CSVScanner::_get_schema(std::vector<SlotDescriptor>* schema) {
-    if (schema == nullptr) {
+Status CSVScanner::_get_schema(std::vector<SlotDescriptor>* merged_schema) {
+    if (merged_schema == nullptr) {
         return Status::InternalError("ouput schema is null");
     }
 
@@ -553,24 +553,49 @@ Status CSVScanner::_get_schema(std::vector<SlotDescriptor>* schema) {
     // skip empty record.
     do {
         auto st = _curr_reader->next_record(&record);
-        if (!st.ok() && st.is_end_of_file()) {
+        if (st.is_end_of_file()) {
             return Status::OK();
         } else if (!st.ok()) {
             return st;
         }
     } while (record.empty());
 
+    // 1st row
     CSVReader::Fields fields;
     _curr_reader->split_record(record, &fields);
+
+    std::vector<std::vector<SlotDescriptor>> schemas;
+    std::vector<SlotDescriptor> schema;
     for (size_t i = 0; i < fields.size(); i++) {
         // column name: $1, $2, $3...
-        schema->emplace_back(SlotDescriptor(i, fmt::format("${}", i + 1), get_type_desc(fields[i])));
+        schema.emplace_back(SlotDescriptor(i, fmt::format("${}", i + 1), get_type_desc(fields[i])));
     }
+    schemas.emplace_back(schema);
+
+    // from 2nd row.
+    for (size_t i = 1; i < _scan_range.params.schema_sample_file_row_count; i++) {
+        auto st = _curr_reader->next_record(&record);
+        if (st.is_end_of_file()) {
+            break;
+        } else if (!st.ok()) {
+            return st;
+        }
+        schema.clear();
+        fields.clear();
+        _curr_reader->split_record(record, &fields);
+        for (size_t i = 0; i < fields.size(); i++) {
+            // column name: $1, $2, $3...
+            schema.emplace_back(SlotDescriptor(i, fmt::format("${}", i + 1), get_type_desc(fields[i])));
+        }
+        schemas.emplace_back(schema);
+    }
+
+    FileScanner::merge_schema(schemas, merged_schema);
     return Status::OK();
 }
 
-Status CSVScanner::_get_schema_v2(std::vector<SlotDescriptor>* schema) {
-    if (schema == nullptr) {
+Status CSVScanner::_get_schema_v2(std::vector<SlotDescriptor>* merged_schema) {
+    if (merged_schema == nullptr) {
         return Status::InternalError("ouput schema is null");
     }
 
@@ -591,20 +616,62 @@ Status CSVScanner::_get_schema_v2(std::vector<SlotDescriptor>* schema) {
     // skip empty row.
     do {
         auto st = _curr_reader->next_record(row);
-        if (!st.ok() && st.is_end_of_file()) {
+        if (st.is_end_of_file()) {
+            // empty file.
             return Status::OK();
         } else if (!st.ok()) {
             return st;
         }
-        while (row.columns.empty())
-            ;
+    } while (row.columns.empty());
 
-        for (size_t i = 0; i < row.columns.size(); i++) {
-            // column name: $1, $2, $3...
-            schema->emplace_back(SlotDescriptor(i, fmt::format("${}", i + 1), get_type_desc(fields[i])));
+    // 1st row
+    std::vector<std::vector<SlotDescriptor>> schemas;
+    std::vector<SlotDescriptor> schema;
+    for (size_t i = 0; i < row.columns.size(); i++) {
+
+        const auto& column = row.columns[i];
+        char* basePtr = nullptr;
+        if (column.is_escaped_column) {
+            basePtr = _curr_reader->escapeDataPtr();
+        } else {
+            basePtr = _curr_reader->buffBasePtr();
         }
+        const Slice field(basePtr + column.start_pos, column.length);
 
-        return Status::OK();
+        // column name: $1, $2, $3...
+        schema.emplace_back(SlotDescriptor(i, fmt::format("${}", i + 1), get_type_desc(field)));
     }
+    schemas.emplace_back(schema);
+
+    // from 2nd row.
+    for (size_t i = 1; i < _scan_range.params.schema_sample_file_row_count; i++) {
+        auto st = _curr_reader->next_record(row);
+        if (st.is_end_of_file()) {
+            break;
+        } else if (!st.ok()) {
+            return st;
+        }
+        schema.clear();
+        for (size_t i = 0; i < row.columns.size(); i++) {
+
+            const auto& column = row.columns[i];
+            char* basePtr = nullptr;
+            if (column.is_escaped_column) {
+                basePtr = _curr_reader->escapeDataPtr();
+            } else {
+                basePtr = _curr_reader->buffBasePtr();
+            }
+            const Slice field(basePtr + column.start_pos, column.length);
+
+            // column name: $1, $2, $3...
+            schema.emplace_back(SlotDescriptor(i, fmt::format("${}", i + 1), get_type_desc(field)));
+        }
+        schemas.emplace_back(schema);
+    }
+
+    FileScanner::merge_schema(schemas, merged_schema);
+
+    return Status::OK();
+}
 
 } // namespace starrocks

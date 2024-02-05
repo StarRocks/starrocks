@@ -266,6 +266,8 @@ struct TBrokerScanRangeParams {
     28: optional string confluent_schema_registry_url
     29: optional i64 json_file_size_limit;
     30: optional i64 schema_sample_file_count
+    31: optional i64 schema_sample_file_row_count
+    32: optional i64 flexible_column_mapping 
 }
 
 // Broker scan range

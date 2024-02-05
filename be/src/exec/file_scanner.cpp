@@ -358,7 +358,8 @@ Status FileScanner::create_random_access_file(const TBrokerRangeDesc& range_desc
     }
 }
 
-void merge_schema(const std::vector<std::vector<SlotDescriptor>>& input, std::vector<SlotDescriptor>* output) {
+void FileScanner::merge_schema(const std::vector<std::vector<SlotDescriptor>>& input,
+                               std::vector<SlotDescriptor>* output) {
     if (output == nullptr) {
         return;
     }

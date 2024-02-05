@@ -75,6 +75,9 @@ public:
     // only for test
     RuntimeState* TEST_runtime_state() { return _state; }
 
+    static void merge_schema(const std::vector<std::vector<SlotDescriptor>>& input,
+                             std::vector<SlotDescriptor>* output);
+
 protected:
     void fill_columns_from_path(ChunkPtr& chunk, int slot_start, const std::vector<std::string>& columns_from_path,
                                 int size);
