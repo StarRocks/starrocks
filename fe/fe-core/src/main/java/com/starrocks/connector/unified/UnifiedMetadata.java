@@ -109,6 +109,11 @@ public class UnifiedMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public Table.TableType getTableType() {
+        return HIVE;
+    }
+
+    @Override
     public List<String> listDbNames() {
         return hiveMetadata.listDbNames();
     }
