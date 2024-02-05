@@ -148,7 +148,13 @@ private:
 
         if constexpr (lt_is_float<LT>) {
             dest_column_data = NullableColumn::create(DoubleColumn::create(), NullColumn::create());
+<<<<<<< HEAD:be/src/exprs/array_functions.tpp
         } else if constexpr (lt_is_integer<LT> || lt_is_boolean<LT>) {
+=======
+        } else if constexpr (pt_is_largeint<PT>) {
+            dest_column_data = NullableColumn::create(RunTimeColumnType<TYPE_LARGEINT>::create(), NullColumn::create());
+        } else if constexpr (pt_is_integer<PT> || pt_is_boolean<PT>) {
+>>>>>>> e650e677ca ([BugFix] Fix array_difference<largint> error (#40747)):be/src/exprs/vectorized/array_functions.tpp
             dest_column_data = NullableColumn::create(Int64Column::create(), NullColumn::create());
         } else if constexpr (lt_is_decimalv2<LT>) {
             dest_column_data = NullableColumn::create(DecimalColumn::create(), NullColumn::create());
@@ -202,7 +208,13 @@ private:
                 if (items[i].is_null()) {
                     dest_data_column->append_nulls(1);
                 } else {
+<<<<<<< HEAD:be/src/exprs/array_functions.tpp
                     if constexpr (lt_is_integer<LT> || lt_is_boolean<LT>) {
+=======
+                    if constexpr (pt_is_largeint<PT>) {
+                        dest_data_column->append_datum((CppType)0);
+                    } else if constexpr (pt_is_integer<PT> || pt_is_boolean<PT>) {
+>>>>>>> e650e677ca ([BugFix] Fix array_difference<largint> error (#40747)):be/src/exprs/vectorized/array_functions.tpp
                         dest_data_column->append_datum((int64_t)0);
                     } else if constexpr (lt_is_float<LT>) {
                         dest_data_column->append_datum((double)0);
@@ -214,7 +226,13 @@ private:
                 if (items[i - 1].is_null() || items[i].is_null()) {
                     dest_data_column->append_nulls(1);
                 } else {
+<<<<<<< HEAD:be/src/exprs/array_functions.tpp
                     if constexpr (lt_is_integer<LT> || lt_is_boolean<LT>) {
+=======
+                    if constexpr (pt_is_largeint<PT>) {
+                        dest_data_column->append_datum((CppType)0);
+                    } else if constexpr (pt_is_integer<PT> || pt_is_boolean<PT>) {
+>>>>>>> e650e677ca ([BugFix] Fix array_difference<largint> error (#40747)):be/src/exprs/vectorized/array_functions.tpp
                         dest_data_column->append_datum(
                                 (int64_t)(items[i].get<CppType>() - items[i - 1].get<CppType>()));
                     } else if constexpr (lt_is_float<LT>) {
