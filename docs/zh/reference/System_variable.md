@@ -656,6 +656,17 @@ set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
 
 用于设置当前会话的时区。时区会对某些时间函数的结果产生影响。
 
+### trace_log_mode
+
+- 含义：用于控制 Query Trace Profile 的 Logs 的输出位置。有效值包括：
+  - `command`：在执行 TRACE LOGS 后作为 **Explain String** 返回。
+  - `file`：在 FE 日志文件 **fe.log** 中以 `FileLogTracer` 为类名返回。
+
+  有关 Query Trace Profile 的更多信息，请参阅 [Query Trace Profile](../developers/trace-tools/query_trace_profile.md)。
+
+- 默认值：`command`
+- 引入版本：v3.2.0
+
 ### transaction_read_only
 
 * 含义：用于兼容 MySQL 5.8 以上客户端，无实际作用。别名 `tx_read_only`。该变量用于指定事务访问模式。取值 `ON` 表示只读。取值 `OFF` 表示可读可写。
