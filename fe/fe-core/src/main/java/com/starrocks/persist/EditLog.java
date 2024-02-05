@@ -56,7 +56,6 @@ import com.starrocks.cluster.Cluster;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
-import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -505,7 +504,7 @@ public class EditLog {
                     globalStateMgr.getLocalMetastore().replayDeleteReplica(info);
                     break;
                 }
-                case OperationType.OP_BATCH_DELETE_REPLICA : {
+                case OperationType.OP_BATCH_DELETE_REPLICA: {
                     BatchDeleteReplicaInfo info = (BatchDeleteReplicaInfo) journal.getData();
                     globalStateMgr.getLocalMetastore().replayBatchDeleteReplica(info);
                     break;
@@ -1431,19 +1430,11 @@ public class EditLog {
     }
 
     public void logRecoverDb(RecoverInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_RECOVER_DB_V2, info);
-        } else {
-            logEdit(OperationType.OP_RECOVER_DB, info);
-        }
+        logJsonObject(OperationType.OP_RECOVER_DB_V2, info);
     }
 
     public void logAlterDb(DatabaseInfo dbInfo) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_ALTER_DB_V2, dbInfo);
-        } else {
-            logEdit(OperationType.OP_ALTER_DB, dbInfo);
-        }
+        logJsonObject(OperationType.OP_ALTER_DB_V2, dbInfo);
     }
 
     public void logCreateTable(CreateTableInfo info) {
@@ -1495,19 +1486,11 @@ public class EditLog {
     }
 
     public void logRecoverPartition(RecoverInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_RECOVER_PARTITION_V2, info);
-        } else {
-            logEdit(OperationType.OP_RECOVER_PARTITION, info);
-        }
+        logJsonObject(OperationType.OP_RECOVER_PARTITION_V2, info);
     }
 
     public void logModifyPartition(ModifyPartitionInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_MODIFY_PARTITION_V2, info);
-        } else {
-            logEdit(OperationType.OP_MODIFY_PARTITION, info);
-        }
+        logJsonObject(OperationType.OP_MODIFY_PARTITION_V2, info);
     }
 
     public void logBatchModifyPartition(BatchModifyPartitionsInfo info) {
@@ -1515,11 +1498,7 @@ public class EditLog {
     }
 
     public void logDropTable(DropInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_DROP_TABLE_V2, info);
-        } else {
-            logEdit(OperationType.OP_DROP_TABLE, info);
-        }
+        logJsonObject(OperationType.OP_DROP_TABLE_V2, info);
     }
 
     public void logEraseMultiTables(List<Long> tableIds) {
@@ -1527,19 +1506,11 @@ public class EditLog {
     }
 
     public void logRecoverTable(RecoverInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_RECOVER_TABLE_V2, info);
-        } else {
-            logEdit(OperationType.OP_RECOVER_TABLE, info);
-        }
+        logJsonObject(OperationType.OP_RECOVER_TABLE_V2, info);
     }
 
     public void logDropRollup(DropInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_DROP_ROLLUP_V2, info);
-        } else {
-            logEdit(OperationType.OP_DROP_ROLLUP, info);
-        }
+        logJsonObject(OperationType.OP_DROP_ROLLUP_V2, info);
     }
 
     public void logBatchDropRollup(BatchDropInfo batchDropInfo) {
@@ -1547,11 +1518,7 @@ public class EditLog {
     }
 
     public void logFinishConsistencyCheck(ConsistencyCheckInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_FINISH_CONSISTENCY_CHECK_V2, info);
-        } else {
-            logEdit(OperationType.OP_FINISH_CONSISTENCY_CHECK, info);
-        }
+        logJsonObject(OperationType.OP_FINISH_CONSISTENCY_CHECK_V2, info);
     }
 
     public void logAddComputeNode(ComputeNode computeNode) {
@@ -1559,11 +1526,7 @@ public class EditLog {
     }
 
     public void logAddBackend(Backend be) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_ADD_BACKEND_V2, be);
-        } else {
-            logEdit(OperationType.OP_ADD_BACKEND, be);
-        }
+        logJsonObject(OperationType.OP_ADD_BACKEND_V2, be);
     }
 
     public void logDropComputeNode(DropComputeNodeLog log) {
@@ -1571,43 +1534,23 @@ public class EditLog {
     }
 
     public void logDropBackend(Backend be) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_DROP_BACKEND_V2, be);
-        } else {
-            logEdit(OperationType.OP_DROP_BACKEND, be);
-        }
+        logJsonObject(OperationType.OP_DROP_BACKEND_V2, be);
     }
 
     public void logAddFrontend(Frontend fe) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_ADD_FRONTEND_V2, fe);
-        } else {
-            logEdit(OperationType.OP_ADD_FRONTEND, fe);
-        }
+        logJsonObject(OperationType.OP_ADD_FRONTEND_V2, fe);
     }
 
     public void logAddFirstFrontend(Frontend fe) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_ADD_FIRST_FRONTEND_V2, fe);
-        } else {
-            logEdit(OperationType.OP_ADD_FIRST_FRONTEND, fe);
-        }
+        logJsonObject(OperationType.OP_ADD_FIRST_FRONTEND_V2, fe);
     }
 
     public void logRemoveFrontend(Frontend fe) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_REMOVE_FRONTEND_V2, fe);
-        } else {
-            logEdit(OperationType.OP_REMOVE_FRONTEND, fe);
-        }
+        logJsonObject(OperationType.OP_REMOVE_FRONTEND_V2, fe);
     }
 
     public void logUpdateFrontend(Frontend fe) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_UPDATE_FRONTEND_V2, fe);
-        } else {
-            logEdit(OperationType.OP_UPDATE_FRONTEND, fe);
-        }
+        logJsonObject(OperationType.OP_UPDATE_FRONTEND_V2, fe);
     }
 
     public void logFinishMultiDelete(MultiDeleteInfo info) {
@@ -1615,27 +1558,15 @@ public class EditLog {
     }
 
     public void logAddReplica(ReplicaPersistInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_ADD_REPLICA_V2, info);
-        } else {
-            logEdit(OperationType.OP_ADD_REPLICA, info);
-        }
+        logJsonObject(OperationType.OP_ADD_REPLICA_V2, info);
     }
 
     public void logUpdateReplica(ReplicaPersistInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_UPDATE_REPLICA_V2, info);
-        } else {
-            logEdit(OperationType.OP_UPDATE_REPLICA, info);
-        }
+        logJsonObject(OperationType.OP_UPDATE_REPLICA_V2, info);
     }
 
     public void logDeleteReplica(ReplicaPersistInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_DELETE_REPLICA_V2, info);
-        } else {
-            logEdit(OperationType.OP_DELETE_REPLICA, info);
-        }
+        logJsonObject(OperationType.OP_DELETE_REPLICA_V2, info);
     }
 
     public void logBatchDeleteReplica(BatchDeleteReplicaInfo info) {
@@ -1643,19 +1574,11 @@ public class EditLog {
     }
 
     public void logTimestamp(Timestamp stamp) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_TIMESTAMP_V2, stamp);
-        } else {
-            logEdit(OperationType.OP_TIMESTAMP, stamp);
-        }
+        logJsonObject(OperationType.OP_TIMESTAMP_V2, stamp);
     }
 
     public void logLeaderInfo(LeaderInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_LEADER_INFO_CHANGE_V2, info);
-        } else {
-            logEdit(OperationType.OP_LEADER_INFO_CHANGE, info);
-        }
+        logJsonObject(OperationType.OP_LEADER_INFO_CHANGE_V2, info);
     }
 
     public void logMetaVersion(MetaVersion metaVersion) {
@@ -1663,27 +1586,15 @@ public class EditLog {
     }
 
     public void logBackendStateChange(Backend be) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_BACKEND_STATE_CHANGE_V2, be);
-        } else {
-            logEdit(OperationType.OP_BACKEND_STATE_CHANGE, be);
-        }
+        logJsonObject(OperationType.OP_BACKEND_STATE_CHANGE_V2, be);
     }
 
     public void logDatabaseRename(DatabaseInfo databaseInfo) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_RENAME_DB_V2, databaseInfo);
-        } else {
-            logEdit(OperationType.OP_RENAME_DB, databaseInfo);
-        }
+        logJsonObject(OperationType.OP_RENAME_DB_V2, databaseInfo);
     }
 
     public void logTableRename(TableInfo tableInfo) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_RENAME_TABLE_V2, tableInfo);
-        } else {
-            logEdit(OperationType.OP_RENAME_TABLE, tableInfo);
-        }
+        logJsonObject(OperationType.OP_RENAME_TABLE_V2, tableInfo);
     }
 
     public void logModifyViewDef(AlterViewInfo alterViewInfo) {
@@ -1691,19 +1602,11 @@ public class EditLog {
     }
 
     public void logRollupRename(TableInfo tableInfo) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_RENAME_ROLLUP_V2, tableInfo);
-        } else {
-            logEdit(OperationType.OP_RENAME_ROLLUP, tableInfo);
-        }
+        logJsonObject(OperationType.OP_RENAME_ROLLUP_V2, tableInfo);
     }
 
     public void logPartitionRename(TableInfo tableInfo) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_RENAME_PARTITION_V2, tableInfo);
-        } else {
-            logEdit(OperationType.OP_RENAME_PARTITION, tableInfo);
-        }
+        logJsonObject(OperationType.OP_RENAME_PARTITION_V2, tableInfo);
     }
 
     public void logGlobalVariable(SessionVariable variable) {
@@ -1715,19 +1618,11 @@ public class EditLog {
     }
 
     public void logAddBroker(BrokerMgr.ModifyBrokerInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_ADD_BROKER_V2, info);
-        } else {
-            logEdit(OperationType.OP_ADD_BROKER, info);
-        }
+        logJsonObject(OperationType.OP_ADD_BROKER_V2, info);
     }
 
     public void logDropBroker(BrokerMgr.ModifyBrokerInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_DROP_BROKER_V2, info);
-        } else {
-            logEdit(OperationType.OP_DROP_BROKER, info);
-        }
+        logJsonObject(OperationType.OP_DROP_BROKER_V2, info);
     }
 
     public void logDropAllBroker(String brokerName) {
@@ -1739,11 +1634,7 @@ public class EditLog {
     }
 
     public void logExportCreate(ExportJob job) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_EXPORT_CREATE_V2, job);
-        } else {
-            logEdit(OperationType.OP_EXPORT_CREATE, job);
-        }
+        logJsonObject(OperationType.OP_EXPORT_CREATE_V2, job);
     }
 
     public void logExportUpdateState(long jobId, ExportJob.JobState newState, long stateChangeTime,
@@ -1751,15 +1642,7 @@ public class EditLog {
                                      Set<String> exportedFiles, ExportFailMsg failMsg) {
         ExportJob.ExportUpdateInfo updateInfo = new ExportJob.ExportUpdateInfo(jobId, newState, stateChangeTime,
                 snapshotPaths, exportTempPath, exportedFiles, failMsg);
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_EXPORT_UPDATE_INFO_V2, updateInfo);
-        } else {
-            logEdit(OperationType.OP_EXPORT_UPDATE_INFO, updateInfo);
-        }
-    }
-
-    public void logUpdateClusterAndBackendState(BackendIdsUpdateInfo info) {
-        logEdit(OperationType.OP_UPDATE_CLUSTER_AND_BACKENDS, info);
+        logJsonObject(OperationType.OP_EXPORT_UPDATE_INFO_V2, updateInfo);
     }
 
     // for TransactionState
@@ -1772,19 +1655,11 @@ public class EditLog {
     }
 
     public void logBackupJob(BackupJob job) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_BACKUP_JOB_V2, job);
-        } else {
-            logEdit(OperationType.OP_BACKUP_JOB, job);
-        }
+        logJsonObject(OperationType.OP_BACKUP_JOB_V2, job);
     }
 
     public void logCreateRepository(Repository repo) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_CREATE_REPOSITORY_V2, repo);
-        } else {
-            logEdit(OperationType.OP_CREATE_REPOSITORY, repo);
-        }
+        logJsonObject(OperationType.OP_CREATE_REPOSITORY_V2, repo);
     }
 
     public void logDropRepository(String repoName) {
@@ -1792,15 +1667,7 @@ public class EditLog {
     }
 
     public void logRestoreJob(RestoreJob job) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_RESTORE_JOB_V2, job);
-        } else {
-            logEdit(OperationType.OP_RESTORE_JOB, job);
-        }
-    }
-
-    public void logUpdateUserProperty(UserPropertyInfo propertyInfo) {
-        logEdit(OperationType.OP_UPDATE_USER_PROPERTY, propertyInfo);
+        logJsonObject(OperationType.OP_RESTORE_JOB_V2, job);
     }
 
     public void logTruncateTable(TruncateTableInfo info) {
@@ -1808,47 +1675,23 @@ public class EditLog {
     }
 
     public void logColocateAddTable(ColocatePersistInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_COLOCATE_ADD_TABLE_V2, info);
-        } else {
-            logEdit(OperationType.OP_COLOCATE_ADD_TABLE, info);
-        }
-    }
-
-    public void logColocateRemoveTable(ColocatePersistInfo info) {
-        logEdit(OperationType.OP_COLOCATE_REMOVE_TABLE, info);
+        logJsonObject(OperationType.OP_COLOCATE_ADD_TABLE_V2, info);
     }
 
     public void logColocateBackendsPerBucketSeq(ColocatePersistInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_COLOCATE_BACKENDS_PER_BUCKETSEQ_V2, info);
-        } else {
-            logEdit(OperationType.OP_COLOCATE_BACKENDS_PER_BUCKETSEQ, info);
-        }
+        logJsonObject(OperationType.OP_COLOCATE_BACKENDS_PER_BUCKETSEQ_V2, info);
     }
 
     public void logColocateMarkUnstable(ColocatePersistInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_COLOCATE_MARK_UNSTABLE_V2, info);
-        } else {
-            logEdit(OperationType.OP_COLOCATE_MARK_UNSTABLE, info);
-        }
+        logJsonObject(OperationType.OP_COLOCATE_MARK_UNSTABLE_V2, info);
     }
 
     public void logColocateMarkStable(ColocatePersistInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_COLOCATE_MARK_STABLE_V2, info);
-        } else {
-            logEdit(OperationType.OP_COLOCATE_MARK_STABLE, info);
-        }
+        logJsonObject(OperationType.OP_COLOCATE_MARK_STABLE_V2, info);
     }
 
     public void logModifyTableColocate(TablePropertyInfo info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_MODIFY_TABLE_COLOCATE_V2, info);
-        } else {
-            logEdit(OperationType.OP_MODIFY_TABLE_COLOCATE, info);
-        }
+        logJsonObject(OperationType.OP_MODIFY_TABLE_COLOCATE_V2, info);
     }
 
     public void logHeartbeat(HbPackage hbPackage) {
@@ -1856,19 +1699,11 @@ public class EditLog {
     }
 
     public void logAddFunction(Function function) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_ADD_FUNCTION_V2, function);
-        } else {
-            logEdit(OperationType.OP_ADD_FUNCTION, function);
-        }
+        logJsonObject(OperationType.OP_ADD_FUNCTION_V2, function);
     }
 
     public void logDropFunction(FunctionSearchDesc function) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_DROP_FUNCTION_V2, function);
-        } else {
-            logEdit(OperationType.OP_DROP_FUNCTION, function);
-        }
+        logJsonObject(OperationType.OP_DROP_FUNCTION_V2, function);
     }
 
     public void logSetHasForbiddenGlobalDict(ModifyTablePropertyOperationLog info) {
@@ -1876,51 +1711,27 @@ public class EditLog {
     }
 
     public void logBackendTabletsInfo(BackendTabletsInfo backendTabletsInfo) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_BACKEND_TABLETS_INFO_V2, backendTabletsInfo);
-        } else {
-            logEdit(OperationType.OP_BACKEND_TABLETS_INFO, backendTabletsInfo);
-        }
+        logJsonObject(OperationType.OP_BACKEND_TABLETS_INFO_V2, backendTabletsInfo);
     }
 
     public void logCreateRoutineLoadJob(RoutineLoadJob routineLoadJob) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_CREATE_ROUTINE_LOAD_JOB_V2, routineLoadJob);
-        } else {
-            logEdit(OperationType.OP_CREATE_ROUTINE_LOAD_JOB, routineLoadJob);
-        }
+        logJsonObject(OperationType.OP_CREATE_ROUTINE_LOAD_JOB_V2, routineLoadJob);
     }
 
     public void logOpRoutineLoadJob(RoutineLoadOperation routineLoadOperation) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_CHANGE_ROUTINE_LOAD_JOB_V2, routineLoadOperation);
-        } else {
-            logEdit(OperationType.OP_CHANGE_ROUTINE_LOAD_JOB, routineLoadOperation);
-        }
+        logJsonObject(OperationType.OP_CHANGE_ROUTINE_LOAD_JOB_V2, routineLoadOperation);
     }
 
     public void logCreateStreamLoadJob(StreamLoadTask streamLoadTask) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_CREATE_STREAM_LOAD_TASK_V2, streamLoadTask);
-        } else {
-            logEdit(OperationType.OP_CREATE_STREAM_LOAD_TASK, streamLoadTask);
-        }
+        logJsonObject(OperationType.OP_CREATE_STREAM_LOAD_TASK_V2, streamLoadTask);
     }
 
     public void logCreateLoadJob(com.starrocks.load.loadv2.LoadJob loadJob) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_CREATE_LOAD_JOB_V2, loadJob);
-        } else {
-            logEdit(OperationType.OP_CREATE_LOAD_JOB, loadJob);
-        }
+        logJsonObject(OperationType.OP_CREATE_LOAD_JOB_V2, loadJob);
     }
 
     public void logEndLoadJob(LoadJobFinalOperation loadJobFinalOperation) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_END_LOAD_JOB_V2, loadJobFinalOperation);
-        } else {
-            logEdit(OperationType.OP_END_LOAD_JOB, loadJobFinalOperation);
-        }
+        logJsonObject(OperationType.OP_END_LOAD_JOB_V2, loadJobFinalOperation);
     }
 
     public void logUpdateLoadJob(LoadJobStateUpdateInfo info) {
@@ -1936,19 +1747,11 @@ public class EditLog {
     }
 
     public void logCreateSmallFile(SmallFile info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_CREATE_SMALL_FILE_V2, info);
-        } else {
-            logEdit(OperationType.OP_CREATE_SMALL_FILE, info);
-        }
+        logJsonObject(OperationType.OP_CREATE_SMALL_FILE_V2, info);
     }
 
     public void logDropSmallFile(SmallFile info) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_DROP_SMALL_FILE_V2, info);
-        } else {
-            logEdit(OperationType.OP_DROP_SMALL_FILE, info);
-        }
+        logJsonObject(OperationType.OP_DROP_SMALL_FILE_V2, info);
     }
 
     public void logAlterJob(AlterJobV2 alterJob) {
@@ -1960,19 +1763,11 @@ public class EditLog {
     }
 
     public void logBatchAlterJob(BatchAlterJobPersistInfo batchAlterJobV2) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_BATCH_ADD_ROLLUP_V2, batchAlterJobV2);
-        } else {
-            logEdit(OperationType.OP_BATCH_ADD_ROLLUP, batchAlterJobV2);
-        }
+        logJsonObject(OperationType.OP_BATCH_ADD_ROLLUP_V2, batchAlterJobV2);
     }
 
     public void logModifyDistributionType(TableInfo tableInfo) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_MODIFY_DISTRIBUTION_TYPE_V2, tableInfo);
-        } else {
-            logEdit(OperationType.OP_MODIFY_DISTRIBUTION_TYPE, tableInfo);
-        }
+        logJsonObject(OperationType.OP_MODIFY_DISTRIBUTION_TYPE_V2, tableInfo);
     }
 
     public void logDynamicPartition(ModifyTablePropertyOperationLog info) {
@@ -2169,19 +1964,11 @@ public class EditLog {
     }
 
     public void logUpdateUserPropertyV2(UserPropertyInfo propertyInfo) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_UPDATE_USER_PROP_V3, propertyInfo);
-        } else {
-            logEdit(OperationType.OP_UPDATE_USER_PROP_V2, propertyInfo);
-        }
+        logJsonObject(OperationType.OP_UPDATE_USER_PROP_V3, propertyInfo);
     }
 
     public void logDropUser(UserIdentity userIdentity) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_DROP_USER_V3, userIdentity);
-        } else {
-            logEdit(OperationType.OP_DROP_USER_V2, userIdentity);
-        }
+        logJsonObject(OperationType.OP_DROP_USER_V3, userIdentity);
     }
 
     public void logCreateSecurityIntegration(String name, Map<String, String> propertyMap) {
