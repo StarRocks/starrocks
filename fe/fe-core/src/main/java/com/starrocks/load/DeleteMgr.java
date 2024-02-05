@@ -643,7 +643,7 @@ public class DeleteMgr implements Writable {
 
         LiteralExpr result = LiteralExpr.create(value, Objects.requireNonNull(column.getType()));
         if (result instanceof DecimalLiteral) {
-            ((DecimalLiteral) result).checkPrecisionAndScale(column.getPrecision(), column.getScale());
+            ((DecimalLiteral) result).checkPrecisionAndScale(column.getType(), column.getPrecision(), column.getScale());
         } else if (result instanceof DateLiteral) {
             predicate.setChild(childNo, result);
         }
