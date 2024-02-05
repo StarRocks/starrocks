@@ -1,3 +1,10 @@
+<<<<<<< HEAD
+=======
+## Why I'm doing:
+
+## What I'm doing:
+
+>>>>>>> b7ccef9b5d ([Enhancement] Optimize Pull Request template (#40352))
 Fixes #issue
 
 ## What type of PR is this:
