@@ -524,7 +524,7 @@ TEST_F(MemTableTest, test_metrics) {
     // because other test cases may also update the metrics concurrently if
     // run tests in parallel, and it's hard to get the accurate value
     ASSERT_TRUE(StarRocksMetrics::instance()->memtable_flush_total.value() > 0);
-    ASSERT_TRUE(StarRocksMetrics::instance()->memtable_flush_bytes_total.value() > 0);
+    ASSERT_TRUE(StarRocksMetrics::instance()->memtable_flush_memory_bytes_total.value() > 0);
     ASSERT_TRUE(StarRocksMetrics::instance()->memtable_flush_disk_bytes_total.value() > 0);
 }
 
