@@ -39,6 +39,11 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public Table.TableType getTableType() {
+        return Table.TableType.DELTALAKE;
+    }
+
+    @Override
     public List<String> listDbNames() {
         return hmsOps.getAllDatabaseNames();
     }

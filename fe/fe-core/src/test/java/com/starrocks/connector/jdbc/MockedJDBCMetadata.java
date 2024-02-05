@@ -30,6 +30,8 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import static com.starrocks.catalog.Table.TableType.JDBC;
+
 public class MockedJDBCMetadata implements ConnectorMetadata {
     private final AtomicLong idGen = new AtomicLong(0L);
     public static final String MOCKED_JDBC_CATALOG_NAME = "jdbc0";
@@ -131,6 +133,11 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
         } finally {
             readUnlock();
         }
+    }
+
+    @Override
+    public Table.TableType getTableType() {
+        return JDBC;
     }
 
     @Override

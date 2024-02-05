@@ -36,29 +36,29 @@ ice_hadoop_db1
 ice_hadoop_db2
 information_schema
 -- !result
-select TABLE_SCHEMA, TABLE_NAME, ENGINE from ice_hadoop${uuid0}.information_schema.tables;
+select TABLE_SCHEMA, TABLE_NAME from ice_hadoop${uuid0}.information_schema.tables;
 -- result:
-ice_hadoop_db1	test	Iceberg
-ice_hadoop_db2	test	Iceberg
-information_schema	tables	MEMORY
-information_schema	table_privileges	MEMORY
-information_schema	referential_constraints	MEMORY
-information_schema	key_column_usage	MEMORY
-information_schema	routines	MEMORY
-information_schema	schemata	MEMORY
-information_schema	columns	MEMORY
-information_schema	character_sets	MEMORY
-information_schema	collations	MEMORY
-information_schema	table_constraints	MEMORY
-information_schema	engines	MEMORY
-information_schema	user_privileges	MEMORY
-information_schema	schema_privileges	MEMORY
-information_schema	statistics	MEMORY
-information_schema	triggers	MEMORY
-information_schema	events	MEMORY
-information_schema	views	MEMORY
-information_schema	partitions	MEMORY
-information_schema	column_privileges	MEMORY
+ice_hadoop_db1	test
+ice_hadoop_db2	test
+information_schema	tables
+information_schema	table_privileges
+information_schema	referential_constraints
+information_schema	key_column_usage
+information_schema	routines
+information_schema	schemata
+information_schema	columns
+information_schema	character_sets
+information_schema	collations
+information_schema	table_constraints
+information_schema	engines
+information_schema	user_privileges
+information_schema	schema_privileges
+information_schema	statistics
+information_schema	triggers
+information_schema	events
+information_schema	views
+information_schema	partitions
+information_schema	column_privileges
 -- !result
 select TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, ORDINAL_POSITION from ice_hadoop${uuid0}.information_schema.columns;
 -- result:

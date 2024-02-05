@@ -88,6 +88,11 @@ public class PaimonMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public Table.TableType getTableType() {
+        return Table.TableType.PAIMON;
+    }
+
+    @Override
     public List<String> listDbNames() {
         return paimonNativeCatalog.listDatabases();
     }
