@@ -87,21 +87,12 @@ public class StatementPlanner {
 
             // Note: we only could get the olap table after Analyzing phase
             boolean isOnlyOlapTableQueries = AnalyzerUtils.isOnlyHasOlapTables(stmt);
-<<<<<<< HEAD
-            if (isOnlyOlapTableQueries && stmt instanceof QueryStatement) {
-                unLock(dbs);
-                needWholePhaseLock = false;
-                return planQuery(stmt, resultSinkType, session, true);
-            }
-
-=======
->>>>>>> 8fae88080f ([BugFix] use db lock in follower or cbo_use_db_lock is true (#40725))
             if (stmt instanceof QueryStatement) {
                 QueryStatement queryStmt = (QueryStatement) stmt;
                 resultSinkType = queryStmt.hasOutFileClause() ? TResultSinkType.FILE : resultSinkType;
                 ExecPlan plan;
                 if (isLockFree(isOnlyOlapTableQueries, session)) {
-                    unLock(locker, dbs);
+                    unLock(dbs);
                     needWholePhaseLock = false;
                     plan = createQueryPlanWithReTry(queryStmt, session, resultSinkType);
                 } else {
