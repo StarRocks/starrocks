@@ -4132,15 +4132,8 @@ public class GlobalStateMgr {
     public ResourceUsageMonitor getResourceUsageMonitor() {
         return resourceUsageMonitor;
     }
-<<<<<<< HEAD
-=======
-
-    public DictionaryMgr getDictionaryMgr() {
-        return dictionaryMgr;
-    }
 
     public boolean isInTransferringToLeader() {
         return isInTransferringToLeader;
     }
->>>>>>> d8bb832929 ([BugFix] Fix forward to self node bug (#39587))
 }
