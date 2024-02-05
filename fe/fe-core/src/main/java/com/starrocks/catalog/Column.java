@@ -602,7 +602,6 @@ public class Column implements Writable {
         if (!this.isSameDefaultValue(other)) {
             return false;
         }
-
         if (this.getType().isScalarType() && other.getType().isScalarType()) {
             if (this.getStrLen() != other.getStrLen()) {
                 return false;
@@ -616,6 +615,29 @@ public class Column implements Writable {
         }
 
         return comment.equals(other.getComment());
+    }
+
+    public boolean isSchemaCompatible(Column other) {
+        if (!this.name.equalsIgnoreCase(other.getName())) {
+            return false;
+        }
+        if (!this.getType().equals(other.getType())) {
+            return false;
+        }
+        if (!(aggregationType == other.aggregationType || (AggregateType.isNullOrNone(aggregationType) &&
+                AggregateType.isNullOrNone(other.getAggregationType())))) {
+            return false;
+        }
+        if (this.isAggregationTypeImplicit != other.isAggregationTypeImplicit()) {
+            return false;
+        }
+        if (this.isKey != other.isKey()) {
+            return false;
+        }
+        if (this.isAllowNull != other.isAllowNull) {
+            return false;
+        }
+        return true;
     }
 
     @Override
