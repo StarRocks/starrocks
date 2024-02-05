@@ -408,8 +408,9 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl,
     }
     auto batch_size = t_request.query_options.batch_size;
     if (UNLIKELY(batch_size <= 0 || batch_size > MAX_CHUNK_SIZE)) {
-        return Status::InvalidArgument(fmt::format(
-                "batch_size is out of range, it must be in the range (0, 65536], current value is [{}]", batch_size));
+        return Status::InvalidArgument(
+                fmt::format("batch_size is out of range, it must be in the range (0, {}], current value is [{}]",
+                            MAX_CHUNK_SIZE, batch_size));
     }
 
     bool is_pipeline = t_request.__isset.is_pipeline && t_request.is_pipeline;
