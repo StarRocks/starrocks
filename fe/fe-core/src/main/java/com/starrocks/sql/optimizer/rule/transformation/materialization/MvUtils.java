@@ -36,6 +36,7 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -59,6 +60,7 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
@@ -437,7 +439,7 @@ public class MvUtils {
 
     public static ScalarOperator rewriteOptExprCompoundPredicate(OptExpression root,
                                                                  ReplaceColumnRefRewriter columnRefRewriter) {
-        List<ScalarOperator> conjuncts = MvUtils.getAllValidPredicates(root);
+        Set<ScalarOperator> conjuncts = MvUtils.getPredicateForRewrite(root);
         ScalarOperator compoundPredicate = null;
         if (!conjuncts.isEmpty()) {
             compoundPredicate = Utils.compoundAnd(conjuncts);
@@ -472,6 +474,78 @@ public class MvUtils {
 
     public static boolean isRedundantPredicate(ScalarOperator predicate) {
         return predicate.isPushdown() || predicate.isRedundant();
+    }
+
+    // for A inner join B A.a = B.b;
+    // A.a is not null and B.b is not null can be deduced from join.
+    // This function only extracts predicates from inner/semi join and scan node,
+    // which scan node will exclude IsNullPredicateOperator predicates if it's not null
+    // and its column ref is in the join's keys
+    public static Set<ScalarOperator> getPredicateForRewrite(OptExpression root) {
+        Set<ScalarOperator> result = Sets.newHashSet();
+        OptExpressionVisitor predicateVisitor = new OptExpressionVisitor<Object, ColumnRefSet>() {
+            @Override
+            public Object visit(OptExpression optExpression, ColumnRefSet context) {
+                for (OptExpression child : optExpression.getInputs()) {
+                    child.getOp().accept(this, child, null);
+                }
+                return null;
+            }
+
+            public Object visitLogicalTableScan(OptExpression optExpression, ColumnRefSet context) {
+                List<ScalarOperator> conjuncts = Utils.extractConjuncts(optExpression.getOp().getPredicate());
+                for (ScalarOperator conjunct : conjuncts) {
+                    if (!isValidPredicate(conjunct)) {
+                        continue;
+                    }
+                    if (conjunct instanceof IsNullPredicateOperator) {
+                        IsNullPredicateOperator isNullPredicateOperator = conjunct.cast();
+                        if (isNullPredicateOperator.isNotNull() && context != null
+                                && context.containsAll(isNullPredicateOperator.getUsedColumns())) {
+                            // if column ref is join key and column ref is not null can be ignored for inner and semi join
+                            continue;
+                        }
+                    }
+                    result.add(conjunct);
+                }
+                return null;
+            }
+
+            public Object visitLogicalJoin(OptExpression optExpression, ColumnRefSet context) {
+                LogicalJoinOperator joinOperator = optExpression.getOp().cast();
+
+                ColumnRefSet joinKeyColumns = new ColumnRefSet();
+                JoinOperator joinType = joinOperator.getJoinType();
+                if (joinType.isInnerJoin() || joinType.isCrossJoin() || joinType.isSemiJoin()) {
+                    List<ScalarOperator> onConjuncts = Utils.extractConjuncts(joinOperator.getOnPredicate());
+                    ColumnRefSet leftChildColumns = optExpression.inputAt(0).getOutputColumns();
+                    ColumnRefSet rightChildColumns = optExpression.inputAt(1).getOutputColumns();
+                    List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(
+                            leftChildColumns, rightChildColumns, onConjuncts);
+                    eqOnPredicates.forEach(predicate -> joinKeyColumns.union(predicate.getUsedColumns()));
+                    if (context != null) {
+                        joinKeyColumns.union(context);
+                    }
+                    optExpression.inputAt(0).getOp().accept(this, optExpression.inputAt(0), joinKeyColumns);
+                    optExpression.inputAt(1).getOp().accept(this, optExpression.inputAt(1), joinKeyColumns);
+                } else if (joinType.isLeftOuterJoin() || joinType.isLeftAntiJoin()) {
+                    optExpression.inputAt(0).getOp().accept(this, optExpression.inputAt(0), joinKeyColumns);
+                } else if (joinType.isRightOuterJoin() || joinType.isRightAntiJoin()) {
+                    optExpression.inputAt(1).getOp().accept(this, optExpression.inputAt(1), joinKeyColumns);
+                }
+                List<ScalarOperator> conjuncts = Utils.extractConjuncts(
+                        Utils.compoundAnd(joinOperator.getPredicate(), joinOperator.getOnPredicate()));
+                for (ScalarOperator conjunct : conjuncts) {
+                    if (!isValidPredicate(conjunct)) {
+                        continue;
+                    }
+                    result.add(conjunct);
+                }
+                return null;
+            }
+        };
+        root.getOp().accept(predicateVisitor, root, null);
+        return result;
     }
 
     /**
