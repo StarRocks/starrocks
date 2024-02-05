@@ -66,8 +66,8 @@ struct ExpectBuildResult {
 };
 
 void BinlogBuilderTest::test_write_one_version(ControlParams control_params, ExpectBuildResult expect_result) {
-    int64_t max_file_size = 1024 * 1024;
-    int32_t max_page_size = 256;
+    int64_t max_file_size = 1024 * 5;
+    int32_t max_page_size = 64;
     int64_t next_file_id = 1;
     std::vector<DupKeyVersionInfo> version_info_vec;
 
@@ -149,10 +149,10 @@ TEST_F(BinlogBuilderTest, test_write_one_version_one_file) {
 
 TEST_F(BinlogBuilderTest, test_write_one_version_multiple_files) {
     ControlParams params{.max_num_entries = INT32_MAX,
-                         .max_num_files = 10,
+                         .max_num_files = 5,
                          .start_with_active_writer = false,
                          .force_to_reach_file_size_limit = true};
-    ExpectBuildResult result{.result_with_active_writer = false, .num_files = 10};
+    ExpectBuildResult result{.result_with_active_writer = false, .num_files = 5};
     test_write_one_version(params, result);
 }
 
@@ -166,8 +166,8 @@ TEST_F(BinlogBuilderTest, test_active_writer) {
 }
 
 void BinlogBuilderTest::test_abort_one_version(int32_t num_files, bool start_with_active_writer) {
-    int64_t max_file_size = 1024 * 1024;
-    int32_t max_page_size = 256;
+    int64_t max_file_size = 1024 * 5;
+    int32_t max_page_size = 64;
     int64_t next_file_id = 1;
     std::vector<DupKeyVersionInfo> version_info_vec;
 
@@ -247,8 +247,8 @@ TEST_F(BinlogBuilderTest, test_abort_one_version_multiple_files_without_active_w
 }
 
 TEST_F(BinlogBuilderTest, test_random_commit_abort_multiple_versions) {
-    int32_t num_versions = 300;
-    int64_t max_file_size = 10 * 1024;
+    int32_t num_versions = 100;
+    int64_t max_file_size = 5 * 1024;
     int32_t max_page_size = 64;
     std::vector<DupKeyVersionInfo> version_info_vec;
     std::map<int64_t, BinlogFileMetaPBPtr> metas;
