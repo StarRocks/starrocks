@@ -15,7 +15,6 @@
 package com.starrocks.planner;
 
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.ha.FrontendNodeType;
@@ -36,9 +35,6 @@ public class QueryPlanLockFreeTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
-
-        FeConstants.enablePruneEmptyOutputScan = false;
-
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.setQueryId(UUIDUtil.genUUID());
