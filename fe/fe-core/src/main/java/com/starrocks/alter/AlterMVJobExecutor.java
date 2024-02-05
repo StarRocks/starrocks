@@ -334,11 +334,15 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 if (materializedView.isActive()) {
                     return null;
                 }
+
                 GlobalStateMgr.getCurrentState().getAlterJobMgr().
                         alterMaterializedViewStatus(materializedView, status, false);
-                GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .refreshMaterializedView(dbName, materializedView.getName(), true, null,
-                                Constants.TaskRunPriority.NORMAL.value(), true, false);
+                // for manual refresh type, do not refresh
+                if (materializedView.getRefreshScheme().getType() != MaterializedView.RefreshType.MANUAL) {
+                    GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .refreshMaterializedView(dbName, materializedView.getName(), true, null,
+                                    Constants.TaskRunPriority.NORMAL.value(), true, false);
+                }
             } else if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(status)) {
                 if (!materializedView.isActive()) {
                     return null;

@@ -3633,7 +3633,7 @@ public class LocalMetastore implements ConnectorMetadata {
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         Task refreshTask = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
         if (refreshTask != null) {
-            taskManager.killTask(refreshTask.getName(), false);
+            taskManager.killTask(refreshTask.getName(), true);
         }
     }
 
