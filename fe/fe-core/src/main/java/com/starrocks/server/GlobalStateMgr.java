@@ -114,6 +114,8 @@ import com.starrocks.consistency.LockChecker;
 import com.starrocks.epack.failover.FailoverGroupMgr;
 import com.starrocks.epack.lake.StarOSAgentEpack;
 import com.starrocks.epack.persist.SRMetaBlockIDEPack;
+import com.starrocks.epack.privilege.AuthenticationMgrEPack;
+import com.starrocks.epack.privilege.AuthorizationMgrEpack;
 import com.starrocks.epack.privilege.SecurityPolicyMgr;
 import com.starrocks.epack.server.WarehouseManagerEpack;
 import com.starrocks.ha.FrontendNodeType;
@@ -615,9 +617,11 @@ public class GlobalStateMgr {
 
         this.globalTransactionMgr = new GlobalTransactionMgr(this);
         this.tabletStatMgr = new TabletStatMgr();
-        this.authenticationMgr = new AuthenticationMgr();
+        this.authenticationMgr = new AuthenticationMgrEPack();
         this.domainResolver = new DomainResolver(authenticationMgr);
-        this.authorizationMgr = new AuthorizationMgr(this, null);
+        this.authorizationMgr = new AuthorizationMgrEpack(this, null);
+        this.securityPolicyManager = new SecurityPolicyMgr();
+        this.ldapGroupCacheMgr = new LDAPGroupCacheMgr(authenticationMgr, authorizationMgr);
 
         this.resourceGroupMgr = new ResourceGroupMgr();
 
