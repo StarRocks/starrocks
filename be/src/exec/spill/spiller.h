@@ -105,6 +105,12 @@ public:
     RuntimeProfile::Counter* block_count = nullptr;
     RuntimeProfile::Counter* local_block_count = nullptr;
     RuntimeProfile::Counter* remote_block_count = nullptr;
+
+    // the number of read io count
+    RuntimeProfile::Counter* read_io_count = nullptr;
+    RuntimeProfile::Counter* local_read_io_count = nullptr;
+    RuntimeProfile::Counter* remote_read_io_count = nullptr;
+
     // flush/restore task count
     RuntimeProfile::Counter* flush_io_task_count = nullptr;
     RuntimeProfile::HighWaterMarkCounter* peak_flush_io_task_count = nullptr;

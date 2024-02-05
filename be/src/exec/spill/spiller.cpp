@@ -91,6 +91,10 @@ SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile, std::atomic_in
     local_block_count = ADD_CHILD_COUNTER(profile, "LocalBlockCount", TUnit::UNIT, "BlockCount");
     remote_block_count = ADD_CHILD_COUNTER(profile, "RemoteBlockCount", TUnit::UNIT, "BlockCount");
 
+    read_io_count = ADD_CHILD_COUNTER(profile, "ReadIOCount", TUnit::UNIT, parent);
+    local_read_io_count = ADD_CHILD_COUNTER(profile, "LocalReadIOCount", TUnit::UNIT, "ReadIOCount");
+    remote_read_io_count = ADD_CHILD_COUNTER(profile, "RemoteReadIOCount", TUnit::UNIT, "ReadIOCount");
+
     flush_io_task_count = ADD_CHILD_COUNTER(profile, "FlushIOTaskCount", TUnit::UNIT, parent);
     peak_flush_io_task_count = profile->AddHighWaterMarkCounter(
             "PeakFlushIOTaskCount", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT), parent);
