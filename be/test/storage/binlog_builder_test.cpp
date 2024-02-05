@@ -67,7 +67,7 @@ struct ExpectBuildResult {
 
 void BinlogBuilderTest::test_write_one_version(ControlParams control_params, ExpectBuildResult expect_result) {
     int64_t max_file_size = 1024 * 5;
-    int32_t max_page_size = 64;
+    int32_t max_page_size = 256;
     int64_t next_file_id = 1;
     std::vector<DupKeyVersionInfo> version_info_vec;
 
