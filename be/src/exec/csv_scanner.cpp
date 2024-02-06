@@ -652,17 +652,6 @@ Status CSVScanner::_get_schema_v2(std::vector<SlotDescriptor>* merged_schema) {
 
     RETURN_IF_ERROR(_init_reader());
 
-    // skip header
-    for (int64_t i = 0; i < _parse_options.skip_header; i++) {
-        CSVReader::Record dummy;
-        auto st = _curr_reader->next_record(&dummy);
-        if (!st.ok() && st.is_end_of_file()) {
-            return Status::OK();
-        } else if (!st.ok()) {
-            return st;
-        }
-    }
-
     CSVRow row;
     // skip empty row.
     do {
