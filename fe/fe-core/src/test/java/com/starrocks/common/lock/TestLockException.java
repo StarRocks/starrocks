@@ -29,7 +29,7 @@ public class TestLockException {
     @Before
     public void setUp() {
         GlobalStateMgr.getCurrentState().setLockManager(new LockManager());
-        Config.dead_lock_detection_delay_time_ms = 0;
+        Config.lock_manager_dead_lock_detection_delay_time_ms = 0;
     }
 
     /**

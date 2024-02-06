@@ -32,7 +32,7 @@ public class LockManager {
     private final Map<Long, Lock>[] lockTables;
 
     public LockManager() {
-        lockTablesSize = Config.lock_table_num;
+        lockTablesSize = Config.lock_manager_lock_table_num;
         lockTableMutexes = new Object[lockTablesSize];
         lockTables = new Map[lockTablesSize];
         for (int i = 0; i < lockTablesSize; i++) {
@@ -92,7 +92,7 @@ public class LockManager {
              * If a lock is obtained during this period, there is no need to perform deadlock detection.
              * Avoid frequent and unnecessary deadlock detection due to lock contention
              */
-            long deadLockDetectionDelayTimeMs = Config.dead_lock_detection_delay_time_ms;
+            long deadLockDetectionDelayTimeMs = Config.lock_manager_dead_lock_detection_delay_time_ms;
             if (deadLockDetectionDelayTimeMs > 0) {
                 if (timeout != 0) {
                     deadLockDetectionDelayTimeMs = Math.min(deadLockDetectionDelayTimeMs, timeRemain(timeout, startTime));
@@ -347,7 +347,7 @@ public class LockManager {
     private Locker checkAndHandleDeadLock(Long rid, Locker locker, LockType lockType) throws DeadlockException {
         DeadLockChecker deadLockChecker = new DeadLockChecker(locker, rid, lockType);
         if (deadLockChecker.hasCycle()) {
-            if (Config.enable_unlock_deadlock) {
+            if (Config.lock_manager_enable_resolve_deadlock) {
                 Locker victim = deadLockChecker.chooseTargetedLocker();
                 if (victim != locker) {
                     return victim;
