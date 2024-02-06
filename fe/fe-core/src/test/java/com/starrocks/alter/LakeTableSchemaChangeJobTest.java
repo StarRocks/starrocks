@@ -25,13 +25,8 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
-<<<<<<< HEAD
 import com.starrocks.common.MarkedCountDownLatch;
-=======
-import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.journal.JournalTask;
-import com.starrocks.lake.DataCacheInfo;
->>>>>>> 3d2a0a51e6 ([Enhancement] Optimize the lock contention of consistency checker (#40710))
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StorageCacheInfo;
@@ -701,16 +696,6 @@ public class LakeTableSchemaChangeJobTest {
             }
 
             @Mock
-<<<<<<< HEAD
-=======
-            public JournalTask writeEditLogAsync(LakeTableSchemaChangeJob job) {
-                JournalTask journalTask = new JournalTask(System.nanoTime(), null, -1);
-                journalTask.markSucceed();
-                return journalTask;
-            }
-
-            @Mock
->>>>>>> 3d2a0a51e6 ([Enhancement] Optimize the lock contention of consistency checker (#40710))
             public long getNextTransactionId() {
                 return 10101L;
             }
