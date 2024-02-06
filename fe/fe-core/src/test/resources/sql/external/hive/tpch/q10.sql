@@ -223,6 +223,7 @@ TABLE: nation
 NON-PARTITION PREDICATES: 34: n_nationkey IS NOT NULL
 partitions=1/1
 avgRowSize=29.0
+numNodes=0
 cardinality: 25
 column statistics:
 * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
@@ -277,9 +278,10 @@ OutPut Exchange Id: 09
 2:HdfsScanNode
 TABLE: lineitem
 NON-PARTITION PREDICATES: 26: l_returnflag = 'R'
-MIN/MAX PREDICATES: 26: l_returnflag <= 'R', 26: l_returnflag >= 'R'
+MIN/MAX PREDICATES: 40: l_returnflag <= 'R', 41: l_returnflag >= 'R'
 partitions=1/1
 avgRowSize=25.0
+numNodes=0
 cardinality: 200012634
 probe runtime filters:
 - filter_id = 0, probe_expr = (18: l_orderkey)
@@ -307,9 +309,10 @@ OutPut Exchange Id: 06
 4:HdfsScanNode
 TABLE: orders
 NON-PARTITION PREDICATES: 13: o_orderdate >= '1994-05-01', 13: o_orderdate < '1994-08-01'
-MIN/MAX PREDICATES: 13: o_orderdate >= '1994-05-01', 13: o_orderdate < '1994-08-01'
+MIN/MAX PREDICATES: 42: o_orderdate >= '1994-05-01', 43: o_orderdate < '1994-08-01'
 partitions=1/1
 avgRowSize=20.0
+numNodes=0
 cardinality: 5738046
 column statistics:
 * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 5738045.738045738] ESTIMATE
@@ -327,6 +330,7 @@ TABLE: customer
 NON-PARTITION PREDICATES: 1: c_custkey IS NOT NULL
 partitions=1/1
 avgRowSize=217.0
+numNodes=0
 cardinality: 15000000
 probe runtime filters:
 - filter_id = 2, probe_expr = (4: c_nationkey)
@@ -339,4 +343,3 @@ column statistics:
 * c_acctbal-->[-999.99, 9999.99, 0.0, 8.0, 1086564.0] ESTIMATE
 * c_comment-->[-Infinity, Infinity, 0.0, 117.0, 1.4788744E7] ESTIMATE
 [end]
-

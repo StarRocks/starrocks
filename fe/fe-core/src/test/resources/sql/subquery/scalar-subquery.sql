@@ -10,75 +10,77 @@ INNER JOIN (join-predicate [2: v2 = 5: v11] post-join-predicate [null])
                     SCAN (columns[5: v11] predicate[null])
 [fragment]
 PLAN FRAGMENT 0
- OUTPUT EXPRS:1: v1
-  PARTITION: UNPARTITIONED
+OUTPUT EXPRS:1: v1
+PARTITION: UNPARTITIONED
 
-  RESULT SINK
+RESULT SINK
 
-  8:EXCHANGE
+8:EXCHANGE
 
 PLAN FRAGMENT 1
- OUTPUT EXPRS:
-  PARTITION: RANDOM
+OUTPUT EXPRS:
+PARTITION: RANDOM
 
-  STREAM DATA SINK
-    EXCHANGE ID: 08
-    UNPARTITIONED
+STREAM DATA SINK
+EXCHANGE ID: 08
+UNPARTITIONED
 
-  7:Project
-  |  <slot 1> : 1: v1
-  |
-  6:HASH JOIN
-  |  join op: INNER JOIN (BROADCAST)
-  |  colocate: false, reason:
-  |  equal join conjunct: 2: v2 = 5: v11
-  |
-  |----5:EXCHANGE
-  |
-  0:OlapScanNode
-     TABLE: t0
-     PREAGGREGATION: ON
-     PREDICATES: 2: v2 IS NOT NULL
-     partitions=1/1
-     rollup: t0
-     tabletRatio=3/3
-     tabletList=10008,10010,10012
-     cardinality=1
-     avgRowSize=2.0
+7:Project
+|  <slot 1> : 1: v1
+|
+6:HASH JOIN
+|  join op: INNER JOIN (BROADCAST)
+|  colocate: false, reason:
+|  equal join conjunct: 2: v2 = 5: v11
+|
+|----5:EXCHANGE
+|
+0:OlapScanNode
+TABLE: t0
+PREAGGREGATION: ON
+PREDICATES: 2: v2 IS NOT NULL
+partitions=1/1
+rollup: t0
+tabletRatio=3/3
+tabletList=10008,10010,10012
+cardinality=1
+avgRowSize=2.0
+numNodes=0
 
 PLAN FRAGMENT 2
- OUTPUT EXPRS:
-  PARTITION: UNPARTITIONED
+OUTPUT EXPRS:
+PARTITION: UNPARTITIONED
 
-  STREAM DATA SINK
-    EXCHANGE ID: 05
-    UNPARTITIONED
+STREAM DATA SINK
+EXCHANGE ID: 05
+UNPARTITIONED
 
-  4:SELECT
-  |  predicates: 5: v11 IS NOT NULL
-  |
-  3:ASSERT NUMBER OF ROWS
-  |  assert number of rows: LE 1
-  |
-  2:EXCHANGE
+4:SELECT
+|  predicates: 5: v11 IS NOT NULL
+|
+3:ASSERT NUMBER OF ROWS
+|  assert number of rows: LE 1
+|
+2:EXCHANGE
 
 PLAN FRAGMENT 3
- OUTPUT EXPRS:
-  PARTITION: RANDOM
+OUTPUT EXPRS:
+PARTITION: RANDOM
 
-  STREAM DATA SINK
-    EXCHANGE ID: 02
-    UNPARTITIONED
+STREAM DATA SINK
+EXCHANGE ID: 02
+UNPARTITIONED
 
-  1:OlapScanNode
-     TABLE: t3
-     PREAGGREGATION: ON
-     partitions=1/1
-     rollup: t3
-     tabletRatio=3/3
-     tabletList=10035,10037,10039
-     cardinality=1
-     avgRowSize=1.0
+1:OlapScanNode
+TABLE: t3
+PREAGGREGATION: ON
+partitions=1/1
+rollup: t3
+tabletRatio=3/3
+tabletList=10035,10037,10039
+cardinality=1
+avgRowSize=1.0
+numNodes=0
 [end]
 
 [sql]
@@ -104,80 +106,82 @@ INNER JOIN (join-predicate [3: v3 = 6: v12 AND 2: v2 < 7: sum] post-join-predica
                 SCAN (columns[5: v11, 6: v12] predicate[6: v12 IS NOT NULL])
 [fragment]
 PLAN FRAGMENT 0
- OUTPUT EXPRS:1: v1
-  PARTITION: UNPARTITIONED
+OUTPUT EXPRS:1: v1
+PARTITION: UNPARTITIONED
 
-  RESULT SINK
+RESULT SINK
 
-  8:EXCHANGE
+8:EXCHANGE
 
 PLAN FRAGMENT 1
- OUTPUT EXPRS:
-  PARTITION: HASH_PARTITIONED: 6: v12
+OUTPUT EXPRS:
+PARTITION: HASH_PARTITIONED: 6: v12
 
-  STREAM DATA SINK
-    EXCHANGE ID: 08
-    UNPARTITIONED
+STREAM DATA SINK
+EXCHANGE ID: 08
+UNPARTITIONED
 
-  7:Project
-  |  <slot 1> : 1: v1
-  |
-  6:HASH JOIN
-  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))
-  |  colocate: false, reason:
-  |  equal join conjunct: 3: v3 = 6: v12
-  |  other join predicates: 2: v2 < 7: sum
-  |
-  |----5:AGGREGATE (merge finalize)
-  |    |  output: sum(7: sum)
-  |    |  group by: 6: v12
-  |    |
-  |    4:EXCHANGE
-  |
-  1:EXCHANGE
+7:Project
+|  <slot 1> : 1: v1
+|
+6:HASH JOIN
+|  join op: INNER JOIN (BUCKET_SHUFFLE(S))
+|  colocate: false, reason:
+|  equal join conjunct: 3: v3 = 6: v12
+|  other join predicates: 2: v2 < 7: sum
+|
+|----5:AGGREGATE (merge finalize)
+|    |  output: sum(7: sum)
+|    |  group by: 6: v12
+|    |
+|    4:EXCHANGE
+|
+1:EXCHANGE
 
 PLAN FRAGMENT 2
- OUTPUT EXPRS:
-  PARTITION: RANDOM
+OUTPUT EXPRS:
+PARTITION: RANDOM
 
-  STREAM DATA SINK
-    EXCHANGE ID: 04
-    HASH_PARTITIONED: 6: v12
+STREAM DATA SINK
+EXCHANGE ID: 04
+HASH_PARTITIONED: 6: v12
 
-  3:AGGREGATE (update serialize)
-  |  STREAMING
-  |  output: sum(5: v11)
-  |  group by: 6: v12
-  |
-  2:OlapScanNode
-     TABLE: t3
-     PREAGGREGATION: ON
-     PREDICATES: 6: v12 IS NOT NULL
-     partitions=1/1
-     rollup: t3
-     tabletRatio=3/3
-     tabletList=10035,10037,10039
-     cardinality=1
-     avgRowSize=2.0
+3:AGGREGATE (update serialize)
+|  STREAMING
+|  output: sum(5: v11)
+|  group by: 6: v12
+|
+2:OlapScanNode
+TABLE: t3
+PREAGGREGATION: ON
+PREDICATES: 6: v12 IS NOT NULL
+partitions=1/1
+rollup: t3
+tabletRatio=3/3
+tabletList=10035,10037,10039
+cardinality=1
+avgRowSize=2.0
+numNodes=0
 
 PLAN FRAGMENT 3
- OUTPUT EXPRS:
-  PARTITION: RANDOM
+OUTPUT EXPRS:
+PARTITION: RANDOM
 
-  STREAM DATA SINK
-    EXCHANGE ID: 01
-    HASH_PARTITIONED: 3: v3
+STREAM DATA SINK
+EXCHANGE ID: 01
+HASH_PARTITIONED: 3: v3
 
-  0:OlapScanNode
-     TABLE: t0
-     PREAGGREGATION: ON
-     PREDICATES: 3: v3 IS NOT NULL
-     partitions=1/1
-     rollup: t0
-     tabletRatio=3/3
-     tabletList=10008,10010,10012
-     cardinality=1
-     avgRowSize=3.0
+0:OlapScanNode
+TABLE: t0
+PREAGGREGATION: ON
+PREDICATES: 3: v3 IS NOT NULL
+partitions=1/1
+rollup: t0
+tabletRatio=3/3
+tabletList=10008,10010,10012
+cardinality=1
+avgRowSize=3.0
+numNodes=0
 [end]
 
 [sql]
@@ -214,92 +218,94 @@ INNER JOIN (join-predicate [3: v3 = 6: v12 AND 11: abs = 10: abs AND cast(2: v2 
                 SCAN (columns[4: v10, 5: v11, 6: v12] predicate[6: v12 IS NOT NULL AND abs(4: v10) IS NOT NULL])
 [fragment]
 PLAN FRAGMENT 0
- OUTPUT EXPRS:1: v1
-  PARTITION: UNPARTITIONED
+OUTPUT EXPRS:1: v1
+PARTITION: UNPARTITIONED
 
-  RESULT SINK
+RESULT SINK
 
-  10:EXCHANGE
+10:EXCHANGE
 
 PLAN FRAGMENT 1
- OUTPUT EXPRS:
-  PARTITION: HASH_PARTITIONED: 6: v12, 10: abs
+OUTPUT EXPRS:
+PARTITION: HASH_PARTITIONED: 6: v12, 10: abs
 
-  STREAM DATA SINK
-    EXCHANGE ID: 10
-    UNPARTITIONED
+STREAM DATA SINK
+EXCHANGE ID: 10
+UNPARTITIONED
 
-  9:Project
-  |  <slot 1> : 1: v1
-  |
-  8:HASH JOIN
-  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))
-  |  colocate: false, reason:
-  |  equal join conjunct: 3: v3 = 6: v12
-  |  equal join conjunct: 11: abs = 10: abs
-  |  other join predicates: CAST(2: v2 AS LARGEINT) < 8: sum
-  |
-  |----7:AGGREGATE (merge finalize)
-  |    |  output: sum(8: sum)
-  |    |  group by: 6: v12, 10: abs
-  |    |
-  |    6:EXCHANGE
-  |
-  2:EXCHANGE
+9:Project
+|  <slot 1> : 1: v1
+|
+8:HASH JOIN
+|  join op: INNER JOIN (BUCKET_SHUFFLE(S))
+|  colocate: false, reason:
+|  equal join conjunct: 3: v3 = 6: v12
+|  equal join conjunct: 11: abs = 10: abs
+|  other join predicates: CAST(2: v2 AS LARGEINT) < 8: sum
+|
+|----7:AGGREGATE (merge finalize)
+|    |  output: sum(8: sum)
+|    |  group by: 6: v12, 10: abs
+|    |
+|    6:EXCHANGE
+|
+2:EXCHANGE
 
 PLAN FRAGMENT 2
- OUTPUT EXPRS:
-  PARTITION: RANDOM
+OUTPUT EXPRS:
+PARTITION: RANDOM
 
-  STREAM DATA SINK
-    EXCHANGE ID: 06
-    HASH_PARTITIONED: 6: v12, 10: abs
+STREAM DATA SINK
+EXCHANGE ID: 06
+HASH_PARTITIONED: 6: v12, 10: abs
 
-  5:AGGREGATE (update serialize)
-  |  STREAMING
-  |  output: sum(7: abs)
-  |  group by: 6: v12, 10: abs
-  |
-  4:Project
-  |  <slot 6> : 6: v12
-  |  <slot 7> : abs(5: v11)
-  |  <slot 10> : abs(4: v10)
-  |
-  3:OlapScanNode
-     TABLE: t3
-     PREAGGREGATION: ON
-     PREDICATES: 6: v12 IS NOT NULL, abs(4: v10) IS NOT NULL
-     partitions=1/1
-     rollup: t3
-     tabletRatio=3/3
-     tabletList=10035,10037,10039
-     cardinality=1
-     avgRowSize=5.0
+5:AGGREGATE (update serialize)
+|  STREAMING
+|  output: sum(7: abs)
+|  group by: 6: v12, 10: abs
+|
+4:Project
+|  <slot 6> : 6: v12
+|  <slot 7> : abs(5: v11)
+|  <slot 10> : abs(4: v10)
+|
+3:OlapScanNode
+TABLE: t3
+PREAGGREGATION: ON
+PREDICATES: 6: v12 IS NOT NULL, abs(4: v10) IS NOT NULL
+partitions=1/1
+rollup: t3
+tabletRatio=3/3
+tabletList=10035,10037,10039
+cardinality=1
+avgRowSize=5.0
+numNodes=0
 
 PLAN FRAGMENT 3
- OUTPUT EXPRS:
-  PARTITION: RANDOM
+OUTPUT EXPRS:
+PARTITION: RANDOM
 
-  STREAM DATA SINK
-    EXCHANGE ID: 02
-    HASH_PARTITIONED: 3: v3, 11: abs
+STREAM DATA SINK
+EXCHANGE ID: 02
+HASH_PARTITIONED: 3: v3, 11: abs
 
-  1:Project
-  |  <slot 1> : 1: v1
-  |  <slot 2> : 2: v2
-  |  <slot 3> : 3: v3
-  |  <slot 11> : abs(1: v1)
-  |
-  0:OlapScanNode
-     TABLE: t0
-     PREAGGREGATION: ON
-     PREDICATES: 3: v3 IS NOT NULL, abs(1: v1) IS NOT NULL
-     partitions=1/1
-     rollup: t0
-     tabletRatio=3/3
-     tabletList=10008,10010,10012
-     cardinality=1
-     avgRowSize=4.0
+1:Project
+|  <slot 1> : 1: v1
+|  <slot 2> : 2: v2
+|  <slot 3> : 3: v3
+|  <slot 11> : abs(1: v1)
+|
+0:OlapScanNode
+TABLE: t0
+PREAGGREGATION: ON
+PREDICATES: 3: v3 IS NOT NULL, abs(1: v1) IS NOT NULL
+partitions=1/1
+rollup: t0
+tabletRatio=3/3
+tabletList=10008,10010,10012
+cardinality=1
+avgRowSize=4.0
+numNodes=0
 [end]
 
 [sql]
@@ -485,21 +491,18 @@ INNER JOIN (join-predicate [2: v2 = 10: v8 AND 8: sum = 12: sum] post-join-predi
 [sql]
 select v1 from t0 where v2 = (with cte as (select v4,v5 from t1 order by 2 limit 10) select v4 from cte order by 1 limit 1)
 [result]
-INNER JOIN (join-predicate [2: v2 = 7: v4] post-join-predicate [null])
+INNER JOIN (join-predicate [2: v2 = 4: v4] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2] predicate[2: v2 IS NOT NULL])
     EXCHANGE BROADCAST
-        PREDICATE 7: v4 IS NOT NULL
+        PREDICATE 4: v4 IS NOT NULL
             ASSERT LE 1
                 EXCHANGE GATHER
-                    TOP-N (order by [[7: v4 ASC NULLS FIRST]])
-                        TOP-N (order by [[8: v5 ASC NULLS FIRST]])
-                            TOP-N (order by [[8: v5 ASC NULLS FIRST]])
-                                SCAN (columns[7: v4, 8: v5] predicate[null])
+                    TOP-N (order by [[4: v4 ASC NULLS FIRST]])
+                        TOP-N (order by [[5: v5 ASC NULLS FIRST]])
+                            TOP-N (order by [[5: v5 ASC NULLS FIRST]])
+                                SCAN (columns[4: v4, 5: v5] predicate[null])
 [end]
 
-/* test PushDownApplyAggFilterRule */
-/* test PushDownApplyAggFilterRule */
-/* test PushDownApplyAggFilterRule */
 /* test PushDownApplyAggFilterRule */
 
 [sql]
@@ -705,9 +708,6 @@ LEFT OUTER JOIN (join-predicate [add(add(1: v1, 4: v4), 9: v9) = if(23: expr, 1,
                     SCAN (columns[12: t1c, 13: t1d] predicate[null])
 [end]
 
-/* test ScalarApply2JoinRule */
-/* test ScalarApply2JoinRule */
-/* test ScalarApply2JoinRule */
 /* test ScalarApply2JoinRule */
 
 [sql]
