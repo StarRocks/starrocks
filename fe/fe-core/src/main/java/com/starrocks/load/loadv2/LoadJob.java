@@ -1118,12 +1118,8 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             progress = 100;
             finishTimestamp = txnState.getFinishTime();
             state = JobState.FINISHED;
-<<<<<<< HEAD
-            GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
-=======
             failMsg = null;
             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
->>>>>>> cc9bf31727 ([BugFix] Get rid of overwriting JobState after create an image (#40672))
         } finally {
             writeUnlock();
         }
