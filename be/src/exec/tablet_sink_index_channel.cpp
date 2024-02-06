@@ -337,16 +337,10 @@ Status NodeChannel::_serialize_chunk(const Chunk* src, ChunkPB* dst) {
     {
         SCOPED_RAW_TIMER(&_serialize_batch_ns);
         StatusOr<ChunkPB> res = Status::OK();
-        // This lambda is to get the result of TRY_CATCH_ALLOC_SCOPE_END()
-        auto st = [&]() {
-            TRY_CATCH_ALLOC_SCOPE_START()
-            res = serde::ProtobufChunkSerde::serialize(*src);
-            return res.status();
-            TRY_CATCH_ALLOC_SCOPE_END()
-        }();
-        if (!st.ok()) {
+        TRY_CATCH_BAD_ALLOC(res = serde::ProtobufChunkSerde::serialize(*src));
+        if (!res.ok()) {
             _cancelled = true;
-            _err_st = st;
+            _err_st = res.status();
             return _err_st;
         }
         res->Swap(dst);
@@ -884,8 +878,6 @@ Status NodeChannel::close_wait(RuntimeState* state) {
 }
 
 void NodeChannel::cancel(const Status& err_st) {
-    if (_cancel_finished) return;
-
     // cancel rpc request, accelerate the release of related resources
     for (auto closure : _add_batch_closures) {
         closure->cancel();
@@ -894,12 +886,6 @@ void NodeChannel::cancel(const Status& err_st) {
     for (int i = 0; i < _rpc_request.requests_size(); i++) {
         _cancel(_rpc_request.requests(i).index_id(), err_st);
     }
-
-    _cancel_finished = true;
-}
-
-void NodeChannel::cancel() {
-    cancel(_err_st);
 }
 
 void NodeChannel::_cancel(int64_t index_id, const Status& err_st) {
