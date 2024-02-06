@@ -158,7 +158,7 @@ Status SchemaBeTabletsScanner::fill_chunk(ChunkPtr* chunk) {
     for (; _cur_idx < end; _cur_idx++) {
         auto& info = _infos[_cur_idx];
         for (const auto& [slot_id, index] : slot_id_to_index_map) {
-            if (slot_id < 1 || slot_id > 19) {
+            if (slot_id < 1 || slot_id > 20) {
                 return Status::InternalError(strings::Substitute("invalid slot id:$0", slot_id));
             }
             ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
