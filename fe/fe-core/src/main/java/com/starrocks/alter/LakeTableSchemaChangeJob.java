@@ -47,11 +47,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-<<<<<<< HEAD
 import com.starrocks.epack.warehouse.WarehouseUnavailableException;
-=======
-import com.starrocks.journal.JournalTask;
->>>>>>> 3d2a0a51e6... [Enhancement] Optimize the lock contention of consistency checker (#40710)
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarMgrMetaSyncer;
@@ -85,6 +81,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
@@ -262,7 +259,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     }
 
     @VisibleForTesting
-    public static JournalTask writeEditLogAsync(LakeTableSchemaChangeJob job) {
+    public static Future<Boolean> writeEditLogAsync(LakeTableSchemaChangeJob job) {
         return GlobalStateMgr.getCurrentState().getEditLog().logAlterJobNoWait(job);
     }
 
@@ -544,7 +541,8 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             return;
         }
 
-        JournalTask editLogFuture;
+        long startWriteTs;
+        Future<Boolean> editLogFuture;
         // Replace the current index with shadow index.
         Set<String> modifiedColumns;
         List<MaterializedIndex> droppedIndexes;
@@ -566,10 +564,11 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             this.jobState = JobState.FINISHED;
             this.finishedTimeMs = System.currentTimeMillis();
 
+            startWriteTs = System.nanoTime();
             editLogFuture = writeEditLogAsync(this);
         }
 
-        EditLog.waitInfinity(editLogFuture);
+        EditLog.waitInfinity(startWriteTs, editLogFuture);
 
         // Delete tablet and shards
         for (MaterializedIndex droppedIndex : droppedIndexes) {

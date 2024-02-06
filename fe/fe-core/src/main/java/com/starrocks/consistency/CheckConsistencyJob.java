@@ -49,9 +49,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.journal.JournalTask;
 import com.starrocks.persist.ConsistencyCheckInfo;
-import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -266,7 +264,6 @@ public class CheckConsistencyJob {
         boolean isConsistent = true;
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.WRITE);
-        JournalTask journalTask;
         try {
             Table table = db.getTable(tabletMeta.getTableId());
             if (table == null) {
@@ -371,14 +368,12 @@ public class CheckConsistencyJob {
             ConsistencyCheckInfo info = new ConsistencyCheckInfo(db.getId(), table.getId(), partition.getId(),
                     index.getId(), tabletId, lastCheckTime,
                     checkedVersion, isConsistent);
-            journalTask = GlobalStateMgr.getCurrentState().getEditLog().logFinishConsistencyCheckNoWait(info);
+            GlobalStateMgr.getCurrentState().getEditLog().logFinishConsistencyCheck(info);
+            return 1;
+
         } finally {
             locker.unLockDatabase(db, LockType.WRITE);
         }
-
-        // Wait for edit log write finish out of db lock.
-        EditLog.waitInfinity(journalTask);
-        return 1;
     }
 
     private boolean isTimeout() {
