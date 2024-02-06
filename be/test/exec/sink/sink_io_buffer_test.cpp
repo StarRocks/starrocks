@@ -259,7 +259,7 @@ protected:
 
     static void poll_thread(void* arg1) {
         auto* buf = reinterpret_cast<MockSinkIOBuffer*>(arg1);
-        (void) buf->set_finishing();
+        (void)buf->set_finishing();
     }
 
     static void run_check(MockSinkIOBuffer& buf, const std::vector<Task>& task) {
