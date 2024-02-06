@@ -68,6 +68,7 @@ import com.starrocks.task.PriorityLeaderTaskExecutor;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TxnStateChangeCallback;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mock;
@@ -694,6 +695,47 @@ public class BrokerLoadJobTest {
         Assert.assertEquals(99, (int) Deencapsulation.getField(brokerLoadJob, "progress"));
         Assert.assertEquals(1, brokerLoadJob.getFinishTimestamp());
         Assert.assertEquals(JobState.CANCELLED, brokerLoadJob.getState());
+    }
+
+    @Test
+    public void testReplayOnAbortedAfterFailure(@Injectable TransactionState txnState,
+                                                @Injectable LoadJobFinalOperation attachment,
+                                                @Injectable FailMsg failMsg) {
+        BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
+        brokerLoadJob.setId(1);
+        GlobalTransactionMgr globalTxnMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        globalTxnMgr.getCallbackFactory().addCallback(brokerLoadJob);
+
+        // 1. The job will be keep when the failure is timeout
+        new Expectations() {
+            {
+                txnState.getTxnCommitAttachment();
+                minTimes = 0;
+                result = attachment;
+                txnState.getReason();
+                minTimes = 0;
+                result = "load timeout";
+            }
+        };
+
+        brokerLoadJob.replayOnAborted(txnState);
+        TxnStateChangeCallback callback = globalTxnMgr.getCallbackFactory().getCallback(1);
+        Assert.assertNotNull(callback);
+
+        // 2. The job will be discard when failure isn't timeout
+        new Expectations() {
+            {
+                txnState.getTxnCommitAttachment();
+                minTimes = 0;
+                result = attachment;
+                txnState.getReason();
+                minTimes = 0;
+                result = "load_run_fail";
+            }
+        };
+        brokerLoadJob.replayOnAborted(txnState);
+        callback = globalTxnMgr.getCallbackFactory().getCallback(1);
+        Assert.assertNull(callback);
     }
 
     @Test
