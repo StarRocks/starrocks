@@ -99,7 +99,7 @@ public class Locker {
      * Before the new version of LockManager is fully enabled, it is used to be compatible with the original db lock logic.
      */
     public void lockDatabase(Database database, LockType lockType) {
-        if (Config.use_lock_manager) {
+        if (Config.lock_manager_enabled) {
             Preconditions.checkNotNull(database);
             try {
                 lock(database.getId(), lockType, 0);
@@ -127,7 +127,7 @@ public class Locker {
      * Before the new version of LockManager is fully enabled, it is used to be compatible with the original db lock logic.
      */
     public boolean tryLockDatabase(Database database, LockType lockType, long timeout) {
-        if (Config.use_lock_manager) {
+        if (Config.lock_manager_enabled) {
             Preconditions.checkNotNull(database);
             try {
                 lock(database.getId(), lockType, timeout);
@@ -189,7 +189,7 @@ public class Locker {
      * Before the new version of LockManager is fully enabled, it is used to be compatible with the original db lock logic.
      */
     public void unLockDatabase(Database database, LockType lockType) {
-        if (Config.use_lock_manager) {
+        if (Config.lock_manager_enabled) {
             Preconditions.checkNotNull(database);
             release(database.getId(), lockType);
         } else {
@@ -231,7 +231,7 @@ public class Locker {
      * Before the new version of LockManager is fully enabled, it is used to be compatible with the original db lock logic.
      */
     public boolean isWriteLockHeldByCurrentThread(Database database) {
-        if (Config.use_lock_manager) {
+        if (Config.lock_manager_enabled) {
             return true;
         } else {
             return database.getRwLock().isWriteLockHeldByCurrentThread();
@@ -245,7 +245,7 @@ public class Locker {
         Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
         List<Long> tableListClone = new ArrayList<>(tableList);
 
-        if (Config.use_lock_manager) {
+        if (Config.lock_manager_enabled) {
             Preconditions.checkState(!tableListClone.isEmpty());
 
             try {
@@ -272,7 +272,7 @@ public class Locker {
         Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
         List<Long> tableListClone = new ArrayList<>(tableList);
 
-        if (Config.use_lock_manager) {
+        if (Config.lock_manager_enabled) {
             Preconditions.checkState(!tableListClone.isEmpty());
 
             try {
@@ -319,7 +319,7 @@ public class Locker {
         Preconditions.checkState(lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE));
         List<Long> tableListClone = new ArrayList<>(tableList);
 
-        if (Config.use_lock_manager) {
+        if (Config.lock_manager_enabled) {
             if (lockType == LockType.WRITE) {
                 this.release(database.getId(), LockType.INTENTION_EXCLUSIVE);
             } else {
