@@ -659,7 +659,7 @@ public class BrokerLoadJobTest {
                 result = attachment;
                 txnState.getReason();
                 minTimes = 0;
-                result = "load_run_faill";
+                result = "load_run_fail";
             }
         };
         brokerLoadJob.replayOnAborted(txnState);

@@ -372,6 +372,29 @@ public class BrokerLoadJob extends BulkLoadJob {
         }
     }
 
+    /**
+     * This method is used to replay the cancelled state of load job
+     *
+     * @param txnState
+     */
+    @Override
+    public void replayOnAborted(TransactionState txnState) {
+        writeLock();
+        try {
+            replayTxnAttachment(txnState);
+            failMsg = new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, txnState.getReason());
+            finishTimestamp = txnState.getFinishTime();
+            state = JobState.CANCELLED;
+            if (retryTime <= 0 || !failMsg.getMsg().contains("timeout") || !isTimeout()) {
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
+                return;
+            }
+            retryTime--;
+        } finally {
+            writeUnlock();
+        }
+    }
+
     protected void unprotectedClearTasksBeforeRetry(FailMsg failMsg) {
         // get load ids of all loading tasks, we will cancel their coordinator process later
         List<TUniqueId> loadIds = Lists.newArrayList();
