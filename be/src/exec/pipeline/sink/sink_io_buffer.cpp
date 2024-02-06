@@ -17,9 +17,7 @@
 namespace starrocks::pipeline {
 
 void SinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
-    DeferOp op([&]() {
-        --_num_pending_chunks;
-    });
+    DeferOp op([&]() { --_num_pending_chunks; });
 
     if (_is_finished) {
         return;
