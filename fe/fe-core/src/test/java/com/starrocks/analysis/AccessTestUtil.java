@@ -154,12 +154,6 @@ public class AccessTestUtil {
                 minTimes = 0;
                 result = Lists.newArrayList(olapTable);
 
-                db.readLock();
-                minTimes = 0;
-
-                db.readUnlock();
-                minTimes = 0;
-
                 db.getFullName();
                 minTimes = 0;
                 result = name;
@@ -299,12 +293,6 @@ public class AccessTestUtil {
                 db.getTables();
                 minTimes = 0;
                 result = Lists.newArrayList(table);
-
-                db.readLock();
-                minTimes = 0;
-
-                db.readUnlock();
-                minTimes = 0;
 
                 db.getFullName();
                 minTimes = 0;

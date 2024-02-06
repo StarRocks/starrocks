@@ -35,6 +35,8 @@ import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.epack.lake.StarOSAgentEpack;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
@@ -303,7 +305,8 @@ public class PseudoCluster {
         if (db == null) {
             return null;
         }
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             Table table = db.getTable(tableName);
             if (table == null) {
@@ -321,7 +324,7 @@ public class PseudoCluster {
             }
             return ret;
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
     }
 
@@ -587,10 +590,10 @@ public class PseudoCluster {
             return String.format("create table %s (id bigint not null, name varchar(64) not null, age int null) " +
                             "primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS %d " +
                             "PROPERTIES(" +
-                                "\"write_quorum\" = \"%s\", " +
-                                "\"replication_num\" = \"%d\", " +
-                                "\"storage_medium\" = \"%s\", " +
-                                "\"colocate_with\" = \"%s\")",
+                            "\"write_quorum\" = \"%s\", " +
+                            "\"replication_num\" = \"%d\", " +
+                            "\"storage_medium\" = \"%s\", " +
+                            "\"colocate_with\" = \"%s\")",
                     tableName,
                     buckets, quorum, replication,
                     ssd ? "SSD" : "HDD",

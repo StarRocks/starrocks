@@ -19,14 +19,23 @@ import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.util.LogUtil;
+import com.starrocks.common.util.Util;
+import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-public class Locker implements Cloneable {
+public class Locker {
+    private static final Logger LOG = LogManager.getLogger(Locker.class);
+
     /* The rid of the lock that this locker is waiting for. */
     private Long waitingForRid;
 
@@ -39,6 +48,8 @@ public class Locker implements Cloneable {
 
     /* The thread stack that created this locker */
     private final String stackTrace;
+
+    private final Map<Long, Long> lastSlowLockLogTimeMap = new HashMap<>();
 
     public Locker() {
         this.waitingForRid = null;
@@ -96,9 +107,17 @@ public class Locker implements Cloneable {
             }
         } else {
             if (lockType.isWriteLock()) {
-                database.writeLock();
+                QueryableReentrantReadWriteLock rwLock = database.getRwLock();
+                long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
+                String threadDump = getOwnerInfo(rwLock.getOwner());
+                rwLock.exclusiveLock();
+                logSlowLockEventIfNeeded(startMs, "writeLock", threadDump, database.getId(), database.getFullName());
             } else {
-                database.readLock();
+                QueryableReentrantReadWriteLock rwLock = database.getRwLock();
+                long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
+                String threadDump = getOwnerInfo(rwLock.getOwner());
+                rwLock.sharedLock();
+                logSlowLockEventIfNeeded(startMs, "readLock", threadDump, database.getId(), database.getFullName());
             }
         }
     }
@@ -119,12 +138,37 @@ public class Locker implements Cloneable {
                 return false;
             }
         } else {
-            if (lockType.isWriteLock()) {
-                return database.tryWriteLock(timeout, TimeUnit.MILLISECONDS);
-            } else {
-                return database.tryReadLock(timeout, TimeUnit.MILLISECONDS);
+            assert lockType.equals(LockType.READ) || lockType.equals(LockType.WRITE);
+
+            QueryableReentrantReadWriteLock rwLock = database.getRwLock();
+            try {
+                long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
+                String threadDump = getOwnerInfo(rwLock.getOwner());
+
+                boolean result;
+                if (lockType.isWriteLock()) {
+                    result = rwLock.tryExclusiveLock(timeout, TimeUnit.MILLISECONDS);
+                } else {
+                    result = rwLock.trySharedLock(timeout, TimeUnit.MILLISECONDS);
+                }
+
+                if (!result) {
+                    logTryLockFailureEvent(lockType.toString(), threadDump);
+                    return false;
+                } else {
+                    logSlowLockEventIfNeeded(startMs, "try" + lockType, threadDump, database.getId(),
+                            database.getFullName());
+                    return true;
+                }
+            } catch (InterruptedException e) {
+                LOG.warn("failed to try " + lockType + " lock at db[" + database.getId() + "]", e);
+                return false;
             }
         }
+    }
+
+    private void logTryLockFailureEvent(String type, String threadDump) {
+        LOG.warn("try db lock failed. type: {}, current {}", type, threadDump);
     }
 
     /**
@@ -149,10 +193,36 @@ public class Locker implements Cloneable {
             release(database.getId(), lockType);
         } else {
             if (lockType.isWriteLock()) {
-                database.writeUnlock();
+                QueryableReentrantReadWriteLock rwLock = database.getRwLock();
+                rwLock.exclusiveUnlock();
             } else {
-                database.readUnlock();
+                QueryableReentrantReadWriteLock rwLock = database.getRwLock();
+                rwLock.sharedUnlock();
             }
+        }
+    }
+
+    private String getOwnerInfo(Thread owner) {
+        if (owner == null) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("owner id: ").append(owner.getId()).append(", owner name: ")
+                .append(owner.getName()).append(", owner stack: ").append(Util.dumpThread(owner, 50));
+        return sb.toString();
+    }
+
+    private void logSlowLockEventIfNeeded(long startMs, String type, String threadDump, Long databaseId,
+                                          String fullQualifiedName) {
+        long endMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
+        Long lastSlowLockLogTime = lastSlowLockLogTimeMap.getOrDefault(databaseId, 0L);
+        if (endMs - startMs > Config.slow_lock_threshold_ms &&
+                endMs > lastSlowLockLogTime + Config.slow_lock_log_every_ms) {
+            lastSlowLockLogTime = endMs;
+            lastSlowLockLogTimeMap.put(databaseId, lastSlowLockLogTime);
+            LOG.warn("slow db lock. type: {}, db id: {}, db name: {}, wait time: {}ms, " +
+                            "former {}, current stack trace: {}", type, databaseId, fullQualifiedName, endMs - startMs,
+                    threadDump, LogUtil.getCurrentStackTrace());
         }
     }
 
@@ -163,7 +233,7 @@ public class Locker implements Cloneable {
         if (Config.use_lock_manager) {
             return true;
         } else {
-            return database.isWriteLockHeldByCurrentThread();
+            return database.getRwLock().isWriteLockHeldByCurrentThread();
         }
     }
 

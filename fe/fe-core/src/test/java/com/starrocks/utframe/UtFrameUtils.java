@@ -68,6 +68,8 @@ import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.hive.ReplayMetadataMgr;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalEntity;
@@ -932,7 +934,8 @@ public class UtFrameUtils {
             return;
         }
         for (Database db : dbs.values()) {
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
         }
     }
 
@@ -942,7 +945,8 @@ public class UtFrameUtils {
             return;
         }
         for (Database db : dbs.values()) {
-            db.readUnlock();
+            Locker locker = new Locker();
+            locker.unLockDatabase(db, LockType.READ);
         }
     }
 

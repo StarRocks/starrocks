@@ -726,24 +726,30 @@ public class LocalMetastore implements ConnectorMetadata {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
 
-        AlterDatabaseQuotaStmt.QuotaType quotaType = stmt.getQuotaType();
-        if (quotaType == AlterDatabaseQuotaStmt.QuotaType.DATA) {
-            db.setDataQuotaWithLock(stmt.getQuota());
-        } else if (quotaType == AlterDatabaseQuotaStmt.QuotaType.REPLICA) {
-            db.setReplicaQuotaWithLock(stmt.getQuota());
-        }
-        long quota = stmt.getQuota();
-        DatabaseInfo dbInfo = new DatabaseInfo(db.getFullName(), "", quota, quotaType);
+        DatabaseInfo dbInfo = new DatabaseInfo(db.getFullName(), "", stmt.getQuota(), stmt.getQuotaType());
         GlobalStateMgr.getCurrentState().getEditLog().logAlterDb(dbInfo);
+
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
+        try {
+            replayAlterDatabaseQuota(dbInfo);
+        } finally {
+            locker.unLockDatabase(db, LockType.WRITE);
+        }
     }
 
-    public void replayAlterDatabaseQuota(String dbName, long quota, AlterDatabaseQuotaStmt.QuotaType quotaType) {
-        Database db = getDb(dbName);
+    public void replayAlterDatabaseQuota(DatabaseInfo dbInfo) {
+        String dbName = dbInfo.getDbName();
+        LOG.info("Begin to unprotect alter db info {}", dbName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        AlterDatabaseQuotaStmt.QuotaType quotaType = dbInfo.getQuotaType();
+        long quota = dbInfo.getQuota();
+
         Preconditions.checkNotNull(db);
         if (quotaType == AlterDatabaseQuotaStmt.QuotaType.DATA) {
-            db.setDataQuotaWithLock(quota);
+            db.setDataQuota(quota);
         } else if (quotaType == AlterDatabaseQuotaStmt.QuotaType.REPLICA) {
-            db.setReplicaQuotaWithLock(quota);
+            db.setReplicaQuota(quota);
         }
     }
 
@@ -771,7 +777,13 @@ public class LocalMetastore implements ConnectorMetadata {
                 throw new DdlException("Database name[" + newFullDbName + "] is already used");
             }
             // 1. rename db
-            db.setNameWithLock(newFullDbName);
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.WRITE);
+            try {
+                db.setName(newFullDbName);
+            } finally {
+                locker.unLockDatabase(db, LockType.WRITE);
+            }
 
             // 2. add to meta. check again
             fullNameToDb.remove(fullDbName);
@@ -2602,7 +2614,7 @@ public class LocalMetastore implements ConnectorMetadata {
         List<Long> chosenBackendIds =
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getNodeSelector()
                         .seqChooseBackendIdsByStorageMedium(replicationNum,
-                        true, true, locReq, storageMedium);
+                                true, true, locReq, storageMedium);
         if (CollectionUtils.isEmpty(chosenBackendIds)) {
             throw new DdlException(
                     "Failed to find enough hosts with storage medium " + storageMedium +
@@ -2843,7 +2855,9 @@ public class LocalMetastore implements ConnectorMetadata {
                 LOG.warn("replay delete replica failed, db is null, meta: {}", meta);
                 continue;
             }
-            db.writeLock();
+
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.WRITE);
             try {
                 OlapTable olapTable = (OlapTable) getTableIncludeRecycleBin(db, meta.getTableId());
                 if (olapTable == null) {
@@ -2867,7 +2881,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
                 tablet.deleteReplicaByBackendId(info.getBackendId());
             } finally {
-                db.writeUnlock();
+                locker.unLockDatabase(db, LockType.WRITE);
             }
         }
     }
