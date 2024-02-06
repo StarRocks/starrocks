@@ -382,7 +382,7 @@ TEST_F(BinlogFileTest, DISABLED_test_random_write_read) {
 // Test random and repeated begin-commit and begin-abort
 TEST_F(BinlogFileTest, test_random_begin_commit_abort) {
     CompressionTypePB compression_type = LZ4_FRAME;
-    int32_t max_page_size = 1024;
+    int32_t max_page_size = 512;
     int32_t estimated_log_entry_size;
     estimate_log_entry_size(INSERT_RANGE_PB, &estimated_log_entry_size);
     int32_t num_log_entries_per_page = max_page_size / estimated_log_entry_size;

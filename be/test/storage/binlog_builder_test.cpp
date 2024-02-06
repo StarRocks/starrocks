@@ -248,8 +248,8 @@ TEST_F(BinlogBuilderTest, test_abort_one_version_multiple_files_without_active_w
 
 TEST_F(BinlogBuilderTest, test_random_commit_abort_multiple_versions) {
     int32_t num_versions = 5;
-    int64_t max_file_size = 512;
-    int32_t max_page_size = 64;
+    int64_t max_file_size = 256;
+    int32_t max_page_size = 32;
     std::vector<DupKeyVersionInfo> version_info_vec;
     std::map<int64_t, BinlogFileMetaPBPtr> metas;
 
