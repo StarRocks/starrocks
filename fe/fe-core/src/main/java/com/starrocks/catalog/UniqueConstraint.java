@@ -16,6 +16,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.server.GlobalStateMgr;
@@ -44,6 +45,9 @@ public class UniqueConstraint {
     private final String tableName;
 
     public UniqueConstraint(String catalogName, String dbName, String tableName, List<String> uniqueColumns) {
+        Preconditions.checkNotNull(catalogName);
+        Preconditions.checkNotNull(dbName);
+        Preconditions.checkNotNull(tableName);
         this.catalogName = catalogName;
         this.dbName = dbName;
         this.tableName = tableName;

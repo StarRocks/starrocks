@@ -162,6 +162,16 @@ public class PruneUKFKJoinRule extends TransformationRule {
         return Utils.compoundAnd(predicates);
     }
 
+    /**
+     * For sql like this:
+     * <p>
+     * select t_fk.* from t_fk join t_uk on t_fk.fk = t_uk.uk
+     * where t_uk.uk < 100;
+     * <p>
+     * The predicates of the uk side must be preserved and rewrited to:
+     * <p>
+     * select t_fk.* from t_fk where t_fk.fk < 100;
+     */
     private OptExpression buildFilterOpt(UKFKConstraints.JoinProperty property,
                                          OptExpression ukChildOpt,
                                          OptExpression fkChildOpt,
