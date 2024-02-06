@@ -57,13 +57,8 @@ public:
         std::vector<std::string> test_data;
         auto schema = ChunkHelper::convert_schema(*_tablet_schema);
         auto chunk = ChunkHelper::new_chunk(schema, 1024);
-<<<<<<< HEAD
-        for (size_t i = 0; i < 24576 * pow(config::size_tiered_level_multiple + 1, level - 2); ++i) {
-            test_data.push_back("well" + std::to_string(std::rand()));
-=======
         for (size_t i = 0; i < 1500 * pow(config::size_tiered_level_multiple + 3, level - 2); ++i) {
             test_data.push_back("well" + std::to_string(id++));
->>>>>>> 323ca5e3ca ([UT] Fix unstable be ut (#40444))
             auto& cols = chunk->columns();
             cols[0]->append_datum(Datum(static_cast<int32_t>(id++)));
             Slice field_1(test_data[i]);
