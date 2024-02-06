@@ -140,6 +140,13 @@ public enum AggregateType {
         return toSql();
     }
 
+    /**
+     * NONE is particular, which is equals to null to make some buggy code compatible
+     */
+    public static boolean isNullOrNone(AggregateType type) {
+        return type == null || type == NONE;
+    }
+
     public boolean checkCompatibility(Type type) {
         return checkPrimitiveTypeCompatibility(this, type.getPrimitiveType()) ||
                 (this.isReplaceFamily() && type.isArrayType());
