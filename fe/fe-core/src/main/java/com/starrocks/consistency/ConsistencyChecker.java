@@ -274,13 +274,8 @@ public class ConsistencyChecker extends LeaderDaemon {
         try {
             while ((chosenOne = dbQueue.poll()) != null) {
                 Database db = (Database) chosenOne;
-<<<<<<< HEAD
                 db.readLock();
-=======
-                Locker locker = new Locker();
-                locker.lockDatabase(db, LockType.READ);
                 long startTime = System.currentTimeMillis();
->>>>>>> 3d2a0a51e6 ([Enhancement] Optimize the lock contention of consistency checker (#40710))
                 try {
                     // sort tables
                     List<Table> tables = db.getTables();
@@ -365,15 +360,11 @@ public class ConsistencyChecker extends LeaderDaemon {
                         } // end while partitionQueue
                     } // end while tableQueue
                 } finally {
-<<<<<<< HEAD
-                    db.readUnlock();
-=======
                     // Since only at most `MAX_JOB_NUM` tablet are chosen, we don't need to release the db read lock
                     // from time to time, just log the time cost here.
                     LOG.info("choose tablets from db[{}-{}](with read lock held) took {}ms",
                             db.getFullName(), db.getId(), System.currentTimeMillis() - startTime);
-                    locker.unLockDatabase(db, LockType.READ);
->>>>>>> 3d2a0a51e6 ([Enhancement] Optimize the lock contention of consistency checker (#40710))
+                    db.readUnlock();
                 }
             } // end while dbQueue
         } finally {
