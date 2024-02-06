@@ -86,6 +86,9 @@ class HintFactoryTest {
         arguments.add(Arguments.of("/*+     \n\r \n \u3000 set_VAR  (abc==abc) */"));
         arguments.add(Arguments.of("/*+     \r \n \u3000 set_VAR  (('abc'='abc')) */"));
         arguments.add(Arguments.of("/*+ set_VAR('abc'='abc', \r\n 'ab' ='ab')) */"));
+        arguments.add(Arguments.of("/* set_var('abc' = 'abc') /*+ set_var(abc =abc) */ */"));
+        arguments.add(Arguments.of("/* set_var('abc' = 'abc') /*+ set_var(abc =abc) */ */"));
+        arguments.add(Arguments.of("/* set_user_variable(@a = 'abc') /*+ set_var(abc =abc) */ */"));
         return arguments.stream();
     }
 }
