@@ -97,7 +97,6 @@ protected:
                                                    const std::string& multi_column_separator = "|",
                                                    const int64_t skip_header = 0, const bool trim_space = false,
                                                    const char enclose = 0, const char escape = 0) {
-
         /// TBrokerScanRangeParams
         TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
         params->__set_multi_row_delimiter(multi_row_delimiter);
