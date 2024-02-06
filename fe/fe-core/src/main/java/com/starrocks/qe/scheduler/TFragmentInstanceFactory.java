@@ -135,7 +135,7 @@ public class TFragmentInstanceFactory {
 
             if (isEnablePipeline) {
                 result.setIs_pipeline(true);
-                result.getQuery_options().setBatch_size(SessionVariable.PIPELINE_BATCH_SIZE);
+                result.getQuery_options().setBatch_size(sessionVariable.getChunkSize());
                 result.setEnable_shared_scan(sessionVariable.isEnableSharedScan());
                 result.params.setEnable_exchange_pass_through(sessionVariable.isEnableExchangePassThrough());
                 result.params.setEnable_exchange_perf(sessionVariable.isEnableExchangePerf());
