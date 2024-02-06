@@ -177,7 +177,7 @@ protected:
             return;
         }
 
-        if (_is_cancelled && !_is_finished) {
+        if (_is_cancelled) {
             set_and_wait_promise(chunk, BEFORE_CANCEL_CHECK_COUNTER);
             if (_num_pending_chunks <= 1) {
                 set_and_wait_promise(chunk, AFTER_CANCEL_CHECK_COUNTER);
