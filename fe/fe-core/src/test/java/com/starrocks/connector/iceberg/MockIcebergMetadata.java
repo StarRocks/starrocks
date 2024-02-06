@@ -54,6 +54,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.Table.TableType.ICEBERG;
 import static org.apache.iceberg.types.Types.NestedField.required;
 
 public class MockIcebergMetadata implements ConnectorMetadata {
@@ -401,6 +402,11 @@ public class MockIcebergMetadata implements ConnectorMetadata {
         return new MockIcebergTable(tblName.hashCode(), tblName, MOCKED_ICEBERG_CATALOG_NAME,
                 null, MOCKED_PARTITIONED_TRANSFORMS_DB_NAME, tblName, schemas, baseTable, null,
                 tableIdentifier);
+    }
+
+    @Override
+    public com.starrocks.catalog.Table.TableType getTableType() {
+        return ICEBERG;
     }
 
     @Override
