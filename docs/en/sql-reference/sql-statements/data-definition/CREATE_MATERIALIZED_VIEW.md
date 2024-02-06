@@ -272,7 +272,7 @@ Properties of the asynchronous materialized view. You can modify the properties 
     - If `mv_rewrite_staleness_second` is not specified, the materialized view can be used for query rewrite only when its data is consistent with the data in all base tables.
     - If `mv_rewrite_staleness_second` is specified, the materialized view can be used for query rewrite when its last refresh is within the staleness time interval.
   - `loose`: Enable automatic query rewrite directly, and no consistency check is required.
-- `storage_volume`: The name of the storage volume you want to create the asynchronous materialzied view with if you are using a shared-data cluster. This property is supported from v3.1 onwards. If this property is not specified, the default storage volume is used. Example: `"storage_volume" = "def_volume"`.
+- `storage_volume`: The name of the [storage volume](../../../deployment/shared_data/s3.md#use-your-shared-data-starrocks-cluster) used to store the asynchronous materialized view you want to create if you are using a shared-data cluster. This property is supported from v3.1 onwards. If this property is not specified, the default storage volume is used. Example: `"storage_volume" = "def_volume"`.
 - `force_external_table_query_rewrite`: Whether to enable query rewrite for external catalog-based materialized views. This property is supported from v3.2. Valid values:
   - `true`: Enable query rewrite for external catalog-based materialized views.
   - `false` (Default value): Disable query rewrite for external catalog-based materialized views.
