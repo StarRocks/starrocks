@@ -68,11 +68,8 @@ import com.starrocks.task.PriorityLeaderTaskExecutor;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
-<<<<<<< HEAD
-=======
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.transaction.TxnStateChangeCallback;
->>>>>>> cc9bf31727 ([BugFix] Get rid of overwriting JobState after create an image (#40672))
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mock;
