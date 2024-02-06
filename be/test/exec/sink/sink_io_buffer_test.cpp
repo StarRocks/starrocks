@@ -26,43 +26,7 @@ namespace starrocks::pipeline {
 
 class MockSinkIOBuffer : public SinkIOBuffer {
 public:
-    enum PromiseType {
-        BEFORE_ADD_TO_QUEUE = 0,
-        BEFORE_ADD_COUNTER = 1,
-        AFTER_ADD_COUNTER = 2,
-        BEFORE_EXECUTE = 3,
-        BEFORE_CANCEL_CHECK_COUNTER = 4,
-        AFTER_CANCEL_CHECK_COUNTER = 5,
-        BEFORE_DEC_COUNTER = 6,
-        AFTER_DEC_COUNTER = 7,
-        END
-    };
-
-    enum ChunkType { FIRST_CHUNK = 0, SECOND_CHUNK = 1, CLOSE_CHUNK = 2 };
-
-    enum ControlType { ALL = 0, SET = 1, WAIT = 2 };
-
-    MockSinkIOBuffer(int num_sinkers) : SinkIOBuffer(num_sinkers) {
-        _first_chunk_wait_promises.resize(PromiseType::END);
-        _first_chunk_control_promises.resize(PromiseType::END);
-        _second_chunk_wait_promises.resize(PromiseType::END);
-        _second_chunk_control_promises.resize(PromiseType::END);
-        _close_chunk_wait_promises.resize(PromiseType::END);
-        _close_chunk_control_promises.resize(PromiseType::END);
-
-        for (int i = 0; i < PromiseType::END; i++) {
-            _first_chunk_wait_promises[i].second = _first_chunk_wait_promises[i].first.get_future();
-            _first_chunk_control_promises[i].second = _first_chunk_control_promises[i].first.get_future();
-            _second_chunk_wait_promises[i].second = _second_chunk_wait_promises[i].first.get_future();
-            _second_chunk_control_promises[i].second = _second_chunk_control_promises[i].first.get_future();
-            _close_chunk_wait_promises[i].second = _close_chunk_wait_promises[i].first.get_future();
-            _close_chunk_control_promises[i].second = _close_chunk_control_promises[i].first.get_future();
-        }
-
-        _value = std::make_unique<int>();
-    }
-
-    ~MockSinkIOBuffer() { _value.reset(); }
+    MockSinkIOBuffer(int num_sinkers) : SinkIOBuffer(num_sinkers) { _value = std::make_unique<int>(); }
 
     static int execute_io_task(void* meta, bthread::TaskIterator<ChunkPtr>& iter) {
         return SinkIOBuffer::execute_io_task(meta, iter);
@@ -80,171 +44,15 @@ public:
         return Status::OK();
     }
 
-    void _add_chunk(const ChunkPtr& chunk) override { dummy(); }
-
-    void set_and_wait_promise(const ChunkPtr& chunk, PromiseType type) {
-        if (chunk == nullptr) {
-            LOG(INFO) << "SET_AND_WAIT: " << (int)CLOSE_CHUNK << ":" << (int)type << std::endl;
-            _close_chunk_control_promises[type].first.set_value();
-            _close_chunk_wait_promises[type].second.get();
-        } else if (chunk->num_rows() == 1) {
-            LOG(INFO) << "SET_AND_WAIT: " << (int)FIRST_CHUNK << ":" << (int)type << std::endl;
-            _first_chunk_control_promises[type].first.set_value();
-            _first_chunk_wait_promises[type].second.get();
-        } else if (chunk->num_rows() == 2) {
-            LOG(INFO) << "SET_AND_WAIT: " << (int)SECOND_CHUNK << ":" << (int)type << std::endl;
-            _second_chunk_control_promises[type].first.set_value();
-            _second_chunk_wait_promises[type].second.get();
-        }
-    }
-
-    void set_wait_promise(ChunkType chunk_type, PromiseType type) {
-        LOG(INFO) << "SET: " << (int)chunk_type << ":" << (int)type << std::endl;
-        if (chunk_type == FIRST_CHUNK) {
-            _first_chunk_wait_promises[type].first.set_value();
-        } else if (chunk_type == SECOND_CHUNK) {
-            _second_chunk_wait_promises[type].first.set_value();
-        } else if (chunk_type == CLOSE_CHUNK) {
-            _close_chunk_wait_promises[type].first.set_value();
-        }
-    }
-
-    void wait_control_promise(ChunkType chunk_type, PromiseType type) {
-        LOG(INFO) << "WAIT: " << (int)chunk_type << ":" << (int)type << std::endl;
-        if (chunk_type == FIRST_CHUNK) {
-            _first_chunk_control_promises[type].second.wait();
-        } else if (chunk_type == SECOND_CHUNK) {
-            _second_chunk_control_promises[type].second.wait();
-        } else if (chunk_type == CLOSE_CHUNK) {
-            _close_chunk_control_promises[type].second.wait();
-        }
-    }
-
-    Status append_chunk(RuntimeState* state, const ChunkPtr& chunk) override {
-        if (Status status = get_io_status(); !status.ok()) {
-            return status;
-        }
-        set_and_wait_promise(chunk, BEFORE_ADD_TO_QUEUE);
-        if (bthread::execution_queue_execute(*_exec_queue_id, chunk) != 0) {
-            return Status::InternalError("submit io task failed");
-        }
-        set_and_wait_promise(chunk, BEFORE_ADD_COUNTER);
-        ++_num_pending_chunks;
-        set_and_wait_promise(chunk, AFTER_ADD_COUNTER);
-        return Status::OK();
-    }
-
-    ALWAYS_NOINLINE void dummy() { *_value = 10; }
-
-    Status set_finishing() override {
-        if (--_num_result_sinkers == 0) {
-            // when all writes are over, we add a nullptr as a special mark to trigger close
-            if (_is_finishing_failed) {
-                return Status::InternalError("set finishing failed");
-            } else {
-                set_and_wait_promise(nullptr, BEFORE_ADD_TO_QUEUE);
-                int v = bthread::execution_queue_execute(*_exec_queue_id, nullptr);
-                if (v != 0) {
-                    return Status::InternalError("submit task failed");
-                }
-                set_and_wait_promise(nullptr, BEFORE_ADD_COUNTER);
-                ++_num_pending_chunks;
-                set_and_wait_promise(nullptr, AFTER_ADD_COUNTER);
-            }
-        }
-        return Status::OK();
-    }
-
-    void set_is_finishing_failed(bool is_finishing_failed) { _is_finishing_failed = is_finishing_failed; }
-
-protected:
-    virtual void _process_chunk(bthread::TaskIterator<ChunkPtr>& iter) override {
-        DeferOp op([&]() {
-            set_and_wait_promise(*iter, BEFORE_DEC_COUNTER);
-            _num_pending_chunks--;
-            set_and_wait_promise(*iter, AFTER_DEC_COUNTER);
-        });
-
-        set_and_wait_promise(*iter, BEFORE_EXECUTE);
-
-        if (_is_finished) {
-            return;
-        }
-
-        const auto& chunk = *iter;
-        if (chunk == nullptr) {
-            close(_state);
-            return;
-        }
-
-        if (_is_cancelled) {
-            set_and_wait_promise(chunk, BEFORE_CANCEL_CHECK_COUNTER);
-            if (_num_pending_chunks <= 1) {
-                set_and_wait_promise(chunk, AFTER_CANCEL_CHECK_COUNTER);
-                close(_state);
-            }
-            return;
-        }
-
-        _add_chunk(chunk);
-    }
-
-private:
-    std::vector<std::pair<std::promise<void>, std::future<void>>> _first_chunk_wait_promises;
-    std::vector<std::pair<std::promise<void>, std::future<void>>> _first_chunk_control_promises;
-
-    std::vector<std::pair<std::promise<void>, std::future<void>>> _second_chunk_wait_promises;
-    std::vector<std::pair<std::promise<void>, std::future<void>>> _second_chunk_control_promises;
-
-    std::vector<std::pair<std::promise<void>, std::future<void>>> _close_chunk_wait_promises;
-    std::vector<std::pair<std::promise<void>, std::future<void>>> _close_chunk_control_promises;
-
-    std::promise<void> _finishing_promise;
-    std::promise<void> _before_cancel_promise;
-
-    std::unique_ptr<int> _value;
-    bool _is_finishing_failed = false;
-};
-
-class MockSinkIOBuffer2 : public SinkIOBuffer {
-public:
-    MockSinkIOBuffer2(int num_sinkers) : SinkIOBuffer(num_sinkers) { _value = std::make_unique<int>(); }
-
-    Status prepare(RuntimeState* state, RuntimeProfile* parent_profile) override {
-        _state = state;
-        _exec_queue_id = std::make_unique<bthread::ExecutionQueueId<ChunkPtr>>();
-        int ret = bthread::execution_queue_start<ChunkPtr>(_exec_queue_id.get(), nullptr,
-                                                           &MockSinkIOBuffer::execute_io_task, this);
-        if (ret != 0) {
-            _exec_queue_id.reset();
-            return Status::InternalError("start execution queue failed");
-        }
-        return Status::OK();
-    }
-
-    void _add_chunk(const ChunkPtr& chunk) override { dummy(); }
-
-    ALWAYS_NOINLINE void dummy() { *_value = 10; }
+    void _add_chunk(const ChunkPtr& chunk) override { *_value = 10; }
 
 private:
     std::unique_ptr<int> _value;
 };
-
-using ControlType = MockSinkIOBuffer::ControlType;
-using PromiseType = MockSinkIOBuffer::PromiseType;
-using ChunkType = MockSinkIOBuffer::ChunkType;
 
 class SinkIOBufferTest : public testing::Test {
 protected:
-    struct Task {
-        ControlType control_type;
-        ChunkType chunk_type;
-        PromiseType promise_type;
-    };
-
     SinkIOBufferTest() = default;
-
-    void SetUp() override {}
 
     static void operator_thread(void* arg1, void* arg2) {
         auto* buf = reinterpret_cast<MockSinkIOBuffer*>(arg1);
@@ -262,15 +70,14 @@ protected:
         (void)buf->set_finishing();
     }
 
-    static void run_check(MockSinkIOBuffer& buf, const std::vector<Task>& task) {
-        for (size_t i = 0; i < task.size(); i++) {
-            if (task[i].control_type == ControlType::WAIT) {
-                buf.wait_control_promise(task[i].chunk_type, task[i].promise_type);
-            } else if (task[i].control_type == ControlType::SET) {
-                buf.set_wait_promise(task[i].chunk_type, task[i].promise_type);
-            } else {
-                buf.wait_control_promise(task[i].chunk_type, task[i].promise_type);
-                buf.set_wait_promise(task[i].chunk_type, task[i].promise_type);
+    void wait(const std::function<bool()>& func) {
+        int i = 0;
+        while (!func()) {
+            bthread_usleep(1000);
+            i++;
+            if (i > 50000) {
+                // max wait 50s
+                ASSERT_TRUE(false);
             }
         }
     }
@@ -278,6 +85,8 @@ protected:
 protected:
     static ChunkPtr gen_test_chunk(int value);
     static std::shared_ptr<RuntimeState> gen_test_runtime_state();
+    std::atomic<int> _data_chunk = 0;
+    std::atomic<int> _close_chunk = 0;
 };
 
 ChunkPtr SinkIOBufferTest::gen_test_chunk(int value) {
@@ -297,326 +106,167 @@ std::shared_ptr<RuntimeState> SinkIOBufferTest::gen_test_runtime_state() {
 
 // Execute sequentially one by one
 TEST_F(SinkIOBufferTest, test_basic_1) {
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_append_chunk", [this](void* arg) {
+        wait([this]() -> bool { return _data_chunk <= 0; });
+
+        if (arg == nullptr) {
+            _close_chunk++;
+        } else {
+            _data_chunk++;
+        }
+    });
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_before_process_chunk", [](void* arg) {});
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_after_process_chunk", [this](void* arg) {
+        if (arg == nullptr) {
+            _close_chunk--;
+        } else {
+            _data_chunk--;
+        }
+    });
+
     auto runtime_state = gen_test_runtime_state();
     auto sink_buffer = std::make_unique<MockSinkIOBuffer>(1);
     ASSERT_OK(sink_buffer->prepare(runtime_state.get(), nullptr));
 
     std::thread thread1(operator_thread, sink_buffer.get(), runtime_state.get());
-    std::vector<Task> tasks1 = {
-            // Append first chunk and wait
-            {ControlType::ALL, ChunkType::FIRST_CHUNK, PromiseType::BEFORE_ADD_TO_QUEUE},
-            {ControlType::ALL, ChunkType::FIRST_CHUNK, PromiseType::BEFORE_ADD_COUNTER},
-            {ControlType::ALL, ChunkType::FIRST_CHUNK, PromiseType::AFTER_ADD_COUNTER},
-            {ControlType::ALL, ChunkType::FIRST_CHUNK, PromiseType::BEFORE_EXECUTE},
-            {ControlType::ALL, ChunkType::FIRST_CHUNK, PromiseType::BEFORE_DEC_COUNTER},
-            {ControlType::ALL, ChunkType::FIRST_CHUNK, PromiseType::AFTER_DEC_COUNTER},
-
-            // Append second chunk and wait
-            {ControlType::ALL, ChunkType::SECOND_CHUNK, PromiseType::BEFORE_ADD_TO_QUEUE},
-            {ControlType::ALL, ChunkType::SECOND_CHUNK, PromiseType::BEFORE_ADD_COUNTER},
-            {ControlType::ALL, ChunkType::SECOND_CHUNK, PromiseType::AFTER_ADD_COUNTER},
-            {ControlType::ALL, ChunkType::SECOND_CHUNK, PromiseType::BEFORE_EXECUTE},
-            {ControlType::ALL, ChunkType::SECOND_CHUNK, PromiseType::BEFORE_DEC_COUNTER},
-            {ControlType::ALL, ChunkType::SECOND_CHUNK, PromiseType::AFTER_DEC_COUNTER},
-    };
-    run_check(*sink_buffer, tasks1);
+    thread1.join();
 
     std::thread thread2(poll_thread, sink_buffer.get());
-    std::vector<Task> tasks2 = {
-            // Append close chunk
-            {ControlType::ALL, ChunkType::CLOSE_CHUNK, PromiseType::BEFORE_ADD_TO_QUEUE},
-            {ControlType::ALL, ChunkType::CLOSE_CHUNK, PromiseType::BEFORE_ADD_COUNTER},
-            {ControlType::ALL, ChunkType::CLOSE_CHUNK, PromiseType::AFTER_ADD_COUNTER},
-            {ControlType::ALL, ChunkType::CLOSE_CHUNK, PromiseType::BEFORE_EXECUTE},
-            {ControlType::ALL, ChunkType::CLOSE_CHUNK, PromiseType::BEFORE_DEC_COUNTER},
-            {ControlType::ALL, ChunkType::CLOSE_CHUNK, PromiseType::AFTER_DEC_COUNTER},
-    };
-    run_check(*sink_buffer, tasks2);
-
-    thread1.join();
     thread2.join();
-    ASSERT_TRUE(sink_buffer->is_finished());
+
+    wait([this]() -> bool { return _data_chunk == 0 && _close_chunk == 0; });
+    wait([&sink_buffer]() -> bool { return sink_buffer->is_finished(); });
 
     sink_buffer.reset();
+
+    SyncPoint::GetInstance()->DisableProcessing();
 }
 
 // Add all and run
 TEST_F(SinkIOBufferTest, test_basic_2) {
+    SyncPoint::GetInstance()->EnableProcessing();
+    bool _need_process_chunk = false;
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_append_chunk", [this](void* arg) {
+        if (arg == nullptr) {
+            _close_chunk++;
+        } else {
+            _data_chunk++;
+        }
+    });
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_before_process_chunk",
+                                          [this, &_need_process_chunk](void* arg) {
+                                              wait([&_need_process_chunk]() -> bool { return _need_process_chunk; });
+                                          });
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_after_process_chunk", [this](void* arg) {
+        if (arg == nullptr) {
+            _close_chunk--;
+        } else {
+            _data_chunk--;
+        }
+    });
+
     auto runtime_state = gen_test_runtime_state();
     auto sink_buffer = std::make_unique<MockSinkIOBuffer>(1);
     ASSERT_OK(sink_buffer->prepare(runtime_state.get(), nullptr));
 
     std::thread thread1(operator_thread, sink_buffer.get(), runtime_state.get());
-    std::vector<Task> tasks1 = {
-            // Append first chunk
-            {ControlType::ALL, ChunkType::FIRST_CHUNK, PromiseType::BEFORE_ADD_TO_QUEUE},
-            {ControlType::ALL, ChunkType::FIRST_CHUNK, PromiseType::BEFORE_ADD_COUNTER},
-            {ControlType::ALL, ChunkType::FIRST_CHUNK, PromiseType::AFTER_ADD_COUNTER},
+    thread1.join();
 
-            // Append second chunk
-            {ControlType::ALL, ChunkType::SECOND_CHUNK, PromiseType::BEFORE_ADD_TO_QUEUE},
-            {ControlType::ALL, ChunkType::SECOND_CHUNK, PromiseType::BEFORE_ADD_COUNTER},
-            {ControlType::ALL, ChunkType::SECOND_CHUNK, PromiseType::AFTER_ADD_COUNTER},
-    };
-    run_check(*sink_buffer, tasks1);
+    wait([this]() -> bool { return _data_chunk == 2; });
 
     std::thread thread2(poll_thread, sink_buffer.get());
-    std::vector<Task> tasks2 = {
-            {ControlType::ALL, ChunkType::CLOSE_CHUNK, PromiseType::BEFORE_ADD_TO_QUEUE},
-            {ControlType::ALL, ChunkType::CLOSE_CHUNK, PromiseType::BEFORE_ADD_COUNTER},
-            {ControlType::ALL, ChunkType::CLOSE_CHUNK, PromiseType::AFTER_ADD_COUNTER},
-    };
-    run_check(*sink_buffer, tasks2);
-
-    std::vector<Task> tasks3 = {
-            // Append close chunk
-            {ControlType::ALL, ChunkType::FIRST_CHUNK, PromiseType::BEFORE_EXECUTE},
-            {ControlType::ALL, ChunkType::FIRST_CHUNK, PromiseType::BEFORE_DEC_COUNTER},
-            {ControlType::ALL, ChunkType::FIRST_CHUNK, PromiseType::AFTER_DEC_COUNTER},
-
-            {ControlType::ALL, ChunkType::SECOND_CHUNK, PromiseType::BEFORE_EXECUTE},
-            {ControlType::ALL, ChunkType::SECOND_CHUNK, PromiseType::BEFORE_DEC_COUNTER},
-            {ControlType::ALL, ChunkType::SECOND_CHUNK, PromiseType::AFTER_DEC_COUNTER},
-
-            {ControlType::ALL, ChunkType::CLOSE_CHUNK, PromiseType::BEFORE_EXECUTE},
-            {ControlType::ALL, ChunkType::CLOSE_CHUNK, PromiseType::BEFORE_DEC_COUNTER},
-            {ControlType::ALL, ChunkType::CLOSE_CHUNK, PromiseType::AFTER_DEC_COUNTER},
-    };
-    run_check(*sink_buffer, tasks3);
-
-    thread1.join();
     thread2.join();
-    ASSERT_TRUE(sink_buffer->is_finished());
+
+    wait([this]() -> bool { return _close_chunk == 1; });
+    _need_process_chunk = true;
+
+    wait([&sink_buffer]() -> bool { return sink_buffer->is_finished(); });
 
     sink_buffer.reset();
+
+    SyncPoint::GetInstance()->DisableProcessing();
 }
 
 // Cancel when there is no task
 TEST_F(SinkIOBufferTest, test_cancel_1) {
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_append_chunk", [this](void* arg) {
+        if (arg == nullptr) {
+            _close_chunk++;
+        } else {
+            _data_chunk++;
+        }
+    });
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_before_process_chunk", [](void* arg) {});
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_after_process_chunk", [this](void* arg) {
+        if (arg == nullptr) {
+            _close_chunk--;
+        } else {
+            _data_chunk--;
+        }
+    });
+
     auto runtime_state = gen_test_runtime_state();
     auto sink_buffer = std::make_unique<MockSinkIOBuffer>(1);
     ASSERT_OK(sink_buffer->prepare(runtime_state.get(), nullptr));
 
     std::thread thread1(operator_thread, sink_buffer.get(), runtime_state.get());
-    std::vector<Task> tasks1 = {
-            // Append first chunk and wait
-            {ControlType::ALL, ChunkType::FIRST_CHUNK, PromiseType::BEFORE_ADD_TO_QUEUE},
-            {ControlType::ALL, ChunkType::FIRST_CHUNK, PromiseType::BEFORE_ADD_COUNTER},
-            {ControlType::ALL, ChunkType::FIRST_CHUNK, PromiseType::AFTER_ADD_COUNTER},
-            {ControlType::ALL, ChunkType::FIRST_CHUNK, PromiseType::BEFORE_EXECUTE},
-            {ControlType::ALL, ChunkType::FIRST_CHUNK, PromiseType::BEFORE_DEC_COUNTER},
-            {ControlType::ALL, ChunkType::FIRST_CHUNK, PromiseType::AFTER_DEC_COUNTER},
+    thread1.join();
 
-            // Append second chunk and wait
-            {ControlType::ALL, ChunkType::SECOND_CHUNK, PromiseType::BEFORE_ADD_TO_QUEUE},
-            {ControlType::ALL, ChunkType::SECOND_CHUNK, PromiseType::BEFORE_ADD_COUNTER},
-            {ControlType::ALL, ChunkType::SECOND_CHUNK, PromiseType::AFTER_ADD_COUNTER},
-            {ControlType::ALL, ChunkType::SECOND_CHUNK, PromiseType::BEFORE_EXECUTE},
-            {ControlType::ALL, ChunkType::SECOND_CHUNK, PromiseType::BEFORE_DEC_COUNTER},
-            {ControlType::ALL, ChunkType::SECOND_CHUNK, PromiseType::AFTER_DEC_COUNTER},
-    };
-    run_check(*sink_buffer, tasks1);
+    wait([this]() -> bool { return _data_chunk == 0; });
 
     sink_buffer->cancel_one_sinker();
     std::thread thread2(poll_thread, sink_buffer.get());
-    std::vector<Task> tasks2 = {
-            // Append close chunk
-            {ControlType::ALL, ChunkType::CLOSE_CHUNK, PromiseType::BEFORE_ADD_TO_QUEUE},
-            {ControlType::ALL, ChunkType::CLOSE_CHUNK, PromiseType::BEFORE_ADD_COUNTER},
-            {ControlType::ALL, ChunkType::CLOSE_CHUNK, PromiseType::AFTER_ADD_COUNTER},
-            {ControlType::ALL, ChunkType::CLOSE_CHUNK, PromiseType::BEFORE_EXECUTE},
-            {ControlType::ALL, ChunkType::CLOSE_CHUNK, PromiseType::BEFORE_DEC_COUNTER},
-            {ControlType::ALL, ChunkType::CLOSE_CHUNK, PromiseType::AFTER_DEC_COUNTER},
-    };
-    run_check(*sink_buffer, tasks2);
-
-    thread1.join();
     thread2.join();
-    ASSERT_TRUE(sink_buffer->is_finished());
+
+    wait([this]() -> bool { return _close_chunk == 0; });
+    wait([&sink_buffer]() -> bool { return sink_buffer->is_finished(); });
 
     sink_buffer.reset();
+
+    SyncPoint::GetInstance()->DisableProcessing();
 }
 
-// Cancel (_num_pending_chunks = 0)
+// Cancel (have tasks in queue)
 TEST_F(SinkIOBufferTest, test_cancel_2) {
     auto runtime_state = gen_test_runtime_state();
     auto sink_buffer = std::make_unique<MockSinkIOBuffer>(1);
     ASSERT_OK(sink_buffer->prepare(runtime_state.get(), nullptr));
 
-    std::thread thread1(operator_thread, sink_buffer.get(), runtime_state.get());
-    std::vector<Task> tasks1 = {
-            // Append first chunk and wait
-            {ControlType::ALL, ChunkType::FIRST_CHUNK, PromiseType::BEFORE_ADD_TO_QUEUE},
-            {ControlType::ALL, ChunkType::FIRST_CHUNK, PromiseType::BEFORE_ADD_COUNTER},
-            {ControlType::ALL, ChunkType::FIRST_CHUNK, PromiseType::AFTER_ADD_COUNTER},
-            {ControlType::ALL, ChunkType::FIRST_CHUNK, PromiseType::BEFORE_EXECUTE},
-            {ControlType::ALL, ChunkType::FIRST_CHUNK, PromiseType::BEFORE_DEC_COUNTER},
-            {ControlType::ALL, ChunkType::FIRST_CHUNK, PromiseType::AFTER_DEC_COUNTER},
-
-            // Append second chunk and wait
-            {ControlType::ALL, ChunkType::SECOND_CHUNK, PromiseType::BEFORE_ADD_TO_QUEUE},
-            {ControlType::WAIT, ChunkType::SECOND_CHUNK, PromiseType::BEFORE_ADD_COUNTER},
-    };
-    run_check(*sink_buffer, tasks1);
-
-    sink_buffer->cancel_one_sinker();
-
-    std::vector<Task> tasks2 = {
-            {ControlType::ALL, ChunkType::SECOND_CHUNK, PromiseType::BEFORE_EXECUTE},
-            {ControlType::WAIT, ChunkType::SECOND_CHUNK, PromiseType::BEFORE_CANCEL_CHECK_COUNTER},
-    };
-    run_check(*sink_buffer, tasks2);
-    ASSERT_EQ(sink_buffer->num_pending_chunks(), 0);
-
-    std::thread thread2(poll_thread, sink_buffer.get());
-
-    std::vector<Task> tasks3 = {
-            {ControlType::SET, ChunkType::SECOND_CHUNK, PromiseType::BEFORE_CANCEL_CHECK_COUNTER},
-            {ControlType::ALL, ChunkType::SECOND_CHUNK, PromiseType::AFTER_CANCEL_CHECK_COUNTER},
-            {ControlType::ALL, ChunkType::SECOND_CHUNK, PromiseType::BEFORE_DEC_COUNTER},
-            {ControlType::ALL, ChunkType::SECOND_CHUNK, PromiseType::AFTER_DEC_COUNTER},
-            {ControlType::SET, ChunkType::SECOND_CHUNK, PromiseType::BEFORE_ADD_COUNTER},
-            {ControlType::ALL, ChunkType::SECOND_CHUNK, PromiseType::AFTER_ADD_COUNTER},
-
-            {ControlType::ALL, ChunkType::CLOSE_CHUNK, PromiseType::BEFORE_ADD_TO_QUEUE},
-    };
-    run_check(*sink_buffer, tasks3);
-
-    thread1.join();
-    thread2.join();
-    ASSERT_TRUE(sink_buffer->is_finished());
-
-    sink_buffer.reset();
-}
-
-// Cancel (_num_pending_chunks = 2)
-TEST_F(SinkIOBufferTest, test_cancel_3) {
-    auto runtime_state = gen_test_runtime_state();
-    auto sink_buffer = std::make_unique<MockSinkIOBuffer>(1);
-    ASSERT_OK(sink_buffer->prepare(runtime_state.get(), nullptr));
-
-    std::thread thread1(operator_thread, sink_buffer.get(), runtime_state.get());
-    std::vector<Task> tasks1 = {
-            // Append first chunk and wait
-            {ControlType::ALL, ChunkType::FIRST_CHUNK, PromiseType::BEFORE_ADD_TO_QUEUE},
-            {ControlType::ALL, ChunkType::FIRST_CHUNK, PromiseType::BEFORE_ADD_COUNTER},
-            {ControlType::ALL, ChunkType::FIRST_CHUNK, PromiseType::AFTER_ADD_COUNTER},
-            {ControlType::ALL, ChunkType::FIRST_CHUNK, PromiseType::BEFORE_EXECUTE},
-            {ControlType::ALL, ChunkType::FIRST_CHUNK, PromiseType::BEFORE_DEC_COUNTER},
-            {ControlType::ALL, ChunkType::FIRST_CHUNK, PromiseType::AFTER_DEC_COUNTER},
-
-            // Append second chunk and wait
-            {ControlType::ALL, ChunkType::SECOND_CHUNK, PromiseType::BEFORE_ADD_TO_QUEUE},
-            {ControlType::ALL, ChunkType::SECOND_CHUNK, PromiseType::BEFORE_ADD_COUNTER},
-            {ControlType::ALL, ChunkType::SECOND_CHUNK, PromiseType::AFTER_ADD_COUNTER},
-            {ControlType::WAIT, ChunkType::SECOND_CHUNK, PromiseType::BEFORE_EXECUTE},
-    };
-    run_check(*sink_buffer, tasks1);
-
-    sink_buffer->cancel_one_sinker();
-
-    std::vector<Task> tasks2 = {
-            {ControlType::SET, ChunkType::SECOND_CHUNK, PromiseType::BEFORE_EXECUTE},
-            {ControlType::WAIT, ChunkType::SECOND_CHUNK, PromiseType::BEFORE_CANCEL_CHECK_COUNTER},
-    };
-    run_check(*sink_buffer, tasks2);
-
-    std::thread thread2(poll_thread, sink_buffer.get());
-    std::vector<Task> tasks3 = {
-            {ControlType::ALL, ChunkType::CLOSE_CHUNK, PromiseType::BEFORE_ADD_TO_QUEUE},
-            {ControlType::ALL, ChunkType::CLOSE_CHUNK, PromiseType::BEFORE_ADD_COUNTER},
-            {ControlType::ALL, ChunkType::CLOSE_CHUNK, PromiseType::AFTER_ADD_COUNTER},
-    };
-    run_check(*sink_buffer, tasks3);
-
-    ASSERT_EQ(sink_buffer->num_pending_chunks(), 2);
-
-    std::vector<Task> tasks4 = {
-            {ControlType::SET, ChunkType::SECOND_CHUNK, PromiseType::BEFORE_CANCEL_CHECK_COUNTER},
-            {ControlType::ALL, ChunkType::SECOND_CHUNK, PromiseType::BEFORE_DEC_COUNTER},
-            {ControlType::ALL, ChunkType::SECOND_CHUNK, PromiseType::AFTER_DEC_COUNTER},
-
-            {ControlType::ALL, ChunkType::CLOSE_CHUNK, PromiseType::BEFORE_EXECUTE},
-            {ControlType::ALL, ChunkType::CLOSE_CHUNK, PromiseType::BEFORE_DEC_COUNTER},
-            {ControlType::ALL, ChunkType::CLOSE_CHUNK, PromiseType::AFTER_DEC_COUNTER},
-    };
-    run_check(*sink_buffer, tasks4);
-
-    thread1.join();
-    thread2.join();
-    ASSERT_TRUE(sink_buffer->is_finished());
-
-    sink_buffer.reset();
-}
-
-TEST_F(SinkIOBufferTest, test_push_close_to_execute_queue_failed) {
-    auto runtime_state = gen_test_runtime_state();
-    auto sink_buffer = std::make_unique<MockSinkIOBuffer>(1);
-    sink_buffer->set_is_finishing_failed(true);
-    ASSERT_OK(sink_buffer->prepare(runtime_state.get(), nullptr));
-
-    std::thread thread1(operator_thread, sink_buffer.get(), runtime_state.get());
-    std::vector<Task> tasks1 = {
-            // Append first chunk
-            {ControlType::ALL, ChunkType::FIRST_CHUNK, PromiseType::BEFORE_ADD_TO_QUEUE},
-            {ControlType::ALL, ChunkType::FIRST_CHUNK, PromiseType::BEFORE_ADD_COUNTER},
-            {ControlType::ALL, ChunkType::FIRST_CHUNK, PromiseType::AFTER_ADD_COUNTER},
-
-            // Append second chunk
-            {ControlType::ALL, ChunkType::SECOND_CHUNK, PromiseType::BEFORE_ADD_TO_QUEUE},
-            {ControlType::ALL, ChunkType::SECOND_CHUNK, PromiseType::BEFORE_ADD_COUNTER},
-            {ControlType::ALL, ChunkType::SECOND_CHUNK, PromiseType::AFTER_ADD_COUNTER},
-    };
-    run_check(*sink_buffer, tasks1);
-
-    sink_buffer->cancel_one_sinker();
-
-    std::thread thread2(poll_thread, sink_buffer.get());
-
-    std::vector<Task> tasks3 = {
-            {ControlType::ALL, ChunkType::FIRST_CHUNK, PromiseType::BEFORE_EXECUTE},
-            {ControlType::ALL, ChunkType::FIRST_CHUNK, PromiseType::BEFORE_CANCEL_CHECK_COUNTER},
-            {ControlType::ALL, ChunkType::FIRST_CHUNK, PromiseType::BEFORE_DEC_COUNTER},
-            {ControlType::ALL, ChunkType::FIRST_CHUNK, PromiseType::AFTER_DEC_COUNTER},
-
-            {ControlType::ALL, ChunkType::SECOND_CHUNK, PromiseType::BEFORE_EXECUTE},
-            {ControlType::ALL, ChunkType::SECOND_CHUNK, PromiseType::BEFORE_CANCEL_CHECK_COUNTER},
-            {ControlType::ALL, ChunkType::SECOND_CHUNK, PromiseType::AFTER_CANCEL_CHECK_COUNTER},
-            {ControlType::ALL, ChunkType::SECOND_CHUNK, PromiseType::BEFORE_DEC_COUNTER},
-            {ControlType::ALL, ChunkType::SECOND_CHUNK, PromiseType::AFTER_DEC_COUNTER},
-    };
-    run_check(*sink_buffer, tasks3);
-
-    thread1.join();
-    thread2.join();
-    ASSERT_TRUE(sink_buffer->is_finished());
-
-    sink_buffer.reset();
-}
-
-TEST_F(SinkIOBufferTest, test_base_class) {
-    auto runtime_state = gen_test_runtime_state();
-    auto sink_buffer = std::make_unique<MockSinkIOBuffer2>(1);
-    ASSERT_OK(sink_buffer->prepare(runtime_state.get(), nullptr));
-
-    auto first_chunk = gen_test_chunk(1);
-    ASSERT_OK(sink_buffer->append_chunk(runtime_state.get(), first_chunk));
-
-    auto second_chunk = gen_test_chunk(2);
-    ASSERT_OK(sink_buffer->append_chunk(runtime_state.get(), second_chunk));
-
-    ASSERT_OK(sink_buffer->set_finishing());
-
-    int i = 0;
-    while (!sink_buffer->is_finished()) {
-        usleep(10000);
-        i++;
-        if (i > 1000) {
-            ASSERT_FALSE(true);
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_append_chunk", [this](void* arg) {
+        if (arg == nullptr) {
+            _close_chunk++;
+        } else {
+            _data_chunk++;
         }
-    }
+    });
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_before_process_chunk", [&sink_buffer, this](void* arg) {
+        wait([&sink_buffer]() -> bool { return sink_buffer->is_cancelled(); });
+    });
+    SyncPoint::GetInstance()->SetCallBack("sink_io_buffer_after_process_chunk", [this](void* arg) {
+        if (arg == nullptr) {
+            _close_chunk--;
+        } else {
+            _data_chunk--;
+        }
+    });
+
+    std::thread thread1(operator_thread, sink_buffer.get(), runtime_state.get());
+    thread1.join();
+
+    sink_buffer->cancel_one_sinker();
+
+    std::thread thread2(poll_thread, sink_buffer.get());
+    thread2.join();
+
+    wait([this]() -> bool { return _data_chunk == 0 && _close_chunk == 0; });
+    wait([&sink_buffer]() -> bool { return sink_buffer->is_finished(); });
 
     sink_buffer.reset();
+
+    SyncPoint::GetInstance()->DisableProcessing();
 }
 
 } // namespace starrocks::pipeline

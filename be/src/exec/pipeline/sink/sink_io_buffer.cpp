@@ -30,9 +30,7 @@ void SinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
     }
 
     if (_is_cancelled) {
-        if (_num_pending_chunks <= 1) {
-            close(_state);
-        }
+        close(_state);
         return;
     }
 

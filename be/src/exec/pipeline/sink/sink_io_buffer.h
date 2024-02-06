@@ -22,6 +22,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "testutil/sync_point.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks::pipeline {
@@ -74,6 +75,7 @@ public:
             return Status::InternalError("submit io task failed");
         }
         ++_num_pending_chunks;
+        TEST_SYNC_POINT_CALLBACK("sink_io_buffer_append_chunk", chunk.get());
         return Status::OK();
     }
 
@@ -86,6 +88,7 @@ public:
                 return Status::InternalError("submit task failed");
             }
             ++_num_pending_chunks;
+            TEST_SYNC_POINT_CALLBACK("sink_io_buffer_append_chunk", nullptr);
         }
         return Status::OK();
     }
@@ -93,6 +96,8 @@ public:
     virtual bool is_finished() { return _is_finished && _num_pending_chunks == 0; }
 
     virtual void cancel_one_sinker() { _is_cancelled = true; }
+
+    bool is_cancelled() const { return _is_cancelled; }
 
     virtual void close(RuntimeState* state) {
         if (_exec_queue_id != nullptr) {
@@ -120,16 +125,16 @@ public:
         auto* sink_io_buffer = static_cast<SinkIOBuffer*>(meta);
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(sink_io_buffer->_state->query_mem_tracker_ptr().get());
         for (; iter; ++iter) {
+            TEST_SYNC_POINT_CALLBACK("sink_io_buffer_before_process_chunk", iter->get());
             sink_io_buffer->_process_chunk(iter);
+            TEST_SYNC_POINT_CALLBACK("sink_io_buffer_after_process_chunk", iter->get());
             (*iter).reset();
         }
         return 0;
     }
 
-    int num_pending_chunks() const { return _num_pending_chunks; }
-
 protected:
-    virtual void _process_chunk(bthread::TaskIterator<ChunkPtr>& iter);
+    void _process_chunk(bthread::TaskIterator<ChunkPtr>& iter);
     virtual void _add_chunk(const ChunkPtr& chunk) = 0;
 
     std::unique_ptr<bthread::ExecutionQueueId<ChunkPtr>> _exec_queue_id;
