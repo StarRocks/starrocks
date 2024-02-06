@@ -802,27 +802,12 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public void updateBackendReportVersion(long backendId, long newReportVersion, long dbId) {
-<<<<<<< HEAD
         AtomicLong atomicLong = null;
         if ((atomicLong = idToReportVersionRef.get(backendId)) != null) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db != null) {
-                atomicLong.set(newReportVersion);
+                updateReportVersionIncrementally(atomicLong, newReportVersion);
                 LOG.debug("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);
-=======
-        ComputeNode node = getBackendOrComputeNode(backendId);
-        // only backend need to report version
-        if (node instanceof Backend) {
-            AtomicLong atomicLong;
-            if ((atomicLong = idToReportVersionRef.get(backendId)) != null) {
-                Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-                if (db != null) {
-                    updateReportVersionIncrementally(atomicLong, newReportVersion);
-                    LOG.debug("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);
-                } else {
-                    LOG.warn("failed to update backend report version, db {} does not exist", dbId);
-                }
->>>>>>> f3233fa9f2 ([BugFix]Fix tablet delete by mistake because of the outdate report version (#40656))
             } else {
                 LOG.warn("failed to update backend report version, db {} does not exist", dbId);
             }
