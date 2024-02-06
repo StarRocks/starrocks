@@ -707,14 +707,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
          * we just check whether all new replicas are healthy.
          */
         EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
-<<<<<<< HEAD
-        Future<Boolean> future;
-        long start;
-        db.writeLock();
-=======
         JournalTask journalTask;
-        locker.lockDatabase(db, LockType.WRITE);
->>>>>>> 3d2a0a51e6 ([Enhancement] Optimize the lock contention of consistency checker (#40710))
+        db.writeLock();
         try {
             OlapTable tbl = (OlapTable) db.getTable(tableId);
             if (tbl == null) {
