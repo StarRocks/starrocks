@@ -51,13 +51,6 @@ Status HiveDataSource::_check_all_slots_nullable() {
 }
 
 Status HiveDataSource::open(RuntimeState* state) {
-    // right now we don't force user to set JAVA_HOME.
-    // but when we access hdfs via JNI, we have to make sure JAVA_HOME is set,
-    // otherwise be will crash because of failure to create JVM.
-    const char* p = std::getenv("JAVA_HOME");
-    if (p == nullptr) {
-        return Status::RuntimeError("env 'JAVA_HOME' is not set");
-    }
     const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
     if (_scan_range.file_length == 0) {
         _no_data = true;
