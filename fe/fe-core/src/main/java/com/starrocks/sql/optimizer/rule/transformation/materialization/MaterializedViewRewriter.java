@@ -2126,16 +2126,23 @@ public class MaterializedViewRewriter {
                 // outer join on predicates can not be used to construct equivalence class
                 continue;
             }
+<<<<<<< HEAD
             Preconditions.checkState(equalPredicate.getChild(0).isColumnRef());
             ColumnRefOperator left = (ColumnRefOperator) equalPredicate.getChild(0);
             Preconditions.checkState(equalPredicate.getChild(1).isColumnRef());
             ColumnRefOperator right = (ColumnRefOperator) equalPredicate.getChild(1);
             ColumnRefOperator leftTarget = columnRewriter == null ? left : columnRewriter.rewriteViewToQuery(left).cast();
             ColumnRefOperator rightTarget = columnRewriter == null ? right : columnRewriter.rewriteViewToQuery(right).cast();
+=======
+            ColumnRefOperator left = getColumnRef(equalPredicate, 0);
+            ColumnRefOperator right = getColumnRef(equalPredicate, 1);
+            ScalarOperator leftTarget = (columnRewriter == null) ? left : columnRewriter.rewriteViewToQuery(left);
+            ScalarOperator rightTarget = (columnRewriter == null) ? right : columnRewriter.rewriteViewToQuery(right);
+>>>>>>> 03c87fa32a ([BugFix] Fix possible NPE when mv rewrite (#40908))
             if (leftTarget == null || rightTarget == null) {
                 return null;
             }
-            ec.addEquivalence(leftTarget, rightTarget);
+            ec.addEquivalence(leftTarget.cast(), rightTarget.cast());
         }
         return ec;
     }
@@ -2193,12 +2200,12 @@ public class MaterializedViewRewriter {
         for (final Map.Entry<ColumnRefOperator, ColumnRefOperator> entry : compensationJoinColumns.entries()) {
             final ColumnRefOperator left = entry.getKey();
             final ColumnRefOperator right = entry.getValue();
-            ColumnRefOperator newKey = columnRewriter.rewriteViewToQuery(left).cast();
-            ColumnRefOperator newValue = columnRewriter.rewriteViewToQuery(right).cast();
+            ScalarOperator newKey = columnRewriter.rewriteViewToQuery(left);
+            ScalarOperator newValue = columnRewriter.rewriteViewToQuery(right);
             if (newKey == null || newValue == null) {
                 return false;
             }
-            ec.addEquivalence(newKey, newValue);
+            ec.addEquivalence(newKey.cast(), newValue.cast());
         }
         return true;
     }
