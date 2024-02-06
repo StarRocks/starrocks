@@ -444,7 +444,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         this.finishedTimeMs = System.currentTimeMillis();
 
         writeEditLog(this);
-
         // Replace the current index with shadow index.
         List<MaterializedIndex> droppedIndexes;
         try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
