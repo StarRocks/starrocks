@@ -4,6 +4,40 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 3.1
 
+## 3.1.8
+
+发布日期：2024 年 1 月 25 日
+
+### 新增特性
+
+- 社区提供 StarRocks 数据迁移工具，支持将数据从存算一体集群迁移数据到存算一体集群或者存算分离集群。
+- 支持创建带有 WHERE 子句的同步物化视图。
+- MemTracker 中新增了 Data Cache 内存使用的相关指标。[#39600](https://github.com/StarRocks/starrocks/pull/39600)
+- 新增函数 `array_unique_agg`。
+
+### 参数变更
+
+- 增加 BE 配置项 `lake_pk_compaction_max_input_rowsets`，用于控制存算分离集群下主键表 Compaction 任务中允许的最大输入 Rowset 数量，优化 Compaction 时资源的使用。[#39611](https://github.com/StarRocks/starrocks/pull/39611)
+
+### 功能优化
+
+- 通过 CTAS 建表时支持配置 ORDER BY 和 INDEX。[#38886](https://github.com/StarRocks/starrocks/pull/38886)
+- 新增支持 ORC 格式 Iceberg v2 表的 Equality Delete 查询。[#37419](https://github.com/StarRocks/starrocks/pull/37419)
+- 云原生表开启 List 分区表后可以设置 `datacache.partition_duration` 属性且支持动态修改，用于控制 Data Cache 的有效时间。[#35681](https://github.com/StarRocks/starrocks/pull/35681) [#38509](https://github.com/StarRocks/starrocks/pull/38509)
+- 优化主键模型表索引的 Major Compaction 的策略，可通过 BE 配置项 `update_compaction_per_tablet_min_interval_seconds` 控制主键模型表索引的 Major Compaction的频率（该参数同时也控制主键模型表 Compaction 的频率）。[#39640](https://github.com/StarRocks/starrocks/pull/39640)
+- Parquet Reader 支持将 Parquet 文件中 INT32 类型的数据转换成 DATETIME 类型的数据并保存到 StarRocks中。[#39808](https://github.com/StarRocks/starrocks/pull/39808)
+
+### 问题修复
+
+修复了如下问题：
+
+- 使用非数列（NaN 列）进行排序可能导致 BE Crash。[#30759](https://github.com/StarRocks/starrocks/pull/30759)
+- 更新主键索引失败可能导致 "get_applied_rowsets failed"。[#27488](https://github.com/StarRocks/starrocks/pull/27488)
+- Compaction 失败后，compaction_state_cache 没有回收仍然占用资源。[#38499](https://github.com/StarRocks/starrocks/pull/38499)
+- 如果外表的分区列有取值是 null，查询时会导致 BE Crash。[#38888](https://github.com/StarRocks/starrocks/pull/38888)
+- 当基表删除重建后，异步物化视图刷新失败。[#38008](https://github.com/StarRocks/starrocks/pull/38008)
+- 如果 Iceberg 表是空表，异步物化视图刷新失败。[#24068](https://starrocks.atlassian.net/browse/SR-24068)
+
 ## 3.1.7
 
 发布日期：2024 年 1 月 12日

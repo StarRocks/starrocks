@@ -4,6 +4,40 @@ displayed_sidebar: "English"
 
 # StarRocks version 3.1
 
+## 3.1.8
+
+Release date: January 25, 2024
+
+### New Features
+
+- StarRocks Community provides the StarRocks Cross-cluster Data Migration Tool, which supports migrating data from a shared-nothing cluster to either another shared-nothing cluster or a shared-data cluster.
+- Supports creating synchronous materialized views with the WHERE clause specified.
+- Added metrics that show memory usage of the data cache to MemTracker. [#39600](https://github.com/StarRocks/starrocks/pull/39600)
+- Added an array function, `array_unique_agg`.
+
+### Parameter Change
+
+- Added a BE configuration item, `lake_pk_compaction_max_input_rowsets`, which controls the maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data StarRocks cluster. This helps optimize resource consumption for compaction tasks. [#39611](https://github.com/StarRocks/starrocks/pull/39611)
+
+### Improvements
+
+- Supports ORDER BY and INDEX clauses in CTAS statements. [#38886](https://github.com/StarRocks/starrocks/pull/38886)
+- Supports equality deletes on ORC-formatted Iceberg v2 tables. [#37419](https://github.com/StarRocks/starrocks/pull/37419)
+- Supports setting the `datacache.partition_duration` property for cloud-native tables created with the list partitioning strategy. This property controls the validity period of the data cache and can be dynamically configured. [#35681](https://github.com/StarRocks/starrocks/pull/35681) [#38509](https://github.com/StarRocks/starrocks/pull/38509)
+- Optimized the BE configuration item `update_compaction_per_tablet_min_interval_seconds`. This parameter is originally used only to control the frequency of compaction tasks on Primary Key tables. After the optimization, it can also be used to control the frequency of major compaction tasks on Primary Key table indexes. [#39640](https://github.com/StarRocks/starrocks/pull/39640)
+- Parquet Reader supports converting INT32-type data in Parquet-formatted data to DATETIME-type data and storing the resulting data to StarRocks. [#39808](https://github.com/StarRocks/starrocks/pull/39808)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Using NaN (Not a Number) columns as ORDER BY columns may cause BEs to crash. [#30759](https://github.com/StarRocks/starrocks/pull/30759)
+- Failure to update primary key indexes may cause the error "get_applied_rowsets failed". [#27488](https://github.com/StarRocks/starrocks/pull/27488)
+- The resources occupied by compaction_state_cache are not recycled after compaction task failures. [#38499](https://github.com/StarRocks/starrocks/pull/38499)
+- If partition columns in external tables contain null values, queries against those tables will cause BEs to crash. [#38888](https://github.com/StarRocks/starrocks/pull/38888)
+- After a table is dropped and then re-created with the same table name, refreshing asynchronous materialized views created on that table fails. [#38008](https://github.com/StarRocks/starrocks/pull/38008)
+- Refreshing asynchronous materialized views created on empty Iceberg tables fail. [#24068](https://starrocks.atlassian.net/browse/SR-24068)
+
 ## 3.1.7
 
 Release date: January 12, 2024
