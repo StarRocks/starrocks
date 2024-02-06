@@ -36,6 +36,7 @@ Status JniScanner::_check_jni_exception(JNIEnv* _jni_env, const std::string& mes
 }
 
 Status JniScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
+    RETURN_IF_ERROR(detect_java_runtime());
     _init_profile(scanner_params);
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
     JNIEnv* _jni_env = JVMFunctionHelper::getInstance().getEnv();
