@@ -30,8 +30,6 @@ import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
-import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ResultSink;
@@ -41,6 +39,7 @@ import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.QueryLocker;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
@@ -73,8 +72,6 @@ import com.starrocks.transaction.RemoteTransactionMgr;
 import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TransactionState;
 
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -108,9 +105,9 @@ public class StatementPlanner {
         boolean needWholePhaseLock = true;
 
         // 1. For all queries, we need db lock when analyze phase
-        Locker locker = new Locker();
+        QueryLocker queryLocker = new QueryLocker(session, stmt);
         try (var guard = session.bindScope()) {
-            lock(locker, dbs);
+            lock(queryLocker);
             try (Timer ignored = Tracers.watchScope("Analyzer")) {
                 Analyzer.analyze(stmt, session);
             }
@@ -129,7 +126,7 @@ public class StatementPlanner {
                 resultSinkType = queryStmt.hasOutFileClause() ? TResultSinkType.FILE : resultSinkType;
                 ExecPlan plan;
                 if (isLockFree(isOnlyOlapTableQueries, session)) {
-                    unLock(locker, dbs);
+                    unLock(queryLocker);
                     needWholePhaseLock = false;
                     plan = createQueryPlanWithReTry(queryStmt, session, resultSinkType);
                 } else {
@@ -151,7 +148,7 @@ public class StatementPlanner {
             }
         } finally {
             if (needWholePhaseLock) {
-                unLock(locker, dbs);
+                unLock(queryLocker);
             }
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
         }
@@ -226,7 +223,7 @@ public class StatementPlanner {
         session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
         // TODO: double check relatedMvs for OlapTable
         // only collect once to save the original olapTable info
-        Set<OlapTable> olapTables = collectOriginalOlapTables(queryStmt, dbs);
+        Set<OlapTable> olapTables = collectOriginalOlapTables(session, queryStmt);
         for (int i = 0; i < Config.max_query_retry_time; ++i) {
             long planStartTime = OptimisticVersion.generate();
             if (!isSchemaValid) {
@@ -299,24 +296,24 @@ public class StatementPlanner {
         return null;
     }
 
-    public static Set<OlapTable> collectOriginalOlapTables(StatementBase queryStmt, Map<String, Database> dbs) {
+    public static Set<OlapTable> collectOriginalOlapTables(ConnectContext session, StatementBase queryStmt) {
         Set<OlapTable> olapTables = Sets.newHashSet();
-        Locker locker = new Locker();
+        QueryLocker locker = new QueryLocker(session, queryStmt);
         try {
             // Need lock to avoid olap table metas ConcurrentModificationException
-            lock(locker, dbs);
+            lock(locker);
             AnalyzerUtils.copyOlapTable(queryStmt, olapTables);
             return olapTables;
         } finally {
-            unLock(locker, dbs);
+            unLock(locker);
         }
     }
 
     public static Set<OlapTable> reAnalyzeStmt(StatementBase queryStmt, Map<String, Database> dbs,
                                                ConnectContext session) {
-        Locker locker = new Locker();
+        QueryLocker locker = new QueryLocker(session, queryStmt);
         try {
-            lock(locker, dbs);
+            lock(locker);
             // analyze to obtain the latest table from metadata
             Analyzer.analyze(queryStmt, session);
             // only copy the latest olap table
@@ -324,30 +321,18 @@ public class StatementPlanner {
             AnalyzerUtils.copyOlapTable(queryStmt, copiedTables);
             return copiedTables;
         } finally {
-            unLock(locker, dbs);
+            unLock(locker);
         }
     }
 
     // Lock all database before analyze
-    public static void lock(Locker locker, Map<String, Database> dbs) {
-        if (dbs == null) {
-            return;
-        }
-        List<Database> dbList = new ArrayList<>(dbs.values());
-        dbList.sort(Comparator.comparingLong(Database::getId));
-        for (Database db : dbList) {
-            locker.lockDatabase(db, LockType.READ);
-        }
+    public static void lock(QueryLocker locker) {
+        locker.lock();
     }
 
     // unLock all database after analyze
-    public static void unLock(Locker locker, Map<String, Database> dbs) {
-        if (dbs == null) {
-            return;
-        }
-        for (Database db : dbs.values()) {
-            locker.unLockDatabase(db, LockType.READ);
-        }
+    public static void unLock(QueryLocker locker) {
+        locker.unlock();
     }
 
     // if query stmt has OUTFILE clause, set info into ResultSink.

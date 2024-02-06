@@ -81,6 +81,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.SetType;
@@ -482,7 +483,7 @@ public class ShowExecutorTest {
     public void testShowTableFromUnknownDatabase() throws AnalysisException, DdlException {
         ShowTableStmt stmt = new ShowTableStmt("emptyDb", false, null);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
-        expectedEx.expect(AnalysisException.class);
+        expectedEx.expect(SemanticException.class);
         expectedEx.expectMessage("Unknown database 'emptyDb'");
         executor.execute();
     }
@@ -596,7 +597,7 @@ public class ShowExecutorTest {
         Assert.assertFalse(resultSet.next());
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = SemanticException.class)
     public void testShowCreateNoDb() throws AnalysisException, DdlException {
         ctx.setGlobalStateMgr(globalStateMgr);
         ctx.setQualifiedUser("testUser");
@@ -608,7 +609,7 @@ public class ShowExecutorTest {
         Assert.fail("No exception throws.");
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = SemanticException.class)
     public void testShowCreateTableEmptyDb() throws AnalysisException, DdlException {
         ShowCreateTableStmt stmt = new ShowCreateTableStmt(new TableName("emptyDb", "testTable"),
                 ShowCreateTableStmt.CreateTableType.TABLE);
@@ -690,7 +691,7 @@ public class ShowExecutorTest {
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
 
-        expectedEx.expect(AnalysisException.class);
+        expectedEx.expect(SemanticException.class);
         expectedEx.expectMessage("Unknown database 'emptyDb'");
         executor.execute();
 
@@ -699,7 +700,7 @@ public class ShowExecutorTest {
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         executor = new ShowExecutor(ctx, stmt);
 
-        expectedEx.expect(AnalysisException.class);
+        expectedEx.expect(SemanticException.class);
         expectedEx.expectMessage("Unknown table 'testDb.emptyTable'");
         executor.execute();
     }
@@ -934,7 +935,7 @@ public class ShowExecutorTest {
     public void testShowMaterializedViewFromUnknownDatabase() throws DdlException, AnalysisException {
         ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("emptyDb", (String) null);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
-        expectedEx.expect(AnalysisException.class);
+        expectedEx.expect(SemanticException.class);
         expectedEx.expectMessage("Unknown database 'emptyDb'");
         executor.execute();
     }
