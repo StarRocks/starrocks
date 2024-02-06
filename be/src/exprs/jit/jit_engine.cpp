@@ -16,6 +16,18 @@
 
 #include <fmt/format.h>
 #include <glog/logging.h>
+#include <llvm/ExecutionEngine/ExecutionEngine.h>
+#include <llvm/ExecutionEngine/ObjectCache.h>
+#include <llvm/ExecutionEngine/Orc/LLJIT.h>
+#include <llvm/IR/DataLayout.h>
+#include <llvm/IR/LegacyPassManager.h>
+#include <llvm/IR/Verifier.h>
+#include <llvm/MC/SubtargetFeature.h>
+#include <llvm/MC/TargetRegistry.h>
+#include <llvm/Support/Error.h>
+#include <llvm/Support/Host.h>
+#include <llvm/Support/MemoryBuffer.h>
+#include <llvm/Support/TargetSelect.h>
 
 #include <memory>
 #include <mutex>
@@ -25,16 +37,6 @@
 #include "common/config.h"
 #include "common/status.h"
 #include "exprs/expr.h"
-#include "llvm/ExecutionEngine/ExecutionEngine.h"
-#include "llvm/ExecutionEngine/Orc/LLJIT.h"
-#include "llvm/IR/DataLayout.h"
-#include "llvm/IR/LegacyPassManager.h"
-#include "llvm/IR/Verifier.h"
-#include "llvm/MC/SubtargetFeature.h"
-#include "llvm/MC/TargetRegistry.h"
-#include "llvm/Support/Error.h"
-#include "llvm/Support/Host.h"
-#include "llvm/Support/TargetSelect.h"
 #include "util/defer_op.h"
 
 namespace starrocks {
@@ -53,6 +55,23 @@ struct JitCacheEntry {
         }
     }
 };
+
+/*
+class JitObjectCache : public llvm::ObjectCache {
+public:
+    explicit JitObjectCache(std::shared_ptr<LRUCache>& cache, const std::string& expr_name);
+
+    ~JitObjectCache() {}
+
+    void notifyObjectCompiled(const llvm::Module* M, llvm::MemoryBufferRef Obj);
+
+    std::unique_ptr<llvm::MemoryBuffer> getObject(const llvm::Module* M);
+
+private:
+    const std::string _cache_key;
+    std::shared_ptr<LRUCache>& _cache;
+};
+*/
 
 JITEngine::~JITEngine() {
     delete _func_cache;

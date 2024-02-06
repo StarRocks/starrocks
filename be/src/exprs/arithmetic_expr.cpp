@@ -14,6 +14,9 @@
 
 #include "exprs/arithmetic_expr.h"
 
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/Value.h>
+
 #include <optional>
 
 #include "column/type_traits.h"
@@ -27,8 +30,6 @@
 #include "exprs/jit/ir_helper.h"
 #include "exprs/overflow.h"
 #include "exprs/unary_function.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Value.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

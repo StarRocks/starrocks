@@ -14,6 +14,8 @@
 
 #include "exprs/jit/jit_expr.h"
 
+#include <llvm/IR/IRBuilder.h>
+
 #include <chrono>
 #include <vector>
 
@@ -25,7 +27,7 @@
 #include "exprs/expr.h"
 #include "exprs/function_context.h"
 #include "exprs/jit/jit_engine.h"
-#include "llvm/IR/IRBuilder.h"
+
 
 namespace starrocks {
 

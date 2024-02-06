@@ -14,6 +14,10 @@
 
 #include "exprs/binary_predicate.h"
 
+#include <llvm/IR/Constants.h>
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/Value.h>
+
 #include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
@@ -21,9 +25,6 @@
 #include "exprs/binary_function.h"
 #include "exprs/jit/ir_helper.h"
 #include "exprs/unary_function.h"
-#include "llvm/IR/Constants.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Value.h"
 #include "storage/column_predicate.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"

@@ -15,6 +15,9 @@
 #include "exprs/cast_expr.h"
 
 #include <llvm/ADT/APInt.h>
+#include <llvm/IR/Constants.h>
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/Value.h>
 #include <ryu/ryu.h>
 
 #include <stdexcept>
@@ -37,9 +40,6 @@
 #include "exprs/unary_function.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
-#include "llvm/IR/Constants.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Value.h"
 #include "runtime/datetime_value.h"
 #include "runtime/large_int_value.h"
 #include "runtime/runtime_state.h"

@@ -44,8 +44,6 @@
 #include "exprs/expr_context.h"
 #include "exprs/function_context.h"
 #include "gen_cpp/Opcodes_types.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Module.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
 
