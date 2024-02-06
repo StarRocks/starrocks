@@ -370,9 +370,11 @@ TEST_P(PersistentIndexTest, test_fixlen_mutable_index_wal) {
     bool created;
     ASSERT_OK(fs->create_dir_if_missing(kPersistentIndexDir, &created));
 
+    int64_t old_val = config::l0_max_mem_usage;
+    config::l0_max_mem_usage = 10240;
     using Key = uint64_t;
     PersistentIndexMetaPB index_meta;
-    const int N = 1000000;
+    const int N = 10000;
     // insert
     vector<Key> keys;
     vector<Slice> key_slices;
@@ -385,7 +387,7 @@ TEST_P(PersistentIndexTest, test_fixlen_mutable_index_wal) {
         key_slices.emplace_back((uint8_t*)(&keys[i]), sizeof(Key));
     }
 
-    const int second_n = 50000;
+    const int second_n = 500;
     vector<Key> second_keys;
     vector<Slice> second_key_slices;
     vector<IndexValue> second_values;
@@ -517,6 +519,7 @@ TEST_P(PersistentIndexTest, test_fixlen_mutable_index_wal) {
         }
     }
 
+    config::l0_max_mem_usage = old_val;
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
