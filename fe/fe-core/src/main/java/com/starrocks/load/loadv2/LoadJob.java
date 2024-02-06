@@ -261,6 +261,11 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         return id;
     }
 
+    // unit test
+    public void setId(long id) {
+        this.id = id;
+    }
+
     public Database getDb() throws MetaNotFoundException {
         // get db
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
@@ -312,7 +317,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         }
         idToTasks.clear();
         finishedTaskIds.clear();
-        loadingStatus.setProgress(0);
+        loadingStatus.reset();
     }
 
     public boolean isTimeout() {
@@ -1060,6 +1065,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             progress = 99;
             transactionId = txnState.getTransactionId();
             state = JobState.COMMITTED;
+            failMsg = null;
         } finally {
             writeUnlock();
         }
@@ -1159,6 +1165,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             progress = 100;
             finishTimestamp = txnState.getFinishTime();
             state = JobState.FINISHED;
+            failMsg = null;
             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
         } finally {
             writeUnlock();
