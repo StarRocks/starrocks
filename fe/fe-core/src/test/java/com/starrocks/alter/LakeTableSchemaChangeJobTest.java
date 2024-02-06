@@ -42,6 +42,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.epack.server.WarehouseManagerEpack;
 import com.starrocks.epack.warehouse.WarehouseUnavailableException;
+import com.starrocks.journal.JournalTask;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
@@ -847,8 +848,10 @@ public class LakeTableSchemaChangeJobTest {
             }
 
             @Mock
-            public Future<Boolean> writeEditLogAsync(LakeTableSchemaChangeJob job) {
-                return ConcurrentUtils.constantFuture(true);
+            public JournalTask writeEditLogAsync(LakeTableSchemaChangeJob job) {
+                JournalTask journalTask = new JournalTask(System.nanoTime(), null, -1);
+                journalTask.markSucceed();
+                return journalTask;
             }
 
             @Mock
