@@ -1191,15 +1191,9 @@ public class EditLog {
         // because starmgr state change happens before global state mgr state change,
         // it will write log before global state mgr becomes leader
         Preconditions.checkState(RunMode.getCurrentRunMode() != RunMode.SHARED_NOTHING ||
-<<<<<<< HEAD
                                  GlobalStateMgr.getCurrentState().isLeader(),
-                "Current node is not leader, but" +
-                GlobalStateMgr.getCurrentState().getFeType() + ", submit log is not allowed");
-=======
-                        GlobalStateMgr.getCurrentState().isLeader(),
-                "Current node is not leader, but " +
-                        GlobalStateMgr.getCurrentState().getFeType() + ", submit log is not allowed");
->>>>>>> 3d2a0a51e6 ([Enhancement] Optimize the lock contention of consistency checker (#40710))
+                                 "Current node is not leader, but " +
+                                 GlobalStateMgr.getCurrentState().getFeType() + ", submit log is not allowed");
         DataOutputBuffer buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
 
         // 1. serialized
