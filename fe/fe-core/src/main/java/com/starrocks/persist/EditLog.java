@@ -1123,12 +1123,7 @@ public class EditLog {
         // it will write log before global state mgr becomes leader
         Preconditions.checkState(RunMode.getCurrentRunMode() != RunMode.SHARED_NOTHING ||
                         GlobalStateMgr.getCurrentState().isLeader(),
-<<<<<<< HEAD
                 "Current node is not leader, submit log is not allowed");
-=======
-                "Current node is not leader, but " +
-                        GlobalStateMgr.getCurrentState().getFeType() + ", submit log is not allowed");
->>>>>>> 3d2a0a51e6 ([Enhancement] Optimize the lock contention of consistency checker (#40710))
         DataOutputBuffer buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
 
         // 1. serialized
