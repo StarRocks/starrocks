@@ -670,6 +670,17 @@ Used to display the time zone of the current system. Cannot be changed.
 
 Used to set the time zone of the current session. The time zone can affect the results of certain time functions.
 
+### trace_log_mode
+
+* Description: Used to control where to output the logs of query trace profiles. Valid values:
+  * `command`: Return query trace profile logs as the **Explain String** after executing TRACE LOGS.
+  * `file`: Return query trace profile logs in the FE log file **fe.log** with the class name being `FileLogTracer`.
+
+  For more information on query trace profile, see [Query Trace Profile](../developers/trace-tools/query_trace_profile.md).
+
+* Default: `command`
+* Introduced in: v3.2.0
+
 ### transaction_read_only
 
 * Description: Used for MySQL 5.8 compatibility. The alias is `tx_read_only`. This variable specifies the transaction access mode. `ON` indicates read only and `OFF` indicates readable and writable.
