@@ -218,9 +218,16 @@ private:
                 if (items[i - 1].is_null() || items[i].is_null()) {
                     dest_data_column->append_nulls(1);
                 } else {
+<<<<<<< HEAD:be/src/exprs/array_functions.tpp
                     if constexpr (lt_is_largeint<LT>) {
                         dest_data_column->append_datum((CppType)0);
                     } else if constexpr (lt_is_integer<LT> || lt_is_boolean<LT>) {
+=======
+                    if constexpr (pt_is_largeint<PT>) {
+                        dest_data_column->append_datum(
+                                (CppType)(items[i].get<CppType>() - items[i - 1].get<CppType>()));
+                    } else if constexpr (pt_is_integer<PT> || pt_is_boolean<PT>) {
+>>>>>>> f899b862f1 ([BugFix] fix Array difference largeint (#40876)):be/src/exprs/vectorized/array_functions.tpp
                         dest_data_column->append_datum(
                                 (int64_t)(items[i].get<CppType>() - items[i - 1].get<CppType>()));
                     } else if constexpr (lt_is_float<LT>) {
