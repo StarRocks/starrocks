@@ -274,6 +274,23 @@ private:
     std::atomic<size_t> _next_accept_source = 0;
 };
 
+// Scale local source for connector sink
+class ConnectorSinkPassthroughExchanger final : public LocalExchanger {
+public:
+    ConnectorSinkPassthroughExchanger(const std::shared_ptr<ChunkBufferMemoryManager>& memory_manager,
+                                      LocalExchangeSourceOperatorFactory* source)
+            : LocalExchanger("ConnectorSinkPassthrough", memory_manager, source) {}
+
+    ~ConnectorSinkPassthroughExchanger() override = default;
+
+    Status accept(const ChunkPtr& chunk, int32_t sink_driver_sequence) override;
+
+private:
+    std::atomic<size_t> _next_accept_source = 0;
+    size_t _writer_count = 1;
+    size_t _data_processed = 0;
+};
+
 // Random shuffle for each chunk of source.
 class RandomPassthroughExchanger final : public LocalExchanger {
 public:

@@ -458,6 +458,11 @@ public:
 
     std::string_view get_sql_dialect() const { return _query_options.sql_dialect; }
 
+    bool is_writer_scale_closed() const {
+        return _query_options.__isset.enable_connector_sink_writer_scaling &&
+               !_query_options.enable_connector_sink_writer_scaling;
+    }
+
 private:
     // Set per-query state.
     void _init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
