@@ -42,6 +42,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MarkedCountDownLatch;
+import com.starrocks.journal.JournalTask;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.ShardDeleter;
@@ -59,7 +60,6 @@ import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import mockit.Mock;
 import mockit.MockUp;
-import org.apache.commons.lang3.concurrent.ConcurrentUtils;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -72,7 +72,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
 
@@ -752,8 +751,10 @@ public class LakeTableSchemaChangeJobTest {
             }
 
             @Mock
-            public Future<Boolean> writeEditLogAsync(LakeTableSchemaChangeJob job) {
-                return ConcurrentUtils.constantFuture(true);
+            public JournalTask writeEditLogAsync(LakeTableSchemaChangeJob job) {
+                JournalTask journalTask = new JournalTask(System.nanoTime(), null, -1);
+                journalTask.markSucceed();
+                return journalTask;
             }
 
             @Mock
