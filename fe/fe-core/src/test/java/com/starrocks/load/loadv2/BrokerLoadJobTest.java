@@ -68,7 +68,6 @@ import com.starrocks.task.PriorityLeaderTaskExecutor;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
-import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.transaction.TxnStateChangeCallback;
 import mockit.Expectations;
 import mockit.Injectable;
