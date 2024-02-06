@@ -1,0 +1,206 @@
+2024-02-06 12:49:54,277 WARN (fe|59) [FrontendOptions.initAddrUseIp():243] ip address range configured for priority_networks does not include the current IP address
+2024-02-06 12:49:54,520 WARN (fe|59) [StateChangeExecutor.notifyNewFETypeTransfer():62] notify new FE type transfer: LEADER
+2024-02-06 12:49:55,173 WARN (stateChangeExecutor|65) [AuthenticationProviderFactory.installPlugin():32] Plugin MYSQL_NATIVE_PASSWORD has already been installed!
+2024-02-06 12:49:55,174 WARN (stateChangeExecutor|65) [AuthenticationProviderFactory.installPlugin():32] Plugin AUTHENTICATION_LDAP_SIMPLE has already been installed!
+2024-02-06 12:49:55,175 WARN (stateChangeExecutor|65) [AuthenticationProviderFactory.installPlugin():32] Plugin AUTHENTICATION_KERBEROS has already been installed!
+2024-02-06 12:49:55,176 WARN (stateChangeExecutor|65) [AuthenticationProviderFactory.installPlugin():32] Plugin AUTHENTICATION_LDAP_SIMPLE_FOR_EXTERNAL has already been installed!
+2024-02-06 12:49:55,414 WARN (Routine load task scheduler|49) [RoutineLoadTaskScheduler.process():116] no available be slot to scheduler tasks, wait for 10 seconds to scheduler again, you can set max_routine_load_task_num_per_be bigger in fe.conf, current value is 16
+2024-02-06 12:49:55,442 WARN (PipeScheduler|55) [PipeScheduler.process():67] Successfully recover all pipes
+2024-02-06 12:50:07,762 WARN (agent-task-pool-3|107) [AgentBatchTask.run():207] task exec error. backend[10001]
+org.apache.thrift.transport.TTransportException: backend 10001 shutdown
+	at com.starrocks.pseudocluster.PseudoBackend$BeThriftClient.submit_tasks(PseudoBackend.java:767) ~[test-classes/:?]
+	at com.starrocks.task.AgentBatchTask.run(AgentBatchTask.java:198) ~[classes/:?]
+	at java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:515) ~[?:?]
+	at java.util.concurrent.FutureTask.run(FutureTask.java:264) ~[?:?]
+	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128) ~[?:?]
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628) ~[?:?]
+	at java.lang.Thread.run(Thread.java:829) ~[?:?]
+2024-02-06 12:50:08,764 WARN (PUBLISH_VERSION|30) [OlapTableTxnLogApplier.applyVisibleLog():129] skip update replica[10027.10001] to visible version
+2024-02-06 12:50:08,777 WARN (PUBLISH_VERSION|30) [OlapTableTxnLogApplier.applyVisibleLog():129] skip update replica[10031.10001] to visible version
+2024-02-06 12:50:08,782 WARN (PUBLISH_VERSION|30) [OlapTableTxnLogApplier.applyVisibleLog():129] skip update replica[10035.10001] to visible version
+2024-02-06 12:50:09,286 WARN (starrocks-mysql-nio-pool-0|101) [BackendServiceClient.sendPlanFragmentAsync():103] Execute plan fragment catch a exception, address=127.0.0.10:12100
+java.lang.RuntimeException: backend 10001 shutdown
+	at com.starrocks.pseudocluster.PseudoBackend$PseudoPBackendService.execPlanFragmentAsync(PseudoBackend.java:895) ~[test-classes/:?]
+	at com.starrocks.rpc.BackendServiceClient.sendPlanFragmentAsync(BackendServiceClient.java:86) ~[classes/:?]
+	at com.starrocks.rpc.BackendServiceClient.execPlanFragmentAsync(BackendServiceClient.java:115) ~[classes/:?]
+	at com.starrocks.qe.scheduler.dag.FragmentInstanceExecState.deployAsync(FragmentInstanceExecState.java:178) ~[classes/:?]
+	at java.util.ArrayList.forEach(ArrayList.java:1541) ~[?:?]
+	at com.starrocks.qe.scheduler.Deployer.deployFragments(Deployer.java:112) ~[classes/:?]
+	at com.starrocks.qe.DefaultCoordinator.deliverExecFragments(DefaultCoordinator.java:564) ~[classes/:?]
+	at com.starrocks.qe.DefaultCoordinator.startScheduling(DefaultCoordinator.java:491) ~[classes/:?]
+	at com.starrocks.qe.scheduler.Coordinator.startScheduling(Coordinator.java:102) ~[classes/:?]
+	at com.starrocks.qe.scheduler.Coordinator.exec(Coordinator.java:85) ~[classes/:?]
+	at com.starrocks.qe.StmtExecutor.handleDMLStmt(StmtExecutor.java:1896) ~[classes/:?]
+	at com.starrocks.qe.StmtExecutor.handleDMLStmtWithProfile(StmtExecutor.java:1732) ~[classes/:?]
+	at com.starrocks.qe.StmtExecutor.execute(StmtExecutor.java:613) ~[classes/:?]
+	at com.starrocks.qe.ConnectProcessor.handleQuery(ConnectProcessor.java:394) ~[classes/:?]
+	at com.starrocks.qe.ConnectProcessor.dispatch(ConnectProcessor.java:588) ~[classes/:?]
+	at com.starrocks.qe.ConnectProcessor.processOnce(ConnectProcessor.java:872) ~[classes/:?]
+	at com.starrocks.mysql.nio.ReadListener.lambda$handleEvent$0(ReadListener.java:69) ~[classes/:?]
+	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128) ~[?:?]
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628) ~[?:?]
+	at java.lang.Thread.run(Thread.java:829) ~[?:?]
+2024-02-06 12:50:09,290 WARN (starrocks-mysql-nio-pool-0|101) [FragmentInstanceExecState.waitForDeploymentCompletion():297] exec plan fragment failed, errmsg=backend 10001 shutdown, host: 127.0.0.10 backend [id=10001] [host=127.0.0.10], code=THRIFT_RPC_ERROR, fragmentId=F00, backend=127.0.0.10:12102
+2024-02-06 12:50:09,312 WARN (starrocks-mysql-nio-pool-0|101) [SimpleScheduler.addToBlacklist():197] add black list 10001
+2024-02-06 12:50:09,313 WARN (starrocks-mysql-nio-pool-0|101) [StmtExecutor.handleDMLStmt():2091] failed to handle stmt [insert into test.test_1 values (1,"1", 1), (2,"2", 2), (3,"3", 3)] label: insert_34680d42-c4ab-11ee-acc1-0242ac110002
+com.starrocks.rpc.RpcException: rpc failed, host: 127.0.0.10
+	at com.starrocks.qe.DefaultCoordinator.handleErrorExecution(DefaultCoordinator.java:581) ~[classes/:?]
+	at com.starrocks.qe.scheduler.Deployer.waitForDeploymentCompletion(Deployer.java:244) ~[classes/:?]
+	at com.starrocks.qe.scheduler.Deployer.deployFragments(Deployer.java:116) ~[classes/:?]
+	at com.starrocks.qe.DefaultCoordinator.deliverExecFragments(DefaultCoordinator.java:564) ~[classes/:?]
+	at com.starrocks.qe.DefaultCoordinator.startScheduling(DefaultCoordinator.java:491) ~[classes/:?]
+	at com.starrocks.qe.scheduler.Coordinator.startScheduling(Coordinator.java:102) ~[classes/:?]
+	at com.starrocks.qe.scheduler.Coordinator.exec(Coordinator.java:85) ~[classes/:?]
+	at com.starrocks.qe.StmtExecutor.handleDMLStmt(StmtExecutor.java:1896) ~[classes/:?]
+	at com.starrocks.qe.StmtExecutor.handleDMLStmtWithProfile(StmtExecutor.java:1732) ~[classes/:?]
+	at com.starrocks.qe.StmtExecutor.execute(StmtExecutor.java:613) ~[classes/:?]
+	at com.starrocks.qe.ConnectProcessor.handleQuery(ConnectProcessor.java:394) ~[classes/:?]
+	at com.starrocks.qe.ConnectProcessor.dispatch(ConnectProcessor.java:588) ~[classes/:?]
+	at com.starrocks.qe.ConnectProcessor.processOnce(ConnectProcessor.java:872) ~[classes/:?]
+	at com.starrocks.mysql.nio.ReadListener.lambda$handleEvent$0(ReadListener.java:69) ~[classes/:?]
+	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128) ~[?:?]
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628) ~[?:?]
+	at java.lang.Thread.run(Thread.java:829) ~[?:?]
+2024-02-06 12:50:09,321 WARN (starrocks-mysql-nio-pool-0|101) [StmtExecutor.handleDMLStmtWithProfile():1734] DML statement(insert into test.test_1 values (1,"1", 1), (2,"2", 2), (3,"3", 3)) process failed.
+com.starrocks.common.UserException: rpc failed, host: 127.0.0.10
+	at com.starrocks.qe.StmtExecutor.handleDMLStmt(StmtExecutor.java:2139) ~[classes/:?]
+	at com.starrocks.qe.StmtExecutor.handleDMLStmtWithProfile(StmtExecutor.java:1732) ~[classes/:?]
+	at com.starrocks.qe.StmtExecutor.execute(StmtExecutor.java:613) ~[classes/:?]
+	at com.starrocks.qe.ConnectProcessor.handleQuery(ConnectProcessor.java:394) ~[classes/:?]
+	at com.starrocks.qe.ConnectProcessor.dispatch(ConnectProcessor.java:588) ~[classes/:?]
+	at com.starrocks.qe.ConnectProcessor.processOnce(ConnectProcessor.java:872) ~[classes/:?]
+	at com.starrocks.mysql.nio.ReadListener.lambda$handleEvent$0(ReadListener.java:69) ~[classes/:?]
+	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128) ~[?:?]
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628) ~[?:?]
+	at java.lang.Thread.run(Thread.java:829) ~[?:?]
+Caused by: com.starrocks.rpc.RpcException: rpc failed, host: 127.0.0.10
+	at com.starrocks.qe.DefaultCoordinator.handleErrorExecution(DefaultCoordinator.java:581) ~[classes/:?]
+	at com.starrocks.qe.scheduler.Deployer.waitForDeploymentCompletion(Deployer.java:244) ~[classes/:?]
+	at com.starrocks.qe.scheduler.Deployer.deployFragments(Deployer.java:116) ~[classes/:?]
+	at com.starrocks.qe.DefaultCoordinator.deliverExecFragments(DefaultCoordinator.java:564) ~[classes/:?]
+	at com.starrocks.qe.DefaultCoordinator.startScheduling(DefaultCoordinator.java:491) ~[classes/:?]
+	at com.starrocks.qe.scheduler.Coordinator.startScheduling(Coordinator.java:102) ~[classes/:?]
+	at com.starrocks.qe.scheduler.Coordinator.exec(Coordinator.java:85) ~[classes/:?]
+	at com.starrocks.qe.StmtExecutor.handleDMLStmt(StmtExecutor.java:1896) ~[classes/:?]
+	... 9 more
+2024-02-06 12:50:09,323 WARN (starrocks-mysql-nio-pool-0|101) [DefaultCoordinator.cancel():809] cancel execState of query, this is outside invoke
+2024-02-06 12:50:09,441 WARN (heartbeat-mgr-pool-4|95) [HeartbeatMgr$BackendHeartbeatHandler.call():325] backend heartbeat got exception, addr: 127.0.0.10:12101
+org.apache.thrift.transport.TTransportException: backend 10001 shutdown
+	at com.starrocks.pseudocluster.PseudoBackend$HeartBeatClient.heartbeat(PseudoBackend.java:739) ~[test-classes/:?]
+	at com.starrocks.system.HeartbeatMgr$BackendHeartbeatHandler.call(HeartbeatMgr.java:283) ~[classes/:?]
+	at com.starrocks.system.HeartbeatMgr$BackendHeartbeatHandler.call(HeartbeatMgr.java:260) ~[classes/:?]
+	at java.util.concurrent.FutureTask.run(FutureTask.java:264) ~[?:?]
+	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128) ~[?:?]
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628) ~[?:?]
+	at java.lang.Thread.run(Thread.java:829) ~[?:?]
+2024-02-06 12:50:09,442 WARN (heartbeat mgr|21) [HeartbeatMgr.runAfterCatalogReady():166] get bad heartbeat response: type: BACKEND, status: BAD, msg: backend 10001 shutdown
+2024-02-06 12:50:10,406 WARN (agent-task-pool-3|107) [AgentBatchTask.run():207] task exec error. backend[10001]
+org.apache.thrift.transport.TTransportException: backend 10001 shutdown
+	at com.starrocks.pseudocluster.PseudoBackend$BeThriftClient.submit_tasks(PseudoBackend.java:767) ~[test-classes/:?]
+	at com.starrocks.task.AgentBatchTask.run(AgentBatchTask.java:198) ~[classes/:?]
+	at java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:515) ~[?:?]
+	at java.util.concurrent.FutureTask.run(FutureTask.java:264) ~[?:?]
+	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128) ~[?:?]
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628) ~[?:?]
+	at java.lang.Thread.run(Thread.java:829) ~[?:?]
+2024-02-06 12:50:11,399 WARN (PUBLISH_VERSION|30) [OlapTableTxnLogApplier.applyVisibleLog():129] skip update replica[10027.10001] to visible version
+2024-02-06 12:50:11,400 WARN (PUBLISH_VERSION|30) [OlapTableTxnLogApplier.applyVisibleLog():129] skip update replica[10031.10001] to visible version
+2024-02-06 12:50:11,401 WARN (PUBLISH_VERSION|30) [OlapTableTxnLogApplier.applyVisibleLog():129] skip update replica[10035.10001] to visible version
+2024-02-06 12:50:11,441 WARN (heartbeat-mgr-pool-5|102) [HeartbeatMgr$BackendHeartbeatHandler.call():325] backend heartbeat got exception, addr: 127.0.0.10:12101
+org.apache.thrift.transport.TTransportException: backend 10001 shutdown
+	at com.starrocks.pseudocluster.PseudoBackend$HeartBeatClient.heartbeat(PseudoBackend.java:739) ~[test-classes/:?]
+	at com.starrocks.system.HeartbeatMgr$BackendHeartbeatHandler.call(HeartbeatMgr.java:283) ~[classes/:?]
+	at com.starrocks.system.HeartbeatMgr$BackendHeartbeatHandler.call(HeartbeatMgr.java:260) ~[classes/:?]
+	at java.util.concurrent.FutureTask.run(FutureTask.java:264) ~[?:?]
+	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128) ~[?:?]
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628) ~[?:?]
+	at java.lang.Thread.run(Thread.java:829) ~[?:?]
+2024-02-06 12:50:11,442 WARN (heartbeat mgr|21) [HeartbeatMgr.runAfterCatalogReady():166] get bad heartbeat response: type: BACKEND, status: BAD, msg: backend 10001 shutdown
+2024-02-06 12:50:11,944 WARN (agent-task-pool-3|107) [AgentBatchTask.run():207] task exec error. backend[10001]
+org.apache.thrift.transport.TTransportException: backend 10001 shutdown
+	at com.starrocks.pseudocluster.PseudoBackend$BeThriftClient.submit_tasks(PseudoBackend.java:767) ~[test-classes/:?]
+	at com.starrocks.task.AgentBatchTask.run(AgentBatchTask.java:198) ~[classes/:?]
+	at java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:515) ~[?:?]
+	at java.util.concurrent.FutureTask.run(FutureTask.java:264) ~[?:?]
+	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128) ~[?:?]
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628) ~[?:?]
+	at java.lang.Thread.run(Thread.java:829) ~[?:?]
+2024-02-06 12:50:12,951 WARN (PUBLISH_VERSION|30) [OlapTableTxnLogApplier.applyVisibleLog():129] skip update replica[10008.10001] to visible version
+2024-02-06 12:50:12,952 WARN (PUBLISH_VERSION|30) [OlapTableTxnLogApplier.applyVisibleLog():129] skip update replica[10012.10001] to visible version
+2024-02-06 12:50:12,953 WARN (PUBLISH_VERSION|30) [OlapTableTxnLogApplier.applyVisibleLog():129] skip update replica[10016.10001] to visible version
+2024-02-06 12:50:13,442 WARN (heartbeat-mgr-pool-1|92) [HeartbeatMgr$BackendHeartbeatHandler.call():325] backend heartbeat got exception, addr: 127.0.0.10:12101
+org.apache.thrift.transport.TTransportException: backend 10001 shutdown
+	at com.starrocks.pseudocluster.PseudoBackend$HeartBeatClient.heartbeat(PseudoBackend.java:739) ~[test-classes/:?]
+	at com.starrocks.system.HeartbeatMgr$BackendHeartbeatHandler.call(HeartbeatMgr.java:283) ~[classes/:?]
+	at com.starrocks.system.HeartbeatMgr$BackendHeartbeatHandler.call(HeartbeatMgr.java:260) ~[classes/:?]
+	at java.util.concurrent.FutureTask.run(FutureTask.java:264) ~[?:?]
+	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128) ~[?:?]
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628) ~[?:?]
+	at java.lang.Thread.run(Thread.java:829) ~[?:?]
+2024-02-06 12:50:13,444 WARN (heartbeat mgr|21) [HeartbeatMgr.runAfterCatalogReady():166] get bad heartbeat response: type: BACKEND, status: BAD, msg: backend 10001 shutdown
+2024-02-06 12:50:13,475 WARN (agent-task-pool-3|107) [AgentBatchTask.run():207] task exec error. backend[10001]
+org.apache.thrift.transport.TTransportException: backend 10001 shutdown
+	at com.starrocks.pseudocluster.PseudoBackend$BeThriftClient.submit_tasks(PseudoBackend.java:767) ~[test-classes/:?]
+	at com.starrocks.task.AgentBatchTask.run(AgentBatchTask.java:198) ~[classes/:?]
+	at java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:515) ~[?:?]
+	at java.util.concurrent.FutureTask.run(FutureTask.java:264) ~[?:?]
+	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128) ~[?:?]
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628) ~[?:?]
+	at java.lang.Thread.run(Thread.java:829) ~[?:?]
+2024-02-06 12:50:14,474 WARN (PUBLISH_VERSION|30) [OlapTableTxnLogApplier.applyVisibleLog():129] skip update replica[10027.10001] to visible version
+2024-02-06 12:50:14,476 WARN (PUBLISH_VERSION|30) [OlapTableTxnLogApplier.applyVisibleLog():129] skip update replica[10031.10001] to visible version
+2024-02-06 12:50:14,478 WARN (PUBLISH_VERSION|30) [OlapTableTxnLogApplier.applyVisibleLog():129] skip update replica[10035.10001] to visible version
+2024-02-06 12:50:15,025 WARN (agent-task-pool-3|107) [AgentBatchTask.run():207] task exec error. backend[10001]
+org.apache.thrift.transport.TTransportException: backend 10001 shutdown
+	at com.starrocks.pseudocluster.PseudoBackend$BeThriftClient.submit_tasks(PseudoBackend.java:767) ~[test-classes/:?]
+	at com.starrocks.task.AgentBatchTask.run(AgentBatchTask.java:198) ~[classes/:?]
+	at java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:515) ~[?:?]
+	at java.util.concurrent.FutureTask.run(FutureTask.java:264) ~[?:?]
+	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128) ~[?:?]
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628) ~[?:?]
+	at java.lang.Thread.run(Thread.java:829) ~[?:?]
+2024-02-06 12:50:15,442 WARN (heartbeat-mgr-pool-7|104) [HeartbeatMgr$BackendHeartbeatHandler.call():325] backend heartbeat got exception, addr: 127.0.0.10:12101
+org.apache.thrift.transport.TTransportException: backend 10001 shutdown
+	at com.starrocks.pseudocluster.PseudoBackend$HeartBeatClient.heartbeat(PseudoBackend.java:739) ~[test-classes/:?]
+	at com.starrocks.system.HeartbeatMgr$BackendHeartbeatHandler.call(HeartbeatMgr.java:283) ~[classes/:?]
+	at com.starrocks.system.HeartbeatMgr$BackendHeartbeatHandler.call(HeartbeatMgr.java:260) ~[classes/:?]
+	at java.util.concurrent.FutureTask.run(FutureTask.java:264) ~[?:?]
+	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128) ~[?:?]
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628) ~[?:?]
+	at java.lang.Thread.run(Thread.java:829) ~[?:?]
+2024-02-06 12:50:15,451 WARN (heartbeat mgr|21) [HeartbeatMgr.runAfterCatalogReady():166] get bad heartbeat response: type: BACKEND, status: BAD, msg: backend 10001 shutdown
+2024-02-06 12:50:15,458 WARN (PUBLISH_VERSION|30) [OlapTableTxnLogApplier.applyVisibleLog():129] skip update replica[10027.10001] to visible version
+2024-02-06 12:50:15,460 WARN (PUBLISH_VERSION|30) [OlapTableTxnLogApplier.applyVisibleLog():129] skip update replica[10031.10001] to visible version
+2024-02-06 12:50:15,464 WARN (PUBLISH_VERSION|30) [OlapTableTxnLogApplier.applyVisibleLog():129] skip update replica[10035.10001] to visible version
+2024-02-06 12:50:15,997 WARN (PUBLISH_VERSION|30) [OlapTableTxnLogApplier.applyVisibleLog():129] skip update replica[10008.10001] to visible version
+2024-02-06 12:50:15,999 WARN (PUBLISH_VERSION|30) [OlapTableTxnLogApplier.applyVisibleLog():129] skip update replica[10012.10001] to visible version
+2024-02-06 12:50:15,999 WARN (PUBLISH_VERSION|30) [OlapTableTxnLogApplier.applyVisibleLog():129] skip update replica[10016.10001] to visible version
+2024-02-06 12:50:16,533 WARN (PUBLISH_VERSION|30) [OlapTableTxnLogApplier.applyVisibleLog():129] skip update replica[10027.10001] to visible version
+2024-02-06 12:50:16,538 WARN (PUBLISH_VERSION|30) [OlapTableTxnLogApplier.applyVisibleLog():129] skip update replica[10031.10001] to visible version
+2024-02-06 12:50:16,548 WARN (PUBLISH_VERSION|30) [OlapTableTxnLogApplier.applyVisibleLog():129] skip update replica[10035.10001] to visible version
+2024-02-06 12:50:17,082 WARN (PUBLISH_VERSION|30) [OlapTableTxnLogApplier.applyVisibleLog():129] skip update replica[10008.10001] to visible version
+2024-02-06 12:50:17,083 WARN (PUBLISH_VERSION|30) [OlapTableTxnLogApplier.applyVisibleLog():129] skip update replica[10012.10001] to visible version
+2024-02-06 12:50:17,084 WARN (PUBLISH_VERSION|30) [OlapTableTxnLogApplier.applyVisibleLog():129] skip update replica[10016.10001] to visible version
+2024-02-06 12:50:17,443 WARN (heartbeat-mgr-pool-4|95) [HeartbeatMgr$BackendHeartbeatHandler.call():325] backend heartbeat got exception, addr: 127.0.0.10:12101
+org.apache.thrift.transport.TTransportException: backend 10001 shutdown
+	at com.starrocks.pseudocluster.PseudoBackend$HeartBeatClient.heartbeat(PseudoBackend.java:739) ~[test-classes/:?]
+	at com.starrocks.system.HeartbeatMgr$BackendHeartbeatHandler.call(HeartbeatMgr.java:283) ~[classes/:?]
+	at com.starrocks.system.HeartbeatMgr$BackendHeartbeatHandler.call(HeartbeatMgr.java:260) ~[classes/:?]
+	at java.util.concurrent.FutureTask.run(FutureTask.java:264) ~[?:?]
+	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128) ~[?:?]
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628) ~[?:?]
+	at java.lang.Thread.run(Thread.java:829) ~[?:?]
+2024-02-06 12:50:17,445 WARN (heartbeat mgr|21) [HeartbeatMgr.runAfterCatalogReady():166] get bad heartbeat response: type: BACKEND, status: BAD, msg: backend 10001 shutdown
+2024-02-06 12:50:17,610 WARN (PUBLISH_VERSION|30) [OlapTableTxnLogApplier.applyVisibleLog():129] skip update replica[10027.10001] to visible version
+2024-02-06 12:50:17,611 WARN (PUBLISH_VERSION|30) [OlapTableTxnLogApplier.applyVisibleLog():129] skip update replica[10031.10001] to visible version
+2024-02-06 12:50:17,613 WARN (PUBLISH_VERSION|30) [OlapTableTxnLogApplier.applyVisibleLog():129] skip update replica[10035.10001] to visible version
+2024-02-06 12:50:18,174 WARN (PUBLISH_VERSION|30) [OlapTableTxnLogApplier.applyVisibleLog():129] skip update replica[10027.10001] to visible version
+2024-02-06 12:50:18,175 WARN (PUBLISH_VERSION|30) [OlapTableTxnLogApplier.applyVisibleLog():129] skip update replica[10031.10001] to visible version
+2024-02-06 12:50:18,178 WARN (PUBLISH_VERSION|30) [OlapTableTxnLogApplier.applyVisibleLog():129] skip update replica[10035.10001] to visible version
+2024-02-06 12:50:18,276 WARN (UpdateBlacklistThread|108) [SimpleScheduler.updateBlacklist():261] remove nodeID 10001 from blacklist
+2024-02-06 12:50:18,710 WARN (PUBLISH_VERSION|30) [OlapTableTxnLogApplier.applyVisibleLog():129] skip update replica[10008.10001] to visible version
+2024-02-06 12:50:18,711 WARN (PUBLISH_VERSION|30) [OlapTableTxnLogApplier.applyVisibleLog():129] skip update replica[10012.10001] to visible version
+2024-02-06 12:50:18,712 WARN (PUBLISH_VERSION|30) [OlapTableTxnLogApplier.applyVisibleLog():129] skip update replica[10016.10001] to visible version
+2024-02-06 12:50:19,242 WARN (PUBLISH_VERSION|30) [OlapTableTxnLogApplier.applyVisibleLog():129] skip update replica[10008.10001] to visible version
+2024-02-06 12:50:19,243 WARN (PUBLISH_VERSION|30) [OlapTableTxnLogApplier.applyVisibleLog():129] skip update replica[10012.10001] to visible version
+2024-02-06 12:50:19,244 WARN (PUBLISH_VERSION|30) [OlapTableTxnLogApplier.applyVisibleLog():129] skip update replica[10016.10001] to visible version

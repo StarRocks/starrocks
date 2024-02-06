@@ -1,0 +1,198 @@
+2024-02-06 13:55:37,855 INFO (fe|59) [FrontendOptions.analyzePriorityCidrs():299] configured prior_cidrs value: 127.0.0.1/24
+2024-02-06 13:55:37,888 WARN (fe|59) [FrontendOptions.initAddrUseIp():243] ip address range configured for priority_networks does not include the current IP address
+2024-02-06 13:55:37,889 INFO (fe|59) [FrontendOptions.initAddrUseIp():249] Use IP init local addr, IP: /127.0.0.1
+2024-02-06 13:55:37,994 INFO (fe|59) [NodeMgr.getHelperNodes():658] get helper nodes: [127.0.0.1:9010]
+2024-02-06 13:55:38,027 INFO (fe|59) [NodeMgr.getClusterIdAndRoleOnStartup():262] very first time to start this node. role: FOLLOWER, node name: 127.0.0.1_9010_1707198938024
+2024-02-06 13:55:38,036 INFO (fe|59) [NodeMgr.getClusterIdAndRoleOnStartup():459] Current run_mode is shared_nothing
+2024-02-06 13:55:38,036 INFO (fe|59) [NodeMgr.getClusterIdAndRoleOnStartup():466] Got cluster id: 1473244114, role: FOLLOWER, node name: 127.0.0.1_9010_1707198938024 and run_mode: shared_nothing
+2024-02-06 13:55:38,080 INFO (fe|59) [GlobalStateMgr.loadImage():1533] image does not exist: /root/starrocks/fe/fe-core/pseudo_cluster_44147/starrocks-meta/image/image.0
+2024-02-06 13:55:38,084 WARN (fe|59) [StateChangeExecutor.notifyNewFETypeTransfer():62] notify new FE type transfer: LEADER
+2024-02-06 13:55:38,326 INFO (stateChangeExecutor|65) [StateChangeExecutor.runOneCycle():85] begin to transfer FE type from INIT to LEADER
+2024-02-06 13:55:38,328 INFO (stateChangeExecutor|65) [GlobalStateMgr.replayJournal():2269] skip replay journal because 0 <= 0
+2024-02-06 13:55:38,548 INFO (stateChangeExecutor|65) [GlobalStateMgr.reInitializeNewPrivilegeOnUpgrade():4066] reinitialize privilege info before upgrade
+2024-02-06 13:55:38,549 WARN (stateChangeExecutor|65) [AuthenticationProviderFactory.installPlugin():32] Plugin MYSQL_NATIVE_PASSWORD has already been installed!
+2024-02-06 13:55:38,550 WARN (stateChangeExecutor|65) [AuthenticationProviderFactory.installPlugin():32] Plugin AUTHENTICATION_LDAP_SIMPLE has already been installed!
+2024-02-06 13:55:38,551 WARN (stateChangeExecutor|65) [AuthenticationProviderFactory.installPlugin():32] Plugin AUTHENTICATION_KERBEROS has already been installed!
+2024-02-06 13:55:38,551 WARN (stateChangeExecutor|65) [AuthenticationProviderFactory.installPlugin():32] Plugin AUTHENTICATION_LDAP_SIMPLE_FOR_EXTERNAL has already been installed!
+2024-02-06 13:55:38,552 INFO (stateChangeExecutor|65) [AuthorizationMgr.initBuiltinRoleUnlocked():283] create built-in role root[-1]
+2024-02-06 13:55:38,553 INFO (stateChangeExecutor|65) [AuthorizationMgr.initBuiltinRoleUnlocked():283] create built-in role db_admin[-2]
+2024-02-06 13:55:38,553 INFO (stateChangeExecutor|65) [AuthorizationMgr.initBuiltinRoleUnlocked():283] create built-in role cluster_admin[-3]
+2024-02-06 13:55:38,554 INFO (stateChangeExecutor|65) [AuthorizationMgr.initBuiltinRoleUnlocked():283] create built-in role user_admin[-4]
+2024-02-06 13:55:38,554 INFO (stateChangeExecutor|65) [AuthorizationMgr.initBuiltinRoleUnlocked():283] create built-in role public[-5]
+2024-02-06 13:55:38,560 INFO (stateChangeExecutor|65) [AuthUpgrader.upgradeAsLeader():80] start to upgrade as leader.
+2024-02-06 13:55:38,562 INFO (stateChangeExecutor|65) [AuthUpgrader.upgradeUser():178] ignore root entry : global priv. host: %, user: root, priv: Node_priv Admin_priv , set by resolver: false, domain user ident: null
+2024-02-06 13:55:38,580 INFO (stateChangeExecutor|65) [AuthUpgrader.upgradeAsLeader():84] upgraded as leader successfully.
+2024-02-06 13:55:38,580 INFO (stateChangeExecutor|65) [GlobalStateMgr.transferToLeader():1316] set usingNewPrivilege to true after transfer to leader
+2024-02-06 13:55:38,582 INFO (stateChangeExecutor|65) [GlobalStateMgr.startLeaderOnlyDaemonThreads():1386] checkpointer thread started. thread id is 67
+2024-02-06 13:55:38,648 INFO (stateChangeExecutor|65) [GlobalStateMgr.transferToLeader():1337] leader finished to replay journal, can write now.
+2024-02-06 13:55:38,691 INFO (leaderCheckpointer|67) [Checkpoint.runAfterCatalogReady():95] checkpoint imageVersion 0, checkpointVersion 0
+2024-02-06 13:55:38,723 INFO (stateChangeExecutor|65) [StateChangeExecutor.runOneCycle():179] finished to transfer FE type from INIT to LEADER
+2024-02-06 13:55:38,726 INFO (tablet checker|42) [TabletChecker.doCheck():426] finished to check tablets. isUrgent: true, unhealthy/total/added/in_sched/not_ready: 0/0/0/0/0, cost: 0 ms, in lock time: 0 ms, wait time: 0ms
+2024-02-06 13:55:38,726 INFO (tablet checker|42) [TabletChecker.doCheck():426] finished to check tablets. isUrgent: false, unhealthy/total/added/in_sched/not_ready: 0/0/0/0/0, cost: 0 ms, in lock time: 0 ms, wait time: 0ms
+2024-02-06 13:55:38,736 INFO (TaskCleaner|64) [TaskManager.dropTasks():370] drop tasks:[]
+2024-02-06 13:55:38,736 WARN (Routine load task scheduler|49) [RoutineLoadTaskScheduler.process():116] no available be slot to scheduler tasks, wait for 10 seconds to scheduler again, you can set max_routine_load_task_num_per_be bigger in fe.conf, current value is 16
+2024-02-06 13:55:38,738 INFO (TaskCleaner|64) [TaskManager.removeExpiredTaskRuns():884] remove run history:[]
+2024-02-06 13:55:38,738 INFO (consistency checker|27) [TabletInvertedIndex.checkTabletMetaConsistency():463] TabletMetaChecker has cleaned 0 invalid tablet(s), scanned 0 tablet(s) on 0 backend(s) in 0ms, total tablets in recycle bin: 0, total ignored tablets: 0, up to 20 of ignored tablets: [], backend tablet count info(format: backend_id=curr_tablet_count:recycle_tablet_count): {}
+2024-02-06 13:55:38,739 INFO (tablet stat mgr|36) [TabletStatMgr.updateLocalTabletStat():173] finished to get local tablet stat of all backends. cost: 0 ms
+2024-02-06 13:55:38,741 INFO (LoadLabelCleaner|62) [TaskManager.dropTasks():370] drop tasks:[]
+2024-02-06 13:55:38,741 INFO (tablet stat mgr|36) [TabletStatMgr.runAfterCatalogReady():138] finished to update index row num of all databases. cost: 0 ms
+2024-02-06 13:55:38,741 INFO (tablet scheduler|41) [TabletScheduler.updateClusterLoadStatistic():484] update cluster load statistic:
+
+2024-02-06 13:55:38,744 INFO (LoadLabelCleaner|62) [TaskManager.removeExpiredTaskRuns():884] remove run history:[]
+2024-02-06 13:55:38,757 WARN (PipeScheduler|55) [PipeScheduler.process():67] Successfully recover all pipes
+2024-02-06 13:55:38,762 INFO (colocate group clone checker|75) [ColocateTableBalancer.matchGroups():903] finished to match colocate group. cost: 0 ms, in lock time: 0 ms
+2024-02-06 13:55:38,777 INFO (tablet checker|42) [TabletChecker.runAfterCatalogReady():214] TStat :
+TStat num of tablet check round: 1 (+1)
+TStat cost of tablet check(ms): 0 (+0)
+TStat num of tablet checked in tablet checker: 0 (+0)
+TStat num of unhealthy tablet checked in tablet checker: 0 (+0)
+TStat num of tablet being added to tablet scheduler: 0 (+0)
+TStat num of tablet schedule round: 1 (+1)
+TStat cost of tablet schedule(ms): 9 (+9)
+TStat num of tablet being scheduled: 0 (+0)
+TStat num of tablet being scheduled succeeded: 0 (+0)
+TStat num of tablet being scheduled failed: 0 (+0)
+TStat num of tablet being scheduled discard: 0 (+0)
+TStat num of tablet priority upgraded: 0 (+0)
+TStat num of clone task: 0 (+0)
+TStat num of clone task succeeded: 0 (+0)
+TStat num of clone task failed: 0 (+0)
+TStat num of clone task timeout: 0 (+0)
+TStat num of replica missing error: 0 (+0)
+TStat num of replica version missing error: 0 (+0)
+TStat num of replica unavailable error: 0 (+0)
+TStat num of replica redundant error: 0 (+0)
+TStat num of replica missing in cluster error: 0 (+0)
+TStat num of balance scheduled: 0 (+0)
+TStat num of colocate replica mismatch: 0 (+0)
+TStat num of colocate replica redundant: 0 (+0)
+TStat num of colocate balancer running round: 0 (+0)
+
+2024-02-06 13:55:39,069 INFO (main|1) [PseudoCluster.build():442] start create and start backends
+2024-02-06 13:55:39,099 INFO (main|1) [PseudoCluster.build():456] add PseudoBackend 10001 127.0.0.10
+2024-02-06 13:55:39,100 INFO (main|1) [PseudoCluster.build():456] add PseudoBackend 10002 127.0.0.11
+2024-02-06 13:55:39,102 INFO (main|1) [PseudoCluster.build():456] add PseudoBackend 10003 127.0.0.12
+2024-02-06 13:55:39,767 INFO (tablet scheduler|41) [TabletScheduler.updateWorkingSlots():258] add new backend 10001 with slots num: 1
+2024-02-06 13:55:39,768 INFO (tablet scheduler|41) [TabletScheduler.updateWorkingSlots():258] add new backend 10002 with slots num: 1
+2024-02-06 13:55:39,768 INFO (tablet scheduler|41) [TabletScheduler.updateWorkingSlots():258] add new backend 10003 with slots num: 1
+2024-02-06 13:55:40,330 INFO (fe|59) [GlobalStateMgr.waitForReady():1212] wait globalStateMgr to be ready. FE type: LEADER. is ready: true
+2024-02-06 13:55:40,331 INFO (fe|59) [GlobalStateMgr.waitForReady():1197] globalStateMgr is ready. FE type: LEADER
+2024-02-06 13:55:40,426 INFO (fe|59) [Xnio.<clinit>():95] XNIO version 3.8.10.Final
+2024-02-06 13:55:40,526 INFO (fe|59) [NioXnio.<clinit>():58] XNIO NIO Implementation Version 3.8.10.Final
+2024-02-06 13:55:40,674 INFO (fe|59) [NMysqlServer.start():90] Open mysql server success on 44147
+2024-02-06 13:55:40,674 INFO (fe|59) [QeService.start():78] QE service start.
+2024-02-06 13:55:42,807 INFO (main|1) [LocalMetastore.createDb():429] createDb dbName = db_for_test, id = 10004
+2024-02-06 13:55:43,397 INFO (main|1) [Database.checkDataSizeQuota():442] database[db_for_test] data quota: left bytes: 8388608.000 TB / total: 8388608.000 TB
+2024-02-06 13:55:43,397 INFO (main|1) [Database.checkReplicaQuota():453] database[db_for_test] replica quota: left number: 9223372036854775807 / total: 9223372036854775807
+2024-02-06 13:55:43,797 INFO (main|1) [LocalMetastore.buildPartitions():1893] start to build 4 partitions sequentially for table db_for_test.table_for_test with 12 replicas
+2024-02-06 13:55:43,798 INFO (main|1) [LocalMetastore.buildPartitionsSequentially():1925] build partitions sequentially, send task one by one, all tasks timeout 720s
+2024-02-06 13:55:43,943 INFO (main|1) [LocalMetastore.buildPartitionsSequentially():1928] build partitions sequentially, all tasks finished, took 146ms
+2024-02-06 13:55:43,944 INFO (main|1) [LocalMetastore.onCreate():2287] Successfully create table: table_for_test-10009, in database: db_for_test-10004
+2024-02-06 13:55:44,098 INFO (main|1) [DatabaseTransactionMgr.beginTransaction():319] begin transaction: txn_id: 2 with label testTxnLable7 from coordinator FE: localfe, listner id: -1
+2024-02-06 13:55:44,129 INFO (be-10003|91) [PseudoBackend.reportTablets():484] report 0 tablets
+2024-02-06 13:55:44,129 INFO (be-10002|88) [PseudoBackend.reportTablets():484] report 0 tablets
+2024-02-06 13:55:44,129 INFO (be-10001|85) [PseudoBackend.reportTablets():484] report 0 tablets
+2024-02-06 13:55:44,133 INFO (be-10003|91) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:55:44,133 INFO (be-10001|85) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:55:44,133 INFO (be-10002|88) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:55:44,134 INFO (be-10001|85) [PseudoBackend.reportTasks():546] report 1 tasks
+2024-02-06 13:55:44,134 INFO (be-10003|91) [PseudoBackend.reportTasks():546] report 0 tasks
+2024-02-06 13:55:44,135 INFO (be-10002|88) [PseudoBackend.reportTasks():546] report 0 tasks
+2024-02-06 13:55:44,246 INFO (main|1) [DatabaseTransactionMgr.commitTransaction():468] transaction:[TransactionState. txn_id: 2, label: testTxnLable7, db id: 10004, table id list: 10009, callback id: -1, coordinator: FE: localfe, transaction status: COMMITTED, error replicas num: 0, replica ids: , prepare time: 1707198944201, write end time: 1707198944239, allow commit time: -1, commit time: 1707198944242, finish time: -1, write cost: 41ms, reason:  tabletCommitInfos size: 36] successfully committed
+2024-02-06 13:55:44,257 INFO (main|1) [DatabaseTransactionMgr.beginTransaction():319] begin transaction: txn_id: 3 with label testTxnLable8 from coordinator FE: localfe, listner id: -1
+2024-02-06 13:55:44,258 INFO (main|1) [DatabaseTransactionMgr.commitTransaction():468] transaction:[TransactionState. txn_id: 3, label: testTxnLable8, db id: 10004, table id list: 10009, callback id: -1, coordinator: FE: localfe, transaction status: COMMITTED, error replicas num: 0, replica ids: , prepare time: 1707198944257, write end time: 1707198944258, allow commit time: -1, commit time: 1707198944258, finish time: -1, write cost: 1ms, reason:  tabletCommitInfos size: 36] successfully committed
+2024-02-06 13:55:44,392 INFO (lake-publish-task-1|103) [DatabaseTransactionMgr.finishTransactionBatch():1822] finish transaction [TransactionState. txn_id: 2, label: testTxnLable7, db id: 10004, table id list: 10009, callback id: -1, coordinator: FE: localfe, transaction status: VISIBLE, error replicas num: 0, replica ids: , prepare time: 1707198944201, write end time: 1707198944239, allow commit time: -1, commit time: 1707198944242, finish time: 1707198944385, write cost: 41ms, publish total cost: 143ms, total cost: 184ms, reason: , newFinish tabletCommitInfos size: 36, TransactionState. txn_id: 3, label: testTxnLable8, db id: 10004, table id list: 10009, callback id: -1, coordinator: FE: localfe, transaction status: VISIBLE, error replicas num: 0, replica ids: , prepare time: 1707198944257, write end time: 1707198944258, allow commit time: -1, commit time: 1707198944258, finish time: 1707198944385, write cost: 1ms, publish total cost: 127ms, total cost: 128ms, reason: , newFinish tabletCommitInfos size: 36] batch successfully
+2024-02-06 13:55:45,466 INFO (main|1) [DatabaseTransactionMgr.beginTransaction():319] begin transaction: txn_id: 4 with label testTxnLable9 from coordinator FE: localfe, listner id: -1
+2024-02-06 13:55:45,468 INFO (main|1) [DatabaseTransactionMgr.commitTransaction():468] transaction:[TransactionState. txn_id: 4, label: testTxnLable9, db id: 10004, table id list: 10009, callback id: -1, coordinator: FE: localfe, transaction status: COMMITTED, error replicas num: 0, replica ids: , prepare time: 1707198945466, write end time: 1707198945467, allow commit time: -1, commit time: 1707198945467, finish time: -1, write cost: 1ms, reason:  tabletCommitInfos size: 36] successfully committed
+2024-02-06 13:55:45,475 INFO (main|1) [DatabaseTransactionMgr.finishTransaction():1074] finish transaction TransactionState. txn_id: 4, label: testTxnLable9, db id: 10004, table id list: 10009, callback id: -1, coordinator: FE: localfe, transaction status: VISIBLE, error replicas num: 0, replica ids: , prepare time: 1707198945466, write end time: 1707198945467, allow commit time: -1, commit time: 1707198945467, finish time: 1707198945471, write cost: 1ms, publish total cost: 4ms, total cost: 5ms, reason:  tabletCommitInfos size: 36 successfully
+2024-02-06 13:55:45,477 INFO (main|1) [DatabaseTransactionMgr.beginTransaction():319] begin transaction: txn_id: 5 with label testTxnLable1 from coordinator FE: localfe, listner id: -1
+2024-02-06 13:55:45,478 INFO (main|1) [DatabaseTransactionMgr.commitTransaction():468] transaction:[TransactionState. txn_id: 5, label: testTxnLable1, db id: 10004, table id list: 10009, callback id: -1, coordinator: FE: localfe, transaction status: COMMITTED, error replicas num: 0, replica ids: , prepare time: 1707198945477, write end time: 1707198945477, allow commit time: -1, commit time: 1707198945477, finish time: -1, reason:  tabletCommitInfos size: 18] successfully committed
+2024-02-06 13:55:45,478 INFO (main|1) [DatabaseTransactionMgr.beginTransaction():319] begin transaction: txn_id: 6 with label testTxnLable2 from coordinator FE: localfe, listner id: -1
+2024-02-06 13:55:45,479 INFO (main|1) [DatabaseTransactionMgr.commitTransaction():468] transaction:[TransactionState. txn_id: 6, label: testTxnLable2, db id: 10004, table id list: 10009, callback id: -1, coordinator: FE: localfe, transaction status: COMMITTED, error replicas num: 0, replica ids: , prepare time: 1707198945479, write end time: 1707198945479, allow commit time: -1, commit time: 1707198945479, finish time: -1, reason:  tabletCommitInfos size: 18] successfully committed
+2024-02-06 13:55:45,480 INFO (main|1) [DatabaseTransactionMgr.beginTransaction():319] begin transaction: txn_id: 7 with label testTxnLable3 from coordinator FE: localfe, listner id: -1
+2024-02-06 13:55:45,481 INFO (main|1) [DatabaseTransactionMgr.commitTransaction():468] transaction:[TransactionState. txn_id: 7, label: testTxnLable3, db id: 10004, table id list: 10009, callback id: -1, coordinator: FE: localfe, transaction status: COMMITTED, error replicas num: 0, replica ids: , prepare time: 1707198945480, write end time: 1707198945481, allow commit time: -1, commit time: 1707198945481, finish time: -1, write cost: 1ms, reason:  tabletCommitInfos size: 18] successfully committed
+2024-02-06 13:55:45,482 INFO (main|1) [DatabaseTransactionMgr.beginTransaction():319] begin transaction: txn_id: 8 with label testTxnLable4 from coordinator FE: localfe, listner id: -1
+2024-02-06 13:55:45,483 INFO (main|1) [DatabaseTransactionMgr.commitTransaction():468] transaction:[TransactionState. txn_id: 8, label: testTxnLable4, db id: 10004, table id list: 10009, callback id: -1, coordinator: FE: localfe, transaction status: COMMITTED, error replicas num: 0, replica ids: , prepare time: 1707198945482, write end time: 1707198945483, allow commit time: -1, commit time: 1707198945483, finish time: -1, write cost: 1ms, reason:  tabletCommitInfos size: 18] successfully committed
+2024-02-06 13:55:45,485 INFO (lake-publish-task-3|116) [DatabaseTransactionMgr.finishTransactionBatch():1822] finish transaction [TransactionState. txn_id: 5, label: testTxnLable1, db id: 10004, table id list: 10009, callback id: -1, coordinator: FE: localfe, transaction status: VISIBLE, error replicas num: 0, replica ids: , prepare time: 1707198945477, write end time: 1707198945477, allow commit time: -1, commit time: 1707198945477, finish time: 1707198945485, publish total cost: 8ms, total cost: 8ms, reason: , newFinish tabletCommitInfos size: 18, TransactionState. txn_id: 6, label: testTxnLable2, db id: 10004, table id list: 10009, callback id: -1, coordinator: FE: localfe, transaction status: VISIBLE, error replicas num: 0, replica ids: , prepare time: 1707198945479, write end time: 1707198945479, allow commit time: -1, commit time: 1707198945479, finish time: 1707198945485, publish total cost: 6ms, total cost: 6ms, reason: , newFinish tabletCommitInfos size: 18, TransactionState. txn_id: 7, label: testTxnLable3, db id: 10004, table id list: 10009, callback id: -1, coordinator: FE: localfe, transaction status: VISIBLE, error replicas num: 0, replica ids: , prepare time: 1707198945480, write end time: 1707198945481, allow commit time: -1, commit time: 1707198945481, finish time: 1707198945485, write cost: 1ms, publish total cost: 4ms, total cost: 5ms, reason: , newFinish tabletCommitInfos size: 18, TransactionState. txn_id: 8, label: testTxnLable4, db id: 10004, table id list: 10009, callback id: -1, coordinator: FE: localfe, transaction status: VISIBLE, error replicas num: 0, replica ids: , prepare time: 1707198945482, write end time: 1707198945483, allow commit time: -1, commit time: 1707198945483, finish time: 1707198945485, write cost: 1ms, publish total cost: 2ms, total cost: 3ms, reason: , newFinish tabletCommitInfos size: 18] batch successfully
+2024-02-06 13:55:45,668 INFO (main|1) [DatabaseTransactionMgr.beginTransaction():319] begin transaction: txn_id: 9 with label testTxnLable5 from coordinator FE: localfe, listner id: -1
+2024-02-06 13:55:45,669 INFO (main|1) [DatabaseTransactionMgr.commitTransaction():468] transaction:[TransactionState. txn_id: 9, label: testTxnLable5, db id: 10004, table id list: 10009, callback id: -1, coordinator: FE: localfe, transaction status: COMMITTED, error replicas num: 0, replica ids: , prepare time: 1707198945668, write end time: 1707198945669, allow commit time: -1, commit time: 1707198945669, finish time: -1, write cost: 1ms, reason:  tabletCommitInfos size: 36] successfully committed
+2024-02-06 13:55:45,670 INFO (main|1) [DatabaseTransactionMgr.beginTransaction():319] begin transaction: txn_id: 10 with label testTxnLable6 from coordinator FE: localfe, listner id: -1
+2024-02-06 13:55:45,671 INFO (main|1) [DatabaseTransactionMgr.commitTransaction():468] transaction:[TransactionState. txn_id: 10, label: testTxnLable6, db id: 10004, table id list: 10009, callback id: -1, coordinator: FE: localfe, transaction status: COMMITTED, error replicas num: 0, replica ids: , prepare time: 1707198945670, write end time: 1707198945670, allow commit time: -1, commit time: 1707198945671, finish time: -1, write cost: 1ms, reason:  tabletCommitInfos size: 36] successfully committed
+2024-02-06 13:55:45,805 INFO (main|1) [PublishVersionDaemon.publishLakeTransactionBatchAsync():671] the database of transaction batch [TransactionState. txn_id: 9, label: testTxnLable5, db id: 10004, table id list: 10009, callback id: -1, coordinator: FE: localfe, transaction status: COMMITTED, error replicas num: 0, replica ids: , prepare time: 1707198945668, write end time: 1707198945669, allow commit time: -1, commit time: 1707198945669, finish time: -1, write cost: 1ms, reason:  tabletCommitInfos size: 36, TransactionState. txn_id: 10, label: testTxnLable6, db id: 10004, table id list: 10009, callback id: -1, coordinator: FE: localfe, transaction status: COMMITTED, error replicas num: 0, replica ids: , prepare time: 1707198945670, write end time: 1707198945670, allow commit time: -1, commit time: 1707198945671, finish time: -1, write cost: 1ms, reason:  tabletCommitInfos size: 36] has been deleted
+2024-02-06 13:55:45,806 WARN (main|1) [DatabaseTransactionMgr.finishTransaction():908] db is dropped during transaction, abort transaction TransactionState. txn_id: 9, label: testTxnLable5, db id: 10004, table id list: 10009, callback id: -1, coordinator: FE: localfe, transaction status: ABORTED, error replicas num: 0, replica ids: , prepare time: 1707198945668, write end time: 1707198945669, allow commit time: -1, commit time: 1707198945669, finish time: -1, write cost: 1ms, reason: db is dropped tabletCommitInfos size: 36
+2024-02-06 13:55:45,807 WARN (main|1) [DatabaseTransactionMgr.finishTransaction():908] db is dropped during transaction, abort transaction TransactionState. txn_id: 10, label: testTxnLable6, db id: 10004, table id list: 10009, callback id: -1, coordinator: FE: localfe, transaction status: ABORTED, error replicas num: 0, replica ids: , prepare time: 1707198945670, write end time: 1707198945670, allow commit time: -1, commit time: 1707198945671, finish time: -1, write cost: 1ms, reason: db is dropped tabletCommitInfos size: 36
+2024-02-06 13:55:49,210 INFO (ReportHandler|19) [ReportHandler.tabletReport():389] backend[10002] reports 0 tablet(s). report version: 2
+2024-02-06 13:55:49,210 INFO (be-10002|88) [PseudoBackend.reportTablets():484] report 0 tablets
+2024-02-06 13:55:49,210 INFO (be-10003|91) [PseudoBackend.reportTablets():484] report 0 tablets
+2024-02-06 13:55:49,210 INFO (be-10001|85) [PseudoBackend.reportTablets():484] report 0 tablets
+2024-02-06 13:55:49,211 INFO (be-10003|91) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:55:49,211 INFO (ReportHandler|19) [TabletInvertedIndex.tabletReport():304] finished to do tablet diff with backend[10002]. sync: 0. metaDel: 0. foundValid: 0. foundInvalid: 0. migration: 0. found invalid transactions 0. found republish transactions 0  cost: 0 ms
+2024-02-06 13:55:49,211 INFO (be-10002|88) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:55:49,212 INFO (be-10003|91) [PseudoBackend.reportTasks():546] report 0 tasks
+2024-02-06 13:55:49,211 INFO (be-10001|85) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:55:49,213 INFO (be-10002|88) [PseudoBackend.reportTasks():546] report 0 tasks
+2024-02-06 13:55:49,213 INFO (ReportHandler|19) [ReportHandler.tabletReport():389] backend[10003] reports 0 tablet(s). report version: 2
+2024-02-06 13:55:49,213 INFO (be-10001|85) [PseudoBackend.reportTasks():546] report 1 tasks
+2024-02-06 13:55:49,214 INFO (ReportHandler|19) [TabletInvertedIndex.tabletReport():304] finished to do tablet diff with backend[10003]. sync: 0. metaDel: 0. foundValid: 0. foundInvalid: 0. migration: 0. found invalid transactions 0. found republish transactions 0  cost: 0 ms
+2024-02-06 13:55:49,215 INFO (ReportHandler|19) [ReportHandler.tabletReport():389] backend[10001] reports 0 tablet(s). report version: 14
+2024-02-06 13:55:49,215 INFO (ReportHandler|19) [TabletInvertedIndex.tabletReport():304] finished to do tablet diff with backend[10001]. sync: 0. metaDel: 0. foundValid: 0. foundInvalid: 0. migration: 0. found invalid transactions 0. found republish transactions 0  cost: 0 ms
+2024-02-06 13:55:54,214 INFO (ReportHandler|19) [ReportHandler.tabletReport():389] backend[10003] reports 0 tablet(s). report version: 3
+2024-02-06 13:55:54,214 INFO (be-10003|91) [PseudoBackend.reportTablets():484] report 0 tablets
+2024-02-06 13:55:54,215 INFO (be-10001|85) [PseudoBackend.reportTablets():484] report 0 tablets
+2024-02-06 13:55:54,215 INFO (be-10002|88) [PseudoBackend.reportTablets():484] report 0 tablets
+2024-02-06 13:55:54,217 INFO (be-10003|91) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:55:54,216 INFO (ReportHandler|19) [TabletInvertedIndex.tabletReport():304] finished to do tablet diff with backend[10003]. sync: 0. metaDel: 0. foundValid: 0. foundInvalid: 0. migration: 0. found invalid transactions 0. found republish transactions 0  cost: 0 ms
+2024-02-06 13:55:54,217 INFO (be-10002|88) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:55:54,218 INFO (ReportHandler|19) [ReportHandler.tabletReport():389] backend[10002] reports 0 tablet(s). report version: 3
+2024-02-06 13:55:54,217 INFO (be-10001|85) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:55:54,218 INFO (be-10002|88) [PseudoBackend.reportTasks():546] report 0 tasks
+2024-02-06 13:55:54,217 INFO (be-10003|91) [PseudoBackend.reportTasks():546] report 0 tasks
+2024-02-06 13:55:54,219 INFO (be-10001|85) [PseudoBackend.reportTasks():546] report 1 tasks
+2024-02-06 13:55:54,219 INFO (ReportHandler|19) [TabletInvertedIndex.tabletReport():304] finished to do tablet diff with backend[10002]. sync: 0. metaDel: 0. foundValid: 0. foundInvalid: 0. migration: 0. found invalid transactions 0. found republish transactions 0  cost: 0 ms
+2024-02-06 13:55:54,221 INFO (ReportHandler|19) [ReportHandler.tabletReport():389] backend[10001] reports 0 tablet(s). report version: 15
+2024-02-06 13:55:54,221 INFO (ReportHandler|19) [TabletInvertedIndex.tabletReport():304] finished to do tablet diff with backend[10001]. sync: 0. metaDel: 0. foundValid: 0. foundInvalid: 0. migration: 0. found invalid transactions 0. found republish transactions 0  cost: 0 ms
+2024-02-06 13:55:58,764 INFO (colocate group clone checker|75) [ColocateTableBalancer.matchGroups():903] finished to match colocate group. cost: 0 ms, in lock time: 0 ms
+2024-02-06 13:55:58,784 INFO (tablet checker|42) [TabletChecker.doCheck():426] finished to check tablets. isUrgent: true, unhealthy/total/added/in_sched/not_ready: 0/0/0/0/0, cost: 4 ms, in lock time: 4 ms, wait time: 0ms
+2024-02-06 13:55:58,784 INFO (tablet checker|42) [TabletChecker.doCheck():426] finished to check tablets. isUrgent: false, unhealthy/total/added/in_sched/not_ready: 0/0/0/0/0, cost: 0 ms, in lock time: 0 ms, wait time: 0ms
+2024-02-06 13:55:58,785 INFO (tablet checker|42) [TabletChecker.runAfterCatalogReady():214] TStat :
+TStat num of tablet check round: 2 (+1)
+TStat cost of tablet check(ms): 4 (+4)
+TStat num of tablet checked in tablet checker: 0 (+0)
+TStat num of unhealthy tablet checked in tablet checker: 0 (+0)
+TStat num of tablet being added to tablet scheduler: 0 (+0)
+TStat num of tablet schedule round: 20 (+19)
+TStat cost of tablet schedule(ms): 11 (+2)
+TStat num of tablet being scheduled: 0 (+0)
+TStat num of tablet being scheduled succeeded: 0 (+0)
+TStat num of tablet being scheduled failed: 0 (+0)
+TStat num of tablet being scheduled discard: 0 (+0)
+TStat num of tablet priority upgraded: 0 (+0)
+TStat num of clone task: 0 (+0)
+TStat num of clone task succeeded: 0 (+0)
+TStat num of clone task failed: 0 (+0)
+TStat num of clone task timeout: 0 (+0)
+TStat num of replica missing error: 0 (+0)
+TStat num of replica version missing error: 0 (+0)
+TStat num of replica unavailable error: 0 (+0)
+TStat num of replica redundant error: 0 (+0)
+TStat num of replica missing in cluster error: 0 (+0)
+TStat num of balance scheduled: 0 (+0)
+TStat num of colocate replica mismatch: 0 (+0)
+TStat num of colocate replica redundant: 0 (+0)
+TStat num of colocate balancer running round: 0 (+0)
+
+2024-02-06 13:55:59,221 INFO (be-10002|88) [PseudoBackend.reportTablets():484] report 0 tablets
+2024-02-06 13:55:59,221 INFO (ReportHandler|19) [ReportHandler.tabletReport():389] backend[10002] reports 0 tablet(s). report version: 4
+2024-02-06 13:55:59,221 INFO (be-10003|91) [PseudoBackend.reportTablets():484] report 0 tablets
+2024-02-06 13:55:59,222 INFO (be-10002|88) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:55:59,221 INFO (be-10001|85) [PseudoBackend.reportTablets():484] report 0 tablets
+2024-02-06 13:55:59,222 INFO (ReportHandler|19) [TabletInvertedIndex.tabletReport():304] finished to do tablet diff with backend[10002]. sync: 0. metaDel: 0. foundValid: 0. foundInvalid: 0. migration: 0. found invalid transactions 0. found republish transactions 0  cost: 0 ms
+2024-02-06 13:55:59,222 INFO (be-10003|91) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:55:59,223 INFO (be-10002|88) [PseudoBackend.reportTasks():546] report 0 tasks
+2024-02-06 13:55:59,223 INFO (be-10001|85) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:55:59,224 INFO (be-10003|91) [PseudoBackend.reportTasks():546] report 0 tasks
+2024-02-06 13:55:59,224 INFO (ReportHandler|19) [ReportHandler.tabletReport():389] backend[10003] reports 0 tablet(s). report version: 4
+2024-02-06 13:55:59,224 INFO (be-10001|85) [PseudoBackend.reportTasks():546] report 1 tasks
+2024-02-06 13:55:59,225 INFO (ReportHandler|19) [TabletInvertedIndex.tabletReport():304] finished to do tablet diff with backend[10003]. sync: 0. metaDel: 0. foundValid: 0. foundInvalid: 0. migration: 0. found invalid transactions 0. found republish transactions 0  cost: 0 ms
+2024-02-06 13:55:59,226 INFO (ReportHandler|19) [ReportHandler.tabletReport():389] backend[10001] reports 0 tablet(s). report version: 16
+2024-02-06 13:55:59,226 INFO (ReportHandler|19) [TabletInvertedIndex.tabletReport():304] finished to do tablet diff with backend[10001]. sync: 0. metaDel: 0. foundValid: 0. foundInvalid: 0. migration: 0. found invalid transactions 0. found republish transactions 0  cost: 0 ms

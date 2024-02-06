@@ -1,0 +1,549 @@
+2024-02-06 13:56:15,031 INFO (fe|59) [FrontendOptions.analyzePriorityCidrs():299] configured prior_cidrs value: 127.0.0.1/24
+2024-02-06 13:56:15,065 WARN (fe|59) [FrontendOptions.initAddrUseIp():243] ip address range configured for priority_networks does not include the current IP address
+2024-02-06 13:56:15,066 INFO (fe|59) [FrontendOptions.initAddrUseIp():249] Use IP init local addr, IP: /127.0.0.1
+2024-02-06 13:56:15,203 INFO (fe|59) [NodeMgr.getHelperNodes():658] get helper nodes: [127.0.0.1:9010]
+2024-02-06 13:56:15,229 INFO (fe|59) [NodeMgr.getClusterIdAndRoleOnStartup():262] very first time to start this node. role: FOLLOWER, node name: 127.0.0.1_9010_1707198975226
+2024-02-06 13:56:15,237 INFO (fe|59) [NodeMgr.getClusterIdAndRoleOnStartup():459] Current run_mode is shared_nothing
+2024-02-06 13:56:15,242 INFO (fe|59) [NodeMgr.getClusterIdAndRoleOnStartup():466] Got cluster id: 1682034686, role: FOLLOWER, node name: 127.0.0.1_9010_1707198975226 and run_mode: shared_nothing
+2024-02-06 13:56:15,306 INFO (fe|59) [GlobalStateMgr.loadImage():1533] image does not exist: /root/starrocks/fe/fe-core/pseudo_cluster_33651/starrocks-meta/image/image.0
+2024-02-06 13:56:15,310 WARN (fe|59) [StateChangeExecutor.notifyNewFETypeTransfer():62] notify new FE type transfer: LEADER
+2024-02-06 13:56:15,542 INFO (stateChangeExecutor|65) [StateChangeExecutor.runOneCycle():85] begin to transfer FE type from INIT to LEADER
+2024-02-06 13:56:15,544 INFO (stateChangeExecutor|65) [GlobalStateMgr.replayJournal():2269] skip replay journal because 0 <= 0
+2024-02-06 13:56:15,789 INFO (stateChangeExecutor|65) [GlobalStateMgr.reInitializeNewPrivilegeOnUpgrade():4066] reinitialize privilege info before upgrade
+2024-02-06 13:56:15,789 WARN (stateChangeExecutor|65) [AuthenticationProviderFactory.installPlugin():32] Plugin MYSQL_NATIVE_PASSWORD has already been installed!
+2024-02-06 13:56:15,790 WARN (stateChangeExecutor|65) [AuthenticationProviderFactory.installPlugin():32] Plugin AUTHENTICATION_LDAP_SIMPLE has already been installed!
+2024-02-06 13:56:15,791 WARN (stateChangeExecutor|65) [AuthenticationProviderFactory.installPlugin():32] Plugin AUTHENTICATION_KERBEROS has already been installed!
+2024-02-06 13:56:15,792 WARN (stateChangeExecutor|65) [AuthenticationProviderFactory.installPlugin():32] Plugin AUTHENTICATION_LDAP_SIMPLE_FOR_EXTERNAL has already been installed!
+2024-02-06 13:56:15,793 INFO (stateChangeExecutor|65) [AuthorizationMgr.initBuiltinRoleUnlocked():283] create built-in role root[-1]
+2024-02-06 13:56:15,793 INFO (stateChangeExecutor|65) [AuthorizationMgr.initBuiltinRoleUnlocked():283] create built-in role db_admin[-2]
+2024-02-06 13:56:15,794 INFO (stateChangeExecutor|65) [AuthorizationMgr.initBuiltinRoleUnlocked():283] create built-in role cluster_admin[-3]
+2024-02-06 13:56:15,794 INFO (stateChangeExecutor|65) [AuthorizationMgr.initBuiltinRoleUnlocked():283] create built-in role user_admin[-4]
+2024-02-06 13:56:15,795 INFO (stateChangeExecutor|65) [AuthorizationMgr.initBuiltinRoleUnlocked():283] create built-in role public[-5]
+2024-02-06 13:56:15,799 INFO (stateChangeExecutor|65) [AuthUpgrader.upgradeAsLeader():80] start to upgrade as leader.
+2024-02-06 13:56:15,801 INFO (stateChangeExecutor|65) [AuthUpgrader.upgradeUser():178] ignore root entry : global priv. host: %, user: root, priv: Node_priv Admin_priv , set by resolver: false, domain user ident: null
+2024-02-06 13:56:15,823 INFO (stateChangeExecutor|65) [AuthUpgrader.upgradeAsLeader():84] upgraded as leader successfully.
+2024-02-06 13:56:15,824 INFO (stateChangeExecutor|65) [GlobalStateMgr.transferToLeader():1316] set usingNewPrivilege to true after transfer to leader
+2024-02-06 13:56:15,827 INFO (stateChangeExecutor|65) [GlobalStateMgr.startLeaderOnlyDaemonThreads():1386] checkpointer thread started. thread id is 67
+2024-02-06 13:56:15,902 INFO (stateChangeExecutor|65) [GlobalStateMgr.transferToLeader():1337] leader finished to replay journal, can write now.
+2024-02-06 13:56:15,928 INFO (leaderCheckpointer|67) [Checkpoint.runAfterCatalogReady():95] checkpoint imageVersion 0, checkpointVersion 0
+2024-02-06 13:56:15,936 INFO (main|1) [PseudoCluster.build():442] start create and start backends
+2024-02-06 13:56:15,977 INFO (tablet checker|42) [TabletChecker.doCheck():426] finished to check tablets. isUrgent: true, unhealthy/total/added/in_sched/not_ready: 0/0/0/0/0, cost: 0 ms, in lock time: 0 ms, wait time: 0ms
+2024-02-06 13:56:15,978 INFO (tablet checker|42) [TabletChecker.doCheck():426] finished to check tablets. isUrgent: false, unhealthy/total/added/in_sched/not_ready: 0/0/0/0/0, cost: 0 ms, in lock time: 0 ms, wait time: 0ms
+2024-02-06 13:56:15,987 WARN (Routine load task scheduler|49) [RoutineLoadTaskScheduler.process():116] no available be slot to scheduler tasks, wait for 10 seconds to scheduler again, you can set max_routine_load_task_num_per_be bigger in fe.conf, current value is 16
+2024-02-06 13:56:15,987 INFO (consistency checker|27) [TabletInvertedIndex.checkTabletMetaConsistency():463] TabletMetaChecker has cleaned 0 invalid tablet(s), scanned 0 tablet(s) on 0 backend(s) in 0ms, total tablets in recycle bin: 0, total ignored tablets: 0, up to 20 of ignored tablets: [], backend tablet count info(format: backend_id=curr_tablet_count:recycle_tablet_count): {}
+2024-02-06 13:56:15,989 INFO (TaskCleaner|64) [TaskManager.dropTasks():370] drop tasks:[]
+2024-02-06 13:56:15,991 INFO (TaskCleaner|64) [TaskManager.removeExpiredTaskRuns():884] remove run history:[]
+2024-02-06 13:56:15,993 INFO (tablet stat mgr|36) [TabletStatMgr.updateLocalTabletStat():173] finished to get local tablet stat of all backends. cost: 0 ms
+2024-02-06 13:56:15,999 INFO (tablet stat mgr|36) [TabletStatMgr.runAfterCatalogReady():138] finished to update index row num of all databases. cost: 1 ms
+2024-02-06 13:56:16,002 INFO (LoadLabelCleaner|62) [TaskManager.dropTasks():370] drop tasks:[]
+2024-02-06 13:56:16,009 INFO (LoadLabelCleaner|62) [TaskManager.removeExpiredTaskRuns():884] remove run history:[]
+2024-02-06 13:56:16,011 INFO (tablet scheduler|41) [TabletScheduler.updateClusterLoadStatistic():484] update cluster load statistic:
+
+2024-02-06 13:56:16,012 INFO (stateChangeExecutor|65) [StateChangeExecutor.runOneCycle():179] finished to transfer FE type from INIT to LEADER
+2024-02-06 13:56:16,019 WARN (PipeScheduler|55) [PipeScheduler.process():67] Successfully recover all pipes
+2024-02-06 13:56:16,021 INFO (colocate group clone checker|75) [ColocateTableBalancer.matchGroups():903] finished to match colocate group. cost: 0 ms, in lock time: 0 ms
+2024-02-06 13:56:16,022 INFO (main|1) [PseudoCluster.build():456] add PseudoBackend 10001 127.0.0.10
+2024-02-06 13:56:16,024 INFO (main|1) [PseudoCluster.build():456] add PseudoBackend 10002 127.0.0.11
+2024-02-06 13:56:16,027 INFO (main|1) [PseudoCluster.build():456] add PseudoBackend 10003 127.0.0.12
+2024-02-06 13:56:16,043 INFO (tablet checker|42) [TabletChecker.runAfterCatalogReady():214] TStat :
+TStat num of tablet check round: 1 (+1)
+TStat cost of tablet check(ms): 0 (+0)
+TStat num of tablet checked in tablet checker: 0 (+0)
+TStat num of unhealthy tablet checked in tablet checker: 0 (+0)
+TStat num of tablet being added to tablet scheduler: 0 (+0)
+TStat num of tablet schedule round: 1 (+1)
+TStat cost of tablet schedule(ms): 9 (+9)
+TStat num of tablet being scheduled: 0 (+0)
+TStat num of tablet being scheduled succeeded: 0 (+0)
+TStat num of tablet being scheduled failed: 0 (+0)
+TStat num of tablet being scheduled discard: 0 (+0)
+TStat num of tablet priority upgraded: 0 (+0)
+TStat num of clone task: 0 (+0)
+TStat num of clone task succeeded: 0 (+0)
+TStat num of clone task failed: 0 (+0)
+TStat num of clone task timeout: 0 (+0)
+TStat num of replica missing error: 0 (+0)
+TStat num of replica version missing error: 0 (+0)
+TStat num of replica unavailable error: 0 (+0)
+TStat num of replica redundant error: 0 (+0)
+TStat num of replica missing in cluster error: 0 (+0)
+TStat num of balance scheduled: 0 (+0)
+TStat num of colocate replica mismatch: 0 (+0)
+TStat num of colocate replica redundant: 0 (+0)
+TStat num of colocate balancer running round: 0 (+0)
+
+2024-02-06 13:56:17,035 INFO (tablet scheduler|41) [TabletScheduler.updateWorkingSlots():258] add new backend 10001 with slots num: 1
+2024-02-06 13:56:17,039 INFO (tablet scheduler|41) [TabletScheduler.updateWorkingSlots():258] add new backend 10002 with slots num: 1
+2024-02-06 13:56:17,040 INFO (tablet scheduler|41) [TabletScheduler.updateWorkingSlots():258] add new backend 10003 with slots num: 1
+2024-02-06 13:56:17,546 INFO (fe|59) [GlobalStateMgr.waitForReady():1212] wait globalStateMgr to be ready. FE type: LEADER. is ready: true
+2024-02-06 13:56:17,549 INFO (fe|59) [GlobalStateMgr.waitForReady():1197] globalStateMgr is ready. FE type: LEADER
+2024-02-06 13:56:17,737 INFO (fe|59) [Xnio.<clinit>():95] XNIO version 3.8.10.Final
+2024-02-06 13:56:17,917 INFO (fe|59) [NioXnio.<clinit>():58] XNIO NIO Implementation Version 3.8.10.Final
+2024-02-06 13:56:18,284 INFO (fe|59) [NMysqlServer.start():90] Open mysql server success on 33651
+2024-02-06 13:56:18,285 INFO (fe|59) [QeService.start():78] QE service start.
+2024-02-06 13:56:18,798 INFO (starrocks-mysql-nio I/O-1|92) [AcceptListener.handleEvent():79] Connection established. remote=/127.0.0.1:49998, connectionId=0
+2024-02-06 13:56:18,800 INFO (starrocks-mysql-nio-pool-0|97) [AcceptListener.lambda$handleEvent$1():87] Connection scheduled to worker thread 97. remote=/127.0.0.1:49998, connectionId=0
+2024-02-06 13:56:21,071 INFO (be-10002|88) [PseudoBackend.reportTablets():484] report 0 tablets
+2024-02-06 13:56:21,071 INFO (ReportHandler|19) [ReportHandler.tabletReport():389] backend[10002] reports 0 tablet(s). report version: 1
+2024-02-06 13:56:21,071 INFO (be-10003|91) [PseudoBackend.reportTablets():484] report 0 tablets
+2024-02-06 13:56:21,071 INFO (be-10001|84) [PseudoBackend.reportTablets():484] report 0 tablets
+2024-02-06 13:56:21,076 INFO (be-10003|91) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:56:21,076 INFO (be-10002|88) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:56:21,078 INFO (be-10003|91) [PseudoBackend.reportTasks():546] report 0 tasks
+2024-02-06 13:56:21,077 INFO (be-10001|84) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:56:21,082 INFO (be-10002|88) [PseudoBackend.reportTasks():546] report 0 tasks
+2024-02-06 13:56:21,083 INFO (be-10001|84) [PseudoBackend.reportTasks():546] report 0 tasks
+2024-02-06 13:56:21,089 INFO (ReportHandler|19) [TabletInvertedIndex.tabletReport():304] finished to do tablet diff with backend[10002]. sync: 0. metaDel: 0. foundValid: 0. foundInvalid: 0. migration: 0. found invalid transactions 0. found republish transactions 0  cost: 16 ms
+2024-02-06 13:56:21,093 INFO (ReportHandler|19) [ReportHandler.tabletReport():389] backend[10003] reports 0 tablet(s). report version: 1
+2024-02-06 13:56:21,094 INFO (ReportHandler|19) [TabletInvertedIndex.tabletReport():304] finished to do tablet diff with backend[10003]. sync: 0. metaDel: 0. foundValid: 0. foundInvalid: 0. migration: 0. found invalid transactions 0. found republish transactions 0  cost: 0 ms
+2024-02-06 13:56:21,096 INFO (ReportHandler|19) [ReportHandler.tabletReport():389] backend[10001] reports 0 tablet(s). report version: 1
+2024-02-06 13:56:21,097 INFO (ReportHandler|19) [TabletInvertedIndex.tabletReport():304] finished to do tablet diff with backend[10001]. sync: 0. metaDel: 0. foundValid: 0. foundInvalid: 0. migration: 0. found invalid transactions 0. found republish transactions 0  cost: 0 ms
+2024-02-06 13:56:22,664 INFO (starrocks-mysql-nio-pool-0|97) [QeProcessorImpl.registerQuery():105] register query id = 729a0dca-c4b4-11ee-b081-0242ac110002
+2024-02-06 13:56:23,366 INFO (PBackendService-10001|83) [PseudoBackend.execPlanFragmentWithReport():1211] exec_plan_fragment query: 729a0dca-c4b4-11ee-b081-0242ac110002 fragment: 729a0dca-c4b4-11ee-b081-0242ac110003
+2024-02-06 13:56:23,401 INFO (starrocks-mysql-nio-pool-0|97) [QeProcessorImpl.unregisterQuery():147] deregister query id = 729a0dca-c4b4-11ee-b081-0242ac110002
+2024-02-06 13:56:23,408 INFO (starrocks-mysql-nio-pool-0|97) [ResourceGroupMetricMgr.createQueryResourceGroupMetrics():123] Add query_resource_group metric, resource group name is default_wg
+2024-02-06 13:56:23,411 INFO (starrocks-mysql-nio-pool-0|97) [ResourceGroupMetricMgr$QueryResourceGroupLatencyMetrics.<init>():168] Add query_resource_group_latency metric, resource group name is default_wg
+2024-02-06 13:56:23,420 INFO (starrocks-mysql-nio-pool-0|97) [ResourceGroupMetricMgr$QueryResourceGroupLatencyMetrics.<init>():168] Add query_resource_group_latency metric, resource group name is default_wg
+2024-02-06 13:56:23,421 INFO (starrocks-mysql-nio-pool-0|97) [ResourceGroupMetricMgr$QueryResourceGroupLatencyMetrics.<init>():168] Add query_resource_group_latency metric, resource group name is default_wg
+2024-02-06 13:56:23,421 INFO (starrocks-mysql-nio-pool-0|97) [ResourceGroupMetricMgr$QueryResourceGroupLatencyMetrics.<init>():168] Add query_resource_group_latency metric, resource group name is default_wg
+2024-02-06 13:56:23,422 INFO (starrocks-mysql-nio-pool-0|97) [ResourceGroupMetricMgr$QueryResourceGroupLatencyMetrics.<init>():168] Add query_resource_group_latency metric, resource group name is default_wg
+2024-02-06 13:56:23,422 INFO (starrocks-mysql-nio-pool-0|97) [ResourceGroupMetricMgr$QueryResourceGroupLatencyMetrics.<init>():168] Add query_resource_group_latency metric, resource group name is default_wg
+2024-02-06 13:56:23,778 INFO (starrocks-mysql-nio-pool-0|97) [ConnectScheduler.unregisterConnection():155] Connection closed. remote=127.0.0.1:49998, connectionId=0
+2024-02-06 13:56:23,819 INFO (starrocks-mysql-nio I/O-2|93) [AcceptListener.handleEvent():79] Connection established. remote=/127.0.0.1:52562, connectionId=1
+2024-02-06 13:56:23,819 INFO (starrocks-mysql-nio-pool-0|97) [AcceptListener.lambda$handleEvent$1():87] Connection scheduled to worker thread 97. remote=/127.0.0.1:52562, connectionId=1
+2024-02-06 13:56:23,835 INFO (starrocks-mysql-nio-pool-0|97) [QeProcessorImpl.registerQuery():105] register query id = 756bcb6e-c4b4-11ee-b081-0242ac110002
+2024-02-06 13:56:23,839 INFO (PBackendService-10002|87) [PseudoBackend.execPlanFragmentWithReport():1211] exec_plan_fragment query: 756bcb6e-c4b4-11ee-b081-0242ac110002 fragment: 756bcb6e-c4b4-11ee-b081-0242ac110003
+2024-02-06 13:56:23,841 INFO (starrocks-mysql-nio-pool-0|97) [QeProcessorImpl.unregisterQuery():147] deregister query id = 756bcb6e-c4b4-11ee-b081-0242ac110002
+2024-02-06 13:56:23,993 INFO (starrocks-mysql-nio-pool-1|109) [LocalMetastore.createDb():429] createDb dbName = test, id = 10004
+2024-02-06 13:56:24,149 INFO (starrocks-mysql-nio-pool-1|109) [Database.checkDataSizeQuota():442] database[test] data quota: left bytes: 8388608.000 TB / total: 8388608.000 TB
+2024-02-06 13:56:24,149 INFO (starrocks-mysql-nio-pool-1|109) [Database.checkReplicaQuota():453] database[test] replica quota: left number: 9223372036854775807 / total: 9223372036854775807
+2024-02-06 13:56:24,237 INFO (starrocks-mysql-nio-pool-1|109) [LocalMetastore.buildPartitions():1893] start to build 1 partitions sequentially for table test.test with 9 replicas
+2024-02-06 13:56:24,240 INFO (starrocks-mysql-nio-pool-1|109) [LocalMetastore.buildPartitionsSequentially():1925] build partitions sequentially, send task one by one, all tasks timeout 30s
+2024-02-06 13:56:24,416 INFO (backend-worker-10001|82) [BeTabletManager.createTablet():63] created tablet 10008 
+2024-02-06 13:56:24,416 INFO (backend-worker-10003|89) [BeTabletManager.createTablet():63] created tablet 10008 
+2024-02-06 13:56:24,417 INFO (backend-worker-10002|86) [BeTabletManager.createTablet():63] created tablet 10008 
+2024-02-06 13:56:24,428 INFO (backend-worker-10001|82) [BeTabletManager.createTablet():63] created tablet 10012 
+2024-02-06 13:56:24,428 INFO (backend-worker-10002|86) [BeTabletManager.createTablet():63] created tablet 10012 
+2024-02-06 13:56:24,428 INFO (backend-worker-10003|89) [BeTabletManager.createTablet():63] created tablet 10012 
+2024-02-06 13:56:24,429 INFO (backend-worker-10001|82) [BeTabletManager.createTablet():63] created tablet 10016 
+2024-02-06 13:56:24,429 INFO (backend-worker-10002|86) [BeTabletManager.createTablet():63] created tablet 10016 
+2024-02-06 13:56:24,430 INFO (backend-worker-10003|89) [BeTabletManager.createTablet():63] created tablet 10016 
+2024-02-06 13:56:24,432 INFO (starrocks-mysql-nio-pool-1|109) [LocalMetastore.buildPartitionsSequentially():1928] build partitions sequentially, all tasks finished, took 194ms
+2024-02-06 13:56:24,432 INFO (starrocks-mysql-nio-pool-1|109) [LocalMetastore.onCreate():2287] Successfully create table: test-10006, in database: test-10004
+2024-02-06 13:56:24,597 INFO (starrocks-mysql-nio-pool-1|109) [DatabaseTransactionMgr.beginTransaction():319] begin transaction: txn_id: 2 with label insert_75dda015-c4b4-11ee-b081-0242ac110002 from coordinator FE: 127.0.0.1, listner id: -1
+2024-02-06 13:56:24,981 INFO (starrocks-mysql-nio-pool-1|109) [QeProcessorImpl.registerQuery():105] register query id = 75dda015-c4b4-11ee-b081-0242ac110002
+2024-02-06 13:56:24,983 INFO (starrocks-mysql-nio-pool-1|109) [DefaultCoordinator.prepareProfile():515] dispatch load job: 75dda015-c4b4-11ee-b081-0242ac110002 to [10003]
+2024-02-06 13:56:25,029 INFO (PBackendService-10003|90) [PseudoBackend.execPlanFragmentWithReport():1211] exec_plan_fragment query: 75dda015-c4b4-11ee-b081-0242ac110002 fragment: 75dda015-c4b4-11ee-b081-0242ac110003 sink: 10006 test
+2024-02-06 13:56:25,065 INFO (starrocks-mysql-nio-pool-1|109) [DatabaseTransactionMgr.commitTransaction():468] transaction:[TransactionState. txn_id: 2, label: insert_75dda015-c4b4-11ee-b081-0242ac110002, db id: 10004, table id list: 10006, callback id: -1, coordinator: FE: 127.0.0.1, transaction status: COMMITTED, error replicas num: 0, replica ids: , prepare time: 1707198984759, write end time: 1707198985033, allow commit time: -1, commit time: 1707198985040, finish time: -1, write cost: 281ms, reason:  attachment: com.starrocks.transaction.InsertTxnCommitAttachment@3a872896 tabletCommitInfos size: 9] successfully committed
+2024-02-06 13:56:25,069 INFO (PUBLISH_VERSION|30) [PublishVersionDaemon.publishVersionForOlapTable():293] send publish tasks for txn_id: 2
+2024-02-06 13:56:25,078 INFO (backend-worker-10002|86) [Tablet.commitNextRowset():323] txn: 2 tablet:10016 rowset commit, version:2 rowset:1 #version:2 #rowset:1
+2024-02-06 13:56:25,078 INFO (backend-worker-10003|89) [Tablet.commitNextRowset():323] txn: 2 tablet:10016 rowset commit, version:2 rowset:1 #version:2 #rowset:1
+2024-02-06 13:56:25,078 INFO (backend-worker-10001|82) [Tablet.commitNextRowset():323] txn: 2 tablet:10016 rowset commit, version:2 rowset:1 #version:2 #rowset:1
+2024-02-06 13:56:25,089 INFO (backend-worker-10002|86) [Tablet.commitNextRowset():323] txn: 2 tablet:10008 rowset commit, version:2 rowset:1 #version:2 #rowset:1
+2024-02-06 13:56:25,089 INFO (backend-worker-10003|89) [Tablet.commitNextRowset():323] txn: 2 tablet:10008 rowset commit, version:2 rowset:1 #version:2 #rowset:1
+2024-02-06 13:56:25,089 INFO (backend-worker-10001|82) [Tablet.commitNextRowset():323] txn: 2 tablet:10008 rowset commit, version:2 rowset:1 #version:2 #rowset:1
+2024-02-06 13:56:25,092 INFO (backend-worker-10003|89) [Tablet.commitNextRowset():323] txn: 2 tablet:10012 rowset commit, version:2 rowset:1 #version:2 #rowset:1
+2024-02-06 13:56:25,091 INFO (backend-worker-10002|86) [Tablet.commitNextRowset():323] txn: 2 tablet:10012 rowset commit, version:2 rowset:1 #version:2 #rowset:1
+2024-02-06 13:56:25,093 INFO (backend-worker-10003|89) [BeTxnManager.publish():117] backend: 10003 txn: 2 publish version error:0 / total:3 
+2024-02-06 13:56:25,093 INFO (backend-worker-10001|82) [Tablet.commitNextRowset():323] txn: 2 tablet:10012 rowset commit, version:2 rowset:1 #version:2 #rowset:1
+2024-02-06 13:56:25,094 INFO (backend-worker-10002|86) [BeTxnManager.publish():117] backend: 10002 txn: 2 publish version error:0 / total:3 
+2024-02-06 13:56:25,095 INFO (backend-worker-10001|82) [BeTxnManager.publish():117] backend: 10001 txn: 2 publish version error:0 / total:3 
+2024-02-06 13:56:26,098 INFO (ReportHandler|19) [ReportHandler.tabletReport():389] backend[10002] reports 3 tablet(s). report version: 6
+2024-02-06 13:56:26,098 INFO (be-10003|91) [PseudoBackend.reportTablets():484] report 3 tablets
+2024-02-06 13:56:26,098 INFO (be-10002|88) [PseudoBackend.reportTablets():484] report 3 tablets
+2024-02-06 13:56:26,098 INFO (be-10001|84) [PseudoBackend.reportTablets():484] report 3 tablets
+2024-02-06 13:56:26,100 INFO (be-10002|88) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:56:26,100 INFO (be-10003|91) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:56:26,101 INFO (be-10001|84) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:56:26,101 INFO (be-10002|88) [PseudoBackend.reportTasks():546] report 2 tasks
+2024-02-06 13:56:26,102 INFO (be-10003|91) [PseudoBackend.reportTasks():546] report 2 tasks
+2024-02-06 13:56:26,102 INFO (be-10001|84) [PseudoBackend.reportTasks():546] report 2 tasks
+2024-02-06 13:56:26,109 INFO (ReportHandler|19) [TabletInvertedIndex.tabletReport():304] finished to do tablet diff with backend[10002]. sync: 0. metaDel: 0. foundValid: 3. foundInvalid: 0. migration: 0. found invalid transactions 0. found republish transactions 0  cost: 9 ms
+2024-02-06 13:56:26,110 INFO (ReportHandler|19) [ReportHandler.tabletReport():389] backend[10003] reports 3 tablet(s). report version: 6
+2024-02-06 13:56:26,111 INFO (ReportHandler|19) [TabletInvertedIndex.tabletReport():304] finished to do tablet diff with backend[10003]. sync: 0. metaDel: 0. foundValid: 3. foundInvalid: 0. migration: 0. found invalid transactions 0. found republish transactions 0  cost: 0 ms
+2024-02-06 13:56:26,113 INFO (ReportHandler|19) [ReportHandler.tabletReport():389] backend[10001] reports 3 tablet(s). report version: 6
+2024-02-06 13:56:26,121 INFO (ReportHandler|19) [TabletInvertedIndex.tabletReport():304] finished to do tablet diff with backend[10001]. sync: 0. metaDel: 0. foundValid: 3. foundInvalid: 0. migration: 0. found invalid transactions 0. found republish transactions 0  cost: 1 ms
+2024-02-06 13:56:28,290 INFO (starrocks-mysql-nio-pool-1|109) [QeProcessorImpl.unregisterQuery():147] deregister query id = 75dda015-c4b4-11ee-b081-0242ac110002
+2024-02-06 13:56:28,303 INFO (PUBLISH_VERSION|30) [DatabaseTransactionMgr.finishTransactionNew():1784] finish transaction TransactionState. txn_id: 2, label: insert_75dda015-c4b4-11ee-b081-0242ac110002, db id: 10004, table id list: 10006, callback id: -1, coordinator: FE: 127.0.0.1, transaction status: VISIBLE, error replicas num: 0, replica ids: , prepare time: 1707198984759, write end time: 1707198985033, allow commit time: -1, commit time: 1707198985040, finish time: 1707198988281, write cost: 281ms, wait for publish cost: 29ms, publish rpc cost: 27ms, finish txn cost: 3185ms, publish total cost: 3241ms, total cost: 3522ms, reason: , newFinish attachment: com.starrocks.transaction.InsertTxnCommitAttachment@3a872896 tabletCommitInfos size: 9 successfully
+2024-02-06 13:56:29,086 INFO (PBackendService-10001|83) [PseudoBackend.execPlanFragmentWithReport():1211] exec_plan_fragment query: 787c66d7-c4b4-11ee-b081-0242ac110002 fragment: 787c66d7-c4b4-11ee-b081-0242ac110003
+2024-02-06 13:56:29,111 INFO (PBackendService-10002|87) [PseudoBackend.execPlanFragmentWithReport():1211] exec_plan_fragment query: 787c66d7-c4b4-11ee-b081-0242ac110002 fragment: 787c66d7-c4b4-11ee-b081-0242ac110005 #TabletScan: 1
+2024-02-06 13:56:29,111 INFO (PBackendService-10003|90) [PseudoBackend.execPlanFragmentWithReport():1211] exec_plan_fragment query: 787c66d7-c4b4-11ee-b081-0242ac110002 fragment: 787c66d7-c4b4-11ee-b081-0242ac110006 #TabletScan: 1
+2024-02-06 13:56:29,112 INFO (PBackendService-10001|83) [PseudoBackend.execPlanFragmentWithReport():1211] exec_plan_fragment query: 787c66d7-c4b4-11ee-b081-0242ac110002 fragment: 787c66d7-c4b4-11ee-b081-0242ac110004 #TabletScan: 1
+2024-02-06 13:56:29,152 INFO (PBackendService-10002|87) [PseudoBackend.execPlanFragmentWithReport():1211] exec_plan_fragment query: 78987a58-c4b4-11ee-b081-0242ac110002 fragment: 78987a58-c4b4-11ee-b081-0242ac110003
+2024-02-06 13:56:29,155 INFO (PBackendService-10001|83) [PseudoBackend.execPlanFragmentWithReport():1211] exec_plan_fragment query: 78987a58-c4b4-11ee-b081-0242ac110002 fragment: 78987a58-c4b4-11ee-b081-0242ac110004 #TabletScan: 1
+2024-02-06 13:56:29,157 INFO (PBackendService-10002|87) [PseudoBackend.execPlanFragmentWithReport():1211] exec_plan_fragment query: 78987a58-c4b4-11ee-b081-0242ac110002 fragment: 78987a58-c4b4-11ee-b081-0242ac110005 #TabletScan: 1
+2024-02-06 13:56:29,156 INFO (PBackendService-10003|90) [PseudoBackend.execPlanFragmentWithReport():1211] exec_plan_fragment query: 78987a58-c4b4-11ee-b081-0242ac110002 fragment: 78987a58-c4b4-11ee-b081-0242ac110006 #TabletScan: 1
+2024-02-06 13:56:29,173 INFO (PBackendService-10003|90) [PseudoBackend.execPlanFragmentWithReport():1211] exec_plan_fragment query: 789bd5b9-c4b4-11ee-b081-0242ac110002 fragment: 789bd5b9-c4b4-11ee-b081-0242ac110003
+2024-02-06 13:56:29,175 INFO (PBackendService-10001|83) [PseudoBackend.execPlanFragmentWithReport():1211] exec_plan_fragment query: 789bd5b9-c4b4-11ee-b081-0242ac110002 fragment: 789bd5b9-c4b4-11ee-b081-0242ac110004 #TabletScan: 1
+2024-02-06 13:56:29,175 INFO (PBackendService-10002|87) [PseudoBackend.execPlanFragmentWithReport():1211] exec_plan_fragment query: 789bd5b9-c4b4-11ee-b081-0242ac110002 fragment: 789bd5b9-c4b4-11ee-b081-0242ac110005 #TabletScan: 1
+2024-02-06 13:56:29,176 INFO (PBackendService-10003|90) [PseudoBackend.execPlanFragmentWithReport():1211] exec_plan_fragment query: 789bd5b9-c4b4-11ee-b081-0242ac110002 fragment: 789bd5b9-c4b4-11ee-b081-0242ac110006 #TabletScan: 1
+2024-02-06 13:56:29,197 INFO (starrocks-mysql-nio-pool-1|109) [DatabaseTransactionMgr.beginTransaction():319] begin transaction: txn_id: 3 with label insert_789fcd5a-c4b4-11ee-b081-0242ac110002 from coordinator FE: 127.0.0.1, listner id: -1
+2024-02-06 13:56:29,203 INFO (starrocks-mysql-nio-pool-1|109) [QeProcessorImpl.registerQuery():105] register query id = 789fcd5a-c4b4-11ee-b081-0242ac110002
+2024-02-06 13:56:29,204 INFO (starrocks-mysql-nio-pool-1|109) [DefaultCoordinator.prepareProfile():515] dispatch load job: 789fcd5a-c4b4-11ee-b081-0242ac110002 to [10001]
+2024-02-06 13:56:29,208 INFO (PBackendService-10001|83) [PseudoBackend.execPlanFragmentWithReport():1211] exec_plan_fragment query: 789fcd5a-c4b4-11ee-b081-0242ac110002 fragment: 789fcd5a-c4b4-11ee-b081-0242ac110003 sink: 10006 test
+2024-02-06 13:56:29,210 INFO (starrocks-mysql-nio-pool-1|109) [DatabaseTransactionMgr.commitTransaction():468] transaction:[TransactionState. txn_id: 3, label: insert_789fcd5a-c4b4-11ee-b081-0242ac110002, db id: 10004, table id list: 10006, callback id: -1, coordinator: FE: 127.0.0.1, transaction status: COMMITTED, error replicas num: 0, replica ids: , prepare time: 1707198989197, write end time: 1707198989209, allow commit time: -1, commit time: 1707198989210, finish time: -1, write cost: 13ms, reason:  attachment: com.starrocks.transaction.InsertTxnCommitAttachment@591692e4 tabletCommitInfos size: 9] successfully committed
+2024-02-06 13:56:29,212 INFO (PUBLISH_VERSION|30) [PublishVersionDaemon.publishVersionForOlapTable():293] send publish tasks for txn_id: 3
+2024-02-06 13:56:29,213 INFO (backend-worker-10002|86) [Tablet.commitNextRowset():323] txn: 3 tablet:10016 rowset commit, version:3 rowset:2 #version:3 #rowset:2
+2024-02-06 13:56:29,213 INFO (backend-worker-10001|82) [Tablet.commitNextRowset():323] txn: 3 tablet:10016 rowset commit, version:3 rowset:2 #version:3 #rowset:2
+2024-02-06 13:56:29,213 INFO (backend-worker-10003|89) [Tablet.commitNextRowset():323] txn: 3 tablet:10016 rowset commit, version:3 rowset:2 #version:3 #rowset:2
+2024-02-06 13:56:29,213 INFO (backend-worker-10002|86) [Tablet.commitNextRowset():323] txn: 3 tablet:10008 rowset commit, version:3 rowset:2 #version:3 #rowset:2
+2024-02-06 13:56:29,214 INFO (backend-worker-10001|82) [Tablet.commitNextRowset():323] txn: 3 tablet:10008 rowset commit, version:3 rowset:2 #version:3 #rowset:2
+2024-02-06 13:56:29,214 INFO (backend-worker-10003|89) [Tablet.commitNextRowset():323] txn: 3 tablet:10008 rowset commit, version:3 rowset:2 #version:3 #rowset:2
+2024-02-06 13:56:29,214 INFO (backend-worker-10001|82) [Tablet.commitNextRowset():323] txn: 3 tablet:10012 rowset commit, version:3 rowset:2 #version:3 #rowset:2
+2024-02-06 13:56:29,214 INFO (backend-worker-10002|86) [Tablet.commitNextRowset():323] txn: 3 tablet:10012 rowset commit, version:3 rowset:2 #version:3 #rowset:2
+2024-02-06 13:56:29,215 INFO (backend-worker-10003|89) [Tablet.commitNextRowset():323] txn: 3 tablet:10012 rowset commit, version:3 rowset:2 #version:3 #rowset:2
+2024-02-06 13:56:29,216 INFO (backend-worker-10001|82) [BeTxnManager.publish():117] backend: 10001 txn: 3 publish version error:0 / total:3 
+2024-02-06 13:56:29,216 INFO (backend-worker-10002|86) [BeTxnManager.publish():117] backend: 10002 txn: 3 publish version error:0 / total:3 
+2024-02-06 13:56:29,217 INFO (backend-worker-10003|89) [BeTxnManager.publish():117] backend: 10003 txn: 3 publish version error:0 / total:3 
+2024-02-06 13:56:29,224 INFO (starrocks-mysql-nio-pool-1|109) [QeProcessorImpl.unregisterQuery():147] deregister query id = 789fcd5a-c4b4-11ee-b081-0242ac110002
+2024-02-06 13:56:29,224 INFO (PUBLISH_VERSION|30) [DatabaseTransactionMgr.finishTransactionNew():1784] finish transaction TransactionState. txn_id: 3, label: insert_789fcd5a-c4b4-11ee-b081-0242ac110002, db id: 10004, table id list: 10006, callback id: -1, coordinator: FE: 127.0.0.1, transaction status: VISIBLE, error replicas num: 0, replica ids: , prepare time: 1707198989197, write end time: 1707198989209, allow commit time: -1, commit time: 1707198989210, finish time: 1707198989223, write cost: 13ms, wait for publish cost: 2ms, publish rpc cost: 6ms, finish txn cost: 5ms, publish total cost: 13ms, total cost: 26ms, reason: , newFinish attachment: com.starrocks.transaction.InsertTxnCommitAttachment@591692e4 tabletCommitInfos size: 9 successfully
+2024-02-06 13:56:29,226 INFO (starrocks-mysql-nio-pool-1|109) [DatabaseTransactionMgr.beginTransaction():319] begin transaction: txn_id: 4 with label insert_78a43a2b-c4b4-11ee-b081-0242ac110002 from coordinator FE: 127.0.0.1, listner id: -1
+2024-02-06 13:56:29,230 INFO (starrocks-mysql-nio-pool-1|109) [QeProcessorImpl.registerQuery():105] register query id = 78a43a2b-c4b4-11ee-b081-0242ac110002
+2024-02-06 13:56:29,231 INFO (starrocks-mysql-nio-pool-1|109) [DefaultCoordinator.prepareProfile():515] dispatch load job: 78a43a2b-c4b4-11ee-b081-0242ac110002 to [10002]
+2024-02-06 13:56:29,233 INFO (PBackendService-10002|87) [PseudoBackend.execPlanFragmentWithReport():1211] exec_plan_fragment query: 78a43a2b-c4b4-11ee-b081-0242ac110002 fragment: 78a43a2b-c4b4-11ee-b081-0242ac110003 sink: 10006 test
+2024-02-06 13:56:29,234 INFO (starrocks-mysql-nio-pool-1|109) [DatabaseTransactionMgr.commitTransaction():468] transaction:[TransactionState. txn_id: 4, label: insert_78a43a2b-c4b4-11ee-b081-0242ac110002, db id: 10004, table id list: 10006, callback id: -1, coordinator: FE: 127.0.0.1, transaction status: COMMITTED, error replicas num: 0, replica ids: , prepare time: 1707198989227, write end time: 1707198989234, allow commit time: -1, commit time: 1707198989234, finish time: -1, write cost: 7ms, reason:  attachment: com.starrocks.transaction.InsertTxnCommitAttachment@f7439bc tabletCommitInfos size: 9] successfully committed
+2024-02-06 13:56:29,235 INFO (PUBLISH_VERSION|30) [PublishVersionDaemon.publishVersionForOlapTable():293] send publish tasks for txn_id: 4
+2024-02-06 13:56:29,235 INFO (backend-worker-10002|86) [Tablet.commitNextRowset():323] txn: 4 tablet:10016 rowset commit, version:4 rowset:3 #version:4 #rowset:3
+2024-02-06 13:56:29,235 INFO (backend-worker-10001|82) [Tablet.commitNextRowset():323] txn: 4 tablet:10016 rowset commit, version:4 rowset:3 #version:4 #rowset:3
+2024-02-06 13:56:29,236 INFO (backend-worker-10003|89) [Tablet.commitNextRowset():323] txn: 4 tablet:10016 rowset commit, version:4 rowset:3 #version:4 #rowset:3
+2024-02-06 13:56:29,236 INFO (backend-worker-10002|86) [Tablet.commitNextRowset():323] txn: 4 tablet:10008 rowset commit, version:4 rowset:3 #version:4 #rowset:3
+2024-02-06 13:56:29,238 INFO (backend-worker-10002|86) [Tablet.commitNextRowset():323] txn: 4 tablet:10012 rowset commit, version:4 rowset:3 #version:4 #rowset:3
+2024-02-06 13:56:29,236 INFO (backend-worker-10001|82) [Tablet.commitNextRowset():323] txn: 4 tablet:10008 rowset commit, version:4 rowset:3 #version:4 #rowset:3
+2024-02-06 13:56:29,237 INFO (backend-worker-10003|89) [Tablet.commitNextRowset():323] txn: 4 tablet:10008 rowset commit, version:4 rowset:3 #version:4 #rowset:3
+2024-02-06 13:56:29,244 INFO (backend-worker-10002|86) [BeTxnManager.publish():117] backend: 10002 txn: 4 publish version error:0 / total:3 
+2024-02-06 13:56:29,244 INFO (backend-worker-10001|82) [Tablet.commitNextRowset():323] txn: 4 tablet:10012 rowset commit, version:4 rowset:3 #version:4 #rowset:3
+2024-02-06 13:56:29,244 INFO (backend-worker-10003|89) [Tablet.commitNextRowset():323] txn: 4 tablet:10012 rowset commit, version:4 rowset:3 #version:4 #rowset:3
+2024-02-06 13:56:29,246 INFO (backend-worker-10001|82) [BeTxnManager.publish():117] backend: 10001 txn: 4 publish version error:0 / total:3 
+2024-02-06 13:56:29,246 INFO (backend-worker-10003|89) [BeTxnManager.publish():117] backend: 10003 txn: 4 publish version error:0 / total:3 
+2024-02-06 13:56:29,257 INFO (PUBLISH_VERSION|30) [DatabaseTransactionMgr.finishTransactionNew():1784] finish transaction TransactionState. txn_id: 4, label: insert_78a43a2b-c4b4-11ee-b081-0242ac110002, db id: 10004, table id list: 10006, callback id: -1, coordinator: FE: 127.0.0.1, transaction status: VISIBLE, error replicas num: 0, replica ids: , prepare time: 1707198989227, write end time: 1707198989234, allow commit time: -1, commit time: 1707198989234, finish time: 1707198989256, write cost: 7ms, wait for publish cost: 1ms, publish rpc cost: 11ms, finish txn cost: 10ms, publish total cost: 22ms, total cost: 29ms, reason: , newFinish attachment: com.starrocks.transaction.InsertTxnCommitAttachment@f7439bc tabletCommitInfos size: 9 successfully
+2024-02-06 13:56:29,257 INFO (starrocks-mysql-nio-pool-1|109) [QeProcessorImpl.unregisterQuery():147] deregister query id = 78a43a2b-c4b4-11ee-b081-0242ac110002
+2024-02-06 13:56:29,261 INFO (starrocks-mysql-nio-pool-1|109) [DatabaseTransactionMgr.beginTransaction():319] begin transaction: txn_id: 5 with label insert_78a9b86d-c4b4-11ee-b081-0242ac110002 from coordinator FE: 127.0.0.1, listner id: -1
+2024-02-06 13:56:29,265 INFO (starrocks-mysql-nio-pool-1|109) [QeProcessorImpl.registerQuery():105] register query id = 78a9b86d-c4b4-11ee-b081-0242ac110002
+2024-02-06 13:56:29,265 INFO (starrocks-mysql-nio-pool-1|109) [DefaultCoordinator.prepareProfile():515] dispatch load job: 78a9b86d-c4b4-11ee-b081-0242ac110002 to [10003]
+2024-02-06 13:56:29,267 INFO (PBackendService-10003|90) [PseudoBackend.execPlanFragmentWithReport():1211] exec_plan_fragment query: 78a9b86d-c4b4-11ee-b081-0242ac110002 fragment: 78a9b86d-c4b4-11ee-b081-0242ac110003 sink: 10006 test
+2024-02-06 13:56:29,269 INFO (starrocks-mysql-nio-pool-1|109) [DatabaseTransactionMgr.commitTransaction():468] transaction:[TransactionState. txn_id: 5, label: insert_78a9b86d-c4b4-11ee-b081-0242ac110002, db id: 10004, table id list: 10006, callback id: -1, coordinator: FE: 127.0.0.1, transaction status: COMMITTED, error replicas num: 0, replica ids: , prepare time: 1707198989262, write end time: 1707198989268, allow commit time: -1, commit time: 1707198989268, finish time: -1, write cost: 6ms, reason:  attachment: com.starrocks.transaction.InsertTxnCommitAttachment@1142900f tabletCommitInfos size: 9] successfully committed
+2024-02-06 13:56:29,277 INFO (PUBLISH_VERSION|30) [PublishVersionDaemon.publishVersionForOlapTable():293] send publish tasks for txn_id: 5
+2024-02-06 13:56:29,278 INFO (backend-worker-10001|82) [Tablet.commitNextRowset():323] txn: 5 tablet:10016 rowset commit, version:5 rowset:4 #version:5 #rowset:4
+2024-02-06 13:56:29,278 INFO (backend-worker-10002|86) [Tablet.commitNextRowset():323] txn: 5 tablet:10016 rowset commit, version:5 rowset:4 #version:5 #rowset:4
+2024-02-06 13:56:29,278 INFO (backend-worker-10003|89) [Tablet.commitNextRowset():323] txn: 5 tablet:10016 rowset commit, version:5 rowset:4 #version:5 #rowset:4
+2024-02-06 13:56:29,279 INFO (backend-worker-10001|82) [Tablet.commitNextRowset():323] txn: 5 tablet:10008 rowset commit, version:5 rowset:4 #version:5 #rowset:4
+2024-02-06 13:56:29,279 INFO (backend-worker-10002|86) [Tablet.commitNextRowset():323] txn: 5 tablet:10008 rowset commit, version:5 rowset:4 #version:5 #rowset:4
+2024-02-06 13:56:29,280 INFO (backend-worker-10003|89) [Tablet.commitNextRowset():323] txn: 5 tablet:10008 rowset commit, version:5 rowset:4 #version:5 #rowset:4
+2024-02-06 13:56:29,280 INFO (backend-worker-10001|82) [Tablet.commitNextRowset():323] txn: 5 tablet:10012 rowset commit, version:5 rowset:4 #version:5 #rowset:4
+2024-02-06 13:56:29,281 INFO (backend-worker-10002|86) [Tablet.commitNextRowset():323] txn: 5 tablet:10012 rowset commit, version:5 rowset:4 #version:5 #rowset:4
+2024-02-06 13:56:29,281 INFO (backend-worker-10003|89) [Tablet.commitNextRowset():323] txn: 5 tablet:10012 rowset commit, version:5 rowset:4 #version:5 #rowset:4
+2024-02-06 13:56:29,282 INFO (backend-worker-10001|82) [BeTxnManager.publish():117] backend: 10001 txn: 5 publish version error:0 / total:3 
+2024-02-06 13:56:29,282 INFO (backend-worker-10003|89) [BeTxnManager.publish():117] backend: 10003 txn: 5 publish version error:0 / total:3 
+2024-02-06 13:56:29,282 INFO (backend-worker-10002|86) [BeTxnManager.publish():117] backend: 10002 txn: 5 publish version error:0 / total:3 
+2024-02-06 13:56:29,289 INFO (starrocks-mysql-nio-pool-1|109) [QeProcessorImpl.unregisterQuery():147] deregister query id = 78a9b86d-c4b4-11ee-b081-0242ac110002
+2024-02-06 13:56:29,289 INFO (PUBLISH_VERSION|30) [DatabaseTransactionMgr.finishTransactionNew():1784] finish transaction TransactionState. txn_id: 5, label: insert_78a9b86d-c4b4-11ee-b081-0242ac110002, db id: 10004, table id list: 10006, callback id: -1, coordinator: FE: 127.0.0.1, transaction status: VISIBLE, error replicas num: 0, replica ids: , prepare time: 1707198989262, write end time: 1707198989268, allow commit time: -1, commit time: 1707198989268, finish time: 1707198989289, write cost: 6ms, wait for publish cost: 9ms, publish rpc cost: 7ms, finish txn cost: 5ms, publish total cost: 21ms, total cost: 27ms, reason: , newFinish attachment: com.starrocks.transaction.InsertTxnCommitAttachment@1142900f tabletCommitInfos size: 9 successfully
+2024-02-06 13:56:29,292 INFO (starrocks-mysql-nio-pool-1|109) [DatabaseTransactionMgr.beginTransaction():319] begin transaction: txn_id: 6 with label insert_78ae735f-c4b4-11ee-b081-0242ac110002 from coordinator FE: 127.0.0.1, listner id: -1
+2024-02-06 13:56:29,296 INFO (starrocks-mysql-nio-pool-1|109) [QeProcessorImpl.registerQuery():105] register query id = 78ae735f-c4b4-11ee-b081-0242ac110002
+2024-02-06 13:56:29,297 INFO (starrocks-mysql-nio-pool-1|109) [DefaultCoordinator.prepareProfile():515] dispatch load job: 78ae735f-c4b4-11ee-b081-0242ac110002 to [10001]
+2024-02-06 13:56:29,299 WARN (PBackendService-10001|83) [PseudoOlapTableSink$NodeChannel.open():89] open tablet writer failed: node:10001 Too many versions. tablet_id: 10008, version_count: 4, limit: 4
+2024-02-06 13:56:29,300 WARN (PBackendService-10001|83) [PseudoOlapTableSink$NodeChannel.open():89] open tablet writer failed: node:10002 Too many versions. tablet_id: 10008, version_count: 4, limit: 4
+2024-02-06 13:56:29,304 WARN (PBackendService-10001|83) [PseudoBackend.execPlanFragmentWithReport():1214] error execPlanFragmentWithReport
+java.lang.Exception: open sink failed, backend:10001 txn:6 index:10007 has intolerable failure: Too many versions. tablet_id: 10008, version_count: 4, limit: 4 [10001, 10002] numReplica:3 |
+	at com.starrocks.pseudocluster.PseudoBackend.runSink(PseudoBackend.java:1339) ~[test-classes/:?]
+	at com.starrocks.pseudocluster.PseudoBackend.execPlanFragmentWithReport(PseudoBackend.java:1207) ~[test-classes/:?]
+	at com.starrocks.pseudocluster.PseudoBackend$PseudoPBackendService.lambda$execPlanFragmentAsync$2(PseudoBackend.java:915) ~[test-classes/:?]
+	at java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:515) ~[?:?]
+	at java.util.concurrent.FutureTask.run(FutureTask.java:264) ~[?:?]
+	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128) ~[?:?]
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628) ~[?:?]
+	at java.lang.Thread.run(Thread.java:829) ~[?:?]
+2024-02-06 13:56:29,326 WARN (PBackendService-10001|83) [DefaultCoordinator.updateFragmentExecStatus():898] exec state report failed status=errorCode INTERNAL_ERROR open sink failed, backend:10001 txn:6 index:10007 has intolerable failure: Too many versions. tablet_id: 10008, version_count: 4, limit: 4 [10001, 10002] numReplica:3 |, query_id=78ae735f-c4b4-11ee-b081-0242ac110002, instance_id=78ae735f-c4b4-11ee-b081-0242ac110003
+2024-02-06 13:56:29,327 WARN (PBackendService-10001|83) [DefaultCoordinator.updateStatus():714] one instance report fail throw updateStatus(), need cancel. job id: 10025, query id: 78ae735f-c4b4-11ee-b081-0242ac110002, instance id: 78ae735f-c4b4-11ee-b081-0242ac110003
+2024-02-06 13:56:29,331 WARN (starrocks-mysql-nio-pool-1|109) [StmtExecutor.handleDMLStmt():1941] insert failed: open sink failed, backend:10001 txn:6 index:10007 has intolerable failure: Too many versions. tablet_id: 10008, version_count: 4, limit: 4 [10001, 10002] numReplica:3 |
+2024-02-06 13:56:29,333 WARN (starrocks-mysql-nio-pool-1|109) [StmtExecutor.handleDMLStmt():2091] failed to handle stmt [insert into test.test values (1,"1", 1), (2,"2", 2), (3,"3", 3)] label: insert_78ae735f-c4b4-11ee-b081-0242ac110002
+com.starrocks.common.DdlException: open sink failed, backend:10001 txn:6 index:10007 has intolerable failure: Too many versions. tablet_id: 10008, version_count: 4, limit: 4 [10001, 10002] numReplica:3 |
+	at com.starrocks.common.ErrorReport.reportDdlException(ErrorReport.java:99) ~[classes/:?]
+	at com.starrocks.qe.StmtExecutor.handleDMLStmt(StmtExecutor.java:1942) ~[classes/:?]
+	at com.starrocks.qe.StmtExecutor.handleDMLStmtWithProfile(StmtExecutor.java:1732) ~[classes/:?]
+	at com.starrocks.qe.StmtExecutor.execute(StmtExecutor.java:613) ~[classes/:?]
+	at com.starrocks.qe.ConnectProcessor.handleQuery(ConnectProcessor.java:394) ~[classes/:?]
+	at com.starrocks.qe.ConnectProcessor.dispatch(ConnectProcessor.java:588) ~[classes/:?]
+	at com.starrocks.qe.ConnectProcessor.processOnce(ConnectProcessor.java:872) ~[classes/:?]
+	at com.starrocks.mysql.nio.ReadListener.lambda$handleEvent$0(ReadListener.java:69) ~[classes/:?]
+	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128) ~[?:?]
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628) ~[?:?]
+	at java.lang.Thread.run(Thread.java:829) ~[?:?]
+2024-02-06 13:56:29,335 INFO (starrocks-mysql-nio-pool-1|109) [DatabaseTransactionMgr.abortTransaction():1349] transaction:[TransactionState. txn_id: 6, label: insert_78ae735f-c4b4-11ee-b081-0242ac110002, db id: 10004, table id list: 10006, callback id: -1, coordinator: FE: 127.0.0.1, transaction status: ABORTED, error replicas num: 0, replica ids: , prepare time: 1707198989293, write end time: -1, allow commit time: -1, commit time: -1, finish time: 1707198989335, total cost: 42ms, reason: open sink failed, backend:10001 txn:6 index:10007 has intolerable failure: Too many versions. tablet_id: 10008, version_count: 4, limit: 4 [10001, 10002] numReplica:3 |] successfully rollback
+2024-02-06 13:56:29,335 INFO (PBackendService-10001|83) [QueryRuntimeProfile.finishAllInstances():212] unfinished instances: []
+2024-02-06 13:56:29,337 INFO (starrocks-mysql-nio-pool-1|109) [QeProcessorImpl.unregisterQuery():147] deregister query id = 78ae735f-c4b4-11ee-b081-0242ac110002
+2024-02-06 13:56:29,337 WARN (starrocks-mysql-nio-pool-1|109) [StmtExecutor.handleDMLStmtWithProfile():1734] DML statement(insert into test.test values (1,"1", 1), (2,"2", 2), (3,"3", 3)) process failed.
+com.starrocks.common.UserException: open sink failed, backend:10001 txn:6 index:10007 has intolerable failure: Too many versions. tablet_id: 10008, version_count: 4, limit: 4 [10001, 10002] numReplica:3 |
+	at com.starrocks.qe.StmtExecutor.handleDMLStmt(StmtExecutor.java:2139) ~[classes/:?]
+	at com.starrocks.qe.StmtExecutor.handleDMLStmtWithProfile(StmtExecutor.java:1732) ~[classes/:?]
+	at com.starrocks.qe.StmtExecutor.execute(StmtExecutor.java:613) ~[classes/:?]
+	at com.starrocks.qe.ConnectProcessor.handleQuery(ConnectProcessor.java:394) ~[classes/:?]
+	at com.starrocks.qe.ConnectProcessor.dispatch(ConnectProcessor.java:588) ~[classes/:?]
+	at com.starrocks.qe.ConnectProcessor.processOnce(ConnectProcessor.java:872) ~[classes/:?]
+	at com.starrocks.mysql.nio.ReadListener.lambda$handleEvent$0(ReadListener.java:69) ~[classes/:?]
+	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128) ~[?:?]
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628) ~[?:?]
+	at java.lang.Thread.run(Thread.java:829) ~[?:?]
+Caused by: com.starrocks.common.DdlException: open sink failed, backend:10001 txn:6 index:10007 has intolerable failure: Too many versions. tablet_id: 10008, version_count: 4, limit: 4 [10001, 10002] numReplica:3 |
+	at com.starrocks.common.ErrorReport.reportDdlException(ErrorReport.java:99) ~[classes/:?]
+	at com.starrocks.qe.StmtExecutor.handleDMLStmt(StmtExecutor.java:1942) ~[classes/:?]
+	... 9 more
+2024-02-06 13:56:29,338 INFO (starrocks-mysql-nio-pool-1|109) [StmtExecutor.execute():663] execute Exception, sql: insert into test.test values (1,"1", 1), (2,"2", 2), (3,"3", 3), error: open sink failed, backend:10001 txn:6 index:10007 has intolerable failure: Too many versions. tablet_id: 10008, version_count: 4, limit: 4 [10001, 10002] numReplica:3 |
+2024-02-06 13:56:29,380 ERROR (main|1) [PseudoCluster.runSingleSql():339] java.sql.SQLSyntaxErrorException: open sink failed, backend:10001 txn:6 index:10007 has intolerable failure: Too many versions. tablet_id: 10008, version_count: 4, limit: 4 [10001, 10002] numReplica:3 |
+2024-02-06 13:56:31,104 INFO (be-10003|91) [PseudoBackend.reportTablets():484] report 3 tablets
+2024-02-06 13:56:31,104 INFO (ReportHandler|19) [ReportHandler.tabletReport():389] backend[10002] reports 3 tablet(s). report version: 10
+2024-02-06 13:56:31,104 INFO (be-10002|88) [PseudoBackend.reportTablets():484] report 3 tablets
+2024-02-06 13:56:31,104 INFO (be-10001|84) [PseudoBackend.reportTablets():484] report 3 tablets
+2024-02-06 13:56:31,105 INFO (be-10003|91) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:56:31,105 INFO (ReportHandler|19) [TabletInvertedIndex.tabletReport():304] finished to do tablet diff with backend[10002]. sync: 0. metaDel: 0. foundValid: 3. foundInvalid: 0. migration: 0. found invalid transactions 0. found republish transactions 0  cost: 0 ms
+2024-02-06 13:56:31,106 INFO (be-10002|88) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:56:31,106 INFO (be-10003|91) [PseudoBackend.reportTasks():546] report 2 tasks
+2024-02-06 13:56:31,108 INFO (be-10002|88) [PseudoBackend.reportTasks():546] report 2 tasks
+2024-02-06 13:56:31,107 INFO (be-10001|84) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:56:31,108 INFO (be-10003|91) [Tablet.doCompaction():496] tablet:10016 compaction #rowset:4 [1-5 #pending:0]
+2024-02-06 13:56:31,107 INFO (ReportHandler|19) [ReportHandler.tabletReport():389] backend[10003] reports 3 tablet(s). report version: 10
+2024-02-06 13:56:31,109 INFO (be-10001|84) [PseudoBackend.reportTasks():546] report 2 tasks
+2024-02-06 13:56:31,109 INFO (be-10003|91) [Tablet.doCompaction():496] tablet:10008 compaction #rowset:4 [1-5 #pending:0]
+2024-02-06 13:56:31,108 INFO (be-10002|88) [Tablet.doCompaction():496] tablet:10016 compaction #rowset:4 [1-5 #pending:0]
+2024-02-06 13:56:31,110 INFO (be-10001|84) [Tablet.doCompaction():496] tablet:10016 compaction #rowset:4 [1-5 #pending:0]
+2024-02-06 13:56:31,110 INFO (ReportHandler|19) [TabletInvertedIndex.tabletReport():304] finished to do tablet diff with backend[10003]. sync: 0. metaDel: 0. foundValid: 3. foundInvalid: 0. migration: 0. found invalid transactions 0. found republish transactions 0  cost: 0 ms
+2024-02-06 13:56:31,110 INFO (be-10003|91) [Tablet.doCompaction():496] tablet:10012 compaction #rowset:4 [1-5 #pending:0]
+2024-02-06 13:56:31,111 INFO (be-10001|84) [Tablet.doCompaction():496] tablet:10008 compaction #rowset:4 [1-5 #pending:0]
+2024-02-06 13:56:31,111 INFO (be-10002|88) [Tablet.doCompaction():496] tablet:10008 compaction #rowset:4 [1-5 #pending:0]
+2024-02-06 13:56:31,112 INFO (ReportHandler|19) [ReportHandler.tabletReport():389] backend[10001] reports 3 tablet(s). report version: 10
+2024-02-06 13:56:31,113 INFO (be-10001|84) [Tablet.doCompaction():496] tablet:10012 compaction #rowset:4 [1-5 #pending:0]
+2024-02-06 13:56:31,113 INFO (be-10002|88) [Tablet.doCompaction():496] tablet:10012 compaction #rowset:4 [1-5 #pending:0]
+2024-02-06 13:56:31,114 INFO (ReportHandler|19) [TabletInvertedIndex.tabletReport():304] finished to do tablet diff with backend[10001]. sync: 0. metaDel: 0. foundValid: 3. foundInvalid: 0. migration: 0. found invalid transactions 0. found republish transactions 0  cost: 0 ms
+2024-02-06 13:56:31,385 INFO (starrocks-mysql-nio-pool-1|109) [DatabaseTransactionMgr.beginTransaction():319] begin transaction: txn_id: 7 with label insert_79edaa21-c4b4-11ee-b081-0242ac110002 from coordinator FE: 127.0.0.1, listner id: -1
+2024-02-06 13:56:31,389 INFO (starrocks-mysql-nio-pool-1|109) [QeProcessorImpl.registerQuery():105] register query id = 79edaa21-c4b4-11ee-b081-0242ac110002
+2024-02-06 13:56:31,389 INFO (starrocks-mysql-nio-pool-1|109) [DefaultCoordinator.prepareProfile():515] dispatch load job: 79edaa21-c4b4-11ee-b081-0242ac110002 to [10002]
+2024-02-06 13:56:31,391 INFO (PBackendService-10002|87) [PseudoBackend.execPlanFragmentWithReport():1211] exec_plan_fragment query: 79edaa21-c4b4-11ee-b081-0242ac110002 fragment: 79edaa21-c4b4-11ee-b081-0242ac110003 sink: 10006 test
+2024-02-06 13:56:31,393 INFO (starrocks-mysql-nio-pool-1|109) [DatabaseTransactionMgr.commitTransaction():468] transaction:[TransactionState. txn_id: 7, label: insert_79edaa21-c4b4-11ee-b081-0242ac110002, db id: 10004, table id list: 10006, callback id: -1, coordinator: FE: 127.0.0.1, transaction status: COMMITTED, error replicas num: 0, replica ids: , prepare time: 1707198991385, write end time: 1707198991392, allow commit time: -1, commit time: 1707198991393, finish time: -1, write cost: 8ms, reason:  attachment: com.starrocks.transaction.InsertTxnCommitAttachment@b425348 tabletCommitInfos size: 9] successfully committed
+2024-02-06 13:56:31,402 INFO (PUBLISH_VERSION|30) [PublishVersionDaemon.publishVersionForOlapTable():293] send publish tasks for txn_id: 7
+2024-02-06 13:56:31,403 INFO (backend-worker-10001|82) [Tablet.commitNextRowset():323] txn: 7 tablet:10016 rowset commit, version:6 rowset:6 #version:7 #rowset:2
+2024-02-06 13:56:31,403 INFO (backend-worker-10003|89) [Tablet.commitNextRowset():323] txn: 7 tablet:10016 rowset commit, version:6 rowset:6 #version:7 #rowset:2
+2024-02-06 13:56:31,403 INFO (backend-worker-10002|86) [Tablet.commitNextRowset():323] txn: 7 tablet:10016 rowset commit, version:6 rowset:6 #version:7 #rowset:2
+2024-02-06 13:56:31,404 INFO (backend-worker-10001|82) [Tablet.commitNextRowset():323] txn: 7 tablet:10008 rowset commit, version:6 rowset:6 #version:7 #rowset:2
+2024-02-06 13:56:31,404 INFO (backend-worker-10003|89) [Tablet.commitNextRowset():323] txn: 7 tablet:10008 rowset commit, version:6 rowset:6 #version:7 #rowset:2
+2024-02-06 13:56:31,404 INFO (backend-worker-10002|86) [Tablet.commitNextRowset():323] txn: 7 tablet:10008 rowset commit, version:6 rowset:6 #version:7 #rowset:2
+2024-02-06 13:56:31,405 INFO (backend-worker-10001|82) [Tablet.commitNextRowset():323] txn: 7 tablet:10012 rowset commit, version:6 rowset:6 #version:7 #rowset:2
+2024-02-06 13:56:31,405 INFO (backend-worker-10003|89) [Tablet.commitNextRowset():323] txn: 7 tablet:10012 rowset commit, version:6 rowset:6 #version:7 #rowset:2
+2024-02-06 13:56:31,406 INFO (backend-worker-10002|86) [Tablet.commitNextRowset():323] txn: 7 tablet:10012 rowset commit, version:6 rowset:6 #version:7 #rowset:2
+2024-02-06 13:56:31,406 INFO (backend-worker-10003|89) [BeTxnManager.publish():117] backend: 10003 txn: 7 publish version error:0 / total:3 
+2024-02-06 13:56:31,406 INFO (backend-worker-10001|82) [BeTxnManager.publish():117] backend: 10001 txn: 7 publish version error:0 / total:3 
+2024-02-06 13:56:31,407 INFO (backend-worker-10002|86) [BeTxnManager.publish():117] backend: 10002 txn: 7 publish version error:0 / total:3 
+2024-02-06 13:56:31,414 INFO (starrocks-mysql-nio-pool-1|109) [QeProcessorImpl.unregisterQuery():147] deregister query id = 79edaa21-c4b4-11ee-b081-0242ac110002
+2024-02-06 13:56:31,414 INFO (PUBLISH_VERSION|30) [DatabaseTransactionMgr.finishTransactionNew():1784] finish transaction TransactionState. txn_id: 7, label: insert_79edaa21-c4b4-11ee-b081-0242ac110002, db id: 10004, table id list: 10006, callback id: -1, coordinator: FE: 127.0.0.1, transaction status: VISIBLE, error replicas num: 0, replica ids: , prepare time: 1707198991385, write end time: 1707198991392, allow commit time: -1, commit time: 1707198991393, finish time: 1707198991414, write cost: 8ms, wait for publish cost: 9ms, publish rpc cost: 6ms, finish txn cost: 6ms, publish total cost: 21ms, total cost: 29ms, reason: , newFinish attachment: com.starrocks.transaction.InsertTxnCommitAttachment@b425348 tabletCommitInfos size: 9 successfully
+2024-02-06 13:56:31,417 INFO (starrocks-mysql-nio-pool-1|109) [DatabaseTransactionMgr.beginTransaction():319] begin transaction: txn_id: 8 with label insert_79f2b333-c4b4-11ee-b081-0242ac110002 from coordinator FE: 127.0.0.1, listner id: -1
+2024-02-06 13:56:31,420 INFO (starrocks-mysql-nio-pool-1|109) [QeProcessorImpl.registerQuery():105] register query id = 79f2b333-c4b4-11ee-b081-0242ac110002
+2024-02-06 13:56:31,420 INFO (starrocks-mysql-nio-pool-1|109) [DefaultCoordinator.prepareProfile():515] dispatch load job: 79f2b333-c4b4-11ee-b081-0242ac110002 to [10003]
+2024-02-06 13:56:31,422 INFO (PBackendService-10003|90) [PseudoBackend.execPlanFragmentWithReport():1211] exec_plan_fragment query: 79f2b333-c4b4-11ee-b081-0242ac110002 fragment: 79f2b333-c4b4-11ee-b081-0242ac110003 sink: 10006 test
+2024-02-06 13:56:31,424 INFO (starrocks-mysql-nio-pool-1|109) [DatabaseTransactionMgr.commitTransaction():468] transaction:[TransactionState. txn_id: 8, label: insert_79f2b333-c4b4-11ee-b081-0242ac110002, db id: 10004, table id list: 10006, callback id: -1, coordinator: FE: 127.0.0.1, transaction status: COMMITTED, error replicas num: 0, replica ids: , prepare time: 1707198991418, write end time: 1707198991423, allow commit time: -1, commit time: 1707198991423, finish time: -1, write cost: 5ms, reason:  attachment: com.starrocks.transaction.InsertTxnCommitAttachment@90591cb tabletCommitInfos size: 9] successfully committed
+2024-02-06 13:56:31,425 INFO (PUBLISH_VERSION|30) [PublishVersionDaemon.publishVersionForOlapTable():293] send publish tasks for txn_id: 8
+2024-02-06 13:56:31,426 INFO (backend-worker-10002|86) [Tablet.commitNextRowset():323] txn: 8 tablet:10016 rowset commit, version:7 rowset:7 #version:8 #rowset:3
+2024-02-06 13:56:31,426 INFO (backend-worker-10003|89) [Tablet.commitNextRowset():323] txn: 8 tablet:10016 rowset commit, version:7 rowset:7 #version:8 #rowset:3
+2024-02-06 13:56:31,426 INFO (backend-worker-10001|82) [Tablet.commitNextRowset():323] txn: 8 tablet:10016 rowset commit, version:7 rowset:7 #version:8 #rowset:3
+2024-02-06 13:56:31,426 INFO (backend-worker-10002|86) [Tablet.commitNextRowset():323] txn: 8 tablet:10008 rowset commit, version:7 rowset:7 #version:8 #rowset:3
+2024-02-06 13:56:31,427 INFO (backend-worker-10003|89) [Tablet.commitNextRowset():323] txn: 8 tablet:10008 rowset commit, version:7 rowset:7 #version:8 #rowset:3
+2024-02-06 13:56:31,427 INFO (backend-worker-10001|82) [Tablet.commitNextRowset():323] txn: 8 tablet:10008 rowset commit, version:7 rowset:7 #version:8 #rowset:3
+2024-02-06 13:56:31,428 INFO (backend-worker-10002|86) [Tablet.commitNextRowset():323] txn: 8 tablet:10012 rowset commit, version:7 rowset:7 #version:8 #rowset:3
+2024-02-06 13:56:31,428 INFO (backend-worker-10003|89) [Tablet.commitNextRowset():323] txn: 8 tablet:10012 rowset commit, version:7 rowset:7 #version:8 #rowset:3
+2024-02-06 13:56:31,428 INFO (backend-worker-10001|82) [Tablet.commitNextRowset():323] txn: 8 tablet:10012 rowset commit, version:7 rowset:7 #version:8 #rowset:3
+2024-02-06 13:56:31,429 INFO (backend-worker-10002|86) [BeTxnManager.publish():117] backend: 10002 txn: 8 publish version error:0 / total:3 
+2024-02-06 13:56:31,429 INFO (backend-worker-10003|89) [BeTxnManager.publish():117] backend: 10003 txn: 8 publish version error:0 / total:3 
+2024-02-06 13:56:31,430 INFO (backend-worker-10001|82) [BeTxnManager.publish():117] backend: 10001 txn: 8 publish version error:0 / total:3 
+2024-02-06 13:56:31,437 INFO (starrocks-mysql-nio-pool-1|109) [QeProcessorImpl.unregisterQuery():147] deregister query id = 79f2b333-c4b4-11ee-b081-0242ac110002
+2024-02-06 13:56:31,437 INFO (PUBLISH_VERSION|30) [DatabaseTransactionMgr.finishTransactionNew():1784] finish transaction TransactionState. txn_id: 8, label: insert_79f2b333-c4b4-11ee-b081-0242ac110002, db id: 10004, table id list: 10006, callback id: -1, coordinator: FE: 127.0.0.1, transaction status: VISIBLE, error replicas num: 0, replica ids: , prepare time: 1707198991418, write end time: 1707198991423, allow commit time: -1, commit time: 1707198991423, finish time: 1707198991436, write cost: 5ms, wait for publish cost: 2ms, publish rpc cost: 7ms, finish txn cost: 4ms, publish total cost: 13ms, total cost: 18ms, reason: , newFinish attachment: com.starrocks.transaction.InsertTxnCommitAttachment@90591cb tabletCommitInfos size: 9 successfully
+2024-02-06 13:56:31,440 INFO (starrocks-mysql-nio-pool-1|109) [DatabaseTransactionMgr.beginTransaction():319] begin transaction: txn_id: 9 with label insert_79f60e95-c4b4-11ee-b081-0242ac110002 from coordinator FE: 127.0.0.1, listner id: -1
+2024-02-06 13:56:31,442 INFO (starrocks-mysql-nio-pool-1|109) [QeProcessorImpl.registerQuery():105] register query id = 79f60e95-c4b4-11ee-b081-0242ac110002
+2024-02-06 13:56:31,443 INFO (starrocks-mysql-nio-pool-1|109) [DefaultCoordinator.prepareProfile():515] dispatch load job: 79f60e95-c4b4-11ee-b081-0242ac110002 to [10001]
+2024-02-06 13:56:31,445 INFO (PBackendService-10001|83) [PseudoBackend.execPlanFragmentWithReport():1211] exec_plan_fragment query: 79f60e95-c4b4-11ee-b081-0242ac110002 fragment: 79f60e95-c4b4-11ee-b081-0242ac110003 sink: 10006 test
+2024-02-06 13:56:31,446 INFO (starrocks-mysql-nio-pool-1|109) [DatabaseTransactionMgr.commitTransaction():468] transaction:[TransactionState. txn_id: 9, label: insert_79f60e95-c4b4-11ee-b081-0242ac110002, db id: 10004, table id list: 10006, callback id: -1, coordinator: FE: 127.0.0.1, transaction status: COMMITTED, error replicas num: 0, replica ids: , prepare time: 1707198991440, write end time: 1707198991446, allow commit time: -1, commit time: 1707198991446, finish time: -1, write cost: 6ms, reason:  attachment: com.starrocks.transaction.InsertTxnCommitAttachment@4c87640e tabletCommitInfos size: 9] successfully committed
+2024-02-06 13:56:31,448 INFO (PUBLISH_VERSION|30) [PublishVersionDaemon.publishVersionForOlapTable():293] send publish tasks for txn_id: 9
+2024-02-06 13:56:31,449 INFO (backend-worker-10002|86) [Tablet.commitNextRowset():323] txn: 9 tablet:10016 rowset commit, version:8 rowset:8 #version:9 #rowset:4
+2024-02-06 13:56:31,449 INFO (backend-worker-10001|82) [Tablet.commitNextRowset():323] txn: 9 tablet:10016 rowset commit, version:8 rowset:8 #version:9 #rowset:4
+2024-02-06 13:56:31,449 INFO (backend-worker-10003|89) [Tablet.commitNextRowset():323] txn: 9 tablet:10016 rowset commit, version:8 rowset:8 #version:9 #rowset:4
+2024-02-06 13:56:31,449 INFO (backend-worker-10001|82) [Tablet.commitNextRowset():323] txn: 9 tablet:10008 rowset commit, version:8 rowset:8 #version:9 #rowset:4
+2024-02-06 13:56:31,450 INFO (backend-worker-10002|86) [Tablet.commitNextRowset():323] txn: 9 tablet:10008 rowset commit, version:8 rowset:8 #version:9 #rowset:4
+2024-02-06 13:56:31,450 INFO (backend-worker-10003|89) [Tablet.commitNextRowset():323] txn: 9 tablet:10008 rowset commit, version:8 rowset:8 #version:9 #rowset:4
+2024-02-06 13:56:31,450 INFO (backend-worker-10001|82) [Tablet.commitNextRowset():323] txn: 9 tablet:10012 rowset commit, version:8 rowset:8 #version:9 #rowset:4
+2024-02-06 13:56:31,451 INFO (backend-worker-10003|89) [Tablet.commitNextRowset():323] txn: 9 tablet:10012 rowset commit, version:8 rowset:8 #version:9 #rowset:4
+2024-02-06 13:56:31,450 INFO (backend-worker-10002|86) [Tablet.commitNextRowset():323] txn: 9 tablet:10012 rowset commit, version:8 rowset:8 #version:9 #rowset:4
+2024-02-06 13:56:31,451 INFO (backend-worker-10001|82) [BeTxnManager.publish():117] backend: 10001 txn: 9 publish version error:0 / total:3 
+2024-02-06 13:56:31,451 INFO (backend-worker-10002|86) [BeTxnManager.publish():117] backend: 10002 txn: 9 publish version error:0 / total:3 
+2024-02-06 13:56:31,451 INFO (backend-worker-10003|89) [BeTxnManager.publish():117] backend: 10003 txn: 9 publish version error:0 / total:3 
+2024-02-06 13:56:31,460 INFO (starrocks-mysql-nio-pool-1|109) [QeProcessorImpl.unregisterQuery():147] deregister query id = 79f60e95-c4b4-11ee-b081-0242ac110002
+2024-02-06 13:56:31,460 INFO (PUBLISH_VERSION|30) [DatabaseTransactionMgr.finishTransactionNew():1784] finish transaction TransactionState. txn_id: 9, label: insert_79f60e95-c4b4-11ee-b081-0242ac110002, db id: 10004, table id list: 10006, callback id: -1, coordinator: FE: 127.0.0.1, transaction status: VISIBLE, error replicas num: 0, replica ids: , prepare time: 1707198991440, write end time: 1707198991446, allow commit time: -1, commit time: 1707198991446, finish time: 1707198991459, write cost: 6ms, wait for publish cost: 2ms, publish rpc cost: 5ms, finish txn cost: 6ms, publish total cost: 13ms, total cost: 19ms, reason: , newFinish attachment: com.starrocks.transaction.InsertTxnCommitAttachment@4c87640e tabletCommitInfos size: 9 successfully
+2024-02-06 13:56:31,496 INFO (starrocks-mysql-nio-pool-1|109) [Database.unprotectDropTable():540] finished dropping table[test] in db[test], tableId: 10006
+2024-02-06 13:56:31,499 INFO (starrocks-mysql-nio-pool-1|109) [TaskManager.dropTasks():370] drop tasks:[]
+2024-02-06 13:56:31,504 INFO (starrocks-mysql-nio-pool-1|109) [PipeManager.dropPipesOfDb():140] drop pipes in database test: []
+2024-02-06 13:56:31,504 INFO (starrocks-mysql-nio-pool-1|109) [LocalMetastore.dropDb():529] finish drop database[test], id: 10004, is force : true
+2024-02-06 13:56:31,505 INFO (starrocks-mysql-nio-pool-1|109) [OlapTable$DeleteOlapTableTask.run():2926] delete tablet[10008] from backend[10001] because table 10006-test is dropped
+2024-02-06 13:56:31,505 INFO (starrocks-mysql-nio-pool-1|109) [OlapTable$DeleteOlapTableTask.run():2926] delete tablet[10008] from backend[10002] because table 10006-test is dropped
+2024-02-06 13:56:31,506 INFO (starrocks-mysql-nio-pool-1|109) [OlapTable$DeleteOlapTableTask.run():2926] delete tablet[10008] from backend[10003] because table 10006-test is dropped
+2024-02-06 13:56:31,506 INFO (starrocks-mysql-nio-pool-1|109) [OlapTable$DeleteOlapTableTask.run():2926] delete tablet[10012] from backend[10001] because table 10006-test is dropped
+2024-02-06 13:56:31,507 INFO (starrocks-mysql-nio-pool-1|109) [OlapTable$DeleteOlapTableTask.run():2926] delete tablet[10012] from backend[10002] because table 10006-test is dropped
+2024-02-06 13:56:31,507 INFO (starrocks-mysql-nio-pool-1|109) [OlapTable$DeleteOlapTableTask.run():2926] delete tablet[10012] from backend[10003] because table 10006-test is dropped
+2024-02-06 13:56:31,507 INFO (starrocks-mysql-nio-pool-1|109) [OlapTable$DeleteOlapTableTask.run():2926] delete tablet[10016] from backend[10001] because table 10006-test is dropped
+2024-02-06 13:56:31,508 INFO (starrocks-mysql-nio-pool-1|109) [OlapTable$DeleteOlapTableTask.run():2926] delete tablet[10016] from backend[10002] because table 10006-test is dropped
+2024-02-06 13:56:31,508 INFO (starrocks-mysql-nio-pool-1|109) [OlapTable$DeleteOlapTableTask.run():2926] delete tablet[10016] from backend[10003] because table 10006-test is dropped
+2024-02-06 13:56:31,512 INFO (backend-worker-10001|82) [BeTabletManager.dropTablet():80] Dropped tablet 10008 force:true
+2024-02-06 13:56:31,516 INFO (backend-worker-10001|82) [BeTabletManager.dropTablet():80] Dropped tablet 10012 force:true
+2024-02-06 13:56:31,513 INFO (backend-worker-10003|89) [BeTabletManager.dropTablet():80] Dropped tablet 10008 force:true
+2024-02-06 13:56:31,513 INFO (backend-worker-10002|86) [BeTabletManager.dropTablet():80] Dropped tablet 10008 force:true
+2024-02-06 13:56:31,518 INFO (backend-worker-10003|89) [BeTabletManager.dropTablet():80] Dropped tablet 10012 force:true
+2024-02-06 13:56:31,517 INFO (backend-worker-10001|82) [BeTabletManager.dropTablet():80] Dropped tablet 10016 force:true
+2024-02-06 13:56:31,518 INFO (backend-worker-10002|86) [BeTabletManager.dropTablet():80] Dropped tablet 10012 force:true
+2024-02-06 13:56:31,519 INFO (backend-worker-10003|89) [BeTabletManager.dropTablet():80] Dropped tablet 10016 force:true
+2024-02-06 13:56:31,520 INFO (backend-worker-10002|86) [BeTabletManager.dropTablet():80] Dropped tablet 10016 force:true
+2024-02-06 13:56:36,023 INFO (colocate group clone checker|75) [ColocateTableBalancer.matchGroups():903] finished to match colocate group. cost: 0 ms, in lock time: 0 ms
+2024-02-06 13:56:36,044 INFO (tablet checker|42) [TabletChecker.doCheck():426] finished to check tablets. isUrgent: true, unhealthy/total/added/in_sched/not_ready: 0/0/0/0/0, cost: 0 ms, in lock time: 0 ms, wait time: 0ms
+2024-02-06 13:56:36,044 INFO (tablet checker|42) [TabletChecker.doCheck():426] finished to check tablets. isUrgent: false, unhealthy/total/added/in_sched/not_ready: 0/0/0/0/0, cost: 0 ms, in lock time: 0 ms, wait time: 0ms
+2024-02-06 13:56:36,045 INFO (tablet checker|42) [TabletChecker.runAfterCatalogReady():214] TStat :
+TStat num of tablet check round: 2 (+1)
+TStat cost of tablet check(ms): 0 (+0)
+TStat num of tablet checked in tablet checker: 0 (+0)
+TStat num of unhealthy tablet checked in tablet checker: 0 (+0)
+TStat num of tablet being added to tablet scheduler: 0 (+0)
+TStat num of tablet schedule round: 20 (+19)
+TStat cost of tablet schedule(ms): 11 (+2)
+TStat num of tablet being scheduled: 0 (+0)
+TStat num of tablet being scheduled succeeded: 0 (+0)
+TStat num of tablet being scheduled failed: 0 (+0)
+TStat num of tablet being scheduled discard: 0 (+0)
+TStat num of tablet priority upgraded: 0 (+0)
+TStat num of clone task: 0 (+0)
+TStat num of clone task succeeded: 0 (+0)
+TStat num of clone task failed: 0 (+0)
+TStat num of clone task timeout: 0 (+0)
+TStat num of replica missing error: 0 (+0)
+TStat num of replica version missing error: 0 (+0)
+TStat num of replica unavailable error: 0 (+0)
+TStat num of replica redundant error: 0 (+0)
+TStat num of replica missing in cluster error: 0 (+0)
+TStat num of balance scheduled: 0 (+0)
+TStat num of colocate replica mismatch: 0 (+0)
+TStat num of colocate replica redundant: 0 (+0)
+TStat num of colocate balancer running round: 0 (+0)
+
+2024-02-06 13:56:36,058 INFO (tablet scheduler|41) [ClusterLoadStatistic.classifyBackendByLoad():163] classify backend by load. medium: SSD, avg load score: 0.5, low/mid/high: 0/3/0
+2024-02-06 13:56:36,114 INFO (be-10003|91) [PseudoBackend.reportTablets():484] report 0 tablets
+2024-02-06 13:56:36,114 INFO (ReportHandler|19) [ReportHandler.tabletReport():389] backend[10003] reports 0 tablet(s). report version: 17
+2024-02-06 13:56:36,115 INFO (be-10003|91) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:56:36,116 INFO (be-10002|88) [PseudoBackend.reportTablets():484] report 0 tablets
+2024-02-06 13:56:36,116 INFO (be-10001|84) [PseudoBackend.reportTablets():484] report 0 tablets
+2024-02-06 13:56:36,116 INFO (be-10003|91) [PseudoBackend.reportTasks():546] report 3 tasks
+2024-02-06 13:56:36,115 INFO (ReportHandler|19) [TabletInvertedIndex.tabletReport():304] finished to do tablet diff with backend[10003]. sync: 0. metaDel: 0. foundValid: 0. foundInvalid: 0. migration: 0. found invalid transactions 0. found republish transactions 0  cost: 0 ms
+2024-02-06 13:56:36,117 INFO (be-10002|88) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:56:36,118 INFO (ReportHandler|19) [ReportHandler.tabletReport():389] backend[10001] reports 0 tablet(s). report version: 17
+2024-02-06 13:56:36,117 INFO (be-10001|84) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:56:36,118 INFO (be-10002|88) [PseudoBackend.reportTasks():546] report 3 tasks
+2024-02-06 13:56:36,119 INFO (ReportHandler|19) [TabletInvertedIndex.tabletReport():304] finished to do tablet diff with backend[10001]. sync: 0. metaDel: 0. foundValid: 0. foundInvalid: 0. migration: 0. found invalid transactions 0. found republish transactions 0  cost: 0 ms
+2024-02-06 13:56:36,119 INFO (be-10001|84) [PseudoBackend.reportTasks():546] report 3 tasks
+2024-02-06 13:56:36,120 INFO (ReportHandler|19) [ReportHandler.tabletReport():389] backend[10002] reports 0 tablet(s). report version: 17
+2024-02-06 13:56:36,120 INFO (ReportHandler|19) [TabletInvertedIndex.tabletReport():304] finished to do tablet diff with backend[10002]. sync: 0. metaDel: 0. foundValid: 0. foundInvalid: 0. migration: 0. found invalid transactions 0. found republish transactions 0  cost: 0 ms
+2024-02-06 13:56:41,123 INFO (ReportHandler|19) [ReportHandler.tabletReport():389] backend[10003] reports 0 tablet(s). report version: 18
+2024-02-06 13:56:41,123 INFO (be-10002|88) [PseudoBackend.reportTablets():484] report 0 tablets
+2024-02-06 13:56:41,123 INFO (be-10003|91) [PseudoBackend.reportTablets():484] report 0 tablets
+2024-02-06 13:56:41,123 INFO (be-10001|84) [PseudoBackend.reportTablets():484] report 0 tablets
+2024-02-06 13:56:41,127 INFO (ReportHandler|19) [TabletInvertedIndex.tabletReport():304] finished to do tablet diff with backend[10003]. sync: 0. metaDel: 0. foundValid: 0. foundInvalid: 0. migration: 0. found invalid transactions 0. found republish transactions 0  cost: 1 ms
+2024-02-06 13:56:41,127 INFO (be-10001|84) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:56:41,127 INFO (be-10003|91) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:56:41,128 INFO (be-10002|88) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:56:41,129 INFO (ReportHandler|19) [ReportHandler.tabletReport():389] backend[10002] reports 0 tablet(s). report version: 18
+2024-02-06 13:56:41,129 INFO (be-10003|91) [PseudoBackend.reportTasks():546] report 3 tasks
+2024-02-06 13:56:41,128 INFO (be-10001|84) [PseudoBackend.reportTasks():546] report 3 tasks
+2024-02-06 13:56:41,130 INFO (ReportHandler|19) [TabletInvertedIndex.tabletReport():304] finished to do tablet diff with backend[10002]. sync: 0. metaDel: 0. foundValid: 0. foundInvalid: 0. migration: 0. found invalid transactions 0. found republish transactions 0  cost: 0 ms
+2024-02-06 13:56:41,129 INFO (be-10002|88) [PseudoBackend.reportTasks():546] report 3 tasks
+2024-02-06 13:56:41,132 INFO (ReportHandler|19) [ReportHandler.tabletReport():389] backend[10001] reports 0 tablet(s). report version: 18
+2024-02-06 13:56:41,133 INFO (ReportHandler|19) [TabletInvertedIndex.tabletReport():304] finished to do tablet diff with backend[10001]. sync: 0. metaDel: 0. foundValid: 0. foundInvalid: 0. migration: 0. found invalid transactions 0. found republish transactions 0  cost: 0 ms
+2024-02-06 13:56:46,134 INFO (ReportHandler|19) [ReportHandler.tabletReport():389] backend[10003] reports 0 tablet(s). report version: 19
+2024-02-06 13:56:46,134 INFO (be-10003|91) [PseudoBackend.reportTablets():484] report 0 tablets
+2024-02-06 13:56:46,134 INFO (be-10002|88) [PseudoBackend.reportTablets():484] report 0 tablets
+2024-02-06 13:56:46,134 INFO (be-10001|84) [PseudoBackend.reportTablets():484] report 0 tablets
+2024-02-06 13:56:46,136 INFO (be-10001|84) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:56:46,136 INFO (be-10003|91) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:56:46,136 INFO (be-10002|88) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:56:46,137 INFO (ReportHandler|19) [TabletInvertedIndex.tabletReport():304] finished to do tablet diff with backend[10003]. sync: 0. metaDel: 0. foundValid: 0. foundInvalid: 0. migration: 0. found invalid transactions 0. found republish transactions 0  cost: 0 ms
+2024-02-06 13:56:46,139 INFO (be-10002|88) [PseudoBackend.reportTasks():546] report 3 tasks
+2024-02-06 13:56:46,137 INFO (be-10001|84) [PseudoBackend.reportTasks():546] report 3 tasks
+2024-02-06 13:56:46,138 INFO (be-10003|91) [PseudoBackend.reportTasks():546] report 3 tasks
+2024-02-06 13:56:46,141 INFO (ReportHandler|19) [ReportHandler.tabletReport():389] backend[10001] reports 0 tablet(s). report version: 19
+2024-02-06 13:56:46,142 INFO (ReportHandler|19) [TabletInvertedIndex.tabletReport():304] finished to do tablet diff with backend[10001]. sync: 0. metaDel: 0. foundValid: 0. foundInvalid: 0. migration: 0. found invalid transactions 0. found republish transactions 0  cost: 1 ms
+2024-02-06 13:56:46,142 INFO (ReportHandler|19) [ReportHandler.tabletReport():389] backend[10002] reports 0 tablet(s). report version: 19
+2024-02-06 13:56:46,143 INFO (ReportHandler|19) [TabletInvertedIndex.tabletReport():304] finished to do tablet diff with backend[10002]. sync: 0. metaDel: 0. foundValid: 0. foundInvalid: 0. migration: 0. found invalid transactions 0. found republish transactions 0  cost: 0 ms
+2024-02-06 13:56:51,143 INFO (be-10001|84) [PseudoBackend.reportTablets():484] report 0 tablets
+2024-02-06 13:56:51,143 INFO (be-10003|91) [PseudoBackend.reportTablets():484] report 0 tablets
+2024-02-06 13:56:51,143 INFO (ReportHandler|19) [ReportHandler.tabletReport():389] backend[10003] reports 0 tablet(s). report version: 20
+2024-02-06 13:56:51,143 INFO (be-10002|88) [PseudoBackend.reportTablets():484] report 0 tablets
+2024-02-06 13:56:51,145 INFO (be-10001|84) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:56:51,147 INFO (be-10003|91) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:56:51,147 INFO (be-10003|91) [PseudoBackend.reportTasks():546] report 3 tasks
+2024-02-06 13:56:51,146 INFO (be-10002|88) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:56:51,146 INFO (ReportHandler|19) [TabletInvertedIndex.tabletReport():304] finished to do tablet diff with backend[10003]. sync: 0. metaDel: 0. foundValid: 0. foundInvalid: 0. migration: 0. found invalid transactions 0. found republish transactions 0  cost: 0 ms
+2024-02-06 13:56:51,147 INFO (be-10001|84) [PseudoBackend.reportTasks():546] report 3 tasks
+2024-02-06 13:56:51,148 INFO (be-10002|88) [PseudoBackend.reportTasks():546] report 3 tasks
+2024-02-06 13:56:51,149 INFO (ReportHandler|19) [ReportHandler.tabletReport():389] backend[10002] reports 0 tablet(s). report version: 20
+2024-02-06 13:56:51,150 INFO (ReportHandler|19) [TabletInvertedIndex.tabletReport():304] finished to do tablet diff with backend[10002]. sync: 0. metaDel: 0. foundValid: 0. foundInvalid: 0. migration: 0. found invalid transactions 0. found republish transactions 0  cost: 0 ms
+2024-02-06 13:56:51,151 INFO (ReportHandler|19) [ReportHandler.tabletReport():389] backend[10001] reports 0 tablet(s). report version: 20
+2024-02-06 13:56:51,152 INFO (ReportHandler|19) [TabletInvertedIndex.tabletReport():304] finished to do tablet diff with backend[10001]. sync: 0. metaDel: 0. foundValid: 0. foundInvalid: 0. migration: 0. found invalid transactions 0. found republish transactions 0  cost: 0 ms
+2024-02-06 13:56:56,026 INFO (colocate group clone checker|75) [ColocateTableBalancer.matchGroups():903] finished to match colocate group. cost: 0 ms, in lock time: 0 ms
+2024-02-06 13:56:56,046 INFO (tablet checker|42) [TabletChecker.doCheck():426] finished to check tablets. isUrgent: true, unhealthy/total/added/in_sched/not_ready: 0/0/0/0/0, cost: 0 ms, in lock time: 0 ms, wait time: 0ms
+2024-02-06 13:56:56,048 INFO (tablet checker|42) [TabletChecker.doCheck():426] finished to check tablets. isUrgent: false, unhealthy/total/added/in_sched/not_ready: 0/0/0/0/0, cost: 0 ms, in lock time: 0 ms, wait time: 0ms
+2024-02-06 13:56:56,049 INFO (tablet checker|42) [TabletChecker.runAfterCatalogReady():214] TStat :
+TStat num of tablet check round: 3 (+1)
+TStat cost of tablet check(ms): 0 (+0)
+TStat num of tablet checked in tablet checker: 0 (+0)
+TStat num of unhealthy tablet checked in tablet checker: 0 (+0)
+TStat num of tablet being added to tablet scheduler: 0 (+0)
+TStat num of tablet schedule round: 40 (+20)
+TStat cost of tablet schedule(ms): 11 (+0)
+TStat num of tablet being scheduled: 0 (+0)
+TStat num of tablet being scheduled succeeded: 0 (+0)
+TStat num of tablet being scheduled failed: 0 (+0)
+TStat num of tablet being scheduled discard: 0 (+0)
+TStat num of tablet priority upgraded: 0 (+0)
+TStat num of clone task: 0 (+0)
+TStat num of clone task succeeded: 0 (+0)
+TStat num of clone task failed: 0 (+0)
+TStat num of clone task timeout: 0 (+0)
+TStat num of replica missing error: 0 (+0)
+TStat num of replica version missing error: 0 (+0)
+TStat num of replica unavailable error: 0 (+0)
+TStat num of replica redundant error: 0 (+0)
+TStat num of replica missing in cluster error: 0 (+0)
+TStat num of balance scheduled: 0 (+0)
+TStat num of colocate replica mismatch: 0 (+0)
+TStat num of colocate replica redundant: 0 (+0)
+TStat num of colocate balancer running round: 0 (+0)
+
+2024-02-06 13:56:56,073 INFO (tablet scheduler|41) [ClusterLoadStatistic.classifyBackendByLoad():163] classify backend by load. medium: SSD, avg load score: 0.5, low/mid/high: 0/3/0
+2024-02-06 13:56:56,149 INFO (be-10003|91) [PseudoBackend.reportTablets():484] report 0 tablets
+2024-02-06 13:56:56,149 INFO (ReportHandler|19) [ReportHandler.tabletReport():389] backend[10003] reports 0 tablet(s). report version: 21
+2024-02-06 13:56:56,150 INFO (ReportHandler|19) [TabletInvertedIndex.tabletReport():304] finished to do tablet diff with backend[10003]. sync: 0. metaDel: 0. foundValid: 0. foundInvalid: 0. migration: 0. found invalid transactions 0. found republish transactions 0  cost: 0 ms
+2024-02-06 13:56:56,150 INFO (be-10002|88) [PseudoBackend.reportTablets():484] report 0 tablets
+2024-02-06 13:56:56,151 INFO (ReportHandler|19) [ReportHandler.tabletReport():389] backend[10001] reports 0 tablet(s). report version: 21
+2024-02-06 13:56:56,150 INFO (be-10003|91) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:56:56,150 INFO (be-10001|84) [PseudoBackend.reportTablets():484] report 0 tablets
+2024-02-06 13:56:56,152 INFO (be-10003|91) [PseudoBackend.reportTasks():546] report 3 tasks
+2024-02-06 13:56:56,151 INFO (be-10002|88) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:56:56,152 INFO (ReportHandler|19) [TabletInvertedIndex.tabletReport():304] finished to do tablet diff with backend[10001]. sync: 0. metaDel: 0. foundValid: 0. foundInvalid: 0. migration: 0. found invalid transactions 0. found republish transactions 0  cost: 0 ms
+2024-02-06 13:56:56,153 INFO (be-10002|88) [PseudoBackend.reportTasks():546] report 3 tasks
+2024-02-06 13:56:56,153 INFO (be-10001|84) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:56:56,154 INFO (ReportHandler|19) [ReportHandler.tabletReport():389] backend[10002] reports 0 tablet(s). report version: 21
+2024-02-06 13:56:56,155 INFO (be-10001|84) [PseudoBackend.reportTasks():546] report 3 tasks
+2024-02-06 13:56:56,155 INFO (ReportHandler|19) [TabletInvertedIndex.tabletReport():304] finished to do tablet diff with backend[10002]. sync: 0. metaDel: 0. foundValid: 0. foundInvalid: 0. migration: 0. found invalid transactions 0. found republish transactions 0  cost: 0 ms
+2024-02-06 13:57:01,155 INFO (ReportHandler|19) [ReportHandler.tabletReport():389] backend[10003] reports 0 tablet(s). report version: 22
+2024-02-06 13:57:01,155 INFO (be-10003|91) [PseudoBackend.reportTablets():484] report 0 tablets
+2024-02-06 13:57:01,156 INFO (be-10003|91) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:57:01,156 INFO (ReportHandler|19) [TabletInvertedIndex.tabletReport():304] finished to do tablet diff with backend[10003]. sync: 0. metaDel: 0. foundValid: 0. foundInvalid: 0. migration: 0. found invalid transactions 0. found republish transactions 0  cost: 0 ms
+2024-02-06 13:57:01,156 INFO (be-10003|91) [PseudoBackend.reportTasks():546] report 3 tasks
+2024-02-06 13:57:01,157 INFO (ReportHandler|19) [ReportHandler.tabletReport():389] backend[10002] reports 0 tablet(s). report version: 22
+2024-02-06 13:57:01,156 INFO (be-10002|88) [PseudoBackend.reportTablets():484] report 0 tablets
+2024-02-06 13:57:01,157 INFO (ReportHandler|19) [TabletInvertedIndex.tabletReport():304] finished to do tablet diff with backend[10002]. sync: 0. metaDel: 0. foundValid: 0. foundInvalid: 0. migration: 0. found invalid transactions 0. found republish transactions 0  cost: 0 ms
+2024-02-06 13:57:01,158 INFO (be-10002|88) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:57:01,159 INFO (be-10002|88) [PseudoBackend.reportTasks():546] report 3 tasks
+2024-02-06 13:57:01,165 INFO (be-10001|84) [PseudoBackend.reportTablets():484] report 0 tablets
+2024-02-06 13:57:01,165 INFO (ReportHandler|19) [ReportHandler.tabletReport():389] backend[10001] reports 0 tablet(s). report version: 22
+2024-02-06 13:57:01,166 INFO (be-10001|84) [PseudoBackend.reportDisks():517] report 1 disks
+2024-02-06 13:57:01,167 INFO (ReportHandler|19) [TabletInvertedIndex.tabletReport():304] finished to do tablet diff with backend[10001]. sync: 0. metaDel: 0. foundValid: 0. foundInvalid: 0. migration: 0. found invalid transactions 0. found republish transactions 0  cost: 0 ms
+2024-02-06 13:57:01,167 INFO (be-10001|84) [PseudoBackend.reportTasks():546] report 3 tasks

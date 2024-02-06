@@ -1,0 +1,53 @@
+2024-02-06 13:56:15,065 WARN (fe|59) [FrontendOptions.initAddrUseIp():243] ip address range configured for priority_networks does not include the current IP address
+2024-02-06 13:56:15,310 WARN (fe|59) [StateChangeExecutor.notifyNewFETypeTransfer():62] notify new FE type transfer: LEADER
+2024-02-06 13:56:15,789 WARN (stateChangeExecutor|65) [AuthenticationProviderFactory.installPlugin():32] Plugin MYSQL_NATIVE_PASSWORD has already been installed!
+2024-02-06 13:56:15,790 WARN (stateChangeExecutor|65) [AuthenticationProviderFactory.installPlugin():32] Plugin AUTHENTICATION_LDAP_SIMPLE has already been installed!
+2024-02-06 13:56:15,791 WARN (stateChangeExecutor|65) [AuthenticationProviderFactory.installPlugin():32] Plugin AUTHENTICATION_KERBEROS has already been installed!
+2024-02-06 13:56:15,792 WARN (stateChangeExecutor|65) [AuthenticationProviderFactory.installPlugin():32] Plugin AUTHENTICATION_LDAP_SIMPLE_FOR_EXTERNAL has already been installed!
+2024-02-06 13:56:15,987 WARN (Routine load task scheduler|49) [RoutineLoadTaskScheduler.process():116] no available be slot to scheduler tasks, wait for 10 seconds to scheduler again, you can set max_routine_load_task_num_per_be bigger in fe.conf, current value is 16
+2024-02-06 13:56:16,019 WARN (PipeScheduler|55) [PipeScheduler.process():67] Successfully recover all pipes
+2024-02-06 13:56:29,299 WARN (PBackendService-10001|83) [PseudoOlapTableSink$NodeChannel.open():89] open tablet writer failed: node:10001 Too many versions. tablet_id: 10008, version_count: 4, limit: 4
+2024-02-06 13:56:29,300 WARN (PBackendService-10001|83) [PseudoOlapTableSink$NodeChannel.open():89] open tablet writer failed: node:10002 Too many versions. tablet_id: 10008, version_count: 4, limit: 4
+2024-02-06 13:56:29,304 WARN (PBackendService-10001|83) [PseudoBackend.execPlanFragmentWithReport():1214] error execPlanFragmentWithReport
+java.lang.Exception: open sink failed, backend:10001 txn:6 index:10007 has intolerable failure: Too many versions. tablet_id: 10008, version_count: 4, limit: 4 [10001, 10002] numReplica:3 |
+	at com.starrocks.pseudocluster.PseudoBackend.runSink(PseudoBackend.java:1339) ~[test-classes/:?]
+	at com.starrocks.pseudocluster.PseudoBackend.execPlanFragmentWithReport(PseudoBackend.java:1207) ~[test-classes/:?]
+	at com.starrocks.pseudocluster.PseudoBackend$PseudoPBackendService.lambda$execPlanFragmentAsync$2(PseudoBackend.java:915) ~[test-classes/:?]
+	at java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:515) ~[?:?]
+	at java.util.concurrent.FutureTask.run(FutureTask.java:264) ~[?:?]
+	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128) ~[?:?]
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628) ~[?:?]
+	at java.lang.Thread.run(Thread.java:829) ~[?:?]
+2024-02-06 13:56:29,326 WARN (PBackendService-10001|83) [DefaultCoordinator.updateFragmentExecStatus():898] exec state report failed status=errorCode INTERNAL_ERROR open sink failed, backend:10001 txn:6 index:10007 has intolerable failure: Too many versions. tablet_id: 10008, version_count: 4, limit: 4 [10001, 10002] numReplica:3 |, query_id=78ae735f-c4b4-11ee-b081-0242ac110002, instance_id=78ae735f-c4b4-11ee-b081-0242ac110003
+2024-02-06 13:56:29,327 WARN (PBackendService-10001|83) [DefaultCoordinator.updateStatus():714] one instance report fail throw updateStatus(), need cancel. job id: 10025, query id: 78ae735f-c4b4-11ee-b081-0242ac110002, instance id: 78ae735f-c4b4-11ee-b081-0242ac110003
+2024-02-06 13:56:29,331 WARN (starrocks-mysql-nio-pool-1|109) [StmtExecutor.handleDMLStmt():1941] insert failed: open sink failed, backend:10001 txn:6 index:10007 has intolerable failure: Too many versions. tablet_id: 10008, version_count: 4, limit: 4 [10001, 10002] numReplica:3 |
+2024-02-06 13:56:29,333 WARN (starrocks-mysql-nio-pool-1|109) [StmtExecutor.handleDMLStmt():2091] failed to handle stmt [insert into test.test values (1,"1", 1), (2,"2", 2), (3,"3", 3)] label: insert_78ae735f-c4b4-11ee-b081-0242ac110002
+com.starrocks.common.DdlException: open sink failed, backend:10001 txn:6 index:10007 has intolerable failure: Too many versions. tablet_id: 10008, version_count: 4, limit: 4 [10001, 10002] numReplica:3 |
+	at com.starrocks.common.ErrorReport.reportDdlException(ErrorReport.java:99) ~[classes/:?]
+	at com.starrocks.qe.StmtExecutor.handleDMLStmt(StmtExecutor.java:1942) ~[classes/:?]
+	at com.starrocks.qe.StmtExecutor.handleDMLStmtWithProfile(StmtExecutor.java:1732) ~[classes/:?]
+	at com.starrocks.qe.StmtExecutor.execute(StmtExecutor.java:613) ~[classes/:?]
+	at com.starrocks.qe.ConnectProcessor.handleQuery(ConnectProcessor.java:394) ~[classes/:?]
+	at com.starrocks.qe.ConnectProcessor.dispatch(ConnectProcessor.java:588) ~[classes/:?]
+	at com.starrocks.qe.ConnectProcessor.processOnce(ConnectProcessor.java:872) ~[classes/:?]
+	at com.starrocks.mysql.nio.ReadListener.lambda$handleEvent$0(ReadListener.java:69) ~[classes/:?]
+	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128) ~[?:?]
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628) ~[?:?]
+	at java.lang.Thread.run(Thread.java:829) ~[?:?]
+2024-02-06 13:56:29,337 WARN (starrocks-mysql-nio-pool-1|109) [StmtExecutor.handleDMLStmtWithProfile():1734] DML statement(insert into test.test values (1,"1", 1), (2,"2", 2), (3,"3", 3)) process failed.
+com.starrocks.common.UserException: open sink failed, backend:10001 txn:6 index:10007 has intolerable failure: Too many versions. tablet_id: 10008, version_count: 4, limit: 4 [10001, 10002] numReplica:3 |
+	at com.starrocks.qe.StmtExecutor.handleDMLStmt(StmtExecutor.java:2139) ~[classes/:?]
+	at com.starrocks.qe.StmtExecutor.handleDMLStmtWithProfile(StmtExecutor.java:1732) ~[classes/:?]
+	at com.starrocks.qe.StmtExecutor.execute(StmtExecutor.java:613) ~[classes/:?]
+	at com.starrocks.qe.ConnectProcessor.handleQuery(ConnectProcessor.java:394) ~[classes/:?]
+	at com.starrocks.qe.ConnectProcessor.dispatch(ConnectProcessor.java:588) ~[classes/:?]
+	at com.starrocks.qe.ConnectProcessor.processOnce(ConnectProcessor.java:872) ~[classes/:?]
+	at com.starrocks.mysql.nio.ReadListener.lambda$handleEvent$0(ReadListener.java:69) ~[classes/:?]
+	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128) ~[?:?]
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628) ~[?:?]
+	at java.lang.Thread.run(Thread.java:829) ~[?:?]
+Caused by: com.starrocks.common.DdlException: open sink failed, backend:10001 txn:6 index:10007 has intolerable failure: Too many versions. tablet_id: 10008, version_count: 4, limit: 4 [10001, 10002] numReplica:3 |
+	at com.starrocks.common.ErrorReport.reportDdlException(ErrorReport.java:99) ~[classes/:?]
+	at com.starrocks.qe.StmtExecutor.handleDMLStmt(StmtExecutor.java:1942) ~[classes/:?]
+	... 9 more
+2024-02-06 13:56:29,380 ERROR (main|1) [PseudoCluster.runSingleSql():339] java.sql.SQLSyntaxErrorException: open sink failed, backend:10001 txn:6 index:10007 has intolerable failure: Too many versions. tablet_id: 10008, version_count: 4, limit: 4 [10001, 10002] numReplica:3 |
