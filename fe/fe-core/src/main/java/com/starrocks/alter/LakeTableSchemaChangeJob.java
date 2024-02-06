@@ -45,13 +45,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
-<<<<<<< HEAD
-=======
-import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
-import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.journal.JournalTask;
->>>>>>> 3d2a0a51e6 ([Enhancement] Optimize the lock contention of consistency checker (#40710))
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarMgrMetaSyncer;
