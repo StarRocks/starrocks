@@ -278,6 +278,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [array_sortby](./array-functions/array_sortby.md)| 对数组中的元素根据另外一个键值数组元素或者 Lambda 函数生成的键值数组元素进行升序排列。 |
 |  [array_sum](./array-functions/array_sum.md)| 对数组中的所有元素求和。 |
 |  [array_to_bitmap](./array-functions/array_to_bitmap.md)| 将 array 类型转化为 bitmap 类型。 |
+|  [array_unique_agg](../sql-functions/array-functions/array_unique_agg.md) |  将一列中的 distinct 值（包括空值 null）串联成一个数组（多行转一行）。  |
 |  [cardinality](./array-functions/cardinality.md)| 计算数组中的元素个数， |
 |  [element_at](./array-functions/element_at.md)| 获取 Array 数组中指定位置的元素。 |
 |  [reverse](./string-functions/reverse.md)| 将字符串或数组反转，返回的字符串或数组的顺序和源字符串或数组的顺序相反。 |
