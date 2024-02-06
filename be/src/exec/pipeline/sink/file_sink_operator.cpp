@@ -127,7 +127,6 @@ void FileSinkIOBuffer::_add_chunk(const ChunkPtr& chunk) {
         _is_writer_opened = true;
     }
 
-
     if (Status status = _writer->append_chunk(chunk.get()); !status.ok()) {
         status = status.clone_and_prepend("add chunk to file writer failed, error");
         LOG(WARNING) << status;
