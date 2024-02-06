@@ -14,10 +14,17 @@
 package com.starrocks.epack.privilege.ranger.hive;
 
 import com.starrocks.epack.privilege.AccessControllerEPack;
+import com.starrocks.epack.privilege.ranger.RangerKerberosAuth;
 import com.starrocks.privilege.ranger.hive.RangerHiveAccessController;
+import org.apache.ranger.authorization.hadoop.config.RangerPluginConfig;
 
 public class RangerHiveAccessControllerEPack extends RangerHiveAccessController implements AccessControllerEPack {
     public RangerHiveAccessControllerEPack(String serviceName) {
         super(serviceName);
+    }
+
+    @Override
+    protected RangerPluginConfig buildRangerPluginContext(String serviceType, String serviceName) {
+        return RangerKerberosAuth.buildKerberosRangerPluginContext(serviceType, serviceName);
     }
 }

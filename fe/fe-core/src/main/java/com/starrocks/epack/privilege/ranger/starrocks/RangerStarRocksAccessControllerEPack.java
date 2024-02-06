@@ -18,6 +18,7 @@ import com.starrocks.epack.privilege.AccessControllerEPack;
 import com.starrocks.epack.privilege.DbUID;
 import com.starrocks.epack.privilege.Policy;
 import com.starrocks.epack.privilege.SecurityPolicyMgr;
+import com.starrocks.epack.privilege.ranger.RangerKerberosAuth;
 import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
@@ -25,6 +26,7 @@ import com.starrocks.privilege.ranger.RangerStarRocksAccessRequest;
 import com.starrocks.privilege.ranger.starrocks.RangerStarRocksAccessController;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
+import org.apache.ranger.authorization.hadoop.config.RangerPluginConfig;
 import org.apache.ranger.plugin.policyengine.RangerAccessResult;
 import org.apache.ranger.plugin.policyengine.RangerPolicyEngine;
 
@@ -34,6 +36,11 @@ import java.util.Set;
 import static java.util.Locale.ENGLISH;
 
 public class RangerStarRocksAccessControllerEPack extends RangerStarRocksAccessController implements AccessControllerEPack {
+    @Override
+    protected RangerPluginConfig buildRangerPluginContext(String serviceType, String serviceName) {
+        return RangerKerberosAuth.buildKerberosRangerPluginContext(serviceType, serviceName);
+    }
+
     @Override
     public void checkPolicyAction(UserIdentity currentUser, Set<Long> roleIds, PolicyType policyType, String catalogName,
                                   String db, String policy, PrivilegeType privilegeType) throws AccessDeniedException {
