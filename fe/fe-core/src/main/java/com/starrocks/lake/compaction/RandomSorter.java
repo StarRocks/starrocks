@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.lake.compaction;
 
 import java.util.Collections;
@@ -29,7 +28,8 @@ public class RandomSorter implements Sorter {
     public List<PartitionStatistics> sort(@NotNull List<PartitionStatistics> partitionStatistics) {
         Collections.shuffle(partitionStatistics);
         return partitionStatistics.stream()
-                .sorted(Comparator.comparingInt(PartitionStatistics::getPriority).reversed())
+                .sorted(Comparator.comparingInt((PartitionStatistics stats) -> stats.getPriority().getValue())
+                        .reversed())
                 .collect(Collectors.toList());
     }
 }

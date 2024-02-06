@@ -71,13 +71,13 @@ public class ScoreSorterTest {
         Assert.assertEquals(3, sortedList.get(1).getPartition().getPartitionId());
 
         // sort by priority first
-        statisticsList.get(0).setPriority(1);
+        statisticsList.get(0).setPriority(PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
         sortedList = sorter.sort(statisticsList);
         Assert.assertEquals(3, sortedList.get(0).getPartition().getPartitionId());
         Assert.assertEquals(4, sortedList.get(1).getPartition().getPartitionId());
 
         // when having same priority value, should compare by compaction score
-        statisticsList.get(1).setPriority(1);
+        statisticsList.get(1).setPriority(PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
         sortedList = sorter.sort(statisticsList);
         Assert.assertEquals(4, sortedList.get(0).getPartition().getPartitionId());
         Assert.assertEquals(3, sortedList.get(1).getPartition().getPartitionId());

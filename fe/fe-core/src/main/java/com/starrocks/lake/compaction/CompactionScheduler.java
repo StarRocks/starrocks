@@ -133,7 +133,7 @@ public class CompactionScheduler extends Daemon {
 
             // Make sure all running compactions' priority is reset
             PartitionStatistics statistics = compactionManager.getStatistics(partition);
-            if (statistics != null && statistics.getPriority() != -1) {
+            if (statistics != null && statistics.getPriority().getValue() != -1) {
                 statistics.resetPriority();
             }
 

@@ -216,7 +216,7 @@ public class CompactionMgr {
             if (v == null) {
                 v = new PartitionStatistics(partition);
             }
-            v.setPriority(1);
+            v.setPriority(PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
             return v;
         });
         if (LOG.isDebugEnabled()) {

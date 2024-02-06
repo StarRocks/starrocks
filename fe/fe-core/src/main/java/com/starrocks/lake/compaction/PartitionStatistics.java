@@ -34,7 +34,22 @@ public class PartitionStatistics {
 
     // default priority is -1, manual compaction will have priority value 1
     @SerializedName(value = "priority")
-    private int priority = -1;
+    private volatile CompactionPriority priority = CompactionPriority.DEFAULT;
+
+    public enum CompactionPriority {
+        DEFAULT(-1),
+        MANUAL_COMPACT(1);
+
+        private final int value;
+
+        CompactionPriority(int value) {
+            this.value = value;
+        }
+
+        public int getValue() {
+            return value;
+        }
+    }
 
     public PartitionStatistics(PartitionIdentifier partition) {
         this.partition = partition;
@@ -87,16 +102,16 @@ public class PartitionStatistics {
         return compactionScore;
     }
 
-    public int getPriority() {
+    public CompactionPriority getPriority() {
         return priority;
     }
 
-    public void setPriority(int priority) {
+    public synchronized void setPriority(CompactionPriority priority) {
         this.priority = priority;
     }
 
-    public void resetPriority() {
-        this.setPriority(-1);
+    public synchronized void resetPriority() {
+        this.setPriority(CompactionPriority.DEFAULT);
     }
 
     @Override
@@ -104,3 +119,4 @@ public class PartitionStatistics {
         return new Gson().toJson(this);
     }
 }
+

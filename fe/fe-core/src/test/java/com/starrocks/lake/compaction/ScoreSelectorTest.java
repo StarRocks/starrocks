@@ -63,12 +63,12 @@ public class ScoreSelectorTest {
         List<PartitionStatistics> statisticsList = new ArrayList<>();
         PartitionStatistics statistics = new PartitionStatistics(new PartitionIdentifier(1, 2, 3));
         statistics.setCompactionScore(Quantiles.compute(Collections.singleton(0.0)));
-        statistics.setPriority(1);
+        statistics.setPriority(PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
         statisticsList.add(statistics);
 
         statistics = new PartitionStatistics(new PartitionIdentifier(1, 2, 4));
         statistics.setCompactionScore(Quantiles.compute(Collections.singleton(0.99)));
-        statistics.setPriority(1);
+        statistics.setPriority(PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
         statisticsList.add(statistics);
 
         statistics = new PartitionStatistics(new PartitionIdentifier(1, 2, 5));
