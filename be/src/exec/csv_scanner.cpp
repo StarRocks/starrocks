@@ -588,18 +588,17 @@ static TypeDescriptor get_type_desc(const Slice& field) {
 }
 
 Status CSVScanner::get_schema(std::vector<SlotDescriptor>* schema) {
+    if (schema == nullptr) {
+        return Status::InternalError("ouput schema is null");
+    }
+    RETURN_IF_ERROR(_init_reader());
+
     if (_use_v2) return _get_schema_v2(schema);
 
     return _get_schema(schema);
 }
 
 Status CSVScanner::_get_schema(std::vector<SlotDescriptor>* merged_schema) {
-    if (merged_schema == nullptr) {
-        return Status::InternalError("ouput schema is null");
-    }
-
-    RETURN_IF_ERROR(_init_reader());
-
     CSVReader::Record record;
     // skip empty record.
     do {
@@ -646,12 +645,6 @@ Status CSVScanner::_get_schema(std::vector<SlotDescriptor>* merged_schema) {
 }
 
 Status CSVScanner::_get_schema_v2(std::vector<SlotDescriptor>* merged_schema) {
-    if (merged_schema == nullptr) {
-        return Status::InternalError("ouput schema is null");
-    }
-
-    RETURN_IF_ERROR(_init_reader());
-
     CSVRow row;
     // skip empty row.
     do {
