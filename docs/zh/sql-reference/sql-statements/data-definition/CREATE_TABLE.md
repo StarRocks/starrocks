@@ -718,13 +718,20 @@ PROPERTIES (
 
 ```SQL
 PROPERTIES (
+    "storage_volume" = "<storage_volume_name>",
     "datacache.enable" = "{ true | false }",
     "datacache.partition_duration" = "<string_value>",
     "enable_async_write_back" = "{ true | false }"
 )
 ```
 
+<<<<<<< HEAD
 * `datacache.enable`：是否启用本地磁盘缓存。默认值：`true`。
+=======
+- `storage_volume`：建表使用的 Storage Volume 名称。该属性自 v3.1 版本起支持。如果未指定该属性，则使用默认 Storage Volume。示例：`"storage_volume" = "def_volume"`。
+
+- `datacache.enable`：是否启用本地磁盘缓存。默认值：`true`。
+>>>>>>> ca7836e0fc ([Doc] Add storage_volume to CREATE TABLE etc (#40854))
 
   * 当该属性设置为 `true` 时，数据会同时导入对象存储（或 HDFS）和本地磁盘（作为查询加速的缓存）。
   * 当该属性设置为 `false` 时，数据仅导入到对象存储中。
