@@ -101,6 +101,10 @@ public:
     static Status get_policy_references(const std::string& ip, const int32_t port,
                                         const TGetPolicyReferencesRequest& request,
                                         TGetPolicyReferenceResponse* response, int timeout_ms);
+
+    static Status get_partitions_meta(const std::string& ip, const int32_t port,
+                                      const TGetPartitionsMetaRequest& var_params,
+                                      TGetPartitionsMetaResponse* var_result, int timeout_ms);
 };
 
 template <LogicalType SlotType>
