@@ -207,7 +207,8 @@ private:
                     dest_data_column->append_nulls(1);
                 } else {
                     if constexpr (pt_is_largeint<PT>) {
-                        dest_data_column->append_datum((CppType)0);
+                        dest_data_column->append_datum(
+                                (CppType)(items[i].get<CppType>() - items[i - 1].get<CppType>()));
                     } else if constexpr (pt_is_integer<PT> || pt_is_boolean<PT>) {
                         dest_data_column->append_datum(
                                 (int64_t)(items[i].get<CppType>() - items[i - 1].get<CppType>()));
