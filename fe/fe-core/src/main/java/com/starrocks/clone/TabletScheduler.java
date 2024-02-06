@@ -68,6 +68,7 @@ import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.system.Backend;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -1767,6 +1768,10 @@ public class TabletScheduler extends FrontendDaemon {
         String state = request.isSetState() ? request.state : null;
         long limit = request.isSetLimit() ? request.limit : -1;
         List<TabletSchedCtx> tabletCtxs;
+        UserIdentity currentUser = null;
+        if (request.isSetCurrent_user_ident()) {
+            currentUser = UserIdentity.fromThrift(request.current_user_ident);
+        }
         synchronized (this) {
             Stream<TabletSchedCtx> all;
             if (TabletSchedCtx.State.PENDING.name().equals(state)) {
@@ -1783,6 +1788,8 @@ public class TabletScheduler extends FrontendDaemon {
                     all = all.filter(t -> t.getState().name().equals(state));
                 }
             }
+            final UserIdentity finalUser = currentUser;
+            all = all.filter(t -> t.checkPrivForCurrUser(finalUser));
             if (type != null) {
                 all = all.filter(t -> t.getType().name().equals(type));
             }

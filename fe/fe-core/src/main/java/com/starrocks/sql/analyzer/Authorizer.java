@@ -26,6 +26,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.Pair;
 import com.starrocks.privilege.AccessControlProvider;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.NativeAccessControl;
@@ -340,5 +341,29 @@ public class Authorizer {
     public static Expr getRowAccessPolicy(ConnectContext currentUser, TableName tableName) {
         String catalog = tableName.getCatalog() == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
         return getInstance().getAccessControlOrDefault(catalog).getRowAccessPolicy(currentUser, tableName);
+    }
+
+    /**
+     * check privilege for `show tablet` statement
+     * if current user has 'OPERATE' privilege, it will result all the result
+     * otherwise it will only return to the user on which it has any privilege on the corresponding table
+     *
+     * @return `Pair.first` means that whether user can see this tablet, `Pair.second` means
+     * whether we need to hide the ip and port in the returned result
+     */
+    public static Pair<Boolean, Boolean> checkPrivForShowTablet(ConnectContext context, String dbName, Table table) {
+        UserIdentity currentUser = context.getCurrentUserIdentity();
+        // if user has 'OPERATE' privilege, can see this tablet, for backward compatibility
+        try {
+            Authorizer.checkSystemAction(currentUser, null, PrivilegeType.OPERATE);
+            return new Pair<>(true, false);
+        } catch (AccessDeniedException ae) {
+            try {
+                Authorizer.checkAnyActionOnTableLikeObject(currentUser, null, dbName, table);
+                return new Pair<>(true, true);
+            } catch (AccessDeniedException e) {
+                return new Pair<>(false, true);
+            }
+        }
     }
 }
