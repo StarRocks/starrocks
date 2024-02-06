@@ -270,6 +270,10 @@ Properties of the asynchronous materialized view. You can modify the properties 
 - `resource_group`: The resource group to which the refresh tasks of the materialized view belong. For more about resource groups see [Resource group](../../../administration/resource_group.md).
 - `storage_volume`: The name of the [storage volume](../../../deployment/shared_data/s3.md#use-your-shared-data-starrocks-cluster) used to store the asynchronous materialized view you want to create if you are using a shared-data cluster. This property is supported from v3.1 onwards. If this property is not specified, the default storage volume is used. Example: `"storage_volume" = "def_volume"`.
 
+> **CAUTION**
+>
+> The Unique Key constraints and Foreign Key constraints are only used for query rewrite. The Foreign Key constraint checks are not guaranteed when data is loaded into the table. You must ensure the data loaded into the table meets the constraints.
+
 **query_statement** (required)
 
 The query statement to create the asynchronous materialized view. From v3.1.6 onwards, StarRocks supports creating asynchronous materialized views with Common Table Expression (CTE).
