@@ -51,6 +51,7 @@ import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
 import com.starrocks.backup.RestoreJob;
+import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -927,7 +928,7 @@ public class ShowExecutor {
                 if (matcher != null && !matcher.match(tableName)) {
                     continue;
                 }
-                Table table = metadataMgr.getTable(catalogName, dbName, tableName);
+                BasicTable table = metadataMgr.getBasicTable(catalogName, dbName, tableName);
                 if (table == null) {
                     LOG.warn("table {}.{}.{} does not exist", catalogName, dbName, tableName);
                     continue;
