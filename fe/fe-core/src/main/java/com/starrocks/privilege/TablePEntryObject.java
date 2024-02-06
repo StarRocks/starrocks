@@ -131,7 +131,7 @@ public class TablePEntryObject implements PEntryObject {
                 throw new PrivObjNotFoundException("cannot find table " +
                         tableToken + " in db " + dbToken + ", msg: " + e.getMessage());
             }
-            if (table == null || table.isOlapView() || table.isMaterializedView()) {
+            if (table == null || table.isView() || table.isMaterializedView()) {
                 throw new PrivObjNotFoundException("cannot find table " +
                         tableToken + " in db " + dbToken);
             }

@@ -274,11 +274,6 @@ public class MetadataMgr {
         return database.getTable(tableId);
     }
 
-    public boolean tableExists(String catalogName, String dbName, String tblName) {
-        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        return connectorMetadata.map(metadata -> metadata.tableExists(dbName, tblName)).orElse(false);
-    }
-        
     /**
      * getBasicTable avoids network interactions with external metadata service when using external catalog(e.g. hive catalog).
      * In this case, only basic information of namespace and table type (derived from the type of its connector) is returned.

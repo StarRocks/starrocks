@@ -31,7 +31,7 @@ public interface BasicTable {
 
     Table.TableType getType();
 
-    boolean isOlapView();
+    boolean isView();
 
     boolean isMaterializedView();
 

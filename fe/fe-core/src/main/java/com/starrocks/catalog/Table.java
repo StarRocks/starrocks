@@ -69,7 +69,7 @@ import javax.annotation.Nullable;
  * Internal representation of table-related metadata. A table contains several partitions.
  */
 public class Table extends MetaObject implements Writable, GsonPostProcessable, BasicTable {
-    private static final Logger LOG = LogManager.getLogger(Table.class);
+    protected static final Logger LOG = LogManager.getLogger(Table.class);
 
     // 1. Native table:
     //   1.1 Local: OLAP, MATERIALIZED_VIEW

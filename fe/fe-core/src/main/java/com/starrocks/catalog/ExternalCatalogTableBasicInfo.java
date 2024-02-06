@@ -66,7 +66,7 @@ public class ExternalCatalogTableBasicInfo implements BasicTable {
     }
 
     @Override
-    public boolean isOlapView() {
+    public boolean isView() {
         return false;
     }
 
