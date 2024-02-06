@@ -725,11 +725,14 @@ PROPERTIES (
 
 ```SQL
 PROPERTIES (
+    "storage_volume" = "<storage_volume_name>",
     "datacache.enable" = "{ true | false }",
     "datacache.partition_duration" = "<string_value>",
     "enable_async_write_back" = "{ true | false }"
 )
 ```
+
+- `storage_volume`：建表使用的 Storage Volume 名称。该属性自 v3.1 版本起支持。如果未指定该属性，则使用默认 Storage Volume。示例：`"storage_volume" = "def_volume"`。
 
 - `datacache.enable`：是否启用本地磁盘缓存。默认值：`true`。
 
