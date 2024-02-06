@@ -42,6 +42,7 @@ import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
@@ -236,6 +237,11 @@ public class InformationSchemaDataSource {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
             propsMap.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM,
                     properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM));
+        }
+
+        if (RunMode.isSharedDataMode()) {
+            String sv = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeNameOfTable(table.getId());
+            propsMap.put(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME, sv);
         }
         return propsMap;
     }
