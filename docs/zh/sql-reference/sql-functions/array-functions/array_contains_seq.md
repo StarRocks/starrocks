@@ -1,36 +1,37 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: "Chinese"
 ---
 
 # array_contains_seq
 
-## Description
+## 描述
 
-Checks whether all the elements of array2 appear in array1 in the same exact order. Therefore, the function will return 1, if and only if array1 = prefix + array2 + suffix.
+检查数组2的所有元素是否以完全相同的顺序出现在数组1中。因此，如果且仅如果数组1 = 前缀 + 数组2 + 后缀，该函数将返回1。
 
-## Syntax
+
+## 语法
 
 ~~~Haskell
 BOOLEAN array_contains_all(arr1, arr2)
 ~~~
 
-## Parameters
+## 参数
 
-`arr`: the two arrays to compare. This syntax checks whether `arr2` is a subset of `arr1` and in the same exact order.
+`arr`: 要比较的两个数组。此语法检查arr2是否是arr1的子集，并且顺序完全相同。
 
-The data types of elements in the two arrays must be the same. For the data types of array elements supported by StarRocks, see [ARRAY](../../../sql-reference/sql-statements/data-types/Array.md).
+两个数组中元素的数据类型必须相同。有关StarRocks支持的数组元素数据类型，请参阅 [ARRAY](../../../sql-reference/sql-statements/data-types/Array.md).
 
-## Return value
+## 返回值
 
-Returns a value of the BOOLEAN type.
+返回BOOLEAN类型的值。
 
-1 is returned if `arr2` is a subset of `arr1`. Otherwise, 0 is returned.
-Null processed as a value. In other words array_contains_seq([1, 2, NULL, 3, 4], [2,3]) will return 0. However, array_contains_seq([1, 2, NULL, 3, 4], [2,NULL,3]) will return 1
-Order of values in both of arrays does matter
+如果arr2是arr1的子集，则返回1。否则，返回0。空值被处理为一个值。换句话说，array_contains_seq([1, 2, NULL, 3, 4], [2,3])将返回0。但是，array_contains_seq([1, 2, NULL, 3, 4], [2,NULL,3])将返回1。两个数组中值的顺序确实很重要。
 
-## Examples
 
-Returns a value of the BOOLEAN type.
+## 示例
+
+返回BOOLEAN类型的值。
+
 
 ```Plaintext
 MySQL [(none)]> select array_contains_seq([1,2,3,4], [1,2,3]);
