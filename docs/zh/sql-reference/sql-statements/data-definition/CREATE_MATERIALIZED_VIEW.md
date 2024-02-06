@@ -271,6 +271,7 @@ AS
 - `force_external_table_query_rewrite`: 是否启用基于 External Catalog 的物化视图的查询改写。该属性自 v3.2 起支持。有效值：
   - `true`：启用基于 External Catalog 的物化视图的查询改写。
   - `false`（默认值）：禁用基于 External Catalog 的物化视图的查询改写。
+- `storage_volume`：如果您使用存算分离集群，则需要指定创建物化视图的 Storage Volume 名称。该属性自 v3.1 版本起支持。如果未指定该属性，则使用默认 Storage Volume。示例：`"storage_volume" = "def_volume"`。
 
   由于无法保证基表和基于 External Catalog 的物化视图之间的数据强一致，因此默认情况下禁用此功能。启用此功能时，物化视图将根据 `query_rewrite_consistency` 中指定的规则改写查询。
 
