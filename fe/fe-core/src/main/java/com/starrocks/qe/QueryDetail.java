@@ -80,6 +80,7 @@ public class QueryDetail implements Serializable {
     private long memCostBytes = -1;
     private long spillBytes = -1;
     private String warehouse = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+    private String digest;
 
     public QueryDetail() {
     }
@@ -142,6 +143,7 @@ public class QueryDetail implements Serializable {
         queryDetail.memCostBytes = this.memCostBytes;
         queryDetail.spillBytes = this.spillBytes;
         queryDetail.warehouse = this.warehouse;
+        queryDetail.digest = this.digest;
         return queryDetail;
     }
 
@@ -315,5 +317,13 @@ public class QueryDetail implements Serializable {
 
     public String getWarehouse() {
         return warehouse;
+    }
+
+    public String getDigest() {
+        return digest;
+    }
+
+    public void setDigest(String digest) {
+        this.digest = digest;
     }
 }
