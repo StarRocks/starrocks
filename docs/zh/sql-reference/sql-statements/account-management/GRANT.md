@@ -254,7 +254,7 @@ GRANT db_admin, user_admin, cluster_admin TO USER user_platform;
 示例九：授予用户 `jack` 以用户 `rose` 的身份执行操作的权限。
 
 ```SQL
-GRANT IMPERSONATE ON 'rose'@'%' TO 'jack'@'%';
+GRANT IMPERSONATE ON USER 'rose'@'%' TO USER 'jack'@'%';
 ```
 
 ## 最佳实践 - 基于使用场景创建自定义角色
