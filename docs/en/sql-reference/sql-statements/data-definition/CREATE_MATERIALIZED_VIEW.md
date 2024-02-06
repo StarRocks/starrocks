@@ -275,6 +275,7 @@ Properties of the asynchronous materialized view. You can modify the properties 
 - `force_external_table_query_rewrite`: Whether to enable query rewrite for external catalog-based materialized views. This property is supported from v3.2. Valid values:
   - `true`: Enable query rewrite for external catalog-based materialized views.
   - `false` (Default value): Disable query rewrite for external catalog-based materialized views.
+- `storage_volume`: The name of the storage volume you want to create the table with if you are using a shared-data cluster. This property is supported from v3.1 onwards. If this property is not specified, the default storage volume is used. Example: `"storage_volume" = "def_volume"`.
 
   Because strong data consistency is not guaranteed between base tables and external catalog-based materialized views, this feature is set to `false` by default. When this feature is enabled, the materialized view is used for query rewrite in accordance with the rule specified in `query_rewrite_consistency`.
 
