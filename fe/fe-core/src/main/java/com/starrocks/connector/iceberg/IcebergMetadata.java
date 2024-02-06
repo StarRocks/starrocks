@@ -605,14 +605,15 @@ public class IcebergMetadata implements ConnectorMetadata {
 
             icebergScanTasks.add(icebergSplitScanTask);
 
-            String filePath = icebergSplitScanTask.file().path().toString();
-            if (!filePaths.contains(filePath)) {
-                filePaths.add(filePath);
-                totalReadCount += scanTask.file().recordCount();
-            }
-
-            if (canPruneManifests && totalReadCount >= limit) {
-                break;
+            if (canPruneManifests) {
+                String filePath = icebergSplitScanTask.file().path().toString();
+                if (!filePaths.contains(filePath)) {
+                    filePaths.add(filePath);
+                    totalReadCount += scanTask.file().recordCount();
+                }
+                if (totalReadCount >= limit) {
+                    break;
+                }
             }
         }
 
