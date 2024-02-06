@@ -620,11 +620,14 @@ To [use your StarRocks Shared-data cluster](../../../deployment/shared_data/s3.m
 
 ```SQL
 PROPERTIES (
+    "storage_volume" = "<storage_volume_name>",
     "datacache.enable" = "{ true | false }",
     "datacache.partition_duration" = "<string_value>",
     "enable_async_write_back" = "{ true | false }"
 )
 ```
+
+- `storage_volume`: The name of the storage volume you want to create the table with. If this property is not specified, the default storage volume is used. This property is supported from v3.1 onwards.
 
 - `datacache.enable`: Whether to enable the local disk cache. Default: `true`.
 
