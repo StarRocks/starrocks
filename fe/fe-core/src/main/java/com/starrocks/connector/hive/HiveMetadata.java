@@ -46,6 +46,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static com.starrocks.catalog.Table.TableType.HIVE;
 import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 
@@ -70,6 +71,11 @@ public class HiveMetadata implements ConnectorMetadata {
         this.fileOps = fileOperations;
         this.statisticsProvider = statisticsProvider;
         this.cacheUpdateProcessor = cacheUpdateProcessor;
+    }
+
+    @Override
+    public Table.TableType getTableType() {
+        return HIVE;
     }
 
     @Override

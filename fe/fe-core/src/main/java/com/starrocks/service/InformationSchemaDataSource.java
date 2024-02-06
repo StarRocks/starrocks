@@ -64,7 +64,7 @@ public class InformationSchemaDataSource {
 
     private static final String DEF = "def";
     private static final String DEFAULT_EMPTY_STRING = "";
-    private static final long DEFAULT_EMPTY_NUM = -1L;
+    public static final long DEFAULT_EMPTY_NUM = -1L;
     public static final String UTF8_GENERAL_CI = "utf8_general_ci";
 
     @NotNull
