@@ -47,12 +47,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
-<<<<<<< HEAD
-=======
-import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.journal.JournalTask;
->>>>>>> 3d2a0a51e6 ([Enhancement] Optimize the lock contention of consistency checker (#40710))
 import com.starrocks.persist.ConsistencyCheckInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
@@ -270,13 +265,8 @@ public class CheckConsistencyJob {
         }
 
         boolean isConsistent = true;
-<<<<<<< HEAD
         db.writeLock();
-=======
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
         JournalTask journalTask;
->>>>>>> 3d2a0a51e6 ([Enhancement] Optimize the lock contention of consistency checker (#40710))
         try {
             Table table = db.getTable(tabletMeta.getTableId());
             if (table == null) {
