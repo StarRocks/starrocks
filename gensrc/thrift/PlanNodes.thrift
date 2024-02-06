@@ -267,7 +267,7 @@ struct TBrokerScanRangeParams {
     29: optional i64 json_file_size_limit;
     30: optional i64 schema_sample_file_count
     31: optional i64 schema_sample_file_row_count
-    32: optional i64 flexible_column_mapping 
+    32: optional bool flexible_column_mapping 
 }
 
 // Broker scan range

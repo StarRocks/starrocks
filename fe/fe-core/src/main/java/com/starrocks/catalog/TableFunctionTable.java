@@ -324,6 +324,11 @@ public class TableFunctionTable extends Table {
         params.setProperties(properties);
         params.setSchema_sample_file_count(autoDetectSampleFiles);
         params.setSchema_sample_file_row_count(autoDetectSampleRows);
+        params.setEnclose(csvEnclose);
+        params.setEscape(csvEscape);
+        params.setSkip_header(csvSkipHeader);
+        params.setTrim_space(csvTrimSpace);
+        params.setFlexible_column_mapping(true);
         if (csvColumnSeparator.length() == 1) {
             params.setColumn_separator(csvColumnSeparator.getBytes()[0]);
         } else if (csvColumnSeparator.length() > 1) {

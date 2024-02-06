@@ -339,7 +339,7 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
 
         const char* data = _curr_reader->buffBasePtr() + row.parsed_start;
         CSVReader::Record record(data, row.parsed_end - row.parsed_start);
-        if (row.columns.size() != _num_fields_in_csv) {
+        if (row.columns.size() != _num_fields_in_csv && !_scan_range.params.flexible_column_mapping) {
             if (status.is_end_of_file()) {
                 break;
             }
@@ -368,11 +368,37 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
 
         SCOPED_RAW_TIMER(&_counter->fill_ns);
         bool has_error = false;
+        bool error_reported = false;
         for (int j = 0, k = 0; j < _num_fields_in_csv; j++) {
             auto slot = _src_slot_descriptors[j];
             if (slot == nullptr) {
                 continue;
             }
+
+            if (j >= row.columns.size()) {
+                // table columns are more than file fields
+
+                // append null.
+                _column_raw_ptrs[k]->append_default(1);
+
+                // report error.
+                if (_strict_mode && !error_reported) {
+                    if (_counter->num_rows_filtered++ < REPORT_ERROR_MAX_NUMBER) {
+                        std::string error_msg = make_column_count_not_matched_error_message(
+                                _num_fields_in_csv, row.columns.size(), _parse_options);
+                        _report_error(record, error_msg);
+                    }
+                    if (_state->enable_log_rejected_record()) {
+                        std::string error_msg = make_column_count_not_matched_error_message(
+                                _num_fields_in_csv, row.columns.size(), _parse_options);
+                        _report_rejected_record(record, error_msg);
+                    }
+                }
+
+                error_reported = true;
+                continue;
+            }
+
             const CSVColumn& column = row.columns[j];
             char* basePtr = nullptr;
             if (column.is_escaped_column) {
@@ -435,7 +461,7 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
         fields.clear();
         _curr_reader->split_record(record, &fields);
 
-        if (fields.size() != _num_fields_in_csv) {
+        if (fields.size() != _num_fields_in_csv && !_scan_range.params.flexible_column_mapping) {
             if (_counter->num_rows_filtered++ < REPORT_ERROR_MAX_NUMBER) {
                 std::string error_msg =
                         make_column_count_not_matched_error_message(_num_fields_in_csv, fields.size(), _parse_options);
@@ -460,11 +486,36 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
 
         SCOPED_RAW_TIMER(&_counter->fill_ns);
         bool has_error = false;
+        bool error_reported = false;
         for (int j = 0, k = 0; j < _num_fields_in_csv; j++) {
             auto slot = _src_slot_descriptors[j];
             if (slot == nullptr) {
                 continue;
             }
+
+            if (j >= fields.size()) {
+                // table columns are more than file fields
+
+                // append null.
+                _column_raw_ptrs[k]->append_default(1);
+
+                // report error.
+                if (_strict_mode && !error_reported) {
+                    if (_counter->num_rows_filtered++ < REPORT_ERROR_MAX_NUMBER) {
+                        std::string error_msg = make_column_count_not_matched_error_message(
+                                _num_fields_in_csv, fields.size(), _parse_options);
+                        _report_error(record, error_msg);
+                    }
+                    if (_state->enable_log_rejected_record()) {
+                        std::string error_msg = make_column_count_not_matched_error_message(
+                                _num_fields_in_csv, fields.size(), _parse_options);
+                        _report_rejected_record(record, error_msg);
+                    }
+                    error_reported = true;
+                }
+                continue;
+            }
+
             const Slice& field = fields[j];
             options.type_desc = &(slot->type());
             if (!_converters[k]->read_string_for_adaptive_null_column(_column_raw_ptrs[k], field, options)) {
