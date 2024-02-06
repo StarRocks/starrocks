@@ -60,6 +60,14 @@ import java.util.Optional;
 
 public interface ConnectorMetadata {
     /**
+     * Use connector type as a hint of table type.
+     * Caveat: there are exceptions that hive connector may have non-hive(e.g. iceberg) tables.
+     */
+    default Table.TableType getTableType() {
+        throw new StarRocksConnectorException("This connector doesn't support getting table type");
+    }
+
+    /**
      * List all database names of connector
      *
      * @return a list of string containing all database names of connector

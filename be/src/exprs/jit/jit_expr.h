@@ -32,7 +32,7 @@ class JITExpr final : public Expr {
 public:
     static JITExpr* create(ObjectPool* pool, Expr* expr);
 
-    JITExpr(ObjectPool* pool, const TExprNode& node, Expr* expr);
+    JITExpr(const TExprNode& node, Expr* expr);
 
     ~JITExpr() override;
 
@@ -54,7 +54,6 @@ protected:
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
 
 private:
-    ObjectPool* _pool;
     // The original expression.
     Expr* _expr;
     bool _is_prepared = false;

@@ -254,6 +254,8 @@ public class TransactionState implements Writable {
     private LoadJobSourceType sourceType;
     @SerializedName("pt")
     private long prepareTime;
+    @SerializedName("pet")
+    private long preparedTime;
     @SerializedName("ct")
     private long commitTime;
     @SerializedName("ft")
@@ -651,6 +653,10 @@ public class TransactionState implements Writable {
         this.prepareTime = prepareTime;
     }
 
+    public void setPreparedTime(long preparedTime) {
+        this.preparedTime = preparedTime;
+    }
+
     public void setCommitTime(long commitTime) {
         this.commitTime = commitTime;
     }
@@ -704,7 +710,7 @@ public class TransactionState implements Writable {
     // return true if txn is running but timeout
     public boolean isTimeout(long currentMillis) {
         return (transactionStatus == TransactionStatus.PREPARE && currentMillis - prepareTime > timeoutMs)
-                || (transactionStatus == TransactionStatus.PREPARED && (currentMillis - commitTime)
+                || (transactionStatus == TransactionStatus.PREPARED && (currentMillis - preparedTime)
                 / 1000 > Config.prepared_transaction_default_timeout_second);
     }
 

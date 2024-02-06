@@ -143,6 +143,11 @@ public class JDBCMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public Table.TableType getTableType() {
+        return Table.TableType.JDBC;
+    }
+
+    @Override
     public List<String> listDbNames() {
         try (Connection connection = getConnection()) {
             return Lists.newArrayList(schemaResolver.listSchemas(connection));
