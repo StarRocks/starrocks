@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#pragma once
+
 #include <memory>
 #include <shared_mutex>
 
@@ -124,8 +126,10 @@ public:
         return 0;
     }
 
+    int num_pending_chunks() const { return _num_pending_chunks; }
+
 protected:
-    void _process_chunk(bthread::TaskIterator<ChunkPtr>& iter);
+    virtual void _process_chunk(bthread::TaskIterator<ChunkPtr>& iter);
     virtual void _add_chunk(const ChunkPtr& chunk) = 0;
 
     std::unique_ptr<bthread::ExecutionQueueId<ChunkPtr>> _exec_queue_id;
@@ -143,34 +147,5 @@ protected:
 
     static const int32_t kExecutionQueueSizeLimit = 64;
 };
-
-void SinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
-    DeferOp op([&]() {
-        auto nc = _num_pending_chunks.fetch_sub(1);
-        DCHECK_GE(nc, 1L);
-    });
-
-    if (_is_finished) {
-        return;
-    }
-
-    const auto& chunk = *iter;
-    if (chunk == nullptr) {
-        // this is the last chunk, finish task is first put into queue and then ++_num_pending_chunks,
-        // So _num_pending_chunks maybe 0 or 1 here.
-        DCHECK_LE(_num_pending_chunks, 1);
-        close(_state);
-        return;
-    }
-
-    if (_is_cancelled && !_is_finished) {
-        if (_num_pending_chunks == 1) {
-            close(_state);
-        }
-        return;
-    }
-
-    _add_chunk(chunk);
-}
 
 } // namespace starrocks::pipeline
