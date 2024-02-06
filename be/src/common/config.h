@@ -171,8 +171,8 @@ CONF_mInt32(compact_threads, "4");
 CONF_Int32(compact_thread_pool_queue_size, "100");
 
 // The count of thread to replication
-CONF_Int32(replication_threads, "0");
-CONF_Int32(clear_expired_replcation_snapshots_interval_seconds, "3600");
+CONF_mInt32(replication_threads, "0");
+CONF_mInt32(clear_expired_replcation_snapshots_interval_seconds, "3600");
 
 // The log dir.
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
@@ -928,7 +928,6 @@ CONF_mInt32(starlet_fs_read_prefetch_threadpool_size, "128");
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
 CONF_mBool(lake_print_delete_log, "true");
-CONF_mBool(lake_compaction_check_txn_log_first, "false");
 // Used to ensure service availability in extreme situations by sacrificing a certain degree of correctness
 CONF_mBool(experimental_lake_ignore_lost_segment, "false");
 CONF_mInt64(experimental_lake_wait_per_put_ms, "0");

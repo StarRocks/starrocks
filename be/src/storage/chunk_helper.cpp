@@ -501,26 +501,32 @@ void ChunkPipelineAccumulator::push(const ChunkPtr& chunk) {
     DCHECK(_out_chunk == nullptr);
     if (_in_chunk == nullptr) {
         _in_chunk = chunk;
+        _mem_usage = chunk->memory_usage();
     } else if (_in_chunk->num_rows() + chunk->num_rows() > _max_size) {
         _out_chunk = std::move(_in_chunk);
         _in_chunk = chunk;
+        _mem_usage = chunk->memory_usage();
     } else {
         _in_chunk->append(*chunk);
+        _mem_usage += chunk->memory_usage();
     }
 
-    if (_out_chunk == nullptr && (_in_chunk->num_rows() >= _max_size * LOW_WATERMARK_ROWS_RATE ||
-                                  _in_chunk->memory_usage() >= LOW_WATERMARK_BYTES)) {
+    if (_out_chunk == nullptr &&
+        (_in_chunk->num_rows() >= _max_size * LOW_WATERMARK_ROWS_RATE || _mem_usage >= LOW_WATERMARK_BYTES)) {
         _out_chunk = std::move(_in_chunk);
+        _mem_usage = 0;
     }
 }
 
 void ChunkPipelineAccumulator::reset() {
     _in_chunk.reset();
     _out_chunk.reset();
+    _mem_usage = 0;
 }
 
 void ChunkPipelineAccumulator::finalize() {
     _finalized = true;
+    _mem_usage = 0;
 }
 
 void ChunkPipelineAccumulator::reset_state() {

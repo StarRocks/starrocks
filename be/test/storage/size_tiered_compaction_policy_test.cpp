@@ -286,6 +286,7 @@ public:
         config::max_compaction_concurrency = 1;
         config::min_base_compaction_num_singleton_deltas = 10;
         config::base_compaction_interval_seconds_since_last_operation = 86400;
+        config::size_tiered_min_level_size = 10240;
         Compaction::init(config::max_compaction_concurrency);
 
         _default_storage_root_path = config::storage_root_path;
@@ -1426,7 +1427,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_large_dup_base_rowset) {
 
     ASSERT_EQ(4, tablet->version_count());
 
-    config::max_segment_file_size = 1024 * 128;
+    config::max_segment_file_size = 10240;
     DeferOp defer([&]() { config::max_segment_file_size = 1073741824; });
 
     {
@@ -1479,7 +1480,7 @@ TEST_F(SizeTieredCompactionPolicyTest, test_large_dup_base_rowset_force_compact)
 
     ASSERT_EQ(4, tablet->version_count());
 
-    config::max_segment_file_size = 1024 * 128;
+    config::max_segment_file_size = 10240;
     DeferOp defer([&]() { config::max_segment_file_size = 1073741824; });
 
     {

@@ -80,6 +80,8 @@ public:
 
     const std::vector<std::unique_ptr<Column>>& auto_increment_deletes() const;
 
+    static StatusOr<bool> file_exist(const std::string& full_path);
+
 private:
     Status _do_load(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, Tablet* tablet, bool need_lock);
 

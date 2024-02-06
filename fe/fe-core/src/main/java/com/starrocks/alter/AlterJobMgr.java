@@ -373,9 +373,12 @@ public class AlterJobMgr {
                     return;
                 }
                 processChangeMaterializedViewStatus(materializedView, status, false);
-                GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .refreshMaterializedView(dbName, materializedView.getName(), true, null,
-                                Constants.TaskRunPriority.NORMAL.value(), true, false);
+                // for manual refresh type, do not refresh
+                if (materializedView.getRefreshScheme().getType() != MaterializedView.RefreshType.MANUAL) {
+                    GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .refreshMaterializedView(dbName, materializedView.getName(), true, null,
+                                    Constants.TaskRunPriority.NORMAL.value(), true, false);
+                }
             } else if (AlterMaterializedViewStmt.INACTIVE.equalsIgnoreCase(status)) {
                 if (!materializedView.isActive()) {
                     return;

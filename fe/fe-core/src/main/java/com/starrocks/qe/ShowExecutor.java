@@ -51,6 +51,7 @@ import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
 import com.starrocks.backup.RestoreJob;
+import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -927,7 +928,7 @@ public class ShowExecutor {
                 if (matcher != null && !matcher.match(tableName)) {
                     continue;
                 }
-                Table table = metadataMgr.getTable(catalogName, dbName, tableName);
+                BasicTable table = metadataMgr.getBasicTable(catalogName, dbName, tableName);
                 if (table == null) {
                     LOG.warn("table {}.{}.{} does not exist", catalogName, dbName, tableName);
                     continue;
@@ -1938,6 +1939,11 @@ public class ShowExecutor {
                         break;
                     }
                     tableName = table.getName();
+                    Pair<Boolean, Boolean> privResult = Authorizer.checkPrivForShowTablet(connectContext, dbName, table);
+                    if (!privResult.first) {
+                        AccessDeniedException.reportAccessDenied("ANY", ObjectType.TABLE,
+                                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+                    }
 
                     OlapTable olapTable = (OlapTable) table;
                     Partition partition = olapTable.getPartition(partitionId);
@@ -2003,6 +2009,14 @@ public class ShowExecutor {
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_NOT_OLAP_TABLE, showStmt.getTableName());
                 }
 
+                Pair<Boolean, Boolean> privResult = Authorizer.checkPrivForShowTablet(
+                        connectContext, db.getFullName(), table);
+                if (!privResult.first) {
+                    AccessDeniedException.reportAccessDenied("ANY", ObjectType.TABLE,
+                            InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+                }
+                Boolean hideIpPort = privResult.second;
+
                 OlapTable olapTable = (OlapTable) table;
                 long sizeLimit = -1;
                 if (showStmt.hasOffset() && showStmt.hasLimit()) {
@@ -2049,7 +2063,8 @@ public class ShowExecutor {
                         } else {
                             LocalTabletsProcDir procDir = new LocalTabletsProcDir(db, olapTable, index);
                             tabletInfos.addAll(procDir.fetchComparableResult(
-                                    showStmt.getVersion(), showStmt.getBackendId(), showStmt.getReplicaState()));
+                                    showStmt.getVersion(), showStmt.getBackendId(), showStmt.getReplicaState(),
+                                    hideIpPort));
                         }
                         if (sizeLimit > -1 && CollectionUtils.isEmpty(showStmt.getOrderByPairs())
                                 && tabletInfos.size() >= sizeLimit) {
