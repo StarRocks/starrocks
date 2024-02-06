@@ -135,6 +135,7 @@ public:
     Status close_wait(RuntimeState* state);
 
     void cancel(const Status& err_st);
+    void cancel();
 
     void time_report(std::unordered_map<int64_t, AddBatchCounter>* add_batch_counter_map, int64_t* serialize_batch_ns,
                      int64_t* actual_consume_ns) {
@@ -184,6 +185,7 @@ private:
 
     // user cancel or get some errors
     bool _cancelled{false};
+    bool _cancel_finished{false};
 
     // send finished means the consumer thread which send the rpc can exit
     bool _send_finished{false};
