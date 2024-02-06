@@ -37,9 +37,6 @@ public class CompactionSchedulerTest {
     @Mocked
     private DatabaseTransactionMgr dbTransactionMgr;
 
-    @Mocked
-    private GlobalStateMgr stateMgr;
-
     @Before
     public void setUp() {
     }
