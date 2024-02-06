@@ -41,6 +41,7 @@ import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -66,6 +67,7 @@ public class BatchRollupJobTest {
         ctx = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(ctx);
         starRocksAssert.withDatabase("db1").useDatabase("db1");
+        Config.alter_scheduler_interval_millisecond = 10;
     }
 
     @Before
@@ -102,16 +104,16 @@ public class BatchRollupJobTest {
             while (!alterJobV2.getJobState().isFinalState()) {
                 System.out.println(
                         "rollup job " + alterJobV2.getJobId() + " is running. state: " + alterJobV2.getJobState());
-                Thread.sleep(5000);
+                Thread.sleep(500);
             }
             System.out.println("rollup job " + alterJobV2.getJobId() + " is done. state: " + alterJobV2.getJobState());
             Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
         }
 
         // waiting table state to normal
-        int retryTimes = 5;
+        int retryTimes = 25;
         while (tbl.getState() != OlapTable.OlapTableState.NORMAL && retryTimes > 0) {
-            Thread.sleep(5000);
+            Thread.sleep(1000);
             retryTimes--;
         }
         Assert.assertEquals(OlapTableState.NORMAL, tbl.getState());
