@@ -21,13 +21,8 @@ import java.lang.reflect.Field;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.List;
-<<<<<<< HEAD
-=======
-import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Collectors;
->>>>>>> f3233fa9f2 ([BugFix]Fix tablet delete by mistake because of the outdate report version (#40656))
 
 public class SystemInfoServiceTest {
 
