@@ -121,9 +121,9 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
     size_t active_rows = active_chunk->num_rows();
     if (active_rows > 0 && !_lazy_column_indices.empty()) {
         ChunkPtr lazy_chunk = _create_read_chunk(_lazy_column_indices);
-        RETURN_IF_ERROR(_lazy_skip_rows(_lazy_column_indices, lazy_chunk, *row_count));
 
         SCOPED_RAW_TIMER(&_param.stats->group_chunk_read_ns);
+        RETURN_IF_ERROR(_lazy_skip_rows(_lazy_column_indices, lazy_chunk, *row_count));
         // read data into lazy chunk
         _column_reader_opts.context->filter = has_filter ? &chunk_filter : nullptr;
         Status st = _read(_lazy_column_indices, &count, &lazy_chunk);

@@ -259,7 +259,7 @@ Status HdfsScanner::open_random_access_file() {
 }
 
 void HdfsScanner::do_update_iceberg_v2_counter(RuntimeProfile* parent_profile, const std::string& parent_name) {
-    const std::string ICEBERG_TIMER = "IcebergV2FormatTimer";
+    const std::string ICEBERG_TIMER = "IcebergV2FormatTime";
     ADD_CHILD_COUNTER(parent_profile, ICEBERG_TIMER, TUnit::NONE, parent_name);
 
     RuntimeProfile::Counter* delete_build_timer =
