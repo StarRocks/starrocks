@@ -628,7 +628,6 @@ Status CSVScanner::_get_schema_v2(std::vector<SlotDescriptor>* merged_schema) {
     std::vector<std::vector<SlotDescriptor>> schemas;
     std::vector<SlotDescriptor> schema;
     for (size_t i = 0; i < row.columns.size(); i++) {
-
         const auto& column = row.columns[i];
         char* basePtr = nullptr;
         if (column.is_escaped_column) {
@@ -653,7 +652,6 @@ Status CSVScanner::_get_schema_v2(std::vector<SlotDescriptor>* merged_schema) {
         }
         schema.clear();
         for (size_t i = 0; i < row.columns.size(); i++) {
-
             const auto& column = row.columns[i];
             char* basePtr = nullptr;
             if (column.is_escaped_column) {
