@@ -64,6 +64,8 @@ public:
         }
         return column_files;
     }
+
+    std::vector<std::vector<uint32_t>>& column_ids() { return _column_ids; }
     const std::vector<std::vector<uint32_t>>& column_ids() const { return _column_ids; }
     int64_t version() const { return _version; }
 

@@ -519,7 +519,9 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
         WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
         ASSIGN_OR_RETURN(auto output_file, fs::new_writable_file(opts, tablet_snapshot_dir_path + file_name));
 
-        if (HasSuffixString(file_name, ".dat") && !column_unique_id_map.empty()) {
+        if (!column_unique_id_map.empty() &&
+            (HasSuffixString(file_name, ".dat") || HasSuffixString(file_name, ".upt") ||
+             HasSuffixString(file_name, ".cols"))) {
             return std::make_unique<SegmentStreamConverter>(file_name, file_size, std::move(output_file),
                                                             &column_unique_id_map);
         }
@@ -559,7 +561,10 @@ static Status convert_rowset_meta_pb(RowsetMetaPB* rowset_meta_pb,
 Status ReplicationTxnManager::convert_snapshot_for_none_primary(
         const std::string& tablet_snapshot_path, std::unordered_map<uint32_t, uint32_t>* column_unique_id_map,
         const TReplicateSnapshotRequest& request) {
-    std::string src_header_file_path = tablet_snapshot_path + std::to_string(request.src_tablet_id) + ".hdr";
+    std::string src_tablet_id_path = tablet_snapshot_path + std::to_string(request.src_tablet_id);
+    std::string src_header_file_path = src_tablet_id_path + ".hdr";
+    std::string src_dcgs_snapshot_file_path = src_tablet_id_path + ".dcgs_snapshot";
+
     TabletMeta tablet_meta;
     RETURN_IF_ERROR(tablet_meta.create_from_file(src_header_file_path));
 
@@ -589,6 +594,33 @@ Status ReplicationTxnManager::convert_snapshot_for_none_primary(
         }
     }
 
+    if (fs::path_exist(src_dcgs_snapshot_file_path)) {
+        DeltaColumnGroupSnapshotPB dcg_snapshot_pb;
+        RETURN_IF_ERROR(DeltaColumnGroupListHelper::parse_snapshot(src_dcgs_snapshot_file_path, dcg_snapshot_pb));
+        for (auto& tablet_id : *dcg_snapshot_pb.mutable_tablet_id()) {
+            tablet_id = request.tablet_id;
+        }
+        for (auto& dcg_list : *dcg_snapshot_pb.mutable_dcg_lists()) {
+            for (auto& dcg : *dcg_list.mutable_dcgs()) {
+                for (auto& dcg_column_ids : *dcg.mutable_column_ids()) {
+                    RETURN_IF_ERROR(ReplicationUtils::convert_column_unique_ids(dcg_column_ids.mutable_column_ids(),
+                                                                                *column_unique_id_map));
+                }
+            }
+        }
+
+        std::string dcgs_snapshot_file_path =
+                tablet_snapshot_path + std::to_string(request.tablet_id) + ".dcgs_snapshot";
+        RETURN_IF_ERROR(DeltaColumnGroupListHelper::save_snapshot(dcgs_snapshot_file_path, dcg_snapshot_pb));
+
+        if (request.tablet_id != request.src_tablet_id) {
+            auto status = fs::delete_file(src_dcgs_snapshot_file_path);
+            if (!status.ok()) {
+                LOG(WARNING) << "Failed to delete file: " << src_dcgs_snapshot_file_path << ", " << status;
+            }
+        }
+    }
+
     RETURN_IF_ERROR(SnapshotManager::instance()->convert_rowset_ids(tablet_snapshot_path, request.tablet_id,
                                                                     request.schema_hash));
     return Status::OK();
@@ -614,6 +646,14 @@ Status ReplicationTxnManager::convert_snapshot_for_primary(const std::string& ta
 
     for (auto& rowset_meta : snapshot_meta.rowset_metas()) {
         RETURN_IF_ERROR(convert_rowset_meta_pb(&rowset_meta, column_unique_id_map, request));
+    }
+
+    for (auto& [segment_id, dcg_list] : snapshot_meta.delta_column_groups()) {
+        for (auto& dcg : dcg_list) {
+            for (auto& dcg_column_ids : dcg->column_ids()) {
+                RETURN_IF_ERROR(ReplicationUtils::convert_column_unique_ids(&dcg_column_ids, *column_unique_id_map));
+            }
+        }
     }
 
     RETURN_IF_ERROR(snapshot_meta.serialize_to_file(snapshot_meta_file_path));
