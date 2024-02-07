@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 ## 3.1.8
 
-Release date: February 6, 2024
+Release date: February 5, 2024
 
 ### New Features
 
