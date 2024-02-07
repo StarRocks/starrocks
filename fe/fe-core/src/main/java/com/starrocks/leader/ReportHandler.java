@@ -1455,6 +1455,9 @@ public class ReportHandler extends Daemon {
                     if (olapTable == null) {
                         continue;
                     }
+                    if (olapTable.getMaxColUniqueId() <= Column.COLUMN_UNIQUE_ID_INIT_VALUE) {
+                        continue;
+                    }
                     MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
                     if (indexMeta == null) {
                         continue;
