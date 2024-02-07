@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
 
+#include "common/config.h"
 #include "runtime/current_thread.h"
 
 namespace starrocks::pipeline {
@@ -66,7 +67,7 @@ bool HashJoinProbeOperator::need_input() const {
 }
 
 bool HashJoinProbeOperator::is_finished() const {
-    return _join_prober->is_done();
+    return _join_prober->is_done() || (_join_builder->is_done() && config::enable_join_short_circuit);
 }
 
 bool HashJoinProbeOperator::is_ready() const {
