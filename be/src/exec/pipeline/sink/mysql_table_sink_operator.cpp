@@ -43,7 +43,7 @@ public:
     void close(RuntimeState* state) override;
 
 private:
-    void _process_chunk(bthread::TaskIterator<ChunkPtr>& iter) override;
+    void _add_chunk(const ChunkPtr& chunk) override;
 
     Status _open_mysql_table_writer();
 
@@ -78,23 +78,7 @@ void MysqlTableSinkIOBuffer::close(RuntimeState* state) {
     SinkIOBuffer::close(state);
 }
 
-void MysqlTableSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
-    DeferOp op([&]() {
-        auto nc = _num_pending_chunks.fetch_sub(1);
-        DCHECK_GE(nc, 1L);
-    });
-
-    if (_is_finished) {
-        return;
-    }
-
-    if (_is_cancelled && !_is_finished) {
-        if (_num_pending_chunks == 1) {
-            close(_state);
-        }
-        return;
-    }
-
+void MysqlTableSinkIOBuffer::_add_chunk(const ChunkPtr& chunk) {
     if (_writer == nullptr) {
         if (Status status = _open_mysql_table_writer(); !status.ok()) {
             LOG(WARNING) << "open mysql table writer failed, error: " << status.to_string();
@@ -103,14 +87,6 @@ void MysqlTableSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& ite
         }
     }
 
-    const auto& chunk = *iter;
-    if (chunk == nullptr) {
-        // this is the last chunk
-        auto nc = _num_pending_chunks.load();
-        DCHECK_LE(nc, 1L);
-        close(_state);
-        return;
-    }
     if (Status status = _writer->append(chunk.get()); !status.ok()) {
         LOG(WARNING) << "add chunk to mysql table writer failed, error: " << status.to_string();
         _fragment_ctx->cancel(status);
