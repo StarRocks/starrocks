@@ -378,6 +378,10 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
 Status ReplicationTxnManager::convert_rowset_meta(const RowsetMeta& rowset_meta, TTransactionId transaction_id,
                                                   TxnLogPB::OpWrite* op_write,
                                                   std::unordered_map<std::string, std::string>* filename_map) {
+    if (rowset_meta.is_column_mode_partial_update()) {
+        return Status::NotSupported("Column mode partial update is not supported in shared-data mode");
+    }
+
     // Convert rowset metadata
     auto* rowset_metadata = op_write->mutable_rowset();
     rowset_metadata->set_id(rowset_meta.get_rowset_seg_id());
