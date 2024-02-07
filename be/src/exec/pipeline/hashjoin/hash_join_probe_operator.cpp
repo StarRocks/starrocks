@@ -66,7 +66,7 @@ bool HashJoinProbeOperator::need_input() const {
 }
 
 bool HashJoinProbeOperator::is_finished() const {
-    return _join_prober->is_done();
+    return _join_prober->is_done() || _join_builder->is_done();
 }
 
 bool HashJoinProbeOperator::is_ready() const {
