@@ -1999,9 +1999,12 @@ public class AlterTest {
                 GlobalStateMgr.getCurrentState().getAuthorizationMgr().getRoleIdsByUser(testUser));
         starRocksAssert.getCtx().setRemoteIP("%");
 
-        String renameDb = "alter database test rename test0";
+
+        starRocksAssert.withDatabase("test_to_rename");
+        String renameDb = "alter database test_to_rename rename test_to_rename_2";
         AlterDatabaseRenameStatement renameDbStmt =
                 (AlterDatabaseRenameStatement) UtFrameUtils.parseStmtWithNewParser(renameDb, starRocksAssert.getCtx());
+        DDLStmtExecutor.execute(renameDbStmt, starRocksAssert.getCtx());
     }
 
     @Test

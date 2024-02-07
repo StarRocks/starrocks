@@ -34,6 +34,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.rewrite.scalar.FoldConstantsRule;
+import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedPredicateRule;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -62,6 +65,10 @@ public class SplitDatePredicateRule extends TransformationRule {
 
     public SplitDatePredicateRule() {
         super(RuleType.TF_SPLIT_PREDICATE_WITH_DATE, Pattern.create(OperatorType.LOGICAL_OLAP_SCAN));
+    }
+
+    private static CallOperator buildDateTrunc(ScalarOperator arg1, ScalarOperator arg2) {
+        return buildDateTrunc(Arrays.asList(arg1, arg2));
     }
 
     private static CallOperator buildDateTrunc(List<ScalarOperator> arguments) {
@@ -173,6 +180,7 @@ public class SplitDatePredicateRule extends TransformationRule {
 
             BinaryType firstPredicateType = leftDayBeginPredicate.getBinaryType();
 
+            //  make sure predicate is "col >= left And col <= right"
             if (BinaryType.LE.equals(firstPredicateType) || BinaryType.LT.equals(firstPredicateType)) {
                 Collections.swap(colPredicates, 0, 1);
             }
@@ -181,67 +189,106 @@ public class SplitDatePredicateRule extends TransformationRule {
             ConstantOperator leftDayBegin = (ConstantOperator) leftDayBeginPredicate.getChild(1);
             ConstantOperator rightDayEnd = (ConstantOperator) rightDayEndPredicate.getChild(1);
 
-            ConstantOperator leftMonthBegin = ScalarOperatorFunctions.monthsAdd(
-                    ScalarOperatorFunctions.dateTrunc(ConstantOperator.createVarchar("month"), leftDayBegin),
-                    ConstantOperator.createInt(1));
-            ConstantOperator rightDayBegin =
-                    ScalarOperatorFunctions.dateTrunc(ConstantOperator.createVarchar("month"), rightDayEnd);
-
-            ConstantOperator yearBegin = ScalarOperatorFunctions.yearsAdd(
-                    ScalarOperatorFunctions.dateTrunc(ConstantOperator.createVarchar("year"), leftDayBegin),
-                    ConstantOperator.createInt(1));
-
-            ConstantOperator rightMonthBegin =
+            ConstantOperator dateTruncYearOfLeftDayBegin =
+                    ScalarOperatorFunctions.dateTrunc(ConstantOperator.createVarchar("year"), leftDayBegin);
+            ConstantOperator dateTruncYearOfRightDayEnd =
                     ScalarOperatorFunctions.dateTrunc(ConstantOperator.createVarchar("year"), rightDayEnd);
 
+            ConstantOperator dateTruncMonthOfLeftDayBegin =
+                    ScalarOperatorFunctions.dateTrunc(ConstantOperator.createVarchar("month"), leftDayBegin);
+            ConstantOperator dateTruncMonthOfRightDayEnd =
+                    ScalarOperatorFunctions.dateTrunc(ConstantOperator.createVarchar("month"), rightDayEnd);
+
+            ConstantOperator leftMonthBegin = ScalarOperatorFunctions.monthsAdd(
+                    dateTruncMonthOfLeftDayBegin,
+                    ConstantOperator.createInt(1));
+            ConstantOperator rightDayBegin = dateTruncMonthOfRightDayEnd;
+
+            ConstantOperator yearBegin = ScalarOperatorFunctions.yearsAdd(
+                    dateTruncYearOfLeftDayBegin,
+                    ConstantOperator.createInt(1));
+
+
+            // 0.selecting all days if leftDayBegin and rightDayEnd is in the same month
+            BinaryPredicateOperator inTheSameMonth =
+                    BinaryPredicateOperator.eq(dateTruncMonthOfLeftDayBegin, dateTruncMonthOfRightDayEnd);
+            ScalarOperator leftDayBeginToRightDayEnd = generateCompound(leftDayBeginPredicate, rightDayEndPredicate,
+                    inTheSameMonth);
+            curResultPredicates.add(leftDayBeginToRightDayEnd);
+
             // 1.Selecting remaining days
+            BinaryPredicateOperator leftDayEndPredicate =
+                    BinaryPredicateOperator.lt(curColumn, leftMonthBegin);
+            BinaryPredicateOperator rightDayBeginPredicate =
+                    BinaryPredicateOperator.ge(curColumn, rightDayBegin);
+            BinaryPredicateOperator notInSameMonth =
+                    BinaryPredicateOperator.lt(dateTruncMonthOfLeftDayBegin, dateTruncMonthOfRightDayEnd);
 
-            BinaryPredicateOperator leftDayEndPredicate = BinaryPredicateOperator.lt(curColumn, leftMonthBegin);
-            BinaryPredicateOperator rightDayBeginPredicate = BinaryPredicateOperator.ge(curColumn, rightDayBegin);
+            ScalarOperator leftDayPredicate = generateCompound(leftDayBeginPredicate, leftDayEndPredicate,
+                    notInSameMonth);
+            ScalarOperator rightDayPredicate =
+                    generateCompound(rightDayBeginPredicate, rightDayEndPredicate, notInSameMonth);
 
-            ScalarOperator leftDayPredicate = generateCompound(leftDayBeginPredicate, leftDayEndPredicate);
-            ScalarOperator rightDayPredicate = generateCompound(rightDayBeginPredicate, rightDayEndPredicate);
-            curResultPredicates.add(leftDayPredicate);
-            curResultPredicates.add(rightDayPredicate);
+
 
             // 2.Selecting remaining months
             // wrap with data_trunct
-            CallOperator monthOfDate =
-                    buildDateTrunc(
-                            Arrays.asList(ConstantOperator.createVarchar("month"), curColumn));
-            BinaryPredicateOperator leftMonthBeginPredicate = BinaryPredicateOperator.ge(monthOfDate, leftMonthBegin);
-            BinaryPredicateOperator leftMonthEndPredicate = BinaryPredicateOperator.lt(monthOfDate, yearBegin);
+            CallOperator monthOfColumn =
+                    buildDateTrunc(ConstantOperator.createVarchar("month"), curColumn);
 
-            BinaryPredicateOperator rightMonthBeginPredicate = BinaryPredicateOperator.ge(monthOfDate, rightMonthBegin);
-            BinaryPredicateOperator rightMonthEndPredicate = BinaryPredicateOperator.lt(monthOfDate, rightDayBegin);
+            BinaryPredicateOperator leftMonthBeginPredicate =
+                    BinaryPredicateOperator.ge(monthOfColumn, leftMonthBegin);
+            BinaryPredicateOperator leftMonthEndPredicate =
+                    BinaryPredicateOperator.lt(monthOfColumn, yearBegin);
+            BinaryPredicateOperator doNotGetLastMonth =
+                    BinaryPredicateOperator.lt(monthOfColumn, dateTruncMonthOfRightDayEnd);
 
-            ScalarOperator leftMonthPredicate = generateCompound(leftMonthBeginPredicate, leftMonthEndPredicate);
-            ScalarOperator rightMonthPredicate = generateCompound(rightMonthBeginPredicate, rightMonthEndPredicate);
-            curResultPredicates.add(leftMonthPredicate);
-            curResultPredicates.add(rightMonthPredicate);
+            BinaryPredicateOperator rightMonthBeginPredicate =
+                    BinaryPredicateOperator.ge(monthOfColumn, dateTruncYearOfRightDayEnd);
+            BinaryPredicateOperator rightMonthEndPredicate =
+                    BinaryPredicateOperator.lt(monthOfColumn, rightDayBegin);
+            BinaryPredicateOperator notInSameYear =
+                    BinaryPredicateOperator.lt(dateTruncYearOfLeftDayBegin, dateTruncYearOfRightDayEnd);
+
+            ScalarOperator leftMonthPredicate =
+                    generateCompound(leftMonthBeginPredicate, leftMonthEndPredicate, doNotGetLastMonth);
+            ScalarOperator rightMonthPredicate =
+                    generateCompound(rightMonthBeginPredicate, rightMonthEndPredicate, notInSameYear);
+
 
             // 3.Selecting remaining years
             CallOperator yearOfDate =
-                    buildDateTrunc(Arrays.asList(ConstantOperator.createVarchar("year"), curColumn));
+                    buildDateTrunc(ConstantOperator.createVarchar("year"), curColumn);
 
-            BinaryPredicateOperator yearBeginPredicate = BinaryPredicateOperator.ge(yearOfDate, yearBegin);
-            BinaryPredicateOperator yearEndPredicate = BinaryPredicateOperator.lt(yearOfDate, rightMonthBegin);
+            BinaryPredicateOperator yearBeginPredicate =
+                    BinaryPredicateOperator.ge(yearOfDate, yearBegin);
+            BinaryPredicateOperator yearEndPredicate =
+                    BinaryPredicateOperator.lt(yearOfDate, dateTruncYearOfRightDayEnd);
+
             ScalarOperator yearPredicate = generateCompound(yearBeginPredicate, yearEndPredicate);
-            curResultPredicates.add(yearPredicate);
 
+            // add predicate to result according to timeline, easier to check the correctness
+            curResultPredicates.add(leftDayPredicate);
+            curResultPredicates.add(leftMonthPredicate);
+            curResultPredicates.add(yearPredicate);
+            curResultPredicates.add(rightMonthPredicate);
+            curResultPredicates.add(rightDayPredicate);
             ScalarOperator resultPredicate = Utils.compoundOr(curResultPredicates);
-            resultPredicates.add(resultPredicate);
+
+            // rewrite result
+            ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
+            ScalarOperator finalResult = rewriter.rewrite(resultPredicate,
+                    Arrays.asList(new FoldConstantsRule(true), new SimplifiedPredicateRule()));
+
+            resultPredicates.add(finalResult);
         }
 
         scan.setPredicate(Utils.compoundAnd(resultPredicates));
         return Lists.newArrayList(input);
     }
 
-    private ScalarOperator generateCompound(BinaryPredicateOperator left, BinaryPredicateOperator right) {
-        List<ScalarOperator> predicateChild = new ArrayList<>();
-        predicateChild.add(left);
-        predicateChild.add(right);
-        return Utils.compoundAnd(predicateChild);
+    private ScalarOperator generateCompound(BinaryPredicateOperator... predicateOperator) {
+        return Utils.compoundAnd(predicateOperator);
     }
 
 }

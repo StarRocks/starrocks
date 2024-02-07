@@ -2458,8 +2458,7 @@ static inline std::string unhex_4chars(Slice s) {
     }
     return ret;
 }
-#endif
-
+#else
 static inline char hexdigit_1char(char ch) {
     if (int value = ch - '0'; value >= 0 && value <= ('9' - '0')) {
         return value;
@@ -2497,6 +2496,7 @@ static inline std::string unhex_1char(Slice str) {
     }
     return ret;
 }
+#endif
 
 DEFINE_STRING_UNARY_FN_WITH_IMPL(unhexImpl, str) {
 #ifdef __AVX2__

@@ -150,7 +150,7 @@ void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
     if (chunk == nullptr) {
         // this is the last chunk
         auto nc = _num_pending_chunks.load();
-        DCHECK_EQ(nc, 1L);
+        DCHECK_LE(nc, 1L);
         close(_state);
         return;
     }

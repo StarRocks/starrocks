@@ -147,6 +147,9 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     public String getComment() {
         return comment;
     }
+    public List<String> getLocations() {
+        return locations;
+    }
 
     public String getType() {
         return svt.toString();

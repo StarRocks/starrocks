@@ -16,6 +16,7 @@ package com.starrocks.sql.plan;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
+import org.junit.Test;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -37,6 +38,35 @@ public class DistinctAggTest extends PlanTestBase {
     public void testSqlWithDistinctLimit(String sql, String expectedPlan) throws Exception {
         String plan = getFragmentPlan(sql);
         assertContains(plan, expectedPlan);
+    }
+
+    @Test
+    public void testDistinctConstants() throws Exception {
+        String sql = "select count(distinct 1, 2, 3, 4), sum(distinct 1), avg(distinct 1), " +
+                "group_concat(distinct 1, 2 order by 1), array_agg(distinct 1 order by 1) from t0 group by v2;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "4:AGGREGATE (update finalize)\n" +
+                "  |  output: count(if(1 IS NULL, NULL, if(2 IS NULL, NULL, if(3 IS NULL, NULL, 4)))), sum(1), avg(1), " +
+                "group_concat('1', '2', ','), array_agg(1)");
+        sql = "select count(distinct 1, 2, 3, 4) from t0 group by v2";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "3:AGGREGATE (merge finalize)\n" +
+                "  |  output: multi_distinct_count(4: count, 1, 2, 3, 4)");
+
+        sql = "select count(distinct v3, 1) from t0 group by v2";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "4:AGGREGATE (update finalize)\n" +
+                "  |  output: count(if(3: v3 IS NULL, NULL, 1))");
+
+        sql = "select array_agg(distinct 1.33) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "2:AGGREGATE (update serialize)\n" +
+                "  |  output: array_agg(DISTINCT 1.33)");
+
+        sql = "select group_concat(distinct 1.33) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "2:AGGREGATE (update serialize)\n" +
+                "  |  output: group_concat(DISTINCT '1.33', ',')");
     }
 
     private static Stream<Arguments> sqlWithDistinctLimit() {

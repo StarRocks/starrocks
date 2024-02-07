@@ -18,6 +18,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Replica;
+import com.starrocks.clone.TabletScheduler;
 import com.starrocks.clone.TabletSchedulerStat;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -56,6 +57,7 @@ public class LocationLabeledTableBalanceTest {
         Config.sys_log_verbose_modules = new String[] {"com.starrocks.clone"};
         Config.tablet_sched_slot_num_per_path = 32;
         Config.tablet_sched_consecutive_full_clone_delay_sec = 1;
+        TabletScheduler.stateUpdateIntervalMs = 1000;
         PseudoBackend.reportIntervalMs = 1000;
         PseudoCluster.getOrCreateWithRandomPort(true, 3);
         PseudoCluster cluster = PseudoCluster.getInstance();
@@ -115,7 +117,7 @@ public class LocationLabeledTableBalanceTest {
             System.out.println("new backend tablets(no loc): " +
                     getBackendTabletsByTable(newBackend, olapTable.getId()) +
                     ", clone tasks finished: " + stat.counterCloneTaskSucceeded.get());
-            Thread.sleep(1000);
+            Thread.sleep(500);
             if (System.currentTimeMillis() - start > WAIT_FOR_CLONE_TIMEOUT) {
                 Assert.fail("wait for enough clone tasks for location balance finished timeout");
             }
@@ -132,7 +134,7 @@ public class LocationLabeledTableBalanceTest {
             System.out.println("new backend tablets(rack:r3): " +
                     getBackendTabletsByTable(newBackend, olapTable.getId()) +
                     ", clone tasks finished: " + stat.counterCloneTaskSucceeded.get());
-            Thread.sleep(1000);
+            Thread.sleep(500);
             if (System.currentTimeMillis() - start > WAIT_FOR_CLONE_TIMEOUT) {
                 Assert.fail("wait for enough clone tasks for location balance finished timeout");
             }
@@ -140,7 +142,7 @@ public class LocationLabeledTableBalanceTest {
         Assert.assertEquals(5, getBackendTabletsByTable(newBackend, olapTable.getId()).size());
 
         // Wait for redundant replicas deleted.
-        Thread.sleep(10000);
+        Thread.sleep(2000);
         Assert.assertEquals(0, getBackendTabletsByTable(cluster.getBackend(firstNewBackend),
                 olapTable.getId()).size());
     }
@@ -183,7 +185,7 @@ public class LocationLabeledTableBalanceTest {
         }
 
         // Wait for redundant replicas deleted.
-        Thread.sleep(10000);
+        Thread.sleep(5000);
         System.out.println("new backend tablets(rack:r4): " +
                 getBackendTabletsByTable(newBackend, olapTable.getId()) +
                 ", clone tasks finished: " + stat.counterCloneTaskSucceeded.get());
