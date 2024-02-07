@@ -1080,9 +1080,9 @@ TEST_P(CSVScannerTest, test_get_schema) {
         ranges.push_back(range);
 
         TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
-        params->row_delimiter = '\n';
-        params->column_separator = ',';
-        params->schema_sample_file_row_count = 1;
+        params->__set_row_delimiter('\n');
+        params->__set_column_separator(',');
+        params->__set_schema_sample_file_row_count(1);
         auto scanner = create_csv_scanner({}, ranges, params);
         EXPECT_OK(scanner->open());
         std::vector<SlotDescriptor> schema;
@@ -1110,9 +1110,9 @@ TEST_P(CSVScannerTest, test_get_schema) {
         ranges.push_back(range);
 
         TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
-        params->row_delimiter = '\n';
-        params->column_separator = ',';
-        params->schema_sample_file_row_count = 2;
+        params->__set_row_delimiter('\n');
+        params->__set_column_separator(',');
+        params->__set_schema_sample_file_row_count(2);
         auto scanner = create_csv_scanner({}, ranges, params);
         EXPECT_OK(scanner->open());
         std::vector<SlotDescriptor> schema;
@@ -1142,7 +1142,7 @@ TEST_P(CSVScannerTest, test_get_schema) {
         params->__set_skip_header(1);
         params->__set_enclose('"');
         params->__set_escape('\\');
-        params->__set_schema_sample_file_count(1);
+        params->__set_schema_sample_file_row_count(1);
         auto scanner = create_csv_scanner({}, ranges, params);
         EXPECT_OK(scanner->open());
         std::vector<SlotDescriptor> schema;
@@ -1154,6 +1154,43 @@ TEST_P(CSVScannerTest, test_get_schema) {
             EXPECT_EQ(expected_schema[i].second, schema[i].type().type) << schema[i].col_name();
         }
     }
+}
+
+TEST_P(CSVScannerTest, test_flexible_column_mapping) {
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_BIGINT);
+    types.emplace_back(TYPE_DOUBLE);
+    types.emplace_back(TYPE_VARCHAR);
+    types.emplace_back(TYPE_VARCHAR);
+    types.emplace_back(TYPE_VARCHAR);
+    // not existing column
+    types.emplace_back(TYPE_INT);
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.__set_start_offset(0);
+    range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file1");
+    range.__set_num_of_columns_from_file(types.size());
+    ranges.push_back(range);
+
+    TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
+    params->__set_row_delimiter('\n');
+    params->__set_column_separator('|');
+    params->__set_flexible_column_mapping(true);
+    auto scanner = create_csv_scanner(types, ranges, params);
+    scanner->use_v2(_use_v2);
+    EXPECT_OK(scanner->open());
+
+    auto res = scanner->get_next();
+    EXPECT_OK(res.status());
+
+    ChunkPtr chunk = res.value();
+    EXPECT_EQ(6, chunk->num_columns());
+    EXPECT_EQ(3, chunk->num_rows());
+
+    EXPECT_EQ("[1, 1.1, 'apple', '2020-01-01', 'apple', NULL]", chunk->debug_row(0));
+    EXPECT_EQ("[-1, -0.1, 'banana', '1998-09-01', 'banana', NULL]", chunk->debug_row(1));
+    EXPECT_EQ("[10, NULL, 'grapefruit', '2021-02-19', 'grapefruit', NULL]", chunk->debug_row(2));
 }
 
 INSTANTIATE_TEST_CASE_P(CSVScannerTestParams, CSVScannerTest, Values(true, false));
