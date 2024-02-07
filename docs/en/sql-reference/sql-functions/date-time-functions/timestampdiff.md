@@ -10,11 +10,7 @@ Returns the interval from `datetime_expr2` to `datetime_expr1`. `datetime_expr1`
 
 The unit for the integer result and the interval should be one of the following:
 
-<<<<<<< HEAD
-SECOND, MINUTE, HOUR, DAY, WEEK, MONTH, or YEAR.
-=======
 MILLISECOND (since 3.2), SECOND, MINUTE, HOUR, DAY, WEEK, MONTH, or YEAR.
->>>>>>> 86b2a32ea9 ([Doc] timestampadd/diff supports millisecond interval and add para desc (#40957))
 
 ## Syntax
 
