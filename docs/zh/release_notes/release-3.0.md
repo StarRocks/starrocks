@@ -218,7 +218,7 @@ displayed_sidebar: "Chinese"
 
 **部署**
 
-- 更新 3.0 版本的 Docker 镜像和相关[部署文档](../quick_start/deploy_with_docker.md)。 [#20623](https://github.com/StarRocks/starrocks/pull/20623) [#21021](https://github.com/StarRocks/starrocks/pull/21021)
+- 更新 3.0 版本的 Docker 镜像和相关[部署文档](https://docs.starrocks.io/zh/docs/quick_start/shared-nothing/)。 [#20623](https://github.com/StarRocks/starrocks/pull/20623) [#21021](https://github.com/StarRocks/starrocks/pull/21021)
 
 **存储与导入**
 
