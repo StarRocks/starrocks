@@ -565,7 +565,7 @@ void HyperLogLog::clear() {
 }
 
 void HyperLogLog::_merge_registers(uint8_t* other_registers) {
-#if defined(__AVX2__) || defined (USE_AVX2KI)
+#if defined(__AVX2__) || defined(USE_AVX2KI)
     int loop = HLL_REGISTERS_COUNT / 32;
     uint8_t* dst = _registers.data;
     const uint8_t* src = other_registers;

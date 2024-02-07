@@ -14,11 +14,11 @@
 
 #pragma once
 
-#if defined(__AVX2__) || (defined(__aarch64__) && defined (USE_AVX2KI))
+#if defined(__AVX2__) || (defined(__aarch64__) && defined(USE_AVX2KI))
 #ifdef __AVX2__
 #include <emmintrin.h>
 #include <immintrin.h>
-#elif defined (__aarch64__) && defined (USE_AVX2KI)
+#elif defined (__aarch64__) && defined(USE_AVX2KI)
 #include "avx2ki.h"
 #endif
 

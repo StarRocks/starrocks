@@ -44,7 +44,7 @@ public:
         int row_sz = select_list[0]->size();
         int processed_rows = 0;
 
-#if defined(__AVX2__) || defined (USE_AVX2KI)
+#if defined(__AVX2__) || defined(USE_AVX2KI)
         // SIMD multi select if Algorithm
         // INPUT: select_vecs = [vec1, vec2] select_datas = [vdata1, vdata2, vdata3]
         // # padding len(selecter) == len(datas)

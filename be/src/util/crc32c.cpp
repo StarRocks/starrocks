@@ -154,7 +154,7 @@ static inline uint32_t LE_LOAD32(const uint8_t* p) {
     return decode_fixed32_le(p);
 }
 
-#if defined(__SSE4_2__) && (defined(__LP64__) || defined(_WIN64)) || defined (USE_AVX2KI)
+#if defined(__SSE4_2__) && (defined(__LP64__) || defined(_WIN64)) || defined(USE_AVX2KI)
 static inline uint64_t LE_LOAD64(const uint8_t* p) {
     return decode_fixed64_le(p);
 }

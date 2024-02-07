@@ -121,7 +121,7 @@ ALWAYS_INLINE inline void memcpy_inlined(void* __restrict _dst, const void* __re
         }
     }
     else {
-#if defined (__AVX2__) || defined (USE_AVX2KI)
+#if defined (__AVX2__) || defined(USE_AVX2KI)
         if (size <= 256) {
             if (size <= 32) {
                 __builtin_memcpy(dst, src, 8);
