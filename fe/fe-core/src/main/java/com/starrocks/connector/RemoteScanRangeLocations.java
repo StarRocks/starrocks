@@ -77,7 +77,11 @@ public class RemoteScanRangeLocations {
             descTbl.addReferencedPartitions(table, partitionInfo);
         }
 
-        forceScheduleLocal = ConnectContext.get().getSessionVariable().getForceScheduleLocal();
+        forceScheduleLocal = false;
+        if (ConnectContext.get() != null) {
+            // ConnectContext sometimes will be nullptr, we need to cover it up
+            forceScheduleLocal = ConnectContext.get().getSessionVariable().getForceScheduleLocal();
+        }
     }
 
     private void addScanRangeLocations(long partitionId, RemoteFileInfo partition, RemoteFileDesc fileDesc,
