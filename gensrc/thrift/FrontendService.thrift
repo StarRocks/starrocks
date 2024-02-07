@@ -1621,6 +1621,7 @@ struct TFeMemoryItem {
     2: optional string class_name
     3: optional i64 current_consumption
     4: optional i64 peak_consumption
+    5: optional string counter_info
 }
 
 struct TFeMemoryReq {

@@ -24,7 +24,8 @@ namespace starrocks {
 SchemaScanner::ColumnDesc SysFeMemoryUsage::_s_columns[] = {{"module_name", TYPE_VARCHAR, sizeof(StringValue), true},
                                                             {"class_name", TYPE_VARCHAR, sizeof(StringValue), true},
                                                             {"current_consumption", TYPE_BIGINT, sizeof(long), true},
-                                                            {"peak_consumption", TYPE_BIGINT, sizeof(long), true}};
+                                                            {"peak_consumption", TYPE_BIGINT, sizeof(long), true},
+                                                            {"counter_info", TYPE_VARCHAR, sizeof(StringValue), true}};
 
 SysFeMemoryUsage::SysFeMemoryUsage()
         : SchemaScanner(_s_columns, sizeof(_s_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
@@ -48,7 +49,7 @@ Status SysFeMemoryUsage::_fill_chunk(ChunkPtr* chunk) {
     auto& slot_id_map = (*chunk)->get_slot_id_to_index_map();
     const TFeMemoryItem& info = _result.items[_index];
     DatumArray datum_array{Slice(info.module_name), Slice(info.class_name), info.current_consumption,
-                           info.peak_consumption};
+                           info.peak_consumption, Slice(info.counter_info)};
     for (const auto& [slot_id, index] : slot_id_map) {
         Column* column = (*chunk)->get_column_by_slot_id(slot_id).get();
         column->append_datum(datum_array[slot_id - 1]);

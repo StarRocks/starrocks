@@ -45,6 +45,7 @@ public class SysFeMemoryUsage {
                         .column("class_name", ScalarType.createVarcharType(256))
                         .column("current_consumption", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("peak_consumption", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("counter_info", ScalarType.createVarcharType(65532))
                         .build(),
                 TSchemaTableType.SYS_FE_MEMORY_USAGE);
     }
@@ -74,6 +75,7 @@ public class SysFeMemoryUsage {
                     item.setClass_name(className);
                     item.setCurrent_consumption(memoryStat.getCurrentConsumption());
                     item.setPeak_consumption(memoryStat.getPeakConsumption());
+                    item.setCounter_info(memoryStat.getCounterInfo());
                     response.addToItems(item);
                 });
             }

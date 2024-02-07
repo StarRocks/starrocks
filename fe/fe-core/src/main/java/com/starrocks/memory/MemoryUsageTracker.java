@@ -19,6 +19,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.monitor.unit.ByteSizeValue;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.QeProcessor;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.server.GlobalStateMgr;
@@ -112,6 +113,7 @@ public class MemoryUsageTracker extends FrontendDaemon {
                 } else {
                     memoryStat.setPeakConsumption(currentEstimateSize);
                 }
+                memoryStat.setCounterInfo(GsonUtils.GSON.toJson(counterMap));
                 usageMap.put(className, memoryStat);
 
                 LOG.info("({}ms) Module {} - {} estimated {} of memory. Contains {}",
