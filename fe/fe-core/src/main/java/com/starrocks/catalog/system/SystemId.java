@@ -109,7 +109,11 @@ public class SystemId {
     public static final long GRANTS_TO_USERS_ID = 103L;
     public static final long OBJECT_DEPENDENCIES = 104L;
     public static final long FE_LOCKS_ID = 105L;
+<<<<<<< HEAD
 
+=======
+    public static final long MEMORY_USAGE_ID = 106L;
+>>>>>>> 49d4380c71 ([Feature] add sys.fe_memory_usage table (#40464))
     public static final long PIPE_FILES_ID = 120L;
     public static final long PIPES_ID = 121L;
 }
