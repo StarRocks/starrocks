@@ -301,6 +301,31 @@ TEST(TestRuntimeProfile, testConflictInfoString) {
     ASSERT_EQ(expected_values, actual_values);
 }
 
+static void test_mass_conflict_info_string(int num) {
+    std::shared_ptr<ObjectPool> obj_pool = std::make_shared<ObjectPool>();
+    std::vector<std::shared_ptr<RuntimeProfile>> profile_ptrs;
+    std::vector<RuntimeProfile*> profiles;
+    for (int i = 1; i <= num; ++i) {
+        auto profile = std::make_shared<RuntimeProfile>("profile");
+        profile->add_info_string("key", std::to_string(i));
+        profile_ptrs.push_back(profile);
+        profiles.push_back(profile.get());
+    }
+
+    auto* merged_profile = RuntimeProfile::merge_isomorphic_profiles(obj_pool.get(), profiles);
+    for (int i = 0; i < num - 1; ++i) {
+        ASSERT_TRUE(merged_profile->get_info_string("key__DUP(" + std::to_string(i) + ")") != nullptr);
+    }
+}
+
+TEST(TestRuntimeProfile, testMassConflictInfoString) {
+    for (int i = 1; i <= 32; ++i) {
+        test_mass_conflict_info_string(i);
+    }
+    test_mass_conflict_info_string(1024);
+    test_mass_conflict_info_string(3267);
+}
+
 TEST(TestRuntimeProfile, testCopyCounterWithParent) {
     auto strategy_unit = create_strategy(TUnit::UNIT);
     auto strategy_time = create_strategy(TUnit::TIME_NS);

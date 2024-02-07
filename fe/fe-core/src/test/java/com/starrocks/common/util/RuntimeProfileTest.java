@@ -612,6 +612,30 @@ public class RuntimeProfileTest {
     }
 
     @Test
+    public void testMassConflictInfoString() {
+        for (int i = 1; i <= 32; i++) {
+            testMassConflictInfoString(i);
+        }
+        testMassConflictInfoString(1024);
+        testMassConflictInfoString(3267);
+    }
+
+    private void testMassConflictInfoString(int num) {
+        List<RuntimeProfile> profiles = Lists.newArrayList();
+        for (int i = 1; i <= num; i++) {
+            RuntimeProfile profile = new RuntimeProfile();
+            profile.addInfoString("key", Integer.toString(i));
+            profiles.add(profile);
+        }
+
+        RuntimeProfile mergedProfile = RuntimeProfile.mergeIsomorphicProfiles(profiles, null);
+        Assert.assertNotNull(mergedProfile);
+        for (int i = 0; i < num - 1; i++) {
+            Assert.assertNotNull(mergedProfile.getInfoString(String.format("key__DUP(%s)", i)));
+        }
+    }
+
+    @Test
     public void testJsonProfileFormater() {
         //profile
         RuntimeProfile profile = new RuntimeProfile("profile");

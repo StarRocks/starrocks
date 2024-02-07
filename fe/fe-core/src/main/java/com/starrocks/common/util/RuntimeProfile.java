@@ -498,13 +498,24 @@ public class RuntimeProfile {
                 if ((pos = key.indexOf("__DUP(")) != -1) {
                     originalKey = key.substring(0, pos);
                 }
-                int i = 0;
+                int offset = -1;
+                int previousOffset;
+                int step = 1;
                 while (true) {
-                    String indexedKey = String.format("%s__DUP(%d)", originalKey, i++);
+                    previousOffset = offset;
+                    offset += step;
+                    String indexedKey = String.format("%s__DUP(%d)", originalKey, offset);
                     if (!this.infoStrings.containsKey(indexedKey)) {
-                        this.infoStrings.put(indexedKey, value);
-                        break;
+                        if (step == 1) {
+                            this.infoStrings.put(indexedKey, value);
+                            break;
+                        }
+                        // Forward too much, try to forward half of the former size
+                        offset = previousOffset;
+                        step >>= 1;
+                        continue;
                     }
+                    step <<= 1;
                 }
             }
         });
