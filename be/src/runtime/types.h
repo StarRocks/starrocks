@@ -304,6 +304,13 @@ struct TypeDescriptor {
 
     inline bool is_collection_type() const { return type == TYPE_ARRAY || type == TYPE_MAP; }
 
+    inline bool is_integer_type() const {
+        return type == TYPE_TINYINT || type == TYPE_SMALLINT || type == TYPE_INT || type == TYPE_BIGINT ||
+               type == TYPE_LARGEINT;
+    }
+
+    inline bool is_float_type() const { return type == TYPE_FLOAT || type == TYPE_DOUBLE; }
+
     // Could this type be used at join on conjuncts
     bool support_join() const;
     // Could this type be used at order by clause
@@ -338,6 +345,33 @@ struct TypeDescriptor {
     void to_thrift(TTypeDesc* thrift_type) const;
 
     size_t get_array_depth_limit() const;
+
+    static TypeDescriptor promote_types(const TypeDescriptor& type1, const TypeDescriptor& type2) {
+        DCHECK(type1 != type2);
+        if (type1.is_integer_type() && type2.is_integer_type()) {
+            // promote integer type. Larger enum values mean larger value ranges.
+            auto tp = type1.type > type2.type ? type1.type : type2.type;
+            return TypeDescriptor::from_logical_type(tp);
+        } else if (type1.is_float_type() && type2.is_float_type()) {
+            // promote all float to double.
+            return TypeDescriptor::from_logical_type(TYPE_DOUBLE);
+        } else if (type1.is_decimal_type() && type2.is_decimal_type()) {
+            // decimal v3 only
+            auto tp = type1.type > type2.type ? type1.type : type2.type;
+            if (tp > TYPE_DECIMAL128) tp = TYPE_DECIMAL128;
+            if (tp < TYPE_DECIMAL32) tp = TYPE_DECIMAL32;
+            auto precision = type1.precision > type2.precision ? type1.precision : type2.precision;
+            if (precision > MAX_PRECISION) precision = MAX_PRECISION;
+            auto scale = type1.scale > type2.scale ? type1.scale : type2.scale;
+            if (scale > MAX_SCALE) scale = MAX_SCALE;
+            return TypeDescriptor::create_decimalv3_type(tp, precision, scale);
+        } else if (type1.is_string_type() && type2.is_string_type()) {
+            auto len = type1.len > type2.len ? type1.len : type2.len;
+            return TypeDescriptor::create_varchar_type(len);
+        }
+        // treat other conflicted types as varchar.
+        return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    }
 
 private:
     /// Used to create a possibly nested type from the flattened Thrift representation.

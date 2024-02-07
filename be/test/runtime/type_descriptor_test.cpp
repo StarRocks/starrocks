@@ -693,4 +693,12 @@ TEST_F(TypeDescriptorTest, test_debug_string) {
     }
 }
 
+TEST_F(TypeDescriptorTest, test_promote_types) {
+    std::vector<std::tuple<TypeDescriptor>> cases = {
+            // input1, input2, output
+            {TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_BIGINT),
+             TypeDescriptor::from_logical_type(TYPE_BIGINT)}};
+    TypeDescriptor::promote_types();
+}
+
 } // namespace starrocks
