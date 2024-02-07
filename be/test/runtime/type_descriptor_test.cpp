@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <tuple>
+
 #include "gtest/gtest.h"
 #include "runtime/types.h"
 
@@ -697,8 +699,21 @@ TEST_F(TypeDescriptorTest, test_promote_types) {
     std::vector<std::tuple<TypeDescriptor>> cases = {
             // input1, input2, output
             {TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_BIGINT),
-             TypeDescriptor::from_logical_type(TYPE_BIGINT)}};
-    TypeDescriptor::promote_types();
+             TypeDescriptor::from_logical_type(TYPE_BIGINT)},
+
+            {TypeDescriptor::from_logical_type(TYPE_FLOAT), TypeDescriptor::from_logical_type(TYPE_DOUBLE),
+             TypeDescriptor::from_logical_type(TYPE_DOUBLE)},
+
+            {TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 2),
+             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 4, 3),
+             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 5, 3)},
+
+            {TypeDescriptor::create_varchar_type(10), TypeDescriptor::create_varchar_type(20),
+             TypeDescriptor::create_varchar_type(20)},
+    };
+    for (const auto& tuple : cases) {
+        EXPECT_TRUE(TypeDescriptor::promote_types(std::get<0>(tuple), std::get<1>(tuple)) == std::get<2>(tuple));
+    }
 }
 
 } // namespace starrocks

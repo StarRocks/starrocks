@@ -365,9 +365,15 @@ struct TypeDescriptor {
             auto scale = type1.scale > type2.scale ? type1.scale : type2.scale;
             if (scale > MAX_SCALE) scale = MAX_SCALE;
             return TypeDescriptor::create_decimalv3_type(tp, precision, scale);
-        } else if (type1.is_string_type() && type2.is_string_type()) {
+        } else if (type1.type == TYPE_VARCHAR && type2.type == TYPE_VARCHAR) {
             auto len = type1.len > type2.len ? type1.len : type2.len;
             return TypeDescriptor::create_varchar_type(len);
+        } else if (type1.type == TYPE_CHAR && type2.type == TYPE_CHAR) {
+            auto len = type1.len > type2.len ? type1.len : type2.len;
+            return TypeDescriptor::create_char_type(len);
+        } else if (type1.type == TYPE_VARBINARY && type2.type == TYPE_VARBINARY) {
+            auto len = type1.len > type2.len ? type1.len : type2.len;
+            return TypeDescriptor::create_varbinary_type(len);
         }
         // treat other conflicted types as varchar.
         return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
