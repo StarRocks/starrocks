@@ -201,9 +201,6 @@ void CacheOperator::close(RuntimeState* state) {
     _cache_populate_tablets_counter->update(_populate_tablets.size());
     _cache_probe_tablets_counter->update(_probe_tablets.size());
     _cache_passthrough_tablets_counter->update(passthrough_tablets.size());
-    _unique_metrics->add_info_string("CacheProbeTablets", flatten_tablet_set(_probe_tablets));
-    _unique_metrics->add_info_string("CachePopulateTablets", flatten_tablet_set(_populate_tablets));
-    _unique_metrics->add_info_string("CachePassthroughTablets", flatten_tablet_set(passthrough_tablets));
 
     Operator::close(state);
 }
