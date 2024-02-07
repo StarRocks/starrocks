@@ -567,7 +567,11 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
+<<<<<<< HEAD
         Assert.assertEquals(25, jobs.size());
+=======
+        Assert.assertEquals(29, jobs.size());
+>>>>>>> ff862de0d5 ([Enhancement] Change hive file split logic (#40910))
     }
 
     @Test

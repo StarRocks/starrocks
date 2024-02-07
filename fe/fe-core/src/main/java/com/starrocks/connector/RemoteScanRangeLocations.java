@@ -46,6 +46,7 @@ public class RemoteScanRangeLocations {
 
     private final List<TScanRangeLocations> result = new ArrayList<>();
     private final List<DescriptorTable.ReferencedPartitionInfo> partitionInfos = new ArrayList<>();
+    private boolean forceScheduleLocal = false;
 
     public void setup(DescriptorTable descTbl, Table table, HDFSScanNodePredicates scanNodePredicates) {
         Collection<Long> selectedPartitionIds = scanNodePredicates.getSelectedPartitionIds();
@@ -60,30 +61,64 @@ public class RemoteScanRangeLocations {
             partitionInfos.add(partitionInfo);
             descTbl.addReferencedPartitions(table, partitionInfo);
         }
+
+        forceScheduleLocal = false;
+        if (ConnectContext.get() != null) {
+            // ConnectContext sometimes will be nullptr, we need to cover it up
+            forceScheduleLocal = ConnectContext.get().getSessionVariable().getForceScheduleLocal();
+        }
     }
 
     private void addScanRangeLocations(long partitionId, RemoteFileInfo partition, RemoteFileDesc fileDesc,
+<<<<<<< HEAD
                                        RemoteFileBlockDesc blockDesc) {
+=======
+                                       Optional<RemoteFileBlockDesc> blockDesc, DataCacheOptions dataCacheOptions) {
+>>>>>>> ff862de0d5 ([Enhancement] Change hive file split logic (#40910))
         // NOTE: Config.hive_max_split_size should be extracted to a local variable,
         // because it may be changed before calling 'splitScanRangeLocations'
         // and after needSplit has been calculated.
-        long splitSize = Config.hive_max_split_size;
-        boolean needSplit = fileDesc.isSplittable() && blockDesc.getLength() > splitSize;
+        final long splitSize = Config.hive_max_split_size;
+        long totalSize = fileDesc.getLength();
+        long offset = 0;
+
+        if (blockDesc.isPresent()) {
+            // If blockDesc existed, we will split according block desc
+            RemoteFileBlockDesc block = blockDesc.get();
+            totalSize = block.getLength();
+            offset = block.getOffset();
+        }
+
+        boolean needSplit = fileDesc.isSplittable() && totalSize > splitSize;
         if (needSplit) {
+<<<<<<< HEAD
             splitScanRangeLocations(partitionId, partition, fileDesc, blockDesc, splitSize);
         } else {
             createScanRangeLocationsForSplit(partitionId, partition, fileDesc, blockDesc, blockDesc.getOffset(),
                     blockDesc.getLength());
+=======
+            splitScanRangeLocations(partitionId, partition, fileDesc, blockDesc, offset, totalSize, splitSize,
+                    dataCacheOptions);
+        } else {
+            createScanRangeLocationsForSplit(partitionId, partition, fileDesc, blockDesc, offset, totalSize,
+                    dataCacheOptions);
+>>>>>>> ff862de0d5 ([Enhancement] Change hive file split logic (#40910))
         }
     }
 
     private void splitScanRangeLocations(long partitionId, RemoteFileInfo partition,
                                          RemoteFileDesc fileDesc,
+<<<<<<< HEAD
                                          RemoteFileBlockDesc blockDesc,
                                          long splitSize) {
         long remainingBytes = blockDesc.getLength();
         long length = blockDesc.getLength();
         long offset = blockDesc.getOffset();
+=======
+                                         Optional<RemoteFileBlockDesc> blockDesc,
+                                         long offset, long length, long splitSize, DataCacheOptions dataCacheOptions) {
+        long remainingBytes = length;
+>>>>>>> ff862de0d5 ([Enhancement] Change hive file split logic (#40910))
         do {
             if (remainingBytes < 2 * splitSize) {
                 createScanRangeLocationsForSplit(partitionId, partition, fileDesc,
@@ -101,8 +136,13 @@ public class RemoteScanRangeLocations {
 
     private void createScanRangeLocationsForSplit(long partitionId, RemoteFileInfo partition,
                                                   RemoteFileDesc fileDesc,
+<<<<<<< HEAD
                                                   RemoteFileBlockDesc blockDesc,
                                                   long offset, long length) {
+=======
+                                                  Optional<RemoteFileBlockDesc> blockDesc,
+                                                  long offset, long length, DataCacheOptions dataCacheOptions) {
+>>>>>>> ff862de0d5 ([Enhancement] Change hive file split logic (#40910))
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
@@ -120,15 +160,20 @@ public class RemoteScanRangeLocations {
         scanRange.setHdfs_scan_range(hdfsScanRange);
         scanRangeLocations.setScan_range(scanRange);
 
-        if (blockDesc.getReplicaHostIds().length == 0) {
-            String message = String.format("hdfs file block has no host. file = %s/%s",
-                    partition.getFullPath(), fileDesc.getFileName());
-            throw new StarRocksPlannerException(message, ErrorType.INTERNAL_ERROR);
-        }
+        if (blockDesc.isPresent()) {
+            if (blockDesc.get().getReplicaHostIds().length == 0) {
+                String message = String.format("hdfs file block has no host. file = %s/%s",
+                        partition.getFullPath(), fileDesc.getFileName());
+                throw new StarRocksPlannerException(message, ErrorType.INTERNAL_ERROR);
+            }
 
-        for (long hostId : blockDesc.getReplicaHostIds()) {
-            String host = blockDesc.getDataNodeIp(hostId);
-            TScanRangeLocation scanRangeLocation = new TScanRangeLocation(new TNetworkAddress(host, -1));
+            for (long hostId : blockDesc.get().getReplicaHostIds()) {
+                String host = blockDesc.get().getDataNodeIp(hostId);
+                TScanRangeLocation scanRangeLocation = new TScanRangeLocation(new TNetworkAddress(host, -1));
+                scanRangeLocations.addToLocations(scanRangeLocation);
+            }
+        } else {
+            TScanRangeLocation scanRangeLocation = new TScanRangeLocation(new TNetworkAddress("-1", -1));
             scanRangeLocations.addToLocations(scanRangeLocation);
         }
 
@@ -197,12 +242,31 @@ public class RemoteScanRangeLocations {
                     if (fileDesc.getLength() == 0) {
                         continue;
                     }
+<<<<<<< HEAD
                     for (RemoteFileBlockDesc blockDesc : fileDesc.getBlockDescs()) {
                         addScanRangeLocations(partitionInfos.get(i).getId(), partitions.get(i), fileDesc, blockDesc);
                         LOG.debug("Add scan range success. partition: {}, file: {}, block: {}-{}",
                                 partitions.get(i).getFullPath(), fileDesc.getFileName(), blockDesc.getOffset(),
                                 blockDesc.getLength());
+=======
+                    if (forceScheduleLocal) {
+                        for (RemoteFileBlockDesc blockDesc : fileDesc.getBlockDescs()) {
+                            addScanRangeLocations(partitionInfos.get(i).getId(), partitions.get(i), fileDesc,
+                                    Optional.of(blockDesc),
+                                    dataCacheOptions);
+                            LOG.debug("Add scan range success. partition: {}, file: {}, block: {}-{}",
+                                    partitions.get(i).getFullPath(), fileDesc.getFileName(), blockDesc.getOffset(),
+                                    blockDesc.getLength());
+                        }
+                    } else {
+                        addScanRangeLocations(partitionInfos.get(i).getId(), partitions.get(i), fileDesc,
+                                Optional.empty(),
+                                dataCacheOptions);
+                        LOG.debug("Add scan range success. partition: {}, file: {}, range: {}-{}",
+                                partitions.get(i).getFullPath(), fileDesc.getFileName(), 0, fileDesc.getLength());
+>>>>>>> ff862de0d5 ([Enhancement] Change hive file split logic (#40910))
                     }
+
                 }
             }
         } else if (table instanceof HudiTable) {
