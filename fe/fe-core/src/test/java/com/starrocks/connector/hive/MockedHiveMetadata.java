@@ -81,6 +81,12 @@ public class MockedHiveMetadata implements ConnectorMetadata {
     static {
         mockTPCHTable();
         mockPartitionTable();
+<<<<<<< HEAD
+=======
+        mockView();
+        mockSubfieldTable();
+        mockFileSplitTable();
+>>>>>>> ff862de0d5 ([Enhancement] Change hive file split logic (#40910))
     }
 
     @Override
@@ -225,6 +231,146 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public static void mockView() {
+        Map<String, HiveTableInfo> mockTables =
+                MOCK_TABLE_MAP.putIfAbsent(MOCKED_TPCH_DB_NAME, new CaseInsensitiveMap<>());
+        List<FieldSchema> cols = Lists.newArrayList();
+        cols.add(new FieldSchema("c_custkey", "int", null));
+        cols.add(new FieldSchema("c_name", "string", null));
+        cols.add(new FieldSchema("c_address", "string", null));
+        cols.add(new FieldSchema("c_nationkey", "int", null));
+        cols.add(new FieldSchema("c_phone", "string", null));
+        cols.add(new FieldSchema("c_mktsegment", "string", null));
+        cols.add(new FieldSchema("c_comment", "string", null));
+        StorageDescriptor sd =
+                new StorageDescriptor(cols, "", "", "", false, -1, null, Lists.newArrayList(), Lists.newArrayList(),
+                                      Maps.newHashMap());
+
+        Table hmsView1 =
+                new Table("customer_view", "tpch", null, 0, 0, 0, sd, Lists.newArrayList(), Maps.newHashMap(), null,
+                          "select c_custkey,c_name, c_address, c_nationkey, c_phone, c_mktsegment, c_comment from tpch.customer",
+                          "VIRTUAL_VIEW");
+        HiveView view1 = HiveMetastoreApiConverter.toHiveView(hmsView1, MOCKED_HIVE_CATALOG_NAME);
+        mockTables.put(hmsView1.getTableName(), new HiveTableInfo(view1));
+
+        cols = Lists.newArrayList();
+        cols.add(new FieldSchema("c_custkey", "int", null));
+        cols.add(new FieldSchema("c_name", "string", null));
+        cols.add(new FieldSchema("c_address", "string", null));
+        cols.add(new FieldSchema("c_nationkey", "int", null));
+        cols.add(new FieldSchema("n_nationkey", "int", null));
+        cols.add(new FieldSchema("n_name", "string", null));
+        cols.add(new FieldSchema("n_regionkey", "int", null));
+        sd = new StorageDescriptor(cols, "", "", "", false, -1, null, Lists.newArrayList(), Lists.newArrayList(),
+                                   Maps.newHashMap());
+
+        Table hmsView2 =
+                new Table("customer_nation_view", "tpch", null, 0, 0, 0, sd, Lists.newArrayList(), Maps.newHashMap(),
+                          null,
+                          "select c_custkey,c_name, c_address, c_nationkey, n_nationkey, n_name, n_regionkey from " +
+                                  "tpch.customer join tpch.nation on c_nationkey = n_nationkey", "VIRTUAL_VIEW");
+        HiveView view2 = HiveMetastoreApiConverter.toHiveView(hmsView2, MOCKED_HIVE_CATALOG_NAME);
+        mockTables.put(hmsView2.getTableName(), new HiveTableInfo(view2));
+
+        cols = Lists.newArrayList();
+        cols.add(new FieldSchema("c_custkey", "int", null));
+        cols.add(new FieldSchema("c_name", "string", null));
+        cols.add(new FieldSchema("c_address", "string", null));
+        cols.add(new FieldSchema("c_nationkey", "int", null));
+        cols.add(new FieldSchema("c_phone", "string", null));
+        cols.add(new FieldSchema("c_mktsegment", "string", null));
+        cols.add(new FieldSchema("c_comment", "string", null));
+        sd = new StorageDescriptor(cols, "", "", "", false, -1, null, Lists.newArrayList(), Lists.newArrayList(),
+                                   Maps.newHashMap());
+
+        Table hmsView3 =
+                new Table("customer_alias_view", "tpch", null, 0, 0, 0, sd, Lists.newArrayList(), Maps.newHashMap(),
+                          null,
+                          "select c_custkey, c_name, c_address, c_nationkey, c_phone, c_mktsegment, c_comment from " +
+                                  "(select * from tpch.customer)", "VIRTUAL_VIEW");
+        HiveView view3 = HiveMetastoreApiConverter.toHiveView(hmsView3, MOCKED_HIVE_CATALOG_NAME);
+        mockTables.put(hmsView3.getTableName(), new HiveTableInfo(view3));
+        // mock trino view which do not have db name
+        Table hmsView4 =
+                new Table("customer_view_without_db", "tpch", null, 0, 0, 0, sd, Lists.newArrayList(), Maps.newHashMap(), null,
+                        "select c_custkey,c_name, c_address, c_nationkey, c_phone, c_mktsegment, c_comment from customer",
+                        "VIRTUAL_VIEW");
+        HiveView view4 = HiveMetastoreApiConverter.toHiveView(hmsView4, MOCKED_HIVE_CATALOG_NAME);
+        mockTables.put(hmsView4.getTableName(), new HiveTableInfo(view4));
+    }
+
+    private static void mockSubfieldTable() {
+        MOCK_TABLE_MAP.putIfAbsent(MOCKED_SUBFIELD_DB, new CaseInsensitiveMap<>());
+        Map<String, HiveTableInfo> mockTables = MOCK_TABLE_MAP.get(MOCKED_SUBFIELD_DB);
+
+        // Mock table region
+        List<FieldSchema> cols = Lists.newArrayList();
+        cols.add(new FieldSchema("col_int", "int", null));
+        cols.add(new FieldSchema("col_struct", "struct<c0: int, c1: struct<c11: int>>", null));
+        StorageDescriptor sd =
+                new StorageDescriptor(cols, "", MAPRED_PARQUET_INPUT_FORMAT_CLASS, "", false,
+                        -1, null, Lists.newArrayList(), Lists.newArrayList(), Maps.newHashMap());
+
+        CaseInsensitiveMap<String, ColumnStatistic> regionStats = new CaseInsensitiveMap<>();
+        regionStats.put("col_int", ColumnStatistic.unknown());
+        regionStats.put("col_struct", ColumnStatistic.unknown());
+
+        Table tbl =
+                new Table("subfield", MOCKED_SUBFIELD_DB, null, 0, 0, 0, sd, Lists.newArrayList(), Maps.newHashMap(), null, null,
+                        "EXTERNAL_TABLE");
+        mockTables.put(tbl.getTableName(),
+                new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(tbl, MOCKED_HIVE_CATALOG_NAME),
+                        ImmutableList.of(), 5, regionStats, MOCKED_FILES));
+
+    }
+
+    private static void mockFileSplitTable() {
+        final String dbName = "file_split_db";
+        MOCK_TABLE_MAP.putIfAbsent(dbName, new CaseInsensitiveMap<>());
+        Map<String, HiveTableInfo> mockTables = MOCK_TABLE_MAP.get(dbName);
+
+        List<FieldSchema> cols = Lists.newArrayList();
+        cols.add(new FieldSchema("col_int", "int", null));
+        StorageDescriptor sd =
+                new StorageDescriptor(cols, "", MAPRED_PARQUET_INPUT_FORMAT_CLASS, "", false,
+                        -1, null, Lists.newArrayList(), Lists.newArrayList(), Maps.newHashMap());
+
+        CaseInsensitiveMap<String, ColumnStatistic> regionStats = new CaseInsensitiveMap<>();
+        regionStats.put("col_int", ColumnStatistic.unknown());
+
+        Table tbl =
+                new Table("file_split_tbl", dbName, null, 0, 0, 0, sd, Lists.newArrayList(), Maps.newHashMap(), null,
+                        null,
+                        "EXTERNAL_TABLE");
+
+        final long oneGigabytes = 1024 * 1024 * 1024;
+        final long oneMegabytes = 1024 * 1024;
+        HiveRemoteFileIO fileIO = new HiveRemoteFileIO(new Configuration());
+        ImmutableList<RemoteFileBlockDesc> blockDescs = ImmutableList.of(
+                new RemoteFileBlockDesc(0, 256 * oneMegabytes, new long[] {123}, new long[] {123}, fileIO),
+                new RemoteFileBlockDesc(256 * oneMegabytes, 256 * oneMegabytes, new long[] {123}, new long[] {123},
+                        fileIO),
+                new RemoteFileBlockDesc(512 * oneMegabytes, 256 * oneMegabytes, new long[] {123}, new long[] {123},
+                        fileIO),
+                new RemoteFileBlockDesc(768 * oneMegabytes, 256 * oneMegabytes, new long[] {123}, new long[] {123},
+                        fileIO)
+        );
+        RemoteFileDesc fileDesc1 = new RemoteFileDesc("file1", "zlib", oneGigabytes, 0, blockDescs, ImmutableList.of());
+        fileDesc1.setSplittable(true);
+        RemoteFileDesc fileDesc2 = new RemoteFileDesc("file2", "zlib", oneGigabytes, 0, blockDescs, ImmutableList.of());
+        fileDesc2.setSplittable(true);
+        List<RemoteFileInfo> files =
+                ImmutableList.of(new RemoteFileInfo(RemoteFileInputFormat.ORC, ImmutableList.of(
+                        fileDesc1, fileDesc2), null));
+
+        mockTables.put(tbl.getTableName(),
+                new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(tbl, MOCKED_HIVE_CATALOG_NAME),
+                        ImmutableList.of(), 5, regionStats, files));
+    }
+
+>>>>>>> ff862de0d5 ([Enhancement] Change hive file split logic (#40910))
     public static void mockTPCHTable() {
         MOCK_TABLE_MAP.putIfAbsent(MOCKED_TPCH_DB_NAME, new CaseInsensitiveMap<>());
         Map<String, HiveTableInfo> mockTables = MOCK_TABLE_MAP.get(MOCKED_TPCH_DB_NAME);
