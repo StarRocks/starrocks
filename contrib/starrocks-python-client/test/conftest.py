@@ -1,4 +1,3 @@
-
 #! /usr/bin/python3
 # Copyright 2021-present StarRocks, Inc. All rights reserved.
 #
@@ -14,6 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import pytest
 from sqlalchemy.dialects import registry
 
-registry.register("starrocks", "starrocks.sqlalchemy.dialect", "StarRocksDialect")
+registry.register("starrocks+pymysql", "starrocks.dialect", "StarRocksDialect")
+registry.register("starrocks", "starrocks.dialect", "StarRocksDialect")
+pytest.register_assert_rewrite("sqlalchemy.testing.assertions")
+
+from sqlalchemy.testing.plugin.pytestplugin import *
