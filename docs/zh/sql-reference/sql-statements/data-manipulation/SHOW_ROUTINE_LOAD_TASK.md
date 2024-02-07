@@ -28,7 +28,7 @@ SHOW ROUTINE LOAD TASK
 
 :::note
 
-返回结果中的字段较多，可使用 `\G` 分行，如 `SHOW ROUTINE LOAD TASK FOR JobName = <job_name> \G`。
+返回结果中的字段较多，可使用 `\G` 分行，如 `SHOW ROUTINE LOAD TASK WHERE JobName = <job_name> \G`。
 
 :::
 

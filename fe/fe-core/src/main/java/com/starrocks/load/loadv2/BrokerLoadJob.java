@@ -343,9 +343,9 @@ public class BrokerLoadJob extends BulkLoadJob {
                 return;
             }
 
+            failMsg = new FailMsg(FailMsg.CancelType.TIMEOUT, txnStatusChangeReason + ". Retry again");
+            LOG.warn("Retry timeout load jobs. job: {}, remaining retryTime: {}", id, retryTime);
             retryTime--;
-            failMsg = new FailMsg(FailMsg.CancelType.TIMEOUT, txnStatusChangeReason);
-            LOG.warn("Retry timeout load jobs. job: {}, retryTime: {}", id, retryTime);
             unprotectedClearTasksBeforeRetry(failMsg);
             try {
                 state = JobState.PENDING;
@@ -353,6 +353,29 @@ public class BrokerLoadJob extends BulkLoadJob {
             } catch (Exception e) {
                 cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.ETL_RUN_FAIL, e.getMessage()), true, true);
             }
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    /**
+     * This method is used to replay the cancelled state of load job
+     *
+     * @param txnState
+     */
+    @Override
+    public void replayOnAborted(TransactionState txnState) {
+        writeLock();
+        try {
+            replayTxnAttachment(txnState);
+            failMsg = new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, txnState.getReason());
+            finishTimestamp = txnState.getFinishTime();
+            state = JobState.CANCELLED;
+            if (retryTime <= 0 || !failMsg.getMsg().contains("timeout") || !isTimeout()) {
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
+                return;
+            }
+            retryTime--;
         } finally {
             writeUnlock();
         }
