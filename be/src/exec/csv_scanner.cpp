@@ -393,9 +393,8 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
                                 _num_fields_in_csv, row.columns.size(), _parse_options);
                         _report_rejected_record(record, error_msg);
                     }
+                    error_reported = true;
                 }
-
-                error_reported = true;
                 continue;
             }
 
@@ -599,37 +598,20 @@ Status CSVScanner::get_schema(std::vector<SlotDescriptor>* schema) {
 }
 
 Status CSVScanner::_get_schema(std::vector<SlotDescriptor>* merged_schema) {
-    CSVReader::Record record;
-    // skip empty record.
-    do {
-        auto st = _curr_reader->next_record(&record);
-        if (st.is_end_of_file()) {
-            return Status::OK();
-        } else if (!st.ok()) {
-            return st;
-        }
-    } while (record.empty());
-
-    // 1st row
-    CSVReader::Fields fields;
-    _curr_reader->split_record(record, &fields);
-
     std::vector<std::vector<SlotDescriptor>> schemas;
     std::vector<SlotDescriptor> schema;
-    for (size_t i = 0; i < fields.size(); i++) {
-        // column name: $1, $2, $3...
-        schema.emplace_back(SlotDescriptor(i, fmt::format("${}", i + 1), get_type_desc(fields[i])));
-    }
-    schemas.emplace_back(schema);
-
-    // from 2nd row.
-    for (size_t i = 1; i < _scan_range.params.schema_sample_file_row_count; i++) {
+    CSVReader::Record record;
+    for (size_t i = 0; i < _scan_range.params.schema_sample_file_row_count;) {
+        record.clear();
         auto st = _curr_reader->next_record(&record);
         if (st.is_end_of_file()) {
             break;
         } else if (!st.ok()) {
             return st;
         }
+        // skip empty record.
+        if (record.empty()) continue;
+
         schema.clear();
         fields.clear();
         _curr_reader->split_record(record, &fields);
@@ -638,6 +620,7 @@ Status CSVScanner::_get_schema(std::vector<SlotDescriptor>* merged_schema) {
             schema.emplace_back(SlotDescriptor(i, fmt::format("${}", i + 1), get_type_desc(fields[i])));
         }
         schemas.emplace_back(schema);
+        i++;
     }
 
     FileScanner::merge_schema(schemas, merged_schema);
@@ -645,44 +628,20 @@ Status CSVScanner::_get_schema(std::vector<SlotDescriptor>* merged_schema) {
 }
 
 Status CSVScanner::_get_schema_v2(std::vector<SlotDescriptor>* merged_schema) {
-    CSVRow row;
-    // skip empty row.
-    do {
-        auto st = _curr_reader->next_record(row);
-        if (st.is_end_of_file()) {
-            // empty file.
-            return Status::OK();
-        } else if (!st.ok()) {
-            return st;
-        }
-    } while (row.columns.empty());
-
-    // 1st row
     std::vector<std::vector<SlotDescriptor>> schemas;
     std::vector<SlotDescriptor> schema;
-    for (size_t i = 0; i < row.columns.size(); i++) {
-        const auto& column = row.columns[i];
-        char* basePtr = nullptr;
-        if (column.is_escaped_column) {
-            basePtr = _curr_reader->escapeDataPtr();
-        } else {
-            basePtr = _curr_reader->buffBasePtr();
-        }
-        const Slice field(basePtr + column.start_pos, column.length);
-
-        // column name: $1, $2, $3...
-        schema.emplace_back(SlotDescriptor(i, fmt::format("${}", i + 1), get_type_desc(field)));
-    }
-    schemas.emplace_back(schema);
-
-    // from 2nd row.
-    for (size_t i = 1; i < _scan_range.params.schema_sample_file_row_count; i++) {
+    CSVRow row;
+    for (size_t i = 0; i < _scan_range.params.schema_sample_file_row_count;) {
+        row.columns.clear();
         auto st = _curr_reader->next_record(row);
         if (st.is_end_of_file()) {
             break;
         } else if (!st.ok()) {
             return st;
         }
+        // skip empty record.
+        if (row.columns.empty()) continue;
+
         schema.clear();
         for (size_t i = 0; i < row.columns.size(); i++) {
             const auto& column = row.columns[i];
@@ -698,6 +657,7 @@ Status CSVScanner::_get_schema_v2(std::vector<SlotDescriptor>* merged_schema) {
             schema.emplace_back(SlotDescriptor(i, fmt::format("${}", i + 1), get_type_desc(field)));
         }
         schemas.emplace_back(schema);
+        i++;
     }
 
     FileScanner::merge_schema(schemas, merged_schema);
