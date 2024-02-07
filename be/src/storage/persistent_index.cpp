@@ -2153,7 +2153,7 @@ Status ShardByLengthMutableIndex::create_index_file(std::string& path) {
     return Status::OK();
 }
 
-#if defined(__SSE2__) || defined(__aarch64__)
+#if defined(__SSE2__) || (defined(__aarch64__) && defined (USE_AVX2KI))
 #ifdef __SSE2__
 #include <emmintrin.h>
 #elif defined (__aarch64__) && defined (USE_AVX2KI)
