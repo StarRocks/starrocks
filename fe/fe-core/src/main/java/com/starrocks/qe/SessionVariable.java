@@ -1695,6 +1695,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return hivePartitionStatsSampleSize;
     }
 
+    public void setForceScheduleLocal(boolean forceScheduleLocal) {
+        this.forceScheduleLocal = forceScheduleLocal;
+    }
+
     public boolean getEnableAdaptiveSinkDop() {
         return enableAdaptiveSinkDop;
     }
