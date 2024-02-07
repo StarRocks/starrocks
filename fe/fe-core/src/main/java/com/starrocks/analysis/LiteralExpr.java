@@ -51,6 +51,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.Objects;
 
 public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr> {
     public LiteralExpr() {
@@ -222,7 +223,7 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
                 || (this instanceof FloatLiteral && !(obj instanceof FloatLiteral))) {
             return false;
         }
-        return this.compareLiteral(((LiteralExpr) obj)) == 0;
+        return this.compareLiteral(((LiteralExpr) obj)) == 0 && Objects.equals(type, ((LiteralExpr) obj).type);
     }
 
     @Override
