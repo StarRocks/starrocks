@@ -338,6 +338,7 @@
           ]
         },
         "administration/Data_recovery",
+        "administration/data_migration_tool",
         {
           "type": "category",
           "label": "User Privileges and Authentication",
@@ -1080,6 +1081,7 @@
           ]
         },
         "administration/Data_recovery",
+        "administration/data_migration_tool",
         {
           "type": "category",
           "label": "管理用户权限",
