@@ -10,11 +10,7 @@ Adds an integer expression interval to the date or datetime expression `datetime
 
 The unit for the interval as mentioned must be one of the following:
 
-<<<<<<< HEAD
-SECOND, MINUTE, HOUR, DAY, WEEK, MONTH, or YEAR.
-=======
 MILLISECOND (since 3.2), SECOND, MINUTE, HOUR, DAY, WEEK, MONTH, or YEAR.
->>>>>>> 86b2a32ea9 ([Doc] timestampadd/diff supports millisecond interval and add para desc (#40957))
 
 ## Syntax
 
