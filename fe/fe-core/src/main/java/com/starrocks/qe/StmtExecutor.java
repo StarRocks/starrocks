@@ -1736,6 +1736,10 @@ public class StmtExecutor {
         serializer.writeInt2(numParams);
         // reserved_1
         serializer.writeInt1(0);
+        // warning_count
+        serializer.writeInt2(0);
+        // metadata follows
+        serializer.writeInt1(1);
         context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
         if (numParams > 0) {
             List<String> colNames = prepareStmt.getParameterLabels();
@@ -1745,6 +1749,10 @@ public class StmtExecutor {
                 serializer.writeField(colNames.get(i), parameters.get(i).getType());
                 context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
             }
+            context.getState().setEof();
+        } else {
+            context.getMysqlChannel().flush();
+            context.getState().setStateType(MysqlStateType.NOOP);
         }
     }
 
