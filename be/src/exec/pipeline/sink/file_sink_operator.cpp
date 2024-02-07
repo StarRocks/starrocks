@@ -16,7 +16,6 @@
 
 #include <utility>
 
-#include "column/chunk.h"
 #include "exec/pipeline/sink/sink_io_buffer.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/scan_task_queue.h"
@@ -45,7 +44,7 @@ public:
     void close(RuntimeState* state) override;
 
 private:
-    void _process_chunk(bthread::TaskIterator<ChunkPtr>& iter) override;
+    void _add_chunk(const ChunkPtr& chunk) override;
 
     std::vector<ExprContext*> _output_expr_ctxs;
 
@@ -114,6 +113,7 @@ void FileSinkIOBuffer::close(RuntimeState* state) {
     SinkIOBuffer::close(state);
 }
 
+<<<<<<< HEAD
 void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
     --_num_pending_chunks;
     // close is already done, just skip
@@ -129,6 +129,9 @@ void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
         return;
     }
 
+=======
+void FileSinkIOBuffer::_add_chunk(const ChunkPtr& chunk) {
+>>>>>>> 50987d3ba2 ([BugFix] Fix the problem of SinkIOBuffer getting stuck (#40874))
     if (!_is_writer_opened) {
         if (Status status = _writer->open(_state); !status.ok()) {
             LOG(WARNING) << "open file writer failed, error: " << status.to_string();
@@ -137,6 +140,7 @@ void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
         }
         _is_writer_opened = true;
     }
+<<<<<<< HEAD
     const auto& chunk = *iter;
     if (chunk == nullptr) {
         // this is the last chunk
@@ -144,6 +148,9 @@ void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
         close(_state);
         return;
     }
+=======
+
+>>>>>>> 50987d3ba2 ([BugFix] Fix the problem of SinkIOBuffer getting stuck (#40874))
     if (Status status = _writer->append_chunk(chunk.get()); !status.ok()) {
         LOG(WARNING) << "add chunk to file writer failed, error: " << status.to_string();
         _fragment_ctx->cancel(status);
