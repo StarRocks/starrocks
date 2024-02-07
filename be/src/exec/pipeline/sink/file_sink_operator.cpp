@@ -113,25 +113,7 @@ void FileSinkIOBuffer::close(RuntimeState* state) {
     SinkIOBuffer::close(state);
 }
 
-<<<<<<< HEAD
-void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
-    --_num_pending_chunks;
-    // close is already done, just skip
-    if (_is_finished) {
-        return;
-    }
-
-    // cancelling has happened but close is not invoked
-    if (_is_cancelled && !_is_finished) {
-        if (_num_pending_chunks == 0) {
-            close(_state);
-        }
-        return;
-    }
-
-=======
 void FileSinkIOBuffer::_add_chunk(const ChunkPtr& chunk) {
->>>>>>> 50987d3ba2 ([BugFix] Fix the problem of SinkIOBuffer getting stuck (#40874))
     if (!_is_writer_opened) {
         if (Status status = _writer->open(_state); !status.ok()) {
             LOG(WARNING) << "open file writer failed, error: " << status.to_string();
@@ -140,17 +122,7 @@ void FileSinkIOBuffer::_add_chunk(const ChunkPtr& chunk) {
         }
         _is_writer_opened = true;
     }
-<<<<<<< HEAD
-    const auto& chunk = *iter;
-    if (chunk == nullptr) {
-        // this is the last chunk
-        DCHECK_LE(_num_pending_chunks, 1);
-        close(_state);
-        return;
-    }
-=======
 
->>>>>>> 50987d3ba2 ([BugFix] Fix the problem of SinkIOBuffer getting stuck (#40874))
     if (Status status = _writer->append_chunk(chunk.get()); !status.ok()) {
         LOG(WARNING) << "add chunk to file writer failed, error: " << status.to_string();
         _fragment_ctx->cancel(status);
