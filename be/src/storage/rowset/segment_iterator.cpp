@@ -1824,10 +1824,17 @@ Status SegmentIterator::_apply_del_vector() {
 Status SegmentIterator::_init_inverted_index_iterators() {
     DCHECK_EQ(_predicate_columns, _opts.predicates.size());
     _inverted_index_iterators.resize(ChunkHelper::max_column_id(_schema) + 1, nullptr);
+    std::unordered_map<ColumnId, ColumnUID> cid_2_ucid;
+
+    for (auto& field : _schema.fields()) {
+        cid_2_ucid[field->id()] = field->uid();
+    }
     for (const auto& pair : _opts.predicates) {
         ColumnId cid = pair.first;
+        ColumnUID ucid = cid_2_ucid[cid];
+
         if (_inverted_index_iterators[cid] == nullptr) {
-            RETURN_IF_ERROR(_segment->new_inverted_index_iterator(cid, &_inverted_index_iterators[cid], _opts));
+            RETURN_IF_ERROR(_segment->new_inverted_index_iterator(ucid, &_inverted_index_iterators[cid], _opts));
             _has_inverted_index |= (_inverted_index_iterators[cid] != nullptr);
         }
     }
