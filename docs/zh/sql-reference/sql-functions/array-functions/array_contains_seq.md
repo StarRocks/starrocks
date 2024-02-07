@@ -1,42 +1,42 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: "Chinese"
 ---
 
 # array_contains_seq
 
-## Description
+## 描述
 
-Checks whether all the elements of `arr2` appear in `arr1` in the same exact order, that is, whether `arr2` is a subset of `arr1` and the elements in `arr2` observe the same exact order as elements in `arr1`. If yes, this function will return 1.
+检查数组 `arr2` 的所有元素是否以完全相同的顺序出现在数组 `arr1` 中。如果是，返回 1。
 
-For example:
+举例：
 
-- `select array_contains_seq([1,2,3,4], [1,2,3]);` returns 1.
-- `select array_contains_seq([1,2,3,4], [4,3]);` returns 0.
+- `select array_contains_seq([1,2,3,4], [1,2,3]);` 返回 1。
+- `select array_contains_seq([1,2,3,4], [4,3]);` 返回 0。
 
-This function is supported from v3.2.
+该函数从 3.2 版本开始支持。
 
-## Syntax
+## 语法
 
 ~~~Haskell
 BOOLEAN array_contains_all(arr1, arr2)
 ~~~
 
-## Parameters
+## 参数
 
-`arr`: the two arrays to compare. This syntax checks whether `arr2` is a subset of `arr1` and in the same exact order.
+`arr`: 要比较的两个数组。此语法检查 `arr2` 是否是 `arr1` 的子集，并且元素的顺序完全相同。
 
-The data types of elements in the two arrays must be the same. For the data types of array elements supported by StarRocks, see [ARRAY](../../../sql-reference/sql-statements/data-types/Array.md).
+两个数组中元素的数据类型必须相同。有关 StarRocks 支持的数组元素数据类型，请参阅 [ARRAY](../../../sql-reference/sql-statements/data-types/Array.md)。
 
-## Return value
+## 返回值
 
-Returns a value of the BOOLEAN type.
+返回 BOOLEAN 类型的值。
 
-- `1` is returned if `arr2` is a subset of `arr1` and the elements in `arr2` observe the same order as those in `arr1`. Otherwise, `0` is returned.
-- An empty array is a subset of any array. Therefore, `1` is returned if `arr2` is empty but `arr1` is a valid array.
-- NULL is returned if any input array is NULL.
-- Nulls in arrays are processed as normal values. For example, `SELECT array_contains_seq([1, 2, NULL, 3, 4], [2,3])` will return 0. However, `SELECT array_contains_seq([1, 2, NULL, 3, 4], [2,NULL,3])` will return 1.
+- 如果 `arr2` 是 `arr1` 的子集，并且元素的顺序完全相同，则返回 `1`。否则，返回 `0`。
+- 空数组默认为所有数组的子集。因此，如果 `arr1` 为有效数组，而 `arr2` 为空，返回 `1`。
+- 如果任何一个输入数组 为 NULL，返回 NULL。
+- 数组中的 Null 值作为正常值处理，比如 `SELECT array_contains_seq([1, 2, NULL, 3, 4], [2,3])` 返回 0。 `SELECT array_contains_seq([1, 2, NULL, 3, 4], [2,NULL,3])` 返回 1。
 
-## Examples
+## 示例
 
 ```Plaintext
 
