@@ -16,18 +16,43 @@
 
 #include <fmt/format.h>
 #include <glog/logging.h>
+#include <llvm/Analysis/Passes.h>
+#include <llvm/Analysis/TargetTransformInfo.h>
+#include <llvm/Bitcode/BitcodeReader.h>
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
 #include <llvm/ExecutionEngine/ObjectCache.h>
 #include <llvm/ExecutionEngine/Orc/LLJIT.h>
+#include <llvm/ExecutionEngine/Orc/ObjectLinkingLayer.h>
 #include <llvm/IR/DataLayout.h>
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/LegacyPassManager.h>
+#include <llvm/IR/PassManager.h>
 #include <llvm/IR/Verifier.h>
+#include <llvm/Linker/Linker.h>
 #include <llvm/MC/SubtargetFeature.h>
 #include <llvm/MC/TargetRegistry.h>
+#include <llvm/Passes/PassBuilder.h>
+#include <llvm/Passes/PassPlugin.h>
 #include <llvm/Support/Error.h>
 #include <llvm/Support/Host.h>
 #include <llvm/Support/MemoryBuffer.h>
 #include <llvm/Support/TargetSelect.h>
+#include <llvm/Support/raw_ostream.h>
+#include <llvm/Transforms/IPO.h>
+#include <llvm/Transforms/IPO/GlobalOpt.h>
+#include <llvm/Transforms/IPO/PassManagerBuilder.h>
+#include <llvm/Transforms/InstCombine/InstCombine.h>
+#include <llvm/Transforms/Scalar.h>
+#include <llvm/Transforms/Scalar/GVN.h>
+#include <llvm/Transforms/Scalar/NewGVN.h>
+#include <llvm/Transforms/Scalar/SimplifyCFG.h>
+#include <llvm/Transforms/Utils.h>
+#include <llvm/Transforms/Utils/Cloning.h>
+#include <llvm/Transforms/Utils/Mem2Reg.h>
+#include <llvm/Transforms/Vectorize.h>
+#include <llvm/Transforms/Vectorize/LoopVectorize.h>
+#include <llvm/Transforms/Vectorize/SLPVectorizer.h>
 
 #include <memory>
 #include <mutex>
@@ -81,10 +106,17 @@ Status JITEngine::init() {
     if (_initialized) {
         return Status::OK();
     }
-
+#if 0
     // Initialize LLVM targets and data layout.
     llvm::InitializeNativeTarget();
     llvm::InitializeNativeTargetAsmPrinter();
+#else
+    llvm::InitializeNativeTarget();
+    llvm::InitializeNativeTargetAsmPrinter();
+    llvm::InitializeNativeTargetAsmParser();
+    llvm::InitializeNativeTargetDisassembler();
+    llvm::sys::DynamicLibrary::LoadLibraryPermanently(nullptr);
+#endif
     _target_machine = std::unique_ptr<llvm::TargetMachine>(llvm::EngineBuilder().selectTarget());
     if (_target_machine == nullptr) {
         LOG(ERROR) << "JIT: Failed to select target machine";
@@ -343,6 +375,211 @@ std::pair<JITScalarFunction, std::function<void()>> JITEngine::lookup_function(c
 
     return std::make_pair(((JitCacheEntry*)_func_cache->value(handle))->func,
                           [this, handle]() { this->_func_cache->release(handle); });
+}
+
+template <typename T>
+StatusOr<T> AsJitResult(llvm::Expected<T>& expected, const std::string& error_context) {
+    if (!expected) {
+        return Status::JitCompileError(error_context + llvm::toString(expected.takeError()));
+    }
+    return std::move(expected.get());
+}
+
+StatusOr<llvm::orc::JITTargetMachineBuilder> MakeTargetMachineBuilder() {
+    llvm::orc::JITTargetMachineBuilder jtmb((llvm::Triple(llvm::sys::getDefaultTargetTriple())));
+    auto const opt_level = true ? llvm::CodeGenOpt::Aggressive : llvm::CodeGenOpt::None;
+    jtmb.setCodeGenOptLevel(opt_level);
+    return jtmb;
+}
+
+std::string DumpModuleIR(const llvm::Module& module) {
+    std::string ir;
+    llvm::raw_string_ostream stream(ir);
+    module.print(stream, nullptr);
+    return ir;
+}
+
+void AddAbsoluteSymbol(llvm::orc::LLJIT& lljit, const std::string& name, void* function_ptr) {
+    llvm::orc::MangleAndInterner mangle(lljit.getExecutionSession(), lljit.getDataLayout());
+
+    llvm::JITEvaluatedSymbol symbol(reinterpret_cast<llvm::JITTargetAddress>(function_ptr),
+                                    llvm::JITSymbolFlags::Exported);
+
+    auto error = lljit.getMainJITDylib().define(llvm::orc::absoluteSymbols({{mangle(name), symbol}}));
+    llvm::cantFail(std::move(error));
+}
+
+// add current process symbol to dylib
+void AddProcessSymbol(llvm::orc::LLJIT& lljit) {
+    lljit.getMainJITDylib().addGenerator(llvm::cantFail(
+            llvm::orc::DynamicLibrarySearchGenerator::GetForCurrentProcess(lljit.getDataLayout().getGlobalPrefix())));
+    // the `atexit` symbol cannot be found for ASAN
+#ifdef ADDRESS_SANITIZER
+    if (!lljit.lookup("atexit")) {
+        AddAbsoluteSymbol(lljit, "atexit", reinterpret_cast<void*>(atexit));
+    }
+#endif
+}
+
+Status UseJITLink(llvm::orc::LLJITBuilder& jit_builder) {
+    auto maybe_mem_manager = llvm::jitlink::InProcessMemoryManager::Create();
+    auto st = AsJitResult(maybe_mem_manager, "Could not create memory manager: ");
+    if (!st.ok()) {
+        return st.status();
+    }
+    static auto memory_manager = std::move(st.value());
+    jit_builder.setObjectLinkingLayerCreator([&](llvm::orc::ExecutionSession& ES, const llvm::Triple& TT) {
+        return std::make_unique<llvm::orc::ObjectLinkingLayer>(ES, *memory_manager);
+    });
+
+    return Status::OK();
+}
+
+StatusOr<std::unique_ptr<llvm::orc::LLJIT>> BuildJIT(llvm::orc::JITTargetMachineBuilder jtmb,
+                                                     std::reference_wrapper<MyObjectCache>& object_cache) {
+    llvm::orc::LLJITBuilder jit_builder;
+
+    RETURN_IF_ERROR(UseJITLink(jit_builder));
+
+    jit_builder.setJITTargetMachineBuilder(std::move(jtmb));
+
+    jit_builder.setCompileFunctionCreator(
+            [&object_cache](llvm::orc::JITTargetMachineBuilder JTMB)
+                    -> llvm::Expected<std::unique_ptr<llvm::orc::IRCompileLayer::IRCompiler>> {
+                auto target_machine = JTMB.createTargetMachine();
+                if (!target_machine) {
+                    return target_machine.takeError();
+                }
+                // after compilation, the object code will be stored into the given object
+                // cache
+                return std::make_unique<llvm::orc::TMOwningSimpleCompiler>(std::move(*target_machine),
+                                                                           &object_cache.get());
+            });
+
+    auto maybe_jit = jit_builder.create();
+    ASSIGN_OR_RETURN(auto jit, AsJitResult(maybe_jit, "Could not create LLJIT instance: "));
+
+    AddProcessSymbol(*jit);
+    return std::move(jit);
+}
+
+Engine::Engine(std::unique_ptr<llvm::orc::LLJIT> lljit, std::unique_ptr<llvm::TargetMachine> target_machine,
+               bool cached)
+        : context_(std::make_unique<llvm::LLVMContext>()),
+          lljit_(std::move(lljit)),
+          ir_builder_(std::make_unique<llvm::IRBuilder<>>(*context_)),
+          optimize_(1),
+          cached_(cached),
+          target_machine_(std::move(target_machine)) {
+    // LLVM 10 doesn't like the expr function name to be the same as the module name
+    auto module_id = "gdv_module_" + std::to_string(reinterpret_cast<uintptr_t>(this));
+    module_ = std::make_unique<llvm::Module>(module_id, *context_);
+}
+
+Engine::~Engine() {}
+
+/// factory method to construct the engine.
+StatusOr<std::unique_ptr<Engine>> Engine::Make(bool cached, std::reference_wrapper<MyObjectCache> object_cache) {
+    ASSIGN_OR_RETURN(auto jtmb, MakeTargetMachineBuilder());
+    ASSIGN_OR_RETURN(auto jit, BuildJIT(jtmb, object_cache));
+    auto maybe_tm = jtmb.createTargetMachine();
+    ASSIGN_OR_RETURN(auto target_machine, AsJitResult(maybe_tm, "Could not create target machine: "));
+    std::unique_ptr<Engine> engine{new Engine(std::move(jit), std::move(target_machine), cached)};
+    return engine;
+}
+
+llvm::Module* Engine::module() {
+    DCHECK(!module_finalized_) << "module cannot be accessed after finalized";
+    return module_.get();
+}
+
+static void OptimizeModuleWithNewPassManager(llvm::Module& module, llvm::TargetIRAnalysis target_analysis) {
+    // Setup an optimiser pipeline
+    llvm::PassBuilder pass_builder;
+    llvm::LoopAnalysisManager loop_am;
+    llvm::FunctionAnalysisManager function_am;
+    llvm::CGSCCAnalysisManager cgscc_am;
+    llvm::ModuleAnalysisManager module_am;
+
+    function_am.registerPass([&] { return target_analysis; });
+
+    // Register required analysis managers
+    pass_builder.registerModuleAnalyses(module_am);
+    pass_builder.registerCGSCCAnalyses(cgscc_am);
+    pass_builder.registerFunctionAnalyses(function_am);
+    pass_builder.registerLoopAnalyses(loop_am);
+    pass_builder.crossRegisterProxies(loop_am, function_am, cgscc_am, module_am);
+
+    pass_builder.registerPipelineStartEPCallback(
+            [&](llvm::ModulePassManager& module_pm, llvm::OptimizationLevel Level) {
+                module_pm.addPass(llvm::ModuleInlinerPass());
+
+                llvm::FunctionPassManager function_pm;
+                function_pm.addPass(llvm::InstCombinePass());
+                function_pm.addPass(llvm::PromotePass());
+                function_pm.addPass(llvm::GVNPass());
+                function_pm.addPass(llvm::NewGVNPass());
+                function_pm.addPass(llvm::SimplifyCFGPass());
+                function_pm.addPass(llvm::LoopVectorizePass());
+                function_pm.addPass(llvm::SLPVectorizerPass());
+                module_pm.addPass(llvm::createModuleToFunctionPassAdaptor(std::move(function_pm)));
+
+                module_pm.addPass(llvm::GlobalOptPass());
+            });
+
+    pass_builder.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O3).run(module, module_am);
+}
+
+// Optimise and compile the module.
+Status Engine::FinalizeModule() {
+    std::string error;
+    llvm::raw_string_ostream errs(error);
+    if (llvm::verifyModule(*module_, &errs)) {
+        return Status::JitCompileError(fmt::format("Failed to generate scalar function IR, errors: {}", errs.str()));
+    }
+    cached_ = false;
+    optimize_ = true;
+    if (!cached_) {
+        if (optimize_) {
+            auto target_analysis = target_machine_->getTargetIRAnalysis();
+            OptimizeModuleWithNewPassManager(*module_, std::move(target_analysis));
+        }
+
+        if (llvm::verifyModule(*module_, &errs)) {
+            return Status::JitCompileError(
+                    fmt::format("Failed to optimize scalar function IR, errors: {}", errs.str()));
+        }
+
+        llvm::orc::ThreadSafeModule tsm(std::move(module_), std::move(context_));
+        auto error = lljit_->addIRModule(std::move(tsm));
+        if (error) {
+            return Status::JitCompileError("Failed to add IR module to LLJIT: " + llvm::toString(std::move(error)));
+        }
+    }
+    module_finalized_ = true;
+    return Status::OK();
+}
+
+StatusOr<JITScalarFunction> Engine::CompiledFunction(const std::string& function) {
+    DCHECK(module_finalized_) << "module must be finalized before getting compiled function";
+    auto sym = lljit_->lookup(function);
+    if (!sym) {
+        return Status::JitCompileError("Failed to look up function: " + function +
+                                       " error: " + llvm::toString(sym.takeError()));
+    }
+
+    auto fn_addr = sym->getValue();
+
+    auto fn_ptr = reinterpret_cast<JITScalarFunction>(fn_addr);
+    if (fn_ptr == nullptr) {
+        return Status::JitCompileError("Failed to get address for function: " + function);
+    }
+    return fn_ptr;
+}
+
+const std::string& Engine::ir() {
+    DCHECK(!module_ir_.empty()) << "dump_ir in Configuration must be set for dumping IR";
+    return module_ir_;
 }
 
 } // namespace starrocks

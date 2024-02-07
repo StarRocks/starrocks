@@ -57,6 +57,7 @@ private:
     JITScalarFunction _jit_function = nullptr;
     std::function<void()> _delete_cache_handle = nullptr;
     std::string _jit_expr_name;
+    MyObjectCache _obj;
 };
 
 } // namespace starrocks

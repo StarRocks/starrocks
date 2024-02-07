@@ -28,7 +28,6 @@
 #include "exprs/function_context.h"
 #include "exprs/jit/jit_engine.h"
 
-
 namespace starrocks {
 
 JITExpr* JITExpr::create(ObjectPool* pool, Expr* expr) {
@@ -62,7 +61,7 @@ Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
 
     if (!is_constant()) {
         auto start = MonotonicNanos();
-
+#if 0
         // Compile the expression into native code and retrieve the function pointer.
         auto* jit_engine = JITEngine::get_instance();
         if (!jit_engine->initialized()) {
@@ -80,6 +79,24 @@ Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
             _delete_cache_handle = function->second;
             _jit_function = function->first;
         }
+#else
+        // create object cache
+        ASSIGN_OR_RETURN(auto engine, Engine::Make(false, _obj))
+        // need set module?
+        // generate ir to module
+        RETURN_IF_ERROR(JITEngine::generate_scalar_function_ir(context, *engine->module(), _expr));
+        // optimize module and add module
+        RETURN_IF_ERROR(engine->FinalizeModule());
+        auto function = engine->CompiledFunction(_expr->jit_func_name());
+        auto elapsed = MonotonicNanos() - start;
+        if (!function.ok()) {
+            LOG(INFO) << "JIT: JIT compile failed, time cost: " << elapsed / 1000000.0 << " ms"
+                      << " Reason: " << function.status();
+        } else {
+            LOG(INFO) << "JIT: JIT compile success, time cost: " << elapsed / 1000000.0 << " ms";
+            _jit_function = function.value();
+        }
+#endif
     }
     if (_jit_function != nullptr) {
         _jit_expr_name = _expr->jit_func_name();

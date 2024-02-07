@@ -14,17 +14,20 @@
 
 #pragma once
 
+#include <llvm/ExecutionEngine/JITSymbol.h>
+#include <llvm/ExecutionEngine/ObjectCache.h>
+#include <llvm/ExecutionEngine/Orc/LLJIT.h>
+#include <llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h>
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/LegacyPassManager.h>
+#include <llvm/IR/Module.h>
+#include <llvm/Transforms/IPO/PassManagerBuilder.h>
+
 #include <cstdint>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <unordered_map>
-
-#include <llvm/ExecutionEngine/JITSymbol.h>
-#include <llvm/ExecutionEngine/Orc/LLJIT.h>
-#include <llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h>
-#include <llvm/IR/LegacyPassManager.h>
-#include <llvm/Transforms/IPO/PassManagerBuilder.h>
 
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
@@ -74,8 +77,9 @@ public:
     // used in UT
     Cache* get_func_cache() const { return _func_cache; }
 
-private:
     static Status generate_scalar_function_ir(ExprContext* context, llvm::Module& module, Expr* expr);
+
+private:
     /**
      * @brief Sets up an LLVM module by specifying its data layout and target triple.
      * The data layout guides the compiler on how to arrange data.
@@ -115,6 +119,74 @@ private:
     std::unique_ptr<llvm::orc::LLJIT> _jit;
     std::mutex _mutex;
     Cache* _func_cache;
+};
+
+class MyObjectCache : public llvm::ObjectCache {
+public:
+    void notifyObjectCompiled(const llvm::Module* M, llvm::MemoryBufferRef ObjBuffer) override {
+        CachedObjects[M->getModuleIdentifier()] =
+                llvm::MemoryBuffer::getMemBufferCopy(ObjBuffer.getBuffer(), ObjBuffer.getBufferIdentifier());
+    }
+
+    std::unique_ptr<llvm::MemoryBuffer> getObject(const llvm::Module* M) override {
+        auto I = CachedObjects.find(M->getModuleIdentifier());
+        if (I == CachedObjects.end()) {
+            LOG(INFO) << "No object for " << M->getModuleIdentifier() << " in cache. Compiling.\n";
+            return nullptr;
+        }
+
+        LOG(INFO) << "Object for " << M->getModuleIdentifier() << " loaded from cache.\n";
+        return llvm::MemoryBuffer::getMemBuffer(I->second->getMemBufferRef());
+    }
+
+private:
+    llvm::StringMap<std::unique_ptr<llvm::MemoryBuffer>> CachedObjects;
+};
+
+class Engine {
+public:
+    ~Engine();
+    llvm::LLVMContext* context() { return context_.get(); }
+    llvm::IRBuilder<>* ir_builder() { return ir_builder_.get(); }
+    llvm::Module* module();
+
+    static StatusOr<std::unique_ptr<Engine>> Make(bool cached, std::reference_wrapper<MyObjectCache> object_cache);
+
+    /// Add the function to the list of IR functions that need to be compiled.
+    /// Compiling only the functions that are used by the module saves time.
+    void AddFunctionToCompile(const std::string& fname) {
+        DCHECK(!module_finalized_);
+        functions_to_compile_.push_back(fname);
+    }
+
+    /// Optimise and compile the module.
+    Status FinalizeModule();
+
+    /// Set LLVM ObjectCache.
+    Status SetLLVMObjectCache(MyObjectCache& object_cache) { return Status::OK(); };
+
+    /// Get the compiled function corresponding to the irfunction.
+    StatusOr<JITScalarFunction> CompiledFunction(const std::string& function);
+
+    /// Return the generated IR for the module.
+    const std::string& ir();
+
+private:
+    Engine(std::unique_ptr<llvm::orc::LLJIT> lljit, std::unique_ptr<llvm::TargetMachine> target_machine, bool cached);
+
+    std::unique_ptr<llvm::LLVMContext> context_;
+    std::unique_ptr<llvm::orc::LLJIT> lljit_;
+    std::unique_ptr<llvm::IRBuilder<>> ir_builder_;
+    std::unique_ptr<llvm::Module> module_;
+
+    std::vector<std::string> functions_to_compile_;
+
+    bool optimize_ = true;
+    bool module_finalized_ = false;
+    bool cached_;
+    bool functions_loaded_ = false;
+    std::string module_ir_;
+    std::unique_ptr<llvm::TargetMachine> target_machine_;
 };
 
 } // namespace starrocks
