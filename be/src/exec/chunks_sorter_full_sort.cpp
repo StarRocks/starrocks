@@ -136,10 +136,10 @@ Status ChunksSorterFullSort::_merge_sorted(RuntimeState* state) {
     // columns's permutation in multiple passes.
     if (_early_materialized_slots.empty() || _sorted_chunks.size() < 3) {
         _early_materialized_slots.clear();
-        _runtime_profile->add_info_string("LateMaterialization", "false");
+        _runtime_profile->add_info_string("LateMaterialization", "False");
         RETURN_IF_ERROR(merge_sorted_chunks(_sort_desc, _sort_exprs, _sorted_chunks, &_merged_runs));
     } else {
-        _runtime_profile->add_info_string("LateMaterialization", "true");
+        _runtime_profile->add_info_string("LateMaterialization", "True");
         _split_late_and_early_chunks();
         _assign_ordinals();
         RETURN_IF_ERROR(merge_sorted_chunks(_sort_desc, _sort_exprs, _early_materialized_chunks, &_merged_runs));
