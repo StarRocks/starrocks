@@ -32,7 +32,7 @@ The data types of elements in the two arrays must be the same. For the data type
 Returns a value of the BOOLEAN type.
 
 - `1` is returned if `arr2` is a subset of `arr1` and the elements in `arr2` observe the same order as those in `arr1`. Otherwise, `0` is returned.
-- `1` is returned if `arr2` is empty but `arr1` is a valid array.
+- An empty array is a subset of any array. Therefore, `1` is returned if `arr2` is empty but `arr1` is a valid array.
 - NULL is returned if any input array is NULL.
 - Nulls in arrays are processed as normal values. For example, `SELECT array_contains_seq([1, 2, NULL, 3, 4], [2,3])` will return 0. However, `SELECT array_contains_seq([1, 2, NULL, 3, 4], [2,NULL,3])` will return 1.
 

@@ -32,7 +32,7 @@ BOOLEAN array_contains_all(arr1, arr2)
 返回 BOOLEAN 类型的值。
 
 - 如果 `arr2` 是 `arr1` 的子集，并且元素的顺序完全相同，则返回 `1`。否则，返回 `0`。
-- 如果 `arr1` 为有效数组，而 `arr2` 为空，返回 `1`。
+- 空数组默认为所有数组的子集。因此，如果 `arr1` 为有效数组，而 `arr2` 为空，返回 `1`。
 - 如果任何一个输入数组 为 NULL，返回 NULL。
 - 数组中的 Null 值作为正常值处理，比如 `SELECT array_contains_seq([1, 2, NULL, 3, 4], [2,3])` 返回 0。 `SELECT array_contains_seq([1, 2, NULL, 3, 4], [2,NULL,3])` 返回 1。
 
