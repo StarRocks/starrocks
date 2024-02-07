@@ -696,12 +696,15 @@ TEST_F(TypeDescriptorTest, test_debug_string) {
 }
 
 TEST_F(TypeDescriptorTest, test_promote_types) {
-    std::vector<std::tuple<TypeDescriptor>> cases = {
+    std::vector<std::tuple<TypeDescriptor, TypeDescriptor, TypeDescriptor>> cases = {
             // input1, input2, output
             {TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_BIGINT),
              TypeDescriptor::from_logical_type(TYPE_BIGINT)},
 
             {TypeDescriptor::from_logical_type(TYPE_FLOAT), TypeDescriptor::from_logical_type(TYPE_DOUBLE),
+             TypeDescriptor::from_logical_type(TYPE_DOUBLE)},
+
+            {TypeDescriptor::from_logical_type(TYPE_FLOAT), TypeDescriptor::from_logical_type(TYPE_BIGINT),
              TypeDescriptor::from_logical_type(TYPE_DOUBLE)},
 
             {TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 2),
@@ -710,7 +713,15 @@ TEST_F(TypeDescriptorTest, test_promote_types) {
 
             {TypeDescriptor::create_varchar_type(10), TypeDescriptor::create_varchar_type(20),
              TypeDescriptor::create_varchar_type(20)},
-    };
+
+            {TypeDescriptor::create_char_type(10), TypeDescriptor::create_char_type(20),
+             TypeDescriptor::create_char_type(20)},
+
+            {TypeDescriptor::create_varbinary_type(10), TypeDescriptor::create_varbinary_type(20),
+             TypeDescriptor::create_varbinary_type(20)},
+
+            {TypeDescriptor::from_logical_type(TYPE_JSON), TypeDescriptor::from_logical_type(TYPE_BIGINT),
+             TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH)}};
     for (const auto& tuple : cases) {
         EXPECT_TRUE(TypeDescriptor::promote_types(std::get<0>(tuple), std::get<1>(tuple)) == std::get<2>(tuple));
     }

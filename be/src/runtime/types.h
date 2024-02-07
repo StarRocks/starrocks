@@ -254,7 +254,7 @@ struct TypeDescriptor {
         if (children != o.children) {
             return false;
         }
-        if (type == TYPE_CHAR) {
+        if (is_string_type()) {
             return len == o.len;
         }
         if (is_decimal_type()) {
@@ -354,6 +354,10 @@ struct TypeDescriptor {
             return TypeDescriptor::from_logical_type(tp);
         } else if (type1.is_float_type() && type2.is_float_type()) {
             // promote all float to double.
+            return TypeDescriptor::from_logical_type(TYPE_DOUBLE);
+        } else if ((type1.is_float_type() && type2.is_integer_type()) ||
+                   (type1.is_integer_type() && type2.is_float_type())) {
+            // if one is float and other is integer, promote to double
             return TypeDescriptor::from_logical_type(TYPE_DOUBLE);
         } else if (type1.is_decimal_type() && type2.is_decimal_type()) {
             // decimal v3 only
