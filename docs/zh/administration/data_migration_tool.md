@@ -1,3 +1,7 @@
+---
+displayed_sidebar: "Chinese"
+---
+
 # 跨集群数据迁移工具
 
 StarRocks 跨集群数据迁移工具是社区提供的 StarRocks 数据迁移工具。您可以使用该工具将数据从源集群一键式迁移到目标集群。
@@ -55,7 +59,7 @@ ADMIN SET FRONTEND CONFIG("lake_compaction_max_tasks"="-1");
 
 #### FE 参数
 
-以下 FE 参数为动态参数。修改方式请参考 [配置 FE 动态参数](../administration/FE_configuration/#配置-fe-动态参数)。
+以下 FE 参数为动态参数。修改方式请参考 [配置 FE 动态参数](../administration/FE_configuration.md#配置-fe-动态参数)。
 
 | **参数名**                            | **默认值** | **单位** | **描述**                                                     |
 | ------------------------------------- | ---------- | -------- | ------------------------------------------------------------ |
@@ -65,7 +69,7 @@ ADMIN SET FRONTEND CONFIG("lake_compaction_max_tasks"="-1");
 
 #### BE 参数
 
-以下 BE 参数为动态参数。修改方式请参考 [配置 BE 动态参数](../administration/BE_configuration/#配置-be-动态参数)。
+以下 BE 参数为动态参数。修改方式请参考 [配置 BE 动态参数](../administration/BE_configuration.md#配置-be-动态参数)。
 
 | **参数名**          | **默认值** | **单位** | **描述**                                                     |
 | ------------------- | ---------- | -------- | ------------------------------------------------------------ |
