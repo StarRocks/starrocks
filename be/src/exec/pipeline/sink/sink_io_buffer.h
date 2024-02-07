@@ -19,6 +19,8 @@
 
 #include "bthread/execution_queue.h"
 #include "column/chunk.h"
+#include "runtime/current_thread.h" : w
+#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "testutil/sync_point.h"
 #include "util/priority_thread_pool.hpp"
