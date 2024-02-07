@@ -336,6 +336,7 @@ StatusOr<std::string> ReplicationUtils::download_remote_snapshot_file(
 
 Status ReplicationUtils::convert_rowset_txn_meta(RowsetTxnMetaPB* rowset_txn_meta,
                                                  const std::unordered_map<uint32_t, uint32_t>& column_unique_id_map) {
+<<<<<<< HEAD
     for (auto& column_unique_id : *rowset_txn_meta->mutable_partial_update_column_unique_ids()) {
         auto iter = column_unique_id_map.find(column_unique_id);
         if (iter == column_unique_id_map.end()) {
@@ -343,6 +344,19 @@ Status ReplicationUtils::convert_rowset_txn_meta(RowsetTxnMetaPB* rowset_txn_met
             return Status::InternalError("Column not found");
         }
         column_unique_id = iter->second;
+=======
+    RETURN_IF_ERROR(convert_column_unique_ids(rowset_txn_meta->mutable_partial_update_column_unique_ids(),
+                                              column_unique_id_map));
+
+    if (rowset_txn_meta->has_auto_increment_partial_update_column_uid()) {
+        auto iter = column_unique_id_map.find(rowset_txn_meta->auto_increment_partial_update_column_uid());
+        if (iter == column_unique_id_map.end()) {
+            LOG(ERROR) << "Column not found, column unique id: "
+                       << rowset_txn_meta->auto_increment_partial_update_column_uid();
+            return Status::InternalError("Column not found");
+        }
+        rowset_txn_meta->set_auto_increment_partial_update_column_uid(iter->second);
+>>>>>>> 29d1008b63 ([BugFix] Fix the problem of column mode partial update in cross cluster replication (#40692))
     }
     return Status::OK();
 }
