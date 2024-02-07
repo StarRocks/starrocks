@@ -71,23 +71,7 @@ void ExportSinkIOBuffer::close(RuntimeState* state) {
     SinkIOBuffer::close(state);
 }
 
-<<<<<<< HEAD
-void ExportSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
-    --_num_pending_chunks;
-    if (_is_finished) {
-        return;
-    }
-
-    if (_is_cancelled && !_is_finished) {
-        if (_num_pending_chunks == 0) {
-            close(_state);
-        }
-        return;
-    }
-
-=======
 void ExportSinkIOBuffer::_add_chunk(const ChunkPtr& chunk) {
->>>>>>> 50987d3ba2 ([BugFix] Fix the problem of SinkIOBuffer getting stuck (#40874))
     if (_file_builder == nullptr) {
         if (Status status = _open_file_writer(); !status.ok()) {
             LOG(WARNING) << "open file write failed, error: " << status.to_string();
