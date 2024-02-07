@@ -90,14 +90,16 @@ public class RemoteScanRangeLocations {
         // because it may be changed before calling 'splitScanRangeLocations'
         // and after needSplit has been calculated.
         final long splitSize = Config.hive_max_split_size;
-        long totalSize = 0;
+        long totalSize = fileDesc.getLength();
         long offset = 0;
+
         if (blockDesc.isPresent()) {
-            totalSize = blockDesc.get().getLength();
-            offset = blockDesc.get().getOffset();
-        } else {
-            totalSize = fileDesc.getLength();
+            // If blockDesc existed, we will split according block desc
+            RemoteFileBlockDesc block = blockDesc.get();
+            totalSize = block.getLength();
+            offset = block.getOffset();
         }
+
         boolean needSplit = fileDesc.isSplittable() && totalSize > splitSize;
         if (needSplit) {
             splitScanRangeLocations(partitionId, partition, fileDesc, blockDesc, offset, totalSize, splitSize,
