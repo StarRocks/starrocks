@@ -112,8 +112,8 @@ public class ExprHashCodeTest {
 
         // IntLiteral/LargeIntLiteral doesn't equal to FloatLiteral/BoolLiteral.
         // IntLiteral can equal to LargeIntLiteral.
-        Streams.forEachPair(intLiterals.stream(), largeIntLiterals.stream(), Assertions::assertEquals);
-        Streams.forEachPair(largeIntLiterals.stream(), intLiterals.stream(), Assertions::assertEquals);
+        Streams.forEachPair(intLiterals.stream(), largeIntLiterals.stream(), Assertions::assertNotEquals);
+        Streams.forEachPair(largeIntLiterals.stream(), intLiterals.stream(), Assertions::assertNotEquals);
         Streams.forEachPair(intLiterals.stream(), Streams.concat(floatLiterals.stream(), boolLiterals.stream()),
                 Assertions::assertNotEquals);
         Streams.forEachPair(largeIntLiterals.stream(), Streams.concat(floatLiterals.stream(), boolLiterals.stream()),

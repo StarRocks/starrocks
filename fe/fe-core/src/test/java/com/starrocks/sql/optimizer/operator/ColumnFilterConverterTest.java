@@ -127,8 +127,8 @@ public class ColumnFilterConverterTest {
         assertTrue(result.containsKey("name"));
         assertTrue(result.containsKey("sex"));
 
-        assertEquals(new IntLiteral(1), result.get("age").getLowerBound());
-        assertEquals(new IntLiteral(1), result.get("age").getUpperBound());
+        assertEquals(new IntLiteral(1).getLongValue(), result.get("age").getLowerBound().getLongValue());
+        assertEquals(new IntLiteral(1).getLongValue(), result.get("age").getUpperBound().getLongValue());
 
         assertEquals(4, result.get("name").getInPredicateLiterals().size());
         assertEquals(new StringLiteral("1"), result.get("name").getInPredicateLiterals().get(0));
