@@ -160,7 +160,7 @@ public class FileScanNode extends LoadScanNode {
     private boolean useVectorizedLoad;
 
     private LoadJob.JSONOptions jsonOptions = new LoadJob.JSONOptions();
-    private boolean flexibleColumnMapping;
+    private boolean flexibleColumnMapping = false;
 
     private boolean nullExprInAutoIncrement;
     private static class ParamCreateContext {
