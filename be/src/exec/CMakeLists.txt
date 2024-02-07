@@ -185,13 +185,7 @@ set(EXEC_FILES
     pipeline/scan/olap_schema_scan_operator.cpp
     pipeline/scan/olap_schema_scan_context.cpp
     pipeline/sink/iceberg_table_sink_operator.cpp
-<<<<<<< HEAD
-=======
     pipeline/sink/sink_io_buffer.cpp
-    pipeline/sink/hive_table_sink_operator.cpp
-    pipeline/sink/table_function_table_sink_operator.cpp
-    pipeline/sink/blackhole_table_sink_operator.cpp
->>>>>>> 50987d3ba2 ([BugFix] Fix the problem of SinkIOBuffer getting stuck (#40874))
     pipeline/scan/morsel.cpp
     pipeline/scan/chunk_buffer_limiter.cpp
     pipeline/sink/file_sink_operator.cpp
