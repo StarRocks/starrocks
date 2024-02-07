@@ -395,6 +395,7 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
                     }
                     error_reported = true;
                 }
+                k++;
                 continue;
             }
 
@@ -512,6 +513,7 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
                     }
                     error_reported = true;
                 }
+                k++;
                 continue;
             }
 
