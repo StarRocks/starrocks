@@ -186,10 +186,6 @@ Status CacheOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-static inline std::string flatten_tablet_set(const std::unordered_set<int64_t>& tablets) {
-    return fmt::format("{}", fmt::join(tablets.begin(), tablets.end(), ","));
-}
-
 void CacheOperator::close(RuntimeState* state) {
     std::unordered_set<int64_t> passthrough_tablets;
     for (auto tablet_id : _all_tablets) {
@@ -201,9 +197,6 @@ void CacheOperator::close(RuntimeState* state) {
     _cache_populate_tablets_counter->update(_populate_tablets.size());
     _cache_probe_tablets_counter->update(_probe_tablets.size());
     _cache_passthrough_tablets_counter->update(passthrough_tablets.size());
-    _unique_metrics->add_info_string("CacheProbeTablets", flatten_tablet_set(_probe_tablets));
-    _unique_metrics->add_info_string("CachePopulateTablets", flatten_tablet_set(_populate_tablets));
-    _unique_metrics->add_info_string("CachePassthroughTablets", flatten_tablet_set(passthrough_tablets));
 
     Operator::close(state);
 }
