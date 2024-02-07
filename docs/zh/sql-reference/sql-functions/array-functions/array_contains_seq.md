@@ -6,8 +6,14 @@ displayed_sidebar: "Chinese"
 
 ## 描述
 
-检查数组2的所有元素是否以完全相同的顺序出现在数组1中。因此，如果且仅如果数组1 = 前缀 + 数组2 + 后缀，该函数将返回1。
+检查数组 `arr2` 的所有元素是否以完全相同的顺序出现在数组 `arr1` 中。如果是，返回 1。
 
+举例：
+
+- `select array_contains_seq([1,2,3,4], [1,2,3]);` 返回 1。
+- `select array_contains_seq([1,2,3,4], [4,3]);` 返回 0。
+
+该函数从 3.2 版本开始支持。
 
 ## 语法
 
@@ -17,66 +23,55 @@ BOOLEAN array_contains_all(arr1, arr2)
 
 ## 参数
 
-`arr`: 要比较的两个数组。此语法检查arr2是否是arr1的子集，并且顺序完全相同。
+`arr`: 要比较的两个数组。此语法检查 `arr2` 是否是 `arr1` 的子集，并且元素的顺序完全相同。
 
-两个数组中元素的数据类型必须相同。有关StarRocks支持的数组元素数据类型，请参阅 [ARRAY](../../../sql-reference/sql-statements/data-types/Array.md).
+两个数组中元素的数据类型必须相同。有关 StarRocks 支持的数组元素数据类型，请参阅 [ARRAY](../../../sql-reference/sql-statements/data-types/Array.md)。
 
 ## 返回值
 
-返回BOOLEAN类型的值。
+返回 BOOLEAN 类型的值。
 
-如果arr2是arr1的子集，则返回1。否则，返回0。空值被处理为一个值。换句话说，array_contains_seq([1, 2, NULL, 3, 4], [2,3])将返回0。但是，array_contains_seq([1, 2, NULL, 3, 4], [2,NULL,3])将返回1。两个数组中值的顺序确实很重要。
-
+- 如果 `arr2` 是 `arr1` 的子集，并且元素的顺序完全相同，则返回 `1`。否则，返回 `0`。
+- 如果 `arr1` 为有效数组，而 `arr2` 为空，返回 `1`。
+- 如果任何一个输入数组 为 NULL，返回 NULL。
+- 数组中的 Null 值作为正常值处理，比如 `SELECT array_contains_seq([1, 2, NULL, 3, 4], [2,3])` 返回 0。 `SELECT array_contains_seq([1, 2, NULL, 3, 4], [2,NULL,3])` 返回 1。
 
 ## 示例
 
-返回BOOLEAN类型的值。
-
-
 ```Plaintext
-MySQL [(none)]> select array_contains_seq([1,2,3,4], [1,2,3]);
+
+MySQL > select array_contains_seq([1,2,3,4], [1,2,3]);
 +---------------------------------------------+
 | array_contains_seq([1, 2, 3, 4], [1, 2, 3]) |
 +---------------------------------------------+
 |                                           1 |
 +---------------------------------------------+
-```
 
-```Plaintext
-MySQL [(none)]> select array_contains_seq([1,2,3,4], [3,2]);
+MySQL > select array_contains_seq([1,2,3,4], [3,2]);
 +------------------------------------------+
 | array_contains_seq([1, 2, 3, 4], [3, 2]) |
 +------------------------------------------+
 |                                        0 |
 +------------------------------------------+
-1 row in set (0.18 sec)
-```
 
-```Plaintext
-MySQL [(none)]> select array_contains_all([1, 2, NULL, 3, 4], ['a']);
+MySQL > select array_contains_seq([1, 2, NULL, 3, 4], ['a']);
 +-----------------------------------------------+
 | array_contains_all([1, 2, NULL, 3, 4], ['a']) |
 +-----------------------------------------------+
 |                                             0 |
 +-----------------------------------------------+
-1 row in set (0.18 sec)
-```
 
-```Plaintext
-MySQL [(none)]> select array_contains([1, 2, NULL, 3, 4], 'a');
-+-----------------------------------------+
-| array_contains([1, 2, NULL, 3, 4], 'a') |
-+-----------------------------------------+
-|                                       0 |
-+-----------------------------------------+
-1 row in set (0.18 sec)
-```
-```Plaintext
-MySQL [(none)]> SELECT array_contains([1, 2,3,4,null], null);
+MySQL > select array_contains_seq([1,2,3,4,null], null);
 +------------------------------------------+
 | array_contains([1, 2, 3, 4, NULL], NULL) |
 +------------------------------------------+
-|                                        1 |
+|                                     NULL |
 +------------------------------------------+
-1 row in set (0.18 sec)
+
+MySQL > select array_contains_seq([1,2,3,4], []);
++--------------------------------------+
+| array_contains_seq([1, 2, 3, 4], []) |
++--------------------------------------+
+|                                    1 |
++--------------------------------------+
 ```
