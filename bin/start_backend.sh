@@ -85,8 +85,6 @@ fi
 export ASAN_OPTIONS="abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1:detect_stack_use_after_return=1"
 export LSAN_OPTIONS=suppressions=${STARROCKS_HOME}/conf/asan_suppressions.conf
 
-# Dependent dynamic libraries
-export LD_LIBRARY_PATH=$STARROCKS_HOME/lib:$LD_LIBRARY_PATH
 
 # ================== jvm section =======================
 if [ -e $STARROCKS_HOME/conf/hadoop_env.sh ]; then
@@ -101,6 +99,7 @@ fi
 
 if [ "$JAVA_HOME" = "" ]; then
     echo "[WARNING] JAVA_HOME env not set. Functions or features that requires jni will not work at all."
+    export LD_LIBRARY_PATH=$STARROCKS_HOME/lib:$LD_LIBRARY_PATH
 else
     java_version=$(jdk_version)
     if [[ $java_version -gt 8 ]]; then
