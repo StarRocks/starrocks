@@ -103,6 +103,7 @@ public class SharedDataStorageVolumeMgrTest {
         new MockUp<StarOSAgent>() {
             Map<String, FileStoreInfo> fileStores = new HashMap<>();
             private long id = 1;
+
             @Mock
             public String addFileStore(FileStoreInfo fsInfo) {
                 if (fsInfo.getFsKey().isEmpty()) {
@@ -690,7 +691,7 @@ public class SharedDataStorageVolumeMgrTest {
         new MockUp<LocalMetastore>() {
             @Mock
             public List<Long> getDbIdsIncludeRecycleBin() {
-                return Arrays.asList(1L);
+                return Arrays.asList(10001L);
             }
 
             @Mock
@@ -700,12 +701,12 @@ public class SharedDataStorageVolumeMgrTest {
 
             @Mock
             public List<Table> getTablesIncludeRecycleBin(Database db) {
-                long dbId = 1L;
-                long tableId = 2L;
-                long partitionId = 3L;
-                long indexId = 4L;
-                long tablet1Id = 10L;
-                long tablet2Id = 11L;
+                long dbId = 10001L;
+                long tableId = 10002L;
+                long partitionId = 10003L;
+                long indexId = 10004L;
+                long tablet1Id = 10010L;
+                long tablet2Id = 10011L;
 
                 // Schema
                 List<Column> columns = Lists.newArrayList();
@@ -736,15 +737,16 @@ public class SharedDataStorageVolumeMgrTest {
         };
 
         SharedDataStorageVolumeMgr sdsvm = new SharedDataStorageVolumeMgr();
-        Assert.assertEquals(Arrays.asList(Arrays.asList(1L), Arrays.asList(2L)), sdsvm.getBindingsOfBuiltinStorageVolume());
+        Assert.assertEquals(Arrays.asList(Arrays.asList(10001L), Arrays.asList(10002L)),
+                sdsvm.getBindingsOfBuiltinStorageVolume());
 
         sdsvm.createBuiltinStorageVolume();
-        sdsvm.bindDbToStorageVolume(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, 1L);
+        sdsvm.bindDbToStorageVolume(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, 10001L);
         Assert.assertEquals(Arrays.asList(new ArrayList(), new ArrayList()), sdsvm.getBindingsOfBuiltinStorageVolume());
 
-        sdsvm.unbindDbToStorageVolume(1L);
-        sdsvm.bindTableToStorageVolume(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, 1L, 2L);
-        Assert.assertEquals(Arrays.asList(Arrays.asList(1L), new ArrayList()), sdsvm.getBindingsOfBuiltinStorageVolume());
+        sdsvm.unbindDbToStorageVolume(10001L);
+        sdsvm.bindTableToStorageVolume(StorageVolumeMgr.BUILTIN_STORAGE_VOLUME, 10001L, 10002L);
+        Assert.assertEquals(Arrays.asList(Arrays.asList(10001L), new ArrayList()), sdsvm.getBindingsOfBuiltinStorageVolume());
     }
 
     @Test

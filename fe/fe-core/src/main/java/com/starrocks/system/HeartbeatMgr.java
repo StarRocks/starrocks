@@ -93,7 +93,7 @@ public class HeartbeatMgr extends FrontendDaemon {
 
     public void setLeader(String token, long epoch) {
         TMasterInfo tMasterInfo = new TMasterInfo(new TNetworkAddress(FrontendOptions.getLocalHostAddress(), Config.rpc_port),
-                /* cluster_id for compatible */ 0, epoch);
+                epoch);
         tMasterInfo.setToken(token);
         tMasterInfo.setHttp_port(Config.http_port);
         long flags = HeartbeatFlags.getHeartbeatFlags();

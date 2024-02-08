@@ -309,8 +309,8 @@ public class LocalMetastore implements ConnectorMetadata {
         fullNameToDb.put(infoSchemaDb.getFullName(), infoSchemaDb);
 
         SysDb starRocksDb = new SysDb();
-        Preconditions.checkState(infoSchemaDb.getId() < NEXT_ID_INIT_VALUE,
-                "starocks id shouldn't larger than " + NEXT_ID_INIT_VALUE);
+        Preconditions.checkState(starRocksDb.getId() < NEXT_ID_INIT_VALUE,
+                "starrocks id shouldn't larger than " + NEXT_ID_INIT_VALUE);
         idToDb.put(starRocksDb.getId(), starRocksDb);
         fullNameToDb.put(starRocksDb.getFullName(), starRocksDb);
     }
