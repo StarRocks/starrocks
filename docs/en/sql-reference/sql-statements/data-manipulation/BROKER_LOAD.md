@@ -640,7 +640,7 @@ The following parameters are supported:
   >
   > The column that you specify cannot be a primary key column. Additionally, only tables that use the Primary Key table support conditional updates.
 
-StarRocks supports loading JSON data from v3.2.3. The parameters are as follows:
+StarRocks supports loading JSON data from v3.2.3 onwards. The parameters are as follows:
 
 - jsonpaths
 
