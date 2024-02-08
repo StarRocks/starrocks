@@ -171,7 +171,7 @@ StarRocks 数据库支持的字符集，当前仅支持 UTF8 编码 （`utf8`）
 
 外表查询时每个 Scan 算子能同时下发的 I/O 任务的最大数量。取值为整数，默认值 16。目前外表查询时会使用自适应算法来调整并发 I/O 任务的数量，通过 `enable_connector_adaptive_io_tasks` 开关来控制，默认打开。
 
-### connector_sink_compression_codec (3.2.3 and later)
+### connector_sink_compression_codec（3.2.3 及以后）
 
 用于指定写入 Hive 表或 Iceberg 表时以及使用 Files() 导出数据时的压缩算法。
 
