@@ -18,6 +18,8 @@
 
 #include "exec/hdfs_scanner.h"
 #include "formats/orc/orc_chunk_reader.h"
+#include "formats/orc/orc_input_stream.h"
+#include "formats/orc/utils.h"
 
 namespace starrocks {
 
@@ -48,6 +50,11 @@ private:
     // hdfs_scanner_orc will only eval conjunctions in _eval_conjunct_ctxs_by_materialized_slot
     // _eval_conjunct_ctxs_by_materialized_slot's slot must be existed in orc file
     std::unordered_map<SlotId, std::vector<ExprContext*>> _eval_conjunct_ctxs_by_materialized_slot{};
+
+    Status build_iceberg_delete_builder();
+    Status build_stripes(orc::Reader* reader, std::vector<DiskRange>* stripes);
+    Status build_io_ranges(ORCHdfsFileStream* file_stream, const std::vector<DiskRange>& stripes);
+    Status resolve_columns(orc::Reader* reader);
 
     // disable orc search argument would be much easier for
     // writing unittest of customized filter
