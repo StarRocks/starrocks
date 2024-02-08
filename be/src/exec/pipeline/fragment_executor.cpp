@@ -29,6 +29,7 @@
 #include "exec/pipeline/olap_table_sink_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/result_sink_operator.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/pipeline/scan/morsel.h"
@@ -794,6 +795,14 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
     auto fragment_ctx = context->fragment_context();
     if (typeid(*datasink) == typeid(starrocks::ResultSink)) {
         auto* result_sink = down_cast<starrocks::ResultSink*>(datasink.get());
+
+      // Accumulate chunks before sending to result sink
+      if (runtime_state->query_options().__isset.enable_result_sink_accumulate &&
+          runtime_state->query_options().enable_result_sink_accumulate) {
+        fragment_ctx->pipelines().back()->add_op_factory(
+            std::make_shared<ChunkAccumulateOperatorFactory>(context->next_operator_id(), 0));
+      }
+
         // Result sink doesn't have plan node id;
         OpFactoryPtr op = nullptr;
         if (result_sink->get_sink_type() == TResultSinkType::FILE) {
