@@ -4,7 +4,9 @@ displayed_sidebar: "Chinese"
 
 # 监控指标
 
-本文介绍了监控 StarRocks 的关键指标。关于为您的 StarRocks 集群设置监控报警服务的详细说明，请参阅 [监控警报](./Monitor_and_Alert.md)。
+本文介绍了监控 StarRocks 的关键指标，包括通用指标、异步物化视图监控项、Share-data Dashboard 监控项，以及 Starlet Dashboard 监控项。
+
+关于为您的 StarRocks 集群设置监控报警服务的详细说明，请参阅 [监控警报](./Monitor_and_Alert.md)。
 
 ## 通用指标
 
@@ -38,7 +40,7 @@ displayed_sidebar: "Chinese"
 - 类型：平均值
 - 描述：BE 的基线合并速率。
 
-#### be_累计值_compaction_bytes_per_second
+#### be_cumulative_compaction_bytes_per_second
 
 - 单位：Byte/秒
 - 类型：平均值
@@ -50,7 +52,7 @@ displayed_sidebar: "Chinese"
 - 类型：平均值
 - 描述：BE 的基线合并 rowsets 合并速率。
 
-#### be_累计值_compaction_rowsets_per_second
+#### be_cumulative_compaction_rowsets_per_second
 
 - 单位：个/秒
 - 类型：平均值
@@ -80,7 +82,7 @@ displayed_sidebar: "Chinese"
 - 类型：平均值
 - 描述：BE 创建 tablet 失败。
 
-#### be_累计值_compaction_failed
+#### be_cumulative_compaction_failed
 
 - 单位：个/秒
 - 类型：平均值
@@ -158,7 +160,7 @@ displayed_sidebar: "Chinese"
 - 类型：平均值
 - 描述：BE 创建分片请求。
 
-#### be_累计值_compaction_requests
+#### be_cumulative_compaction_requests
 
 - 单位：个/秒
 - 类型：平均值
