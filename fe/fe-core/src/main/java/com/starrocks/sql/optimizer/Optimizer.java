@@ -428,6 +428,7 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_PROJECT);
 
         tree = pushDownAggregation(tree, rootTaskContext, requiredColumns);
+        ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.MERGE_LIMIT);
 
         CTEUtils.collectCteOperators(tree, context);
         // inline CTE if consume use once
