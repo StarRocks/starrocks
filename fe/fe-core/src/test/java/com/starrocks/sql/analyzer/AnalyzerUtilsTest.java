@@ -76,4 +76,5 @@ public class AnalyzerUtilsTest {
         Expr shouldReplaceExpr = expr.getChild(0).getChild(0);
         Assert.assertTrue(shouldReplaceExpr instanceof StringLiteral);
     }
+
 }
