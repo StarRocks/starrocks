@@ -11,7 +11,14 @@ import TabItem from '@theme/TabItem';
 
 # Data Lakehouse with Apache Hudi
 
+## Overview
 
+- Deploy Object Storage, Apache Spark, Hudi, and StarRocks using Docker compose
+- Load a tiny dataset into Hudi with Apache Spark
+- Configure StarRocks to access the Hive Metastore using an extrnal catalog
+- Query the data with StarRocks where the data sits
+
+<DataLakeIntro />
 
 ## Prerequisites
 
@@ -19,11 +26,11 @@ import TabItem from '@theme/TabItem';
 
 Clone the [StarRocks demo repository](https://github.com/StarRocks/demo/) to your local machine.
 
-All of the steps in this guide will be run from either the `demo/documentation-samples/hudi/` directory in the directory where you cloned the `demo` github repo.
+All of the steps in this guide will be run from the `demo/documentation-samples/hudi/` directory in the directory where you cloned the `demo` github repo.
 
 ### Docker
 
-- Docker Setup: For Mac, Please follow the steps as defined in [Install Docker Desktop on Mac](https://docs.docker.com/desktop/install/mac-install/). For running Spark-SQL queries, please ensure at least 8 GB memory and 4 CPUs are allocated to Docker (See Docker -> Preferences -> Advanced). Otherwise, spark-SQL queries could be killed because of memory issues.
+- Docker Setup: For Mac, Please follow the steps as defined in [Install Docker Desktop on Mac](https://docs.docker.com/desktop/install/mac-install/). For running Spark-SQL queries, please ensure at least 5 GB memory and 4 CPUs are allocated to Docker (See Docker -> Preferences -> Advanced). Otherwise, spark-SQL queries could be killed because of memory issues.
 - 20 GB free disk space assigned to Docker
   
 ### SQL client
@@ -50,19 +57,9 @@ Starts these services:
 
 #### `spark-hudi`
 
-The `spark-hudi` service mounts the files `conf/spark-defaults.conf` and `conf/core-site.xml`
-
-### `conf/core-site.xml`
-
-Use the new plugin to import the file here
-
-### `conf/spark-defaults.conf`
-
-Use the new plugin to import the file here
-
 ## Bringing up Demo Cluster
 
-The next step is to run the Docker compose script and setup configs for bringing up the cluster:
+This demo system consists of StarRocks, Hudi, MinIO, and Spark services. Run Docker compose to bring up the cluster:
 
 ```bash
 docker compose up --detach --wait --wait-timeout 60
@@ -82,10 +79,11 @@ docker compose up --detach --wait --wait-timeout 60
 
 :::tip
 
-With many containers running, `docker ps` output is easier to read if you pipe it to `jq`:
+With many containers running, `docker compose ps` output is easier to read if you pipe it to `jq`:
 
 ```bash
-docker compose ps --format json | jq '{Name: .Names, State: .State, Status: .Status}'
+docker compose ps --format json | \
+jq '{Name: .Names, State: .State, Status: .Status}'
 ```
 
 ```json
@@ -128,31 +126,30 @@ docker compose ps --format json | jq '{Name: .Names, State: .State, Status: .Sta
 
 :::
 
-## Demo
 
-### Configure MinIO
+## Configure MinIO
 
 In the configuration files above there is configuration for ??? to interact with Minio. In there the path `huditest` is specified. In this step you will create that path (bucket).
 
 The MinIO console is running on port `9000`. 
 
-#### Authenticate to MinIO
+### Authenticate to MinIO
 
 Open a browser to [http://localhost:9000/](http://localhost:9000/) and authenticate. The username and password are specified in `docker-compose.yml`; they are `admin` and `password`.
 
-#### Create a bucket
+### Create a bucket
 
 In the left navigation select **Buckets**, and then **Create Bucket +**. Name the bucket `huditest` and select **Create Bucket**
 
 ![Create bucket huditest](../assets/quick-start/hudi-test-bucket.png)
 
-### Spark commands
+## Create and populate a table, then sync it to Hive
 
 :::tip
 Run this command, and any other `docker compose` commands, from the directory containing the `docker-compose.yml` file.
 :::
 
-1. Open `spark-shell` in the `spark-hudi` service
+Open `spark-shell` in the `spark-hudi` service
 
 ```
 docker compose exec spark-hudi \
@@ -163,7 +160,11 @@ docker compose exec spark-hudi \
 There will be warnings when `spark-shell` starts about illegal reflective access. You can ignore these warnings.
 :::
 
-Run these commands at the `scala>` prompt:
+Run these commands at the `scala>` prompt to:
+
+- Configure this Spark session to load, process, and write data
+- Create a dataframe and write that to a Hudi table
+- Sync to the Hive Metastore
 
 ```java
 import org.apache.spark.sql.functions._
@@ -211,6 +212,7 @@ df.write.format("hudi").
 
 :::note
 You will see a warning:
+
 ```java
 WARN
 org.apache.hudi.metadata.HoodieBackedTableMetadata - 
@@ -229,7 +231,7 @@ hudi_coders/.hoodie/metadata/files/.files-0000_00000000000000.log.1_0-0-0.
 This is unsupported
 ```
 
-This warning informs you that the log file may not be current in object storage as the file will only be synced when it is closed. See [Stack Overflow](https://stackoverflow.com/a/74886836/10424890).
+This warning informs you that syncing a log file that is open for writes is not supported when using object storage. The file will only be synced when it is closed. See [Stack Overflow](https://stackoverflow.com/a/74886836/10424890).
 :::
 
 To exit the spark-shell:
@@ -238,12 +240,20 @@ To exit the spark-shell:
 :quit
 ```
 
-### Configure StarRocks
+## Configure StarRocks
+
+### Connect to StarRocks
+
+Connect to StarRocks with the provided  MySQL client provided by the `starrocks-fe` service, or use your favorite SQL client and configure it to connect using the MySQL protocol on `localhost:9030`.
 
 ```bash
 docker compose exec starrocks-fe \
   mysql -P 9030 -h 127.0.0.1 -u root --prompt="StarRocks > "
 ```
+
+### Create the linkage between StarRocks and Hudi
+
+There is a link at the end of this guide with more information on external catalogs. The external catalog created in this step acts as the linkage to the Hive Metastore (HMS) running in Docker.
 
 ```sql
 CREATE EXTERNAL CATALOG hudi_catalog_hms
@@ -266,6 +276,8 @@ PROPERTIES
 Query OK, 0 rows affected (0.59 sec)
 ```
 
+### Use the new catalog
+
 ```sql
 SET CATALOG hudi_catalog_hms;
 ```
@@ -273,6 +285,7 @@ SET CATALOG hudi_catalog_hms;
 ```plaintext
 Query OK, 0 rows affected (0.01 sec)
 ```
+### Navigate to the data inserted with Spark
 
 ```sql
 SHOW DATABASES;
@@ -311,6 +324,10 @@ show tables;
 +-------------------+
 1 row in set (0.07 sec)
 ```
+
+### Query the data in Hudi with StarRocks
+
+Run this query twice, the first time may take around five seconds to complete as data is not yet cached in StarRocks. The second query will be very quick.
 
 ```sql
 SELECT * from hudi_coders_hive\G
@@ -353,3 +370,20 @@ _hoodie_partition_path: language=Python
                     id: b
 3 rows in set (0.15 sec)
 ```
+
+## Summary
+
+This tutorial exposed you to the use of a StarRocks external catalog to show you that you can query your data where it sits using the Hudi external catalog. Many other integrations are available using Iceberg, Delta Lake, and JDBC catalogs.
+
+In this tutorial you:
+
+- Deployed StarRocks and an Hudi/Spark/MinIO environment in Docker
+- Loaded a tiny dataset into Hudi with Apache Spark
+- Configured a StarRocks external catalog to provide access to the Hudi catalog
+- Queried the data with SQL in StarRocks without copying the data from the data lake
+
+## More information
+
+[StarRocks Catalogs](../data_source/catalog/catalog_overview.md)
+
+[Apache Hudi quickstart](https://hudi.apache.org/docs/quick-start-guide/) (includes Spark)
