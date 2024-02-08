@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "English"
+toc_max_heading_level: 5
 ---
 
 # BROKER LOAD
@@ -623,7 +624,7 @@ The following parameters are supported:
 
 - `priority`
 
-  Specifies the priority of the load job. Valid values: `LOWEST`, `LOW`, `NORMAL`, `HIGH`, and `HIGHEST`. Default value: `NORMAL`. Broker Load provides the [FE parameter](../../../administration/FE_configuration.md#fe-configuration-items) `max_broker_load_job_concurrency`, determines the maximum number of Broker Load jobs that can be concurrently run within your StarRocks cluster. If the number of Broker Load jobs that are submitted within the specified time period exceeds the maximum number, excessive jobs will be waiting to be scheduled based on their priorities.
+  Specifies the priority of the load job. Valid values: `LOWEST`, `LOW`, `NORMAL`, `HIGH`, and `HIGHEST`. Default value: `NORMAL`. Broker Load provides the [FE parameter](../../../administration/FE_configuration.md) `max_broker_load_job_concurrency`, determines the maximum number of Broker Load jobs that can be concurrently run within your StarRocks cluster. If the number of Broker Load jobs that are submitted within the specified time period exceeds the maximum number, excessive jobs will be waiting to be scheduled based on their priorities.
 
   You can use the [ALTER LOAD](../../../sql-reference/sql-statements/data-manipulation/ALTER_LOAD.md) statement to change the priority of an existing load job that is in the `QUEUEING` or `LOADING` state.
 
@@ -639,7 +640,35 @@ The following parameters are supported:
   >
   > The column that you specify cannot be a primary key column. Additionally, only tables that use the Primary Key table support conditional updates.
 
+StarRocks supports loading JSON data from v3.2.3 onwards. The parameters are as follows:
+
+- jsonpaths
+
+  The names of the keys that you want to load from the JSON data file. You need to specify this parameter only when you load JSON data by using the matched mode. The value of this parameter is in JSON format. See [Configure column mapping for JSON data loading](#configure-column-mapping-for-json-data-loading).
+
+- strip_outer_array
+
+  Specifies whether to strip the outermost array structure. Valid values: `true` and `false`. Default value: `false`.
+  
+  In real-world business scenarios, the JSON data may have an outermost array structure as indicated by a pair of square brackets `[]`. In this situation, we recommend that you set this parameter to `true`, so StarRocks removes the outermost square brackets `[]` and loads each inner array as a separate data record. If you set this parameter to `false`, StarRocks parses the entire JSON data file into one array and loads the array as a single data record. For example, the JSON data is `[ {"category" : 1, "author" : 2}, {"category" : 3, "author" : 4} ]`. If you set this parameter to `true`,  `{"category" : 1, "author" : 2}` and `{"category" : 3, "author" : 4}` are parsed into separate data records that are loaded into separate StarRocks table rows.
+
+- json_root
+
+  The root element of the JSON data that you want to load from the JSON data file. You need to specify this parameter only when you load JSON data by using the matched mode. The value of this parameter is a valid JsonPath string. By default, the value of this parameter is empty, indicating that all data of the JSON data file will be loaded. For more information, see the "[Load JSON data using matched mode with root element specified](#load-json-data-using-matched-mode-with-root-element-specified)" section of this topic.
+
+<!-- - ignore_json_size
+
+  Specifies whether to check the size of the JSON body in the HTTP request.
+  
+  > **NOTE**
+  >
+  > By default, the size of the JSON body in an HTTP request cannot exceed 100 MB. If the JSON body exceeds 100 MB in size, an error "The size of this batch exceed the max size [104857600] of json type data data [8617627793]. Set ignore_json_size to skip check, although it may lead huge memory consuming." is reported. To prevent this error, you can add `"ignore_json_size:true"` in the HTTP request header to instruct StarRocks not to check the JSON body size.
+-->
+When you load JSON data, also note that the size per JSON object cannot exceed 4 GB. If an individual JSON object in the JSON data file exceeds 4 GB in size, an error "This parser can't support a document that big." is reported.
+
 ## Column mapping
+
+### Configure column mapping for CSV data loading
 
 If the columns of the data file can be mapped one on one in sequence to the columns of the StarRocks table, you do not need to configure the column mapping between the data file and the StarRocks table.
 
@@ -660,9 +689,22 @@ If the columns of the data file cannot be mapped one on one in sequence to the c
 
 For detailed examples, see [Configure column mapping](#configure-column-mapping).
 
+### Configure column mapping for JSON data loading
+
+If the keys of the JSON document have the same names as the columns of the StarRocks table, you can load the JSON-formatted data by using the simple mode. In simple mode, you do not need to specify the `jsonpaths` parameter. This mode requires that the JSON-formatted data must be an object as indicated by curly brackets `{}`, such as `{"category": 1, "author": 2, "price": "3"}`. In this example, `category`, `author`, and `price` are key names, and these keys can be mapped one on one by name to the columns `category`, `author`, and `price` of the StarRocks table.
+
+If the keys of the JSON document have different names than the columns of the StarRocks table, you can load the JSON-formatted data by using the matched mode. In matched mode, you need to use the `jsonpaths` and `COLUMNS` parameters to specify the column mapping between the JSON document and the StarRocks table:
+
+- In the `jsonpaths` parameter, specify the JSON keys in the sequence as how they are arranged in the JSON document.
+- In the `COLUMNS` parameter, specify the mapping between the JSON keys and the StarRocks table columns:
+  - The column names specified in the `COLUMNS` parameter are mapped one on one in sequence to the JSON keys.
+  - The column names specified in the `COLUMNS` parameter are mapped one on one by name to the StarRocks table columns.
+
+For examples about loading JSON-formatted data by using the matched mode, see [Load JSON data using matched mode](#load-json-data-using-matched-mode).
+
 ## Related configuration items
 
-The [FE configuration item](../../../administration/FE_configuration.md#fe-configuration-items) `max_broker_load_job_concurrency` specifies the maximum number of Broker Load jobs that can be concurrently run within your StarRocks cluster.
+The [FE configuration item](../../../administration/FE_configuration.md) `max_broker_load_job_concurrency` specifies the maximum number of Broker Load jobs that can be concurrently run within your StarRocks cluster.
 
 In StarRocks v2.4 and earlier, if the total number of Broker Load jobs that are submitted within a specific period of time exceeds the maximum number, excessive jobs will be queued and scheduled based on their submission time.
 
@@ -1107,3 +1149,143 @@ WITH BROKER
 > - By default, when you load ORC data, StarRocks determines the data file format based on whether the filename contains the extension **.orc**. If the filename does not contain the extension **.orc**, you must use `FORMAT AS` to specify the data file format as `ORC`.
 >
 > - In StarRocks v2.3 and earlier, if the data file contains ARRAY-type columns, you must make sure that the columns of the ORC data file have the same names as their mapping columns in the StarRocks table and the columns cannot be specified in the SET clause.
+
+### Load JSON data
+
+This section describes the parameter settings that you need to take note of when you load JSON data.
+
+Your StarRocks database `test_db` contains a table named `tbl1`, whose schema is as follows:
+
+```SQL
+`category` varchar(512) NULL COMMENT "",
+`author` varchar(512) NULL COMMENT "",
+`title` varchar(512) NULL COMMENT "",
+`price` double NULL COMMENT ""
+```
+
+#### Load JSON data using simple mode
+
+Suppose that your data file `example1.json` consists of the following data:
+
+```JSON
+{"category":"C++","author":"avc","title":"C++ primer","price":895}
+```
+
+To load all data from `example1.json` into `tbl1`, run the following command:
+
+```SQL
+LOAD LABEL test_db.label15
+(
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example1.csv")
+    INTO TABLE tbl1
+    FORMAT AS "json"
+)
+WITH BROKER
+(
+    "username" = "<hdfs_username>",
+    "password" = "<hdfs_password>"
+);
+```
+
+> **NOTE**
+>
+> In the preceding example, the parameters `columns` and `jsonpaths` are not specified. Therefore, the keys in `example1.json` are mapped by name onto the columns of `tbl1`.
+
+#### Load JSON data using matched mode
+
+StarRocks performs the following steps to match and process JSON data:
+
+1. (Optional) Strips the outermost array structure as instructed by the `strip_outer_array` parameter setting.
+
+   > **NOTE**
+   >
+   > This step is performed only when the outermost layer of the JSON data is an array structure as indicated by a pair of square brackets `[]`. You need to set `strip_outer_array` to `true`.
+
+2. (Optional) Matches the root element of the JSON data as instructed by the `json_root` parameter setting.
+
+   > **NOTE**
+   >
+   > This step is performed only when the JSON data has a root element. You need to specify the root element by using the `json_root` parameter.
+
+3. Extracts the specified JSON data as instructed by the `jsonpaths` parameter setting.
+
+##### Load JSON data using matched mode without root element specified
+
+Suppose that your data file `example2.json` consists of the following data:
+
+```JSON
+[
+    {"category":"xuxb111","author":"1avc","title":"SayingsoftheCentury","price":895},
+    {"category":"xuxb222","author":"2avc","title":"SayingsoftheCentury","price":895},
+    {"category":"xuxb333","author":"3avc","title":"SayingsoftheCentury","price":895}
+]
+```
+
+To load only `category`, `author`, and `price` from `example2.json`, run the following command:
+
+```SQL
+LOAD LABEL test_db.label16
+(
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example2.csv")
+    INTO TABLE tbl1
+    FORMAT AS "json"
+    (category, price, author)
+)
+WITH BROKER
+(
+    "username" = "<hdfs_username>",
+    "password" = "<hdfs_password>"
+)
+PROPERTIES
+(
+    "strip_outer_array" = "true",
+    "jsonpaths" = "[\"$.category\",\"$.price\",\"$.author\"]"
+);
+```
+
+> **NOTE**
+>
+> In the preceding example, the outermost layer of the JSON data is an array structure as indicated by a pair of square brackets `[]`. The array structure consists of multiple JSON objects that each represent a data record. Therefore, you need to set `strip_outer_array` to `true` to strip the outermost array structure. The key **title** that you do not want to load is ignored during loading.
+
+##### Load JSON data using matched mode with root element specified
+
+Suppose your data file `example3.json` consists of the following data:
+
+```JSON
+{
+    "id": 10001,
+    "RECORDS":[
+        {"category":"11","title":"SayingsoftheCentury","price":895,"timestamp":1589191587},
+        {"category":"22","author":"2avc","price":895,"timestamp":1589191487},
+        {"category":"33","author":"3avc","title":"SayingsoftheCentury","timestamp":1589191387}
+    ],
+    "comments": ["3 records", "there will be 3 rows"]
+}
+```
+
+To load only `category`, `author`, and `price` from `example3.json`, run the following command:
+
+```SQL
+LOAD LABEL test_db.label17
+(
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example3.csv")
+    INTO TABLE tbl1
+    FORMAT AS "json"
+    (category, price, author)
+)
+WITH BROKER
+(
+    "username" = "<hdfs_username>",
+    "password" = "<hdfs_password>"
+)
+PROPERTIES
+(
+    "json_root"="$.RECORDS",
+    "strip_outer_array" = "true",
+    "jsonpaths" = "[\"$.category\",\"$.price\",\"$.author\"]"
+);
+```
+
+> **NOTE**
+>
+> In the preceding example, the outermost layer of the JSON data is an array structure as indicated by a pair of square brackets `[]`. The array structure consists of multiple JSON objects that each represent a data record. Therefore, you need to set `strip_outer_array` to `true` to strip the outermost array structure. The keys `title` and `timestamp` that you do not want to load are ignored during loading. Additionally, the `json_root` parameter is used to specify the root element, which is an array, of the JSON data.

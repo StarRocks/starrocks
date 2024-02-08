@@ -407,14 +407,19 @@ AVG_ROW_LENGTH: 17
 
 An asynchronous Broker Load process handles making the connection to MinIO, pulling the data, and storing the data in StarRocks.
 
-This method supports the Parquet, ORC, and CSV file formats.
+This method supports the following file formats:
+
+- Parquet
+- ORC
+- CSV
+- JSON (supported from v3.2.3 onwards)
 
 ### Advantages of Broker Load
 
 - Broker Load supports [data transformation](../loading/Etl_in_loading.md) and [data changes such as UPSERT and DELETE operations](../loading/Load_to_Primary_Key_tables.md) during loading.
 - Broker Load runs in the background and clients do not need to stay connected for the job to continue.
 - Broker Load is preferred for long-running jobs, with the default timeout spanning 4 hours.
-- In addition to Parquet and ORC file formats, Broker Load supports CSV files.
+- In addition to Parquet and ORC file format, Broker Load supports CSV file format and JSON file format (JSON file format is supported from v3.2.3 onwards).
 
 ### Data flow
 
