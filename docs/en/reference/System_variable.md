@@ -176,6 +176,10 @@ The maximum number of concurrent I/O tasks that can be issued by a scan operator
 
 Currently, StarRocks can adaptively adjust the number of concurrent I/O tasks when querying external tables. This feature is controlled by the variable `enable_connector_adaptive_io_tasks`, which is enabled by default.
 
+### connnector_sink_compression_codec
+
+Specifies the compression algorithm used for writing data into Hive tables or Iceberg tables, or exporting data with Files(). Valid algorithms include GZIP, BROTLI, ZSTD, and LZ4.
+
 ### count_distinct_column_buckets (2.5 and later)
 
 The number of buckets for the COUNT DISTINCT column in a group-by-count-distinct query. This variable takes effect only when `enable_distinct_column_bucketization` is set to `true`. Default value: 1024.

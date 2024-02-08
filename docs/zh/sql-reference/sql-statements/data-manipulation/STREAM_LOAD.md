@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+toc_max_heading_level: 4
 ---
 
 # STREAM LOAD

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "English"
+toc_max_heading_level: 5
 ---
 
 # BROKER LOAD
@@ -1107,3 +1108,139 @@ WITH BROKER
 > - By default, when you load ORC data, StarRocks determines the data file format based on whether the filename contains the extension **.orc**. If the filename does not contain the extension **.orc**, you must use `FORMAT AS` to specify the data file format as `ORC`.
 >
 > - In StarRocks v2.3 and earlier, if the data file contains ARRAY-type columns, you must make sure that the columns of the ORC data file have the same names as their mapping columns in the StarRocks table and the columns cannot be specified in the SET clause.
+
+### Load JSON data
+
+This section describes the parameter settings that you need to take note of when you load JSON data.
+
+Your StarRocks database `test_db` contains a table named `tbl1`, whose schema is as follows:
+
+```SQL
+`category` varchar(512) NULL COMMENT "",
+`author` varchar(512) NULL COMMENT "",
+`title` varchar(512) NULL COMMENT "",
+`price` double NULL COMMENT ""
+```
+
+#### Load JSON data using simple mode
+
+Suppose that your data file `example1.json` consists of the following data:
+
+```JSON
+{"category":"C++","author":"avc","title":"C++ primer","price":895}
+```
+
+To load all data from `example1.json` into `tbl1`, run the following command:
+
+```SQL
+LOAD LABEL test_db.label15
+(
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example1.csv")
+    INTO TABLE tbl1
+    FORMAT AS "json"
+)
+WITH BROKER
+(
+    "username" = "<hdfs_username>",
+    "password" = "<hdfs_password>"
+);
+```
+
+> **NOTE**
+>
+> In the preceding example, the parameters `columns` and `jsonpaths` are not specified. Therefore, the keys in `example1.json` are mapped by name onto the columns of `tbl1`.
+
+#### Load JSON data using matched mode
+
+StarRocks performs the following steps to match and process JSON data:
+
+1. (Optional) Strips the outermost array structure as instructed by the `strip_outer_array` parameter setting.
+
+   > **NOTE**
+   >
+   > This step is performed only when the outermost layer of the JSON data is an array structure as indicated by a pair of square brackets `[]`. You need to set `strip_outer_array` to `true`.
+
+2. (Optional) Matches the root element of the JSON data as instructed by the `json_root` parameter setting.
+
+   > **NOTE**
+   >
+   > This step is performed only when the JSON data has a root element. You need to specify the root element by using the `json_root` parameter.
+
+3. Extracts the specified JSON data as instructed by the `jsonpaths` parameter setting.
+
+##### Load JSON data using matched without root element specified
+
+Suppose that your data file `example2.json` consists of the following data:
+
+```JSON
+[
+    {"category":"xuxb111","author":"1avc","title":"SayingsoftheCentury","price":895},
+    {"category":"xuxb222","author":"2avc","title":"SayingsoftheCentury","price":895},
+    {"category":"xuxb333","author":"3avc","title":"SayingsoftheCentury","price":895}
+]
+```
+
+To load only `category`, `author`, and `price` from `example2.json`, run the following command:
+
+```SQL
+LOAD LABEL LOAD LABEL test_db.label16
+(
+    DATA INFILE(""hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example2.csv"")
+    INTO TABLE tbl1
+    FORMAT AS "json"
+    (category, price, author)
+)
+WITH BROKER
+(
+    "username" = "<hdfs_username>",
+    "password" = "<hdfs_password>"
+)
+PROPERTIES
+(
+    "strip_outer_array" = "true",
+    "jsonpaths" = "[\"$.category\",\"$.price\",\"$.author\"]"
+);
+```
+
+> **NOTE**
+>
+> In the preceding example, the outermost layer of the JSON data is an array structure as indicated by a pair of square brackets `[]`. The array structure consists of multiple JSON objects that each represent a data record. Therefore, you need to set `strip_outer_array` to `true` to strip the outermost array structure. The key **title** that you do not want to load is ignored during loading.
+
+##### Load JSON data using matched mode with root element specified
+
+Suppose your data file `example3.json` consists of the following data:
+
+```JSON
+{
+    "id": 10001,
+    "RECORDS":[
+        {"category":"11","title":"SayingsoftheCentury","price":895,"timestamp":1589191587},
+        {"category":"22","author":"2avc","price":895,"timestamp":1589191487},
+        {"category":"33","author":"3avc","title":"SayingsoftheCentury","timestamp":1589191387}
+    ],
+    "comments": ["3 records", "there will be 3 rows"]
+}
+```
+
+To load only `category`, `author`, and `price` from `example3.json`, run the following command:
+
+```SQL
+LOAD LABEL LOAD LABEL test_db.label17
+(
+    DATA INFILE(""hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example3.csv"")
+    INTO TABLE tbl1
+    FORMAT AS "json"
+    (category, price, author)
+)
+WITH BROKER
+(
+    "username" = "<hdfs_username>",
+    "password" = "<hdfs_password>"
+)
+PROPERTIES
+(
+    "json_root"="$.RECORDS",
+    "strip_outer_array" = "true",
+    "jsonpaths" = "[\"$.category\",\"$.price\",\"$.author\"]"
+);
+```

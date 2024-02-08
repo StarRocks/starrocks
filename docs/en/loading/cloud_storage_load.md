@@ -28,7 +28,9 @@ Broker Load supports the following data file formats:
 
 - Parquet
 
-- ORC
+- OR
+
+- JSON (supported from v3.2.3 onwards)
 
 > **NOTE**
 >

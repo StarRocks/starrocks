@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+toc_max_heading_level: 5
 ---
 
 # BROKER LOAD
@@ -1159,3 +1160,139 @@ WITH BROKER
 > - 导入 ORC 格式的数据时，默认通过文件扩展名 (**.orc**) 判断数据文件的格式。如果文件名称中没有包含扩展名，则必须通过 `FORMAT AS` 参数指定数据文件格式为 `ORC`。
 >
 > - StarRocks v2.3 及之前版本，当数据文件中包含 ARRAY 类型的列时，必须确保数据文件和 StarRocks 表中对应的列同名，并且不能写在 SET 子句里。
+
+### 导入 JSON 格式的数据
+
+本小节主要描述导入 JSON 格式的数据时，需要关注的一些参数配置。
+
+StarRocks 数据库 `test_db` 里的表 `tbl1` 拥有如下表结构：
+
+```SQL
+`category` varchar(512) NULL COMMENT "",
+`author` varchar(512) NULL COMMENT "",
+`title` varchar(512) NULL COMMENT "",
+`price` double NULL COMMENT ""
+```
+
+#### 使用简单模式导入数据
+
+假设数据文件 `example1.json` 包含如下数据：
+
+```JSON
+{"category":"C++","author":"avc","title":"C++ primer","price":895}
+```
+
+您可以通过如下命令将 `example1.json` 中的数据导入到 `tbl1` 中：
+
+```SQL
+LOAD LABEL test_db.label15
+(
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example1.csv")
+    INTO TABLE tbl1
+    FORMAT AS "json"
+)
+WITH BROKER
+(
+    "username" = "<hdfs_username>",
+    "password" = "<hdfs_password>"
+);
+```
+
+> **说明**
+>
+> 如上述示例所示，在没有指定 `columns` 和 `jsonpaths` 参数的情况下，则会按照 StarRocks 表中的列名称去对应 JSON 数据文件中的字段。
+
+#### 使用匹配模式导入数据
+
+StarRocks 按照如下顺序对数据进行匹配和处理：
+
+1. （可选）根据 `strip_outer_array` 参数裁剪最外层的数组结构。
+
+    > **说明**
+    >
+    > 仅在 JSON 数据的最外层是一个通过中括号 `[]` 表示的数组结构时涉及，需要设置 `strip_outer_array` 为 `true`。
+
+2. （可选）根据 `json_root` 参数匹配 JSON 数据的根节点。
+
+    > **说明**
+    >
+    > 仅在 JSON 数据存在根节点时涉及，需要通过 `json_root` 参数来指定根节点。
+
+3. 根据 `jsonpaths` 参数提取待导入的 JSON 数据。
+
+##### 不指定 JSON 根节点、使匹配模式导入数据
+
+假设数据文件 `example2.json` 包含如下数据：
+
+```JSON
+[
+    {"category":"xuxb111","author":"1avc","title":"SayingsoftheCentury","price":895},
+    {"category":"xuxb222","author":"2avc","title":"SayingsoftheCentury","price":895},
+    {"category":"xuxb333","author":"3avc","title":"SayingsoftheCentury","price":895}
+]
+```
+
+您可以通过指定 `jsonpaths` 参数进行精准导入，例如只导入 `category`、`author`、`price` 三个字段的数据：
+
+```SQL
+LOAD LABEL LOAD LABEL test_db.label16
+(
+    DATA INFILE(""hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example2.csv"")
+    INTO TABLE tbl1
+    FORMAT AS "json"
+    (category, price, author)
+)
+WITH BROKER
+(
+    "username" = "<hdfs_username>",
+    "password" = "<hdfs_password>"
+)
+PROPERTIES
+(
+    "strip_outer_array" = "true",
+    "jsonpaths" = "[\"$.category\",\"$.price\",\"$.author\"]"
+);
+```
+
+> **说明**
+>
+> 上述示例中，JSON 数据的最外层是一个通过中括号 [] 表示的数组结构，并且数组结构中的每个 JSON 对象都表示一条数据记录。因此，需要设置 `strip_outer_array` 为 `true`来裁剪最外层的数组结构。导入过程中，未指定的字段 `title` 会被忽略掉。
+
+##### 指定 JSON 根节点、使匹配模式导入数据
+
+假设数据文件 `example3.json` 包含如下数据：
+
+```JSON
+{
+    "id": 10001,
+    "RECORDS":[
+        {"category":"11","title":"SayingsoftheCentury","price":895,"timestamp":1589191587},
+        {"category":"22","author":"2avc","price":895,"timestamp":1589191487},
+        {"category":"33","author":"3avc","title":"SayingsoftheCentury","timestamp":1589191387}
+    ],
+    "comments": ["3 records", "there will be 3 rows"]
+}
+```
+
+您可以通过指定 `jsonpaths` 进行精准导入，例如只导入 `category`、`author`、`price` 三个字段的数据：
+
+```SQL
+LOAD LABEL LOAD LABEL test_db.label17
+(
+    DATA INFILE(""hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example3.csv"")
+    INTO TABLE tbl1
+    FORMAT AS "json"
+    (category, price, author)
+)
+WITH BROKER
+(
+    "username" = "<hdfs_username>",
+    "password" = "<hdfs_password>"
+)
+PROPERTIES
+(
+    "json_root"="$.RECORDS",
+    "strip_outer_array" = "true",
+    "jsonpaths" = "[\"$.category\",\"$.price\",\"$.author\"]"
+);
+```
