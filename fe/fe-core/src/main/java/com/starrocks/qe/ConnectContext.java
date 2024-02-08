@@ -586,8 +586,7 @@ public class ConnectContext {
         if (!sessionVariable.isEnableBigQueryProfile()) {
             return false;
         }
-        return System.currentTimeMillis() - getStartTime() >
-                1000L * sessionVariable.getBigQueryProfileSecondThreshold();
+        return System.currentTimeMillis() - getStartTime() > sessionVariable.getBigQueryProfileMilliSecondThreshold();
     }
 
     public boolean needMergeProfile() {
@@ -891,7 +890,7 @@ public class ConnectContext {
             row.add(ClusterNamespace.getNameFromFullName(qualifiedUser));
             // Ip + port
             if (ConnectContext.this instanceof HttpConnectContext) {
-                String remoteAddress = ((HttpConnectContext) (ConnectContext.this)).getRemoteAddres();
+                String remoteAddress = ((HttpConnectContext) (ConnectContext.this)).getRemoteAddress();
                 row.add(remoteAddress);
             } else {
                 row.add(getMysqlChannel().getRemoteHostPortString());

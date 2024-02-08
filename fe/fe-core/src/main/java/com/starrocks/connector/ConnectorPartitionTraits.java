@@ -37,6 +37,8 @@ import com.starrocks.catalog.JDBCPartitionKey;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.NullablePartitionKey;
+import com.starrocks.catalog.OdpsPartitionKey;
+import com.starrocks.catalog.OdpsTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PaimonPartitionKey;
 import com.starrocks.catalog.PaimonTable;
@@ -46,8 +48,10 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.connector.iceberg.IcebergPartitionUtils;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.lang.NotImplementedException;
+import org.apache.iceberg.PartitionField;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,6 +60,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 /**
  * Abstract the partition-related interfaces for different connectors, including Iceberg/Hive/....
@@ -76,6 +81,7 @@ public abstract class ConnectorPartitionTraits {
                     .put(Table.TableType.HUDI, HudiPartitionTraits::new)
                     .put(Table.TableType.ICEBERG, IcebergPartitionTraits::new)
                     .put(Table.TableType.PAIMON, PaimonPartitionTraits::new)
+                    .put(Table.TableType.ODPS, OdpsPartitionTraits::new)
                     .put(Table.TableType.JDBC, JDBCPartitionTraits::new)
                     .put(Table.TableType.DELTALAKE, DeltaLakePartitionTraits::new)
                     .build();
@@ -104,8 +110,15 @@ public abstract class ConnectorPartitionTraits {
 
     abstract String getDbName();
 
-    abstract PartitionKey createPartitionKey(List<String> values, List<Type> types) throws AnalysisException;
+    /**
+     * Whether this table support partition-granular refresh as ref-table
+     */
+    public abstract boolean supportPartitionRefresh();
 
+    abstract PartitionKey createPartitionKeyWithType(List<String> values, List<Type> types) throws AnalysisException;
+
+    abstract PartitionKey createPartitionKey(List<String> partitionValues, List<Column> partitionColumns)
+            throws AnalysisException;
     /**
      * Get all partitions' name
      */
@@ -131,7 +144,7 @@ public abstract class ConnectorPartitionTraits {
      */
     abstract Map<String, List<List<String>>> getPartitionList(Column partitionColumn) throws AnalysisException;
 
-    abstract Map<String, PartitionInfo> getPartitionNameWithPartitionInfo();
+    public abstract Map<String, PartitionInfo> getPartitionNameWithPartitionInfo();
 
     /**
      * The max of refresh ts for all partitions
@@ -146,10 +159,15 @@ public abstract class ConnectorPartitionTraits {
 
     // ========================================= Implementations ==============================================
 
-    abstract static class DefaultTraits extends ConnectorPartitionTraits {
+    public abstract static class DefaultTraits extends ConnectorPartitionTraits {
 
         @Override
-        public PartitionKey createPartitionKey(List<String> values, List<Type> types) throws AnalysisException {
+        public boolean supportPartitionRefresh() {
+            return false;
+        }
+
+        @Override
+        public PartitionKey createPartitionKeyWithType(List<String> values, List<Type> types) throws AnalysisException {
             Preconditions.checkState(values.size() == types.size(),
                     "columns size is %s, but values size is %s", types.size(), values.size());
 
@@ -173,6 +191,13 @@ public abstract class ConnectorPartitionTraits {
                 partitionKey.pushColumn(exprValue, type.getPrimitiveType());
             }
             return partitionKey;
+        }
+
+        @Override
+        public PartitionKey createPartitionKey(List<String> partitionValues, List<Column> partitionColumns)
+                throws AnalysisException {
+            return createPartitionKeyWithType(partitionValues,
+                    partitionColumns.stream().map(Column::getType).collect(Collectors.toList()));
         }
 
         protected String getTableName() {
@@ -281,6 +306,12 @@ public abstract class ConnectorPartitionTraits {
         }
 
         @Override
+        public boolean supportPartitionRefresh() {
+            // TODO: check partition types
+            return true;
+        }
+
+        @Override
         public Map<String, Range<PartitionKey>> getPartitionKeyRange(Column partitionColumn, Expr partitionExpr) {
             // TODO: check partition type
             return ((OlapTable) table).getRangePartitionMap();
@@ -342,9 +373,18 @@ public abstract class ConnectorPartitionTraits {
             }
             return result;
         }
+
+        public List<Column> getPartitionColumns() {
+            return ((OlapTable) table).getPartitionInfo().getPartitionColumns();
+        }
     }
 
     static class HivePartitionTraits extends DefaultTraits {
+
+        @Override
+        public boolean supportPartitionRefresh() {
+            return true;
+        }
 
         @Override
         public String getDbName() {
@@ -397,6 +437,12 @@ public abstract class ConnectorPartitionTraits {
     static class IcebergPartitionTraits extends DefaultTraits {
 
         @Override
+        public boolean supportPartitionRefresh() {
+            // TODO: refine the check
+            return true;
+        }
+
+        @Override
         public String getDbName() {
             return ((IcebergTable) table).getRemoteDbName();
         }
@@ -423,9 +469,65 @@ public abstract class ConnectorPartitionTraits {
             return GlobalStateMgr.getCurrentState().getMetadataMgr().
                     getPartitions(icebergTable.getCatalogName(), table, partitionNames);
         }
+
+        @Override
+        public PartitionKey createPartitionKey(List<String> partitionValues, List<Column> partitionColumns)
+                throws AnalysisException {
+            Preconditions.checkState(partitionValues.size() == partitionColumns.size(),
+                    "columns size is %s, but values size is %s", partitionColumns.size(),
+                    partitionValues.size());
+
+            IcebergTable icebergTable = (IcebergTable) table;
+            List<PartitionField> partitionFields = Lists.newArrayList();
+            for (Column column : partitionColumns) {
+                for (PartitionField field : icebergTable.getNativeTable().spec().fields()) {
+                    String partitionFieldName = icebergTable.getNativeTable().schema().findColumnName(field.sourceId());
+                    if (partitionFieldName.equalsIgnoreCase(column.getName())) {
+                        partitionFields.add(field);
+                    }
+                }
+            }
+            Preconditions.checkState(partitionFields.size() == partitionColumns.size(),
+                    "columns size is %s, but partitionFields size is %s", partitionColumns.size(), partitionFields.size());
+
+            PartitionKey partitionKey = createEmptyKey();
+
+            // change string value to LiteralExpr,
+            for (int i = 0; i < partitionValues.size(); i++) {
+                String rawValue = partitionValues.get(i);
+                Column column = partitionColumns.get(i);
+                PartitionField field = partitionFields.get(i);
+                LiteralExpr exprValue;
+                // rawValue could be null for delta table
+                if (rawValue == null) {
+                    rawValue = "null";
+                }
+                if (((NullablePartitionKey) partitionKey).nullPartitionValueList().contains(rawValue)) {
+                    partitionKey.setNullPartitionValue(rawValue);
+                    exprValue = NullLiteral.create(column.getType());
+                } else {
+                    // transform year/month/day/hour dedup name is time
+                    if (field.transform().dedupName().equalsIgnoreCase("time")) {
+                        rawValue = IcebergPartitionUtils.normalizeTimePartitionName(rawValue, field,
+                                icebergTable.getNativeTable().schema(), column.getType());
+                        exprValue = LiteralExpr.create(rawValue,  column.getType());
+                    } else {
+                        exprValue = LiteralExpr.create(rawValue,  column.getType());
+                    }
+                }
+                partitionKey.pushColumn(exprValue, column.getType().getPrimitiveType());
+            }
+            return partitionKey;
+        }
     }
 
     static class PaimonPartitionTraits extends DefaultTraits {
+
+        @Override
+        public boolean supportPartitionRefresh() {
+            // TODO: refine the check
+            return true;
+        }
 
         @Override
         public String getDbName() {
@@ -491,7 +593,27 @@ public abstract class ConnectorPartitionTraits {
         }
     }
 
+    static class OdpsPartitionTraits extends DefaultTraits {
+
+        @Override
+        public String getDbName() {
+            return ((OdpsTable) table).getDbName();
+        }
+
+        @Override
+        PartitionKey createEmptyKey() {
+            return new OdpsPartitionKey();
+        }
+    }
+
     static class JDBCPartitionTraits extends DefaultTraits {
+
+        @Override
+        public boolean supportPartitionRefresh() {
+            // TODO: refine check
+            return true;
+        }
+
         @Override
         public String getDbName() {
             return ((JDBCTable) table).getDbName();

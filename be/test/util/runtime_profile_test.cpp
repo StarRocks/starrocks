@@ -20,6 +20,7 @@
 #include <gtest/gtest.h>
 
 #include "common/logging.h"
+#include "gen_cpp/RuntimeProfile_types.h"
 
 namespace starrocks {
 
@@ -158,91 +159,96 @@ TEST(TestRuntimeProfile, testMergeIsomorphicProfiles2) {
 }
 
 TEST(TestRuntimeProfile, testProfileMergeStrategy) {
-    std::shared_ptr<ObjectPool> obj_pool = std::make_shared<ObjectPool>();
-    std::vector<RuntimeProfile*> profiles;
+    auto do_test = [](TCounterAggregateType::type type1, TCounterAggregateType::type type2) {
+        std::shared_ptr<ObjectPool> obj_pool = std::make_shared<ObjectPool>();
+        std::vector<RuntimeProfile*> profiles;
 
-    TCounterStrategy strategy1;
-    strategy1.aggregate_type = TCounterAggregateType::SUM;
-    strategy1.merge_type = TCounterMergeType::MERGE_ALL;
+        TCounterStrategy strategy1;
+        strategy1.aggregate_type = type1;
+        strategy1.merge_type = TCounterMergeType::MERGE_ALL;
 
-    TCounterStrategy strategy2;
-    strategy2.aggregate_type = TCounterAggregateType::SUM;
-    strategy2.merge_type = TCounterMergeType::SKIP_ALL;
+        TCounterStrategy strategy2;
+        strategy2.aggregate_type = type1;
+        strategy2.merge_type = TCounterMergeType::SKIP_ALL;
 
-    TCounterStrategy strategy3;
-    strategy3.aggregate_type = TCounterAggregateType::AVG;
-    strategy3.merge_type = TCounterMergeType::SKIP_FIRST_MERGE;
+        TCounterStrategy strategy3;
+        strategy3.aggregate_type = type2;
+        strategy3.merge_type = TCounterMergeType::SKIP_FIRST_MERGE;
 
-    TCounterStrategy strategy4;
-    strategy4.aggregate_type = TCounterAggregateType::AVG;
-    strategy4.merge_type = TCounterMergeType::SKIP_SECOND_MERGE;
+        TCounterStrategy strategy4;
+        strategy4.aggregate_type = type2;
+        strategy4.merge_type = TCounterMergeType::SKIP_SECOND_MERGE;
 
-    auto profile1 = std::make_shared<RuntimeProfile>("profile");
-    {
-        auto* time1 = profile1->add_counter("time1", TUnit::TIME_NS, strategy1);
-        time1->set(1000000000L);
+        auto profile1 = std::make_shared<RuntimeProfile>("profile");
+        {
+            auto* time1 = profile1->add_counter("time1", TUnit::TIME_NS, strategy1);
+            time1->set(1000000000L);
 
-        auto* time2 = profile1->add_counter("time2", TUnit::TIME_NS, strategy2);
-        time2->set(2000000000L);
+            auto* time2 = profile1->add_counter("time2", TUnit::TIME_NS, strategy2);
+            time2->set(2000000000L);
 
-        auto* count1 = profile1->add_counter("count1", TUnit::UNIT, strategy3);
-        count1->set(6L);
+            auto* count1 = profile1->add_counter("count1", TUnit::UNIT, strategy3);
+            count1->set(6L);
 
-        auto* count2 = profile1->add_counter("count2", TUnit::UNIT, strategy4);
-        count2->set(8L);
+            auto* count2 = profile1->add_counter("count2", TUnit::UNIT, strategy4);
+            count2->set(8L);
 
-        profiles.push_back(profile1.get());
-    }
+            profiles.push_back(profile1.get());
+        }
 
-    auto profile2 = std::make_shared<RuntimeProfile>("profile");
-    {
-        auto* time1 = profile2->add_counter("time1", TUnit::TIME_NS, strategy1);
-        time1->set(1000000000L);
+        auto profile2 = std::make_shared<RuntimeProfile>("profile");
+        {
+            auto* time1 = profile2->add_counter("time1", TUnit::TIME_NS, strategy1);
+            time1->set(1000000000L);
 
-        auto* time2 = profile2->add_counter("time2", TUnit::TIME_NS, strategy2);
-        time2->set(3000000000L);
+            auto* time2 = profile2->add_counter("time2", TUnit::TIME_NS, strategy2);
+            time2->set(3000000000L);
 
-        auto* count1 = profile2->add_counter("count1", TUnit::UNIT, strategy3);
-        count1->set(6L);
+            auto* count1 = profile2->add_counter("count1", TUnit::UNIT, strategy3);
+            count1->set(6L);
 
-        auto* count2 = profile2->add_counter("count2", TUnit::UNIT, strategy4);
-        count2->set(8L);
-        profiles.push_back(profile2.get());
-    }
+            auto* count2 = profile2->add_counter("count2", TUnit::UNIT, strategy4);
+            count2->set(8L);
+            profiles.push_back(profile2.get());
+        }
 
-    auto* merged_profile = RuntimeProfile::merge_isomorphic_profiles(obj_pool.get(), profiles);
+        auto* merged_profile = RuntimeProfile::merge_isomorphic_profiles(obj_pool.get(), profiles);
 
-    auto* merged_time1 = merged_profile->get_counter("time1");
-    ASSERT_EQ(2000000000L, merged_time1->value());
-    auto* merged_min_of_time1 = merged_profile->get_counter("__MIN_OF_time1");
-    auto* merged_max_of_time1 = merged_profile->get_counter("__MAX_OF_time1");
-    ASSERT_TRUE(merged_min_of_time1);
-    ASSERT_TRUE(merged_max_of_time1);
-    ASSERT_EQ(1000000000L, merged_min_of_time1->value());
-    ASSERT_EQ(1000000000L, merged_max_of_time1->value());
+        auto* merged_time1 = merged_profile->get_counter("time1");
+        ASSERT_EQ(2000000000L, merged_time1->value());
+        auto* merged_min_of_time1 = merged_profile->get_counter("__MIN_OF_time1");
+        auto* merged_max_of_time1 = merged_profile->get_counter("__MAX_OF_time1");
+        ASSERT_TRUE(merged_min_of_time1);
+        ASSERT_TRUE(merged_max_of_time1);
+        ASSERT_EQ(1000000000L, merged_min_of_time1->value());
+        ASSERT_EQ(1000000000L, merged_max_of_time1->value());
 
-    auto* merged_time2 = merged_profile->get_counter("time2");
-    ASSERT_EQ(2000000000L, merged_time2->value());
-    auto* merged_min_of_time2 = merged_profile->get_counter("__MIN_OF_time2");
-    auto* merged_max_of_time2 = merged_profile->get_counter("__MAX_OF_time2");
-    ASSERT_FALSE(merged_min_of_time2);
-    ASSERT_FALSE(merged_max_of_time2);
+        auto* merged_time2 = merged_profile->get_counter("time2");
+        ASSERT_EQ(2000000000L, merged_time2->value());
+        auto* merged_min_of_time2 = merged_profile->get_counter("__MIN_OF_time2");
+        auto* merged_max_of_time2 = merged_profile->get_counter("__MAX_OF_time2");
+        ASSERT_FALSE(merged_min_of_time2);
+        ASSERT_FALSE(merged_max_of_time2);
 
-    auto* merged_count1 = merged_profile->get_counter("count1");
-    ASSERT_EQ(6, merged_count1->value());
-    auto* merged_min_of_count1 = merged_profile->get_counter("__MIN_OF_count1");
-    auto* merged_max_of_count1 = merged_profile->get_counter("__MAX_OF_count1");
-    ASSERT_FALSE(merged_min_of_count1);
-    ASSERT_FALSE(merged_max_of_count1);
+        auto* merged_count1 = merged_profile->get_counter("count1");
+        ASSERT_EQ(6, merged_count1->value());
+        auto* merged_min_of_count1 = merged_profile->get_counter("__MIN_OF_count1");
+        auto* merged_max_of_count1 = merged_profile->get_counter("__MAX_OF_count1");
+        ASSERT_FALSE(merged_min_of_count1);
+        ASSERT_FALSE(merged_max_of_count1);
 
-    auto* merged_count2 = merged_profile->get_counter("count2");
-    ASSERT_EQ(8, merged_count2->value());
-    auto* merged_min_of_count2 = merged_profile->get_counter("__MIN_OF_count2");
-    auto* merged_max_of_count2 = merged_profile->get_counter("__MAX_OF_count2");
-    ASSERT_TRUE(merged_min_of_count2);
-    ASSERT_TRUE(merged_max_of_count2);
-    ASSERT_EQ(8, merged_min_of_count2->value());
-    ASSERT_EQ(8, merged_max_of_count2->value());
+        auto* merged_count2 = merged_profile->get_counter("count2");
+        ASSERT_EQ(8, merged_count2->value());
+        auto* merged_min_of_count2 = merged_profile->get_counter("__MIN_OF_count2");
+        auto* merged_max_of_count2 = merged_profile->get_counter("__MAX_OF_count2");
+        ASSERT_TRUE(merged_min_of_count2);
+        ASSERT_TRUE(merged_max_of_count2);
+        ASSERT_EQ(8, merged_min_of_count2->value());
+        ASSERT_EQ(8, merged_max_of_count2->value());
+    };
+
+    do_test(TCounterAggregateType::SUM, TCounterAggregateType::AVG);
+    do_test(TCounterAggregateType::SUM_AVG, TCounterAggregateType::AVG_SUM);
 }
 
 TEST(TestRuntimeProfile, testConflictInfoString) {

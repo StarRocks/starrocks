@@ -1817,7 +1817,7 @@ public class MaterializedViewRewriter {
     protected OptExpression queryBasedRewrite(RewriteContext rewriteContext, ScalarOperator compensationPredicates,
                                               OptExpression queryExpression) {
         queryExpression = MvUtils.replaceLogicalViewScanOperator(queryExpression,
-                materializationContext.getOptimizerContext().getViewScans());
+                materializationContext.getOptimizerContext().getQueryMaterializationContext());
         if (queryExpression == null) {
             return null;
         }
@@ -1899,9 +1899,10 @@ public class MaterializedViewRewriter {
                 // predicate can not be pushdown, we should add it it optExpression
                 Operator.Builder builder = OperatorBuilderFactory.build(optExpression.getOp());
                 builder.withOperator(optExpression.getOp());
-                // builder.setPredicate(Utils.compoundAnd(predicate, optExpression.getOp().getPredicate()));
+                PredicateSplit predicateSplit = PredicateSplit.splitPredicate(
+                        Utils.compoundAnd(predicate, optExpression.getOp().getPredicate()));
                 ScalarOperator canonizePredicates = MvUtils.canonizePredicateForRewrite(
-                        queryMaterializationContext, Utils.compoundAnd(predicate, optExpression.getOp().getPredicate()));
+                        queryMaterializationContext, predicateSplit.toScalarOperator());
                 builder.setPredicate(canonizePredicates);
                 Operator newQueryOp = builder.build();
                 return OptExpression.create(newQueryOp, optExpression.getInputs());
@@ -2005,9 +2006,10 @@ public class MaterializedViewRewriter {
         Preconditions.checkState(partitionColumnRef != null);
         ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
         partitionColumnRef = columnRewriter.rewriteViewToQuery(partitionColumnRef).cast();
+
         // for view based mv rewrite, we should mapping the partition column to output column of view scan
-        if (optimizerContext.getViewScans() != null) {
-            for (LogicalViewScanOperator viewScanOperator : optimizerContext.getViewScans()) {
+        if (queryMaterializationContext.getViewScans() != null) {
+            for (LogicalViewScanOperator viewScanOperator : queryMaterializationContext.getViewScans()) {
                 Projection projection = viewScanOperator.getProjection();
                 if (viewScanOperator.getProjection() != null) {
                     for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getColumnRefMap().entrySet()) {

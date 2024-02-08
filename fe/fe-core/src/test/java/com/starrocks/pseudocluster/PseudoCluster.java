@@ -103,6 +103,10 @@ public class PseudoCluster {
         }
     }
 
+    public void setServerPrepareStatement() {
+        dataSource.setConnectionProperties("useServerPrepStmts=true");
+    }
+
     public void setQueryTimeout(int timeout) {
         dataSource.setDefaultQueryTimeout(timeout);
     }
@@ -165,7 +169,7 @@ public class PseudoCluster {
         }
 
         @Override
-        public FilePathInfo allocateFilePath(long tableId) throws DdlException {
+        public FilePathInfo allocateFilePath(long dbId, long tableId) throws DdlException {
             FilePathInfo.Builder builder = FilePathInfo.newBuilder();
             FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
 

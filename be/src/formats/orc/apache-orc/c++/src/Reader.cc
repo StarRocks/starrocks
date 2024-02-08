@@ -1019,7 +1019,11 @@ void RowReaderImpl::buildIORanges(std::vector<InputStream::IORange>* io_ranges) 
         uint64_t length = stream.length();
         // ColumnId = 0 is root column, we always need it
         if (columnId == 0 || selectedColumns[columnId] || lazyLoadColumns[columnId]) {
-            io_ranges->emplace_back(InputStream::IORange{.offset = offset, .size = length});
+            bool is_active = true;
+            if (lazyLoadColumns[columnId]) {
+                is_active = false;
+            }
+            io_ranges->emplace_back(InputStream::IORange{.offset = offset, .size = length, .is_active = is_active});
         }
         offset += length;
     }
@@ -1029,7 +1033,7 @@ void RowReaderImpl::startNextStripe() {
     reader.reset(); // ColumnReaders use lots of memory; free old memory first
     rowIndexes.clear();
     bloomFilterIndex.clear();
-    bool streamIORangesEnabled = contents->stream->isIORangesEnabled();
+    const bool isIOCoalesceEnabled = contents->stream->isIOCoalesceEnabled();
 
     // evaluate file statistics if it exists
     if (sargsApplier && !sargsApplier->evaluateFileStatistics(*footer, numRowGroupsInStripeRange)) {
@@ -1063,15 +1067,15 @@ void RowReaderImpl::startNextStripe() {
 
         contents->stream->prepareCache(InputStream::PrepareCacheScope::READ_FULL_STRIPE, currentStripeInfo.offset(),
                                        stripeSize);
-        if (streamIORangesEnabled) {
+        if (isIOCoalesceEnabled) {
             contents->stream->clearIORanges();
         }
         currentStripeFooter = getStripeFooter(currentStripeInfo, *contents);
         rowsInCurrentStripe = currentStripeInfo.numberofrows();
-        if (streamIORangesEnabled) {
+        if (isIOCoalesceEnabled) {
             std::vector<InputStream::IORange> io_ranges;
             buildIORanges(&io_ranges);
-            contents->stream->setIORanges(io_ranges);
+            contents->stream->setIORanges(io_ranges, true);
         }
 
         if (sargsApplier) {
@@ -1553,12 +1557,16 @@ uint64_t InputStream::getNaturalReadSizeAfterSeek() const {
 
 void InputStream::prepareCache(PrepareCacheScope scope, uint64_t offset, uint64_t length) {}
 
-bool InputStream::isIORangesEnabled() const {
+bool InputStream::isIOCoalesceEnabled() const {
+    return false;
+}
+
+bool InputStream::isIOAdaptiveCoalesceEnabled() const {
     return false;
 }
 
 void InputStream::clearIORanges() {}
 
-void InputStream::setIORanges(std::vector<InputStream::IORange>& io_ranges) {}
+void InputStream::setIORanges(std::vector<InputStream::IORange>& io_ranges, const bool is_from_stripe) {}
 
 } // namespace orc

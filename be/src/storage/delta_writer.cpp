@@ -54,6 +54,7 @@ DeltaWriter::DeltaWriter(DeltaWriterOptions opt, MemTracker* mem_tracker, Storag
           _tablet_schema(new TabletSchema),
           _flush_token(nullptr),
           _replicate_token(nullptr),
+          _segment_flush_token(nullptr),
           _with_rollback_log(true) {}
 
 DeltaWriter::~DeltaWriter() {
@@ -63,6 +64,9 @@ DeltaWriter::~DeltaWriter() {
     }
     if (_replicate_token != nullptr) {
         _replicate_token->shutdown();
+    }
+    if (_segment_flush_token != nullptr) {
+        _segment_flush_token->shutdown();
     }
     switch (get_state()) {
     case kUninitialized:
@@ -308,6 +312,9 @@ Status DeltaWriter::_init() {
     if (_replica_state == Primary && _opt.replicas.size() > 1) {
         _replicate_token = _storage_engine->segment_replicate_executor()->create_replicate_token(&_opt);
     }
+    if (replica_state() == Secondary) {
+        _segment_flush_token = StorageEngine::instance()->segment_flush_executor()->create_flush_token();
+    }
     _set_state(kWriting, Status::OK());
 
     VLOG(2) << "DeltaWriter [tablet_id=" << _opt.tablet_id << ", load_id=" << print_id(_opt.load_id)
@@ -552,8 +559,9 @@ Status DeltaWriter::_build_current_tablet_schema(int64_t index_id, const POlapTa
             ptable_schema_param.indexes(i).column_param().columns_desc(0).unique_id() >= 0 &&
             ptable_schema_param.version() > ori_tablet_schema->schema_version()) {
             new_schema->copy_from(ori_tablet_schema);
-            RETURN_IF_ERROR(new_schema->build_current_tablet_schema(index_id, ptable_schema_param.version(),
-                                                                    ptable_schema_param.indexes(i), ori_tablet_schema));
+            RETURN_IF_ERROR(new_schema->build_current_tablet_schema(
+                    ptable_schema_param.indexes(i).schema_id(), ptable_schema_param.version(),
+                    ptable_schema_param.indexes(i).column_param(), ori_tablet_schema));
         }
     }
     if (new_schema->schema_version() > ori_tablet_schema->schema_version()) {
@@ -673,6 +681,9 @@ void DeltaWriter::cancel(const Status& st) {
     if (_replicate_token != nullptr) {
         _replicate_token->cancel(st);
     }
+    if (_segment_flush_token != nullptr) {
+        _segment_flush_token->cancel(st);
+    }
 }
 
 void DeltaWriter::abort(bool with_log) {
@@ -685,6 +696,9 @@ void DeltaWriter::abort(bool with_log) {
     }
     if (_replicate_token != nullptr) {
         _replicate_token->shutdown();
+    }
+    if (_segment_flush_token != nullptr) {
+        _segment_flush_token->shutdown();
     }
 
     VLOG(1) << "Aborted delta writer. tablet_id: " << _tablet->tablet_id() << " txn_id: " << _opt.txn_id

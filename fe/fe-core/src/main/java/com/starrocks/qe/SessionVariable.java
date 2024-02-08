@@ -45,6 +45,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.monitor.unit.TimeValue;
 import com.starrocks.qe.VariableMgr.VarAttr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.QueryDebugOptions;
@@ -55,9 +56,11 @@ import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TSpillMode;
 import com.starrocks.thrift.TTabletInternalParallelMode;
+import com.starrocks.thrift.TTimeUnit;
 import org.apache.commons.lang3.EnumUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.TestOnly;
 import org.json.JSONObject;
 
 import java.io.DataInput;
@@ -278,6 +281,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             "cbo_materialized_view_rewrite_rule_output_limit";
     public static final String CBO_MATERIALIZED_VIEW_REWRITE_CANDIDATE_LIMIT =
             "cbo_materialized_view_rewrite_candidate_limit";
+    public static final String CBO_MATERIALIZED_VIEW_REWRITE_RELATED_MVS_LIMIT =
+            "cbo_materialized_view_rewrite_related_mvs_limit";
 
     public static final String CBO_MAX_REORDER_NODE_USE_EXHAUSTIVE = "cbo_max_reorder_node_use_exhaustive";
     public static final String CBO_ENABLE_DP_JOIN_REORDER = "cbo_enable_dp_join_reorder";
@@ -435,6 +440,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PLAN_SERIALIZE_CONCURRENTLY = "enable_plan_serialize_concurrently";
 
     public static final String ENABLE_STRICT_ORDER_BY = "enable_strict_order_by";
+    private static final String CBO_SPLIT_SCAN_PREDICATE_WITH_DATE = "enable_split_scan_predicate_with_date";
 
     // Flag to control whether to proxy follower's query statement to leader/follower.
     public enum FollowerQueryForwardMode {
@@ -470,6 +476,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_SYNC_MATERIALIZED_VIEW_REWRITE = "enable_sync_materialized_view_rewrite";
     public static final String ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE =
             "enable_rule_based_materialized_view_rewrite";
+    public static final String ENABLE_FORCE_RULE_BASED_MV_REWRITE =
+            "eable_force_rule_based_mv_rewrite";
 
     public static final String ENABLE_MATERIALIZED_VIEW_VIEW_DELTA_REWRITE =
             "enable_materialized_view_view_delta_rewrite";
@@ -493,7 +501,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String BIG_QUERY_LOG_CPU_SECOND_THRESHOLD = "big_query_log_cpu_second_threshold";
     public static final String BIG_QUERY_LOG_SCAN_BYTES_THRESHOLD = "big_query_log_scan_bytes_threshold";
     public static final String BIG_QUERY_LOG_SCAN_ROWS_THRESHOLD = "big_query_log_scan_rows_threshold";
-    public static final String BIG_QUERY_PROFILE_SECOND_THRESHOLD = "big_query_profile_second_threshold";
+    public static final String BIG_QUERY_PROFILE_THRESHOLD = "big_query_profile_threshold";
 
     public static final String SQL_DIALECT = "sql_dialect";
 
@@ -596,6 +604,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_EQ_BASE_TYPE = "cbo_eq_base_type";
 
     public static final String ENABLE_SHORT_CIRCUIT = "enable_short_circuit";
+
+    public static final String ENABLE_PREPARE_STMT = "enable_prepare_stmt";
 
     // whether rewrite bitmap_union(to_bitmap(x)) to bitmap_agg(x) directly.
     public static final String ENABLE_REWRITE_BITMAP_UNION_TO_BITMAP_AGG = "enable_rewrite_bitmap_union_to_bitamp_agg";
@@ -893,8 +903,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_ASYNC_PROFILE, flag = VariableMgr.INVISIBLE)
     private boolean enableAsyncProfile = true;
 
-    @VariableMgr.VarAttr(name = BIG_QUERY_PROFILE_SECOND_THRESHOLD)
-    private int bigQueryProfileSecondThreshold = 0;
+    @VariableMgr.VarAttr(name = BIG_QUERY_PROFILE_THRESHOLD)
+    private String bigQueryProfileThreshold = "0s";
 
     @VariableMgr.VarAttr(name = RESOURCE_GROUP_ID, alias = RESOURCE_GROUP_ID_V2,
             show = RESOURCE_GROUP_ID_V2, flag = VariableMgr.INVISIBLE)
@@ -1359,6 +1369,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_REWRITE_PARTITION_COMPENSATE, flag = VariableMgr.INVISIBLE)
     private boolean enableMaterializedViewRewritePartitionCompensate = true;
 
+    @VarAttr(name = ENABLE_FORCE_RULE_BASED_MV_REWRITE)
+    private boolean enableForceRuleBasedMvRewrite = false;
+
     @VarAttr(name = ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE)
     private boolean enableRuleBasedMaterializedViewRewrite = true;
 
@@ -1403,6 +1416,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      */
     @VarAttr(name = CBO_MATERIALIZED_VIEW_REWRITE_CANDIDATE_LIMIT, flag = VariableMgr.INVISIBLE)
     private int cboMaterializedViewRewriteCandidateLimit = 12;
+
+    /**
+     * Materialized view rewrite related mv limit: how many related MVs would be considered for rewrite to a query?
+     */
+    @VarAttr(name = CBO_MATERIALIZED_VIEW_REWRITE_RELATED_MVS_LIMIT, flag = VariableMgr.INVISIBLE)
+    private int cboMaterializedViewRewriteRelatedMVsLimit = 64;
 
     @VarAttr(name = QUERY_EXCLUDING_MV_NAMES, flag = VariableMgr.INVISIBLE)
     private String queryExcludingMVNames = "";
@@ -1522,6 +1541,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_SHORT_CIRCUIT)
     private boolean enableShortCircuit = false;
 
+    @VariableMgr.VarAttr(name = ENABLE_PREPARE_STMT)
+    private boolean enablePrepareStmt = true;
+
     private int exprChildrenLimit = -1;
 
     @VarAttr(name = CBO_PREDICATE_SUBFIELD_PATH, flag = VariableMgr.INVISIBLE)
@@ -1560,6 +1582,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_DERIVE_RANGE_JOIN_PREDICATE)
     private boolean cboDeriveRangeJoinPredicate = false;
+
+    @VarAttr(name = CBO_SPLIT_SCAN_PREDICATE_WITH_DATE)
+    private boolean cboSplitScanPredicateWithDate = false;
 
     @VarAttr(name = CBO_DERIVE_JOIN_IS_NULL_PREDICATE)
     private boolean cboDeriveJoinIsNullPredicate = true;
@@ -1720,6 +1745,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return cboUseDBLock;
     }
 
+    @TestOnly
+    public void setCboUseDBLock(boolean cboUseDBLock) {
+        this.cboUseDBLock = cboUseDBLock;
+    }
+
     public boolean isEnableQueryTabletAffinity() {
         return enableQueryTabletAffinity;
     }
@@ -1813,11 +1843,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public boolean isEnableBigQueryProfile() {
-        return bigQueryProfileSecondThreshold > 0;
+        return TimeValue.parseTimeValue(bigQueryProfileThreshold).getMillis() > 0;
     }
 
-    public int getBigQueryProfileSecondThreshold() {
-        return bigQueryProfileSecondThreshold;
+    public long getBigQueryProfileMilliSecondThreshold() {
+        return TimeValue.parseTimeValue(bigQueryProfileThreshold).getMillis();
     }
 
     public int getWaitTimeoutS() {
@@ -2654,6 +2684,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableRuleBasedMaterializedViewRewrite = enableRuleBasedMaterializedViewRewrite;
     }
 
+    public boolean isEnableForceRuleBasedMvRewrite() {
+        return enableForceRuleBasedMvRewrite;
+    }
+
+    public void setEnableForceRuleBasedMvRewrite(boolean enableForceRuleBasedMvRewrite) {
+        this.enableForceRuleBasedMvRewrite = enableForceRuleBasedMvRewrite;
+    }
+
     public boolean isEnableMaterializedViewRewritePartitionCompensate() {
         return enableMaterializedViewRewritePartitionCompensate;
     }
@@ -2721,6 +2759,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCboMaterializedViewRewriteCandidateLimit(int limit) {
         this.cboMaterializedViewRewriteCandidateLimit = limit;
+    }
+
+    public int getCboMaterializedViewRewriteRelatedMVsLimit() {
+        return cboMaterializedViewRewriteRelatedMVsLimit;
+    }
+
+    public void setCboMaterializedViewRewriteRelatedMVsLimit(int cboMaterializedViewRewriteRelatedMVsLimit) {
+        this.cboMaterializedViewRewriteRelatedMVsLimit = cboMaterializedViewRewriteRelatedMVsLimit;
     }
 
     public String getQueryExcludingMVNames() {
@@ -2947,6 +2993,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.cboDeriveRangeJoinPredicate = cboDeriveRangeJoinPredicate;
     }
 
+
+    public boolean isCboSplitScanPredicateWithDate() {
+        return cboSplitScanPredicateWithDate;
+    }
+
+    public void setCboSplitScanPredicateWithDate(boolean cboSplitScanPredicateWithDate) {
+        this.cboSplitScanPredicateWithDate = cboSplitScanPredicateWithDate;
+    }
+
     public boolean isCboDeriveJoinIsNullPredicate() {
         return cboDeriveJoinIsNullPredicate;
     }
@@ -2961,6 +3016,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableShortCircuit() {
         return enableShortCircuit;
+    }
+
+    public boolean isEnablePrepareStmt() {
+        return enablePrepareStmt;
+    }
+
+    public void setEnablePrepareStmt(boolean enablePrepareStmt) {
+        this.enablePrepareStmt = enablePrepareStmt;
     }
 
     public void setLargeDecimalUnderlyingType(String type) {
@@ -3021,7 +3084,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setQuery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryTimeoutS));
         tResult.setQuery_delivery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryDeliveryTimeoutS));
         tResult.setEnable_profile(enableProfile);
-        tResult.setBig_query_profile_second_threshold(bigQueryProfileSecondThreshold);
+        tResult.setBig_query_profile_threshold(TimeValue.parseTimeValue(bigQueryProfileThreshold).getMillis());
+        tResult.setBig_query_profile_threshold_unit(TTimeUnit.MILLISECOND);
         tResult.setRuntime_profile_report_interval(runtimeProfileReportInterval);
         tResult.setBatch_size(chunkSize);
         tResult.setLoad_mem_limit(loadMemLimit);

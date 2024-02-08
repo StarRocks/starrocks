@@ -484,7 +484,7 @@ public class OlapTable extends Table {
         if (partitionInfo instanceof ExpressionRangePartitionInfo) {
             ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
             Preconditions.checkState(expressionRangePartitionInfo.getPartitionExprs().size() == 1);
-            expressionRangePartitionInfo.renameTableName(newName);
+            expressionRangePartitionInfo.renameTableName("", newName);
         }
     }
 
@@ -807,7 +807,7 @@ public class OlapTable extends Table {
         return Status.OK;
     }
 
-    public Status doAfterRestore(Database db, MvRestoreContext mvRestoreContext) throws DdlException {
+    public Status doAfterRestore(MvRestoreContext mvRestoreContext) throws DdlException {
         if (relatedMaterializedViews == null || relatedMaterializedViews.isEmpty()) {
             return Status.OK;
         }
@@ -837,10 +837,8 @@ public class OlapTable extends Table {
                 continue;
             }
             MaterializedView mv = (MaterializedView) mvTable;
-            if (mv.isActive()) {
-                continue;
-            }
-            mv.doAfterRestore(db, mvRestoreContext);
+            // Do this no matter whether mv is active or not to restore version map for mv rewrite.
+            mv.doAfterRestore(mvRestoreContext);
         }
         return Status.OK;
     }
@@ -890,6 +888,10 @@ public class OlapTable extends Table {
      */
     public List<Column> getKeyColumns() {
         return getColumns().stream().filter(Column::isKey).collect(Collectors.toList());
+    }
+
+    public List<Column> getKeyColumnsInOrder() {
+        return getFullSchema().stream().filter(Column::isKey).collect(Collectors.toList());
     }
 
     public List<Column> getKeyColumnsByIndexId(Long indexId) {
@@ -2748,6 +2750,11 @@ public class OlapTable extends Table {
         return tableProperty.getForeignKeyConstraints();
     }
 
+    /**
+     * Return Whether MaterializedView has foreignKey constraints or not. MV's constraints come from table properties
+     * and is different from normal table.
+     */
+    @Override
     public boolean hasForeignKeyConstraints() {
         return tableProperty != null && tableProperty.getForeignKeyConstraints() != null &&
                 !tableProperty.getForeignKeyConstraints().isEmpty();
@@ -2766,7 +2773,7 @@ public class OlapTable extends Table {
         tableProperty.setForeignKeyConstraints(foreignKeyConstraints);
     }
 
-    public Boolean getUseFastSchemaEvolution() {
+    public boolean getUseFastSchemaEvolution() {
         if (tableProperty != null) {
             return tableProperty.getUseFastSchemaEvolution();
         }
@@ -2916,6 +2923,8 @@ public class OlapTable extends Table {
                                     batchTaskMap.put(backendId, batchTask);
                                 }
                                 batchTask.addTask(dropTask);
+                                LOG.info("delete tablet[{}] from backend[{}] because table {}-{} is dropped",
+                                        tabletId, backendId, table.getId(), table.getName());
                             } // end for replicas
                         } // end for tablets
                     }

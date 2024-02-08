@@ -81,7 +81,7 @@ displayed_sidebar: "Chinese"
 修复了如下问题：
 
 - 向多副本的表中导入数据时，如果某些分区没有数据，则会写入很多无用日志。 [#28824](https://github.com/StarRocks/starrocks/issues/28824)
-- 主键模型表部分列更新时平均 row size 预估不准导致内存占用过多。 [#27485](https://github.com/StarRocks/starrocks/pull/27485)
+- 主键表部分列更新时平均 row size 预估不准导致内存占用过多。 [#27485](https://github.com/StarRocks/starrocks/pull/27485)
 - 某个 Tablet 出现某种 ERROR 状态之后触发 Clone 操作，会导致磁盘使用上升。 [#28488](https://github.com/StarRocks/starrocks/pull/28488)
 - Compaction 会触发冷数据写入 Local Cache。 [#28831](https://github.com/StarRocks/starrocks/pull/28831)
 
@@ -93,10 +93,10 @@ displayed_sidebar: "Chinese"
 
 #### 存算分离架构
 
-- 新增支持主键模型（Primary Key）表，暂不支持持久化索引。
-- 支持自增列属性 [AUTO_INCREMENT](../sql-reference/sql-statements/auto_increment.md)，提供表内全局唯一 ID，简化数据管理。
-- 支持[导入时自动创建分区和使用分区表达式定义分区规则](../table_design/expression_partitioning.md)，提高了分区创建的易用性和灵活性。
-- 支持[存储卷（Storage Volume）抽象](../deployment/shared_data/s3.md)，方便在存算分离架构中配置存储位置及鉴权等相关信息。后续创建库表时可以直接引用，提升易用性。
+- 新增支持主键表，暂不支持持久化索引。
+- 支持自增列属性 [AUTO_INCREMENT](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/auto_increment/)，提供表内全局唯一 ID，简化数据管理。
+- 支持[导入时自动创建分区和使用分区表达式定义分区规则](https://docs.starrocks.io/zh/docs/table_design/expression_partitioning/)，提高了分区创建的易用性和灵活性。
+- 支持[存储卷（Storage Volume）抽象](https://docs.starrocks.io/zh/docs/deployment/shared_data/s3/)，方便在存算分离架构中配置存储位置及鉴权等相关信息。后续创建库表时可以直接引用，提升易用性。
 
 #### 数据湖分析
 
@@ -179,7 +179,7 @@ displayed_sidebar: "Chinese"
 
 - 正式支持[大算子落盘 (Spill)](../administration/spill_to_disk.md) 功能，允许将部分阻塞算子的中间结果落盘。开启大算子落盘功能后，当查询中包含聚合、排序或连接算子时，StarRocks 会将以上算子的中间结果缓存到磁盘以减少内存占用，尽量避免查询因内存不足而导致查询失败。
 - 支持基数保持 JOIN 表（Cardinality-preserving Joins）的裁剪。在较多表的星型模型（比如 SSB）和雪花模型 (TPC-H) 的建模中、且查询只涉及到少量表的一些情况下，能裁剪掉一些不必要的表，从而提升 JOIN 的性能。
-- 执行 [UPDATE](../sql-reference/sql-statements/data-manipulation/UPDATE.md) 语句对主键模型表进行部分更新时支持启用列模式，适用于更新少部分列但是大量行的场景，更新性能可提升十倍。
+- 执行 [UPDATE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/UPDATE/) 语句对主键表进行部分更新时支持启用列模式，适用于更新少部分列但是大量行的场景，更新性能可提升十倍。
 - 优化统计信息收集，以降低对导入影响，提高收集性能。
 - 优化并行 Merge 算法，在全排序场景下整体性能最高可提升 2 倍。
 - 优化查询逻辑以不再依赖 DB 锁。

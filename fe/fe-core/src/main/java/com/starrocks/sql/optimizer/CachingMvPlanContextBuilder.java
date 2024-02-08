@@ -64,6 +64,13 @@ public class CachingMvPlanContextBuilder {
         }
     }
 
+    /**
+     * Get plan cache only if mv is present in the plan cache, otherwise null is returned.
+     */
+    public List<MvPlanContext> getPlanContextFromCacheIfPresent(MaterializedView mv) {
+        return mvPlanContextCache.getIfPresent(mv);
+    }
+
     private List<MvPlanContext> loadMvPlanContext(MaterializedView mv) {
         try {
             return MvPlanContextBuilder.getPlanContext(mv);

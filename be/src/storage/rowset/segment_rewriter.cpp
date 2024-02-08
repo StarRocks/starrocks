@@ -12,6 +12,7 @@
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
+#include "testutil/sync_point.h"
 #include "util/filesystem_util.h"
 #include "util/raw_container.h"
 #include "util/slice.h"
@@ -62,6 +63,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, FileInfo* dest_path
     uint64_t segment_file_size;
     RETURN_IF_ERROR(writer.append_chunk(*chunk));
     RETURN_IF_ERROR(writer.finalize_columns(&index_size));
+    TEST_ERROR_POINT("SegmentRewriter::rewrite1");
     RETURN_IF_ERROR(writer.finalize_footer(&segment_file_size));
 
     dest_path->size = segment_file_size;
@@ -152,6 +154,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
     uint64_t segment_file_size;
     RETURN_IF_ERROR(writer.append_chunk(*chunk));
     RETURN_IF_ERROR(writer.finalize_columns(&index_size));
+    TEST_ERROR_POINT("SegmentRewriter::rewrite2");
     RETURN_IF_ERROR(writer.finalize_footer(&segment_file_size));
 
     return Status::OK();
@@ -190,11 +193,13 @@ Status SegmentRewriter::rewrite(const std::string& src_path, FileInfo* dest_path
     Schema src_schema = ChunkHelper::convert_schema(tschema, src_column_ids);
 
     size_t footer_sine_hint = 16 * 1024;
-    auto fill_cache = false;
     auto tablet_mgr = tablet->tablet_mgr();
     auto segment_path = tablet->segment_location(op_write.rowset().segments(segment_id));
     auto segment_info = FileInfo{.path = segment_path};
-    ASSIGN_OR_RETURN(auto segment, tablet_mgr->load_segment(segment_info, segment_id, &footer_sine_hint, fill_cache,
+    // not fill data and meta cache
+    auto fill_cache = false;
+    LakeIOOptions lake_io_opts{fill_cache, -1};
+    ASSIGN_OR_RETURN(auto segment, tablet_mgr->load_segment(segment_info, segment_id, &footer_sine_hint, lake_io_opts,
                                                             fill_cache, tschema));
     uint32_t num_rows = segment->num_rows();
 
@@ -246,6 +251,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, FileInfo* dest_path
     uint64_t segment_file_size;
     RETURN_IF_ERROR(writer.append_chunk(*chunk));
     RETURN_IF_ERROR(writer.finalize_columns(&index_size));
+    TEST_ERROR_POINT("SegmentRewriter::rewrite3");
     RETURN_IF_ERROR(writer.finalize_footer(&segment_file_size));
 
     dest_path->size = segment_file_size;
@@ -280,6 +286,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const TabletSchemaC
     uint64_t segment_file_size;
     RETURN_IF_ERROR(writer.append_chunk(*chunk));
     RETURN_IF_ERROR(writer.finalize_columns(&index_size));
+    TEST_ERROR_POINT("SegmentRewriter::rewrite4");
     RETURN_IF_ERROR(writer.finalize_footer(&segment_file_size));
 
     return Status::OK();

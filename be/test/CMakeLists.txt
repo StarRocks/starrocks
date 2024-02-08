@@ -42,6 +42,7 @@ set(EXEC_FILES
         ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/query_context_manger_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
+        ./exec/pipeline/sink/table_function_table_sink_operator_test.cpp
         ./exec/query_cache/query_cache_test.cpp
         ./exec/query_cache/transform_operator.cpp
         ./exec/schema_columns_scanner_test.cpp
@@ -278,6 +279,8 @@ set(EXEC_FILES
         ./storage/push_handler_test.cpp
         ./storage/range_test.cpp
         ./storage/replication_txn_manager_test.cpp
+        ./storage/replication_utils_test.cpp
+        ./storage/segment_stream_converter_test.cpp
         ./storage/row_source_mask_test.cpp
         ./storage/union_iterator_test.cpp
         ./storage/unique_iterator_test.cpp
@@ -286,6 +289,7 @@ set(EXEC_FILES
         ./storage/rowset_merger_test.cpp
         ./storage/schema_change_test.cpp
         ./storage/row_store_encoder_test.cpp
+        ./storage/segment_flush_executor_test.cpp
         ./storage/storage_engine_test.cpp
         ./storage/binlog_test_base.cpp
         ./storage/binlog_file_test.cpp

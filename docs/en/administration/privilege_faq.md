@@ -18,8 +18,8 @@ SET GLOBAL activate_all_roles_on_login = TRUE;
 
 However, we recommend that you follow the principle of "least privilege" by setting default roles with limited privileges to prevent potential risks. For example:
 
-- For common users, you can set the `read_only` role that has only the SELECT privilege as the default role, while avoiding setting roles with privileges like ALTER, DROP, and INSERT as default roles.
-- For administrators, you can set the `db_admin` role as the default role, while avoiding setting the `node_admin` role, which has the privilege to add and drop nodes, as the default role.
+- Common users can set the `read_only` role that has only the SELECT privilege as the default role, while avoiding setting roles with privileges like ALTER, DROP, and INSERT as default roles.
+- Administrators can set the `db_admin` role as the default role, while avoiding setting the `node_admin` role, which has the privilege to add and drop nodes, as the default role.
 
 This approach helps ensure that users are assigned roles with appropriate permissions, reducing the risk of unintended operations.
 

@@ -36,6 +36,7 @@
 
 #include "common/status.h"
 #include "storage/olap_common.h"
+#include "storage/options.h"
 #include "storage/range.h"
 #include "storage/rowset/common.h"
 
@@ -55,7 +56,7 @@ struct ColumnIteratorOptions {
     // reader statistics
     OlapReaderStatistics* stats = nullptr;
     bool use_page_cache = false;
-    bool fill_data_cache = true;
+    LakeIOOptions lake_io_opts{.fill_data_cache = true};
 
     // check whether column pages are all dictionary encoding.
     bool check_dict_encoding = false;

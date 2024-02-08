@@ -102,8 +102,29 @@ public:
         }
         return MonotonicNanos() - _query_begin_time > _big_query_profile_threshold_ns;
     }
-    void set_big_query_profile_threshold(int64_t big_query_profile_threshold_s) {
-        _big_query_profile_threshold_ns = 1'000'000'000L * big_query_profile_threshold_s;
+    void set_big_query_profile_threshold(int64_t big_query_profile_threshold,
+                                         TTimeUnit::type big_query_profile_threshold_unit) {
+        int64_t factor = 1;
+        switch (big_query_profile_threshold_unit) {
+        case TTimeUnit::NANOSECOND:
+            factor = 1;
+            break;
+        case TTimeUnit::MICROSECOND:
+            factor = 1'000L;
+            break;
+        case TTimeUnit::MILLISECOND:
+            factor = 1'000'000L;
+            break;
+        case TTimeUnit::SECOND:
+            factor = 1'000'000'000L;
+            break;
+        case TTimeUnit::MINUTE:
+            factor = 60 * 1'000'000'000L;
+            break;
+        default:
+            DCHECK(false);
+        }
+        _big_query_profile_threshold_ns = factor * big_query_profile_threshold;
     }
     void set_runtime_profile_report_interval(int64_t runtime_profile_report_interval_s) {
         _runtime_profile_report_interval_ns = 1'000'000'000L * runtime_profile_report_interval_s;
@@ -138,6 +159,8 @@ public:
                           RuntimeState* state = nullptr);
     std::shared_ptr<MemTracker> mem_tracker() { return _mem_tracker; }
     MemTracker* connector_scan_mem_tracker() { return _connector_scan_mem_tracker.get(); }
+
+    MemTracker* operator_mem_tracker(int32_t plan_node_id);
 
     Status init_query_once(workgroup::WorkGroup* wg, bool enable_group_level_query_queue);
     /// Release the workgroup token only once to avoid double-free.
@@ -230,6 +253,8 @@ private:
     TPipelineProfileLevel::type _profile_level;
     std::shared_ptr<MemTracker> _mem_tracker;
     std::shared_ptr<MemTracker> _connector_scan_mem_tracker;
+    std::mutex _operator_mem_trackers_lock;
+    std::unordered_map<int32_t, std::shared_ptr<MemTracker>> _operator_mem_trackers;
     ObjectPool _object_pool;
     DescriptorTbl* _desc_tbl = nullptr;
     std::once_flag _query_trace_init_flag;

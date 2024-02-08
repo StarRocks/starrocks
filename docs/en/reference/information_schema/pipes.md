@@ -6,6 +6,12 @@ displayed_sidebar: "English"
 
 `pipes` provides information about all pipes stored in the current or specified database. This view is supported from StarRocks v3.2 onwards.
 
+:::note
+
+You can also use [SHOW PIPES](../../sql-reference/sql-statements/data-manipulation/SHOW_PIPES.md) to view the pipes stored in a specified database or in the current database in use. This command is also supported from v3.2 onwards.
+
+:::
+
 The following fields are provided in `pipes`:
 
 | **Field**     | **Description**                                              |

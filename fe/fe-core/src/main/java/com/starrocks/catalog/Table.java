@@ -118,7 +118,9 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         @SerializedName("PAIMON")
         PAIMON,
         @SerializedName("HIVE_VIEW")
-        HIVE_VIEW;
+        HIVE_VIEW,
+        @SerializedName("ODPS")
+        ODPS;
 
         public static String serialize(TableType type) {
             if (type == CLOUD_NATIVE) {
@@ -290,12 +292,16 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return type == TableType.MATERIALIZED_VIEW;
     }
 
-    public boolean isView() {
+    public boolean isOlapView() {
         return type == TableType.VIEW;
     }
 
     public boolean isHiveView() {
         return type == TableType.HIVE_VIEW;
+    }
+
+    public boolean isView() {
+        return isOlapView() || isHiveView();
     }
 
     public boolean isOlapTableOrMaterializedView() {
@@ -348,6 +354,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     public boolean isPaimonTable() {
         return type == TableType.PAIMON;
+    }
+
+    public boolean isOdpsTable() {
+        return type == TableType.ODPS;
     }
 
     public boolean isJDBCTable() {
@@ -453,6 +463,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
             table = LakeMaterializedView.read(in);
             table.setTypeRead(true);
             return table;
+        } else if (type == TableType.ODPS) {
+            table = new OdpsTable();
         } else {
             throw new IOException("Unknown table type: " + type.name());
         }
@@ -774,6 +786,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     public List<ForeignKeyConstraint> getForeignKeyConstraints() {
         return this.foreignKeyConstraints;
+    }
+
+    public boolean hasForeignKeyConstraints() {
+        return this.foreignKeyConstraints != null && !this.foreignKeyConstraints.isEmpty();
     }
 
     public synchronized List<Long> allocatePartitionIdByKey(List<PartitionKey> keys) {

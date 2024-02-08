@@ -82,7 +82,7 @@ else
     echo "JEMALLOC_CONF from conf is '$JEMALLOC_CONF'"
 fi
 # enable coredump when BE build with ASAN
-export ASAN_OPTIONS=abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1
+export ASAN_OPTIONS="abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1:detect_stack_use_after_return=1"
 export LSAN_OPTIONS=suppressions=${STARROCKS_HOME}/conf/asan_suppressions.conf
 
 

@@ -863,19 +863,11 @@ INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM hive_table
 
 ## Grant privileges on Hive tables and views
 
-You can use the [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) statement to grant the privileges on all tables or views within a Hive catalog to a specific role.
+You can use the [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) statement to grant the privileges on all tables and views within a Hive catalog to a specific role. The command syntax is as follows:
 
-- Grant a role the privilege to query all tables within a Hive catalog:
-
-  ```SQL
-  GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE <role_name>
-  ```
-
-- Grant a role the privilege to query all views within a Hive catalog:
-
-  ```SQL
-  GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE <role_name>
-  ```
+```SQL
+GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE <role_name>
+```
 
 For example, use the following commands to create a role named `hive_role_table`, switch to the Hive catalog `hive_catalog`, and then grant the role `hive_role_table` the privilege to query all tables and views within the Hive catalog `hive_catalog`:
 
@@ -886,11 +878,8 @@ CREATE ROLE hive_role_table;
 -- Switch to the Hive catalog hive_catalog.
 SET CATALOG hive_catalog;
 
--- Grant the role hive_role_table the privilege to query all tables within the Hive catalog hive_catalog.
+-- Grant the role hive_role_table the privilege to query all tables and views within the Hive catalog hive_catalog.
 GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE hive_role_table;
-
--- Grant the role hive_role_table the privilege to query all views within the Hive catalog hive_catalog.
-GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE hive_role_table;
 ```
 
 ## Create a Hive database

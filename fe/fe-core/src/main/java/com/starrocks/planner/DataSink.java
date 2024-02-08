@@ -41,7 +41,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TExplainLevel;
 

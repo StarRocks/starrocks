@@ -145,9 +145,11 @@ SELECT /*+ SET_VAR
 
 用于指定在查询执行过程中，各个节点传输的单个数据包的行数。默认一个数据包的行数为 1024 行，即源端节点每产生 1024 行数据后，打包发给目的节点。较大的行数，会在扫描大数据量场景下提升查询的吞吐率，但可能会在小查询场景下增加查询延迟。同时，也会增加查询的内存开销。建议设置范围 1024 至 4096。
 
-### big_query_profile_second_threshold （3.1 及以后）
+### big_query_profile_threshold （3.1 及以后）
 
-当会话变量 `enable_profile` 设置为 `false` 且查询时间超过 `big_query_profile_second_threshold` 设定的阈值时，则会生成 Profile。
+当会话变量 `enable_profile` 设置为 `false` 且查询时间超过 `big_query_profile_threshold` 设定的阈值时，则会生成 Profile。
+
+注意：在版本 v3.1.5 至 v3.1.7 以及 v3.2.0 至 v3.2.2 中，我们引入了 `big_query_profile_second_threshold` 参数，用于设定大型查询的阈值。而在 v3.1.8、v3.2.3 及后续版本中，此参数被 `big_query_profile_threshold` 替代，以便提供更加灵活的配置选项。
 
 ### cbo_decimal_cast_string_strict （2.5.14 及以后）
 
@@ -457,7 +459,7 @@ Global runtime filter 开关。Runtime Filter（简称 RF）在运行时对数�
 
 在一个分布式的查询执行计划中，上层节点通常有一个或多个 exchange node 用于接收来自下层节点在不同 BE 上的执行实例的数据。通常 exchange node 数量等于下层节点执行实例数量。
 
-在一些聚合查询场景下，如果底层需要扫描的数据量较大，但聚合之后的数据量很小，则可以尝试修改此变量为一个较小的值，可以降低此类查询的资源开销。如在 DUPLICATE KEY 明细模型上进行聚合查询的场景。
+在一些聚合查询场景下，如果底层需要扫描的数据量较大，但聚合之后的数据量很小，则可以尝试修改此变量为一个较小的值，可以降低此类查询的资源开销。如在 DUPLICATE KEY 明细表上进行聚合查询的场景。
 
 ### parallel_fragment_exec_instance_num
 
@@ -658,6 +660,17 @@ set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
 ### time_zone
 
 用于设置当前会话的时区。时区会对某些时间函数的结果产生影响。
+
+### trace_log_mode
+
+- 含义：用于控制 Query Trace Profile 的 Logs 的输出位置。有效值包括：
+  - `command`：在执行 TRACE LOGS 后作为 **Explain String** 返回。
+  - `file`：在 FE 日志文件 **fe.log** 中以 `FileLogTracer` 为类名返回。
+
+  有关 Query Trace Profile 的更多信息，请参阅 [Query Trace Profile](../developers/trace-tools/query_trace_profile.md)。
+
+- 默认值：`command`
+- 引入版本：v3.2.0
 
 ### transaction_read_only
 

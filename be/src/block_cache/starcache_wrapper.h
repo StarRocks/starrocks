@@ -40,7 +40,7 @@ public:
 
     Status remove(const std::string& key) override;
 
-    std::unordered_map<std::string, double> cache_stats() override;
+    const DataCacheMetrics cache_metrics(int level) override;
 
     void record_read_remote(size_t size, int64_t lateny_us) override;
 

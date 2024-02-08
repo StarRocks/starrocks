@@ -50,6 +50,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
+import static java.util.Objects.requireNonNull;
+
 /**
  * Hash Distribution Info.
  */
@@ -63,12 +65,12 @@ public class HashDistributionInfo extends DistributionInfo {
 
     public HashDistributionInfo() {
         super();
-        this.distributionColumns = new ArrayList<Column>();
+        this.distributionColumns = new ArrayList<>();
     }
 
     public HashDistributionInfo(int bucketNum, List<Column> distributionColumns) {
         super(DistributionInfoType.HASH);
-        this.distributionColumns = distributionColumns;
+        this.distributionColumns = requireNonNull(distributionColumns, "distributionColumns is null");
         this.bucketNum = bucketNum;
     }
 
@@ -77,6 +79,7 @@ public class HashDistributionInfo extends DistributionInfo {
         return true;
     }
 
+    @Override
     public List<Column> getDistributionColumns() {
         return distributionColumns;
     }

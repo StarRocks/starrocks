@@ -342,6 +342,8 @@ private:
     // pk index major compaction function
     void* _pk_index_major_compaction_thread_callback(void* arg);
 
+    void* _pk_dump_thread_callback(void* arg);
+
 #ifdef USE_STAROS
     // local pk index of SHARED_DATA gc/evict function
     void* _local_pk_index_shared_data_gc_evict_thread_callback(void* arg);
@@ -417,6 +419,8 @@ private:
     std::vector<std::thread> _manual_compaction_threads;
     // thread to run pk index major compaction
     std::thread _pk_index_major_compaction_thread;
+    // thread to generate pk dump
+    std::thread _pk_dump_thread;
     // thread to gc/evict local pk index in sharded_data
     std::thread _local_pk_index_shared_data_gc_evict_thread;
 

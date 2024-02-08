@@ -112,6 +112,7 @@ public class TaskManager {
             registerPeriodicalTask();
             dispatchScheduler.scheduleAtFixedRate(() -> {
                 if (!taskRunManager.tryTaskRunLock()) {
+                    LOG.warn("TaskRun scheduler cannot acquire the lock");
                     return;
                 }
                 try {
@@ -198,9 +199,7 @@ public class TaskManager {
     }
 
     public void createTask(Task task, boolean isReplay) throws DdlException {
-        if (!tryTaskLock()) {
-            throw new DdlException("Failed to get task lock when create Task [" + task.getName() + "]");
-        }
+        takeTaskLock();
         try {
             if (nameToTaskMap.containsKey(task.getName())) {
                 throw new DdlException("Task [" + task.getName() + "] already exists");
@@ -340,10 +339,7 @@ public class TaskManager {
     }
 
     public void dropTasks(List<Long> taskIdList, boolean isReplay) {
-        // keep nameToTaskMap and manualTaskMap consist
-        if (!tryTaskLock()) {
-            return;
-        }
+        takeTaskLock();
         try {
             for (long taskId : taskIdList) {
                 Task task = idToTaskMap.get(taskId);
@@ -465,6 +461,17 @@ public class TaskManager {
             LOG.warn("got exception while getting task lock", e);
         }
         return false;
+    }
+
+    /**
+     * Keep trying to get the lock until succeed
+     */
+    private void takeTaskLock() {
+        int i = 1;
+        while (!tryTaskLock()) {
+            LOG.warn("fail to get TaskManager lock after retry {} times", i);
+            i++;
+        }
     }
 
     public void taskUnlock() {
@@ -886,9 +893,7 @@ public class TaskManager {
     }
 
     public boolean containTask(String taskName) {
-        if (!tryTaskLock()) {
-            throw new DmlException("Failed to get task lock when check Task [" + taskName + "]");
-        }
+        takeTaskLock();
         try {
             return nameToTaskMap.containsKey(taskName);
         } finally {
@@ -897,9 +902,7 @@ public class TaskManager {
     }
 
     public Task getTask(String taskName) {
-        if (!tryTaskLock()) {
-            throw new DmlException("Failed to get task lock when get Task [" + taskName + "]");
-        }
+        takeTaskLock();
         try {
             return nameToTaskMap.get(taskName);
         } finally {

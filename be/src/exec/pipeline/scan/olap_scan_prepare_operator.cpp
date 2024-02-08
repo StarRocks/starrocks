@@ -39,7 +39,7 @@ Status OlapScanPrepareOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
 
     RETURN_IF_ERROR(_ctx->prepare(state));
-    RETURN_IF_ERROR(_ctx->capture_tablet_rowsets(_morsel_queue->olap_scan_ranges()));
+    RETURN_IF_ERROR(_ctx->capture_tablet_rowsets(_morsel_queue->prepare_olap_scan_ranges()));
 
     return Status::OK();
 }

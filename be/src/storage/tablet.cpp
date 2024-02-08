@@ -1443,6 +1443,7 @@ void Tablet::build_tablet_report_info(TTabletInfo* tablet_info) {
     tablet_info->__set_path_hash(_data_dir->path_hash());
     tablet_info->__set_enable_persistent_index(_tablet_meta->get_enable_persistent_index());
     tablet_info->__set_primary_index_cache_expire_sec(_tablet_meta->get_primary_index_cache_expire_sec());
+    tablet_info->__set_tablet_schema_version(_max_version_schema->schema_version());
     if (_tablet_meta->get_binlog_config() != nullptr) {
         tablet_info->__set_binlog_config_version(_tablet_meta->get_binlog_config()->version);
     }
@@ -1639,6 +1640,7 @@ void Tablet::get_basic_info(TabletBasicInfo& info) {
     info.data_dir = data_dir()->path();
     info.shard_id = shard_id();
     info.schema_hash = schema_hash();
+    info.medium_type = data_dir()->storage_medium();
     if (_updates != nullptr) {
         _updates->get_basic_info_extra(info);
     } else {
@@ -1646,6 +1648,7 @@ void Tablet::get_basic_info(TabletBasicInfo& info) {
         info.max_version = _timestamped_version_tracker.get_max_continuous_version();
         info.min_version = _timestamped_version_tracker.get_min_readable_version();
         info.num_rowset = _tablet_meta->version_count();
+        info.num_segment = _tablet_meta->segment_count();
         info.num_row = _tablet_meta->num_rows();
         info.data_size = _tablet_meta->tablet_footprint();
     }

@@ -326,7 +326,7 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.Iterator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -1577,49 +1577,49 @@ public class GlobalStateMgr {
                         .put(SRMetaBlockID.STORAGE_VOLUME_MGR, storageVolumeMgr::load)
                         .put(SRMetaBlockID.REPLICATION_MGR, replicationMgr::load)
                         .build();
+
+                Set<SRMetaBlockID> metaMgrMustExists = new HashSet<>(loadImages.keySet());
                 try {
                     loadHeaderV2(dis);
-
-                    Iterator<Map.Entry<SRMetaBlockID, SRMetaBlockLoader>> iterator = loadImages.entrySet().iterator();
-                    Map.Entry<SRMetaBlockID, SRMetaBlockLoader> entry = iterator.next();
                     while (true) {
-                        SRMetaBlockID srMetaBlockID = entry.getKey();
                         SRMetaBlockReader reader = new SRMetaBlockReader(dis);
-                        if (!reader.getHeader().getSrMetaBlockID().equals(srMetaBlockID)) {
-                            /*
-                              The expected read module does not match the module stored in the image,
-                              and the json chunk is skipped directly. This usually occurs in several situations.
-                              1. When the obsolete image code is deleted.
-                              2. When the new version rolls back to the old version,
-                                 the old version ignores the functions of the new version
-                             */
-                            LOG.warn(String.format("Ignore this invalid meta block, sr meta block id mismatch" +
-                                    "(expect %s actual %s)", srMetaBlockID, reader.getHeader().getSrMetaBlockID()));
-                            reader.close();
-                            continue;
-                        }
+                        SRMetaBlockID srMetaBlockID = reader.getHeader().getSrMetaBlockID();
 
                         try {
-                            SRMetaBlockLoader imageLoader = entry.getValue();
+                            SRMetaBlockLoader imageLoader = loadImages.get(srMetaBlockID);
+                            if (imageLoader == null) {
+                                /*
+                                 * The expected read module does not match the module stored in the image,
+                                 * and the json chunk is skipped directly. This usually occurs in several situations.
+                                 * 1. When the obsolete image code is deleted.
+                                 * 2. When the new version rolls back to the old version,
+                                 *    the old version ignores the functions of the new version
+                                 */
+                                LOG.warn(String.format("Ignore this invalid meta block, sr meta block id mismatch" +
+                                        "(expect sr meta block id %s)", srMetaBlockID));
+                                continue;
+                            }
+
                             imageLoader.apply(reader);
+                            metaMgrMustExists.remove(srMetaBlockID);
                             LOG.info("Success load StarRocks meta block " + srMetaBlockID + " from image");
                         } catch (SRMetaBlockEOFException srMetaBlockEOFException) {
                             /*
-                              The number of json expected to be read is more than the number of json actually stored
-                              in the image, which usually occurs when the module adds new functions.
+                             * The number of json expected to be read is more than the number of json actually stored in the image
                              */
+                            metaMgrMustExists.remove(srMetaBlockID);
                             LOG.warn("Got EOF exception, ignore, ", srMetaBlockEOFException);
-                        } catch (SRMetaBlockException srMetaBlockException) {
-                            LOG.error("Load meta block failed ", srMetaBlockException);
-                            throw new IOException("Load meta block failed ", srMetaBlockException);
                         } finally {
                             reader.close();
                         }
-                        if (iterator.hasNext()) {
-                            entry = iterator.next();
-                        } else {
-                            break;
-                        }
+                    }
+                } catch (EOFException exception) {
+                    if (!metaMgrMustExists.isEmpty()) {
+                        LOG.warn("Miss meta block [" + Joiner.on(",").join(new ArrayList<>(metaMgrMustExists)) + "], " +
+                                "This may not be a fatal error. It may be because there are new features in the version " +
+                                "you upgraded this time, but there is no relevant metadata.");
+                    } else {
+                        LOG.info("Load meta-image EOF, successful loading all requires meta module");
                     }
                 } catch (SRMetaBlockException e) {
                     LOG.error("load meta block failed ", e);
@@ -2178,7 +2178,7 @@ public class GlobalStateMgr {
                     if (cursor == null) {
                         // 1. set replay to the end
                         LOG.info("start to replay from {}", replayedJournalId.get());
-                        cursor = journal.read(replayedJournalId.get() + 1, JournalCursor.CUROSR_END_KEY);
+                        cursor = journal.read(replayedJournalId.get() + 1, JournalCursor.CURSOR_END_KEY);
                     } else {
                         cursor.refresh();
                     }
@@ -2351,7 +2351,7 @@ public class GlobalStateMgr {
             if (feType != FrontendNodeType.LEADER) {
                 journalObservable.notifyObservers(replayedJournalId.get());
             }
-            if (MetricRepo.isInit) {
+            if (MetricRepo.hasInit) {
                 // Metric repo may not init after this replay thread start
                 MetricRepo.COUNTER_EDIT_LOG_READ.increase(1L);
             }
@@ -2698,6 +2698,7 @@ public class GlobalStateMgr {
                         .append(olapTable.getAutomaticBucketSize()).append("\"");
             }
 
+            Map<String, String> properties = olapTable.getTableProperty().getProperties();
             if (table.isCloudNativeTable()) {
                 Map<String, String> storageProperties = olapTable.getProperties();
 
@@ -2782,9 +2783,6 @@ public class GlobalStateMgr {
                     sb.append(olapTable.getUseFastSchemaEvolution()).append("\"");
                 }
 
-                // storage media
-                Map<String, String> properties = olapTable.getTableProperty().getProperties();
-
                 if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
                     sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
                             .append("\" = \"");
@@ -2798,13 +2796,6 @@ public class GlobalStateMgr {
                             .append(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)
                             .append("\" = \"")
                             .append(storageCoolDownTTL).append("\"");
-                }
-
-                // partition live number
-                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
-                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)
-                            .append("\" = \"");
-                    sb.append(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)).append("\"");
                 }
 
                 // unique constraint
@@ -2835,6 +2826,13 @@ public class GlobalStateMgr {
                         sb.append(olapTable.storageType()).append("\"");
                     }
                 }
+            }
+
+            // partition live number
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)
+                        .append("\" = \"");
+                sb.append(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)).append("\"");
             }
 
             if (olapTable.primaryIndexCacheExpireSec() > 0) {
@@ -3830,7 +3828,7 @@ public class GlobalStateMgr {
             table = metadataMgr.getTable(catalogName, dbName, tblName);
             if (!(table instanceof HiveMetaStoreTable) && !(table instanceof HiveView) && !(table instanceof IcebergTable)) {
                 throw new StarRocksConnectorException(
-                        "table : " + tableName + " not exists, or is not hive/hudi/iceberg external table/view");
+                        "table : " + tableName + " not exists, or is not hive/hudi/iceberg/odps external table/view");
             }
         } finally {
             db.readUnlock();

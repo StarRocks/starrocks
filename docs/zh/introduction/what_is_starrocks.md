@@ -40,7 +40,7 @@ StarRocks 可以满足企业级用户的多种分析需求，包括 OLAP (Online
 
 ### 实时数据仓库
 
-StarRocks 设计和实现了 Primary-Key 模型，能够实时更新数据并极速查询，可以秒级同步 TP (Transaction Processing) 数据库的变化，构建实时数仓，业务场景包括：
+StarRocks 设计和实现了主键表，能够实时更新数据并极速查询，可以秒级同步 TP (Transaction Processing) 数据库的变化，构建实时数仓，业务场景包括：
 
 - 电商大促数据分析
 

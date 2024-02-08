@@ -55,6 +55,7 @@ public:
     struct IORange {
         uint64_t offset;
         uint64_t size;
+        bool is_active;
     };
     enum class PrepareCacheScope { READ_FULL_FILE, READ_FULL_STRIPE, READ_FULL_ROW_INDEX };
 
@@ -93,9 +94,10 @@ public:
 
     virtual void prepareCache(PrepareCacheScope scope, uint64_t offset, uint64_t length);
 
-    virtual bool isIORangesEnabled() const;
+    virtual bool isIOCoalesceEnabled() const;
+    virtual bool isIOAdaptiveCoalesceEnabled() const;
     virtual void clearIORanges();
-    virtual void setIORanges(std::vector<InputStream::IORange>& io_ranges);
+    virtual void setIORanges(std::vector<InputStream::IORange>& io_ranges, const bool is_from_stripe);
 };
 
 /**

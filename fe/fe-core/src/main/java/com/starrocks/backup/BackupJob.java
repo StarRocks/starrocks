@@ -96,6 +96,8 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static com.starrocks.scheduler.MVActiveChecker.MV_BACKUP_INACTIVE_REASON;
+
 public class BackupJob extends AbstractJob {
     private static final Logger LOG = LogManager.getLogger(BackupJob.class);
 
@@ -509,8 +511,8 @@ public class BackupJob extends AbstractJob {
                 }
                 if (copiedTbl.isMaterializedView()) {
                     MaterializedView copiedMv = (MaterializedView) copiedTbl;
-                    copiedMv.setInactiveAndReason(String.format("Set the materialized view %s inactive in backup and " +
-                            "active it in restore if possible", copiedMv.getName()));
+                    copiedMv.setInactiveAndReason(String.format("Set the materialized view %s inactive in backup " +
+                            "because %s", copiedMv.getName(), MV_BACKUP_INACTIVE_REASON));
                 }
                 copiedTables.add(copiedTbl);
             }
@@ -763,7 +765,7 @@ public class BackupJob extends AbstractJob {
         return true;
     }
 
-    private boolean validateLocalFile(String filePath) {
+    protected boolean validateLocalFile(String filePath) {
         File file = new File(filePath);
         if (!file.exists() || !file.canRead()) {
             status = new Status(ErrCode.COMMON_ERROR, "file is invalid: " + filePath);

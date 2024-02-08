@@ -88,7 +88,7 @@ select count(*) from information_schema.be_tablets t1, information_schema.tables
 alter table t set('bucket_size'='1');
 -- result:
 -- !result
--- name: test_range_partition
+-- name: test_range_partition @sequential
 create database ttt;
 -- result:
 -- !result
@@ -146,7 +146,7 @@ select * from t;
 2021-01-01	1
 2021-01-05	1
 -- !result
--- name: test_list_partition
+-- name: test_list_partition @sequential
 create database ddd;
 -- result:
 -- !result
@@ -204,7 +204,7 @@ select * from t;
 2021-01-01	1
 2021-01-03	1
 -- !result
--- name: test_expr_partition
+-- name: test_expr_partition @sequential
 create database eee;
 -- result:
 -- !result

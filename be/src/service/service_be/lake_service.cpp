@@ -34,7 +34,6 @@
 #include "storage/lake/transactions.h"
 #include "storage/lake/vacuum.h"
 #include "testutil/sync_point.h"
-#include "util/bthreads/semaphore.h"
 #include "util/countdown_latch.h"
 #include "util/defer_op.h"
 #include "util/thread.h"
@@ -120,38 +119,6 @@ bvar::PassiveStatus<int> g_publish_version_active_tasks("lake_publish_version_ac
 bvar::PassiveStatus<int> g_vacuum_queued_tasks("lake_vacuum_queued_tasks", get_num_vacuum_queued_tasks, nullptr);
 bvar::PassiveStatus<int> g_vacuum_active_tasks("lake_vacuum_active_tasks", get_num_vacuum_active_tasks, nullptr);
 
-// A class use to limit the number of tasks submitted to the thread pool.
-class ConcurrencyLimitedThreadPoolToken {
-public:
-    explicit ConcurrencyLimitedThreadPoolToken(ThreadPool* pool, int max_concurrency)
-            : _pool(pool), _sem(std::make_shared<bthreads::CountingSemaphore<>>(max_concurrency)) {}
-
-    DISALLOW_COPY_AND_MOVE(ConcurrencyLimitedThreadPoolToken);
-
-    Status submit_func(std::function<void()> task, std::chrono::system_clock::time_point deadline) {
-        if (!_sem->try_acquire_until(deadline)) {
-            auto t = MilliSecondsSinceEpochFromTimePoint(deadline);
-            return Status::TimedOut(fmt::format("acquire semaphore reached deadline={}", t));
-        }
-        auto task_with_semaphore_release = [sem = _sem, task = std::move(task)]() {
-            task();
-            // The `ConcurrencyLimitedThreadPoolToken` object may have been destroyed
-            // before `release()` the semaphore, so we use `std::shared_ptr` to manage
-            // the semaphore to ensure it's still alive when calling `release()`.
-            sem->release();
-        };
-        auto st = _pool->submit_func(std::move(task_with_semaphore_release));
-        if (!st.ok()) {
-            _sem->release();
-        }
-        return st;
-    }
-
-private:
-    ThreadPool* _pool;
-    std::shared_ptr<bthreads::CountingSemaphore<>> _sem;
-};
-
 } // namespace
 
 using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
@@ -193,7 +160,8 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     bthread::Mutex response_mtx;
     scoped_refptr<Trace> trace_gurad = scoped_refptr<Trace>(new Trace());
     Trace* trace = trace_gurad.get();
-    TRACE_TO(trace, "got request. txn_id=$0 new_version=$1 #tablets=$2", request->txn_ids(0), request->new_version(),
+    TRACE_TO(trace, "got request. txn_ids=$0 base_version=$1 new_version=$2 #tablets=$3",
+             JoinInts(request->txn_ids(), ","), request->base_version(), request->new_version(),
              request->tablet_ids_size());
 
     Status::OK().to_protobuf(response->mutable_status());
@@ -231,7 +199,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
             } else {
                 g_publish_version_failed_tasks << 1;
                 LOG(WARNING) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
-                             << " txn_id=" << txns[0] << " version=" << new_version;
+                             << " txn_ids=" << JoinInts(txns, ",") << " version=" << new_version;
                 std::lock_guard l(response_mtx);
                 response->add_failed_tablets(tablet_id);
                 res.status().to_protobuf(response->mutable_status());
@@ -244,7 +212,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
         if (!st.ok()) {
             g_publish_version_failed_tasks << 1;
             LOG(WARNING) << "Fail to submit publish version task: " << st << ". tablet_id=" << tablet_id
-                         << " txn_id=" << request->txn_ids()[0];
+                         << " txn_ids=" << JoinInts(request->txn_ids(), ",");
             std::lock_guard l(response_mtx);
             response->add_failed_tablets(tablet_id);
             st.to_protobuf(response->mutable_status());
@@ -256,10 +224,12 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     auto cost = butil::gettimeofday_us() - start_ts;
     auto is_slow = cost >= config::lake_publish_version_slow_log_ms * 1000;
     if (config::lake_enable_publish_version_trace_log && is_slow) {
-        LOG(INFO) << "Published txn " << request->txn_ids(0) << ". cost=" << cost << "us\n" << trace->DumpToString();
+        LOG(INFO) << "Published txns=" << JoinInts(request->txn_ids(), ",") << ". cost=" << cost << "us\n"
+                  << trace->DumpToString();
     } else if (is_slow) {
-        LOG(INFO) << "Published txn " << request->txn_ids(0) << ". #tablets=" << request->tablet_ids_size()
-                  << " cost=" << cost << "us, trace: " << trace->MetricsAsJSON();
+        LOG(INFO) << "Published txns=" << JoinInts(request->txn_ids(), ",")
+                  << ". tablets=" << JoinInts(request->tablet_ids(), ",") << " cost=" << cost
+                  << "us, trace: " << trace->MetricsAsJSON();
     }
     TEST_SYNC_POINT("LakeServiceImpl::publish_version:return");
 }

@@ -65,6 +65,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -97,7 +98,7 @@ public class RangePartitionInfo extends PartitionInfo {
 
     public RangePartitionInfo(List<Column> partitionColumns) {
         super(PartitionType.RANGE);
-        this.partitionColumns = partitionColumns;
+        this.partitionColumns = Objects.requireNonNull(partitionColumns, "partitionColumns is null");
         this.isMultiColumnPartition = partitionColumns.size() > 1;
     }
 

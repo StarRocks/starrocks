@@ -94,6 +94,7 @@ private:
     HdfsScanner* _create_paimon_jni_scanner(const FSOptions& options);
     // for hiveTable/fileTable with avro/rcfile/sequence format
     HdfsScanner* _create_hive_jni_scanner(const FSOptions& options);
+    HdfsScanner* _create_odps_jni_scanner(const FSOptions& options);
     Status _check_all_slots_nullable();
 
     // =====================================

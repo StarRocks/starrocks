@@ -116,6 +116,8 @@ CONF_Int32(clone_worker_count, "3");
 CONF_Int32(storage_medium_migrate_count, "3");
 // The count of thread to check consistency.
 CONF_Int32(check_consistency_worker_count, "1");
+// The count of thread to update scheam
+CONF_Int32(update_schema_worker_count, "3");
 // The count of thread to upload.
 CONF_Int32(upload_worker_count, "1");
 // The count of thread to download.
@@ -150,9 +152,8 @@ CONF_mInt32(compact_threads, "4");
 CONF_Int32(compact_thread_pool_queue_size, "100");
 
 // The count of thread to replication
-CONF_Int32(replication_threads, "64");
-CONF_Int32(replication_thread_pool_queue_size, "2048");
-CONF_Int32(clear_expired_replcation_snapshots_interval_seconds, "3600");
+CONF_mInt32(replication_threads, "0");
+CONF_mInt32(clear_expired_replcation_snapshots_interval_seconds, "3600");
 
 // The log dir.
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
@@ -304,6 +305,10 @@ CONF_mBool(enable_lazy_delta_column_compaction, "true");
 CONF_mInt32(update_compaction_check_interval_seconds, "10");
 CONF_mInt32(update_compaction_num_threads_per_disk, "1");
 CONF_mInt32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
+// using this config to adjust chunk size used in compaction for row store
+// if this value is 0, auto chunk size calculation algorithm will be used
+// set this value to none zero if auto algorithm isn't working well
+CONF_mInt32(update_compaction_chunk_size_for_row_store, "0");
 CONF_mInt64(max_update_compaction_num_singleton_deltas, "1000");
 CONF_mInt64(update_compaction_size_threshold, "268435456");
 CONF_mInt64(update_compaction_result_bytes, "1073741824");
@@ -881,7 +886,7 @@ CONF_String(query_debug_trace_dir, "${STARROCKS_HOME}/query_debug_trace");
 
 #ifdef USE_STAROS
 CONF_Int32(starlet_port, "9070");
-CONF_mInt32(starlet_cache_thread_num, "64");
+CONF_mInt32(starlet_cache_thread_num, "16");
 // Root dir used for cache if cache enabled.
 CONF_String(starlet_cache_dir, "");
 // Cache backend check interval (in seconds), for async write sync check and ttl clean, e.t.c.
@@ -900,7 +905,7 @@ CONF_mDouble(starlet_cache_evict_percent, "0.1");
 CONF_mInt32(starlet_cache_evict_throughput_mb, "200");
 // Buffer size in starlet fs buffer stream, size <= 0 means not use buffer stream.
 // Only support in S3/HDFS currently.
-CONF_mInt32(starlet_fs_stream_buffer_size_bytes, "131072");
+CONF_mInt32(starlet_fs_stream_buffer_size_bytes, "1048576");
 CONF_mBool(starlet_use_star_cache, "true");
 // TODO: support runtime change
 CONF_Int32(starlet_star_cache_mem_size_percent, "0");
@@ -921,7 +926,7 @@ CONF_mInt32(starlet_fs_read_prefetch_threadpool_size, "128");
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
 CONF_mBool(lake_print_delete_log, "true");
-CONF_mBool(lake_compaction_check_txn_log_first, "false");
+CONF_mInt64(lake_compaction_stream_buffer_size_bytes, "1048576"); // 1MB
 // Used to ensure service availability in extreme situations by sacrificing a certain degree of correctness
 CONF_mBool(experimental_lake_ignore_lost_segment, "false");
 CONF_mInt64(experimental_lake_wait_per_put_ms, "0");
@@ -934,6 +939,10 @@ CONF_mString(lake_vacuum_retry_pattern, "*request rate*");
 CONF_mInt64(lake_vacuum_retry_max_attempts, "5");
 CONF_mInt64(lake_vacuum_retry_min_delay_ms, "10");
 CONF_mBool(enable_primary_key_recover, "false");
+CONF_mBool(lake_enable_compaction_async_write, "false");
+CONF_mInt64(lake_pk_compaction_max_input_rowsets, "5");
+// Used for control memory usage of update state cache and compaction state cache
+CONF_mInt32(lake_pk_preload_memory_limit_percent, "30");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
@@ -995,7 +1004,7 @@ CONF_Int64(max_length_for_to_base64, "200000");
 CONF_Int64(max_length_for_bitmap_function, "1000000");
 
 // Configuration items for datacache
-CONF_mBool(datacache_enable, "false");
+CONF_Bool(datacache_enable, "false");
 CONF_mString(datacache_mem_size, "10%");
 CONF_mString(datacache_disk_size, "0");
 CONF_mString(datacache_disk_path, "${STARROCKS_HOME}/datacache/");
@@ -1037,6 +1046,7 @@ CONF_Bool(block_cache_direct_io_enable, "false");
 CONF_String(block_cache_engine, "");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
+// max wal file size in l0
 CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
 CONF_mInt64(l0_min_mem_usage, "2097152");   // 2MB
 CONF_mInt64(l0_max_mem_usage, "104857600"); // 100MB
@@ -1162,4 +1172,10 @@ CONF_mBool(lake_enable_vertical_compaction_fill_data_cache, "false");
 // it may be evicted if the disk is full
 CONF_mInt64(lake_local_pk_index_unused_threshold_seconds, "86400"); // 1 day
 
+// Allowable intervals for continuous generation of pk dumps
+// Disable when pk_dump_interval_seconds <= 0
+CONF_mInt64(pk_dump_interval_seconds, "3600"); // 1 hour
+
+// whether enable query profile for queries initiated by spark or flink
+CONF_mBool(enable_profile_for_external_plan, "false");
 } // namespace starrocks::config

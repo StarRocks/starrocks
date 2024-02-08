@@ -3042,15 +3042,10 @@ TEST_F(TimeFunctionsTest, timeSliceFloorTest) {
         unit_text->append("second");
         auto unit_column = ConstColumn::create(unit_text, 1);
 
-        auto boundary_text = BinaryColumn::create();
-        boundary_text->append("floor");
-        auto boundary_column = ConstColumn::create(boundary_text, 1);
-
         Columns columns;
         columns.emplace_back(tc);
         columns.emplace_back(period_column);
         columns.emplace_back(unit_column);
-        columns.emplace_back(boundary_column);
 
         time_slice_context->set_constant_columns(columns);
 
@@ -3831,9 +3826,6 @@ TEST_F(TimeFunctionsTest, MakeDateTest) {
     year_value->append(1);
     day_of_year_value->append(-1);
 
-    year_value->append(1);
-    (void)day_of_year_value->append_nulls(1);
-
     Columns columns;
     columns.emplace_back(year_value);
     columns.emplace_back(day_of_year_value);
@@ -3853,6 +3845,5 @@ TEST_F(TimeFunctionsTest, MakeDateTest) {
     ASSERT_TRUE(nullable_col->is_null(7));
     ASSERT_TRUE(nullable_col->is_null(8));
     ASSERT_TRUE(nullable_col->is_null(9));
-    ASSERT_TRUE(nullable_col->is_null(10));
 }
 } // namespace starrocks

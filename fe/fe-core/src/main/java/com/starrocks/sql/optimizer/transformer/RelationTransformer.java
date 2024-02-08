@@ -100,6 +100,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOdpsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
@@ -561,6 +562,9 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         } else if (Table.TableType.PAIMON.equals(node.getTable().getType())) {
             scanOperator = new LogicalPaimonScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                     columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
+        } else if (Table.TableType.ODPS.equals(node.getTable().getType())) {
+            scanOperator = new LogicalOdpsScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
+                    columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
         } else if (Table.TableType.SCHEMA.equals(node.getTable().getType())) {
             scanOperator =
                     new LogicalSchemaScanOperator(node.getTable(),
@@ -715,7 +719,14 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         Map<Column, ColumnRefOperator> columnMetaToColRefMap = columnMetaToColRefMapBuilder.build();
         ImmutableMap<ColumnRefOperator, Column> columnRefOperatorToColumn = colRefToColumnMetaMapBuilder.build();
 
-        Map<Expr, ColumnRefOperator> exprMapping = logicalPlan.getRootBuilder().getExpressionMapping().getExpressionToColumns();
+        OptExprBuilder rootBuilder = logicalPlan.getRootBuilder();
+        // there may be nested LogicalCTEAnchorOperator, like tpcds query31
+        while (rootBuilder.getRoot().getOp() instanceof LogicalCTEAnchorOperator) {
+            // for cte, use right child as new root builder
+            rootBuilder = rootBuilder.getInputs().get(1);
+        }
+        ExpressionMapping expressionMapping = rootBuilder.getExpressionMapping();
+        Map<Expr, ColumnRefOperator> exprMapping = expressionMapping.getExpressionToColumns();
         Map<Expr, ColumnRefOperator> newExprMapping = Maps.newHashMap();
         // construct a mapping from output expr to output columns of view
         for (Map.Entry<Expr, ColumnRefOperator> entry : exprMapping.entrySet()) {

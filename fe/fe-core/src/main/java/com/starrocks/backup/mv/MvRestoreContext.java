@@ -77,9 +77,10 @@ public class MvRestoreContext {
         if (remoteTbl.getRelatedMaterializedViews() == null || remoteTbl.getRelatedMaterializedViews().isEmpty()) {
             return;
         }
+        String localDbName = jobInfo.dbName;
         String localTableName = jobInfo.getAliasByOriginNameIfSet(remoteTbl.getName());
         MvBaseTableBackupInfo mvBaseTableBackupInfo =
-                new MvBaseTableBackupInfo(backupTableInfo, localTableName, remoteTbl.getId(), jobInfo.backupTime);
+                new MvBaseTableBackupInfo(backupTableInfo, localDbName, localTableName, remoteTbl.getId(), jobInfo.backupTime);
         mvBaseTableToBackupTableInfo.put(new TableName(jobInfo.dbName, remoteTbl.getName()), mvBaseTableBackupInfo);
     }
 
@@ -99,7 +100,7 @@ public class MvRestoreContext {
         }
     }
 
-    public void discordExpiredBackupTableInfo(AbstractJob job) {
+    public void discardExpiredBackupTableInfo(AbstractJob job) {
         if (!(job instanceof RestoreJob)) {
             return;
         }

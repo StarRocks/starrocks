@@ -334,7 +334,7 @@ TEST_F(BinlogFileTest, test_reopen) {
 }
 
 // Test generating large binlog file with random content for duplicate key
-TEST_F(BinlogFileTest, test_random_write_read) {
+TEST_F(BinlogFileTest, DISABLED_test_random_write_read) {
     CompressionTypePB compression_type = NO_COMPRESSION;
     int32_t expect_file_size = 100 * 1024 * 1024;
     int32_t expect_num_versions = 1000;
@@ -393,7 +393,7 @@ TEST_F(BinlogFileTest, test_random_begin_commit_abort) {
             std::make_shared<BinlogFileWriter>(1, file_path, max_page_size, compression_type);
     ASSERT_OK(file_writer->init());
     std::vector<DupKeyVersionInfo> versions;
-    for (int i = 1; i <= 2000 || versions.empty(); i++) {
+    for (int i = 1; i <= 500 || versions.empty(); i++) {
         DupKeyVersionInfo version_info;
         version_info.version = i;
         int32_t num_pages = std::rand() % 5;

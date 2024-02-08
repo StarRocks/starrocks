@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <future>
 #include <memory>
 #include <string>
 #include <vector>
@@ -22,15 +23,18 @@
 #include "storage/lake/tablet_writer.h"
 
 namespace starrocks {
+class ConcurrencyLimitedThreadPoolToken;
 class SegmentWriter;
-}
+class ThreadPool;
+} // namespace starrocks
 
 namespace starrocks::lake {
 
 class HorizontalGeneralTabletWriter : public TabletWriter {
 public:
     explicit HorizontalGeneralTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
-                                           std::shared_ptr<const TabletSchema> schema, int64_t txn_id);
+                                           std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
+                                           ThreadPool* flush_pool = nullptr);
 
     ~HorizontalGeneralTabletWriter() override;
 
@@ -71,7 +75,7 @@ class VerticalGeneralTabletWriter : public TabletWriter {
 public:
     explicit VerticalGeneralTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
                                          std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
-                                         uint32_t max_rows_per_segment);
+                                         uint32_t max_rows_per_segment, ThreadPool* flush_pool = nullptr);
 
     ~VerticalGeneralTabletWriter() override;
 
@@ -101,14 +105,21 @@ public:
     RowsetTxnMetaPB* rowset_txn_meta() override { return nullptr; }
 
 private:
-    StatusOr<std::unique_ptr<SegmentWriter>> create_segment_writer(const std::vector<uint32_t>& column_indexes,
+    StatusOr<std::shared_ptr<SegmentWriter>> create_segment_writer(const std::vector<uint32_t>& column_indexes,
                                                                    bool is_key);
 
-    Status flush_columns(std::unique_ptr<SegmentWriter>* segment_writer);
+    Status flush_columns(const std::shared_ptr<SegmentWriter>& segment_writer);
+    Status check_futures();
+    Status wait_futures_finish();
 
     uint32_t _max_rows_per_segment = 0;
-    std::vector<std::unique_ptr<SegmentWriter>> _segment_writers;
+    std::vector<std::shared_ptr<SegmentWriter>> _segment_writers;
     size_t _current_writer_index = 0;
+
+    static constexpr int64_t kDefaultTimeoutForAsyncWriteSegment = 1 * 60 * 1000L; // 1 minutes
+
+    std::unique_ptr<ConcurrencyLimitedThreadPoolToken> _segment_writer_finalize_token;
+    std::vector<std::future<Status>> _futures;
 };
 
 } // namespace starrocks::lake

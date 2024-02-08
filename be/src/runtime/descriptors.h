@@ -307,6 +307,19 @@ private:
     std::string _paimon_native_table;
 };
 
+class OdpsTableDescriptor : public HiveTableDescriptor {
+public:
+    OdpsTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
+    ~OdpsTableDescriptor() override = default;
+    bool has_partition() const override { return false; }
+    const std::string& get_database_name() const;
+    const std::string& get_table_name() const;
+
+private:
+    std::string _database_name;
+    std::string _table_name;
+};
+
 // ===========================================
 
 class OlapTableDescriptor : public TableDescriptor {

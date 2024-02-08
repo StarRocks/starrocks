@@ -236,12 +236,6 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
     // Save new metadata
     RETURN_IF_ERROR(log_applier->finish());
 
-    // collect trash files, and remove them by background threads
-    auto trash_files = log_applier->trash_files();
-    if (trash_files != nullptr) {
-        files_to_delete.insert(files_to_delete.end(), trash_files->begin(), trash_files->end());
-    }
-
     delete_files_async(std::move(files_to_delete));
 
     return new_metadata;

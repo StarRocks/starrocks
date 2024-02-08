@@ -32,6 +32,7 @@ namespace starrocks {
 class Tablet;
 class Schema;
 class Column;
+class PrimaryKeyDump;
 
 class TabletLoader {
 public:
@@ -266,6 +267,8 @@ public:
 
     virtual size_t memory_usage() = 0;
 
+    virtual Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb) = 0;
+
     static StatusOr<std::unique_ptr<MutableIndex>> create(size_t key_size);
 
     static std::tuple<size_t, size_t> estimate_nshard_and_npage(const size_t total_kv_pairs_usage);
@@ -390,6 +393,8 @@ public:
 
     static StatusOr<std::unique_ptr<ShardByLengthMutableIndex>> create(size_t key_size, const std::string& path);
 
+    Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb);
+
 private:
     friend class PersistentIndex;
     friend class starrocks::lake::LakeLocalPersistentIndex;
@@ -490,6 +495,8 @@ public:
 
     static StatusOr<std::unique_ptr<ImmutableIndex>> load(std::unique_ptr<RandomAccessFile>&& index_rb,
                                                           bool load_bf_data);
+
+    Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb);
 
 private:
     friend class PersistentIndex;
@@ -778,6 +785,8 @@ public:
 
     void reset_cancel_major_compaction();
 
+    Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb);
+
 protected:
     Status _delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version,
                                       const EditVersionWithMerge& min_l2_version);
@@ -797,8 +806,8 @@ private:
     bool _can_dump_directly();
     bool _need_flush_advance();
     bool _need_merge_advance();
-    Status _flush_advance_or_append_wal(size_t n, const Slice* keys, const IndexValue* values);
-
+    Status _flush_advance_or_append_wal(size_t n, const Slice* keys, const IndexValue* values,
+                                        std::vector<size_t>* replace_idxes);
     Status _delete_major_compaction_tmp_index_file();
     Status _delete_tmp_index_file();
 
@@ -901,6 +910,8 @@ private:
     std::atomic<bool> _major_compaction_running{false};
     // write amplification score, 0.0 means this index doesn't need major compaction
     std::atomic<double> _write_amp_score{0.0};
+    // Latest major compaction time. In second.
+    int64_t _latest_compaction_time = 0;
 };
 
 } // namespace starrocks

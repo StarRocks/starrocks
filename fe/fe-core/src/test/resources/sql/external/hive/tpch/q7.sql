@@ -112,7 +112,7 @@ OutPut Exchange Id: 23
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * expr-->[810.9, 104949.5, 0.0, 16.0, 277562.0869449505] ESTIMATE
+|  * expr-->[810.9, 104949.5, 0.0, 16.0, 554680.0745507891] ESTIMATE
 |
 20:HASH JOIN
 |  join op: INNER JOIN (PARTITIONED)
@@ -124,7 +124,7 @@ OutPut Exchange Id: 23
 |  output columns: 13, 14, 18, 42, 46
 |  cardinality: 554680
 |  column statistics:
-|  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 277562.0869449505] ESTIMATE
+|  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 554680.0745507891] ESTIMATE
 |  * l_discount-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
 |  * l_shipdate-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0] ESTIMATE
 |  * c_nationkey-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
@@ -132,7 +132,7 @@ OutPut Exchange Id: 23
 |  * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * expr-->[810.9, 104949.5, 0.0, 16.0, 277562.0869449505] ESTIMATE
+|  * expr-->[810.9, 104949.5, 0.0, 16.0, 554680.0745507891] ESTIMATE
 |
 |----19:EXCHANGE
 |       distribution type: SHUFFLE

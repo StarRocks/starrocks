@@ -81,6 +81,13 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
         AtomicReference<RuntimeProfile> runtimeProfile = new AtomicReference<>();
         AtomicLong affectedRows = new AtomicLong();
 
+        // all data will be pruned by fe
+        if (be2ShortCircuitRequests.keys().size() == 0) {
+            rowBatchQueue.offer(new RowBatch());
+            result = new ShortCircuitResult(rowBatchQueue, affectedRows.get(), runtimeProfile.get());
+            return;
+        }
+
         AtomicInteger i = new AtomicInteger();
         MetricRepo.COUNTER_SHORTCIRCUIT_QUERY.increase(1L);
         MetricRepo.COUNTER_SHORTCIRCUIT_RPC.increase((long) be2ShortCircuitRequests.size());

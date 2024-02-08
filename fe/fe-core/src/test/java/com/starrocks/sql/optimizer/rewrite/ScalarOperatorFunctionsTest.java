@@ -474,6 +474,15 @@ public class ScalarOperatorFunctionsTest {
     }
 
     @Test
+    public void toDate() {
+        ConstantOperator result = ScalarOperatorFunctions
+                .toDate(ConstantOperator.createDatetime(LocalDateTime.of(2001, 1, 9, 13, 4, 5)));
+        assertTrue(result.getType().isDate());
+        // when transfer constantOpeartor to DateLiteral, only y/m/d will keep
+        assertEquals("2001-01-09T13:04:05", result.getDate().toString());
+    }
+
+    @Test
     public void yearsSub() {
         assertEquals("2005-03-23T09:23:55",
                 ScalarOperatorFunctions.yearsSub(O_DT_20150323_092355, O_INT_10).getDatetime().toString());

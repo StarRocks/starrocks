@@ -89,7 +89,7 @@ None
 -- !result
 select count(*) > 1 from information_schema.task_runs where `database`='test_create_mv_with_params' and `DEFINITION` like "%test_iceberg_mv1_${uuid0}%";
 -- result:
-1
+0
 -- !result
 SELECT dt,sum(col_int)  FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt order by dt;
 -- result:
@@ -116,9 +116,9 @@ function: wait_async_materialized_view_finish("test_iceberg_mv2_${uuid0}")
 -- result:
 None
 -- !result
-select count(*) == 1 from information_schema.task_runs where `database`='test_create_mv_with_params' and `DEFINITION` like "%test_iceberg_mv2_${uuid0}%";
+select count(*) = 1 from information_schema.task_runs where `database`='test_create_mv_with_params' and `DEFINITION` like "%test_iceberg_mv2_${uuid0}%";
 -- result:
-E: (1064, "Getting syntax error at line 1, column 16. Detail message: Unexpected input '=', the most similar input is {<EOF>, ';'}.")
+1
 -- !result
 SELECT dt,sum(col_int)  FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt order by dt;
 -- result:

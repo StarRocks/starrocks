@@ -71,7 +71,7 @@ displayed_sidebar: "Chinese"
 - 新增示例说明如何导入至 BITMAP 和 HLL 类型的列。[#70](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/70)
 - 新增 Python 编写的 Spark 应用程序示例。[#72](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/72)
 - 新增导入 ARRAY 类型数据的示例。[#75](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/75)
-- 新增示例说明如何实现主键模型表的部分更新和条件更新。[#80](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/80)
+- 新增示例说明如何实现主键表的部分更新和条件更新。[#80](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/80)
 
 **1.1.0**
 

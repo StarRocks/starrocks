@@ -237,7 +237,7 @@ public class OptExpression {
         String childHeadlinePrefix = detailPrefix + "->  ";
         String childDetailPrefix = detailPrefix + "    ";
         for (OptExpression input : inputs) {
-            sb.append(input.debugString(childHeadlinePrefix, childDetailPrefix, limitLine)).append("\n");
+            sb.append(input.debugString(childHeadlinePrefix, childDetailPrefix, limitLine));
         }
         return sb.toString();
     }

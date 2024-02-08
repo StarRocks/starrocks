@@ -360,6 +360,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int edit_log_roll_num = 50000;
 
+    @ConfField(mutable = true)
+    public static int edit_log_write_slow_log_threshold_ms = 2000;
+
     /**
      * whether ignore unknown log id
      * when fe rolls back to low version, there may be log id that low version fe can not recognise
@@ -633,6 +636,13 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean http_web_page_display_hardware = true;
+
+    /**
+     * Whether to enable the detail metrics for http. It may be expensive
+     * to get those metrics, and only enable it for debug in general.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_http_detail_metrics = false;
 
     /**
      * Cluster name will be shown as the title of web page
@@ -2258,6 +2268,9 @@ public class Config extends ConfigBase {
     // ***********************************************************
 
     @ConfField(mutable = true)
+    public static boolean enable_experimental_rowstore = false;
+
+    @ConfField(mutable = true)
     public static boolean enable_experimental_mv = true;
 
     /**
@@ -2599,6 +2612,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_fast_schema_evolution = false;
 
+    // This configuration will be removed after the shared data mode supports fast schema evolution
+    @ConfField(mutable = true)
+    public static boolean experimental_enable_fast_schema_evolution_in_shared_data = false;
+
     @ConfField(mutable = false)
     public static int pipe_listener_interval_millis = 1000;
     @ConfField(mutable = false)
@@ -2716,16 +2733,29 @@ public class Config extends ConfigBase {
     public static long routine_load_unstable_threshold_second = 3600;
     
     /*
-     * replication transaction config
+     * Replication config
      */
+    @ConfField
+    public static int replication_interval_ms = 10;
     @ConfField(mutable = true)
-    public static int replication_transaction_max_parallel_job_count = 100; // 100
+    public static int replication_max_parallel_table_count = 100; // 100
     @ConfField(mutable = true)
-    public static int replication_transaction_max_parallel_replication_data_size_mb = 10240; // 10g
+    public static int replication_max_parallel_data_size_mb = 10240; // 10g
     @ConfField(mutable = true)
     public static int replication_transaction_timeout_sec = 1 * 60 * 60; // 1hour
+
     @ConfField(mutable = true)
-    public static int replication_transaction_remote_snapshot_timeout_sec = 30 * 60; // 30minute
+    public static boolean jdbc_meta_default_cache_enable = false;
+
     @ConfField(mutable = true)
-    public static int replication_transaction_replicate_snapshot_timeout_sec = 30 * 60; // 30minute
+    public static long jdbc_meta_default_cache_expire_sec = 600L;
+
+    @ConfField(mutable = false)
+    public static int jdbc_connection_pool_size = 8;
+
+    @ConfField(mutable = false)
+    public static int jdbc_minimum_idle_connections = 1;
+
+    @ConfField(mutable = false)
+    public static int jdbc_connection_idle_timeout_ms = 600000;
 }

@@ -200,6 +200,7 @@ public class AlterJobV2Test {
             MaterializedView mv2 = (MaterializedView) GlobalStateMgr.getCurrentState().getDb("test").getTable("mv2");
             Assert.assertFalse(mv2.isActive());
         } catch (Exception e) {
+            e.printStackTrace();
             Assert.fail();
         }
     }
@@ -322,6 +323,7 @@ public class AlterJobV2Test {
                 Assert.assertTrue(mv.getInactiveReason().contains("base table schema changed for columns: k2"));
             }
         } catch (Exception e) {
+            e.printStackTrace();
             Assert.fail();
         } finally {
             starRocksAssert.dropTable("modify_column_test4");

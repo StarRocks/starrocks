@@ -2,7 +2,7 @@
 displayed_sidebar: "Chinese"
 ---
 
-# (To be deprecated) 外部表
+# 外部表
 
 StarRocks 支持以外部表 (External Table) 的形式，接入其他数据源。外部表指的是保存在其他数据源中的数据表，而 StartRocks 只保存表对应的元数据，并直接向外部表所在数据源发起查询。目前 StarRocks 已支持的第三方数据源包括 MySQL、StarRocks、Elasticsearch、Apache Hive™、Apache Iceberg 和 Apache Hudi。**对于 StarRocks 数据源，现阶段只支持 Insert 写入，不支持读取，对于其他数据源，现阶段只支持读取，还不支持写入**。
 
@@ -1159,7 +1159,7 @@ SELECT COUNT(*) FROM hudi_tbl;
 
 ## (Deprecated) MySQL 外部表
 
-星型模型中，数据一般划分为维度表 (dimension table) 和事实表 (fact table)。维度表数据量少，但会涉及 UPDATE 操作。目前 StarRocks 中还不直接支持 UPDATE 操作（可以通过 Unique/Primary 数据模型实现），在一些场景下，可以把维度表存储在 MySQL 中，查询时直接读取维度表。
+星型模型中，数据一般划分为维度表 (dimension table) 和事实表 (fact table)。维度表数据量少，但会涉及 UPDATE 操作。目前 StarRocks 中还不直接支持 UPDATE 操作（可以通过更新表或者主键表实现），在一些场景下，可以把维度表存储在 MySQL 中，查询时直接读取维度表。
 
 在使用 MySQL 的数据之前，需在 StarRocks 创建外部表 (CREATE EXTERNAL TABLE)，与之相映射。StarRocks 中创建 MySQL 外部表时需要指定 MySQL 的相关连接信息，如下所示。
 

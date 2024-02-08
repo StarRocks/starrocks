@@ -223,6 +223,9 @@ struct TExprNode {
   30: optional list<string> used_subfield_names;
   31: optional TBinaryLiteral binary_literal;
 
+  // used for CollectionElementAt
+  35: optional bool check_is_out_of_bounds
+
   // For vector query engine
   50: optional bool use_vectorized  // Deprecated
   51: optional bool has_nullable_child

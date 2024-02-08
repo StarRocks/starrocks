@@ -37,10 +37,10 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
-import org.junit.Test;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.RepeatedTest;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
@@ -193,6 +193,46 @@ public class MaterializedViewAnalyzerTest {
                 }
             };
             Assert.assertFalse(materializedViewAnalyzerVisitor.replacePaimonTableAlias(slotRef, table, baseTableInfo));
+        }
+    }
+
+    @Test
+    public void testCreateIcebergTable() throws Exception {
+        {
+            String mvName = "iceberg_parttbl_mv1";
+            starRocksAssert.useDatabase("test")
+                    .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_parttbl_mv1`\n" +
+                            "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                            "PARTITION BY str2date(`date`, '%Y-%m-%d')\n" +
+                            "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                            "REFRESH DEFERRED MANUAL\n" +
+                            "PROPERTIES (\n" +
+                            "\"replication_num\" = \"1\",\n" +
+                            "\"storage_medium\" = \"HDD\"\n" +
+                            ")\n" +
+                            "AS SELECT id, data, date  FROM `iceberg0`.`partitioned_db`.`t1` as a;");
+            Table mv = starRocksAssert.getTable("test", mvName);
+            Assert.assertTrue(mv != null);
+            starRocksAssert.dropMaterializedView(mvName);
+        }
+
+        try {
+            starRocksAssert.useDatabase("test")
+                    .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_bucket_mv1`\n" +
+                            "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                            "PARTITION BY ts\n" +
+                            "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                            "REFRESH DEFERRED MANUAL\n" +
+                            "PROPERTIES (\n" +
+                            "\"replication_num\" = \"1\",\n" +
+                            "\"storage_medium\" = \"HDD\"\n" +
+                            ")\n" +
+                            "AS SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_bucket` as a;");
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().
+                    contains("Do not support create materialized view when base iceberg table partition transform " +
+                            "has bucket or truncate."));
         }
     }
 

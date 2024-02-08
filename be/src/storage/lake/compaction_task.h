@@ -45,7 +45,7 @@ public:
     explicit CompactionTask(int64_t txn_id, VersionedTablet tablet, std::vector<std::shared_ptr<Rowset>> input_rowsets);
     virtual ~CompactionTask() = default;
 
-    virtual Status execute(Progress* stats, CancelFunc cancel_func) = 0;
+    virtual Status execute(Progress* stats, CancelFunc cancel_func, ThreadPool* flush_pool = nullptr) = 0;
 
     inline static const CancelFunc kNoCancelFn = []() { return false; };
     inline static const CancelFunc kCancelledFn = []() { return true; };

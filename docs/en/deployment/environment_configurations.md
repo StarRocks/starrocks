@@ -132,7 +132,12 @@ echo 'performance' | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_gover
 Memory Overcommit allows the operating system to overcommit memory resources to processes. We recommend you enable Memory Overcommit.
 
 ```Bash
-echo 1 | sudo tee /proc/sys/vm/overcommit_memory
+# Modify the configuration file.
+cat >> /etc/sysctl.conf << EOF
+vm.overcommit_memory=1
+EOF
+# Bring the change into effect.
+sysctl -p
 ```
 
 ### Transparent Huge Pages
@@ -140,7 +145,19 @@ echo 1 | sudo tee /proc/sys/vm/overcommit_memory
 Transparent Huge Pages are enabled by default. We recommend you disable this feature because it can interfere with the memory allocator, and thereby lead to a drop in performance.
 
 ```Bash
-echo 'madvise' | sudo tee /sys/kernel/mm/transparent_hugepage/enabled
+# Change the configuration temporarily.
+echo madvise | sudo tee /sys/kernel/mm/transparent_hugepage/enabled
+echo madvise | sudo tee /sys/kernel/mm/transparent_hugepage/defrag
+# Change the configuration permanently.
+cat >> /etc/rc.d/rc.local << EOF
+if test -f /sys/kernel/mm/transparent_hugepage/enabled; then
+   echo madvise > /sys/kernel/mm/transparent_hugepage/enabled
+fi
+if test -f /sys/kernel/mm/transparent_hugepage/defrag; then
+   echo madvise > /sys/kernel/mm/transparent_hugepage/defrag
+fi
+EOF
+chmod +x /etc/rc.d/rc.local
 ```
 
 ### Swap Space
@@ -153,6 +170,7 @@ Follow these steps to check and disable Swap Space:
 
    ```SQL
    swapoff /<path_to_swap_space>
+   swapoff -a
    ```
 
 2. Delete the Swap Space information from the configuration file **/etc/fstab**.
@@ -172,7 +190,12 @@ Follow these steps to check and disable Swap Space:
 We recommend you disable swappiness to eliminate its impact on performance.
 
 ```Bash
-echo 0 | sudo tee /proc/sys/vm/swappiness
+# Modify the configuration file.
+cat >> /etc/sysctl.conf << EOF
+vm.swappiness=0
+EOF
+# Bring the change into effect.
+sysctl -p
 ```
 
 ## Storage configurations
@@ -192,48 +215,52 @@ We recommend you use the mq-deadline scheduler for SATA disks and the kyber sche
 
 The mq-deadline scheduler algorithm suits SATA disks.
 
-Modify this item temporarily:
-
 ```Bash
+# Change the configuration temporarily.
 echo mq-deadline | sudo tee /sys/block/${disk}/queue/scheduler
-```
-
-To make the change permanent, run the following command after you modify this item:
-
-```Bash
+# Change the configuration permanently.
+cat >> /etc/rc.d/rc.local << EOF
+echo mq-deadline | sudo tee /sys/block/${disk}/queue/scheduler
+EOF
 chmod +x /etc/rc.d/rc.local
 ```
 
 ### SSD and NVMe
 
-The kyber scheduler algorithm suits NVMe or SSD disks.
+- If your NVMe or SSD disks support the kyber scheduler algorithm:
 
-Modify this item temporarily:
+   ```Bash
+   # Change the configuration temporarily.
+   echo kyber | sudo tee /sys/block/${disk}/queue/scheduler
+   # Change the configuration permanently.
+   cat >> /etc/rc.d/rc.local << EOF
+   echo kyber | sudo tee /sys/block/${disk}/queue/scheduler
+   EOF
+   chmod +x /etc/rc.d/rc.local
+   ```
 
-```Bash
-echo kyber | sudo tee /sys/block/${disk}/queue/scheduler
-```
+- If your NVMe or SSD disks support the none (or noop) scheduler.
 
-If your system does not support the kyber scheduler for SSD and NVMe, we recommend you use the none (or noop) scheduler.
-
-```Bash
-echo none | sudo tee /sys/block/${disk}/queue/scheduler
-```
-
-To make the change permanent, run the following command after you modify this item:
-
-```Bash
-chmod +x /etc/rc.d/rc.local
-```
+   ```Bash
+   # Change the configuration temporarily.
+   echo none | sudo tee /sys/block/vdb/queue/scheduler
+   # Change the configuration permanently.
+   cat >> /etc/rc.d/rc.local << EOF
+   echo none | sudo tee /sys/block/${disk}/queue/scheduler
+   EOF
+   chmod +x /etc/rc.d/rc.local
+   ```
 
 ## SELinux
 
 We recommend you disable SELinux.
 
 ```Bash
+# Change the configuration temporarily.
+setenforce 0
+# Change the configuration permanently.
 sed -i 's/SELINUX=.*/SELINUX=disabled/' /etc/selinux/config
 sed -i 's/SELINUXTYPE/#SELINUXTYPE/' /etc/selinux/config
-setenforce 0 
 ```
 
 ## Firewall
@@ -250,7 +277,9 @@ systemctl disable firewalld.service
 Run the following command to check and configure the LANG variable manually:
 
 ```Bash
+# Modify the configuration file.
 echo "export LANG=en_US.UTF8" >> /etc/profile
+# Bring the change into effect.
 source /etc/profile
 ```
 
@@ -267,22 +296,24 @@ hwclock
 
 ## ulimit configurations
 
-Problems can occur with StarRocks if the values of **max file descriptors** and **max user processes** are abnormally small.
-
-### Max file descriptors
-
-You can set the maximum number of file descriptors by running the following command:
+Problems can occur with StarRocks if the values of **max file descriptors** and **max user processes** are abnormally small. We recommend you enlarge these values.
 
 ```Bash
-ulimit -n 655350
-```
+cat >> /etc/security/limits.conf << EOF
+* soft nproc 65535
+* hard nproc 65535
+* soft nofile 655350
+* hard nofile 655350
+* soft stack unlimited
+* hard stack unlimited
+* hard memlock unlimited
+* soft memlock unlimited
+EOF
 
-### Max user processes
-
-You can set the maximum number of user processes by running the following command:
-
-```Bash
-ulimit -u 65535
+cat >> /etc/security/limits.d/20-nproc.conf << EOF 
+*          soft    nproc     65535
+root       soft    nproc     65535
+EOF
 ```
 
 ## File system configuration
@@ -300,7 +331,12 @@ df -Th
 Allow the system to reset new connections if the system is currently overflowed with new connection attempts that the daemon(s) can not handle:
 
 ```Bash
-echo 1 | sudo tee /proc/sys/net/ipv4/tcp_abort_on_overflow
+# Modify the configuration file.
+cat >> /etc/sysctl.conf << EOF
+net.ipv4.tcp_abort_on_overflow=1
+EOF
+# Bring the change into effect.
+sysctl -p
 ```
 
 ### somaxconn
@@ -308,17 +344,23 @@ echo 1 | sudo tee /proc/sys/net/ipv4/tcp_abort_on_overflow
 Specify the maximum number of connection requests queued for any listening socket to `1024`:
 
 ```Bash
-echo 1024 | sudo tee /proc/sys/net/core/somaxconn
+# Modify the configuration file.
+cat >> /etc/sysctl.conf << EOF
+net.core.somaxconn=1024
+EOF
+# Bring the change into effect.
+sysctl -p
 ```
 
 ## NTP configuration
 
 You must configure time synchronization between nodes within your StarRocks cluster to ensure linear consistency of transactions. You can either use the internet time service provided by pool.ntp.org, or use the NTP service built in an offline environment. For example, you can use the NTP service provided by your cloud service provider.
 
-1. Check if the NTP time server exists.
+1. Check if the NTP time server or Chrony service exists.
 
    ```Bash
    rpm -qa | grep ntp
+   systemctl status chrony
    ```
 
 2. Install the NTP service if there is not one.
@@ -355,10 +397,24 @@ You must configure time synchronization between nodes within your StarRocks clus
 
 ## High concurrency configurations
 
-If your StarRocks cluster has a high load concurrency, we recommend you set the following configurations:
+If your StarRocks cluster has a high load concurrency, we recommend you set the following configurations.
+
+### max_map_count
+
+Specify the maximum number of memory map areas a process may have as `262144`:
+
+```bash
+# Modify the configuration file.
+cat >> /etc/sysctl.conf << EOF
+vm.max_map_count = 262144
+EOF
+# Bring the change into effect.
+sysctl -p
+```
+
+### Other
 
 ```Bash
 echo 120000 > /proc/sys/kernel/threads-max
-echo 262144 > /proc/sys/vm/max_map_count
 echo 200000 > /proc/sys/kernel/pid_max
 ```

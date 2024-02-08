@@ -445,6 +445,7 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
 
 void vacuum(TabletManager* tablet_mgr, const VacuumRequest& request, VacuumResponse* response) {
     auto st = vacuum_impl(tablet_mgr, request, response);
+    LOG_IF(ERROR, !st.ok()) << st;
     st.to_protobuf(response->mutable_status());
 }
 

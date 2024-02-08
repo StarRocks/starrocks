@@ -20,6 +20,7 @@
 #include <string_view>
 
 #include "fmt/core.h"
+#include "util/defer_op.h"
 #include "util/time.h"
 #include "util/uid_util.h"
 
@@ -344,13 +345,13 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         }
 
         closure->addFailedHandler([this](const ClosureContext& ctx, std::string_view rpc_error_msg) noexcept {
+            auto defer = DeferOp([this]() { --_total_in_flight_rpc; });
             _is_finishing = true;
             {
                 std::lock_guard<Mutex> l(*_mutexes[ctx.instance_id.lo]);
                 ++_num_finished_rpcs[ctx.instance_id.lo];
                 --_num_in_flight_rpcs[ctx.instance_id.lo];
             }
-            --_total_in_flight_rpc;
 
             const auto& dest_addr = _dest_addrs[ctx.instance_id.lo];
             std::string err_msg =
@@ -361,6 +362,8 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             LOG(WARNING) << err_msg;
         });
         closure->addSuccessHandler([this](const ClosureContext& ctx, const PTransmitChunkResult& result) noexcept {
+            // when _total_in_flight_rpc desc to 0, _fragment_ctx may be destructed
+            auto defer = DeferOp([this]() { --_total_in_flight_rpc; });
             Status status(result.status());
             {
                 std::lock_guard<Mutex> l(*_mutexes[ctx.instance_id.lo]);
@@ -381,7 +384,6 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
                     _process_send_window(ctx.instance_id, ctx.sequence);
                 });
             }
-            --_total_in_flight_rpc;
         });
 
         ++_total_in_flight_rpc;

@@ -115,10 +115,12 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -385,6 +387,7 @@ public class AnalyzerUtils {
         protected Map<TableName, Table> tables;
 
         public TableCollector() {
+            this.tables = Maps.newHashMap();
         }
 
         public TableCollector(Map<TableName, Table> dbs) {
@@ -583,42 +586,83 @@ public class AnalyzerUtils {
 
     private static class OlapTableCollector extends TableCollector {
         private Set<OlapTable> olapTables;
-        private Map<Long, OlapTable> idMap;
+        private Map<TableIndexId, OlapTable> idMap;
 
         public OlapTableCollector(Set<OlapTable> tables) {
             this.olapTables = tables;
             this.idMap = new HashMap<>();
         }
 
+        /**
+         * One table may contain multi MaterializeIndexMetas. and it's different if one has tableA and baseIndex a
+         * and one has tableA and baseIndex b. So use TableId and its base table index as the key to distinguish a TableRelation.
+         */
+        class TableIndexId {
+            long tableId;
+            long baseIndexId;
+            public TableIndexId(long tableId, long indexId) {
+                this.tableId = tableId;
+                this.baseIndexId = indexId;
+            }
+            @Override
+            public boolean equals(Object o) {
+                if (this == o) {
+                    return true;
+                }
+                if (o == null || getClass() != o.getClass()) {
+                    return false;
+                }
+                TableIndexId that = (TableIndexId) o;
+                return tableId == that.tableId && baseIndexId == that.baseIndexId;
+            }
+
+            @Override
+            public int hashCode() {
+                return Objects.hash(tableId, baseIndexId);
+            }
+        }
+
+        @Override
+        public Void visitInsertStatement(InsertStmt node, Void context) {
+            super.visitInsertStatement(node, context);
+            Table copied = copyTable(node.getTargetTable());
+            if (copied != null) {
+                node.setTargetTable(copied);
+            }
+            return null;
+        }
+
         @Override
         public Void visitTable(TableRelation node, Void context) {
-            if (node.getTable().isOlapTable()) {
-                OlapTable table = (OlapTable) node.getTable();
-                if (!idMap.containsKey(table.getId())) {
-                    olapTables.add(table);
-                    idMap.put(table.getId(), table);
-                    // Only copy the necessary olap table meta to avoid the lock when plan query
-                    OlapTable copied = new OlapTable();
-                    table.copyOnlyForQuery(copied);
-                    node.setTable(copied);
-                } else {
-                    node.setTable(idMap.get(table.getId()));
-                }
-            } else if (node.getTable().isOlapMaterializedView()) {
-                MaterializedView table = (MaterializedView) node.getTable();
-                if (!idMap.containsKey(table.getId())) {
-                    olapTables.add(table);
-                    idMap.put(table.getId(), table);
-                    // Only copy the necessary olap table meta to avoid the lock when plan query
-                    MaterializedView copied = new MaterializedView();
-                    table.copyOnlyForQuery(copied);
-                    node.setTable(copied);
-                } else {
-                    node.setTable(idMap.get(table.getId()));
-                }
+            Table copied = copyTable(node.getTable());
+            if (copied != null) {
+                node.setTable(copied);
             }
-            // TODO: support cloud native table and mv
             return null;
+        }
+
+        // TODO: support cloud native table and mv
+        private Table copyTable(Table originalTable) {
+            OlapTable table = (OlapTable) originalTable;
+            TableIndexId tableIndexId = new TableIndexId(table.getId(), table.getBaseIndexId());
+            OlapTable existed = idMap.get(tableIndexId);
+            if (existed != null) {
+                return existed;
+            }
+
+            OlapTable copied = null;
+            if (originalTable.isOlapTable()) {
+                copied = new OlapTable();
+            } else if (originalTable.isOlapMaterializedView()) {
+                copied = new MaterializedView();
+            } else {
+                return null;
+            }
+
+            olapTables.add(table);
+            idMap.put(tableIndexId, table);
+            table.copyOnlyForQuery(copied);
+            return copied;
         }
     }
 
@@ -1167,6 +1211,10 @@ public class AnalyzerUtils {
             }
         }
         return null;
+    }
+
+    public static Type[] replaceNullTypes2Booleans(Type[] types) {
+        return Arrays.stream(types).map(type -> replaceNullType2Boolean(type)).toArray(Type[]::new);
     }
 
     public static Type replaceNullType2Boolean(Type type) {

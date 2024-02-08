@@ -576,13 +576,10 @@ public class ScalarType extends Type implements Cloneable {
                 }
                 break;
             case DECIMALV2:
-                stringBuilder.append("decimal").append("(").append(precision).append(", ").append(scale).append(")");
-                break;
             case DECIMAL32:
             case DECIMAL64:
             case DECIMAL128:
-                stringBuilder.append(type.toString().toLowerCase()).append("(").append(precision).append(", ")
-                        .append(scale).append(")");
+                stringBuilder.append("decimal").append("(").append(precision).append(", ").append(scale).append(")");
                 break;
             case BOOLEAN:
                 return "boolean";

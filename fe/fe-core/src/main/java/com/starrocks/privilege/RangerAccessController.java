@@ -13,15 +13,13 @@
 // limitations under the License.
 package com.starrocks.privilege;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.common.Config;
+import com.starrocks.privilege.ranger.AccessTypeConverter;
 import com.starrocks.privilege.ranger.RangerStarRocksAccessRequest;
-import com.starrocks.privilege.ranger.starrocks.RangerStarRocksResource;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.SqlParser;
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.conf.Configuration;
@@ -30,18 +28,18 @@ import org.apache.ranger.authorization.hadoop.config.RangerPluginConfig;
 import org.apache.ranger.plugin.audit.RangerDefaultAuditHandler;
 import org.apache.ranger.plugin.model.RangerPolicy;
 import org.apache.ranger.plugin.model.RangerServiceDef;
+import org.apache.ranger.plugin.policyengine.RangerAccessResourceImpl;
 import org.apache.ranger.plugin.policyengine.RangerAccessResult;
+import org.apache.ranger.plugin.policyengine.RangerPolicyEngine;
 import org.apache.ranger.plugin.service.RangerBasePlugin;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.List;
-import java.util.Map;
 
 import static java.util.Locale.ENGLISH;
 
-public abstract class RangerAccessController extends ExternalAccessController {
+public abstract class RangerAccessController extends ExternalAccessController implements AccessTypeConverter {
     private static final Logger LOG = LoggerFactory.getLogger(RangerAccessController.class);
     protected final RangerBasePlugin rangerPlugin;
 
@@ -56,9 +54,9 @@ public abstract class RangerAccessController extends ExternalAccessController {
                 LOG.info("Load system property java.security.krb5.conf with path : " + krb5);
                 System.setProperty("java.security.krb5.conf", krb5);
             }
+
             Configuration hadoopConf = new Configuration();
             hadoopConf.set("hadoop.security.authorization", "true");
-            hadoopConf.set("hadoop.security.auth_to_local", "DEFAULT");
             hadoopConf.set("hadoop.security.authentication", "kerberos");
             UserGroupInformation.setConfiguration(hadoopConf);
 
@@ -70,6 +68,7 @@ public abstract class RangerAccessController extends ExternalAccessController {
         } else {
             LOG.info("Interacting with Ranger Admin Server using SIMPLE authentication");
         }
+
         RangerPluginConfig rangerPluginContext = new RangerPluginConfig(serviceType, serviceName, serviceType,
                 null, null, null);
         /*
@@ -81,63 +80,74 @@ public abstract class RangerAccessController extends ExternalAccessController {
         rangerPluginContext.setBoolean("ranger.plugin." + serviceType + ".policy.rest.client.cookie.enabled", false);
 
         rangerPlugin = new RangerBasePlugin(rangerPluginContext);
+
         rangerPlugin.init(); // this will initialize policy engine and policy refresher
         rangerPlugin.setResultProcessor(new RangerDefaultAuditHandler());
+
+        LOG.info("Start Ranger plugin ({} - {}) success",
+                rangerPluginContext.getServiceType(), rangerPluginContext.getServiceName());
     }
 
-    @Override
-    public Map<String, Expr> getColumnMaskingPolicy(ConnectContext context, TableName tableName, List<Column> columns) {
-        Map<String, Expr> maskingExprMap = Maps.newHashMap();
-        for (Column column : columns) {
-            RangerStarRocksAccessRequest request = RangerStarRocksAccessRequest.createAccessRequest(
-                    new RangerStarRocksResource(tableName.getCatalog(), tableName.getDb(), tableName.getTbl(), column.getName()),
-                    context.getCurrentUserIdentity(), PrivilegeType.SELECT.name().toLowerCase(ENGLISH));
-
-            RangerAccessResult result = rangerPlugin.evalDataMaskPolicies(request, null);
-            if (result.isMaskEnabled()) {
-                String maskType = result.getMaskType();
-                RangerServiceDef.RangerDataMaskTypeDef maskTypeDef = result.getMaskTypeDef();
-                String transformer = null;
-
-                if (maskTypeDef != null) {
-                    transformer = maskTypeDef.getTransformer();
-                }
-
-                if (StringUtils.equalsIgnoreCase(maskType, RangerPolicy.MASK_TYPE_NULL)) {
-                    transformer = "NULL";
-                } else if (StringUtils.equalsIgnoreCase(maskType, RangerPolicy.MASK_TYPE_CUSTOM)) {
-                    String maskedValue = result.getMaskedValue();
-
-                    if (maskedValue == null) {
-                        transformer = "NULL";
-                    } else {
-                        transformer = maskedValue;
-                    }
-                }
-
-                if (StringUtils.isNotEmpty(transformer)) {
-                    transformer = transformer.replace("{col}", column.getName())
-                            .replace("{type}", column.getType().toSql());
-                }
-
-                maskingExprMap.put(column.getName(),
-                        SqlParser.parseSqlToExpr(transformer, context.getSessionVariable().getSqlMode()));
-            }
-        }
-        return maskingExprMap;
-    }
-
-    @Override
-    public Expr getRowAccessPolicy(ConnectContext context, TableName tableName) {
+    public Expr getColumnMaskingExpression(RangerAccessResourceImpl resource, Column column, ConnectContext context) {
         RangerStarRocksAccessRequest request = RangerStarRocksAccessRequest.createAccessRequest(
-                new RangerStarRocksResource(ObjectType.TABLE,
-                        Lists.newArrayList(tableName.getCatalog(), tableName.getDb(), tableName.getTbl())),
-                context.getCurrentUserIdentity(), PrivilegeType.SELECT.name().toLowerCase(ENGLISH));
+                resource, context.getCurrentUserIdentity(), PrivilegeType.SELECT.name().toLowerCase(ENGLISH));
+
+        RangerAccessResult result = rangerPlugin.evalDataMaskPolicies(request, null);
+        if (result != null && result.isMaskEnabled()) {
+            String maskType = result.getMaskType();
+            RangerServiceDef.RangerDataMaskTypeDef maskTypeDef = result.getMaskTypeDef();
+            String transformer = null;
+
+            if (maskTypeDef != null) {
+                transformer = maskTypeDef.getTransformer();
+            }
+
+            if (StringUtils.equalsIgnoreCase(maskType, RangerPolicy.MASK_TYPE_NULL)) {
+                transformer = "NULL";
+            } else if (StringUtils.equalsIgnoreCase(maskType, RangerPolicy.MASK_TYPE_CUSTOM)) {
+                String maskedValue = result.getMaskedValue();
+                if (maskedValue == null) {
+                    transformer = "NULL";
+                } else {
+                    transformer = maskedValue;
+                }
+            }
+
+            if (StringUtils.isNotEmpty(transformer)) {
+                transformer = transformer.replace("{col}", column.getName())
+                        .replace("{type}", column.getType().toSql());
+            }
+
+            return SqlParser.parseSqlToExpr(transformer, context.getSessionVariable().getSqlMode());
+        }
+
+        return null;
+    }
+
+    protected Expr getRowAccessExpression(RangerAccessResourceImpl resource, ConnectContext context) {
+        RangerStarRocksAccessRequest request = RangerStarRocksAccessRequest.createAccessRequest(
+                resource, context.getCurrentUserIdentity(), PrivilegeType.SELECT.name().toLowerCase(ENGLISH));
         RangerAccessResult result = rangerPlugin.evalRowFilterPolicies(request, null);
         if (result != null && result.isRowFilterEnabled()) {
             return SqlParser.parseSqlToExpr(result.getFilterExpr(), context.getSessionVariable().getSqlMode());
         } else {
             return null;
+        }
+    }
+
+    protected void hasPermission(RangerAccessResourceImpl resource, UserIdentity user, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        String accessType;
+        if (privilegeType.equals(PrivilegeType.ANY)) {
+            accessType = RangerPolicyEngine.ANY_ACCESS;
+        } else {
+            accessType = convertToAccessType(privilegeType);
+        }
+
+        RangerStarRocksAccessRequest request = RangerStarRocksAccessRequest.createAccessRequest(resource, user, accessType);
+        RangerAccessResult result = rangerPlugin.isAccessAllowed(request);
+        if (result == null || !result.getIsAllowed()) {
+            throw new AccessDeniedException();
         }
     }
 }

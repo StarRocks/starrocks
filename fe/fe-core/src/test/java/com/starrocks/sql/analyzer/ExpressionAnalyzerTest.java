@@ -55,7 +55,7 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
 
         IntLiteral sub = new IntLiteral(10);
 
-        CollectionElementExpr collectionElementExpr = new CollectionElementExpr(slot, sub);
+        CollectionElementExpr collectionElementExpr = new CollectionElementExpr(slot, sub, false);
         try {
             visitor.visitCollectionElementExpr(collectionElementExpr,
                     new Scope(RelationId.anonymous(), new RelationFields()));
@@ -64,7 +64,7 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
         }
 
         StringLiteral subCast = new StringLiteral("10");
-        CollectionElementExpr collectionElementExpr1 = new CollectionElementExpr(slot, subCast);
+        CollectionElementExpr collectionElementExpr1 = new CollectionElementExpr(slot, subCast, false);
         try {
             visitor.visitCollectionElementExpr(collectionElementExpr1,
                     new Scope(RelationId.anonymous(), new RelationFields()));
@@ -73,7 +73,7 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
         }
 
         StringLiteral subNoCast = new StringLiteral("aaa");
-        CollectionElementExpr collectionElementExpr2 = new CollectionElementExpr(slot, subNoCast);
+        CollectionElementExpr collectionElementExpr2 = new CollectionElementExpr(slot, subNoCast, false);
         Assert.assertThrows(SemanticException.class,
                 () -> visitor.visitCollectionElementExpr(collectionElementExpr2,
                         new Scope(RelationId.anonymous(), new RelationFields())));
@@ -83,7 +83,7 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
         mapType = new MapType(keyTypeChar, valueTypeInt);
         slot.setType(mapType);
         StringLiteral subString = new StringLiteral("aaa");
-        CollectionElementExpr collectionElementExpr3 = new CollectionElementExpr(slot, subString);
+        CollectionElementExpr collectionElementExpr3 = new CollectionElementExpr(slot, subString, false);
         try {
             visitor.visitCollectionElementExpr(collectionElementExpr3,
                     new Scope(RelationId.anonymous(), new RelationFields()));
@@ -105,7 +105,7 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
 
         IntLiteral sub = new IntLiteral(10);
 
-        CollectionElementExpr collectionElementExpr = new CollectionElementExpr(slot, sub);
+        CollectionElementExpr collectionElementExpr = new CollectionElementExpr(slot, sub, false);
         try {
             visitor.visitCollectionElementExpr(collectionElementExpr,
                     new Scope(RelationId.anonymous(), new RelationFields()));
@@ -114,13 +114,13 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
         }
 
         StringLiteral subCast = new StringLiteral("10");
-        CollectionElementExpr collectionElementExpr1 = new CollectionElementExpr(slot, subCast);
+        CollectionElementExpr collectionElementExpr1 = new CollectionElementExpr(slot, subCast, false);
         Assert.assertThrows(SemanticException.class,
                 () -> visitor.visitCollectionElementExpr(collectionElementExpr1,
                         new Scope(RelationId.anonymous(), new RelationFields())));
 
         StringLiteral subNoCast = new StringLiteral("aaa");
-        CollectionElementExpr collectionElementExpr2 = new CollectionElementExpr(slot, subNoCast);
+        CollectionElementExpr collectionElementExpr2 = new CollectionElementExpr(slot, subNoCast, false);
         Assert.assertThrows(SemanticException.class,
                 () -> visitor.visitCollectionElementExpr(collectionElementExpr2,
                         new Scope(RelationId.anonymous(), new RelationFields())));
@@ -137,7 +137,7 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
 
         IntLiteral sub = new IntLiteral(10);
 
-        CollectionElementExpr collectionElementExpr = new CollectionElementExpr(slot, sub);
+        CollectionElementExpr collectionElementExpr = new CollectionElementExpr(slot, sub, false);
         Assert.assertThrows(SemanticException.class,
                 () -> visitor.visitCollectionElementExpr(collectionElementExpr,
                         new Scope(RelationId.anonymous(), new RelationFields())));

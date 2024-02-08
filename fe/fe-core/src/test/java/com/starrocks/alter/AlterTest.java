@@ -1195,7 +1195,7 @@ public class AlterTest {
 
         new Expectations() {
             {
-                agent.allocateFilePath(anyString, anyLong);
+                agent.allocateFilePath(anyString, anyLong, anyLong);
                 result = pathInfo;
                 agent.createShardGroup(anyLong, anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentState().getNextId();
@@ -1302,7 +1302,7 @@ public class AlterTest {
 
         new Expectations() {
             {
-                agent.allocateFilePath(anyString, anyLong);
+                agent.allocateFilePath(anyString, anyLong, anyLong);
                 result = pathInfo;
                 agent.createShardGroup(anyLong, anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentState().getNextId();
@@ -2297,7 +2297,7 @@ public class AlterTest {
 
         new Expectations() {
             {
-                agent.allocateFilePath(anyString, anyLong);
+                agent.allocateFilePath(anyString, anyLong, anyLong);
                 result = pathInfo;
                 agent.createShardGroup(anyLong, anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentState().getNextId();

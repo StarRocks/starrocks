@@ -432,7 +432,11 @@ public class StarRocksAssert {
             createTableStmt.getProperties().put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
             return this.withTable(sql);
         } else if (statementBase instanceof CreateMaterializedViewStatement) {
-            return this.withMaterializedView(sql, true, false);
+            CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement) statementBase;
+            StarRocksAssert starRocksAssert = this.withMaterializedView(sql, true, false);
+            starRocksAssert.getCtx().executeSql(String.format("refresh materialized view %s with sync mode",
+                    createMaterializedViewStatement.getTableName().getTbl()));
+            return starRocksAssert;
         } else {
             throw new AnalysisException("Sql is not supported in withSingleReplicaTable:" + sql);
         }
@@ -541,6 +545,48 @@ public class StarRocksAssert {
                     dropMaterializedView(mvName);
                 } catch (Exception e) {
                     // e.printStackTrace();
+                }
+            }
+        }
+        return this;
+    }
+
+    public StarRocksAssert withRefreshedMaterializedViews(List<String> sqls, ExceptionConsumer action) {
+        return withMaterializedViews(sqls, action, true);
+    }
+
+    public StarRocksAssert withMaterializedViews(List<String> sqls, ExceptionConsumer action) {
+        return withMaterializedViews(sqls, action, false);
+    }
+
+    /**
+     * Create mvs with using sqls and refresh it or not by {@code isRefresh}, and then do {@code action} after
+     * create it success.
+     */
+    private StarRocksAssert withMaterializedViews(List<String> sqls, ExceptionConsumer action, boolean isRefresh) {
+        List<String> mvNames = Lists.newArrayList();
+        try {
+            for (String sql : sqls) {
+                StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+                Preconditions.checkState(stmt instanceof CreateMaterializedViewStatement);
+                CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement) stmt;
+                String mvName = createMaterializedViewStatement.getTableName().getTbl();
+                System.out.println(sql);
+                mvNames.add(mvName);
+                withMaterializedView(sql, true, isRefresh);
+            }
+            action.accept(mvNames);
+        } catch (Exception e) {
+            Assert.fail();
+        } finally {
+            // Create mv may fail.
+            for (String mvName : mvNames) {
+                if (!Strings.isNullOrEmpty(mvName)) {
+                    try {
+                        dropMaterializedView(mvName);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
                 }
             }
         }

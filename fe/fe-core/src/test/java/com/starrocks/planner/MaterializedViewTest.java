@@ -2722,6 +2722,17 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+    public void testArrayAggDistinctWithRollup() {
+        String mv = "select user_id, array_agg_distinct(tag_id) from user_tags group by user_id, time;";
+        testRewriteOK(mv, "select user_id, array_agg_distinct(tag_id) from user_tags group by user_id, time;")
+                .notContain("array_unique_agg");
+        testRewriteOK(mv, "select user_id, array_agg_distinct(tag_id) from user_tags group by user_id")
+                .contains("array_unique_agg");
+        testRewriteOK(mv, "select array_agg_distinct(tag_id) from user_tags")
+                .contains("array_unique_agg");
+    }
+
+    @Test
     public void testCountDistinctToBitmapCount1() {
         String mv = "select user_id, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id;";
         testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags group by user_id;");
@@ -4692,7 +4703,8 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 ")\n" +
                 "As select * from hive0.tpch.customer_view;");
         String query = "select * from hive0.tpch.customer_view";
-        String plan = getFragmentPlan(query);
+        setTracLogModule("MV");
+        String plan = getFragmentPlan(query, "MV");
         PlanTestBase.assertContains(plan, "mv_on_hive_view_1");
         starRocksAssert.dropMaterializedView("mv_on_hive_view_1");
     }
@@ -5362,5 +5374,21 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     Assert.assertTrue(!Strings.isNullOrEmpty(newDefinedQueries.second));
                 });
 
+    }
+
+    @Test
+    public void testAggregateWithHave() {
+        String mv = "select empid, deptno,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid, deptno having sum(salary) > 1";
+        testRewriteOK(mv, "select empid, deptno,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid, deptno having sum(salary) > 1");
+        testRewriteOK(mv, "select empid, deptno,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid, deptno having sum(salary) > 10");
+        testRewriteOK(mv, "select empid,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid having sum(salary) > 10");
     }
 }

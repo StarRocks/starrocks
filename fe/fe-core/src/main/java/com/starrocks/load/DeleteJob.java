@@ -46,6 +46,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.transaction.AbstractTxnStateChangeCallback;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionAlreadyCommitException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
@@ -143,7 +145,8 @@ public abstract class DeleteJob extends AbstractTxnStateChangeCallback {
 
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
         try {
-            globalTransactionMgr.abortTransaction(getDeleteInfo().getDbId(), getTransactionId(), reason);
+            globalTransactionMgr.abortTransaction(getDeleteInfo().getDbId(), getTransactionId(), reason,
+                    getTabletCommitInfos(), getTabletFailInfos(), null);
         } catch (TransactionAlreadyCommitException e) {
             return false;
         } catch (Exception e) {
@@ -159,6 +162,10 @@ public abstract class DeleteJob extends AbstractTxnStateChangeCallback {
      * A UserException thrown if both commit and publish failed.
      */
     public abstract boolean commitImpl(Database db, long timeoutMs) throws UserException;
+
+    protected abstract List<TabletCommitInfo> getTabletCommitInfos();
+
+    protected abstract List<TabletFailInfo> getTabletFailInfos();
 
     public void commit(Database db, long timeoutMs) throws DdlException, QueryStateException {
         TransactionStatus status = TransactionStatus.UNKNOWN;

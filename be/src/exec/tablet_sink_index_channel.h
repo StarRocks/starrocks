@@ -161,6 +161,9 @@ public:
     bool has_immutable_partition() { return !_immutable_partition_ids.empty(); }
     void reset_immutable_partition_ids() { _immutable_partition_ids.clear(); }
 
+    bool has_primary_replica() const { return _has_primary_replica; }
+    void set_has_primary_replica(bool has_primary_replica) { _has_primary_replica = has_primary_replica; }
+
 private:
     Status _wait_request(ReusableClosure<PTabletWriterAddBatchResult>* closure);
     Status _wait_all_prev_request();
@@ -244,6 +247,8 @@ private:
     std::set<int64_t> _immutable_partition_ids;
 
     ExprContext* _where_clause = nullptr;
+
+    bool _has_primary_replica = false;
 };
 
 class IndexChannel {
@@ -276,7 +281,7 @@ public:
         }
     }
 
-    void mark_as_failed(const NodeChannel* ch) { _failed_channels.insert(ch->node_id()); }
+    void mark_as_failed(const NodeChannel* ch);
 
     bool is_failed_channel(const NodeChannel* ch) { return _failed_channels.count(ch->node_id()) != 0; }
 
@@ -303,6 +308,8 @@ private:
 
     bool _has_incremental_node_channel = false;
     ExprContext* _where_clause = nullptr;
+
+    bool _has_intolerable_failure = false;
 };
 
 } // namespace stream_load

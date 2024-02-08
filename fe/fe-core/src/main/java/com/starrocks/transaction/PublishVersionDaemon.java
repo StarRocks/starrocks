@@ -631,7 +631,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         long tableId = txnStateBatch.getTableId();
         List<TransactionState> states = txnStateBatch.getTransactionStates();
         // partitionId -> txnIdList
-        Map<Long, List<Long>> dirtyPartitons = new HashMap<>();
+        Map<Long, List<Long>> dirtyPartitions = new HashMap<>();
         // partitionId -> versionList
         Map<Long, List<Long>> partitionVersions = new HashMap<>();
         // partitionId -> transactionState
@@ -643,10 +643,10 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     .getIdToPartitionCommitInfo();
             for (Map.Entry<Long, PartitionCommitInfo> item : partitionCommitInfoMap.entrySet()) {
 
-                if (!dirtyPartitons.containsKey(item.getKey())) {
-                    dirtyPartitons.put(item.getKey(), new ArrayList<>());
+                if (!dirtyPartitions.containsKey(item.getKey())) {
+                    dirtyPartitions.put(item.getKey(), new ArrayList<>());
                 }
-                List<Long> partitionCommitInfo = dirtyPartitons.get(item.getKey());
+                List<Long> partitionCommitInfo = dirtyPartitions.get(item.getKey());
                 partitionCommitInfo.add(state.getTransactionId());
 
                 if (!partitionVersions.containsKey(item.getKey())) {
@@ -681,7 +681,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
         List<CompletableFuture<Boolean>> futureList = new ArrayList<>();
 
-        for (Map.Entry<Long, List<Long>> item : dirtyPartitons.entrySet()) {
+        for (Map.Entry<Long, List<Long>> item : dirtyPartitions.entrySet()) {
             Long partitionId = item.getKey();
 
             CompletableFuture<Boolean> future = CompletableFuture.supplyAsync(() -> {
@@ -714,7 +714,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     }
 
                     // here create the job to drop txnLog, for the visibleVersion has been updated
-                    submitDeleteTxnLogJob(txnStateBatch, dirtyPartitons);
+                    submitDeleteTxnLogJob(txnStateBatch, dirtyPartitions);
                 } catch (UserException e) {
                     throw new RuntimeException(e);
                 }

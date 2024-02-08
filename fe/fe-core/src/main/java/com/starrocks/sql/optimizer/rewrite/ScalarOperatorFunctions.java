@@ -65,6 +65,7 @@ import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -177,17 +178,33 @@ public class ScalarOperatorFunctions {
                 first.getDatetime().truncatedTo(ChronoUnit.DAYS)).toDays());
     }
 
-    @ConstantFunction(name = "years_add", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "years_add", argTypes = {DATETIME,
+                    INT}, returnType = DATETIME, isMonotonic = true),
+            @ConstantFunction(name = "years_add", argTypes = {DATE, INT}, returnType = DATE, isMonotonic = true)
+    })
     public static ConstantOperator yearsAdd(ConstantOperator date, ConstantOperator year) {
-        return ConstantOperator.createDatetime(date.getDatetime().plusYears(year.getInt()));
+        if (date.getType().isDate()) {
+            return ConstantOperator.createDate(date.getDatetime().plusYears(year.getInt()));
+        } else {
+            return ConstantOperator.createDatetime(date.getDatetime().plusYears(year.getInt()));
+        }
     }
 
     @ConstantFunction.List(list = {
-            @ConstantFunction(name = "months_add", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true),
-            @ConstantFunction(name = "add_months", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
+            @ConstantFunction(name = "months_add", argTypes = {DATETIME,
+                    INT}, returnType = DATETIME, isMonotonic = true),
+            @ConstantFunction(name = "add_months", argTypes = {DATETIME,
+                    INT}, returnType = DATETIME, isMonotonic = true),
+            @ConstantFunction(name = "months_add", argTypes = {DATE, INT}, returnType = DATE, isMonotonic = true),
+            @ConstantFunction(name = "add_months", argTypes = {DATE, INT}, returnType = DATE, isMonotonic = true)
     })
     public static ConstantOperator monthsAdd(ConstantOperator date, ConstantOperator month) {
-        return ConstantOperator.createDatetime(date.getDatetime().plusMonths(month.getInt()));
+        if (date.getType().isDate()) {
+            return ConstantOperator.createDate(date.getDate().plusMonths(month.getInt()));
+        } else {
+            return ConstantOperator.createDatetime(date.getDatetime().plusMonths(month.getInt()));
+        }
     }
 
     @ConstantFunction.List(list = {
@@ -336,6 +353,13 @@ public class ScalarOperatorFunctions {
         LocalDate ld = LocalDate.from(builder.toFormatter().withResolverStyle(ResolverStyle.STRICT).parse(
                 StringUtils.strip(date.getVarchar(), "\r\n\t ")));
         return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), Type.DATE);
+    }
+
+    @ConstantFunction(name = "to_date", argTypes = {DATETIME}, returnType = DATE, isMonotonic = true)
+    public static ConstantOperator toDate(ConstantOperator dateTime) {
+        LocalDateTime dt = dateTime.getDatetime();
+        dt.truncatedTo(ChronoUnit.DAYS);
+        return ConstantOperator.createDate(dt);
     }
 
     @ConstantFunction(name = "years_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
@@ -1263,6 +1287,16 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "inspect_all_pipes", argTypes = {}, returnType = VARCHAR, isMetaFunction = true)
     public static ConstantOperator inspect_all_pipes() {
         ConnectContext connectContext = ConnectContext.get();
+        authOperatorPrivilege();
+        String currentDb = connectContext.getDatabase();
+        Database db = GlobalStateMgr.getCurrentState().mayGetDb(connectContext.getDatabase())
+                .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR, currentDb));
+        String json = GlobalStateMgr.getCurrentState().getPipeManager().getPipesOfDb(db.getId());
+        return ConstantOperator.createVarchar(json);
+    }
+
+    private static void authOperatorPrivilege() {
+        ConnectContext connectContext = ConnectContext.get();
         try {
             Authorizer.checkSystemAction(
                     connectContext.getCurrentUserIdentity(),
@@ -1274,11 +1308,17 @@ public class ScalarOperatorFunctions {
                     connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
                     PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
         }
-        String currentDb = connectContext.getDatabase();
-        Database db = GlobalStateMgr.getCurrentState().mayGetDb(connectContext.getDatabase())
-                .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR, currentDb));
-        String json = GlobalStateMgr.getCurrentState().getPipeManager().getPipesOfDb(db.getId());
-        return ConstantOperator.createVarchar(json);
+    }
+
+    /**
+     * Return all status about the TaskManager
+     */
+    @ConstantFunction(name = "inspect_task_runs", argTypes = {}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator inspectTaskRuns() {
+        ConnectContext connectContext = ConnectContext.get();
+        authOperatorPrivilege();
+        TaskRunManager trm = GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager();
+        return ConstantOperator.createVarchar(trm.inspect());
     }
 
     @ConstantFunction.List(list = {

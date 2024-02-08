@@ -99,7 +99,7 @@ import com.starrocks.task.PushTask;
 import com.starrocks.task.RemoteSnapshotTask;
 import com.starrocks.task.ReplicateSnapshotTask;
 import com.starrocks.task.SnapshotTask;
-import com.starrocks.task.UpdateTabletMetaInfoTask;
+import com.starrocks.task.TabletMetadataUpdateAgentTask;
 import com.starrocks.task.UploadTask;
 import com.starrocks.thrift.TAbortRemoteTxnRequest;
 import com.starrocks.thrift.TAbortRemoteTxnResponse;
@@ -245,7 +245,8 @@ public class LeaderImpl {
                         && taskType != TTaskType.CREATE && taskType != TTaskType.UPDATE_TABLET_META_INFO
                         && taskType != TTaskType.DROP_AUTO_INCREMENT_MAP
                         && taskType != TTaskType.STORAGE_MEDIUM_MIGRATE
-                        && taskType != TTaskType.REMOTE_SNAPSHOT && taskType != TTaskType.REPLICATE_SNAPSHOT) {
+                        && taskType != TTaskType.REMOTE_SNAPSHOT && taskType != TTaskType.REPLICATE_SNAPSHOT
+                        && taskType != TTaskType.UPDATE_SCHEMA) {
                     if (taskType == TTaskType.REALTIME_PUSH) {
                         PushTask pushTask = (PushTask) task;
                         if (pushTask.getPushType() == TPushType.DELETE) {
@@ -328,6 +329,9 @@ public class LeaderImpl {
                     break;
                 case REPLICATE_SNAPSHOT:
                     finishReplicateSnapshotTask(task, request);
+                    break;
+                case UPDATE_SCHEMA:
+                    finishUpdateSchemaTask(task, request);
                     break;
                 default:
                     break;
@@ -414,7 +418,7 @@ public class LeaderImpl {
         // because in this function, the only problem that cause failure is meta missing.
         // and if meta is missing, we no longer need to resend this task
         try {
-            UpdateTabletMetaInfoTask tabletTask = (UpdateTabletMetaInfoTask) task;
+            TabletMetadataUpdateAgentTask tabletTask = (TabletMetadataUpdateAgentTask) task;
             if (request.getTask_status().getStatus_code() != TStatusCode.OK) {
                 tabletTask.countDownToZero(
                         task.getBackendId() + ": " + request.getTask_status().getError_msgs().toString());
@@ -445,6 +449,32 @@ public class LeaderImpl {
         try {
             GlobalStateMgr.getCurrentState().getReplicationMgr().finishReplicateSnapshotTask(
                     (ReplicateSnapshotTask) task, request);
+        } finally {
+            AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
+        }
+    }
+
+    private void finishUpdateSchemaTask(AgentTask task, TFinishTaskRequest request) {
+        try {
+            long dbId = task.getDbId();
+            long tableId = task.getTableId();
+            long indexId = task.getIndexId();
+            long backendId = task.getBackendId();
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            if (db != null) {
+                db.readLock();
+                try {
+                    OlapTable olapTable = (OlapTable) db.getTable(tableId);
+                    if (olapTable != null) {
+                        MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
+                        if (indexMeta != null) {
+                            indexMeta.removeUpdateSchemaBackend(backendId);
+                        }
+                    }
+                } finally {
+                    db.readUnlock();
+                }
+            }
         } finally {
             AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
         }
@@ -1294,8 +1324,11 @@ public class LeaderImpl {
         }
 
         try {
-            GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
-                    request.getDb_id(), request.getTxn_id(), request.getError_msg());
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(
+                    request.getDb_id(), request.getTxn_id(), request.getError_msg(),
+                    TabletCommitInfo.fromThrift(request.getCommit_infos()),
+                    TabletFailInfo.fromThrift(request.getFail_infos()),
+                    TxnCommitAttachment.fromThrift(request.getCommit_attachment()));
         } catch (Exception e) {
             LOG.warn("abort remote txn failed, txn_id: {}", request.getTxn_id(), e);
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);

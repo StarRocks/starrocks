@@ -49,6 +49,7 @@ add_library(Storage STATIC
     protobuf_file.cpp
     replication_txn_manager.cpp
     replication_utils.cpp
+    segment_stream_converter.cpp
     rowset_update_state.cpp
     rowset_column_update_state.cpp
     update_compaction_state.cpp
@@ -173,6 +174,8 @@ add_library(Storage STATIC
     size_tiered_compaction_policy.cpp
     cluster_id_mgr.cpp
     push_utils.cpp
+    primary_key_recover.cpp
+    local_primary_key_recover.cpp
     lake/async_delta_writer.cpp
     lake/compaction_policy.cpp
     lake/compaction_scheduler.cpp
@@ -199,7 +202,7 @@ add_library(Storage STATIC
     lake/versioned_tablet.cpp
     lake/vertical_compaction_task.cpp
     lake/metacache.cpp
-    lake/primary_key_recover.cpp
+    lake/lake_primary_key_recover.cpp
     binlog_util.cpp
     binlog_file_writer.cpp
     binlog_file_reader.cpp
@@ -212,4 +215,5 @@ add_library(Storage STATIC
     persistent_index_compaction_manager.cpp
     lake/local_pk_index_manager.cpp
     persistent_index_tablet_loader.cpp
-    lake/lake_local_persistent_index_tablet_loader.cpp)
+    lake/lake_local_persistent_index_tablet_loader.cpp
+    primary_key_dump.cpp)

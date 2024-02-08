@@ -1423,7 +1423,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitDropTaskStatement(StarRocksParser.DropTaskStatementContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TaskName taskName = qualifiedNameToTaskName(qualifiedName);
-        return new DropTaskStmt(taskName, createPos(context));
+        boolean force = context.FORCE() != null;
+        return new DropTaskStmt(taskName, force, createPos(context));
     }
 
     // ------------------------------------------- Materialized View Statement -----------------------------------------
@@ -5591,7 +5592,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             if (params.size() != 2) {
                 throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(functionName), pos);
             }
-            return new CollectionElementExpr(params.get(0), params.get(1));
+            return new CollectionElementExpr(params.get(0), params.get(1), false);
         }
 
         if (functionName.equals(FunctionSet.ISNULL)) {
@@ -6129,7 +6130,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitCollectionSubscript(StarRocksParser.CollectionSubscriptContext context) {
         Expr value = (Expr) visit(context.value);
         Expr index = (Expr) visit(context.index);
-        return new CollectionElementExpr(value, index);
+        return new CollectionElementExpr(value, index, false);
     }
 
     @Override
@@ -6872,7 +6873,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         List<StarRocksParser.SubfieldDescContext> subfields =
                 context.subfieldDescs().subfieldDesc();
         for (StarRocksParser.SubfieldDescContext type : subfields) {
-            fields.add(new StructField(type.identifier().getText(), getType(type.type()), null));
+            Identifier fieldIdentifier = (Identifier) visit(type.identifier());
+            String fieldName = fieldIdentifier.getValue();
+            fields.add(new StructField(fieldName, getType(type.type()), null));
         }
 
         return new StructType(fields);

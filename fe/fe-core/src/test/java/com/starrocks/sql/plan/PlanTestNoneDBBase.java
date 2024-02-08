@@ -15,6 +15,7 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.io.CharStreams;
@@ -34,6 +35,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TExplainLevel;
@@ -102,8 +104,16 @@ public class PlanTestNoneDBBase {
     }
 
     public static void assertContains(String text, String... pattern) {
-        for (String s : pattern) {
-            Assert.assertTrue(text, text.contains(s));
+        if (isIgnoreExplicitColRefIds()) {
+            String ignoreExpect = normalizeLogicalPlan(text);
+            for (String actual : pattern) {
+                String ignoreActual = normalizeLogicalPlan(actual);
+                Assert.assertTrue(text, ignoreExpect.contains(ignoreActual));
+            }
+        }  else {
+            for (String s : pattern) {
+                Assert.assertTrue(text, text.contains(s));
+            }
         }
     }
 
@@ -122,8 +132,11 @@ public class PlanTestNoneDBBase {
             StringBuilder sb = new StringBuilder();
             sb.append(first);
             sb.append(LOGICAL_PLAN_PREDICATE_PREFIX + "[");
-            String sorted = Arrays.stream(predicates.split(" AND ")).sorted().collect(Collectors.joining(" AND "));
-            sorted = Arrays.stream(sorted.split(" OR ")).sorted().collect(Collectors.joining(" OR "));
+            // FIXME: This is only used for normalize not for the final result.
+            String sorted = Arrays.stream(predicates.split(" AND "))
+                    .map(p -> Arrays.stream(p.split(" OR ")).sorted().collect(Collectors.joining(" OR ")))
+                    .sorted()
+                    .collect(Collectors.joining(" AND "));
             sb.append(sorted);
             sb.append("])");
             return sb.toString();
@@ -235,6 +248,17 @@ public class PlanTestNoneDBBase {
         connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
         return UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
                 getExplainString(TExplainLevel.NORMAL);
+    }
+
+    public String getFragmentPlan(String sql, String traceModule) throws Exception {
+        Pair<String, Pair<ExecPlan, String>> result =
+                UtFrameUtils.getFragmentPlanWithTrace(connectContext, sql, traceModule);
+        Pair<ExecPlan, String> execPlanWithQuery = result.second;
+        String traceLog = execPlanWithQuery.second;
+        if (!Strings.isNullOrEmpty(traceLog)) {
+            System.out.println(traceLog);
+        }
+        return execPlanWithQuery.first.getExplainString(TExplainLevel.NORMAL);
     }
 
     public String getLogicalFragmentPlan(String sql) throws Exception {
@@ -518,6 +542,94 @@ public class PlanTestNoneDBBase {
         runFileUnitTest(filename, false);
     }
 
+    private boolean executeSqlByMode(StringBuilder sql, int nth, StringBuilder comment,
+                                     StringBuilder exceptString,
+                                     boolean hasResult, StringBuilder result,
+                                     boolean hasFragment, StringBuilder fragment,
+                                     boolean hasFragmentStatistics, StringBuilder fragmentStatistics,
+                                     boolean isDump, StringBuilder dumpInfoString,
+                                     boolean hasScheduler, StringBuilder schedulerString,
+                                     boolean isEnumerate, int planCount, StringBuilder planEnumerate,
+                                     boolean isDebug, BufferedWriter debugWriter) throws Exception {
+        Pair<String, Pair<ExecPlan, String>> pair = null;
+        QueryDebugOptions debugOptions = connectContext.getSessionVariable().getQueryDebugOptions();
+        String logModule = debugOptions.isEnableQueryTraceLog() ? "MV" : "";
+        try {
+            pair = UtFrameUtils.getFragmentPlanWithTrace(connectContext, sql.toString(), logModule);
+        } catch (Exception ex) {
+            if (!exceptString.toString().isEmpty()) {
+                Assert.assertEquals(exceptString.toString(), ex.getMessage());
+                return true;
+            }
+            Assert.fail("Planning failed, message: " + ex.getMessage() + ", sql: " + sql);
+        }
+
+        try {
+            String fra = null;
+            String statistic = null;
+            String dumpStr = null;
+            String actualSchedulerPlan = null;
+
+            ExecPlan execPlan = pair.second.first;
+            if (debugOptions.isEnableQueryTraceLog()) {
+                System.out.println(pair.second.second);
+            }
+            if (hasResult && !isDebug) {
+                checkWithIgnoreTabletList(result.toString().trim(), pair.first.trim());
+            }
+            if (hasFragment) {
+                fra = execPlan.getExplainString(TExplainLevel.NORMAL);
+                if (!isDebug) {
+                    fra = format(fra);
+                    checkWithIgnoreTabletList(fragment.toString().trim(), fra.trim());
+                }
+            }
+            if (hasFragmentStatistics) {
+                statistic = format(execPlan.getExplainString(TExplainLevel.COSTS));
+                if (!isDebug) {
+                    checkWithIgnoreTabletList(fragmentStatistics.toString().trim(), statistic.trim());
+                }
+            }
+            if (isDump) {
+                dumpStr = Stream.of(toPrettyFormat(getDumpString(sql.toString())).split("\n"))
+                        .filter(s -> !s.contains("\"session_variables\""))
+                        .collect(Collectors.joining("\n"));
+                if (!isDebug) {
+                    Assert.assertEquals(dumpInfoString.toString().trim(), dumpStr.trim());
+                }
+            }
+            if (hasScheduler) {
+                try {
+                    actualSchedulerPlan =
+                            UtFrameUtils.getPlanAndStartScheduling(connectContext, sql.toString()).first;
+                } catch (Exception ex) {
+                    if (!exceptString.toString().isEmpty()) {
+                        Assert.assertEquals(exceptString.toString(), ex.getMessage());
+                        return true;
+                    }
+                    Assert.fail("Scheduling failed, message: " + ex.getMessage() + ", sql: " + sql);
+                }
+
+                if (!isDebug) {
+                    checkSchedulerPlan(schedulerString.toString(), actualSchedulerPlan);
+                }
+            }
+            if (isDebug) {
+                debugSQL(debugWriter, hasResult, hasFragment, isDump, hasFragmentStatistics, hasScheduler, nth,
+                        sql.toString(), pair.first, fra, dumpStr, statistic, comment.toString(),
+                        actualSchedulerPlan);
+            }
+            if (isEnumerate) {
+                Assert.assertEquals("plan count mismatch", planCount, execPlan.getPlanCount());
+                checkWithIgnoreTabletList(planEnumerate.toString().trim(), pair.first.trim());
+                connectContext.getSessionVariable().setUseNthExecPlan(0);
+            }
+        } catch (Error error) {
+            collector.addError(new Throwable(nth + " plan " + "\n" + sql, error));
+        }
+        return false;
+    }
+
     public static String format(String result) {
         StringBuilder sb = new StringBuilder();
         Arrays.stream(result.split("\n")).forEach(d -> sb.append(d.trim()).append("\n"));
@@ -584,7 +696,7 @@ public class PlanTestNoneDBBase {
     /**
      * Whether ignore explicit column ref ids when checking the expected plans.
      */
-    protected boolean isIgnoreExplicitColRefIds() {
+    public static boolean isIgnoreExplicitColRefIds() {
         return false;
     }
 

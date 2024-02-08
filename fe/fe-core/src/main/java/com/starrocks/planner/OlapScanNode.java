@@ -1280,12 +1280,13 @@ public class OlapScanNode extends ScanNode {
     }
 
     public void computePointScanRangeLocations() {
-        List<String> keyColumns = olapTable.getKeyColumns().stream().map(Column::getName).collect(Collectors.toList());
+        // must order in create table
+        List<String> keyColumns = olapTable.getKeyColumnsInOrder().stream().map(Column::getName)
+                .collect(Collectors.toList());
         Optional<List<List<LiteralExpr>>> points = RowStoreUtils.extractPointsLiteral(conjuncts, keyColumns);
 
         if (points.isPresent()) {
             rowStoreKeyLiterals = points.get();
-            return;
         }
     }
 

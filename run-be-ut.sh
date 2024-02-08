@@ -170,10 +170,6 @@ if [ "${USE_STAROS}" == "ON"  ]; then
   export STARLET_INSTALL_DIR
 fi
 
-if [[ -z ${WITH_STARCACHE} ]]; then
-  WITH_STARCACHE=ON
-fi
-
 ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}\
             -DSTARROCKS_HOME=${STARROCKS_HOME} \
@@ -184,7 +180,6 @@ ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DSTARLET_INSTALL_DIR=${STARLET_INSTALL_DIR}          \
             -DWITH_GCOV=${WITH_GCOV} \
             -DWITH_CACHELIB=${WITH_CACHELIB} \
-            -DWITH_STARCACHE=${WITH_STARCACHE} \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ../
 
 ${BUILD_SYSTEM} -j${PARALLEL}
@@ -251,6 +246,7 @@ export CLASSPATH=$STARROCKS_HOME/conf:$HADOOP_CLASSPATH:$CLASSPATH
 # ===========================================================
 
 export STARROCKS_TEST_BINARY_DIR=${STARROCKS_TEST_BINARY_DIR}/test
+export ASAN_OPTIONS="abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1:detect_stack_use_after_return=1"
 
 if [ $WITH_AWS = "OFF" ]; then
     append_negative_case "*S3*"

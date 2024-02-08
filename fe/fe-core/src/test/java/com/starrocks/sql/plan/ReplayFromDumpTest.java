@@ -42,6 +42,37 @@ import static org.junit.Assert.fail;
 public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
 
     @Test
+    public void testForceRuleBasedRewrite() throws Exception {
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite"));
+        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
+        sessionVariable.setEnableForceRuleBasedMvRewrite(true);
+        Pair<QueryDumpInfo, String> replayPair =
+                getCostPlanFragment(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite"), sessionVariable);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("partition_flat_consumptions_partition_drinks_dates"));
+    }
+
+    @Test
+    public void testForceRuleBasedRewriteMonth() throws Exception {
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_month"));
+        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
+        sessionVariable.setEnableForceRuleBasedMvRewrite(true);
+        Pair<QueryDumpInfo, String> replayPair =
+                getCostPlanFragment(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_month"), sessionVariable);
+        Assert.assertTrue(replayPair.second,
+                replayPair.second.contains("partition_flat_consumptions_partition_drinks_roll_month"));
+    }
+
+    @Test
+    public void testForceRuleBasedRewriteYear() throws Exception {
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_year"));
+        SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
+        sessionVariable.setEnableForceRuleBasedMvRewrite(true);
+        Pair<QueryDumpInfo, String> replayPair =
+                getCostPlanFragment(getDumpInfoFromFile("query_dump/force_rule_based_mv_rewrite_year"), sessionVariable);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("flat_consumptions_drinks_dates_roll_year"));
+    }
+
+    @Test
     public void testTPCH17WithUseAnalytic() throws Exception {
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(getDumpInfoFromFile("query_dump/tpch17"));
         SessionVariable sessionVariable = queryDumpInfo.getSessionVariable();
@@ -647,20 +678,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 52: n_regionkey = 58: r_regionkey"));
         FeConstants.isReplayFromQueryDump = false;
-    }
-
-    @Test
-    public void testTPCH11() throws Exception {
-        try {
-            FeConstants.USE_MOCK_DICT_MANAGER = true;
-            Pair<QueryDumpInfo, String> replayPair =
-                    getCostPlanFragment(getDumpInfoFromFile("query_dump/tpch_query11_mv_rewrite"));
-            Assert.assertTrue(replayPair.second, replayPair.second.contains(
-                    "n_name,[<place-holder> = 'GERMANY'])\n" +
-                            "     dict_col=n_name"));
-        } finally {
-            FeConstants.USE_MOCK_DICT_MANAGER = false;
-        }
     }
 
     @Test

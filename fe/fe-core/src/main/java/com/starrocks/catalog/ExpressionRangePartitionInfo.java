@@ -38,6 +38,7 @@ import com.starrocks.sql.parser.SqlParser;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.parquet.Strings;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -229,7 +230,13 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
         Text.writeString(out, GsonUtils.GSON.toJson(serializedPartitionExprs));
     }
 
-    public void renameTableName(String newTableName) {
+    /**
+     * Do actions when rename referred table's db or table name.
+     * @param dbName        : new db name which can be null or empty and will be not updated then.
+     * @param newTableName  : new table name which must be not null or empty.
+     */
+    public void renameTableName(String dbName, String newTableName) {
+        Preconditions.checkArgument(!Strings.isNullOrEmpty(newTableName));
         AstVisitor<Void, Void> renameVisitor = new AstVisitor<Void, Void>() {
             @Override
             public Void visitExpression(Expr expr, Void context) {
@@ -243,6 +250,9 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
             public Void visitSlot(SlotRef node, Void context) {
                 TableName tableName = node.getTblNameWithoutAnalyzed();
                 if (tableName != null) {
+                    if (!Strings.isNullOrEmpty(dbName)) {
+                        tableName.setDb(dbName);
+                    }
                     tableName.setTbl(newTableName);
                 }
                 return null;

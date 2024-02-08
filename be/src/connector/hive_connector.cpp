@@ -651,6 +651,43 @@ HdfsScanner* HiveDataSource::_create_hive_jni_scanner(const FSOptions& options) 
     return scanner;
 }
 
+HdfsScanner* HiveDataSource::_create_odps_jni_scanner(const FSOptions& options) {
+    const auto* odps_table = dynamic_cast<const OdpsTableDescriptor*>(_hive_table);
+    std::string required_fields;
+    for (auto slot : _tuple_desc->slots()) {
+        required_fields.append(slot->col_name());
+        required_fields.append(",");
+    }
+    required_fields = required_fields.substr(0, required_fields.size() - 1);
+    std::string nested_fields;
+    for (auto slot : _tuple_desc->slots()) {
+        const TypeDescriptor& type = slot->type();
+        if (type.is_complex_type()) {
+            build_nested_fields(type, slot->col_name(), &nested_fields);
+        }
+    }
+    if (!nested_fields.empty()) {
+        nested_fields = nested_fields.substr(0, nested_fields.size() - 1);
+    }
+    std::map<std::string, std::string> jni_scanner_params;
+    jni_scanner_params["project_name"] = odps_table->get_database_name();
+    jni_scanner_params["table_name"] = odps_table->get_table_name();
+    jni_scanner_params["required_fields"] = required_fields;
+    jni_scanner_params.insert(_scan_range.odps_split_infos.begin(), _scan_range.odps_split_infos.end());
+    jni_scanner_params["nested_fields"] = nested_fields;
+
+    const AliyunCloudConfiguration aliyun_cloud_configuration =
+            CloudConfigurationFactory::create_aliyun(*options.cloud_configuration);
+    AliyunCloudCredential aliyun_cloud_credential = aliyun_cloud_configuration.aliyun_cloud_credential;
+    jni_scanner_params["endpoint"] = aliyun_cloud_credential.endpoint;
+    jni_scanner_params["access_id"] = aliyun_cloud_credential.access_key;
+    jni_scanner_params["access_key"] = aliyun_cloud_credential.secret_key;
+
+    std::string scanner_factory_class = "com/starrocks/odps/reader/OdpsSplitScannerFactory";
+    HdfsScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, jni_scanner_params));
+    return scanner;
+}
+
 Status HiveDataSource::_init_scanner(RuntimeState* state) {
     SCOPED_TIMER(_profile.open_file_timer);
 
@@ -680,7 +717,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     COUNTER_UPDATE(_profile.scan_ranges_counter, 1);
     HdfsScannerParams scanner_params;
     scanner_params.runtime_filter_collector = _runtime_filters;
-    scanner_params.scan_ranges = {&scan_range};
+    scanner_params.scan_range = &scan_range;
     scanner_params.fs = _pool.add(fs.release());
     scanner_params.path = native_file_path;
     scanner_params.file_size = _scan_range.file_length;
@@ -701,7 +738,6 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.hive_column_names = &_hive_column_names;
     scanner_params.case_sensitive = _case_sensitive;
     scanner_params.profile = &_profile;
-    scanner_params.open_limit = nullptr;
     scanner_params.lazy_column_coalesce_counter = get_lazy_column_coalesce_counter();
 
     if (!_equality_delete_slots.empty()) {
@@ -737,6 +773,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     if (scan_range.__isset.use_paimon_jni_reader) {
         use_paimon_jni_reader = scan_range.use_paimon_jni_reader;
     }
+    bool use_odps_jni_reader = false;
+    if (scan_range.__isset.use_odps_jni_reader) {
+        use_odps_jni_reader = scan_range.use_odps_jni_reader;
+    }
 
     if (_use_partition_column_value_only) {
         DCHECK(_can_use_any_column);
@@ -745,6 +785,8 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         scanner = _create_paimon_jni_scanner(fsOptions);
     } else if (use_hudi_jni_reader) {
         scanner = _create_hudi_jni_scanner(fsOptions);
+    } else if (use_odps_jni_reader) {
+        scanner = _create_odps_jni_scanner(fsOptions);
     } else if (format == THdfsFileFormat::PARQUET) {
         scanner = _pool.add(new HdfsParquetScanner());
     } else if (format == THdfsFileFormat::ORC) {

@@ -65,6 +65,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.FeNameFormat;
@@ -81,6 +82,7 @@ import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -322,7 +324,7 @@ public class DatabaseTransactionMgr {
             transactionState.setPrepareTime(System.currentTimeMillis());
             unprotectUpsertTransactionState(transactionState, false);
 
-            if (MetricRepo.isInit) {
+            if (MetricRepo.hasInit) {
                 MetricRepo.COUNTER_TXN_BEGIN.increase(1L);
             }
 
@@ -330,7 +332,7 @@ public class DatabaseTransactionMgr {
         } catch (DuplicatedRequestException e) {
             throw e;
         } catch (Exception e) {
-            if (MetricRepo.isInit) {
+            if (MetricRepo.hasInit) {
                 MetricRepo.COUNTER_TXN_REJECT.increase(1L);
             }
             throw e;
@@ -1157,8 +1159,19 @@ public class DatabaseTransactionMgr {
                             transactionState);
                     continue;
                 }
-                partitionCommitInfo.setVersion(partition.getNextVersion());
-                partitionCommitInfo.setVersionTime(table.isCloudNativeTable() ? 0 : commitTs);
+                if (transactionState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
+                    Map<Long, Long> partitionVersions = ((ReplicationTxnCommitAttachment) transactionState
+                            .getTxnCommitAttachment()).getPartitionVersions();
+                    partitionCommitInfo.setVersion(partitionVersions.get(partitionCommitInfo.getPartitionId()));
+                } else {
+                    partitionCommitInfo.setVersion(partition.getNextVersion());
+                }
+                // versionTime has different meanings in shared data and shared nothing mode.
+                // In shared nothing mode, versionTime is the time when the transaction was
+                // committed, while in shared data mode, versionTime is the time when the
+                // transaction was successfully published. This is a design error due to
+                // carelessness, and should have been consistent here.
+                partitionCommitInfo.setVersionTime(table.isCloudNativeTableOrMaterializedView() ? 0 : commitTs);
             }
         }
 
@@ -1280,17 +1293,22 @@ public class DatabaseTransactionMgr {
 
     public void abortTransaction(long transactionId, String reason, TxnCommitAttachment txnCommitAttachment)
             throws UserException {
-        abortTransaction(transactionId, true, reason, txnCommitAttachment, Lists.newArrayList());
+        abortTransaction(transactionId, true, reason, txnCommitAttachment,
+                Collections.emptyList(), Collections.emptyList());
     }
 
     public void abortTransaction(long transactionId, String reason,
-                                 TxnCommitAttachment txnCommitAttachment, List<TabletFailInfo> failedTablets)
+                                 TxnCommitAttachment txnCommitAttachment,
+                                 List<TabletCommitInfo> finishedTablets,
+                                 List<TabletFailInfo> failedTablets)
             throws UserException {
-        abortTransaction(transactionId, true, reason, txnCommitAttachment, failedTablets);
+        abortTransaction(transactionId, true, reason, txnCommitAttachment, finishedTablets, failedTablets);
     }
 
     public void abortTransaction(long transactionId, boolean abortPrepared, String reason,
-                                 TxnCommitAttachment txnCommitAttachment, List<TabletFailInfo> failedTablets)
+                                 TxnCommitAttachment txnCommitAttachment,
+                                 List<TabletCommitInfo> finishedTablets,
+                                 List<TabletFailInfo> failedTablets)
             throws UserException {
         if (transactionId < 0) {
             LOG.info("transaction id is {}, less than 0, maybe this is an old type load job, ignore abort operation",
@@ -1341,7 +1359,7 @@ public class DatabaseTransactionMgr {
             }
             TransactionStateListener listener = stateListenerFactory.create(this, table);
             if (listener != null) {
-                listener.postAbort(transactionState, failedTablets);
+                listener.postAbort(transactionState, finishedTablets, failedTablets);
             }
         }
     }

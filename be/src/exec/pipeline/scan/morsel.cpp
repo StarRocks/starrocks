@@ -33,7 +33,7 @@ namespace starrocks::pipeline {
 
 /// Morsel.
 
-const std::vector<RowsetSharedPtr> Morsel::kEmptyRowsets;
+const std::vector<RowsetSharedPtr> ScanMorselX::kEmptyRowsets;
 
 void PhysicalSplitScanMorsel::init_tablet_reader_params(TabletReaderParams* params) {
     params->rowid_range_option = _rowid_range_option;
@@ -105,7 +105,7 @@ size_t BucketSequenceMorselQueueFactory::num_original_morsels() const {
 }
 
 /// MorselQueue.
-std::vector<TInternalScanRange*> _convert_morsels_to_olap_scan_ranges(const Morsels& morsels) {
+static std::vector<TInternalScanRange*> convert_morsels_to_olap_scan_ranges(const Morsels& morsels) {
     std::vector<TInternalScanRange*> scan_ranges;
     scan_ranges.reserve(morsels.size());
     for (const auto& morsel : morsels) {
@@ -116,8 +116,8 @@ std::vector<TInternalScanRange*> _convert_morsels_to_olap_scan_ranges(const Mors
     return scan_ranges;
 }
 
-std::vector<TInternalScanRange*> FixedMorselQueue::olap_scan_ranges() const {
-    return _convert_morsels_to_olap_scan_ranges(_morsels);
+std::vector<TInternalScanRange*> MorselQueue::prepare_olap_scan_ranges() const {
+    return convert_morsels_to_olap_scan_ranges(_morsels);
 }
 
 void MorselQueue::unget(MorselPtr&& morsel) {
@@ -147,8 +147,8 @@ StatusOr<MorselPtr> FixedMorselQueue::try_get() {
 BucketSequenceMorselQueue::BucketSequenceMorselQueue(MorselQueuePtr&& morsel_queue)
         : _morsel_queue(std::move(morsel_queue)) {}
 
-std::vector<TInternalScanRange*> BucketSequenceMorselQueue::olap_scan_ranges() const {
-    return _morsel_queue->olap_scan_ranges();
+std::vector<TInternalScanRange*> BucketSequenceMorselQueue::prepare_olap_scan_ranges() const {
+    return _morsel_queue->prepare_olap_scan_ranges();
 }
 
 bool BucketSequenceMorselQueue::empty() const {
@@ -164,6 +164,7 @@ StatusOr<MorselPtr> BucketSequenceMorselQueue::try_get() {
     }
     ASSIGN_OR_RETURN(auto morsel, _morsel_queue->try_get());
     auto* m = down_cast<ScanMorsel*>(morsel.get());
+    DCHECK(m->has_owner_id());
     auto owner_id = m->owner_id();
     ASSIGN_OR_RETURN(int64_t next_owner_id, _peek_sequence_id());
     _ticket_checker->enter(owner_id, next_owner_id != owner_id);
@@ -202,10 +203,6 @@ StatusOr<int64_t> BucketSequenceMorselQueue::_peek_sequence_id() const {
         }
     }
     return next_owner_id;
-}
-
-std::vector<TInternalScanRange*> PhysicalSplitMorselQueue::olap_scan_ranges() const {
-    return _convert_morsels_to_olap_scan_ranges(_morsels);
 }
 
 void PhysicalSplitMorselQueue::set_key_ranges(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges) {
@@ -305,7 +302,7 @@ StatusOr<MorselPtr> PhysicalSplitMorselQueue::try_get() {
     MorselPtr morsel = std::make_unique<PhysicalSplitScanMorsel>(
             scan_morsel->get_plan_node_id(), *(scan_morsel->get_scan_range()), std::move(rowid_range));
     morsel->set_rowsets(_tablet_rowsets[_tablet_idx]);
-    _inc_num_splits(_is_last_split_of_current_morsel());
+    _inc_split(_is_last_split_of_current_morsel());
     return morsel;
 }
 
@@ -454,10 +451,6 @@ Status PhysicalSplitMorselQueue::_init_segment() {
     return Status::OK();
 }
 
-std::vector<TInternalScanRange*> LogicalSplitMorselQueue::olap_scan_ranges() const {
-    return _convert_morsels_to_olap_scan_ranges(_morsels);
-}
-
 void LogicalSplitMorselQueue::set_key_ranges(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges) {
     for (const auto& key_range : key_ranges) {
         if (key_range->begin_scan_range.size() == 1 && key_range->begin_scan_range.get_value(0) == NEGATIVE_INFINITY) {
@@ -590,7 +583,7 @@ StatusOr<MorselPtr> LogicalSplitMorselQueue::try_get() {
     auto morsel = std::make_unique<LogicalSplitScanMorsel>(
             scan_morsel->get_plan_node_id(), *(scan_morsel->get_scan_range()), std::move(short_key_ranges));
     morsel->set_rowsets(_tablet_rowsets[_tablet_idx]);
-    _inc_num_splits(_is_last_split_of_current_morsel());
+    _inc_split(_is_last_split_of_current_morsel());
     return morsel;
 }
 
@@ -815,6 +808,33 @@ bool LogicalSplitMorselQueue::_is_last_split_of_current_morsel() {
 
 MorselQueuePtr create_empty_morsel_queue() {
     return std::make_unique<FixedMorselQueue>(std::vector<MorselPtr>{});
+}
+
+StatusOr<MorselPtr> DynamicMorselQueue::try_get() {
+    std::lock_guard<std::mutex> _l(_mutex);
+    if (_size == 0) return nullptr;
+    _size -= 1;
+    MorselPtr ret = std::move(_queue.front());
+    _queue.pop_front();
+    if (_ticket_checker != nullptr && ret->has_owner_id() && !ret->is_ticket_checker_entered()) {
+        ret->set_ticket_checker_entered(true);
+        _ticket_checker->enter(ret->owner_id(), ret->is_last_split());
+    }
+    return std::move(ret);
+}
+
+void DynamicMorselQueue::unget(MorselPtr&& morsel) {
+    std::lock_guard<std::mutex> _l(_mutex);
+    _size += 1;
+    _queue.emplace_front(std::move(morsel));
+}
+
+void DynamicMorselQueue::append_morsels(std::vector<MorselPtr>&& morsels) {
+    std::lock_guard<std::mutex> _l(_mutex);
+    _size += morsels.size();
+    for (MorselPtr& morsel : morsels) {
+        _queue.emplace_back(std::move(morsel));
+    }
 }
 
 } // namespace starrocks::pipeline
