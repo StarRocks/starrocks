@@ -15,6 +15,7 @@
 
 package com.starrocks.scheduler;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.google.gson.JsonObject;
@@ -22,6 +23,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.QueryableReentrantLock;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.Util;
+import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.persist.TaskRunStatus;
@@ -38,7 +40,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
-public class TaskRunManager {
+public class TaskRunManager implements MemoryTrackable {
 
     private static final Logger LOG = LogManager.getLogger(TaskRunManager.class);
 
@@ -312,6 +314,21 @@ public class TaskRunManager {
 
     public long getHistoryTaskRunCount() {
         return taskRunHistory.getTaskRunCount();
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        long validPendingCount = 0;
+        for (Long taskId : pendingTaskRunMap.keySet()) {
+            PriorityBlockingQueue<TaskRun> taskRuns = pendingTaskRunMap.get(taskId);
+            if (taskRuns != null && !taskRuns.isEmpty()) {
+                validPendingCount += taskRuns.size();
+            }
+        }
+
+        return ImmutableMap.of("PendingTaskRun", validPendingCount,
+                "RunningTaskRun", (long) runningTaskRunMap.size(),
+                "HistoryTaskRun", taskRunHistory.getTaskRunCount());
     }
 
     /**
