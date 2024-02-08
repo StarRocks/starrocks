@@ -710,8 +710,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         RETURN_IF_ERROR(_prepare_workgroup(request));
         RETURN_IF_ERROR(_prepare_runtime_state(exec_env, request));
 
-        auto query_mem_tracker = _query_ctx->mem_tracker();
-        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(query_mem_tracker.get());
+        auto mem_tracker = _fragment_ctx->runtime_state()->instance_mem_tracker();
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
 
         RETURN_IF_ERROR(_prepare_exec_plan(exec_env, request));
         RETURN_IF_ERROR(_prepare_global_dict(request));
@@ -719,8 +719,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     {
         SCOPED_RAW_TIMER(&profiler.prepare_pipeline_driver_time);
 
-        auto query_mem_tracker = _query_ctx->mem_tracker();
-        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(query_mem_tracker.get());
+        auto mem_tracker = _fragment_ctx->runtime_state()->instance_mem_tracker();
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
 
         RETURN_IF_ERROR(_prepare_pipeline_driver(exec_env, request));
         RETURN_IF_ERROR(_prepare_stream_load_pipe(exec_env, request));
