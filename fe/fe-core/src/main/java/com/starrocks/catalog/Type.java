@@ -118,7 +118,11 @@ public abstract class Type implements Cloneable {
             ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0);
 
     public static final ScalarType VARCHAR = ScalarType.createVarcharType(-1);
+<<<<<<< HEAD
     public static final ScalarType STRING = ScalarType.createVarcharType(ScalarType.MAX_VARCHAR_LENGTH);
+=======
+    public static final ScalarType STRING = ScalarType.createVarcharType(ScalarType.getOlapMaxVarcharLength());
+>>>>>>> caaee45137 ([Enhancement] Make maximal varchar string length configurable in fe.conf and be.conf. (#38957))
     public static final ScalarType DEFAULT_STRING = ScalarType.createDefaultString();
     public static final ScalarType HLL = ScalarType.createHllType();
     public static final ScalarType CHAR = ScalarType.createCharType(-1);

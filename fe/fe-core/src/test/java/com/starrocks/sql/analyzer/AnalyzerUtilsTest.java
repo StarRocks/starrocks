@@ -77,4 +77,14 @@ public class AnalyzerUtilsTest {
         Assert.assertTrue(shouldReplaceExpr instanceof StringLiteral);
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testConvertCatalogMaxStringToOlapMaxString() {
+        ScalarType catalogString = ScalarType.createDefaultCatalogString();
+        ScalarType convertedString = (ScalarType) AnalyzerUtils.transformTableColumnType(catalogString);
+        Assert.assertEquals(ScalarType.getOlapMaxVarcharLength(), convertedString.getLength());
+    }
+
+>>>>>>> caaee45137 ([Enhancement] Make maximal varchar string length configurable in fe.conf and be.conf. (#38957))
 }

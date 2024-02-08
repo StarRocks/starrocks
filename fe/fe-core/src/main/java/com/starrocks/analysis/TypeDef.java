@@ -128,7 +128,11 @@ public class TypeDef implements ParseNode {
                 int maxLen;
                 if (type == PrimitiveType.VARCHAR) {
                     name = "Varchar";
+<<<<<<< HEAD
                     maxLen = ScalarType.MAX_VARCHAR_LENGTH;
+=======
+                    maxLen = ScalarType.getOlapMaxVarcharLength();
+>>>>>>> caaee45137 ([Enhancement] Make maximal varchar string length configurable in fe.conf and be.conf. (#38957))
                 } else {
                     name = "Char";
                     maxLen = ScalarType.MAX_CHAR_LENGTH;
@@ -147,7 +151,11 @@ public class TypeDef implements ParseNode {
             }
             case VARBINARY: {
                 String name = "VARBINARY";
+<<<<<<< HEAD
                 int maxLen = ScalarType.MAX_VARCHAR_LENGTH;
+=======
+                int maxLen = ScalarType.getOlapMaxVarcharLength();
+>>>>>>> caaee45137 ([Enhancement] Make maximal varchar string length configurable in fe.conf and be.conf. (#38957))
                 int len = scalarType.getLength();
                 // len is decided by child, when it is -1.
                 if (scalarType.getLength() > maxLen) {

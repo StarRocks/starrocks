@@ -36,6 +36,7 @@ add_library(Storage STATIC
     local_tablet_reader.cpp
     publish_version_manager.cpp
     olap_common.cpp
+    olap_define.cpp
     olap_server.cpp
     options.cpp
     page_cache.cpp

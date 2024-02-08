@@ -240,7 +240,11 @@ public class ColumnDefTest {
 
     @Test(expected = AnalysisException.class)
     public void testInvalidVarcharInsideArray() throws AnalysisException {
+<<<<<<< HEAD
         Type tooLongVarchar = ScalarType.createVarchar(ScalarType.MAX_VARCHAR_LENGTH + 1);
+=======
+        Type tooLongVarchar = ScalarType.createVarchar(ScalarType.getOlapMaxVarcharLength() + 1);
+>>>>>>> caaee45137 ([Enhancement] Make maximal varchar string length configurable in fe.conf and be.conf. (#38957))
         ColumnDef column = new ColumnDef("col", new TypeDef(new ArrayType(tooLongVarchar)), false, null, true,
                 DefaultValueDef.NOT_SET, "");
         column.analyze(true);
