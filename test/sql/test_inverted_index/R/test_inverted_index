@@ -119,9 +119,6 @@ DROP TABLE t_test_basic_create_index_pk;
 DROP TABLE t_test_basic_create_index_dup;
 -- result:
 -- !result
-DROP TABLE t_test_basic_create_index_replicated;
--- result:
--- !result
 
 -- name: test_query_gin_index
 CREATE TABLE `t_test_gin_index_query` (

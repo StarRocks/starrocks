@@ -20,7 +20,6 @@ function: wait_alter_table_finish()
 CREATE INDEX index_2 ON t_test_basic_create_index_pk (id3) USING BITMAP;
 function: wait_alter_table_finish()
 
-
 CREATE TABLE `t_test_basic_create_index_dup` (
   `id1` bigint(20) NOT NULL COMMENT "",
   `id2` bigint(20) NOT NULL COMMENT "",
@@ -81,7 +80,6 @@ PROPERTIES (
 
 DROP TABLE t_test_basic_create_index_pk;
 DROP TABLE t_test_basic_create_index_dup;
-DROP TABLE t_test_basic_create_index_replicated;
 
 -- name: test_query_gin_index
 CREATE TABLE `t_test_gin_index_query` (
