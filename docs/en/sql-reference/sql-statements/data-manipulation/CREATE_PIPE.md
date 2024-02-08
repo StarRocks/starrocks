@@ -16,6 +16,8 @@ CREATE [OR REPLACE] PIPE [db_name.]<pipe_name>
 AS <INSERT_SQL>
 ```
 
+StarRocks supports CREATE [OR REPLACE] PIPE from v3.2.3 onwards. When you use CREATE [OR REPLACE] PIPE to create a pipe and the pipe name specified in `pipe_name` is the same as the name of an existing pipe in the current database, the existing database is replaced by the new pipe.
+
 ## Parameters
 
 ### db_name
@@ -28,7 +30,7 @@ The unique name of the database to which the pipe belongs.
 
 ### pipe_name
 
-The name of the pipe. The pipe name must be unique within the database in which the pipe is created.
+The name of the pipe. The pipe name must be unique within the database in which the pipe is created. For the naming conventions, see [System limits](../../../reference/System_limit.md).
 
 ### INSERT_SQL
 
@@ -49,7 +51,7 @@ A set of optional parameters that specify how to execute the pipe. Format: `"key
 
 ## Examples
 
-Create a pipe named `user_behavior_replica` in the current database to load the data of the sample dataset `s3://starrocks-datasets/user_behavior_ten_million_rows.parquet` to the `user_behavior_replica` table:
+Create a pipe named `user_behavior_replica` in the current database to load the data of the sample dataset `s3://starrocks-examples/user_behavior_ten_million_rows.parquet` to the `user_behavior_replica` table:
 
 ```SQL
 CREATE PIPE user_behavior_replica
@@ -61,7 +63,7 @@ AS
 INSERT INTO user_behavior_replica
 SELECT * FROM FILES
 (
-    "path" = "s3://starrocks-datasets/user_behavior_ten_million_rows.parquet",
+    "path" = "s3://starrocks-examples/user_behavior_ten_million_rows.parquet",
     "format" = "parquet",
     "aws.s3.region" = "us-east-1",
     "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",

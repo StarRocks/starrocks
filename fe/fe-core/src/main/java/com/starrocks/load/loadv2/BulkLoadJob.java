@@ -239,6 +239,16 @@ public abstract class BulkLoadJob extends LoadJob {
     }
 
     @Override
+    protected List<TabletCommitInfo> getTabletCommitInfos() {
+        return commitInfos;
+    }
+
+    @Override
+    protected List<TabletFailInfo> getTabletFailInfos() {
+        return failInfos;
+    }
+
+    @Override
     public void onTaskFailed(long taskId, FailMsg failMsg) {
         writeLock();
         try {

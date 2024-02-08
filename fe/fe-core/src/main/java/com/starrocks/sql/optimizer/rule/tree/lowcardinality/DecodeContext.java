@@ -291,7 +291,7 @@ class DecodeContext {
             }
             Preconditions.checkState(newChildren.get(0).getType().isArrayType());
             ScalarOperator result = new CollectionElementOperator(((ArrayType) newChildren.get(0)
-                    .getType()).getItemType(), newChildren.get(0), newChildren.get(1));
+                    .getType()).getItemType(), newChildren.get(0), newChildren.get(1), collectionElementOp.isCheckOutOfBounds());
 
             return processArrayAnchor(result);
         }

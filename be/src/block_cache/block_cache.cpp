@@ -168,8 +168,8 @@ void BlockCache::record_read_cache(size_t size, int64_t lateny_us) {
     _kv_cache->record_read_cache(size, lateny_us);
 }
 
-const DataCacheMetrics BlockCache::cache_metrics() const {
-    return _kv_cache->cache_metrics();
+const DataCacheMetrics BlockCache::cache_metrics(int level) const {
+    return _kv_cache->cache_metrics(level);
 }
 
 Status BlockCache::shutdown() {

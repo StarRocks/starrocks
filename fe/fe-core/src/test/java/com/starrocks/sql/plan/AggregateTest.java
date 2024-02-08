@@ -1392,30 +1392,37 @@ public class AggregateTest extends PlanTestBase {
     public void testMultiAvgDistinctWithNoneGroup() throws Exception {
         String sql = "select avg(distinct t1b) from test_all_type";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "19:Project\n" +
-                "  |  <slot 11> : CAST(12: sum AS DOUBLE) / CAST(14: count AS DOUBLE)");
+        assertContains(plan, "4:AGGREGATE (update serialize)\n" +
+                "  |  output: avg(2: t1b)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  3:AGGREGATE (merge serialize)\n" +
+                "  |  group by: 2: t1b");
 
         sql = "select avg(distinct t1b), count(distinct t1b) from test_all_type";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "19:Project\n" +
-                "  |  <slot 11> : CAST(14: sum AS DOUBLE) / CAST(12: count AS DOUBLE)\n" +
-                "  |  <slot 12> : 12: count");
+        assertContains(plan, "4:AGGREGATE (update serialize)\n" +
+                "  |  output: avg(2: t1b), count(2: t1b)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  3:AGGREGATE (merge serialize)\n" +
+                "  |  group by: 2: t1b");
 
         sql = "select avg(distinct t1b), count(distinct t1b), sum(distinct t1b) from test_all_type";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "9:Project\n" +
-                "  |  <slot 11> : CAST(13: sum AS DOUBLE) / CAST(12: count AS DOUBLE)\n" +
-                "  |  <slot 12> : 12: count\n" +
-                "  |  <slot 13> : 13: sum");
+        assertContains(plan, "4:AGGREGATE (update serialize)\n" +
+                "  |  output: avg(2: t1b), count(2: t1b), sum(2: t1b)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  3:AGGREGATE (merge serialize)\n" +
+                "  |  group by: 2: t1b");
 
         sql =
                 "select avg(distinct t1b + 1), count(distinct t1b+1), sum(distinct t1b + 1), count(t1b) from test_all_type";
         plan = getFragmentPlan(sql);
-        assertContains(plan, " 27:Project\n" +
-                "  |  <slot 12> : CAST(14: sum AS DOUBLE) / CAST(13: count AS DOUBLE)\n" +
-                "  |  <slot 13> : 13: count\n" +
-                "  |  <slot 14> : 14: sum\n" +
-                "  |  <slot 15> : 15: count");
+        assertContains(plan, "7:AGGREGATE (merge finalize)\n" +
+                "  |  output: avg(12: avg), count(13: count), sum(14: sum), count(15: count)\n" +
+                "  |  group by:");
 
         sql =
                 "select avg(distinct t1b + 1), count(distinct t1b), sum(distinct t1c), count(t1c), sum(t1c) from test_all_type";
@@ -1429,24 +1436,21 @@ public class AggregateTest extends PlanTestBase {
 
         sql = "select avg(distinct 1), count(distinct null), count(distinct 1) from test_all_type";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "16:AGGREGATE (update serialize)\n" +
-                "  |  output: multi_distinct_sum(1)\n" +
-                "  |  group by: \n" +
-                "  |  \n" +
-                "  15:Project\n" +
-                "  |  <slot 19> : 15: auto_fill_col");
+        assertContains(plan, "4:AGGREGATE (merge finalize)\n" +
+                "  |  output: avg(11: avg), multi_distinct_count(12: count), multi_distinct_count(13: count)");
 
         sql = "select avg(distinct 1), count(distinct null), count(distinct 1), " +
                 "count(distinct (t1a + t1c)), sum(t1c) from test_all_type";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "26:AGGREGATE (update serialize)\n" +
-                "  |  output: multi_distinct_sum(1)\n" +
+        assertContains(plan, "7:AGGREGATE (merge finalize)\n" +
+                "  |  output: avg(12: avg), count(13: count), count(14: count), count(15: count), sum(16: sum)");
+        assertContains(plan, "5:AGGREGATE (update serialize)\n" +
+                "  |  output: avg(1), count(NULL), count(1), count(11: expr), sum(16: sum)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
-                "  25:Project\n" +
-                "  |  <slot 21> : 3: t1c");
-        assertContains(plan, "4:AGGREGATE (update serialize)\n" +
-                "  |  output: multi_distinct_count(NULL)");
+                "  4:AGGREGATE (merge serialize)\n" +
+                "  |  output: sum(16: sum)\n" +
+                "  |  group by: 11: expr");
     }
 
     @Test
@@ -1648,11 +1652,17 @@ public class AggregateTest extends PlanTestBase {
     public void testAvgCountDistinctWithHaving() throws Exception {
         String sql = "select avg(distinct s_suppkey), count(distinct s_acctbal) " +
                 "from supplier having avg(distinct s_suppkey) > 3 ;";
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
         String plan = getFragmentPlan(sql);
-        assertContains(plan, " 28:NESTLOOP JOIN\n" +
-                "  |  join op: INNER JOIN\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  other join predicates: CAST(12: sum AS DOUBLE) / CAST(14: count AS DOUBLE) > 3.0");
+        assertContains(plan, "30:SELECT\n" +
+                "  |  predicates: 9: avg > 3.0\n" +
+                "  |  \n" +
+                "  29:Project\n" +
+                "  |  <slot 9> : CAST(12: sum AS DOUBLE) / CAST(14: count AS DOUBLE)\n" +
+                "  |  <slot 10> : 10: count\n" +
+                "  |  \n" +
+                "  28:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN");
     }
 
     @Test

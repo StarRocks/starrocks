@@ -22,7 +22,8 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.task.UpdateTabletMetaInfoTask;
+import com.starrocks.task.TabletMetadataUpdateAgentTask;
+import com.starrocks.task.TabletMetadataUpdateAgentTaskFactory;
 import com.starrocks.thrift.TTabletMetaType;
 
 import java.io.DataOutput;
@@ -46,8 +47,9 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
     }
 
     @Override
-    protected UpdateTabletMetaInfoTask createTask(long backend, Set<Long> tablets) {
-        return UpdateTabletMetaInfoTask.updateBooleanProperty(backend, tablets, metaValue, metaType);
+    protected TabletMetadataUpdateAgentTask createTask(long backend, Set<Long> tablets) {
+        return TabletMetadataUpdateAgentTaskFactory.createGenericBooleanPropertyUpdateTask(backend, tablets,
+                metaValue, metaType);
     }
 
     @Override

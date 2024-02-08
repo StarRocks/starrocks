@@ -186,6 +186,8 @@ vectorized_functions = [
 
     [10322, "square", "DOUBLE", ["DOUBLE"], "MathFunctions::square"],
 
+    [10330, "cbrt", "DOUBLE", ["DOUBLE"], "MathFunctions::cbrt"],
+
     # 20xxx: bit functions
     [20010, 'bitand', 'TINYINT', ['TINYINT', 'TINYINT'], "BitFunctions::bitAnd<TYPE_TINYINT>"],
     [20011, 'bitand', 'SMALLINT', ['SMALLINT', 'SMALLINT'], "BitFunctions::bitAnd<TYPE_SMALLINT>"],
@@ -430,6 +432,7 @@ vectorized_functions = [
     [50231, 'to_days', 'INT', ['DATE'], 'TimeFunctions::to_days'],
     [50241, 'date_format', 'VARCHAR', ['DATETIME', 'VARCHAR'], 'TimeFunctions::datetime_format', 'TimeFunctions::format_prepare', 'TimeFunctions::format_close'],
     [50242, 'date_format', 'VARCHAR', ['DATE', 'VARCHAR'], 'TimeFunctions::date_format', 'TimeFunctions::format_prepare', 'TimeFunctions::format_close'],
+    [50245, 'milliseconds_diff', 'BIGINT', ['DATETIME', 'DATETIME'], 'TimeFunctions::milliseconds_diff'],
 
     # From string to DATE/DATETIME
     # the function will call by FE getStrToDateFunction, and is invisible to user

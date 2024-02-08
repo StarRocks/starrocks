@@ -145,7 +145,7 @@ public abstract class ConnectorPartitionTraits {
      */
     abstract Map<String, List<List<String>>> getPartitionList(Column partitionColumn) throws AnalysisException;
 
-    abstract Map<String, PartitionInfo> getPartitionNameWithPartitionInfo();
+    public abstract Map<String, PartitionInfo> getPartitionNameWithPartitionInfo();
 
     /**
      * The max of refresh ts for all partitions
@@ -160,7 +160,7 @@ public abstract class ConnectorPartitionTraits {
 
     // ========================================= Implementations ==============================================
 
-    abstract static class DefaultTraits extends ConnectorPartitionTraits {
+    public abstract static class DefaultTraits extends ConnectorPartitionTraits {
 
         @Override
         public boolean supportPartitionRefresh() {

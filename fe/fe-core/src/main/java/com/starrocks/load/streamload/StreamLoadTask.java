@@ -863,7 +863,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
         try {
             if (txnId != -1L) {
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(
-                        dbId, txnId, reason);
+                        dbId, txnId, reason, Coordinator.getCommitInfos(coord), Coordinator.getFailInfos(coord), null);
             } else {
                 writeLock();
                 for (int i = 0; i < channelNum; i++) {

@@ -81,7 +81,11 @@ public class SubfieldAccessPathNormalizer {
         ColumnAccessPath rootPath = new ColumnAccessPath(TAccessPathType.ROOT, columnName);
         for (AccessPath accessPath : paths) {
             ColumnAccessPath parentPath = rootPath;
-            for (int i = 0; i < accessPath.paths.size(); i++) {
+            int depth = accessPath.paths.size();
+            if (accessPath.root.getType().isJsonType()) {
+                depth = Math.min(depth, JSON_FLATTEN_DEPTH);
+            }
+            for (int i = 0; i < depth; i++) {
                 if (parentPath.hasChildPath(accessPath.paths.get(i))) {
                     ColumnAccessPath childPath = parentPath.getChildPath(accessPath.paths.get(i));
                     TAccessPathType pathType = accessPath.pathTypes.get(i);

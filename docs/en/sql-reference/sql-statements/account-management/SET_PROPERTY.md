@@ -6,39 +6,29 @@ displayed_sidebar: "English"
 
 ## Description
 
+Sets user properties. Currently, only the number of user connections (`max_user_connections`) can be set using this command.
+
+:::tip
+
+- The user properties mean the properties of users, not user_identity. For example, if two users, 'jack'@'%' and 'jack'@'192.%', are created using CREATE USER, the SET PROPERTY statement works only on user `jack``, not 'jack'@'%' or 'jack'@'192.%'.
+- Only users with the `user_admin` role can perform this operation.
+:::
+
 ### Syntax
 
 ```SQL
 SET PROPERTY [FOR 'user'] 'key' = 'value' [, 'key' = 'value']
 ```
 
-Set user attributes, including resources allocated to users and etc. The user properties here means the attributes for users, not for user_identity. That is to say, if two users, 'jack'@'%' and 'jack'@'192.%', are created through CREATE USER statement, then SET PROPERTY statement can only be used for user jack, not 'jack'@'%' or 'jack'@'192.%'.
-
-key:
-
-Super user permission:
-
-```plain text
-max_user_connections: Maximum number of connections
-resource.cpu_share: cpu resource assignment
-```
-
-Ordinary user permission:
-
-```plain text
-quota.normal: Resource allocation at the normal level
-quota.high: Resource allocation at the high level 
-quota.low: Resource allocation at the low level
-```
-
 ## Examples
 
-1. Modify the maximum number of connections to 1000 for the user jack
+1. Modify the maximum number of connections to `1000` for user `jack`.
 
     ```SQL
     SET PROPERTY FOR 'jack' 'max_user_connections' = '1000';
     ```
 
+<!--
 2. Modify cpu_share to 1000 for the user jack
 
     ```SQL
@@ -50,3 +40,4 @@ quota.low: Resource allocation at the low level
     ```SQL
     SET PROPERTY FOR 'jack' 'quota.normal' = '400';
     ```
+-->

@@ -109,6 +109,9 @@ public class AuthorizationMgrTest {
         metadataMgr.init();
         globalStateMgr.setMetadataMgr(metadataMgr);
 
+        globalStateMgr.setAuthenticationMgr(new AuthenticationMgr());
+        globalStateMgr.setAuthorizationMgr(new AuthorizationMgr(globalStateMgr, null));
+
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create user test_user", ctx);
         globalStateMgr.getAuthenticationMgr().createUser(createUserStmt);

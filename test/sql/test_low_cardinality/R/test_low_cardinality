@@ -612,11 +612,11 @@ INSERT INTO low_card_duplicate (c0,c1,c2,c3,c4,c5,c6) VALUES
 -- !result
 [UC] analyze full table common_duplicate;
 -- result:
-test_db_d0bf876e9d5011eea8e700163e04d4c2.common_duplicate	analyze	status	OK
+test_db_d992a13ebf6811eeb62000163e04d4c2.common_duplicate	analyze	status	OK
 -- !result
 [UC] analyze full table low_card_duplicate;
 -- result:
-test_db_d0bf876e9d5011eea8e700163e04d4c2.low_card_duplicate	analyze	status	OK
+test_db_d992a13ebf6811eeb62000163e04d4c2.low_card_duplicate	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('c3', 'low_card_duplicate')
 -- result:
@@ -665,7 +665,7 @@ SELECT
     SUBSTRING(lcd.c4, 3) AS substring_c4,
     TRIM(CONCAT(lcd.c4, ' - ', 'a')) AS trimmed,
     UPPER(lcd.c4) AS upper_c4,
-    IF(lcd.c3 IS NOT NULL, 'a', 'b') AS if_result,
+    IF(lcd.c3 IS NOT NULL, 'a', 'b') AS if_result
 FROM
     low_card_duplicate lcd
 group by
@@ -676,7 +676,16 @@ order by
 limit
     10;
 -- result:
-E: (1064, "Getting syntax error at line 25, column 0. Detail message: Unexpected input 'FROM', the most similar input is {a legal identifier}.")
+None	beijing - a	beijing-a	68616E677A686F75	hangz	1	hangzhou	000beijing	beijing		zhengzhou	hangzhouhangzhouhangzhou	hangsu	gnijieb	hou	hangzhou  	beijing	None	angz	ijing	beijing - a	BEIJING	a
+None	beijing - a	beijing-a	6265696A696E67	beiji	0	beijing	000beijing	beijing		beijing	beijingbeijingbeijing	beijing	gnijieb	ing	beijing   	beijing	None	eiji	ijing	beijing - a	BEIJING	a
+None	beijing - a	beijing-a	7368656E7A68656E	shenz	0	shenzhen	000beijing	beijing		shenzhen	shenzhenshenzhenshenzhen	shenzhen	gnijieb	hen	shenzhen  	beijing	None	henz	ijing	beijing - a	BEIJING	a
+None	beijing - a	beijing-a	7368616E67686169	shang	0	shanghai	000beijing	beijing		szhenghai	shanghaishanghaishanghai	shanghai	gnijieb	hai	shanghai  	beijing	None	hang	ijing	beijing - a	BEIJING	a
+None	beijing - a	beijing-a	6775616E677A686F75	guang	0	guangzhou	000beijing	beijing		guangzhou	guangzhouguangzhouguangzhou	guangsu	gnijieb	hou	guangzhou 	beijing	None	uang	ijing	beijing - a	BEIJING	a
+None	guangzhou - a	guangzhou-a	6265696A696E67	beiji	0	beijing	0guangzhou	guangzhou		beijing	beijingbeijingbeijing	beijing	uohzgnaug	ing	beijing   	guangzhou	None	eiji	angzhou	guangzhou - a	GUANGZHOU	a
+None	guangzhou - a	guangzhou-a	6775616E677A686F75	guang	0	guangzhou	0guangzhou	guangzhou		guangzhou	guangzhouguangzhouguangzhou	guangsu	uohzgnaug	hou	guangzhou 	guangzhou	None	uang	angzhou	guangzhou - a	GUANGZHOU	a
+None	guangzhou - a	guangzhou-a	7368616E67686169	shang	0	shanghai	0guangzhou	guangzhou		szhenghai	shanghaishanghaishanghai	shanghai	uohzgnaug	hai	shanghai  	guangzhou	None	hang	angzhou	guangzhou - a	GUANGZHOU	a
+None	guangzhou - a	guangzhou-a	68616E677A686F75	hangz	1	hangzhou	0guangzhou	guangzhou		zhengzhou	hangzhouhangzhouhangzhou	hangsu	uohzgnaug	hou	hangzhou  	guangzhou	None	angz	angzhou	guangzhou - a	GUANGZHOU	a
+None	guangzhou - a	guangzhou-a	7368656E7A68656E	shenz	0	shenzhen	0guangzhou	guangzhou		shenzhen	shenzhenshenzhenshenzhen	shenzhen	uohzgnaug	hen	shenzhen  	guangzhou	None	henz	angzhou	guangzhou - a	GUANGZHOU	a
 -- !result
 select
     CONCAT(concatenated_values, '-', lower_c3),

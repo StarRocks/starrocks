@@ -35,7 +35,6 @@ set(EXPR_FILES
   jit/ir_helper.cpp
   jit/jit_engine.cpp
   jit/jit_expr.cpp
-  jit/jit_functions.cpp
   anyval_util.cpp
   base64.cpp
   binary_functions.cpp

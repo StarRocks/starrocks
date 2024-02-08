@@ -52,13 +52,14 @@ SELECT * FROM information_schema.task_runs WHERE task_name = '<task_name>';
 
 您可以通过调整如下 FE 参数配置异步 ETL 任务：
 
-| **参数**                   | **默认值** | **说明**                                                     |
-| -------------------------- | ---------- | ------------------------------------------------------------ |
-| task_ttl_second            | 259200     | Task 的有效期，单位秒。超过有效期的 Task 会被自动删除。        |
-| task_check_interval_second | 14400      | 删除过期 Task 的间隔时间，单位秒。                           |
-| task_runs_ttl_second       | 259200     | TaskRun 的有效期，单位秒。超过有效期的 TaskRun 会被自动删除。此外，成功和失败状态的 TaskRun 也会被自动删除。 |
-| task_runs_concurrency      | 20         | 最多可同时运行的 TaskRun 的数量。                            |
-| task_runs_queue_length     | 500        | 最多可同时等待运行的 TaskRun 的数量。如同时等待运行的 TaskRun 的数量超过该参数的默认值，您将无法继续执行 Task。 |
+| **参数**                     | **默认值** | **说明**                                                     |
+| ---------------------------- | ---------- | ------------------------------------------------------------ |
+| task_ttl_second              | 86400      | Task 的有效期，单位秒。超过有效期的 Task 会被自动删除。        |
+| task_check_interval_second   | 14400      | 删除过期 Task 的间隔时间，单位秒。                           |
+| task_runs_ttl_second         | 86400      | TaskRun 的有效期，单位秒。超过有效期的 TaskRun 会被自动删除。此外，成功和失败状态的 TaskRun 也会被自动删除。 |
+| task_runs_concurrency        | 4          | 最多可同时运行的 TaskRun 的数量。                            |
+| task_runs_queue_length       | 500        | 最多可同时等待运行的 TaskRun 的数量。如同时等待运行的 TaskRun 的数量超过该参数的默认值，您将无法继续执行 Task。 |
+| task_runs_max_history_number | 10000      | 保留的最多历史 TaskRun 任务数量。 |
 
 ## 示例
 

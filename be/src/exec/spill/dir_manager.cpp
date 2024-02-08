@@ -101,7 +101,7 @@ Status DirManager::init(const std::string& spill_dirs) {
     return Status::OK();
 }
 
-StatusOr<Dir*> DirManager::acquire_writable_dir(const AcquireDirOptions& opts) {
+StatusOr<DirPtr> DirManager::acquire_writable_dir(const AcquireDirOptions& opts) {
     // for the case of multiple dirs, we randomly select one as the start
     // and then try one by one until we find the first one that meets the capacity requirements.
     size_t start_idx = 0;
@@ -112,7 +112,7 @@ StatusOr<Dir*> DirManager::acquire_writable_dir(const AcquireDirOptions& opts) {
     for (size_t i = 0; i < _dirs.size(); i++) {
         size_t idx = (start_idx + i) % _dirs.size();
         if (_dirs[idx]->inc_size(opts.data_size)) {
-            return _dirs[idx].get();
+            return _dirs[idx];
         }
     }
     return Status::CapacityLimitExceed("no writable spill storage directories");

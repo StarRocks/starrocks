@@ -33,7 +33,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Collections;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Queue;
@@ -47,8 +46,7 @@ public class TaskRunManager implements MemoryTrackable {
 
     // taskId -> pending TaskRun Queue, for each Task only support 1 running taskRun currently,
     // so the map value is priority queue need to be sorted by priority from large to small
-    private final Map<Long, PriorityBlockingQueue<TaskRun>> pendingTaskRunMap =
-            Collections.synchronizedMap(Maps.newLinkedHashMap());
+    private final Map<Long, PriorityBlockingQueue<TaskRun>> pendingTaskRunMap = Maps.newConcurrentMap();
 
     // taskId -> running TaskRun, for each Task only support 1 running taskRun currently,
     // so the map value is not queue
@@ -100,6 +98,7 @@ public class TaskRunManager implements MemoryTrackable {
         if (taskRun == null) {
             return false;
         }
+        taskRun.kill();
         ConnectContext runCtx = taskRun.getRunCtx();
         if (runCtx != null) {
             runCtx.kill(false, "kill TaskRun");
@@ -215,6 +214,9 @@ public class TaskRunManager implements MemoryTrackable {
             TaskRun runningTaskRun = runningTaskRunMap.get(taskId);
             if (runningTaskRun == null) {
                 Queue<TaskRun> taskRunQueue = pendingTaskRunMap.get(taskId);
+                if (taskRunQueue == null) {
+                    continue;
+                }
                 if (taskRunQueue.size() == 0) {
                     pendingIterator.remove();
                 } else {

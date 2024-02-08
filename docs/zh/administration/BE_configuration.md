@@ -361,6 +361,12 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 单位：毫秒
 - 默认值：5000
 
+#### txn_commit_rpc_timeout_ms
+
+- 含义：Transaction Commit RPC 超时的时长。该参数自 v3.1.0 起弃用。
+- 单位：毫秒
+- 默认值：60000
+
 #### max_consumer_num_per_group
 
 - 含义：Routine load 中，每个consumer group 内最大的 consumer 数量。
@@ -500,6 +506,12 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：存算分离集群下，是否允许 Compaction 任务在执行时缓存数据到本地磁盘上。
 - 默认值：false
 - 引入版本：v3.1.7、v3.2.3
+
+#### lake_pk_compaction_max_input_rowsets
+
+- 含义：存算分离集群下，主键表 Compaction 任务中允许的最大输入 Rowset 数量。
+- 默认值：5
+- 引入版本：v3.1.8、v3.2.3
 
 #### compact_threads
 

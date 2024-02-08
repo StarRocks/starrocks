@@ -128,6 +128,7 @@ set(EXEC_FILES
     schema_scanner/schema_task_runs_scanner.cpp
     schema_scanner/schema_loads_scanner.cpp
     schema_scanner/schema_load_tracking_logs_scanner.cpp
+    schema_scanner/schema_partitions_meta_scanner.cpp
     schema_scanner/schema_user_privileges_scanner.cpp
     schema_scanner/schema_schema_privileges_scanner.cpp
     schema_scanner/schema_table_privileges_scanner.cpp
@@ -153,6 +154,7 @@ set(EXEC_FILES
     schema_scanner/schema_be_datacache_metrics_scanner.cpp
     schema_scanner/sys_object_dependencies.cpp
     schema_scanner/sys_fe_locks.cpp
+    schema_scanner/sys_fe_memory_usage.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp
     sorting/merge_column.cpp
@@ -198,6 +200,7 @@ set(EXEC_FILES
     pipeline/scan/schema_scan_operator.cpp
     pipeline/scan/schema_scan_context.cpp
     pipeline/sink/iceberg_table_sink_operator.cpp
+    pipeline/sink/sink_io_buffer.cpp
     pipeline/sink/hive_table_sink_operator.cpp
     pipeline/sink/table_function_table_sink_operator.cpp
     pipeline/sink/blackhole_table_sink_operator.cpp
@@ -288,6 +291,7 @@ set(EXEC_FILES
     spill/file_block_manager.cpp
     spill/hybird_block_manager.cpp
     spill/operator_mem_resource_manager.cpp
+    spill/query_spill_manager.cpp
     stream/state/mem_state_table.cpp
     stream/aggregate/agg_state_data.cpp
     stream/aggregate/agg_group_state.cpp

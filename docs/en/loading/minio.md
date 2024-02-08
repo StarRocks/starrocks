@@ -4,7 +4,6 @@ displayed_sidebar: "English"
 
 # Load data from MinIO
 
-
 import LoadMethodIntro from '../assets/commonMarkdown/loadMethodIntro.md'
 
 import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
@@ -22,12 +21,11 @@ Make sure the source data you want to load into StarRocks is properly stored in 
 In this topic, we provide you with a sample dataset. You can download this with `curl`:
 
 ```bash
-curl -O https://starrocks-datasets.s3.amazonaws.com/user_behavior_ten_million_rows.parquet
+curl -O https://starrocks-examples.s3.amazonaws.com/user_behavior_ten_million_rows.parquet
 ```
 
 Load the Parquet file into your MinIO system and note the bucket name. The examples in this guide
 use a bucket name of `/starrocks`.
-
 
 ### Check privileges
 
@@ -99,6 +97,7 @@ LIMIT 3;
 ```
 
 The system returns the following query result:
+
 ```plaintext
 +--------+---------+------------+--------------+---------------------+
 | UserID | ItemID  | CategoryID | BehaviorType | Timestamp           |
@@ -408,14 +407,19 @@ AVG_ROW_LENGTH: 17
 
 An asynchronous Broker Load process handles making the connection to MinIO, pulling the data, and storing the data in StarRocks.
 
-This method supports the Parquet, ORC, and CSV file formats.
+This method supports the following file formats:
+
+- Parquet
+- ORC
+- CSV
+- JSON (supported from v3.2.3 onwards)
 
 ### Advantages of Broker Load
 
 - Broker Load supports [data transformation](../loading/Etl_in_loading.md) and [data changes such as UPSERT and DELETE operations](../loading/Load_to_Primary_Key_tables.md) during loading.
 - Broker Load runs in the background and clients do not need to stay connected for the job to continue.
 - Broker Load is preferred for long-running jobs, with the default timeout spanning 4 hours.
-- In addition to Parquet and ORC file formats, Broker Load supports CSV files.
+- In addition to Parquet and ORC file format, Broker Load supports CSV file format and JSON file format (JSON file format is supported from v3.2.3 onwards).
 
 ### Data flow
 
@@ -487,6 +491,7 @@ PROPERTIES
     "timeout" = "72000"
 );
 ```
+
 This job has four main sections:
 
 - `LABEL`: A string used when querying the state of the load job.
@@ -499,7 +504,6 @@ For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-referen
 #### Check load progress
 
 You can query the progress of Broker Load jobs from the [`information_schema.loads`](../reference/information_schema/loads.md) view. This feature is supported from v3.1 onwards.
-
 
 ```SQL
 SELECT * FROM information_schema.loads;
@@ -560,7 +564,7 @@ The following query result is returned, indicating that the data has been succes
 +--------+---------+------------+--------------+---------------------+
 ```
 
-## Use Pipe
+<!-- ## Use Pipe
 
 Starting from v3.2, StarRocks provides the Pipe loading method, which currently supports only the Parquet and ORC file formats.
 
@@ -595,6 +599,7 @@ For each Pipe job, StarRocks maintains a file queue, from which it fetches and l
 ### Typical example
 
 Note that Pipe is typically used with:
+
 - large datasets
 - datasets that are in multiple files
 - datasets that grow over time
@@ -690,3 +695,4 @@ DATABASE_NAME: mydatabase
 #### Manage Pipe jobs
 
 You can alter, suspend or resume, drop, or query the pipes you have created and retry to load specific data files. For more information, see [ALTER PIPE](../sql-reference/sql-statements/data-manipulation/ALTER_PIPE.md), [SUSPEND or RESUME PIPE](../sql-reference/sql-statements/data-manipulation/SUSPEND_or_RESUME_PIPE.md), [DROP PIPE](../sql-reference/sql-statements/data-manipulation/DROP_PIPE.md), [SHOW PIPES](../sql-reference/sql-statements/data-manipulation/SHOW_PIPES.md), and [RETRY FILE](../sql-reference/sql-statements/data-manipulation/RETRY_FILE.md).
+-->

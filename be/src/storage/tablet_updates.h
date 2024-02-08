@@ -72,6 +72,11 @@ struct CompactionInfo {
     uint32_t output = UINT32_MAX;
 };
 
+struct ExtraFileSize {
+    int64_t pindex_size = 0;
+    int64_t col_size = 0;
+};
+
 struct EditVersionInfo {
     EditVersion version;
     int64_t creation_time;
@@ -99,6 +104,7 @@ struct EditVersionInfo {
 // maintain all states for updatable tablets
 class TabletUpdates {
 public:
+    friend class LocalPrimaryKeyRecover;
     using ColumnUniquePtr = std::unique_ptr<Column>;
     using segment_rowid_t = uint32_t;
     using DeletesMap = std::unordered_map<uint32_t, vector<segment_rowid_t>>;
@@ -336,6 +342,12 @@ public:
     Status get_rowset_stats(std::map<uint32_t, std::string>* output_rowset_stats);
 
     Status primary_index_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb);
+    // recover
+    Status recover();
+
+    void set_error(const string& msg) { _set_error(msg); }
+
+    Status generate_pk_dump_if_in_error_state();
 
 private:
     friend class Tablet;
@@ -452,7 +464,7 @@ private:
 
     std::timed_mutex* get_index_lock() { return &_index_lock; }
 
-    Status _get_extra_file_size(int64_t* pindex_size, int64_t* col_size) const;
+    StatusOr<ExtraFileSize> _get_extra_file_size() const;
 
 private:
     Tablet& _tablet;

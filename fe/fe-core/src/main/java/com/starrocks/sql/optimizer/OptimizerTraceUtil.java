@@ -111,8 +111,8 @@ public class OptimizerTraceUtil {
                     sb.append(i).append(":").append(newExpressions.get(i).debugString());
                 }
             }
+            sb.append("\n");
             return sb.toString();
         });
     }
-
 }

@@ -16,7 +16,6 @@
 package com.starrocks.lake.delete;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.IntLiteral;
@@ -43,7 +42,6 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.DeleteJob;
 import com.starrocks.load.DeleteMgr;
-import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.EditLog;
 import com.starrocks.proto.DeleteDataRequest;
 import com.starrocks.proto.DeleteDataResponse;
@@ -103,7 +101,6 @@ public class DeleteTest {
     private LakeService lakeService;
 
     private Database db;
-    private Auth auth;
     private ConnectContext connectContext = new ConnectContext();
     private DeleteMgr deleteHandler;
 
@@ -170,7 +167,6 @@ public class DeleteTest {
     public void setUp() {
         connectContext.setGlobalStateMgr(globalStateMgr);
         deleteHandler = new DeleteMgr();
-        auth = AccessTestUtil.fetchAdminAccess();
         db = createDb();
     }
 

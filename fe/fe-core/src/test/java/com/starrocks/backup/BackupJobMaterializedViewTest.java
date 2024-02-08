@@ -212,6 +212,13 @@ public class BackupJobMaterializedViewTest {
         tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, UnitTestUtil.TABLE_NAME), null));
 
         job = new BackupJob(MV_LABEL, dbId, UnitTestUtil.DB_NAME, tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
+        new Expectations(job) {
+            {
+                job.validateLocalFile(anyString);
+                minTimes = 0;
+                result = true;
+            }
+        };
     }
 
     @Test

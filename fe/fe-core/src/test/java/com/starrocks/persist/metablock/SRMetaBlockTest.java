@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.persist.metablock;
 
 import com.google.gson.annotations.SerializedName;
@@ -104,7 +103,7 @@ public class SRMetaBlockTest {
         dos.close();
 
         DataInputStream dis = openInput(name);
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, name);
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis);
 
         // 1. String
         String retStr = reader.readJson(String.class);
@@ -185,7 +184,7 @@ public class SRMetaBlockTest {
         DataInputStream dis = openInput(name);
 
         // first block, 4 json
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, block1);
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis);
         // 1. String
         String retStr = reader.readJson(String.class);
         Assert.assertEquals(simpleStruct.str, retStr);
@@ -207,7 +206,7 @@ public class SRMetaBlockTest {
         reader.close();
 
         // second block, 1 json
-        reader = new SRMetaBlockReader(dis, block2);
+        reader = new SRMetaBlockReader(dis);
         SimpleStruct ret = reader.readJson(SimpleStruct.class);
         Assert.assertEquals(simpleStruct.str, ret.str);
         Assert.assertEquals(simpleStruct.num, ret.num);
@@ -229,7 +228,7 @@ public class SRMetaBlockTest {
         dis = openInput(name);
 
         // first block, only read 1 string
-        reader = new SRMetaBlockReader(dis, block1);
+        reader = new SRMetaBlockReader(dis);
         // 1. String
         retStr = reader.readJson(String.class);
         Assert.assertEquals(simpleStruct.str, retStr);
@@ -237,7 +236,7 @@ public class SRMetaBlockTest {
         reader.close();
 
         // second block, 1 json
-        reader = new SRMetaBlockReader(dis, block2);
+        reader = new SRMetaBlockReader(dis);
         ret = reader.readJson(SimpleStruct.class);
         Assert.assertEquals(simpleStruct.str, ret.str);
         Assert.assertEquals(simpleStruct.num, ret.num);
@@ -327,7 +326,7 @@ public class SRMetaBlockTest {
         write2String(name);
         // read more than expect
         DataInputStream dis = openInput(name);
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, name);
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis);
         reader.readJson(String.class);
         reader.readJson(String.class);
         try {
@@ -352,13 +351,13 @@ public class SRMetaBlockTest {
 
         DataInputStream dis = openInput(name);
         // first block, everything's fine
-        SRMetaBlockReader reader = new SRMetaBlockReader(dis, name);
+        SRMetaBlockReader reader = new SRMetaBlockReader(dis);
         reader.readJson(String.class);
         reader.close();
         // second block, get EOF
 
         try {
-            reader = new SRMetaBlockReader(dis, "xxx");
+            reader = new SRMetaBlockReader(dis);
             reader.readJson(String.class);
             Assert.fail();
         } catch (EOFException exception) {

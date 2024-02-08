@@ -52,8 +52,6 @@ import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.NodeMgr;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.system.Frontend;
 import com.starrocks.utframe.UtFrameUtils;
@@ -65,15 +63,19 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import java.lang.reflect.Field;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class GlobalStateMgrTest {
 
     @Before
     public void setUp() {
+        Config.meta_dir = UUID.randomUUID().toString();
+        Config.plugin_dir = UUID.randomUUID().toString();
         UtFrameUtils.PseudoImage.setUpImageVersion();
     }
 
@@ -229,5 +231,76 @@ public class GlobalStateMgrTest {
                 new JournalInconsistentException(OperationType.OP_CREATE_DB_V2, "failed")));
 
         Config.metadata_journal_ignore_replay_failure = originVal;
+    }
+
+    private static class MyGlobalStateMgr extends GlobalStateMgr {
+        public static final String ERROR_MESSAGE = "Create Exception here.";
+        private final boolean throwException;
+
+        public MyGlobalStateMgr(boolean throwException) {
+            this.throwException = throwException;
+        }
+
+        public MyGlobalStateMgr(boolean throwException, NodeMgr nodeMgr) {
+            super(nodeMgr);
+            this.throwException = throwException;
+        }
+
+        @Override
+        public void initJournal() throws JournalException, InterruptedException {
+            if (throwException) {
+                throw new UnsupportedOperationException(ERROR_MESSAGE);
+            }
+            super.initJournal();
+        }
+    }
+
+    @Test
+    public void testRemoveRoleAndVersionFileAtFirstTimeStarting() {
+        GlobalStateMgr globalStateMgr = new MyGlobalStateMgr(true);
+        NodeMgr nodeMgr = globalStateMgr.getNodeMgr();
+        Assert.assertTrue(nodeMgr.isVersionAndRoleFilesNotExist());
+        try {
+            globalStateMgr.initialize(new String[0]);
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof UnsupportedOperationException);
+            Assert.assertEquals(MyGlobalStateMgr.ERROR_MESSAGE, e.getMessage());
+        }
+        Assert.assertTrue(nodeMgr.isVersionAndRoleFilesNotExist());
+    }
+
+    @Test
+    public void testSuccessfullyInitializeGlobalStateMgr() {
+        GlobalStateMgr globalStateMgr = new MyGlobalStateMgr(false);
+        NodeMgr nodeMgr = globalStateMgr.getNodeMgr();
+        Assert.assertTrue(nodeMgr.isVersionAndRoleFilesNotExist());
+        try {
+            globalStateMgr.initialize(new String[0]);
+        } catch (Exception e) {
+            Assert.fail("No exception is expected here.");
+        }
+        Assert.assertFalse(nodeMgr.isVersionAndRoleFilesNotExist());
+    }
+
+    @Test
+    public void testErrorOccursWhileRemovingClusterIdAndRoleWhenStartAtFirstTime() {
+        final String removeFileErrorMessage = "Failed to delete role and version files.";
+
+        NodeMgr nodeMgr = Mockito.spy(new NodeMgr());
+        Mockito.doThrow(new RuntimeException(removeFileErrorMessage)).when(nodeMgr).removeClusterIdAndRole();
+
+        GlobalStateMgr globalStateMgr = new MyGlobalStateMgr(true, nodeMgr);
+        Assert.assertTrue(nodeMgr.isVersionAndRoleFilesNotExist());
+        try {
+            globalStateMgr.initialize(new String[0]);
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof UnsupportedOperationException);
+            Assert.assertEquals(MyGlobalStateMgr.ERROR_MESSAGE, e.getMessage());
+
+            Throwable[] suppressedExceptions = e.getSuppressed();
+            Assert.assertEquals(1, suppressedExceptions.length);
+            Assert.assertTrue(suppressedExceptions[0] instanceof RuntimeException);
+            Assert.assertEquals(removeFileErrorMessage, suppressedExceptions[0].getMessage());
+        }
     }
 }

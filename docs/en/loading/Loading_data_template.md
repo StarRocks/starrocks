@@ -161,7 +161,7 @@ This job has four main sections:
 ```SQL
 LOAD LABEL user_behavior
 (
-    DATA INFILE("s3://starrocks-datasets/user_behavior_sample_data.parquet")
+    DATA INFILE("s3://starrocks-examples/user_behavior_sample_data.parquet")
     INTO TABLE user_behavior
     FORMAT AS "parquet"
  )
@@ -251,7 +251,7 @@ Querying directly from S3 using `FILES()` can gives a good preview of the conten
 
 ```sql
 SELECT * FROM FILES(
-    "path" = "s3://starrocks-datasets/user_behavior_sample_data.parquet",
+    "path" = "s3://starrocks-examples/user_behavior_sample_data.parquet",
     "format" = "parquet",
     "aws.s3.region" = "us-east-1",
     "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
@@ -294,7 +294,7 @@ USE project;
 
 CREATE TABLE `user_behavior_inferred` AS
 SELECT * FROM FILES(
-    "path" = "s3://starrocks-datasets/user_behavior_sample_data.parquet",
+    "path" = "s3://starrocks-examples/user_behavior_sample_data.parquet",
     "format" = "parquet",
     "aws.s3.region" = "us-east-1",
     "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
@@ -382,7 +382,7 @@ After creating the table, you can load it with `INSERT INTO` … `SELECT FROM FI
 ```SQL
 INSERT INTO user_behavior_declared
   SELECT * FROM FILES(
-    "path" = "s3://starrocks-datasets/user_behavior_sample_data.parquet",
+    "path" = "s3://starrocks-examples/user_behavior_sample_data.parquet",
     "format" = "parquet",
     "aws.s3.region" = "us-east-1",
     "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",

@@ -63,6 +63,7 @@ import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.ExpressionContext;
+import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.MvPlanContextBuilder;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -95,6 +96,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
@@ -332,16 +334,17 @@ public class MvUtils {
         return isLogicalSPJG(root);
     }
 
-    public static String getInvalidReason(OptExpression expr) {
+    public static String getInvalidReason(OptExpression expr, boolean inlineView) {
         List<Operator> operators = collectOperators(expr);
+        String viewRewriteHint = inlineView ? "no view rewrite" : "view rewrite";
         if (operators.stream().anyMatch(op -> !isLogicalSPJGOperator(op))) {
             String nonSPJGOperators =
                     operators.stream().filter(x -> !isLogicalSPJGOperator(x))
                             .map(Operator::toString)
                             .collect(Collectors.joining(","));
-            return "MV contains non-SPJG operators: " + nonSPJGOperators;
+            return String.format("MV contains non-SPJG operators(%s): %s", viewRewriteHint, nonSPJGOperators);
         }
-        return "MV is not SPJG structure";
+        return String.format("MV is not SPJG structure(%s)", viewRewriteHint);
     }
 
     private static List<Operator> collectOperators(OptExpression expr) {
@@ -371,19 +374,28 @@ public class MvUtils {
         }
         Operator operator = root.getOp();
         if (!(operator instanceof LogicalAggregationOperator)) {
-            if (level == 0) {
+            return level == 0 ? false : isLogicalSPJ(root);
+        } else {
+            LogicalAggregationOperator agg = (LogicalAggregationOperator) operator;
+            if (agg.getType() != AggType.GLOBAL) {
                 return false;
-            } else {
-                return isLogicalSPJ(root);
             }
+            // Aggregate nested with aggregate is not supported yet.
+            // eg:
+            // create view v1 as
+            // select count(distinct cnt)
+            // from
+            //   (
+            //      select c_city, count(*) as cnt
+            //      from customer
+            //      group by c_city
+            //    ) t
+            if (level > 0) {
+                return false;
+            }
+            OptExpression child = root.inputAt(0);
+            return isLogicalSPJG(child, level + 1);
         }
-        LogicalAggregationOperator agg = (LogicalAggregationOperator) operator;
-        if (agg.getType() != AggType.GLOBAL) {
-            return false;
-        }
-
-        OptExpression child = root.inputAt(0);
-        return isLogicalSPJG(child, level + 1);
     }
 
     /**
@@ -582,6 +594,78 @@ public class MvUtils {
 
     public static boolean isRedundantPredicate(ScalarOperator predicate) {
         return predicate.isPushdown() || predicate.isRedundant();
+    }
+
+    // for A inner join B A.a = B.b;
+    // A.a is not null and B.b is not null can be deduced from join.
+    // This function only extracts predicates from inner/semi join and scan node,
+    // which scan node will exclude IsNullPredicateOperator predicates if it's not null
+    // and its column ref is in the join's keys
+    public static Set<ScalarOperator> getPredicateForRewrite(OptExpression root) {
+        Set<ScalarOperator> result = Sets.newHashSet();
+        OptExpressionVisitor predicateVisitor = new OptExpressionVisitor<Object, ColumnRefSet>() {
+            @Override
+            public Object visit(OptExpression optExpression, ColumnRefSet context) {
+                for (OptExpression child : optExpression.getInputs()) {
+                    child.getOp().accept(this, child, null);
+                }
+                return null;
+            }
+
+            public Object visitLogicalTableScan(OptExpression optExpression, ColumnRefSet context) {
+                List<ScalarOperator> conjuncts = Utils.extractConjuncts(optExpression.getOp().getPredicate());
+                for (ScalarOperator conjunct : conjuncts) {
+                    if (!isValidPredicate(conjunct)) {
+                        continue;
+                    }
+                    if (conjunct instanceof IsNullPredicateOperator) {
+                        IsNullPredicateOperator isNullPredicateOperator = conjunct.cast();
+                        if (isNullPredicateOperator.isNotNull() && context != null
+                                && context.containsAll(isNullPredicateOperator.getUsedColumns())) {
+                            // if column ref is join key and column ref is not null can be ignored for inner and semi join
+                            continue;
+                        }
+                    }
+                    result.add(conjunct);
+                }
+                return null;
+            }
+
+            public Object visitLogicalJoin(OptExpression optExpression, ColumnRefSet context) {
+                LogicalJoinOperator joinOperator = optExpression.getOp().cast();
+
+                ColumnRefSet joinKeyColumns = new ColumnRefSet();
+                JoinOperator joinType = joinOperator.getJoinType();
+                if (joinType.isInnerJoin() || joinType.isCrossJoin() || joinType.isSemiJoin()) {
+                    List<ScalarOperator> onConjuncts = Utils.extractConjuncts(joinOperator.getOnPredicate());
+                    ColumnRefSet leftChildColumns = optExpression.inputAt(0).getOutputColumns();
+                    ColumnRefSet rightChildColumns = optExpression.inputAt(1).getOutputColumns();
+                    List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(
+                            leftChildColumns, rightChildColumns, onConjuncts);
+                    eqOnPredicates.forEach(predicate -> joinKeyColumns.union(predicate.getUsedColumns()));
+                    if (context != null) {
+                        joinKeyColumns.union(context);
+                    }
+                    optExpression.inputAt(0).getOp().accept(this, optExpression.inputAt(0), joinKeyColumns);
+                    optExpression.inputAt(1).getOp().accept(this, optExpression.inputAt(1), joinKeyColumns);
+                } else if (joinType.isLeftOuterJoin() || joinType.isLeftAntiJoin()) {
+                    optExpression.inputAt(0).getOp().accept(this, optExpression.inputAt(0), joinKeyColumns);
+                } else if (joinType.isRightOuterJoin() || joinType.isRightAntiJoin()) {
+                    optExpression.inputAt(1).getOp().accept(this, optExpression.inputAt(1), joinKeyColumns);
+                }
+                List<ScalarOperator> conjuncts = Utils.extractConjuncts(
+                        Utils.compoundAnd(joinOperator.getPredicate(), joinOperator.getOnPredicate()));
+                for (ScalarOperator conjunct : conjuncts) {
+                    if (!isValidPredicate(conjunct)) {
+                        continue;
+                    }
+                    result.add(conjunct);
+                }
+                return null;
+            }
+        };
+        root.getOp().accept(predicateVisitor, root, null);
+        return result;
     }
 
     /**
@@ -1668,8 +1752,9 @@ public class MvUtils {
         }
     }
 
-    public static OptExpression replaceLogicalViewScanOperator(
-            OptExpression queryExpression, List<LogicalViewScanOperator> viewScans) {
+    public static OptExpression replaceLogicalViewScanOperator(OptExpression queryExpression,
+                                                               QueryMaterializationContext queryMaterializationContext) {
+        List<LogicalViewScanOperator> viewScans = queryMaterializationContext.getViewScans();
         if (viewScans == null) {
             return queryExpression;
         }

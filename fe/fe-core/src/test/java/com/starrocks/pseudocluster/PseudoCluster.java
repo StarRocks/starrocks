@@ -35,6 +35,8 @@ import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
@@ -56,7 +58,6 @@ import java.io.File;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.sql.SQLSyntaxErrorException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -97,7 +98,7 @@ public class PseudoCluster {
 
     static {
         try {
-            Class.forName("com.mysql.cj.jdbc.Driver").newInstance();
+            Class.forName("org.mariadb.jdbc.Driver").newInstance();
         } catch (Exception ex) {
             ex.printStackTrace();
         }
@@ -265,7 +266,7 @@ public class PseudoCluster {
     public ClusterConfig getConfig() {
         return config;
     }
-    
+
     public PseudoBackend getBackend(long beId) {
         String host = backendIdToHost.get(beId);
         if (host == null) {
@@ -295,7 +296,8 @@ public class PseudoCluster {
         if (db == null) {
             return null;
         }
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             Table table = db.getTable(tableName);
             if (table == null) {
@@ -313,7 +315,7 @@ public class PseudoCluster {
             }
             return ret;
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
     }
 
@@ -327,8 +329,8 @@ public class PseudoCluster {
                     System.out.printf("runSql(%.3fs): %s\n", (end - start) / 1e9, sql);
                 }
                 break;
-            } catch (SQLSyntaxErrorException e) {
-                if (e.getMessage().startsWith("rpc failed, host")) {
+            } catch (SQLException e) {
+                if (e.getMessage().contains("rpc failed, host")) {
                     try {
                         Thread.sleep(1000);
                     } catch (InterruptedException ie) {
@@ -394,6 +396,10 @@ public class PseudoCluster {
         }
     }
 
+    public void shutdown() {
+        shutdown(true);
+    }
+
     /**
      * build cluster at specified dir
      *
@@ -410,7 +416,7 @@ public class PseudoCluster {
 
         BasicDataSource dataSource = new BasicDataSource();
         dataSource.setUrl(
-                "jdbc:mysql://127.0.0.1:" + queryPort + "/?permitMysqlScheme" +
+                "jdbc:mariadb://127.0.0.1:" + queryPort + "/?permitMysqlScheme" +
                         "&usePipelineAuth=false&useBatchMultiSend=false&" +
                         "autoReconnect=true&failOverReadOnly=false&maxReconnects=10");
         dataSource.setUsername("root");

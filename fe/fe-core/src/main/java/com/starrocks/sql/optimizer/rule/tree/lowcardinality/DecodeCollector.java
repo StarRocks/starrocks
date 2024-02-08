@@ -381,7 +381,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         if ((table.getKeysType().equals(KeysType.PRIMARY_KEYS))) {
             return DecodeInfo.EMPTY;
         }
-        if (table.hasForbitGlobalDict()) {
+        if (table.hasForbiddenGlobalDict()) {
             return DecodeInfo.EMPTY;
         }
 

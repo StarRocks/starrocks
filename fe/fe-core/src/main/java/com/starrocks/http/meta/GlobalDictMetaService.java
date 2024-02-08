@@ -95,7 +95,7 @@ public class GlobalDictMetaService {
                 boolean isEnable = "true".equalsIgnoreCase(request.getSingleParameter(ENABLE).trim());
 
                 GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .setHasForbitGlobalDict(dbName, tableName, isEnable);
+                        .setHasForbiddenGlobalDict(dbName, tableName, isEnable);
                 response.appendContent(new RestBaseResult("apply success").toJson());
             } else {
                 response.appendContent(new RestBaseResult("HTTP method is not allowed.").toJson());

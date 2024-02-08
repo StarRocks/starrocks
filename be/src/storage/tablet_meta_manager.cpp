@@ -1365,6 +1365,21 @@ Status TabletMetaManager::put_del_vector(DataDir* store, WriteBatch* batch, TTab
     return to_status(batch->Put(h, k, v));
 }
 
+Status TabletMetaManager::put_del_vectors(DataDir* store, WriteBatch* batch, TTabletId tablet_id,
+                                          const EditVersion& version,
+                                          const vector<std::pair<uint32_t, DelVectorPtr>>& delvecs) {
+    auto handle = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
+    TabletSegmentId tsid;
+    tsid.tablet_id = tablet_id;
+    for (auto& rssid_delvec : delvecs) {
+        tsid.segment_id = rssid_delvec.first;
+        auto dv_key = encode_del_vector_key(tsid.tablet_id, tsid.segment_id, version.major_number());
+        auto dv_value = rssid_delvec.second->save();
+        RETURN_IF_ERROR(batch->Put(handle, dv_key, dv_value));
+    }
+    return Status::OK();
+}
+
 Status TabletMetaManager::put_delta_column_group(DataDir* store, WriteBatch* batch, TTabletId tablet_id,
                                                  uint32_t segment_id, const DeltaColumnGroupList& dcgs) {
     for (const auto& dcg : dcgs) {

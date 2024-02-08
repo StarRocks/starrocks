@@ -26,6 +26,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.sql.ast.AddPartitionClause;
@@ -58,6 +59,14 @@ import java.util.Map;
 import java.util.Optional;
 
 public interface ConnectorMetadata {
+    /**
+     * Use connector type as a hint of table type.
+     * Caveat: there are exceptions that hive connector may have non-hive(e.g. iceberg) tables.
+     */
+    default Table.TableType getTableType() {
+        throw new StarRocksConnectorException("This connector doesn't support getting table type");
+    }
+
     /**
      * List all database names of connector
      *
@@ -171,6 +180,10 @@ public interface ConnectorMetadata {
                                           ScalarOperator predicate,
                                           long limit) {
         return Statistics.builder().build();
+    }
+
+    default boolean prepareMetadata(MetaPreparationItem item, Tracers tracers) {
+        return true;
     }
 
     default List<PartitionKey> getPrunedPartitions(Table table, ScalarOperator predicate, long limit) {

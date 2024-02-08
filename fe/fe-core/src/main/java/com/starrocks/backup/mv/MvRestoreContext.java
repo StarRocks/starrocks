@@ -60,7 +60,8 @@ public class MvRestoreContext {
         return mvIdToTableNameMap;
     }
 
-    public void addIntoMvBaseTableBackupInfoIfNeeded(Table remoteTbl,
+    public void addIntoMvBaseTableBackupInfoIfNeeded(String localDbName,
+                                                     Table remoteTbl,
                                                      BackupJobInfo jobInfo,
                                                      BackupJobInfo.BackupTableInfo backupTableInfo) {
         if (remoteTbl == null) {
@@ -79,7 +80,7 @@ public class MvRestoreContext {
         }
         String localTableName = jobInfo.getAliasByOriginNameIfSet(remoteTbl.getName());
         MvBaseTableBackupInfo mvBaseTableBackupInfo =
-                new MvBaseTableBackupInfo(backupTableInfo, localTableName, remoteTbl.getId(), jobInfo.backupTime);
+                new MvBaseTableBackupInfo(backupTableInfo, localDbName, localTableName, remoteTbl.getId(), jobInfo.backupTime);
         mvBaseTableToBackupTableInfo.put(new TableName(jobInfo.dbName, remoteTbl.getName()), mvBaseTableBackupInfo);
     }
 
@@ -95,7 +96,7 @@ public class MvRestoreContext {
         }
         for (BackupJobInfo.BackupTableInfo tblInfo : jobInfo.tables.values()) {
             Table remoteTbl = backupMeta.getTable(tblInfo.name);
-            addIntoMvBaseTableBackupInfoIfNeeded(remoteTbl, jobInfo, tblInfo);
+            addIntoMvBaseTableBackupInfoIfNeeded(job.getDbName(), remoteTbl, jobInfo, tblInfo);
         }
     }
 

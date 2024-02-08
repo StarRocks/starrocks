@@ -90,7 +90,10 @@ public class SubfieldExpressionCollector extends ScalarOperatorVisitor<Void, Voi
         }
 
         // Json function has multi-version, support use path version
-        if (enableJsonCollect && PruneSubfieldRule.SUPPORT_JSON_FUNCTIONS.contains(call.getFnName())) {
+        if (PruneSubfieldRule.SUPPORT_JSON_FUNCTIONS.contains(call.getFnName())) {
+            if (!enableJsonCollect) {
+                return visit(call, context);
+            }
             Type[] args = call.getFunction().getArgs();
             if (args.length <= 1 || !args[0].isJsonType() || !args[1].isStringType()) {
                 return visit(call, context);

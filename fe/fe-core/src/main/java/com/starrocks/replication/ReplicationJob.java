@@ -32,8 +32,11 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -468,7 +471,8 @@ public class ReplicationJob implements GsonPostProcessable {
             throw new MetaNotFoundException("Database " + request.database_id + " not found");
         }
 
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             Table table = db.getTable(request.table_id);
             if (table == null) {
@@ -502,7 +506,7 @@ public class ReplicationJob implements GsonPostProcessable {
                 partitionInfos.put(partitionInfo.getPartitionId(), partitionInfo);
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
         return new TableInfo(tableType, tableDataSize, partitionInfos);
     }
@@ -648,6 +652,33 @@ public class ReplicationJob implements GsonPostProcessable {
     }
 
     private void commitTransaction() throws UserException {
+        Pair<List<TabletCommitInfo>, List<TabletFailInfo>> tabletsCommitInfo = getTabletsCommitInfo();
+
+        Map<Long, Long> partitionVersions = Maps.newHashMap();
+        for (PartitionInfo partitionInfo : partitionInfos.values()) {
+            partitionVersions.put(partitionInfo.getPartitionId(), partitionInfo.getSrcVersion());
+        }
+        ReplicationTxnCommitAttachment attachment = new ReplicationTxnCommitAttachment(partitionVersions);
+
+        GlobalStateMgr.getServingState().getGlobalTransactionMgr().commitTransaction(databaseId,
+                transactionId, tabletsCommitInfo.first, tabletsCommitInfo.second, attachment);
+    }
+
+    private void abortTransaction(String reason) {
+        Pair<List<TabletCommitInfo>, List<TabletFailInfo>> tabletsCommitInfo = getTabletsCommitInfo();
+
+        try {
+            GlobalStateMgr.getServingState().getGlobalTransactionMgr().abortTransaction(databaseId, transactionId,
+                    reason, tabletsCommitInfo.first, tabletsCommitInfo.second, null);
+        } catch (Exception e) {
+            LOG.warn("Abort transaction failed, ignore, database id: {}, table id: {}, transaction id: {}, ",
+                    databaseId, tableId, transactionId, e);
+        }
+
+        removeRunningTasks();
+    }
+
+    private Pair<List<TabletCommitInfo>, List<TabletFailInfo>> getTabletsCommitInfo() {
         List<TabletCommitInfo> tabletCommitInfos = Lists.newArrayList();
         List<TabletFailInfo> tabletFailInfos = Lists.newArrayList();
         for (AgentTask task : finishedTasks.values()) {
@@ -657,27 +688,7 @@ public class ReplicationJob implements GsonPostProcessable {
                 tabletCommitInfos.add(new TabletCommitInfo(task.getTabletId(), task.getBackendId()));
             }
         }
-
-        Map<Long, Long> partitionVersions = Maps.newHashMap();
-        for (PartitionInfo partitionInfo : partitionInfos.values()) {
-            partitionVersions.put(partitionInfo.getPartitionId(), partitionInfo.getSrcVersion());
-        }
-        ReplicationTxnCommitAttachment attachment = new ReplicationTxnCommitAttachment(partitionVersions);
-
-        GlobalStateMgr.getServingState().getGlobalTransactionMgr().commitTransaction(databaseId,
-                transactionId, tabletCommitInfos, tabletFailInfos, attachment);
-    }
-
-    private void abortTransaction(String reason) {
-        try {
-            GlobalStateMgr.getServingState().getGlobalTransactionMgr().abortTransaction(databaseId, transactionId,
-                    reason);
-        } catch (Exception e) {
-            LOG.warn("Abort transaction failed, ignore, database id: {}, table id: {}, transaction id: {}, ",
-                    databaseId, tableId, transactionId, e);
-        }
-
-        removeRunningTasks();
+        return Pair.create(tabletCommitInfos, tabletFailInfos);
     }
 
     private boolean isTransactionAborted() {

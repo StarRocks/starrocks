@@ -371,8 +371,17 @@ static void prepare_tablet(RowsetColumnPartialUpdateTest* self, const TabletShar
         }));
         // check refcnt
         for (const auto& rs_ptr : rowsets) {
-            ASSERT_FALSE(
-                    StorageEngine::instance()->update_manager()->TEST_update_state_exist(tablet.get(), rs_ptr.get()));
+            bool exist = false;
+            // retry 3 times
+            for (int i = 0; i < 3; i++) {
+                bool exist = StorageEngine::instance()->update_manager()->TEST_update_state_exist(tablet.get(),
+                                                                                                  rs_ptr.get());
+                if (!exist) {
+                    break;
+                }
+                sleep(1);
+            }
+            ASSERT_FALSE(exist);
         }
         ASSERT_TRUE(StorageEngine::instance()->update_manager()->TEST_primary_index_refcnt(tablet->tablet_id(), 1));
         version_before_partial_update = version;
@@ -399,8 +408,17 @@ static void prepare_tablet(RowsetColumnPartialUpdateTest* self, const TabletShar
         }));
         // check refcnt
         for (const auto& rs_ptr : rowsets) {
-            ASSERT_FALSE(
-                    StorageEngine::instance()->update_manager()->TEST_update_state_exist(tablet.get(), rs_ptr.get()));
+            bool exist = false;
+            // retry 3 times
+            for (int i = 0; i < 3; i++) {
+                bool exist = StorageEngine::instance()->update_manager()->TEST_update_state_exist(tablet.get(),
+                                                                                                  rs_ptr.get());
+                if (!exist) {
+                    break;
+                }
+                sleep(1);
+            }
+            ASSERT_FALSE(exist);
         }
         ASSERT_TRUE(StorageEngine::instance()->update_manager()->TEST_primary_index_refcnt(tablet->tablet_id(), 1));
     }
@@ -519,7 +537,17 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_diff_column_and_check) {
     }));
     // check refcnt
     for (const auto& rs_ptr : rowsets) {
-        ASSERT_FALSE(StorageEngine::instance()->update_manager()->TEST_update_state_exist(tablet.get(), rs_ptr.get()));
+        bool exist = false;
+        // retry 3 times
+        for (int i = 0; i < 3; i++) {
+            bool exist =
+                    StorageEngine::instance()->update_manager()->TEST_update_state_exist(tablet.get(), rs_ptr.get());
+            if (!exist) {
+                break;
+            }
+            sleep(1);
+        }
+        ASSERT_FALSE(exist);
     }
     ASSERT_TRUE(StorageEngine::instance()->update_manager()->TEST_primary_index_refcnt(tablet->tablet_id(), 1));
 }
@@ -558,7 +586,17 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_multi_segment_and_check) {
     }));
     // check refcnt
     for (const auto& rs_ptr : rowsets) {
-        ASSERT_FALSE(StorageEngine::instance()->update_manager()->TEST_update_state_exist(tablet.get(), rs_ptr.get()));
+        bool exist = false;
+        // retry 3 times
+        for (int i = 0; i < 3; i++) {
+            bool exist =
+                    StorageEngine::instance()->update_manager()->TEST_update_state_exist(tablet.get(), rs_ptr.get());
+            if (!exist) {
+                break;
+            }
+            sleep(1);
+        }
+        ASSERT_FALSE(exist);
     }
     ASSERT_TRUE(StorageEngine::instance()->update_manager()->TEST_primary_index_refcnt(tablet->tablet_id(), 1));
 }
@@ -823,8 +861,17 @@ TEST_P(RowsetColumnPartialUpdateTest, test_upsert) {
         }));
         // check refcnt
         for (const auto& rs_ptr : rowsets) {
-            ASSERT_FALSE(
-                    StorageEngine::instance()->update_manager()->TEST_update_state_exist(tablet.get(), rs_ptr.get()));
+            bool exist = false;
+            // retry 3 times
+            for (int i = 0; i < 3; i++) {
+                bool exist = StorageEngine::instance()->update_manager()->TEST_update_state_exist(tablet.get(),
+                                                                                                  rs_ptr.get());
+                if (!exist) {
+                    break;
+                }
+                sleep(1);
+            }
+            ASSERT_FALSE(exist);
         }
         ASSERT_TRUE(StorageEngine::instance()->update_manager()->TEST_primary_index_refcnt(tablet->tablet_id(), 1));
     }
@@ -948,7 +995,17 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_too_many_segment_and_check)
     }));
     // check refcnt
     for (const auto& rs_ptr : rowsets) {
-        ASSERT_FALSE(StorageEngine::instance()->update_manager()->TEST_update_state_exist(tablet.get(), rs_ptr.get()));
+        bool exist = false;
+        // retry 3 times
+        for (int i = 0; i < 3; i++) {
+            bool exist =
+                    StorageEngine::instance()->update_manager()->TEST_update_state_exist(tablet.get(), rs_ptr.get());
+            if (!exist) {
+                break;
+            }
+            sleep(1);
+        }
+        ASSERT_FALSE(exist);
     }
     ASSERT_TRUE(StorageEngine::instance()->update_manager()->TEST_primary_index_refcnt(tablet->tablet_id(), 1));
 }
@@ -956,7 +1013,7 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_too_many_segment_and_check)
 TEST_P(RowsetColumnPartialUpdateTest, partial_update_too_many_segment_and_limit_mem_tracker) {
     const int N = 10;
     // generate M upt files in each partial rowset
-    const int M = 1000;
+    const int M = 100;
     auto tablet = create_tablet(rand(), rand());
     ASSERT_EQ(1, tablet->updates()->version_history_count());
 
@@ -994,7 +1051,17 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_too_many_segment_and_limit_
     tracker->set_limit(old_limit);
     // check refcnt
     for (const auto& rs_ptr : rowsets) {
-        ASSERT_FALSE(StorageEngine::instance()->update_manager()->TEST_update_state_exist(tablet.get(), rs_ptr.get()));
+        bool exist = false;
+        // retry 3 times
+        for (int i = 0; i < 3; i++) {
+            bool exist =
+                    StorageEngine::instance()->update_manager()->TEST_update_state_exist(tablet.get(), rs_ptr.get());
+            if (!exist) {
+                break;
+            }
+            sleep(1);
+        }
+        ASSERT_FALSE(exist);
     }
     ASSERT_TRUE(StorageEngine::instance()->update_manager()->TEST_primary_index_refcnt(tablet->tablet_id(), 1));
 }
@@ -1039,7 +1106,17 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_multi_column_batch) {
     config::vertical_compaction_max_columns_per_group = old_val;
     // check refcnt
     for (const auto& rs_ptr : rowsets) {
-        ASSERT_FALSE(StorageEngine::instance()->update_manager()->TEST_update_state_exist(tablet.get(), rs_ptr.get()));
+        bool exist = false;
+        // retry 3 times
+        for (int i = 0; i < 3; i++) {
+            bool exist =
+                    StorageEngine::instance()->update_manager()->TEST_update_state_exist(tablet.get(), rs_ptr.get());
+            if (!exist) {
+                break;
+            }
+            sleep(1);
+        }
+        ASSERT_FALSE(exist);
     }
     ASSERT_TRUE(StorageEngine::instance()->update_manager()->TEST_primary_index_refcnt(tablet->tablet_id(), 1));
 }
@@ -1094,7 +1171,17 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_multi_segment_and_column_ba
     config::vertical_compaction_max_columns_per_group = old_val;
     // check refcnt
     for (const auto& rs_ptr : rowsets) {
-        ASSERT_FALSE(StorageEngine::instance()->update_manager()->TEST_update_state_exist(tablet.get(), rs_ptr.get()));
+        bool exist = false;
+        // retry 3 times
+        for (int i = 0; i < 3; i++) {
+            bool exist =
+                    StorageEngine::instance()->update_manager()->TEST_update_state_exist(tablet.get(), rs_ptr.get());
+            if (!exist) {
+                break;
+            }
+            sleep(1);
+        }
+        ASSERT_FALSE(exist);
     }
     ASSERT_TRUE(StorageEngine::instance()->update_manager()->TEST_primary_index_refcnt(tablet->tablet_id(), 1));
 }

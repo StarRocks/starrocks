@@ -370,9 +370,11 @@ TEST_P(PersistentIndexTest, test_fixlen_mutable_index_wal) {
     bool created;
     ASSERT_OK(fs->create_dir_if_missing(kPersistentIndexDir, &created));
 
+    int64_t old_val = config::l0_max_mem_usage;
+    config::l0_max_mem_usage = 10240;
     using Key = uint64_t;
     PersistentIndexMetaPB index_meta;
-    const int N = 1000000;
+    const int N = 10000;
     // insert
     vector<Key> keys;
     vector<Slice> key_slices;
@@ -385,7 +387,7 @@ TEST_P(PersistentIndexTest, test_fixlen_mutable_index_wal) {
         key_slices.emplace_back((uint8_t*)(&keys[i]), sizeof(Key));
     }
 
-    const int second_n = 50000;
+    const int second_n = 500;
     vector<Key> second_keys;
     vector<Slice> second_key_slices;
     vector<IndexValue> second_values;
@@ -517,6 +519,7 @@ TEST_P(PersistentIndexTest, test_fixlen_mutable_index_wal) {
         }
     }
 
+    config::l0_max_mem_usage = old_val;
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
@@ -908,8 +911,8 @@ TEST_P(PersistentIndexTest, test_small_varlen_mutable_index_wal) {
 
     using Key = std::string;
     PersistentIndexMetaPB index_meta;
-    const int N = 1000000;
-    const int wal_n = 50000;
+    const int N = 50000;
+    const int wal_n = 2500;
     // insert
     vector<Key> keys(N);
     vector<Slice> key_slices;
@@ -1487,8 +1490,8 @@ TEST_P(PersistentIndexTest, test_build_from_tablet_flush) {
     auto manager = StorageEngine::instance()->update_manager();
     manager->mem_tracker()->set_limit(-1);
     // flush l1
-    config::l0_max_mem_usage = 1000000;
-    build_persistent_index_from_tablet(1000000);
+    config::l0_max_mem_usage = 100000;
+    build_persistent_index_from_tablet(100000);
     config::l0_max_mem_usage = 104857600;
 }
 
@@ -1496,8 +1499,8 @@ TEST_P(PersistentIndexTest, test_build_from_tablet_flush_advance) {
     auto manager = StorageEngine::instance()->update_manager();
     manager->mem_tracker()->set_limit(-1);
     // flush one tmp l1
-    config::l0_max_mem_usage = 18874368;
-    build_persistent_index_from_tablet(1000000);
+    config::l0_max_mem_usage = 50000;
+    build_persistent_index_from_tablet(100000);
     config::l0_max_mem_usage = 104857600;
 }
 

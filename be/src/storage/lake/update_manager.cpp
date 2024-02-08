@@ -38,15 +38,18 @@ UpdateManager::UpdateManager(LocationProvider* location_provider, MemTracker* me
           _location_provider(location_provider),
           _pk_index_shards(config::pk_index_map_shard_size) {
     _update_mem_tracker = mem_tracker;
-    _update_state_mem_tracker = std::make_unique<MemTracker>(-1, "lake_rowset_update_state", mem_tracker);
+    const int64_t update_mem_limit = _update_mem_tracker->limit();
+    const int64_t preload_mem_limit =
+            update_mem_limit * std::max(std::min(100, config::lake_pk_preload_memory_limit_percent), 0) / 100;
+    _update_state_mem_tracker =
+            std::make_unique<MemTracker>(preload_mem_limit, "lake_rowset_update_state", mem_tracker);
     _index_cache_mem_tracker = std::make_unique<MemTracker>(-1, "lake_index_cache", mem_tracker);
-    _compaction_state_mem_tracker = std::make_unique<MemTracker>(-1, "compaction_state_cache", mem_tracker);
+    _compaction_state_mem_tracker =
+            std::make_unique<MemTracker>(preload_mem_limit, "lake_compaction_state", mem_tracker);
     _index_cache.set_mem_tracker(_index_cache_mem_tracker.get());
     _update_state_cache.set_mem_tracker(_update_state_mem_tracker.get());
 
-    int64_t byte_limits = ParseUtil::parse_mem_spec(config::mem_limit, MemInfo::physical_mem());
-    int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
-    _index_cache.set_capacity(byte_limits * update_mem_percent / 100);
+    _index_cache.set_capacity(update_mem_limit);
 }
 
 UpdateManager::~UpdateManager() {
@@ -69,6 +72,7 @@ StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(const TabletMetadataP
     auto index_entry = _index_cache.get_or_create(metadata->id());
     index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     auto& index = index_entry->value();
+    // Fetch lock guard before `lake_load`
     guard = index.fetch_guard();
     Status st = index.lake_load(_tablet_mgr, metadata, base_version, builder);
     _index_cache.update_object_size(index_entry, index.memory_usage());
@@ -89,7 +93,6 @@ StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(const TabletMetadataP
         LOG(ERROR) << msg;
         return Status::InternalError(msg);
     }
-    builder->set_has_update_index();
     return index_entry;
 }
 
@@ -117,6 +120,12 @@ Status UpdateManager::commit_primary_index(IndexEntry* index_entry, Tablet* tabl
 void UpdateManager::release_primary_index_cache(IndexEntry* index_entry) {
     if (index_entry != nullptr) {
         _index_cache.release(index_entry);
+    }
+}
+
+void UpdateManager::remove_primary_index_cache(IndexEntry* index_entry) {
+    if (index_entry != nullptr) {
+        _index_cache.remove(index_entry);
     }
 }
 
@@ -329,15 +338,16 @@ Status UpdateManager::_handle_index_op(Tablet* tablet, int64_t base_version, boo
     // release index entry but keep it in cache
     DeferOp release_index_entry([&] { _index_cache.release(index_entry); });
     auto& index = index_entry->value();
-    if (!index.is_load(base_version)) {
-        return Status::Uninitialized(fmt::format("Primary index not load yet, tablet_id: {}", tablet->id()));
-    }
     std::unique_ptr<std::lock_guard<std::mutex>> guard = nullptr;
+    // Fetch lock guard before check `is_load()`
     if (need_lock) {
         guard = index.try_fetch_guard();
         if (guard == nullptr) {
             return Status::Cancelled(fmt::format("Fail to fetch primary index guard, tablet_id: {}", tablet->id()));
         }
+    }
+    if (!index.is_load(base_version)) {
+        return Status::Uninitialized(fmt::format("Primary index not load yet, tablet_id: {}", tablet->id()));
     }
     op(index);
 
@@ -494,9 +504,32 @@ Status UpdateManager::get_del_vec_in_meta(const TabletSegmentId& tsid, int64_t m
 
 void UpdateManager::expire_cache() {
     if (MonotonicMillis() - _last_clear_expired_cache_millis > _cache_expire_ms) {
+        ssize_t update_state_orig_size = _update_state_cache.size();
+        ssize_t update_state_orig_obj_size = _update_state_cache.object_size();
         _update_state_cache.clear_expired();
+        ssize_t update_state_size = _update_state_cache.size();
+        ssize_t update_state_obj_size = _update_state_cache.object_size();
+
+        ssize_t index_orig_size = _index_cache.size();
+        ssize_t index_orig_obj_size = _index_cache.object_size();
         _index_cache.clear_expired();
+        ssize_t index_size = _index_cache.size();
+        ssize_t index_obj_size = _index_cache.object_size();
+
+        ssize_t compaction_cache_orig_size = _compaction_cache.size();
+        ssize_t compaction_cache_orig_obj_size = _compaction_cache.object_size();
         _compaction_cache.clear_expired();
+        ssize_t compaction_cache_size = _compaction_cache.size();
+        ssize_t compaction_cache_obj_size = _compaction_cache.object_size();
+
+        LOG(INFO) << strings::Substitute(
+                "update state cache expire: ($0 $1), index cache expire: ($2 $3), compaction cache expire: ($4 $5)",
+                update_state_orig_obj_size - update_state_obj_size,
+                PrettyPrinter::print_bytes(update_state_orig_size - update_state_size),
+                index_orig_obj_size - index_obj_size, PrettyPrinter::print_bytes(index_orig_size - index_size),
+                compaction_cache_orig_obj_size - compaction_cache_obj_size,
+                PrettyPrinter::print_bytes(compaction_cache_orig_size - compaction_cache_size));
+
         _last_clear_expired_cache_millis = MonotonicMillis();
     }
 }
@@ -593,7 +626,7 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     for (auto&& each : delvecs) {
         builder->append_delvec(each.second, each.first);
     }
-    builder->apply_opcompaction(op_compaction);
+    builder->apply_opcompaction(op_compaction, max_rowset_id);
     RETURN_IF_ERROR(builder->update_num_del_stat(segment_id_to_add_dels));
 
     TRACE_COUNTER_INCREMENT("rowsetid", rowset_id);
@@ -605,16 +638,6 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     _print_memory_stats();
 
     return Status::OK();
-}
-
-void UpdateManager::remove_primary_index_cache(uint32_t tablet_id) {
-    bool succ = false;
-    auto index_entry = _index_cache.get(tablet_id);
-    if (index_entry != nullptr) {
-        _index_cache.remove(index_entry);
-        succ = true;
-    }
-    LOG(WARNING) << "Lake update manager remove primary index cache, tablet_id: " << tablet_id << " , succ: " << succ;
 }
 
 bool UpdateManager::try_remove_primary_index_cache(uint32_t tablet_id) {

@@ -40,7 +40,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Multimap;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
-import com.starrocks.catalog.LocalTablet.TabletStatus;
+import com.starrocks.catalog.LocalTablet.TabletHealthStatus;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
@@ -48,6 +48,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.clone.TabletChecker;
 import com.starrocks.clone.TabletSchedCtx.Priority;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
@@ -168,14 +169,14 @@ public class StatisticProcDir implements ProcDirInterface {
                                         errorStateTabletIds.put(dbId, tablet.getId());
                                     }
 
-                                    Pair<TabletStatus, Priority> res = localTablet.getHealthStatusWithPriority(
-                                            infoService, physicalParition.getVisibleVersion(),
-                                            replicationNum, aliveBeIdsInCluster);
+                                    Pair<TabletHealthStatus, Priority> res = TabletChecker.getTabletHealthStatusWithPriority(
+                                            localTablet, infoService, physicalParition.getVisibleVersion(),
+                                            replicationNum, aliveBeIdsInCluster, olapTable.getLocation());
 
-                                    // here we treat REDUNDANT as HEALTHY, for user friendly.
-                                    if (res.first != TabletStatus.HEALTHY && res.first != TabletStatus.REDUNDANT
-                                            && res.first != TabletStatus.COLOCATE_REDUNDANT &&
-                                            res.first != TabletStatus.NEED_FURTHER_REPAIR) {
+                                    // here we treat REDUNDANT as HEALTHY, for user-friendly.
+                                    if (res.first != TabletHealthStatus.HEALTHY && res.first != TabletHealthStatus.REDUNDANT
+                                            && res.first != TabletHealthStatus.COLOCATE_REDUNDANT &&
+                                            res.first != TabletHealthStatus.NEED_FURTHER_REPAIR) {
                                         unhealthyTabletIds.put(dbId, tablet.getId());
                                     }
 

@@ -160,7 +160,7 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                 " from emps2 join depts2 using (deptno) where depts2.deptno < 120";
         String plan2 = getFragmentPlan(query2);
         PlanTestBase.assertContains(plan2, "join_union_mv_1");
-        PlanTestBase.assertContains(plan2, "4:HASH JOIN\n" +
+        PlanTestBase.assertContainsIgnoreColRefs(plan2, "4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 15: deptno = 12: deptno\n" +
@@ -401,11 +401,10 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                                                 "     TABLE: mt1\n" +
                                                 "     PREAGGREGATION: ON\n" +
                                                 "     PREDICATES: 10: k2 LIKE 'a%'"),
-                                // TODO: remove redundant predicates
                                 Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1 != 3 and k2 like 'a%'",
                                         "TABLE: mt1\n" +
                                                 "     PREAGGREGATION: ON\n" +
-                                                "     PREDICATES: 9: k1 != 3, (9: k1 < 3) OR (9: k1 > 3), 10: k2 LIKE 'a%'\n" +
+                                                "     PREDICATES: 9: k1 > 3, 10: k2 LIKE 'a%'\n" +
                                                 "     partitions=2/3")
                         );
                         for (Pair<String, String> p : sqls) {

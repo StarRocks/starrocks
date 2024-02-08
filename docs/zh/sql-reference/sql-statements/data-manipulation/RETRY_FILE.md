@@ -28,10 +28,10 @@ Pipe 的名称。
 ALTER PIPE [ IF EXISTS ] user_behavior_replica RETRY ALL;
 ```
 
-重试导入名为 `user_behavior_replica` 的 Pipe 中的数据文件 `s3://starrocks-datasets/user_behavior_ten_million_rows.parquet`：
+重试导入名为 `user_behavior_replica` 的 Pipe 中的数据文件 `s3://starrocks-examples/user_behavior_ten_million_rows.parquet`：
 
 ```SQL
-ALTER PIPE [ IF EXISTS ] user_behavior_replica RETRY FILE 's3://starrocks-datasets/user_behavior_ten_million_rows.parquet';
+ALTER PIPE [ IF EXISTS ] user_behavior_replica RETRY FILE 's3://starrocks-examples/user_behavior_ten_million_rows.parquet';
 ```
 
 ## 相关文档

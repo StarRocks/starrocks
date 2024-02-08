@@ -91,19 +91,23 @@ public class DateUtils {
     private static final DateTimeFormatter STRICT_DATE_NO_SPLIT_FORMATTER =
             unixDatetimeStrictFormatter("%Y%m%e", true);
 
-    // isTwoDigit, withMs, withSplitT -> formatter
-    private static final DateTimeFormatter[][][] DATETIME_FORMATTERS = new DateTimeFormatter[2][2][2];
+    // isTwoDigit, withMs, withSplitT, withSec -> formatter
+    private static final DateTimeFormatter[][][][] DATETIME_FORMATTERS = new DateTimeFormatter[2][2][2][2];
 
     static {
-        // isTwoDigit, withMs, withSplitT -> formatter
-        DATETIME_FORMATTERS[0][0][0] = unixDatetimeStrictFormatter("%Y-%m-%e %H:%i:%s", false);
-        DATETIME_FORMATTERS[0][0][1] = unixDatetimeStrictFormatter("%Y-%m-%eT%H:%i:%s", false);
-        DATETIME_FORMATTERS[0][1][0] = unixDatetimeStrictFormatter("%Y-%m-%e %H:%i:%s.%f", false);
-        DATETIME_FORMATTERS[0][1][1] = unixDatetimeStrictFormatter("%Y-%m-%eT%H:%i:%s.%f", false);
-        DATETIME_FORMATTERS[1][0][0] = unixDatetimeStrictFormatter("%y-%m-%e %H:%i:%s", false);
-        DATETIME_FORMATTERS[1][0][1] = unixDatetimeStrictFormatter("%y-%m-%eT%H:%i:%s", false);
-        DATETIME_FORMATTERS[1][1][0] = unixDatetimeStrictFormatter("%y-%m-%e %H:%i:%s.%f", false);
-        DATETIME_FORMATTERS[1][1][1] = unixDatetimeStrictFormatter("%y-%m-%eT%H:%i:%s.%f", false);
+        // isTwoDigit, withMs, withSplitT, withSec -> formatter
+        DATETIME_FORMATTERS[0][0][0][0] = unixDatetimeStrictFormatter("%Y-%m-%e %H:%i", false);
+        DATETIME_FORMATTERS[0][0][0][1] = unixDatetimeStrictFormatter("%Y-%m-%e %H:%i:%s", false);
+        DATETIME_FORMATTERS[0][0][1][0] = unixDatetimeStrictFormatter("%Y-%m-%eT%H:%i", false);
+        DATETIME_FORMATTERS[0][0][1][1] = unixDatetimeStrictFormatter("%Y-%m-%eT%H:%i:%s", false);
+        DATETIME_FORMATTERS[0][1][0][1] = unixDatetimeStrictFormatter("%Y-%m-%e %H:%i:%s.%f", false);
+        DATETIME_FORMATTERS[0][1][1][1] = unixDatetimeStrictFormatter("%Y-%m-%eT%H:%i:%s.%f", false);
+        DATETIME_FORMATTERS[1][0][0][0] = unixDatetimeStrictFormatter("%y-%m-%e %H:%i", false);
+        DATETIME_FORMATTERS[1][0][0][1] = unixDatetimeStrictFormatter("%y-%m-%e %H:%i:%s", false);
+        DATETIME_FORMATTERS[1][0][1][0] = unixDatetimeStrictFormatter("%y-%m-%eT%H:%i", false);
+        DATETIME_FORMATTERS[1][0][1][1] = unixDatetimeStrictFormatter("%y-%m-%eT%H:%i:%s", false);
+        DATETIME_FORMATTERS[1][1][0][1] = unixDatetimeStrictFormatter("%y-%m-%e %H:%i:%s.%f", false);
+        DATETIME_FORMATTERS[1][1][1][1] = unixDatetimeStrictFormatter("%y-%m-%eT%H:%i:%s.%f", false);
     }
 
     public static String formatDateTimeUnix(LocalDateTime dateTime) {
@@ -128,9 +132,10 @@ public class DateUtils {
         if (str.contains(":")) {
             // datetime
             int isTwoDigit = str.split("-")[0].length() == 2 ? 1 : 0;
+            int withSec = str.split(":").length > 2 ? 1 : 0;
             int withMs = str.contains(".") ? 1 : 0;
             int withSplitT = str.contains("T") ? 1 : 0;
-            DateTimeFormatter formatter = DATETIME_FORMATTERS[isTwoDigit][withMs][withSplitT];
+            DateTimeFormatter formatter = DATETIME_FORMATTERS[isTwoDigit][withMs][withSplitT][withSec];
             return parseStringWithDefaultHSM(str, formatter);
         } else {
             // date

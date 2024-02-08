@@ -151,7 +151,7 @@ Status TableFunctionTableSinkOperator::push_chunk(RuntimeState* state, const Chu
     if (_partition_exprs.empty()) {
         if (_partition_writers.empty()) {
             auto writer = std::make_unique<RollingAsyncParquetWriter>(_make_table_info(_path), _output_exprs,
-                                                                      _common_metrics.get(), add_commit_info, state,
+                                                                      _unique_metrics.get(), add_commit_info, state,
                                                                       _driver_sequence);
             RETURN_IF_ERROR(writer->init());
             _partition_writers.insert({"default writer", std::move(writer)});
@@ -171,7 +171,7 @@ Status TableFunctionTableSinkOperator::push_chunk(RuntimeState* state, const Chu
     // create writer for current partition if not exists
     if (partition_writer == _partition_writers.end()) {
         auto writer = std::make_unique<RollingAsyncParquetWriter>(_make_table_info(partition_location), _output_exprs,
-                                                                  _common_metrics.get(), add_commit_info, state,
+                                                                  _unique_metrics.get(), add_commit_info, state,
                                                                   _driver_sequence);
         RETURN_IF_ERROR(writer->init());
         RETURN_IF_ERROR(writer->append_chunk(chunk.get(), state));

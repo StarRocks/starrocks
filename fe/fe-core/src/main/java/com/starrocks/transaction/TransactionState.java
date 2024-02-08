@@ -52,6 +52,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.proto.TxnTypePB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.Backend;
@@ -69,6 +70,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -77,6 +79,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
@@ -103,7 +106,8 @@ public class TransactionState implements Writable {
         LAKE_COMPACTION(7),            // compaction of LakeTable
         FRONTEND_STREAMING(8),          // FE streaming load use this type
         MV_REFRESH(9),                  // Refresh MV
-        REPLICATION(10);                // Replication
+        REPLICATION(10),                // Replication
+        BYPASS_WRITE(11);               // Bypass BE, and write data file directly
 
         private final int flag;
 
@@ -116,30 +120,14 @@ public class TransactionState implements Writable {
         }
 
         public static LoadJobSourceType valueOf(int flag) {
-            switch (flag) {
-                case 1:
-                    return FRONTEND;
-                case 2:
-                    return BACKEND_STREAMING;
-                case 3:
-                    return INSERT_STREAMING;
-                case 4:
-                    return ROUTINE_LOAD_TASK;
-                case 5:
-                    return BATCH_LOAD_JOB;
-                case 6:
-                    return DELETE;
-                case 7:
-                    return LAKE_COMPACTION;
-                case 8:
-                    return FRONTEND_STREAMING;
-                case 9:
-                    return MV_REFRESH;
-                case 10:
-                    return REPLICATION;
-                default:
-                    return null;
-            }
+            return Arrays.stream(values())
+                    .filter(sourceType -> sourceType.flag == flag)
+                    .findFirst()
+                    .orElse(null);
+        }
+
+        public int getFlag() {
+            return flag;
         }
     }
 
@@ -252,6 +240,8 @@ public class TransactionState implements Writable {
     private LoadJobSourceType sourceType;
     @SerializedName("pt")
     private long prepareTime;
+    @SerializedName("pet")
+    private long preparedTime;
     @SerializedName("ct")
     private long commitTime;
     @SerializedName("ft")
@@ -342,6 +332,20 @@ public class TransactionState implements Writable {
     // Therefore, a snapshot of this information is maintained here.
     private ConcurrentMap<String, TOlapTablePartition> partitionNameToTPartition = Maps.newConcurrentMap();
     private ConcurrentMap<Long, TTabletLocation> tabletIdToTTabletLocation = Maps.newConcurrentMap();
+
+    private final ReentrantReadWriteLock txnLock = new ReentrantReadWriteLock(true);
+
+    public void writeLock() {
+        if (Config.lock_manager_enable_loading_using_fine_granularity_lock) {
+            txnLock.writeLock().lock();
+        }
+    }
+
+    public void writeUnlock() {
+        if (Config.lock_manager_enable_loading_using_fine_granularity_lock) {
+            txnLock.writeLock().unlock();
+        }
+    }
 
     public TransactionState() {
         this.dbId = -1;
@@ -635,6 +639,10 @@ public class TransactionState implements Writable {
         this.prepareTime = prepareTime;
     }
 
+    public void setPreparedTime(long preparedTime) {
+        this.preparedTime = preparedTime;
+    }
+
     public void setCommitTime(long commitTime) {
         this.commitTime = commitTime;
     }
@@ -688,7 +696,7 @@ public class TransactionState implements Writable {
     // return true if txn is running but timeout
     public boolean isTimeout(long currentMillis) {
         return (transactionStatus == TransactionStatus.PREPARE && currentMillis - prepareTime > timeoutMs)
-                || (transactionStatus == TransactionStatus.PREPARED && (currentMillis - commitTime)
+                || (transactionStatus == TransactionStatus.PREPARED && (currentMillis - preparedTime)
                 / 1000 > Config.prepared_transaction_default_timeout_second);
     }
 
@@ -776,6 +784,10 @@ public class TransactionState implements Writable {
 
     public TTxnType getTxnType() {
         return sourceType == LoadJobSourceType.REPLICATION ? TTxnType.TXN_REPLICATION : TTxnType.TXN_NORMAL;
+    }
+
+    public TxnTypePB getTxnTypePB() {
+        return sourceType == LoadJobSourceType.REPLICATION ? TxnTypePB.TXN_REPLICATION : TxnTypePB.TXN_NORMAL;
     }
 
     public Map<Long, PublishVersionTask> getPublishVersionTasks() {

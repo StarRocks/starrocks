@@ -1,0 +1,188 @@
+-- name: test_sort_key_uni_tbl;
+show backends;
+create database sort_key_test_uni;
+-- result:
+-- !result
+use sort_key_test_uni;
+-- result:
+-- !result
+CREATE TABLE `uni_test` (
+    `k1` int(11) NOT NULL COMMENT "",
+    `k2` int(11) NOT NULL COMMENT "",
+    `v1` bigint REPLACE NULL COMMENT "",
+    `v2` bigint REPLACE NULL COMMENT "",
+    `v3` bigint REPLACE NULL COMMENT ""
+)
+UNIQUE KEY(k1, k2)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1
+ORDER BY (k2)
+PROPERTIES (
+    "replication_num" = "1",
+    "in_memory" = "false",
+    "storage_format" = "DEFAULT"
+);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: The sort columns of UNIQUE KEY table must be same with key columns.')
+-- !result
+CREATE TABLE `uni_test` (
+    `k1` int(11) NOT NULL COMMENT "",
+    `k2` int(11) NOT NULL COMMENT "",
+    `v1` bigint REPLACE NULL COMMENT "",
+    `v2` bigint REPLACE NULL COMMENT "",
+    `v3` bigint REPLACE NULL COMMENT ""
+)
+UNIQUE KEY(k1, k2)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1
+ORDER BY (k2,v2)
+PROPERTIES (
+    "replication_num" = "1",
+    "in_memory" = "false",
+    "storage_format" = "DEFAULT"
+);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: The sort columns of UNIQUE KEY table must be same with key columns.')
+-- !result
+CREATE TABLE `uni_test` (
+    `k1` int(11) NOT NULL COMMENT "",
+    `k2` int(11) NOT NULL COMMENT "",
+    `v1` bigint REPLACE NULL COMMENT "",
+    `v2` bigint REPLACE NULL COMMENT "",
+    `v3` bigint REPLACE NULL COMMENT ""
+)
+UNIQUE KEY(k1, k2)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1
+ORDER BY (k2,k1)
+PROPERTIES (
+    "replication_num" = "1",
+    "in_memory" = "false",
+    "storage_format" = "DEFAULT"
+);
+-- result:
+-- !result
+insert into uni_test values (1,3,2,10,9),(2,2,2,9,7),(3,1,2,8,8);
+-- result:
+-- !result
+select * from uni_test;
+-- result:
+3	1	2	8	8
+2	2	2	9	7
+1	3	2	10	9
+-- !result
+insert into uni_test values (1,2,2,10,9),(2,3,2,9,7),(2,1,2,8,8);
+-- result:
+-- !result
+select * from uni_test;
+-- result:
+2	1	2	8	8
+1	2	2	10	9
+2	3	2	9	7
+3	1	2	8	8
+2	2	2	9	7
+1	3	2	10	9
+-- !result
+function: manual_compact("sort_key_test_uni", "uni_test")
+-- result:
+None
+-- !result
+select * from uni_test;
+-- result:
+2	1	2	8	8
+3	1	2	8	8
+1	2	2	10	9
+2	2	2	9	7
+1	3	2	10	9
+2	3	2	9	7
+-- !result
+alter table uni_test order by (k2,v1);
+-- result:
+E: (1064, 'Unexpected exception: The sort columns of UNIQUE KEY table must be same with key columns')
+-- !result
+alter table uni_test order by (k2);
+-- result:
+E: (1064, 'Unexpected exception: The sort columns of UNIQUE KEY table must be same with key columns')
+-- !result
+alter table uni_test order by (k1,k2);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+show create table uni_test;
+-- result:
+uni_test	CREATE TABLE `uni_test` (
+  `k1` int(11) NOT NULL COMMENT "",
+  `k2` int(11) NOT NULL COMMENT "",
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT "",
+  `v3` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+UNIQUE KEY(`k1`, `k2`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1 
+ORDER BY(`k1`, `k2`)
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"fast_schema_evolution" = "true",
+"compression" = "LZ4"
+);
+-- !result
+select * from uni_test;
+-- result:
+1	2	2	10	9
+1	3	2	10	9
+2	1	2	8	8
+2	2	2	9	7
+2	3	2	9	7
+3	1	2	8	8
+-- !result
+alter table uni_test order by (k2,k1,v2,v1,v3);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+show create table uni_test;
+-- result:
+uni_test	CREATE TABLE `uni_test` (
+  `k2` int(11) NOT NULL COMMENT "",
+  `k1` int(11) NOT NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT "",
+  `v1` bigint(20) NULL COMMENT "",
+  `v3` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+UNIQUE KEY(`k2`, `k1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k1`, `k2`) BUCKETS 1 
+ORDER BY(`k1`, `k2`)
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"fast_schema_evolution" = "true",
+"compression" = "LZ4"
+);
+-- !result
+select * from uni_test;
+-- result:
+2	1	10	2	9
+3	1	10	2	9
+1	2	8	2	8
+2	2	9	2	7
+3	2	9	2	7
+1	3	8	2	8
+-- !result
+drop table uni_test;
+-- result:
+-- !result
+drop database sort_key_test_uni;
+-- result:
+-- !result

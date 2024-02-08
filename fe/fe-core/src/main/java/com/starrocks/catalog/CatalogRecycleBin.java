@@ -850,7 +850,6 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         } catch (InterruptedException e) {
             LOG.warn(e);
         }
-
     }
 
     private void postProcessEraseTable(List<RecycleTableInfo> tableToRemove) {

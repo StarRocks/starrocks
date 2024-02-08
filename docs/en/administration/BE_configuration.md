@@ -332,6 +332,12 @@ BE dynamic parameters are as follows.
 - **Default:** 5,000 ms
 - **Description:** The timeout for a thrift RPC.
 
+#### txn_commit_rpc_timeout_ms
+
+- **Default:** 60,000
+- **Description:** The timeout for a transaction commit RPC. Since v3.1.0, this parameter is deprecated.
+- **Unit:** ms
+
 #### max_consumer_num_per_group
 
 - **Default:** 3 (Maximum Number of Consumers in a Consumer Group of Routine Load)
@@ -447,6 +453,12 @@ BE dynamic parameters are as follows.
 - **Default:** false
 - **Description:** Whether to allow compaction tasks to cache data on local disks in a shared-data cluster.
 - **Introduced in:** v3.1.7, v3.2.3
+
+#### lake_pk_compaction_max_input_rowsets
+
+- **Default:** 5
+- **Description:** The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster.
+- **Introduced in:** v3.1.8, v3.2.3
 
 #### compact_threads
 
