@@ -236,12 +236,7 @@
           "items": [
             "administration/Scale_up_down",
             "administration/Backup_and_restore",
-<<<<<<< HEAD
             "administration/Configuration",
-            "administration/Monitor_and_Alert",
-=======
-            "administration/FE_configuration",
-            "administration/BE_configuration",
             {
               "type": "category",
               "label": "Monitor and Alert",
@@ -250,7 +245,6 @@
                 "administration/metrics"
               ]
             },
->>>>>>> 7dbb6ff9e2 ([Doc] Add Monitor and Metrics (#40983))
             "administration/audit_loader",
             "administration/enable_fqdn",
             "administration/timezone",
@@ -888,12 +882,7 @@
           "items": [
             "administration/Scale_up_down",
             "administration/Backup_and_restore",
-<<<<<<< HEAD
             "administration/Configuration",
-            "administration/Monitor_and_Alert",
-=======
-            "administration/FE_configuration",
-            "administration/BE_configuration",
             {
               "type": "category",
               "label": "监控报警",
@@ -902,7 +891,6 @@
                 "administration/metrics"
               ]
             },
->>>>>>> 7dbb6ff9e2 ([Doc] Add Monitor and Metrics (#40983))
             "administration/audit_loader",
             "administration/enable_fqdn",
             "administration/timezone",
