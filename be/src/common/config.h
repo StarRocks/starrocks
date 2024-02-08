@@ -875,6 +875,7 @@ CONF_Int64(send_rpc_runtime_filter_timeout_ms, "1000");
 // if runtime filter size is larger than send_runtime_filter_via_http_rpc_min_size, be will transmit runtime filter via http protocol.
 // this is a default value, maybe changed by global_runtime_filter_rpc_http_min_size in session variable.
 CONF_Int64(send_runtime_filter_via_http_rpc_min_size, "67108864");
+CONF_Bool(enable_join_short_circuit, "true");
 
 CONF_Int64(rpc_connect_timeout_ms, "30000");
 
