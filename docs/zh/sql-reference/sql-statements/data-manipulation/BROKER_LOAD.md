@@ -1296,3 +1296,7 @@ PROPERTIES
     "jsonpaths" = "[\"$.category\",\"$.price\",\"$.author\"]"
 );
 ```
+
+> **说明**
+>
+> 上述示例中，JSON 数据的最外层是一个通过中括号 [] 表示的数组结构，并且数组结构中的每个 JSON 对象都表示一条数据记录。因此，需要设置 `strip_outer_array` 为 `true`来裁剪最外层的数组结构。导入过程中，未指定的字段 `title` 和 `timestamp` 会被忽略掉。另外，示例中还通过 `json_root` 参数指定了需要真正导入的数据为 `RECORDS` 字段对应的值，即一个 JSON 数组。

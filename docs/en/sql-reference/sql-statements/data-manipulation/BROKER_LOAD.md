@@ -1244,3 +1244,7 @@ PROPERTIES
     "jsonpaths" = "[\"$.category\",\"$.price\",\"$.author\"]"
 );
 ```
+
+> **NOTE**
+>
+> In the preceding example, the outermost layer of the JSON data is an array structure as indicated by a pair of square brackets `[]`. The array structure consists of multiple JSON objects that each represent a data record. Therefore, you need to set `strip_outer_array` to `true` to strip the outermost array structure. The keys `title` and `timestamp` that you do not want to load are ignored during loading. Additionally, the `json_root` parameter is used to specify the root element, which is an array, of the JSON data.
