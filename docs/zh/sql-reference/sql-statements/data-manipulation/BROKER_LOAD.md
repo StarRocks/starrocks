@@ -698,7 +698,35 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
   >
   > 指定的列必须为非主键列，且仅主键表支持条件更新。
 
+StarRocks 自 3.2.3 版本起支持导入 JSON 格式的数据，相关参数如下：
+
+- jsonpaths
+
+  用于指定待导入的字段的名称。仅在使用匹配模式导入 JSON 数据时需要指定该参数。参数取值为 JSON 格式。参见[导入 JSON 数据时配置列映射关系](#导入-json-数据时配置列映射关系)。
+
+- strip_outer_array
+
+  用于指定是否裁剪最外层的数组结构。取值范围：`true` 和 `false`。默认值：`false`。
+  
+  真实业务场景中，待导入的 JSON 数据可能在最外层有一对表示数组结构的中括号 `[]`。这种情况下，一般建议您指定该参数取值为 `true`，这样 StarRocks 会剪裁掉外层的中括号 `[]`，并把中括号 `[]` 里的每个内层数组都作为一行单独的数据导入。如果您指定该参数取值为 `false`，则 StarRocks 会把整个 JSON 数据文件解析成一个数组，并作为一行数据导入。例如，待导入的 JSON 数据为 `[ {"category" : 1, "author" : 2}, {"category" : 3, "author" : 4} ]`，如果指定该参数取值为 `true`，则 StarRocks 会把 `{"category" : 1, "author" : 2}` 和 `{"category" : 3, "author" : 4}` 解析成两行数据，并导入到目标 StarRocks 表中对应的数据行。
+
+- json_root
+
+  用于指定待导入 JSON 数据的根元素。仅在使用匹配模式导入 JSON 数据时需要指定该参数。参数取值为合法的 JsonPath 字符串。默认值为空，表示会导入整个 JSON 数据文件的数据。具体请参见本文提供的示例“[导入数据并指定 JSON 根节点](#指定-json-根节点使用匹配模式导入数据)”。
+
+- ignore_json_size
+
+  用于指定是否检查 HTTP 请求中 JSON Body 的大小。
+  
+  > **说明**
+  >
+  > HTTP 请求中 JSON Body 的大小默认不能超过 100 MB。如果 JSON Body 的大小超过 100 MB，会提示 "The size of this batch exceed the max size [104857600] of json type data data [8617627793]. Set ignore_json_size to skip check, although it may lead huge memory consuming." 错误。为避免该报错，可以在 HTTP 请求头中添加 `"ignore_json_size:true"` 设置，忽略对 JSON Body 大小的检查。
+
+另外，导入 JSON 格式的数据时，需要注意单个 JSON 对象的大小不能超过 4 GB。如果 JSON 文件中单个 JSON 对象的大小超过 4 GB，会提示 "This parser can't support a document that big." 错误。
+
 ## 列映射
+
+### 导入 CSV 数据时配置列映射关系
 
 如果源数据文件中的列与目标表中的列按顺序一一对应，您不需要指定列映射和转换关系。
 
@@ -714,6 +742,19 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
   - 目标表中有三列，按顺序依次为 `year`、`month` 和 `day`。源数据文件中只有一个包含时间数据的列，格式为 `yyyy-mm-dd hh:mm:ss`。这种情况下，可以指定 `COLUMNS (col, year = year(col), month=month(col), day=day(col))`。其中，`col` 是源数据文件中所包含的列的临时命名，`year = year(col)`、`month=month(col)` 和 `day=day(col)` 用于指定从 `col` 列提取对应的数据并落入目标表中对应的列，如 `year = year(col)` 表示通过 `year` 函数提取源数据文件中 `col` 列的 `yyyy` 部分的数据并落入目标表中的 `year` 列。
 
 有关操作示例，参见[设置列映射关系](#设置列映射关系)。
+
+### 导入 JSON 数据时配置列映射关系
+
+如果 JSON 文件中的 Key 名与目标表中的列名一致，您可以使用简单模式来导入数据。简单模式下，不需要设置 `jsonpaths` 参数，这种模式要求 JSON 数据是大括号 {} 表示的对象类型，例如 `{"category": 1, "author": 2, "price": "3"}` 中，`category`、`author`、`price` 是 Key 的名称，按名称直接对应目标 表中的 `category`、`author`、`price` 三列。
+
+如果 JSON 文件中的 Key 名与目标表中的列名不一致，则需要使用匹配模式来导入数据。匹配模式下，需要通过 `jsonpaths` 和 `COLUMNS` 两个参数来指定 JSON 文件中的 Key 和目标表中的列之间的映射和转换关系：
+
+- `jsonpaths` 参数中按照 JSON 文件中 Key 的顺序一一指定待导入的 Key。
+- `COLUMNS` 参数中指定 JSON 文件中的 Key 与目标表中的列之间的映射关系和数据转换关系。
+  - `COLUMNS` 参数中指定的列名与 `jsonpaths` 参数中指定的 Key 按顺序保持一一对应。
+  - `COLUMNS` 参数中指定的列名与目标表中的列按名称保持一一对应。
+
+有关使用匹配模式导入 JSON 数据的示例，参见[使用匹配模式导入数据](#使用匹配模式导入数据)。
 
 ## 相关配置项
 
@@ -1235,9 +1276,9 @@ StarRocks 按照如下顺序对数据进行匹配和处理：
 您可以通过指定 `jsonpaths` 参数进行精准导入，例如只导入 `category`、`author`、`price` 三个字段的数据：
 
 ```SQL
-LOAD LABEL LOAD LABEL test_db.label16
+LOAD LABEL test_db.label16
 (
-    DATA INFILE(""hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example2.csv"")
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example2.csv")
     INTO TABLE tbl1
     FORMAT AS "json"
     (category, price, author)
@@ -1258,7 +1299,7 @@ PROPERTIES
 >
 > 上述示例中，JSON 数据的最外层是一个通过中括号 [] 表示的数组结构，并且数组结构中的每个 JSON 对象都表示一条数据记录。因此，需要设置 `strip_outer_array` 为 `true`来裁剪最外层的数组结构。导入过程中，未指定的字段 `title` 会被忽略掉。
 
-##### 指定 JSON 根节点、使匹配模式导入数据
+##### 指定 JSON 根节点、使用匹配模式导入数据
 
 假设数据文件 `example3.json` 包含如下数据：
 
@@ -1277,9 +1318,9 @@ PROPERTIES
 您可以通过指定 `jsonpaths` 进行精准导入，例如只导入 `category`、`author`、`price` 三个字段的数据：
 
 ```SQL
-LOAD LABEL LOAD LABEL test_db.label17
+LOAD LABEL test_db.label17
 (
-    DATA INFILE(""hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example3.csv"")
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/input/example3.csv")
     INTO TABLE tbl1
     FORMAT AS "json"
     (category, price, author)

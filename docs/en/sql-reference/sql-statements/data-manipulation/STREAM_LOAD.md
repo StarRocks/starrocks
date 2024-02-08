@@ -490,7 +490,7 @@ StarRocks performs the following steps to match and process JSON data:
 
 3. Extracts the specified JSON data as instructed by the `jsonpaths` parameter setting.
 
-##### Load JSON data using matched without root element specified
+##### Load JSON data using matched mode without root element specified
 
 Suppose that your data file `example2.json` consists of the following data:
 
