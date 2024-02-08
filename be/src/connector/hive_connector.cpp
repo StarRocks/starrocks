@@ -835,6 +835,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         LOG(WARNING) << msg;
         return Status::NotSupported(msg);
     }
+    scanner->set_split_context(_split_context);
     RETURN_IF_ERROR(scanner->init(state, scanner_params));
     Status st = scanner->open(state);
     if (!st.ok()) {

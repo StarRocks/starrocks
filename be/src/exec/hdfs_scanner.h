@@ -236,6 +236,7 @@ struct HdfsScannerContext {
 
     // scan range
     const THdfsScanRange* scan_range = nullptr;
+    const pipeline::ScanSplitContext* split_context = nullptr;
 
     // min max slots
     const TupleDescriptor* min_max_tuple_desc = nullptr;
@@ -315,7 +316,10 @@ public:
     virtual Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) = 0;
     virtual void do_update_counter(HdfsScanProfile* profile);
     virtual bool is_jni_scanner() { return false; }
-    virtual void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) {}
+    virtual void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) {
+        split_tasks->swap(_split_tasks);
+    }
+    void set_split_context(const pipeline::ScanSplitContext* split_context) { _split_context = split_context; }
 
 protected:
     Status open_random_access_file();
@@ -343,6 +347,9 @@ protected:
     int64_t _total_running_time = 0;
 
     std::shared_ptr<DefaultMORProcessor> _mor_processor;
+
+    const pipeline::ScanSplitContext* _split_context = nullptr;
+    std::vector<pipeline::ScanSplitContextPtr> _split_tasks;
 };
 
 } // namespace starrocks

@@ -31,6 +31,12 @@
 
 namespace starrocks {
 
+struct HdfsOrcScannerSplitContext : public pipeline::ScanSplitContext {
+    size_t split_begin = 0;
+    size_t split_end = 0;
+    std::shared_ptr<std::string> footer;
+};
+
 class OrcRowReaderFilter : public orc::RowReaderFilter {
 public:
     OrcRowReaderFilter(const HdfsScannerContext& scanner_ctx, OrcChunkReader* reader);
@@ -87,9 +93,16 @@ bool OrcRowReaderFilter::filterOnOpeningStripe(uint64_t stripeIndex,
     uint64_t offset = stripeInformation->offset();
 
     const auto* scan_range = _scanner_ctx.scan_range;
-    size_t scan_start = scan_range->offset;
-    size_t scan_end = scan_range->length + scan_start;
-    if (offset >= scan_start && offset < scan_end) {
+    size_t scan_begin = scan_range->offset;
+    size_t scan_end = scan_range->length + scan_begin;
+
+    if (_scanner_ctx.split_context != nullptr) {
+        auto split_context = down_cast<const HdfsOrcScannerSplitContext*>(_scanner_ctx.split_context);
+        scan_begin = split_context->split_begin;
+        scan_end = split_context->split_end;
+    }
+
+    if (offset >= scan_begin && offset < scan_end) {
         return false;
     }
     return true;
@@ -486,7 +499,7 @@ void HdfsOrcScanner::do_close(RuntimeState* runtime_state) noexcept {
 
 Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     CHECK(chunk != nullptr);
-    if (_should_skip_file) {
+    if (_should_skip_file || _split_tasks.size() > 0) {
         return Status::EndOfFile("");
     }
 

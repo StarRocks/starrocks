@@ -631,11 +631,13 @@ ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* run
     _conjunct_ctxs.insert(_conjunct_ctxs.end(), _runtime_in_filters.begin(), _runtime_in_filters.end());
     auto* scan_morsel = (ScanMorsel*)_morsel.get();
     TScanRange* scan_range = scan_morsel->get_scan_range();
+    ScanSplitContext* split_context = scan_morsel->get_split_context();
 
     if (scan_range->__isset.broker_scan_range) {
         scan_range->broker_scan_range.params.__set_non_blocking_read(true);
     }
     _data_source = scan_node->data_source_provider()->create_data_source(*scan_range);
+    _data_source->set_split_context(split_context);
     _data_source->set_predicates(_conjunct_ctxs);
     _data_source->set_runtime_filters(_runtime_bloom_filters);
     _data_source->set_read_limit(_limit);
