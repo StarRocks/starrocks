@@ -2492,4 +2492,95 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int port_connectivity_check_timeout_ms = 10000;
+
+    // This limit limits the maximum size of json file to load.
+    @ConfField(mutable = true)
+    public static long json_file_size_limit = 4294967296L;
+
+    @ConfField(mutable = true)
+    public static boolean allow_system_reserved_names = false;
+
+    /**
+     * Whether to use LockManager to manage lock usage
+     */
+    @ConfField
+    public static boolean lock_manager_enabled = false;
+
+    /**
+     * Number of Hash of Lock Table
+     */
+    @ConfField
+    public static int lock_manager_lock_table_num = 32;
+
+    /**
+     * Whether to enable deadlock unlocking operation.
+     * It is turned off by default and only deadlock detection is performed.
+     * If turned on, LockManager will try to relieve the deadlock by killing the victim.
+     */
+    @ConfField(mutable = true)
+    public static boolean lock_manager_enable_resolve_deadlock = false;
+
+    /**
+     * Whether to use table level lock
+     */
+    @ConfField
+    public static boolean lock_manager_enable_loading_using_fine_granularity_lock = false;
+
+    /**
+     * when a lock cannot be obtained, we cannot determine whether it is because the required
+     * lock is being used normally or if a deadlock has occurred.
+     * Therefore, based on the configuration parameter `dead_lock_detection_delay_time_ms`
+     * is used to control the waiting time before deadlock detection.
+     * If a lock is obtained during this period, there is no need to perform deadlock detection.
+     * Avoid frequent and unnecessary deadlock detection due to lock contention
+     */
+    @ConfField(mutable = true)
+    public static long lock_manager_dead_lock_detection_delay_time_ms = 3000; // 3s
+
+    @ConfField(mutable = true)
+    public static long routine_load_unstable_threshold_second = 3600;
+    /**
+     * dictionary cache refresh task thread pool size
+     */
+    @ConfField(mutable = true)
+    public static int refresh_dictionary_cache_thread_num = 2;
+
+    /*
+     * Replication config
+     */
+    @ConfField
+    public static int replication_interval_ms = 10;
+    @ConfField(mutable = true)
+    public static int replication_max_parallel_table_count = 100; // 100
+    @ConfField(mutable = true)
+    public static int replication_max_parallel_data_size_mb = 10240; // 10g
+    @ConfField(mutable = true)
+    public static int replication_transaction_timeout_sec = 1 * 60 * 60; // 1hour
+
+    @ConfField(mutable = true)
+    public static boolean jdbc_meta_default_cache_enable = false;
+
+    @ConfField(mutable = true)
+    public static long jdbc_meta_default_cache_expire_sec = 600L;
+
+    // the retention time for host disconnection events
+    @ConfField(mutable = true)
+    public static long black_host_history_sec = 2 * 60; // 2min
+
+    // limit for the number of host disconnections in the last {black_host_history_sec} seconds
+    @ConfField(mutable = true)
+    public static long black_host_connect_failures_within_time = 5;
+
+    @ConfField(mutable = false)
+    public static int jdbc_connection_pool_size = 8;
+
+    @ConfField(mutable = false)
+    public static int jdbc_minimum_idle_connections = 1;
+
+    @ConfField(mutable = false)
+    public static int jdbc_connection_idle_timeout_ms = 600000;
+
+    // The longest supported VARCHAR length.
+    @ConfField(mutable = true)
+    public static int max_varchar_length = 1048576;
 }

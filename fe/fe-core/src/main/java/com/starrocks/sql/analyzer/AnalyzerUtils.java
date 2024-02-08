@@ -789,11 +789,12 @@ public class AnalyzerUtils {
             if (PrimitiveType.VARCHAR == srcType.getPrimitiveType() ||
                     PrimitiveType.CHAR == srcType.getPrimitiveType() ||
                     PrimitiveType.NULL_TYPE == srcType.getPrimitiveType()) {
-                int len = ScalarType.MAX_VARCHAR_LENGTH;
+                int len = ScalarType.getOlapMaxVarcharLength();
                 if (srcType instanceof ScalarType) {
                     ScalarType scalarType = (ScalarType) srcType;
                     if (scalarType.getLength() > 0) {
-                        len = scalarType.getLength();
+                        // Catalog's varchar length may larger than olap's max varchar length
+                        len = Integer.min(scalarType.getLength(), ScalarType.getOlapMaxVarcharLength());
                     }
                 }
                 ScalarType stringType = ScalarType.createVarcharType(len);
