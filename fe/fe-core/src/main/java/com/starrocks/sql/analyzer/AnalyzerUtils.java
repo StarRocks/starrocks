@@ -793,8 +793,7 @@ public class AnalyzerUtils {
                 if (srcType instanceof ScalarType) {
                     ScalarType scalarType = (ScalarType) srcType;
                     if (scalarType.getLength() > 0) {
-                        // Catalog's varchar length may larger than olap's max varchar length
-                        len = Integer.min(scalarType.getLength(), ScalarType.getOlapMaxVarcharLength());
+                        len = scalarType.getLength();
                     }
                 }
                 ScalarType stringType = ScalarType.createVarcharType(len);

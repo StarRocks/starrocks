@@ -76,12 +76,4 @@ public class AnalyzerUtilsTest {
         Expr shouldReplaceExpr = expr.getChild(0).getChild(0);
         Assert.assertTrue(shouldReplaceExpr instanceof StringLiteral);
     }
-
-    @Test
-    public void testConvertCatalogMaxStringToOlapMaxString() {
-        ScalarType catalogString = ScalarType.createDefaultCatalogString();
-        ScalarType convertedString = (ScalarType) AnalyzerUtils.transformTableColumnType(catalogString);
-        Assert.assertEquals(ScalarType.getOlapMaxVarcharLength(), convertedString.getLength());
-    }
-
 }

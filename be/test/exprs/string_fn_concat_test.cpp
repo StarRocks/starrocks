@@ -566,7 +566,7 @@ TEST_F(StringFunctionConcatTest, concatWsBigOversizeTest) {
     auto col3 = BinaryColumn::create();
     auto sep_null_col = NullColumn::create();
     auto null_col = NullColumn::create();
-    for (int i = 3795; i < 3796; ++i) {
+    for (int i = 3786; i < 3796; ++i) {
         sep->append(Slice(std::string(get_olap_string_max_length() - i, 'x')));
         col0->append(Slice(std::string(100, 'y')));
         col1->append(Slice(std::string(i + 1, 'z')));
