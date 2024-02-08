@@ -32,11 +32,13 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 
+import static com.starrocks.catalog.ScalarType.getOlapMaxVarcharLength;
 import static com.starrocks.connector.ColumnTypeConverter.columnEquals;
 import static com.starrocks.connector.ColumnTypeConverter.fromHiveTypeToArrayType;
 import static com.starrocks.connector.ColumnTypeConverter.fromHiveTypeToMapType;
 import static com.starrocks.connector.ColumnTypeConverter.fromHudiType;
 import static com.starrocks.connector.ColumnTypeConverter.getPrecisionAndScale;
+
 
 public class ColumnTypeConverterTest {
 
