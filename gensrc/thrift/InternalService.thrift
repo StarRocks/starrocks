@@ -271,11 +271,13 @@ struct TQueryOptions {
   114: optional bool enable_jit = false;
 
   115: optional TTimeUnit big_query_profile_threshold_unit = TTimeUnit.SECOND;
-  
+
   116: optional string sql_dialect;
 
   117: optional bool enable_spill_to_remote_storage;
   118: optional TSpillToRemoteStorageOptions spill_to_remote_storage_options;
+
+  119: optional bool enable_result_sink_accumulate;
 }
 
 
