@@ -9,13 +9,13 @@ import Clients from '../assets/quick-start/_clientsCompose.mdx'
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-# Data Lakehouse with Apache Hudi
+# Apache Hudi Lakehouse
 
 ## Overview
 
 - Deploy Object Storage, Apache Spark, Hudi, and StarRocks using Docker compose
 - Load a tiny dataset into Hudi with Apache Spark
-- Configure StarRocks to access the Hive Metastore using an extrnal catalog
+- Configure StarRocks to access the Hive Metastore using an external catalog
 - Query the data with StarRocks where the data sits
 
 <DataLakeIntro />
@@ -26,36 +26,51 @@ import TabItem from '@theme/TabItem';
 
 Clone the [StarRocks demo repository](https://github.com/StarRocks/demo/) to your local machine.
 
-All of the steps in this guide will be run from the `demo/documentation-samples/hudi/` directory in the directory where you cloned the `demo` github repo.
+All the steps in this guide will be run from the `demo/documentation-samples/hudi/` directory in the directory where you cloned the `demo` GitHub repo.
 
 ### Docker
 
-- Docker Setup: For Mac, Please follow the steps as defined in [Install Docker Desktop on Mac](https://docs.docker.com/desktop/install/mac-install/). For running Spark-SQL queries, please ensure at least 5 GB memory and 4 CPUs are allocated to Docker (See Docker -> Preferences -> Advanced). Otherwise, spark-SQL queries could be killed because of memory issues.
+- Docker Setup: For Mac, Please follow the steps as defined in [Install Docker Desktop on Mac](https://docs.docker.com/desktop/install/mac-install/). For running Spark-SQL queries, please ensure at least 5 GB memory and 4 CPUs are allocated to Docker (See Docker → Preferences → Advanced). Otherwise, spark-SQL queries could be killed because of memory issues.
 - 20 GB free disk space assigned to Docker
   
 ### SQL client
 
-You can use the SQL client provided in the Docker environment, or use one on your system. Many MySQL compatible clients will work, and this guide covers the configuration of DBeaver and MySQL WorkBench.
+You can use the SQL client provided in the Docker environment, or use one on your system. Many MySQL compatible clients will work.
 
 ## Configuration
 
-Change directory into `demo/documentation-samples/hudi` and look at the files:
+Change directory into `demo/documentation-samples/hudi` and look at the files. This is not a tutorial on Hudi, so not every configuration file will be described; but it is important for the reader to know where to look to see how things are configured. In the `hudi/` directory you will find the `docker-compose.yml` file which is used to launch and configure the services in Docker. Here is a list of those services and a brief description:
 
-### `docker-compose.yml`
+### Docker services
 
-Starts these services:
+| Service                  | Responsibilities                                                    |
+|--------------------------|---------------------------------------------------------------------|
+| **`starrocks-fe`**       | Metadata management, client connections, query plans and scheduling |
+| **`starrocks-be`**       | Running query plans                                                 |
+| **`metastore_db`**       |                                                                     |
+| **`hive_metastore`**     |                                                                     |
+| **`minio`** and **`mc`** | MinIO Object Storage and MinIO command line client                  |
+| **`spark-hudi`**         | MinIO Object Storage                                                |
 
-#### `starrocks-fe`
+### Configuration files
 
-#### `starrocks-be`
+In the `hudi/conf/` directory you will find configuration files that get mounted in the `spark-hudi`
+container.
 
-#### `metastore_db`
+##### `core-site.xml`
+This file contains the object storage related settings. Links for this and other items in More information at the end of this document.
 
-#### `hive_metastore`
+##### `spark-defaults.conf`
+Settings for Hive, MinIO, and Spark SQL.
 
-#### `minio` and `mc`
+##### `hudi-defaults.conf`
+Default file used to silence warnings in the `spark-shell`.
 
-#### `spark-hudi`
+##### `hadoop-metrics2-hbase.properties`
+Empty file used to silence warnings in the `spark-shell`.
+
+##### `hadoop-metrics2-s3a-file-system.properties`
+Empty file used to silence warnings in the `spark-shell`.
 
 ## Bringing up Demo Cluster
 
@@ -129,9 +144,13 @@ jq '{Name: .Names, State: .State, Status: .Status}'
 
 ## Configure MinIO
 
-In the configuration files above there is configuration for ??? to interact with Minio. In there the path `huditest` is specified. In this step you will create that path (bucket).
+When you run the Spark commands you will set the basepath for the table being created to an `s3a` URI:
 
-The MinIO console is running on port `9000`. 
+```java
+val basePath = "s3a://huditest/hudi_coders"
+```
+
+In this step you will create the bucket `huditest` in MinIO. The MinIO console is running on port `9000`. 
 
 ### Authenticate to MinIO
 
@@ -146,6 +165,7 @@ In the left navigation select **Buckets**, and then **Create Bucket +**. Name th
 ## Create and populate a table, then sync it to Hive
 
 :::tip
+
 Run this command, and any other `docker compose` commands, from the directory containing the `docker-compose.yml` file.
 :::
 
@@ -244,7 +264,7 @@ To exit the spark-shell:
 
 ### Connect to StarRocks
 
-Connect to StarRocks with the provided  MySQL client provided by the `starrocks-fe` service, or use your favorite SQL client and configure it to connect using the MySQL protocol on `localhost:9030`.
+Connect to StarRocks with the provided MySQL client provided by the `starrocks-fe` service, or use your favorite SQL client and configure it to connect using the MySQL protocol on `localhost:9030`.
 
 ```bash
 docker compose exec starrocks-fe \
@@ -377,7 +397,7 @@ This tutorial exposed you to the use of a StarRocks external catalog to show you
 
 In this tutorial you:
 
-- Deployed StarRocks and an Hudi/Spark/MinIO environment in Docker
+- Deployed StarRocks and a Hudi/Spark/MinIO environment in Docker
 - Loaded a tiny dataset into Hudi with Apache Spark
 - Configured a StarRocks external catalog to provide access to the Hudi catalog
 - Queried the data with SQL in StarRocks without copying the data from the data lake
@@ -387,3 +407,7 @@ In this tutorial you:
 [StarRocks Catalogs](../data_source/catalog/catalog_overview.md)
 
 [Apache Hudi quickstart](https://hudi.apache.org/docs/quick-start-guide/) (includes Spark)
+
+[Apache Hudi S3 configuration](https://hudi.apache.org/docs/s3_hoodie/)
+
+[Apache Spark configuration docs](https://spark.apache.org/docs/latest/configuration.html)
