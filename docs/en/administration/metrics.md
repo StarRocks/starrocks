@@ -4,7 +4,9 @@ displayed_sidebar: "English"
 
 # Monitoring Metrics
 
-This topic introduces some important metrics of StarRocks. For more information on how to build a monitoring service for your StarRocks cluster, see [Monitor and Alert](./Monitor_and_Alert.md).
+This topic introduces some important metrics of StarRocks, including general metrics, asynchronous materialized view metrics, Shared-data Dashboard metrics, and Starlet Dashboard metrics.
+
+For more information on how to build a monitoring service for your StarRocks cluster, see [Monitor and Alert](./Monitor_and_Alert.md).
 
 ## General Metrics
 
