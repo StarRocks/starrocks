@@ -4,6 +4,59 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 3.2
 
+## 3.2.3
+
+发布日期：2024 年 2 月 8 日
+
+### 新增特性
+
+- 【公测中】支持行列混存的表存储格式，对于基于主键的高并发、低延时点查，以及数据部分列更新等场景有更好的性能。但目前还不支持 ALTER，Sort Key 和列模式部分列更新。
+- 支持异步物化视图的备份（BACKUP）和恢复（RESTORE）。
+- Broker Load 支持 JSON 格式的数据的导入。
+- 支持基于视图创建的物化视图的查询改写。例如，直接基于视图创建了物化视图，后续基于该视图的查询可以被改写到物化视图上。
+- 支持 CREATE OR REPLACE PIPE。 [#37658](https://github.com/StarRocks/starrocks/pull/37658)
+
+### 行为变更
+
+- 新增 Session 变量 `enable_strict_order_by`。当取值为默认值 `TRUE` 时，如果查询中的输出列存在不同的表达式使用重复别名的情况，且按照该别名进行排序，查询会报错，例如 `select distinct t1.* from tbl1 t1 order by t1.k1;`。该行为和 2.3 及之前版本的逻辑一致。如果取值为 `FALSE`，采用宽松的去重机制，把这类查询作为有效 SQL 处理。[#37910](https://github.com/StarRocks/starrocks/pull/37910)
+- 新增 Session 变量 `enable_materialized_view_for_insert`，默认值为 `FALSE`，即物化视图默认不改写 INSERT INTO SELECT 语句中的查询。[#37505](https://github.com/StarRocks/starrocks/pull/37505)
+- 单个查询在 Pipeline 框架中执行时所使用的内存限制不再受 `exec_mem_limit` 限制，仅由 `query_mem_limit` 限制。取值为 `0` 表示没有限制。 [#34120](https://github.com/StarRocks/starrocks/pull/34120) 
+
+### 参数变更
+
+- 新增 FE 配置项  `http_worker_threads_num`，HTTP Server 用于处理 HTTP 请求的线程数。默认取值为 0。如果配置为负数或 0 ，线程数将设置为 CPU 核数的 2 倍**。**[#37530](https://github.com/StarRocks/starrocks/pull/37530)
+- 新增 BE 配置项 `lake_pk_compaction_max_input_rowsets`，用于控制存算分离集群下主键表 Compaction 任务中允许的最大输入 Rowset 数量，优化 Compaction 时资源的使用。[#39611](https://github.com/StarRocks/starrocks/pull/39611)
+- 新增 Session 变量 `connnector_sink_compression_codec`，用于指定写入 Hive 表或 Iceberg 表时以及使用 Files() 导出数据时的压缩算法，可选算法包括 GZIP、BROTLI、ZSTD 以及 LZ4。 [#37912](https://github.com/StarRocks/starrocks/pull/37912)
+- 新增 FE 配置项 `routine_load_unstable_threshold_second`。[#36222](https://github.com/StarRocks/starrocks/pull/36222)
+- 新增 BE 配置项 `pindex_major_compaction_limit_per_disk`，配置每块盘 Compaction 的最大并发数，用于解决 Compaction 在磁盘之间不均衡导致个别磁盘 I/O 过高的问题，默认取值为 `1`。[#36681](https://github.com/StarRocks/starrocks/pull/36681)
+- 新增 BE 配置项 `enable_lazy_delta_column_compaction`，默认取值是 `true`，表示不启用频繁的进行 Delta Column 的 Compaction。[#36654](https://github.com/StarRocks/starrocks/pull/36654)
+- 新增 FE 配置项 `default_mv_refresh_immediate`，用于控制物化视图创建完成后是否立刻进行刷新，默认值为 `true`，表示立刻刷新，`false` 表示延迟刷新。 [#37093](https://github.com/StarRocks/starrocks/pull/37093)
+- 调整 FE 配置项 `default_mv_refresh_partition_num` 默认值为 `1`，即单次物化视图刷新需更新多个分区时，任务将分批执行，一次只刷新一个分区。此举可以减少每次刷新占用的资源。 [#36560](https://github.com/StarRocks/starrocks/pull/36560)
+
+### 功能优化
+
+- 对于分区字段为 TIMESTAMP 类型的 Iceberg 表，新增 `yyyy-MM-ddTHH:mm` 和 `yyyy-MM-dd HH:mm` 两种数据格式的支持。[#39986](https://github.com/StarRocks/starrocks/pull/39986)
+- 监控 API 增加 Data Cache 相关指标。 [#40375](https://github.com/StarRocks/starrocks/pull/40375)
+- 优化 BE 的日志打印，避免日志过多。 [#22820](https://github.com/StarRocks/starrocks/pull/22820) [#36187](https://github.com/StarRocks/starrocks/pull/36187)
+- 视图 `information_schema.``be_tablets` 中增加 `storage_medium` 字段。 [#37070](https://github.com/StarRocks/starrocks/pull/37070)
+- 支持在多个子查询中使用 `SET_VAR`。 [#36871](https://github.com/StarRocks/starrocks/pull/36871)
+- SHOW ROUTINE LOAD 返回结果中增加 `LatestSourcePosition`，记录数据源 Kafka 中 Topic 内各个分区的最新消息位点，便于检查导入延迟情况。[#38298](https://github.com/StarRocks/starrocks/pull/38298)
+- WHERE 子句中 LIKE 运算符右侧字符串中不包括 `%` 或者 `_` 时，LIKE 运算符会转换成 `=` 运算符。[#37515](https://github.com/StarRocks/starrocks/pull/37515)
+- 调整 Trash 文件的默认过期时间为 1 天（原来是 3 天）。[#37113](https://github.com/StarRocks/starrocks/pull/37113)
+- 支持收集带 Partition Transform 的 Iceberg 表的统计信息。 [#39907](https://github.com/StarRocks/starrocks/pull/39907)
+- 优化 Rountine Load 的调度策略，慢任务不阻塞其他正常任务的执行。[#37638](https://github.com/StarRocks/starrocks/pull/37638)
+
+### 问题修复
+
+修复了如下问题：
+
+- ANALYZE TABLE 偶尔会卡住。 [#36836](https://github.com/StarRocks/starrocks/pull/36836)
+- PageCache 内存占用在有些情况下会超过 BE 动态参数 `storage_page_cache_limit` 设定的阈值。[#37740](https://github.com/StarRocks/starrocks/pull/37740)
+- Hive Catalog 的元数据在 Hive 表新增字段后不会自动刷新。[#37549](https://github.com/StarRocks/starrocks/pull/37549)
+- 某些情况下 `bitmap_to_string` 会因为转换时数据类型溢出导致查询结果错误。[#37405](https://github.com/StarRocks/starrocks/pull/37405)
+- `SELECT ... FROM ... INTO OUTFILE` 导出至 CSV 时，如果 FROM 子句中包含多个常量，执行时会报错："Unmatched number of columns"。[#38045](https://github.com/StarRocks/starrocks/pull/38045)
+- 查询表中半结构化数据时，某些情况下会导致 BE Crash。 [#40208](https://github.com/StarRocks/starrocks/pull/40208)
+
 ## 3.2.2
 
 发布日期：2023 年 12 月 30 日
