@@ -218,8 +218,8 @@ TEST(TabletMetaTest, test_create) {
     ASSERT_TRUE(c2_1.subcolumn(0).is_nullable());
     ASSERT_FALSE(c2_1.subcolumn(0).has_bitmap_index());
     ASSERT_FALSE(c2_1.subcolumn(0).has_default_value());
-    ASSERT_EQ(10 + sizeof(OLAP_STRING_MAX_LENGTH), c2_1.subcolumn(0).length());
-    ASSERT_EQ(10 + sizeof(OLAP_STRING_MAX_LENGTH), c2_1.subcolumn(0).index_length());
+    ASSERT_EQ(10 + sizeof(get_olap_string_max_length()), c2_1.subcolumn(0).length());
+    ASSERT_EQ(10 + sizeof(get_olap_string_max_length()), c2_1.subcolumn(0).index_length());
     ASSERT_EQ(0, c2_1.subcolumn(0).subcolumn_count());
 
     std::shared_ptr<BinlogConfig> binlog_config_ptr = tablet_meta->get_binlog_config();

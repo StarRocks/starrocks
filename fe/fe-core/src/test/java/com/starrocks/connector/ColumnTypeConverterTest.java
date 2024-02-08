@@ -34,7 +34,12 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 
+<<<<<<< HEAD
 import static com.starrocks.catalog.ScalarType.MAX_VARCHAR_LENGTH;
+=======
+import static com.starrocks.catalog.ScalarType.CATALOG_MAX_VARCHAR_LENGTH;
+import static com.starrocks.catalog.ScalarType.getOlapMaxVarcharLength;
+>>>>>>> caaee45137 ([Enhancement] Make maximal varchar string length configurable in fe.conf and be.conf. (#38957))
 import static com.starrocks.catalog.Type.UNKNOWN_TYPE;
 import static com.starrocks.connector.ColumnTypeConverter.columnEquals;
 import static com.starrocks.connector.ColumnTypeConverter.fromHiveTypeToArrayType;
@@ -42,6 +47,7 @@ import static com.starrocks.connector.ColumnTypeConverter.fromHiveTypeToMapType;
 import static com.starrocks.connector.ColumnTypeConverter.fromHudiType;
 import static com.starrocks.connector.ColumnTypeConverter.getPrecisionAndScale;
 import static com.starrocks.connector.ColumnTypeConverter.toHiveType;
+
 
 public class ColumnTypeConverterTest {
 
@@ -300,6 +306,14 @@ public class ColumnTypeConverterTest {
         typeStr = "string";
         resType = ColumnTypeConverter.fromHiveType(typeStr);
         Assert.assertEquals(resType, stringType);
+<<<<<<< HEAD
+=======
+
+        Assert.assertEquals("varchar(65535)", toHiveType(ScalarType.createVarchar(HiveVarchar.MAX_VARCHAR_LENGTH)));
+        Assert.assertEquals("varchar(65534)", toHiveType(ScalarType.createVarchar(HiveVarchar.MAX_VARCHAR_LENGTH - 1)));
+        Assert.assertEquals("string", toHiveType(ScalarType.createVarchar(getOlapMaxVarcharLength())));
+        Assert.assertEquals("string", toHiveType(ScalarType.createVarchar(CATALOG_MAX_VARCHAR_LENGTH)));
+>>>>>>> caaee45137 ([Enhancement] Make maximal varchar string length configurable in fe.conf and be.conf. (#38957))
     }
 
     @Test
@@ -426,7 +440,11 @@ public class ColumnTypeConverterTest {
                 "Unsupported Hive type: VARCHAR(200000). Supported VARCHAR types: VARCHAR(<=65535)",
                 () -> toHiveType(ScalarType.createVarcharType(200000)));
 
+<<<<<<< HEAD
         Assert.assertEquals("string", toHiveType(ScalarType.createVarchar(MAX_VARCHAR_LENGTH)));
+=======
+        Assert.assertEquals("string", toHiveType(ScalarType.createVarchar(getOlapMaxVarcharLength())));
+>>>>>>> caaee45137 ([Enhancement] Make maximal varchar string length configurable in fe.conf and be.conf. (#38957))
 
         ScalarType itemType = ScalarType.createType(PrimitiveType.DATE);
         ArrayType arrayType = new ArrayType(new ArrayType(itemType));
