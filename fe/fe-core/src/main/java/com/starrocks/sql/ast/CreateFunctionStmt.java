@@ -323,7 +323,7 @@ public class CreateFunctionStmt extends DdlStmt {
         argsDef.analyze();
         returnType.analyze();
 
-        intermediateType = TypeDef.createVarchar(ScalarType.OLAP_MAX_VARCHAR_LENGTH);
+        intermediateType = TypeDef.createVarchar(ScalarType.getOlapMaxVarcharLength());
 
         String type = properties.get(TYPE_KEY);
         if (TYPE_STARROCKS_JAR.equals(type)) {

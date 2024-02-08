@@ -363,14 +363,14 @@ Status StringFunctions::concat_prepare(FunctionContext* context, FunctionContext
     // size of concatenation of tail columns(i.e. columns except the 1st one)
     // must not exceeds SIZE_LIMIT, otherwise the result is oversize in which
     // case NULL is returned according to mysql.
-    raw::make_room(&tail, OLAP_STRING_MAX_LENGTH);
+    raw::make_room(&tail, get_olap_string_max_length());
     auto* tail_begin = (uint8_t*)tail.data();
     size_t tail_off = 0;
 
     for (auto i = 1; i < num_args; ++i) {
         auto const_arg = context->get_constant_column(i);
         auto s = ColumnHelper::get_const_value<TYPE_VARCHAR>(const_arg);
-        if (tail_off + s.size > OLAP_STRING_MAX_LENGTH) {
+        if (tail_off + s.size > get_olap_string_max_length()) {
             //oversize
             state->is_oversize = true;
             break;
@@ -794,7 +794,7 @@ public:
         size_t dst_off = 0;
         for (auto i = 0; i < num_rows; ++i) {
             auto len = len_array[i];
-            if (UNLIKELY((uint32_t)len > OLAP_STRING_MAX_LENGTH)) {
+            if (UNLIKELY((uint32_t)len > get_olap_string_max_length())) {
                 dst_offsets[i + 1] = dst_off;
                 has_null = true;
                 nulls[i] = 1;
@@ -889,11 +889,11 @@ static inline ColumnPtr repeat_const_not_null(const Columns& columns, const Bina
         raw::make_room(&dst_offsets, num_rows + 1);
         dst_offsets[0] = 0;
         size_t reserved = static_cast<size_t>(times) * src_offsets.back();
-        if (reserved > OLAP_STRING_MAX_LENGTH * num_rows) {
+        if (reserved > get_olap_string_max_length() * num_rows) {
             reserved = 0;
             for (int i = 0; i < num_rows; ++i) {
                 size_t slice_sz = src_offsets[i + 1] - src_offsets[i];
-                if (slice_sz * times < OLAP_STRING_MAX_LENGTH) {
+                if (slice_sz * times < get_olap_string_max_length()) {
                     reserved += slice_sz * times;
                 }
             }
@@ -911,7 +911,7 @@ static inline ColumnPtr repeat_const_not_null(const Columns& columns, const Bina
         }
         // if result exceed STRING_MAX_LENGTH
         // return null
-        if (s.size * times > OLAP_STRING_MAX_LENGTH) {
+        if (s.size * times > get_olap_string_max_length()) {
             dst_nulls[i] = 1;
             has_null = true;
             dst_offsets[i + 1] = dst_off;
@@ -965,7 +965,7 @@ static inline ColumnPtr repeat_not_const(const Columns& columns) {
         auto s = str_viewer.value(i);
         int32_t n = times_viewer.value(i);
 
-        if (s.size * n > OLAP_STRING_MAX_LENGTH) {
+        if (s.size * n > get_olap_string_max_length()) {
             dst_nulls[i] = 1;
             has_null = true;
             dst_offsets[i + 1] = dst_off;
@@ -1083,7 +1083,7 @@ static inline void build_translate_map(const Slice& from_str, const Slice& to_st
  * @param utf8_map the UTF-8 map.
  * @param dst the destination to store the translated chars. The caller must guarantee there is enough room.
  * @return [is_null, num_bytes].
- * - `is_null` will be true, if the number of translated chars exceeds `OLAP_STRING_MAX_LENGTH`.
+ * - `is_null` will be true, if the number of translated chars exceeds `get_olap_string_max_length()`.
  * - `num_bytes`: the number of translated chars.
  */
 static inline std::pair<bool, size_t> translate_string_with_utf8_map(
@@ -1101,7 +1101,7 @@ static inline std::pair<bool, size_t> translate_string_with_utf8_map(
             continue;
         }
 
-        if (num_bytes + dst_utf_char.size > OLAP_STRING_MAX_LENGTH) {
+        if (num_bytes + dst_utf_char.size > get_olap_string_max_length()) {
             return {true, 0};
         }
         strings::memcpy_inlined(dst + num_bytes, dst_utf_char.data, dst_utf_char.size);
@@ -1227,7 +1227,7 @@ static inline ColumnPtr translate_with_ascii_const_nonnull_from_and_to(const Col
  * @param src the source column, which may be de-wrapped from NullableColumn.
  * @param state stores the UTF-8 map.
  * @return the translated column, which may be a nullable BinaryColumn.
- *  The row will be null, if it exceeds OLAP_STRING_MAX_LENGTH after translated.
+ *  The row will be null, if it exceeds get_olap_string_max_length() after translated.
  */
 static inline ColumnPtr translate_with_utf8_const_nonnull_from_and_to(const Columns& columns, BinaryColumn* src,
                                                                       const TranslateState* state) {
@@ -1266,7 +1266,7 @@ static inline ColumnPtr translate_with_utf8_const_nonnull_from_and_to(const Colu
         src_encoded_values.reserve(s.size);
         encode_utf8_chars(s, &src_encoded_values);
 
-        dst_bytes.resize(dst_offset + std::min<size_t>(s.size * 4, OLAP_STRING_MAX_LENGTH));
+        dst_bytes.resize(dst_offset + std::min<size_t>(s.size * 4, get_olap_string_max_length()));
         uint8_t* dst_begin = dst_bytes.data() + dst_offset;
 
         const auto [is_null, num_row_bytes] = translate_string_with_utf8_map(src_encoded_values, utf8_map, dst_begin);
@@ -1294,7 +1294,7 @@ static inline ColumnPtr translate_with_utf8_const_nonnull_from_and_to(const Colu
  * @param columns the input columns, including `SRC_STR_INDEX`, `FROM_STR_INDEX`, `TO_STR_INDEX`.
  * @param state useless, `state` is useful only for the constant `from_string`, `to_string` for now.
  * @return the translated column, which may be a nullable BinaryColumn.
- *  The row will be null, if it exceeds OLAP_STRING_MAX_LENGTH after translated.
+ *  The row will be null, if it exceeds get_olap_string_max_length() after translated.
  */
 ColumnPtr translate_with_non_const_from_or_to(const Columns& columns, const TranslateState* state) {
     DCHECK(state == nullptr || !state->is_from_and_to_const);
@@ -1349,7 +1349,7 @@ ColumnPtr translate_with_non_const_from_or_to(const Columns& columns, const Tran
             src_encoded_values.reserve(src.size);
             encode_utf8_chars(src, &src_encoded_values);
 
-            dst_bytes.resize(dst_offset + std::min<size_t>(src.size * 4, OLAP_STRING_MAX_LENGTH));
+            dst_bytes.resize(dst_offset + std::min<size_t>(src.size * 4, get_olap_string_max_length()));
             uint8_t* dst_begin = dst_bytes.data() + dst_offset;
 
             const auto [is_null, num_row_bytes] =
@@ -1435,7 +1435,7 @@ enum PadType { PAD_TYPE_LEFT, PAD_TYPE_RIGHT };
 template <PadType pad_type>
 static inline ColumnPtr ascii_pad_ascii_const(Columns const& columns, BinaryColumn* src, const uint8_t* fill,
                                               const size_t fill_size, const size_t len) {
-    DCHECK(0 < len && len <= OLAP_STRING_MAX_LENGTH);
+    DCHECK(0 < len && len <= get_olap_string_max_length());
     DCHECK(fill_size > 0);
 
     const auto num_rows = src->size();
@@ -1545,7 +1545,7 @@ static inline ColumnPtr pad_utf8_const(Columns const& columns, BinaryColumn* src
 
         size_t dst_slice_size = s.size + fill_times * fill_size + fill_rest;
         // oversize
-        if (dst_slice_size > OLAP_STRING_MAX_LENGTH) {
+        if (dst_slice_size > get_olap_string_max_length()) {
             dst_nulls[i] = 1;
             has_null = true;
             dst_offsets[i + 1] = dst_off;
@@ -1583,7 +1583,7 @@ static inline ColumnPtr pad_const_not_null(const Columns& columns, BinaryColumn*
     auto fill = ColumnHelper::get_const_value<TYPE_VARCHAR>(columns[2]);
 
     // illegal length  or too-big length, return NULL
-    if (len < 0 || len > OLAP_STRING_MAX_LENGTH) {
+    if (len < 0 || len > get_olap_string_max_length()) {
         return ColumnHelper::create_const_null_column(columns[1]->size());
     }
     // len == 0, return empty string
@@ -1655,8 +1655,8 @@ ColumnPtr pad_not_const(const Columns& columns, [[maybe_unused]] const PadState*
         }
 
         int len = len_viewer.value(i);
-        // NULL if len < 0 || len > OLAP_STRING_MAX_LENGTH
-        if ((uint32)len > OLAP_STRING_MAX_LENGTH) {
+        // NULL if len < 0 || len > get_olap_string_max_length()
+        if ((uint32)len > get_olap_string_max_length()) {
             has_null = true;
             dst_offsets[i + 1] = dst_off;
             dst_nulls[i] = 1;
@@ -1716,7 +1716,7 @@ ColumnPtr pad_not_const(const Columns& columns, [[maybe_unused]] const PadState*
         const size_t dst_slice_size = str.size + fill->size * fill_times + fill_rest;
 
         // result is oversize, return NULL
-        if (dst_slice_size > OLAP_STRING_MAX_LENGTH) {
+        if (dst_slice_size > get_olap_string_max_length()) {
             has_null = true;
             dst_offsets[i + 1] = dst_off;
             dst_nulls[i] = 1;
@@ -2673,7 +2673,7 @@ static inline ColumnPtr concat_const_not_null(Columns const& columns, BinaryColu
     for (int i = 0; i < num_rows; ++i) {
         auto s = src->get_slice(i);
         const auto dst_slice_size = s.size + tail_size;
-        if (LIKELY(dst_slice_size <= OLAP_STRING_MAX_LENGTH)) {
+        if (LIKELY(dst_slice_size <= get_olap_string_max_length())) {
             dst_off += dst_slice_size;
             dst_offsets[i + 1] = dst_off;
         } else {
@@ -2691,7 +2691,7 @@ static inline ColumnPtr concat_const_not_null(Columns const& columns, BinaryColu
     for (int i = 0; i < num_rows; ++i) {
         auto s = src->get_slice(i);
         const auto dst_slice_size = s.size + tail_size;
-        if (LIKELY(dst_slice_size <= OLAP_STRING_MAX_LENGTH)) {
+        if (LIKELY(dst_slice_size <= get_olap_string_max_length())) {
             strings::memcpy_inlined(dst_begin + dst_off, s.data, s.size);
             dst_off += s.size;
             strings::memcpy_inlined(dst_begin + dst_off, tail_begin, tail_size);
@@ -2740,7 +2740,7 @@ static inline ColumnPtr concat_not_const_small(std::vector<ColumnViewer<TYPE_VAR
         bool oversize = false;
         for (auto& view : list) {
             auto v = view.value(i);
-            if (UNLIKELY(dst_slice_len + v.size > OLAP_STRING_MAX_LENGTH)) {
+            if (UNLIKELY(dst_slice_len + v.size > get_olap_string_max_length())) {
                 oversize = true;
                 break;
             }
@@ -2794,7 +2794,7 @@ static inline ColumnPtr concat_not_const(Columns const& columns) {
         bool oversize = false;
         for (auto& view : list) {
             auto v = view.value(i);
-            if (UNLIKELY(dst_slice_len + v.size > OLAP_STRING_MAX_LENGTH)) {
+            if (UNLIKELY(dst_slice_len + v.size > get_olap_string_max_length())) {
                 oversize = true;
                 break;
             }
@@ -2864,7 +2864,7 @@ ColumnPtr concat_ws_small(ColumnViewer<TYPE_VARCHAR>& sep_viewer, std::vector<Co
                 continue;
             }
             auto v = view.value(i);
-            if (UNLIKELY(dst_slice_size + v.size > OLAP_STRING_MAX_LENGTH)) {
+            if (UNLIKELY(dst_slice_size + v.size > get_olap_string_max_length())) {
                 oversize = true;
                 break;
             }
@@ -2910,7 +2910,7 @@ StatusOr<ColumnPtr> StringFunctions::concat_ws(FunctionContext* context, const C
     const auto sep_size = ColumnHelper::compute_bytes_size(columns.begin(), columns.begin() + 1);
     const auto rest_size = ColumnHelper::compute_bytes_size(columns.begin() + 1, columns.end());
     // need extra SIZE_LIMIT bytes of space for rewinding the appended separator.
-    const auto dst_bytes_max_size = rest_size + sep_size * (column_num - 2) + OLAP_STRING_MAX_LENGTH;
+    const auto dst_bytes_max_size = rest_size + sep_size * (column_num - 2) + get_olap_string_max_length();
 
     ColumnViewer<TYPE_VARCHAR> sep_viewer(columns[0]);
     std::vector<ColumnViewer<TYPE_VARCHAR>> list;
@@ -2952,7 +2952,7 @@ StatusOr<ColumnPtr> StringFunctions::concat_ws(FunctionContext* context, const C
             dst_slice_size += sep.size;
         }
         // return NULL for oversize
-        if (UNLIKELY(dst_slice_size > OLAP_STRING_MAX_LENGTH + sep.size)) {
+        if (UNLIKELY(dst_slice_size > get_olap_string_max_length() + sep.size)) {
             builder.rewind(dst_slice_size);
             builder.set_null(i);
         } else if (LIKELY(dst_slice_size > 0)) {
