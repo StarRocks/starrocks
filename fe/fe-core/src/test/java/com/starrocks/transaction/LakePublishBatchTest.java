@@ -46,8 +46,6 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-import org.apache.log4j.LogManager;
-import org.apache.log4j.Logger;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -58,7 +56,6 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 public class LakePublishBatchTest {
-    private static final Logger LOG = LogManager.getLogger(LakePublishBatchTest.class);
     private static PseudoCluster cluster;
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
@@ -446,17 +443,16 @@ public class LakePublishBatchTest {
         VisibleStateWaiter waiter2 = globalTransactionMgr.commitTransaction(db.getId(), transactionId2, transTablets2,
                 Lists.newArrayList(), null);
 
-        LOG.error("Begin to publish " + transactionId1 + ", " + transactionId2);
-        System.out.println("Begin to publish " + transactionId1 + ", " + transactionId2);
         PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
-        publishVersionDaemon.runAfterCatalogReady1();
+        publishVersionDaemon.runAfterCatalogReady();
 
         Assert.assertTrue(waiter1.await(10, TimeUnit.SECONDS));
         Assert.assertTrue(waiter2.await(10, TimeUnit.SECONDS));
 
+        // Ensure publishingLakeTransactionsBatchTableId has been cleared, otherwise the following single publish may fail.
+        publishVersionDaemon.publishingLakeTransactionsBatchTableId.clear();
+
         Config.lake_enable_batch_publish_version = false;
-        LOG.error("lake_enable_batch_publish_version has been set to " + Config.lake_enable_batch_publish_version);
-        System.out.println("lake_enable_batch_publish_version has been set to " + Config.lake_enable_batch_publish_version);
         long transactionId3 = globalTransactionMgr.
                 beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
                         "label3",
@@ -466,9 +462,7 @@ public class LakePublishBatchTest {
         VisibleStateWaiter waiter3 = globalTransactionMgr.commitTransaction(db.getId(), transactionId3, transTablets1,
                 Lists.newArrayList(), null);
 
-        LOG.error("Begin to publish " + transactionId3);
-        System.out.println("Begin to publish " + transactionId3);
-        publishVersionDaemon.runAfterCatalogReady1();
+        publishVersionDaemon.runAfterCatalogReady();
         Assert.assertTrue(waiter3.await(10, TimeUnit.SECONDS));
 
         Config.lake_enable_batch_publish_version = true;
