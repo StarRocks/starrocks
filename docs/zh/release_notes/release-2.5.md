@@ -4,6 +4,40 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 2.5
 
+## 2.5.19
+
+发布日期：2024 年 2 月 8 日
+
+### 新增特性
+
+- 新增模糊/正则匹配函数：[regexp_extract_all](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/like-predicate-functions/regexp_extract_all/)。
+- 新增 Bitmap 取值的处理函数：serialize、deserialize、serializeToString。 [#40162](https://github.com/StarRocks/starrocks/pull/40162/files)
+
+### 功能优化
+
+- 在刷新物化视图时，尝试自动激活失效的物化视图。 [#38521](https://github.com/StarRocks/starrocks/pull/38521)
+- 优化 BE 的日志打印，避免日志过多。 [#22820](https://github.com/StarRocks/starrocks/pull/22820) [#36187](https://github.com/StarRocks/starrocks/pull/36187)
+- 可以使用 [Hive UDF](https://docs.starrocks.io/zh/docs/integrations/hive_bitmap_udf/) 导入/导出/处理 StarRocks 中的 Bitmap 数据。 [#40165](https://github.com/StarRocks/starrocks/pull/40165) [#40168](https://github.com/StarRocks/starrocks/pull/40168)
+- 对于分区字段为 TIMESTAMP 类型的 Iceberg 表，新增 `yyyy-MM-ddTHH:mm` 和 `yyyy-MM-dd HH:mm` 两种数据格式的支持。 [#39986](https://github.com/StarRocks/starrocks/pull/39986)
+
+### 问题修复
+
+修复了如下问题：
+
+- Spark Load 创建导入任务时，不指定 PROPERTIES 会导致空指针异常 (NPE)。 [#38765](https://github.com/StarRocks/starrocks/pull/38765)
+- INSERT INTO SELECT 偶尔会超时报错 "timeout by txn manager"。 [#36688](https://github.com/StarRocks/starrocks/pull/36688)
+- PageCache 内存占用在有些情况下会超过 BE 动态参数 `storage_page_cache_limit` 设定的阈值。 [#37740](https://github.com/StarRocks/starrocks/pull/37740)
+- 当基表删除重建后，异步物化视图刷新失败。 [#38008](https://github.com/StarRocks/starrocks/pull/38008) [#38982](https://github.com/StarRocks/starrocks/pull/38982)
+- SELECT INTO S3 偶尔会报错 "The tablet write operation update metadata take a long time"。 [#38443](https://github.com/StarRocks/starrocks/pull/38443)
+- 导入过程中某些操作会出现报错 "reached timeout"。 [#36746](https://github.com/StarRocks/starrocks/pull/36746)
+- DECIMAL 类型数据在 SHOW CREATE TABLE 中展示的和创建时不一致。 [#39297](https://github.com/StarRocks/starrocks/pull/39297)
+- 如果外表的分区列有取值是 null，查询时会导致 BE Crash。 [#38888](https://github.com/StarRocks/starrocks/pull/38888)
+- 从明细表删除数据时，如果 DELETE 语句的 WHERE 条件中有空格，数据删除后还能查到。 [#39797](https://github.com/StarRocks/starrocks/pull/39797)
+- 导入 ORC 文件中 `array<string>` 到 StarRocks 时转为 `array<json>`，可能引起 BE crash。 [#39233](https://github.com/StarRocks/starrocks/pull/39233)
+- 查询 Hive Catalog 某些情况下会出现卡住直到超时。 [#39863](https://github.com/StarRocks/starrocks/pull/39863)
+- 动态分区日期类型为小时的时候会创建失败。 [#40256](https://github.com/StarRocks/starrocks/pull/40256)
+- Flink 导入报错 "failed to call frontend service"。 [#40710](https://github.com/StarRocks/starrocks/pull/40710)
+
 ## 2.5.18
 
 发布日期：2024 年 1 月 10 日
