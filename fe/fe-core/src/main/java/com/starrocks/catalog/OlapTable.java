@@ -171,10 +171,6 @@ public class OlapTable extends Table {
         WAITING_STABLE
     }
 
-    @SerializedName(value = "clusterId")
-    @Deprecated
-    protected int clusterId;
-
     @SerializedName(value = "state")
     protected OlapTableState state;
 
@@ -264,8 +260,6 @@ public class OlapTable extends Table {
         // for persist
         super(type);
 
-        this.clusterId = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId();
-
         this.bfColumns = null;
         this.bfFpp = 0;
 
@@ -282,24 +276,16 @@ public class OlapTable extends Table {
     }
 
     public OlapTable(long id, String tableName, List<Column> baseSchema, KeysType keysType,
-                     PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo, TableIndexes indexes) {
-        this(id, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo,
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId(), indexes, TableType.OLAP);
+                     PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo,
+                     TableIndexes indexes) {
+        this(id, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo, indexes, TableType.OLAP);
     }
 
     public OlapTable(long id, String tableName, List<Column> baseSchema, KeysType keysType,
                      PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo,
-                     int clusterId, TableIndexes indexes) {
-        this(id, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo,
-                clusterId, indexes, TableType.OLAP);
-    }
-
-    public OlapTable(long id, String tableName, List<Column> baseSchema, KeysType keysType,
-                     PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo,
-                     int clusterId, TableIndexes indexes, TableType tableType) {
+                     TableIndexes indexes, TableType tableType) {
         super(id, tableName, tableType, baseSchema);
 
-        this.clusterId = clusterId;
         this.state = OlapTableState.NORMAL;
 
         this.keysType = keysType;
@@ -448,10 +434,6 @@ public class OlapTable extends Table {
 
     public long getBaseIndexId() {
         return baseIndexId;
-    }
-
-    public int getClusterId() {
-        return clusterId;
     }
 
     public void setState(OlapTableState state) {
@@ -1952,10 +1934,6 @@ public class OlapTable extends Table {
             }
         }
 
-        // The table may be restored from another cluster, it should be set to current
-        // cluster id.
-        clusterId = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId();
-
         lastSchemaUpdateTime = new AtomicLong(-1);
         // Record the start and end time for data load version update phase
         lastVersionUpdateStartTime = new AtomicLong(-1);
@@ -3111,7 +3089,7 @@ public class OlapTable extends Table {
                     return partitionRange.isConnected(dataCacheRange);
                 } catch (Exception e) {
                     LOG.warn("Table name: {}, Partition name: {}, Datacache.partiton_duration: {}, Failed to check the " +
-                            " validaity of range partition. Error: {}.", super.name, partition.getName(),
+                                    " validaity of range partition. Error: {}.", super.name, partition.getName(),
                             cacheDuration.toString(), e.getMessage());
                     return false;
                 }
@@ -3150,7 +3128,7 @@ public class OlapTable extends Table {
                 return false;
             } catch (Exception e) {
                 LOG.warn("Table name: {}, Partition name: {}, Datacache.partiton_duration: {}, Failed to check the " +
-                        "validaity of list partition. Error: {}.", super.name, partition.getName(),
+                                "validaity of list partition. Error: {}.", super.name, partition.getName(),
                         cacheDuration.toString(), e.getMessage());
                 return false;
             }

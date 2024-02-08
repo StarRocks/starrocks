@@ -294,15 +294,6 @@ public abstract class StarRocksHttpTestCase {
                 minTimes = 0;
                 result = editLog;
 
-                //globalStateMgr.changeCatalogDb((ConnectContext) any, "blockDb");
-                //minTimes = 0;
-
-                //globalStateMgr.changeCatalogDb((ConnectContext) any, anyString);
-                //minTimes = 0;
-
-                globalStateMgr.initDefaultCluster();
-                minTimes = 0;
-
                 globalStateMgr.getLocalMetastore();
                 minTimes = 0;
                 result = localMetastore;
@@ -369,15 +360,6 @@ public abstract class StarRocksHttpTestCase {
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
-
-                //globalStateMgr.changeCatalogDb((ConnectContext) any, "blockDb");
-                //minTimes = 0;
-
-                //globalStateMgr.changeCatalogDb((ConnectContext) any, anyString);
-                //minTimes = 0;
-
-                globalStateMgr.initDefaultCluster();
-                minTimes = 0;
 
                 globalStateMgr.getMetadataMgr();
                 minTimes = 0;

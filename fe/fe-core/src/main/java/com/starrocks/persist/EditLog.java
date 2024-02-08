@@ -52,7 +52,6 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.Resource;
-import com.starrocks.cluster.Cluster;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
@@ -566,8 +565,7 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_CREATE_CLUSTER: {
-                    final Cluster value = (Cluster) journal.getData();
-                    globalStateMgr.getLocalMetastore().replayCreateCluster(value);
+                    // ignore
                     break;
                 }
                 case OperationType.OP_ADD_BROKER:
@@ -1493,10 +1491,6 @@ public class EditLog {
 
     public void logGlobalVariable(SessionVariable variable) {
         logEdit(OperationType.OP_GLOBAL_VARIABLE, variable);
-    }
-
-    public void logCreateCluster(Cluster cluster) {
-        logEdit(OperationType.OP_CREATE_CLUSTER, cluster);
     }
 
     public void logAddBroker(BrokerMgr.ModifyBrokerInfo info) {
