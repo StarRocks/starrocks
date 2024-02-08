@@ -2879,10 +2879,10 @@ size_t TabletUpdates::_get_rowset_num_deletes(const Rowset& rowset) {
 
 StatusOr<ExtraFileSize> TabletUpdates::_get_extra_file_size() const {
     std::string tablet_path_str = _tablet.schema_hash_path();
-    std::filesystem::path tablet_path(tablet_path_str.c_str());
     ExtraFileSize ef_size;
+
     try {
-        for (const auto& entry : std::filesystem::directory_iterator(tablet_path)) {
+        for (const auto& entry : std::filesystem::directory_iterator(tablet_path_str)) {
             if (entry.is_regular_file()) {
                 std::string filename = entry.path().filename().string();
 
