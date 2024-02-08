@@ -32,11 +32,11 @@ public:
 
     JITExpr(const TExprNode& node, Expr* expr);
 
-    ~JITExpr() override;
+    ~JITExpr() override = default;
 
     Expr* clone(ObjectPool* pool) const override { return JITExpr::create(pool, _expr); }
 
-    bool is_jit_compiled() { return _jit_function != nullptr && !_jit_expr_name.empty(); }
+    bool is_jit_compiled() { return _jit_function != nullptr; }
 
 protected:
     /**
@@ -47,7 +47,7 @@ protected:
     Status prepare(RuntimeState* state, ExprContext* context) override;
 
     /**
-     * @brief Evaluate the expression using the function context, which contains the compiled function pointer.
+     * @brief Evaluate the expression using the compiled function.
      */
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
 
@@ -55,9 +55,7 @@ private:
     Expr* _expr; // The original expression.
     bool _is_prepared = false;
     JITScalarFunction _jit_function = nullptr;
-    std::function<void()> _delete_cache_handle = nullptr;
-    std::string _jit_expr_name;
-    MyObjectCache _obj;
+    std::unique_ptr<JitObjectCache> _func_obj;
 };
 
 } // namespace starrocks

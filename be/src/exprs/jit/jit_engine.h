@@ -19,8 +19,6 @@
 #include <llvm/ExecutionEngine/Orc/LLJIT.h>
 #include <llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h>
 #include <llvm/IR/IRBuilder.h>
-#include <llvm/IR/LegacyPassManager.h>
-#include <llvm/IR/Module.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 
 #include <cstdint>
@@ -36,6 +34,35 @@
 #include "util/lru_cache.h"
 
 namespace starrocks {
+
+class JitObjectCache : public llvm::ObjectCache {
+public:
+    explicit JitObjectCache(const std::string& expr_name, Cache* cache);
+
+    ~JitObjectCache() override = default;
+
+    void notifyObjectCompiled(const llvm::Module* M, llvm::MemoryBufferRef Obj) override;
+
+    std::unique_ptr<llvm::MemoryBuffer> getObject(const llvm::Module* M) override;
+
+    Status register_func(JITScalarFunction func);
+
+    const std::string& get_func_name() const { return _cache_key; };
+
+    void set_cache(std::shared_ptr<llvm::MemoryBuffer> obj_code, JITScalarFunction func) {
+        _obj_code = std::move(obj_code);
+        _func = func;
+    }
+    JITScalarFunction get_func() const {
+        return _func;
+    }
+
+private:
+    const std::string _cache_key;
+    JITScalarFunction _func = nullptr;
+    Cache* _lru_cache = nullptr;
+    std::shared_ptr<llvm::MemoryBuffer> _obj_code = nullptr;
+};
 
 /**
  * JITEngine is a wrapper of LLVM JIT engine, based on ORCv2.
@@ -70,77 +97,20 @@ public:
     /**
      * @brief Compile the expr into LLVM IR and return the function pointer.
      */
-    static StatusOr<std::pair<JITScalarFunction, std::function<void()>>> compile_scalar_function(ExprContext* context,
-                                                                                                 Expr* expr);
+    static Status compile_scalar_function(ExprContext* context, JitObjectCache* obj, Expr* expr);
 
-    std::pair<JITScalarFunction, std::function<void()>> lookup_function(const std::string& expr_name);
+    bool lookup_function(JitObjectCache* obj);
     // used in UT
     Cache* get_func_cache() const { return _func_cache; }
 
     static Status generate_scalar_function_ir(ExprContext* context, llvm::Module& module, Expr* expr);
 
+    Cache* get_lru_cache() { return _func_cache; }
+
 private:
-    /**
-     * @brief Sets up an LLVM module by specifying its data layout and target triple.
-     * The data layout guides the compiler on how to arrange data.
-     * The target triple informs which code architecture the module should generate for.
-     */
-    void setup_module(llvm::Module* module) const;
-
-    /**
-     * @brief Optimize the module, including:
-     * 1. remove unused functions
-     * 2. remove unused global variables
-     * 3. remove unused instructions
-     */
-    void optimize_module(llvm::Module* module);
-
-    /**
-     * @brief Compile the module and return the function pointer.
-     */
-    std::pair<JITScalarFunction, std::function<void()>> compile_module(std::unique_ptr<llvm::Module> module,
-                                                                       std::unique_ptr<llvm::LLVMContext> context,
-                                                                       const std::string& expr_name);
-
-    /**
-     * @brief Print the LLVM IR of the module in readable format.
-     */
-    static void print_module(const llvm::Module& module);
-
     bool _initialized = false;
     bool _support_jit = false;
-
-    std::unique_ptr<llvm::TargetMachine> _target_machine;
-    std::unique_ptr<const llvm::DataLayout> _data_layout;
-
-    llvm::PassManagerBuilder _pass_manager_builder;
-    llvm::legacy::PassManager _pass_manager;
-
-    std::unique_ptr<llvm::orc::LLJIT> _jit;
-    std::mutex _mutex;
     Cache* _func_cache;
-};
-
-class MyObjectCache : public llvm::ObjectCache {
-public:
-    void notifyObjectCompiled(const llvm::Module* M, llvm::MemoryBufferRef ObjBuffer) override {
-        CachedObjects[M->getModuleIdentifier()] =
-                llvm::MemoryBuffer::getMemBufferCopy(ObjBuffer.getBuffer(), ObjBuffer.getBufferIdentifier());
-    }
-
-    std::unique_ptr<llvm::MemoryBuffer> getObject(const llvm::Module* M) override {
-        auto I = CachedObjects.find(M->getModuleIdentifier());
-        if (I == CachedObjects.end()) {
-            LOG(INFO) << "No object for " << M->getModuleIdentifier() << " in cache. Compiling.\n";
-            return nullptr;
-        }
-
-        LOG(INFO) << "Object for " << M->getModuleIdentifier() << " loaded from cache.\n";
-        return llvm::MemoryBuffer::getMemBuffer(I->second->getMemBufferRef());
-    }
-
-private:
-    llvm::StringMap<std::unique_ptr<llvm::MemoryBuffer>> CachedObjects;
 };
 
 class Engine {
@@ -150,25 +120,12 @@ public:
     llvm::IRBuilder<>* ir_builder() { return ir_builder_.get(); }
     llvm::Module* module();
 
-    static StatusOr<std::unique_ptr<Engine>> Make(bool cached, std::reference_wrapper<MyObjectCache> object_cache);
+    static StatusOr<std::unique_ptr<Engine>> create(bool cached, std::reference_wrapper<JitObjectCache> object_cache);
 
-    /// Add the function to the list of IR functions that need to be compiled.
-    /// Compiling only the functions that are used by the module saves time.
-    void AddFunctionToCompile(const std::string& fname) {
-        DCHECK(!module_finalized_);
-        functions_to_compile_.push_back(fname);
-    }
+    Status optimize_and_finalize_module();
 
-    /// Optimise and compile the module.
-    Status FinalizeModule();
+    StatusOr<JITScalarFunction> get_compiled_func(const std::string& function);
 
-    /// Set LLVM ObjectCache.
-    Status SetLLVMObjectCache(MyObjectCache& object_cache) { return Status::OK(); };
-
-    /// Get the compiled function corresponding to the irfunction.
-    StatusOr<JITScalarFunction> CompiledFunction(const std::string& function);
-
-    /// Return the generated IR for the module.
     const std::string& ir();
 
 private:
@@ -178,8 +135,6 @@ private:
     std::unique_ptr<llvm::orc::LLJIT> lljit_;
     std::unique_ptr<llvm::IRBuilder<>> ir_builder_;
     std::unique_ptr<llvm::Module> module_;
-
-    std::vector<std::string> functions_to_compile_;
 
     bool optimize_ = true;
     bool module_finalized_ = false;

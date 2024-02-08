@@ -45,12 +45,6 @@ JITExpr::JITExpr(const TExprNode& node, Expr* expr) : Expr(node), _expr(expr) {
     _expr->get_uncompilable_exprs(_children);
 }
 
-JITExpr::~JITExpr() {
-    if (_delete_cache_handle != nullptr) {
-        _delete_cache_handle(); // release handle hold in LRU cache
-    }
-}
-
 Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
     RETURN_IF_ERROR(Expr::prepare(state, context));
 
@@ -61,46 +55,30 @@ Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
 
     if (!is_constant()) {
         auto start = MonotonicNanos();
-#if 0
+
         // Compile the expression into native code and retrieve the function pointer.
         auto* jit_engine = JITEngine::get_instance();
         if (!jit_engine->initialized()) {
             return Status::JitCompileError("JIT is not supported");
         }
+        auto expr_name = _expr->jit_func_name();
+        _func_obj = std::make_unique<JitObjectCache>(expr_name, JITEngine::get_instance()->get_lru_cache());
 
-        auto function = jit_engine->compile_scalar_function(context, _expr);
+        auto st = jit_engine->compile_scalar_function(context, _func_obj.get(), _expr);
 
         auto elapsed = MonotonicNanos() - start;
-        if (!function.ok()) {
+        if (!st.ok()) {
             LOG(INFO) << "JIT: JIT compile failed, time cost: " << elapsed / 1000000.0 << " ms"
-                      << " Reason: " << function.status();
+                      << " Reason: " << st;
         } else {
             LOG(INFO) << "JIT: JIT compile success, time cost: " << elapsed / 1000000.0 << " ms";
-            _delete_cache_handle = function->second;
-            _jit_function = function->first;
+            _jit_function = _func_obj->get_func();
+            if (_jit_function == nullptr) {
+                EXIT_IF_ERROR(Status::RuntimeError("JIT func must be not null"));
+            }
         }
-#else
-        // create object cache
-        ASSIGN_OR_RETURN(auto engine, Engine::Make(false, _obj))
-        // need set module?
-        // generate ir to module
-        RETURN_IF_ERROR(JITEngine::generate_scalar_function_ir(context, *engine->module(), _expr));
-        // optimize module and add module
-        RETURN_IF_ERROR(engine->FinalizeModule());
-        auto function = engine->CompiledFunction(_expr->jit_func_name());
-        auto elapsed = MonotonicNanos() - start;
-        if (!function.ok()) {
-            LOG(INFO) << "JIT: JIT compile failed, time cost: " << elapsed / 1000000.0 << " ms"
-                      << " Reason: " << function.status();
-        } else {
-            LOG(INFO) << "JIT: JIT compile success, time cost: " << elapsed / 1000000.0 << " ms";
-            _jit_function = function.value();
-        }
-#endif
     }
-    if (_jit_function != nullptr) {
-        _jit_expr_name = _expr->jit_func_name();
-    } else {
+    if (_jit_function == nullptr) {
         _children.clear();
         _children.push_back(_expr);
         RETURN_IF_ERROR(Expr::prepare(state, context)); // jitExpr becomes an empty node, fallback to original expr.

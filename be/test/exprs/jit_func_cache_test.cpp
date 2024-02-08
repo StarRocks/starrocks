@@ -39,7 +39,8 @@ public:
     }
 
     void mock_insert(string expr_name) {
-        auto* handle = engine->get_func_cache()->insert(expr_name, nullptr, 1, [](const CacheKey& key, void* value) {});
+        auto* handle =
+                engine->get_func_cache()->insert(expr_name, nullptr, 1000, [](const CacheKey& key, void* value) {});
         if (handle != nullptr) {
             engine->get_func_cache()->release(handle);
         }
@@ -55,7 +56,7 @@ public:
 // into the cache, and the second run hit the cache, and at last, invalid all cache.
 TEST_F(JITFunctionCacheTest, cache) {
     for (auto i = 0; i < 10; i++) {
-        // Normal int8
+        // Normal int8, shard = 2
         {
             expr_node.opcode = TExprOpcode::ADD;
             expr_node.type = gen_type_desc(TPrimitiveType::TINYINT);
@@ -68,8 +69,10 @@ TEST_F(JITFunctionCacheTest, cache) {
             expr->_children.push_back(&col1);
             expr->_children.push_back(&col2);
 
-            auto func_with_handle = engine->lookup_function(expr->jit_func_name());
-            ASSERT_TRUE(func_with_handle.first == nullptr);
+            auto expr_name = expr->jit_func_name();
+            auto func_obj = std::make_unique<JitObjectCache>(expr_name, engine->get_lru_cache());
+            auto found = engine->lookup_function(func_obj.get());
+            ASSERT_FALSE(found);
 
             ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
             ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
@@ -84,9 +87,8 @@ TEST_F(JITFunctionCacheTest, cache) {
                 }
             });
             // cached
-            func_with_handle = engine->lookup_function(expr->jit_func_name());
-            ASSERT_TRUE(func_with_handle.first != nullptr);
-            func_with_handle.second();
+            found = engine->lookup_function(func_obj.get());
+            ASSERT_TRUE(found);
             ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
                 ASSERT_FALSE(ptr->is_nullable());
                 ASSERT_TRUE(ptr->is_numeric());
@@ -100,7 +102,7 @@ TEST_F(JITFunctionCacheTest, cache) {
             });
         }
 
-        // Normal int
+        // Normal int, shard = 2
         {
             expr_node.opcode = TExprOpcode::ADD;
             expr_node.type = gen_type_desc(TPrimitiveType::INT);
@@ -113,10 +115,12 @@ TEST_F(JITFunctionCacheTest, cache) {
             expr->_children.push_back(&col1);
             expr->_children.push_back(&col2);
 
-            ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
-            auto func_with_handle = engine->lookup_function(expr->jit_func_name());
-            ASSERT_TRUE(func_with_handle.first == nullptr);
+            auto expr_name = expr->jit_func_name();
+            auto func_obj = std::make_unique<JitObjectCache>(expr_name, engine->get_lru_cache());
+            auto found = engine->lookup_function(func_obj.get());
+            ASSERT_FALSE(found);
 
+            ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
             ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
                 ASSERT_FALSE(ptr->is_nullable());
                 ASSERT_TRUE(ptr->is_numeric());
@@ -129,9 +133,8 @@ TEST_F(JITFunctionCacheTest, cache) {
                 }
             });
             // cached
-            func_with_handle = engine->lookup_function(expr->jit_func_name());
-            ASSERT_TRUE(func_with_handle.first != nullptr);
-            func_with_handle.second();
+            found = engine->lookup_function(func_obj.get());
+            ASSERT_TRUE(found);
             ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
                 ASSERT_FALSE(ptr->is_nullable());
                 ASSERT_TRUE(ptr->is_numeric());
@@ -145,7 +148,7 @@ TEST_F(JITFunctionCacheTest, cache) {
             });
         }
 
-        // Large int
+        // Large int, shard = 4
         {
             expr_node.opcode = TExprOpcode::ADD;
             expr_node.type = gen_type_desc(TPrimitiveType::LARGEINT);
@@ -157,8 +160,12 @@ TEST_F(JITFunctionCacheTest, cache) {
 
             expr->_children.push_back(&col1);
             expr->_children.push_back(&col2);
-            auto func_with_handle = engine->lookup_function(expr->jit_func_name());
-            ASSERT_TRUE(func_with_handle.first == nullptr);
+
+            auto expr_name = expr->jit_func_name();
+            auto func_obj = std::make_unique<JitObjectCache>(expr_name, engine->get_lru_cache());
+            auto found = engine->lookup_function(func_obj.get());
+            ASSERT_FALSE(found);
+
             ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
             ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
                 ASSERT_FALSE(ptr->is_nullable());
@@ -172,9 +179,8 @@ TEST_F(JITFunctionCacheTest, cache) {
                 }
             });
             // cached
-            func_with_handle = engine->lookup_function(expr->jit_func_name());
-            ASSERT_TRUE(func_with_handle.first != nullptr);
-            func_with_handle.second();
+            found = engine->lookup_function(func_obj.get());
+            ASSERT_TRUE(found);
             ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
                 ASSERT_FALSE(ptr->is_nullable());
                 ASSERT_TRUE(ptr->is_numeric());
