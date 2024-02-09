@@ -411,11 +411,13 @@ Status HdfsOrcScanner::resolve_columns(orc::Reader* reader) {
 Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     // create wrapped input stream.
     RETURN_IF_ERROR(open_random_access_file());
-    auto input_stream = std::make_unique<ORCHdfsFileStream>(_file.get(), _file->get_size().value(),
+    if (_input_stream == nullptr) {
+        _input_stream = std::make_unique<ORCHdfsFileStream>(_file.get(), _file->get_size().value(),
                                                             _shared_buffered_input_stream.get());
-    input_stream->set_lazy_column_coalesce_counter(_scanner_ctx.lazy_column_coalesce_counter);
-    input_stream->set_app_stats(&_app_stats);
-    ORCHdfsFileStream* orc_hdfs_file_stream = input_stream.get();
+        _input_stream->set_lazy_column_coalesce_counter(_scanner_ctx.lazy_column_coalesce_counter);
+        _input_stream->set_app_stats(&_app_stats);
+    }
+    ORCHdfsFileStream* orc_hdfs_file_stream = _input_stream.get();
 
     // create orc reader on this input stream.
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
@@ -423,7 +425,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     try {
         orc::ReaderOptions options;
         options.setMemoryPool(*getOrcMemoryPool());
-        reader = orc::createReader(std::move(input_stream), options);
+        reader = orc::createReader(std::move(_input_stream), options);
     } catch (std::exception& e) {
         auto s = strings::Substitute("HdfsOrcScanner::do_open failed. reason = $0", e.what());
         LOG(WARNING) << s;

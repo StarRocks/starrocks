@@ -35,7 +35,6 @@ public:
     Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
     Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) override;
     void do_update_counter(HdfsScanProfile* profile) override;
-
     void disable_use_orc_sargs() { _use_orc_sargs = false; }
 
 private:
@@ -66,6 +65,7 @@ private:
     Filter _dict_filter;
     Filter _chunk_filter;
     std::set<int64_t> _need_skip_rowids;
+    std::unique_ptr<ORCHdfsFileStream> _input_stream;
 };
 
 } // namespace starrocks
