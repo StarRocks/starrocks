@@ -439,6 +439,10 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         errno = 0;
         orc::ReaderOptions options;
         options.setMemoryPool(*getOrcMemoryPool());
+        if (_split_context != nullptr) {
+            auto* split_context = down_cast<const HdfsOrcScannerSplitContext*>(_split_context);
+            options.setSerializedFileTail(*(split_context->footer.get()));
+        }
         reader = orc::createReader(std::move(_input_stream), options);
     } catch (std::exception& e) {
         bool is_not_found = (errno == ENOENT);
