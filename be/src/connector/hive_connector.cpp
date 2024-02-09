@@ -771,6 +771,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.case_sensitive = _case_sensitive;
     scanner_params.profile = &_profile;
     scanner_params.lazy_column_coalesce_counter = get_lazy_column_coalesce_counter();
+    scanner_params.split_context = _split_context;
 
     if (!_equality_delete_slots.empty()) {
         MORParams& mor_params = scanner_params.mor_params;
@@ -835,7 +836,6 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         LOG(WARNING) << msg;
         return Status::NotSupported(msg);
     }
-    scanner->set_split_context(_split_context);
     RETURN_IF_ERROR(scanner->init(state, scanner_params));
     Status st = scanner->open(state);
     if (!st.ok()) {

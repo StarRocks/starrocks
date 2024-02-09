@@ -453,7 +453,21 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     // select stripes to read and resolve columns aganist this orc file.
     std::vector<DiskRange> stripes;
     RETURN_IF_ERROR(build_stripes(reader.get(), &stripes));
-    RETURN_IF_ERROR(build_io_ranges(orc_hdfs_file_stream, stripes));
+
+    // we can split task if we have >= 2 stripes.
+    if (_scanner_params.enable_split_tasks && stripes.size() >= 2) {
+        auto footer = std::make_shared<std::string>(reader->getSerializedFileTail());
+        for (const auto& info : stripes) {
+            auto ctx = std::make_unique<HdfsOrcScannerSplitContext>();
+            ctx->footer = footer;
+            ctx->split_begin = info.offset;
+            ctx->split_end = info.offset + info.length;
+            _split_tasks.emplace_back(std::move(ctx));
+        }
+        return Status::OK();
+    }
+
+    orc_hdfs_file_stream->setStripes(std::move(stripes));
     RETURN_IF_ERROR(resolve_columns(reader.get()));
     if (_should_skip_file) {
         return Status::OK();

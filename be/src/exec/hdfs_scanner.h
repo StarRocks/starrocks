@@ -143,6 +143,9 @@ struct HdfsScannerParams {
     // one file split (parition_id, file_path, file_length, offset, length, file_format)
     const THdfsScanRange* scan_range = nullptr;
 
+    bool enable_split_tasks = false;
+    const pipeline::ScanSplitContext* split_context = nullptr;
+
     // runtime bloom filter.
     const RuntimeFilterProbeCollector* runtime_filter_collector = nullptr;
 
@@ -319,7 +322,6 @@ public:
     virtual void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) {
         split_tasks->swap(_split_tasks);
     }
-    void set_split_context(const pipeline::ScanSplitContext* split_context) { _split_context = split_context; }
 
 protected:
     Status open_random_access_file();
