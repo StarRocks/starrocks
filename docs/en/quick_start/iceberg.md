@@ -7,7 +7,7 @@ toc_max_heading_level: 2
 import DataLakeIntro from '../assets/commonMarkdown/datalakeIntro.md'
 import Clients from '../assets/quick-start/_clientsCompose.mdx'
 
-# Data Lakehouse with Apache Iceberg
+# Apache Iceberg Lakehouse
 
 ## Overview
 
