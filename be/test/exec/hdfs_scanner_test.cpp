@@ -469,11 +469,14 @@ TEST_F(HdfsScannerTest, TestOrcReaderException) {
     struct ErrorContent {
         int ret_errno;
         std::string ret_message;
+        TStatusCode::type ret_code;
     };
 
     std::vector<ErrorContent> error_contents = {
-            ErrorContent{.ret_errno = 0, .ret_message = "read error"},
-            ErrorContent{.ret_errno = ENOENT, .ret_message = "S3 SDK Error. Code = 404"},
+            ErrorContent{.ret_errno = 0, .ret_message = "read error", .ret_code = TStatusCode::INTERNAL_ERROR},
+            ErrorContent{.ret_errno = ENOENT,
+                         .ret_message = "S3 SDK Error. Code = 404",
+                         .ret_code = TStatusCode::REMOTE_FILE_NOT_FOUND},
     };
 
     for (const auto& ec : error_contents) {
@@ -500,6 +503,7 @@ TEST_F(HdfsScannerTest, TestOrcReaderException) {
 
         status = scanner->open(_runtime_state);
         EXPECT_FALSE(status.ok()) << status.message();
+        EXPECT_EQ(status.code(), ec.ret_code);
         scanner->close();
     }
 }
