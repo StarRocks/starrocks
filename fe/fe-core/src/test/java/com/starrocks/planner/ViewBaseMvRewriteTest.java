@@ -489,7 +489,6 @@ public class ViewBaseMvRewriteTest extends MaterializedViewTestBase {
     }
 
     @Test
-<<<<<<< HEAD
     public void testViewWithInvalidPlan() {
         String view = "create view invalid_view0 as select count(distinct cnt) as ndv from " +
                 "(select count(*) cnt from lineitem group by l_returnflag) t";
@@ -503,7 +502,9 @@ public class ViewBaseMvRewriteTest extends MaterializedViewTestBase {
             sql("select * from invalid_view0").contains("invalid_plan_mv");
             sql("select * from invalid_view0 where ndv > 10").contains("invalid_plan_mv");
         });
-=======
+    }
+
+    @Test
     public void testViewRewriteWithNestedMVs() throws Exception {
         String tbl1 = "CREATE TABLE test_t1 (\n" +
                 " k1 INT,\n" +
@@ -526,6 +527,5 @@ public class ViewBaseMvRewriteTest extends MaterializedViewTestBase {
         starRocksAssert.dropView("v1");
         starRocksAssert.dropView("v2");
         starRocksAssert.dropTable("test_t1");
->>>>>>> e53d893c32 ([BugFix] Fix nested mv rewrite bugs (#40508))
     }
 }
