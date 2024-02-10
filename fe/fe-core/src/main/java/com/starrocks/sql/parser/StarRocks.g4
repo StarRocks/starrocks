@@ -2130,7 +2130,7 @@ expressionSingleton
     ;
 
 expression
-    : booleanExpression                                                                   #expressionDefault
+    : (BINARY)? booleanExpression                                                         #expressionDefault
     | NOT expression                                                                      #logicalNot
     | left=expression operator=(AND|LOGICAL_AND) right=expression                         #logicalBinary
     | left=expression operator=(OR|LOGICAL_OR) right=expression                           #logicalBinary

@@ -140,6 +140,23 @@ public class SelectStmtTest {
     }
 
     @Test
+    void testNavicatBinarySupport() throws Exception {
+        String sql = "SELECT ACTION_ORDER, \n" +
+                "       EVENT_OBJECT_TABLE, \n" +
+                "       TRIGGER_NAME, \n" +
+                "       EVENT_MANIPULATION, \n" +
+                "       EVENT_OBJECT_TABLE, \n" +
+                "       DEFINER, \n" +
+                "       ACTION_STATEMENT, \n" +
+                "       ACTION_TIMING\n" +
+                "FROM information_schema.triggers\n" +
+                "WHERE BINARY event_object_schema = 'test_ods_inceptor' \n" +
+                "  AND BINARY event_object_table = 'cus_ast_total_d_p' \n" +
+                "ORDER BY event_object_table";
+        starRocksAssert.query(sql).explainQuery();
+    }
+
+    @Test
     void testEqualExprNotMonotonic() throws Exception {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         String sql = "select k1 from db1.baseall where (k1=10) = true";
