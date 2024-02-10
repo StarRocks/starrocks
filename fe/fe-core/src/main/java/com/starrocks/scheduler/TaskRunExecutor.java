@@ -62,6 +62,7 @@ public class TaskRunExecutor {
                 status.setErrorCode(-1);
                 status.setErrorMessage(ex.getMessage());
             } finally {
+                // NOTE: Ensure this thread local is removed after this method to avoid memory leak in JVM.
                 ConnectContext.remove();
                 status.setFinishTime(System.currentTimeMillis());
             }
