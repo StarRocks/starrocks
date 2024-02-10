@@ -98,11 +98,11 @@ static Status get_orc_type_from_scalar_type(const orc::Type* typ, TypeDescriptor
         break;
 
     case orc::TypeKind::VARCHAR:
-        *desc = TypeDescriptor::create_varchar_type(typ->getMaximumLength());
+        *desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
         break;
 
     case orc::TypeKind::CHAR:
-        *desc = TypeDescriptor::create_char_type(typ->getMaximumLength());
+        *desc = TypeDescriptor::create_char_type(TypeDescriptor::MAX_CHAR_LENGTH);
         break;
 
     default:

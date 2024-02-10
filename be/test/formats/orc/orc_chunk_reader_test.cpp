@@ -2241,7 +2241,7 @@ TEST_F(OrcChunkReaderTest, get_file_schema) {
               {"col_float", TypeDescriptor::from_logical_type(TYPE_FLOAT)},
               {"col_double", TypeDescriptor::from_logical_type(TYPE_DOUBLE)},
               {"col_string", TypeDescriptor::create_varchar_type(1048576)},
-              {"col_char", TypeDescriptor::create_char_type(10)},
+              {"col_char", TypeDescriptor::create_char_type(255)},
               {"col_varchar", TypeDescriptor::create_varchar_type(1048576)},
               {"col_binary", TypeDescriptor::create_varbinary_type(1048576)},
               {"col_decimal", TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 19)},
