@@ -414,6 +414,9 @@ public class GlobalStateMgr {
     // false if default_cluster is not created.
     private boolean isDefaultClusterCreated = false;
 
+    // True indicates that the node is transferring to the leader, using this state avoids forwarding stmt to its own node.
+    private volatile boolean isInTransferringToLeader = false;
+
     // false if default_warehouse is not created.
     private boolean isDefaultWarehouseCreated = false;
 
@@ -791,7 +794,12 @@ public class GlobalStateMgr {
         this.execution = new StateChangeExecution() {
             @Override
             public void transferToLeader() {
-                gsm.transferToLeader();
+                isInTransferringToLeader = true;
+                try {
+                    gsm.transferToLeader();
+                } finally {
+                    isInTransferringToLeader = false;
+                }
             }
 
             @Override
@@ -4211,5 +4219,9 @@ public class GlobalStateMgr {
 
     public ResourceUsageMonitor getResourceUsageMonitor() {
         return resourceUsageMonitor;
+    }
+
+    public boolean isInTransferringToLeader() {
+        return isInTransferringToLeader;
     }
 }
