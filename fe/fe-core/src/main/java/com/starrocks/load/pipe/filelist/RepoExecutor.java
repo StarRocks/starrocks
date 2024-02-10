@@ -15,8 +15,10 @@
 package com.starrocks.load.pipe.filelist;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.common.AuditLog;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -65,6 +67,8 @@ public class RepoExecutor {
             StmtExecutor executor = new StmtExecutor(context, parsedStmt);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
+            AuditLog.getInternalAudit().info("RepoExecutor execute SQL | Query_id {} | SQL {}",
+                    DebugUtil.printId(context.getQueryId()), sql);
             executor.handleDMLStmt(execPlan, dmlStmt);
         } catch (Exception e) {
             LOG.error("RepoExecutor execute SQL {} failed: {}", sql, e.getMessage(), e);
@@ -84,6 +88,8 @@ public class RepoExecutor {
             StmtExecutor executor = new StmtExecutor(context, parsedStmt);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
+            AuditLog.getInternalAudit().info("RepoExecutor execute SQL | Query_id {} | SQL {}",
+                    DebugUtil.printId(context.getQueryId()), sql);
             Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
             if (!sqlResult.second.ok()) {
                 throw new SemanticException("execute sql failed with status: " + sqlResult.second.getErrorMsg());
@@ -103,6 +109,7 @@ public class RepoExecutor {
 
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             Analyzer.analyze(parsedStmt, context);
+            AuditLog.getInternalAudit().info("RepoExecutor execute DDL | SQL {}", sql);
             DDLStmtExecutor.execute(parsedStmt, context);
         } catch (Exception e) {
             LOG.error("execute DDL error: {}", sql, e);
