@@ -47,8 +47,8 @@ Change directory into `demo/documentation-samples/hudi` and look at the files. T
 |--------------------------|---------------------------------------------------------------------|
 | **`starrocks-fe`**       | Metadata management, client connections, query plans and scheduling |
 | **`starrocks-be`**       | Running query plans                                                 |
-| **`metastore_db`**       |                                                                     |
-| **`hive_metastore`**     |                                                                     |
+| **`metastore_db`**       | Postgres DB used to store the Hive metadata                         |
+| **`hive_metastore`**     | Provides the Apache Hive metastore                                  |
 | **`minio`** and **`mc`** | MinIO Object Storage and MinIO command line client                  |
 | **`spark-hudi`**         | MinIO Object Storage                                                |
 
