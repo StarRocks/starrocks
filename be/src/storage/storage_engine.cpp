@@ -185,7 +185,9 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
         Thread::set_thread_name(threads.back(), "compact_data_dir");
     }
     for (auto& thread : threads) {
-        thread.join();
+        if (thread.joinable()) {
+            thread.join();
+        }
     }
 }
 
@@ -278,7 +280,9 @@ Status StorageEngine::_init_store_map() {
         Thread::set_thread_name(threads.back(), "init_store_path");
     }
     for (auto& thread : threads) {
-        thread.join();
+        if (thread.joinable()) {
+            thread.join();
+        }
     }
 
     if (!error_msg.empty()) {
