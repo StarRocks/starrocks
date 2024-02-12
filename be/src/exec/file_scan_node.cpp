@@ -180,9 +180,7 @@ void FileScanNode::close(RuntimeState* state) {
     _queue_writer_cond.notify_all();
     _queue_reader_cond.notify_all();
     for (auto& _scanner_thread : _scanner_threads) {
-        if (_scanner_thread.joinable()) {
-            _scanner_thread.join();
-        }
+        _scanner_thread.join();
     }
 
     while (!_chunk_queue.empty()) {
