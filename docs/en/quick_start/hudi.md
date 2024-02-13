@@ -98,44 +98,44 @@ With many containers running, `docker compose ps` output is easier to read if yo
 
 ```bash
 docker compose ps --format json | \
-jq '{Name: .Names, State: .State, Status: .Status}'
+jq '{Service: .Service, State: .State, Status: .Status}'
 ```
 
 ```json
 {
-  "Name": "hudi-hive-metastore-1",
+  "Service": "hive-metastore",
   "State": "running",
-  "Status": "Up 3 minutes (healthy)"
+  "Status": "Up About a minute (healthy)"
 }
 {
-  "Name": "hudi-mc-1",
+  "Service": "mc",
   "State": "running",
-  "Status": "Up 3 minutes"
+  "Status": "Up About a minute"
 }
 {
-  "Name": "hudi-metastore_db-1",
+  "Service": "metastore_db",
   "State": "running",
-  "Status": "Up 3 minutes"
+  "Status": "Up About a minute"
 }
 {
-  "Name": "hudi-minio-1",
+  "Service": "minio",
   "State": "running",
-  "Status": "Up 3 minutes"
+  "Status": "Up About a minute"
 }
 {
-  "Name": "hudi-spark-hudi-1",
+  "Service": "spark-hudi",
   "State": "running",
-  "Status": "Up 2 minutes (healthy)"
+  "Status": "Up 33 seconds (healthy)"
 }
 {
-  "Name": "hudi-starrocks-be-1",
+  "Service": "starrocks-be",
   "State": "running",
-  "Status": "Up 3 minutes (healthy)"
+  "Status": "Up About a minute (healthy)"
 }
 {
-  "Name": "hudi-starrocks-fe-1",
+  "Service": "starrocks-fe",
   "State": "running",
-  "Status": "Up 3 minutes (healthy)"
+  "Status": "Up About a minute (healthy)"
 }
 ```
 
@@ -171,9 +171,8 @@ Run this command, and any other `docker compose` commands, from the directory co
 
 Open `spark-shell` in the `spark-hudi` service
 
-```
-docker compose exec spark-hudi \
-  /spark-3.2.1-bin-hadoop3.2/bin/spark-shell
+```bash
+docker compose exec spark-hudi spark-shell
 ```
 
 :::note
@@ -186,7 +185,7 @@ Run these commands at the `scala>` prompt to:
 - Create a dataframe and write that to a Hudi table
 - Sync to the Hive Metastore
 
-```java
+```scala
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.Row
@@ -202,32 +201,33 @@ val schema = StructType( Array(
                  StructField("id", StringType, true)
              ))
 
-val rowData= Seq(Row("Java", "20000", "a"), 
-               Row("Python", "100000", "b"), 
+val rowData= Seq(Row("Java", "20000", "a"),
+               Row("Python", "100000", "b"),
                Row("Scala", "3000", "c"))
 
 
 val df = spark.createDataFrame(rowData,schema)
 
+val databaseName = "hudi_sample"
 val tableName = "hudi_coders_hive"
 val basePath = "s3a://huditest/hudi_coders"
 
 df.write.format("hudi").
-  option(TABLE_NAME, tableName).
+  option(org.apache.hudi.config.HoodieWriteConfig.TABLE_NAME, tableName).
   option(RECORDKEY_FIELD_OPT_KEY, "id").
   option(PARTITIONPATH_FIELD_OPT_KEY, "language").
   option(PRECOMBINE_FIELD_OPT_KEY, "users").
   option("hoodie.datasource.write.hive_style_partitioning", "true").
   option("hoodie.datasource.hive_sync.enable", "true").
   option("hoodie.datasource.hive_sync.mode", "hms").
-  option("hoodie.datasource.hive_sync.database", "default").
+  option("hoodie.datasource.hive_sync.database", databaseName).
   option("hoodie.datasource.hive_sync.table", tableName).
   option("hoodie.datasource.hive_sync.partition_fields", "language").
   option("hoodie.datasource.hive_sync.partition_extractor_class", "org.apache.hudi.hive.MultiPartKeysValueExtractor").
   option("hoodie.datasource.hive_sync.metastore.uris", "thrift://hive-metastore:9083").
   mode(Overwrite).
   save(basePath)
-
+System.exit(0)
 ```
 
 :::note
@@ -254,11 +254,7 @@ This is unsupported
 This warning informs you that syncing a log file that is open for writes is not supported when using object storage. The file will only be synced when it is closed. See [Stack Overflow](https://stackoverflow.com/a/74886836/10424890).
 :::
 
-To exit the spark-shell:
-
-```java
-:quit
-```
+The final command in the above spark-shell session should exit the container, if it doesn't press enter and it will exit.
 
 ## Configure StarRocks
 
@@ -285,7 +281,6 @@ PROPERTIES
     "aws.s3.use_instance_profile" = "false",
     "aws.s3.access_key" = "admin",
     "aws.s3.secret_key" = "password",
-    "aws.s3.region" = "us-east-1",
     "aws.s3.enable_ssl" = "false",
     "aws.s3.enable_path_style_access" = "true",
     "aws.s3.endpoint" = "http://minio:9000"
@@ -316,13 +311,14 @@ SHOW DATABASES;
 | Database           |
 +--------------------+
 | default            |
+| hudi_sample        |
 | information_schema |
 +--------------------+
 2 rows in set (0.40 sec)
 ```
 
 ```sql
-USE default;
+USE hudi_sample;
 ```
 
 ```plaintext
@@ -333,15 +329,15 @@ Database changed
 ```
 
 ```sql
-show tables;
+SHOW TABLES;
 ```
 
 ```plaintext
-+-------------------+
-| Tables_in_default |
-+-------------------+
-| hudi_coders_hive  |
-+-------------------+
++-----------------------+
+| Tables_in_hudi_sample |
++-----------------------+
+| hudi_coders_hive      |
++-----------------------+
 1 row in set (0.07 sec)
 ```
 
