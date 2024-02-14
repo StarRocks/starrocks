@@ -458,8 +458,14 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     std::vector<DiskRange> stripes;
     RETURN_IF_ERROR(build_stripes(reader.get(), &stripes));
 
-    // we can split task if we have >= 2 stripes.
-    if (_scanner_params.enable_split_tasks && stripes.size() >= 2) {
+    // we can split task if we enable split tasks feature and have >= 2 stripes.
+    // but if we have splitted tasks before, we don't want to split again, to avoid infinite loop.
+    bool enable_split_tasks =
+            _scanner_params.enable_split_tasks && stripes.size() >= 2 && (_scanner_params.split_context == nullptr);
+    VLOG_OPERATOR << "HdfsOrcScanner: do_open. split task for " << _file->filename() << ", size = " << stripes.size()
+                  << ", scanner_params.enable_split_tasks = " << _scanner_params.enable_split_tasks
+                  << ", enable_split_tasks = " << enable_split_tasks;
+    if (enable_split_tasks) {
         auto footer = std::make_shared<std::string>(reader->getSerializedFileTail());
         for (const auto& info : stripes) {
             auto ctx = std::make_unique<HdfsOrcScannerSplitContext>();
