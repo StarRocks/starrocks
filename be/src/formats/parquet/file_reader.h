@@ -65,8 +65,10 @@ private:
 
     void _build_metacache_key();
 
+    std::shared_ptr<MetaHelper> _build_meta_helper();
+
     // parse footer of parquet file
-    Status _parse_footer(FileMetaData** file_metadata, int64_t* file_metadata_size);
+    Status _parse_footer(std::shared_ptr<FileMetaData>* file_metadata, int64_t* file_metadata_size);
 
     void _prepare_read_columns();
 
@@ -110,6 +112,7 @@ private:
 
     // get the data page start offset in parquet file
     static int64_t _get_row_group_start_offset(const tparquet::RowGroup& row_group);
+    static int64_t _get_row_group_end_offset(const tparquet::RowGroup& row_group);
 
     RandomAccessFile* _file = nullptr;
     uint64_t _file_size = 0;
@@ -124,10 +127,9 @@ private:
     bool _no_materialized_column_scan = false;
 
     BlockCache* _cache = nullptr;
-    FileMetaData* _file_metadata = nullptr;
-    bool _is_metadata_cached = false;
     std::string _metacache_key;
     CacheHandle _cache_handle;
+    std::shared_ptr<FileMetaData> _file_metadata = nullptr;
 
     // not exist column conjuncts eval false, file can be skipped
     bool _is_file_filtered = false;
