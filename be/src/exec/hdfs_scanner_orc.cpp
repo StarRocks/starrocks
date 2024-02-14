@@ -87,9 +87,9 @@ bool OrcRowReaderFilter::filterOnOpeningStripe(uint64_t stripeIndex,
     uint64_t offset = stripeInformation->offset();
 
     const auto* scan_range = _scanner_ctx.scan_range;
-    size_t scan_begin = scan_range->offset;
-    size_t scan_end = scan_range->length + scan_begin;
-    if (offset >= scan_begin && offset < scan_end) {
+    size_t scan_start = scan_range->offset;
+    size_t scan_end = scan_range->length + scan_start;
+    if (offset >= scan_start && offset < scan_end) {
         return false;
     }
     return true;
@@ -327,17 +327,18 @@ Status HdfsOrcScanner::build_stripes(orc::Reader* reader, std::vector<DiskRange>
     std::vector<DiskRange> stripe_disk_ranges{};
 
     const auto* scan_range = _scanner_ctx.scan_range;
-    size_t scan_begin = scan_range->offset;
-    size_t scan_end = scan_range->length + scan_begin;
+    size_t scan_start = scan_range->offset;
+    size_t scan_end = scan_range->length + scan_start;
 
     for (uint64_t idx = 0; idx < stripe_number; idx++) {
         auto stripeInfo = reader->getStripeInOrcFormat(idx);
         int64_t offset = stripeInfo.offset();
 
-        if (offset >= scan_begin && offset < scan_end) {
-            int64_t length = stripeInfo.datalength() + stripeInfo.indexlength() + stripeInfo.footerlength();
-            stripe_disk_ranges.emplace_back(offset, length);
-            _app_stats.orc_stripe_sizes.push_back(length);
+        if (offset >= scan_start && offset < scan_end) {
+            s.offset = offset;
+            s.length = stripeInfo.datalength() + stripeInfo.indexlength() + stripeInfo.footerlength();
+            stripes->emplace_back(s);
+            _app_stats.orc_stripe_sizes.push_back(s.length);
         }
     }
     return Status::OK();
