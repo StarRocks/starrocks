@@ -222,15 +222,6 @@ int64_t FileReader::_get_row_group_start_offset(const tparquet::RowGroup& row_gr
     return first_column.data_page_offset;
 }
 
-int64_t FileReader::_get_row_group_end_offset(const tparquet::RowGroup& row_group) {
-    int64_t start_offset = _get_row_group_start_offset(row_group);
-    if (row_group.__isset.total_compressed_size) {
-        return start_offset + row_group.total_compressed_size;
-    }
-    const tparquet::ColumnMetaData& last_column = row_group.columns.back().meta_data;
-    return start_offset + last_column.total_compressed_size;
-}
-
 StatusOr<bool> FileReader::_filter_group(const tparquet::RowGroup& row_group) {
     // filter by min/max conjunct ctxs.
     if (!_scanner_ctx->min_max_conjunct_ctxs.empty()) {

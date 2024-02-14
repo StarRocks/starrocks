@@ -112,7 +112,6 @@ private:
 
     // get the data page start offset in parquet file
     static int64_t _get_row_group_start_offset(const tparquet::RowGroup& row_group);
-    static int64_t _get_row_group_end_offset(const tparquet::RowGroup& row_group);
 
     RandomAccessFile* _file = nullptr;
     uint64_t _file_size = 0;
