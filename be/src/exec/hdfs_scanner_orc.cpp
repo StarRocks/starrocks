@@ -32,7 +32,7 @@
 namespace starrocks {
 
 struct HdfsOrcScannerSplitContext : public pipeline::ScanSplitContext {
-    size_t split_begin = 0;
+    size_t split_start = 0;
     size_t split_end = 0;
     std::shared_ptr<std::string> footer;
 };
@@ -93,16 +93,16 @@ bool OrcRowReaderFilter::filterOnOpeningStripe(uint64_t stripeIndex,
     uint64_t offset = stripeInformation->offset();
 
     const auto* scan_range = _scanner_ctx.scan_range;
-    size_t scan_begin = scan_range->offset;
-    size_t scan_end = scan_range->length + scan_begin;
+    size_t scan_start = scan_range->offset;
+    size_t scan_end = scan_range->length + scan_start;
 
     if (_scanner_ctx.split_context != nullptr) {
         auto split_context = down_cast<const HdfsOrcScannerSplitContext*>(_scanner_ctx.split_context);
-        scan_begin = split_context->split_begin;
+        scan_start = split_context->split_start;
         scan_end = split_context->split_end;
     }
 
-    if (offset >= scan_begin && offset < scan_end) {
+    if (offset >= scan_start && offset < scan_end) {
         return false;
     }
     return true;
@@ -343,14 +343,21 @@ Status HdfsOrcScanner::build_stripes(orc::Reader* reader, std::vector<DiskRange>
     size_t scan_start = scan_range->offset;
     size_t scan_end = scan_range->length + scan_start;
 
+    if (_scanner_ctx.split_context != nullptr) {
+        auto split_context = down_cast<const HdfsOrcScannerSplitContext*>(_scanner_ctx.split_context);
+        scan_start = split_context->split_start;
+        scan_end = split_context->split_end;
+    }
+
     for (uint64_t idx = 0; idx < stripe_number; idx++) {
         auto stripeInfo = reader->getStripeInOrcFormat(idx);
         int64_t offset = stripeInfo.offset();
 
         if (offset >= scan_start && offset < scan_end) {
-            int64_t length = stripeInfo.datalength() + stripeInfo.indexlength() + stripeInfo.footerlength();
-            stripes->emplace_back(offset, length);
-            _app_stats.orc_stripe_sizes.push_back(length);
+            s.offset = offset;
+            s.length = stripeInfo.datalength() + stripeInfo.indexlength() + stripeInfo.footerlength();
+            stripes->emplace_back(s);
+            _app_stats.orc_stripe_sizes.push_back(s.length);
         }
     }
     return Status::OK();
@@ -470,7 +477,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         for (const auto& info : stripes) {
             auto ctx = std::make_unique<HdfsOrcScannerSplitContext>();
             ctx->footer = footer;
-            ctx->split_begin = info.offset;
+            ctx->split_start = info.offset;
             ctx->split_end = info.offset + info.length;
             _split_tasks.emplace_back(std::move(ctx));
         }
