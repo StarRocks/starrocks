@@ -22,60 +22,9 @@
 namespace starrocks {
 
 ORCHdfsFileStream::ORCHdfsFileStream(RandomAccessFile* file, uint64_t length, io::SharedBufferedInputStream* sb_stream)
-        : _file(file), _length(length), _cache_buffer(0), _cache_offset(0), _sb_stream(sb_stream) {}
-
-void ORCHdfsFileStream::prepareCache(PrepareCacheScope scope, uint64_t offset, uint64_t length) {
-    size_t cache_max_size = 0;
-    if (scope == PrepareCacheScope::READ_FULL_FILE) {
-        cache_max_size = config::orc_file_cache_max_size;
-    } else if (scope == PrepareCacheScope::READ_FULL_ROW_INDEX) {
-        cache_max_size = config::orc_row_index_cache_max_size;
-    } else if (scope == PrepareCacheScope::READ_FULL_STRIPE) {
-        cache_max_size = config::orc_stripe_cache_max_size;
-    }
-
-    if (length > cache_max_size) return;
-    if (isAlreadyCachedInBuffer(offset, length)) return;
-    if (scope == PrepareCacheScope::READ_FULL_STRIPE && _tiny_stripe_read) {
-        length = computeCacheFullStripeSize(offset, length);
-    }
-    _cache_buffer.resize(length);
-    _cache_offset = offset;
-
-    // We need to set io range manually, otherwise one io request will be split into multiple requests
-    std::vector<IORange> io_ranges{};
-    io_ranges.emplace_back(InputStream::IORange{.offset = offset, .size = length});
-    setIORanges(io_ranges, false);
-
-    doRead(_cache_buffer.data(), length, offset);
-
-    // Don't do clearIORanges(), because it will clear io ranges setted in startNextStripe()
-    // Just left clearIORanges() operation take place in startNextStripe()
-    // clearIORanges();
-}
-
-bool ORCHdfsFileStream::isAlreadyCachedInBuffer(uint64_t offset, uint64_t length) {
-    if ((_cache_buffer.size() != 0) && (offset >= _cache_offset) &&
-        ((offset + length) <= (_cache_offset + _cache_buffer.size()))) {
-        return true;
-    }
-    return false;
-}
+        : _file(file), _length(length), _sb_stream(sb_stream) {}
 
 void ORCHdfsFileStream::read(void* buf, uint64_t length, uint64_t offset) {
-    if (isAlreadyCachedInBuffer(offset, length)) {
-        size_t idx = offset - _cache_offset;
-        memcpy(buf, _cache_buffer.data() + idx, length);
-    } else {
-        doRead(buf, length, offset);
-    }
-}
-
-const std::string& ORCHdfsFileStream::getName() const {
-    return _file->filename();
-}
-
-void ORCHdfsFileStream::doRead(void* buf, uint64_t length, uint64_t offset) {
     if (buf == nullptr) {
         throw orc::ParseError("Buffer is null");
     }
@@ -86,12 +35,32 @@ void ORCHdfsFileStream::doRead(void* buf, uint64_t length, uint64_t offset) {
     }
 }
 
-void ORCHdfsFileStream::clearIORanges() {
-    if (!_sb_stream) return;
-    _sb_stream->release();
+const std::string& ORCHdfsFileStream::getName() const {
+    return _file->filename();
 }
 
-void ORCHdfsFileStream::setIORanges(std::vector<IORange>& io_ranges, const bool is_from_stripe) {
+void ORCHdfsFileStream::releaseToOffset(const int64_t offset) {
+    if (!_sb_stream) return;
+    _sb_stream->release_to_offset(offset);
+}
+
+Status ORCHdfsFileStream::setIORanges(const std::vector<io::SharedBufferedInputStream::IORange>& io_ranges,
+                                      const bool coalesce_active_lazy_column) {
+    if (!_sb_stream) {
+        return Status::OK();
+    }
+    return _sb_stream->set_io_ranges(io_ranges, coalesce_active_lazy_column);
+}
+
+bool ORCHdfsFileStream::isAlreadyCollectedInSharedBuffer(const int64_t offset, const int64_t length) const {
+    if (!_sb_stream) {
+        return false;
+    }
+
+    return _sb_stream->find_shared_buffer(offset, length).status().ok();
+}
+
+void ORCHdfsFileStream::setIORanges(std::vector<IORange>& io_ranges) {
     if (!_sb_stream) return;
 
     std::vector<io::SharedBufferedInputStream::IORange> bs_io_ranges;
@@ -102,17 +71,14 @@ void ORCHdfsFileStream::setIORanges(std::vector<IORange>& io_ranges, const bool 
 
     // default we will coalesce active and lazy column into one io range
     bool active_lazy_column_coalesce = true;
-    // We will only handle adaptive io coalesce from stripe, not from prepareCache()
-    if (is_from_stripe) {
-        if (isIOAdaptiveCoalesceEnabled() && _lazy_column_coalesce_counter->load(std::memory_order_relaxed) < 0) {
-            active_lazy_column_coalesce = false;
-            _app_stats->orc_stripe_active_lazy_coalesce_seperately++;
-        } else {
-            _app_stats->orc_stripe_active_lazy_coalesce_together++;
-        }
+    if (isIOAdaptiveCoalesceEnabled() && _lazy_column_coalesce_counter->load(std::memory_order_relaxed) < 0) {
+        active_lazy_column_coalesce = false;
+        _app_stats->orc_stripe_active_lazy_coalesce_seperately++;
+    } else {
+        _app_stats->orc_stripe_active_lazy_coalesce_together++;
     }
 
-    Status st = _sb_stream->set_io_ranges(bs_io_ranges, active_lazy_column_coalesce);
+    const Status st = setIORanges(bs_io_ranges, active_lazy_column_coalesce);
 
     if (!st.ok()) {
         auto msg = strings::Substitute("Failed to setIORanges $0: $1", _file->filename(), st.to_string());
@@ -120,41 +86,8 @@ void ORCHdfsFileStream::setIORanges(std::vector<IORange>& io_ranges, const bool 
     }
 }
 
-uint64_t ORCHdfsFileStream::computeCacheFullStripeSize(uint64_t offset, uint64_t length) {
-    uint64_t from = _last_stripe_index;
-    while (from < _stripes.size()) {
-        if (_stripes[from].offset == offset) {
-            break;
-        }
-        from += 1;
-    }
-    _last_stripe_index = from;
-    DCHECK(from != _stripes.size());
-    if (from == _stripes.size()) {
-        return 0;
-    }
-
-    uint64_t to = from + 1;
-    while (to < _stripes.size()) {
-        uint64_t gap = _stripes[to].offset - _stripes[to - 1].offset - _stripes[to - 1].length;
-        uint64_t total = _stripes[to].offset + _stripes[to].length - _stripes[from].offset;
-        if (gap > config::io_coalesce_read_max_distance_size) break;
-        if (total > config::orc_stripe_cache_max_size) break;
-        to += 1;
-    }
-    to -= 1;
-    return _stripes[to].offset + _stripes[to].length - _stripes[from].offset;
-}
-
-void ORCHdfsFileStream::setStripes(std::vector<StripeInformation>&& stripes) {
-    _stripes = std::move(stripes);
-    _tiny_stripe_read = true;
-    for (const StripeInformation& s : _stripes) {
-        if (s.length > config::orc_stripe_cache_max_size) {
-            _tiny_stripe_read = false;
-            break;
-        }
-    }
+std::atomic<int32_t>* ORCHdfsFileStream::get_lazy_column_coalesce_counter() {
+    return _lazy_column_coalesce_counter;
 }
 
 } // namespace starrocks
