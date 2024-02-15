@@ -11,6 +11,7 @@ The `dbt-starrocks` package contains all the code to enable [dbt](https://getdbt
 
 This is an experimental plugin:
 - We have not tested it extensively
+- Currently only works with DBT 1.6
 - Requires StarRocks version 2.5.0 or higher  
   - version 3.1.x is recommended
   - StarRocks versions 2.4 and below are no longer supported
@@ -32,6 +33,8 @@ $ pip install dbt-starrocks
 |        ❌         |          ❌          |         ✅         | Materialized View materialization |
 |        ❌         |          ✅          |         ✅         |    Incremental materialization    |
 |        ❌         |          ✅          |         ✅         |         Primary Key Model         |
+|        ❌         |          ❌          |         ❌         |        Duplicate Key Model        |
+|        ❌         |          ❌          |         ❌         |       Aggregiate Key Model        |
 |        ✅         |          ✅          |         ✅         |              Sources              |
 |        ✅         |          ✅          |         ✅         |         Custom data tests         |
 |        ✅         |          ✅          |         ✅         |           Docs generate           |
