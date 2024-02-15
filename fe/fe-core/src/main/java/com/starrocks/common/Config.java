@@ -2492,4 +2492,8 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int port_connectivity_check_timeout_ms = 10000;
+
+    // The longest supported VARCHAR length.
+    @ConfField(mutable = true)
+    public static int max_varchar_length = 1048576;
 }

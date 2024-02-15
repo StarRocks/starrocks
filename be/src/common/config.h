@@ -1084,4 +1084,6 @@ CONF_mInt64(lake_vacuum_min_batch_delete_size, "1000");
 // 20min
 CONF_mInt64(query_ctx_dump_interval_ns, "1200000000000");
 
+// the max length supported for varchar type
+CONF_mInt32(olap_string_max_length, "1048576");
 } // namespace starrocks::config
