@@ -68,7 +68,7 @@ private:
     std::shared_ptr<MetaHelper> _build_meta_helper();
 
     // parse footer of parquet file
-    Status _parse_footer(std::shared_ptr<FileMetaData>* file_metadata, int64_t* file_metadata_size);
+    Status _parse_footer(FileMetaDataPtr* file_metadata, int64_t* file_metadata_size);
 
     void _prepare_read_columns();
 

@@ -140,14 +140,15 @@ Status FileReader::_parse_footer(FileMetaDataPtr* file_metadata_ptr, int64_t* fi
     RETURN_IF_ERROR(deserialize_thrift_msg(reinterpret_cast<const uint8*>(footer_buffer.data()) + footer_buffer.size() -
                                                    PARQUET_FOOTER_SIZE - metadata_length,
                                            &metadata_length, TProtocolType::COMPACT, &t_metadata));
+
     int64_t before_bytes = CurrentThread::current().get_consumed_bytes();
-    FileMetaData* file_metadata = new FileMetaData();
+    *file_metadata_ptr = std::make_shared<FileMetaData>();
+    FileMetaData* file_metadata = file_metadata_ptr->get();
     RETURN_IF_ERROR(file_metadata->init(t_metadata, _scanner_ctx->case_sensitive));
     *file_metadata_size = CurrentThread::current().get_consumed_bytes() - before_bytes;
 #ifdef BE_TEST
     *file_metadata_size = sizeof(FileMetaData);
 #endif
-    file_metadata_ptr->reset(file_metadata);
     return Status::OK();
 }
 
