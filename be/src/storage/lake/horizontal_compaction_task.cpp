@@ -109,6 +109,7 @@ Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_f
     op_compaction->mutable_output_rowset()->set_data_size(writer->data_size());
     op_compaction->mutable_output_rowset()->set_overlapped(false);
     RETURN_IF_ERROR(_tablet.tablet_manager()->put_txn_log(txn_log));
+    _tablet.tablet_manager()->get_compaction_amp()->add_write_bytes(_tablet.id(), writer->data_size());
     if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         // preload primary key table's compaction state
         Tablet t(_tablet.tablet_manager(), _tablet.id());

@@ -33,6 +33,7 @@
 #include "storage/lake/horizontal_compaction_task.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/lake_primary_key_recover.h"
+#include "storage/lake/primary_key_compaction_policy.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/test_util.h"
@@ -984,6 +985,114 @@ TEST_P(LakePrimaryKeyCompactionTest, test_pk_recover_rowset_order_after_compact)
     EXPECT_TRUE(rs_list[0]->metadata().max_compact_input_rowset_id() < rs_list[1]->metadata().id());
 
     config::lake_pk_compaction_max_input_rowsets = 1000;
+}
+
+static void generate_test_rowsets(std::vector<int64_t> bytes, std::vector<RowsetMetadataPB>* rowset_metas,
+                                  std::vector<RowsetCandidate>* rowset_vec) {
+    uint32_t id = 0;
+    for (int64_t byte : bytes) {
+        RowsetMetadataPB rm;
+        rm.set_id(id++);
+        rm.set_overlapped(false);
+        rm.set_num_rows(1000);
+        rm.set_data_size(byte);
+        rowset_metas->push_back(rm);
+    }
+    for (const RowsetMetadataPB& rowset_pb : *rowset_metas) {
+        RowsetStat stat;
+        stat.num_rows = rowset_pb.num_rows();
+        stat.bytes = rowset_pb.data_size();
+        stat.num_dels = rowset_pb.num_dels();
+        rowset_vec->emplace_back(&rowset_pb, stat, rowset_pb.id());
+    }
+}
+
+TEST_P(LakePrimaryKeyCompactionTest, test_size_tiered_compaction_strategy) {
+    const bool old_val = config::enable_pk_size_tiered_compaction_strategy;
+    config::enable_pk_size_tiered_compaction_strategy = true;
+    // Example-1
+    // 1000MB, 200MB, 40MB, 8MB, 1MB, 200KB, 10KB
+    std::vector<RowsetMetadataPB> rowset_metas;
+    std::vector<RowsetCandidate> rowset_vec;
+    generate_test_rowsets({1000 * 1024 * 1024, 200 * 1024 * 1024, 40 * 1024 * 1024, 8 * 1024 * 1024, 1 * 1024 * 1024,
+                           200 * 1024, 10 * 1024},
+                          &rowset_metas, &rowset_vec);
+    ASSIGN_OR_ABORT(auto pick_level_ptr, PrimaryCompactionPolicy::pick_max_level(false, rowset_vec));
+    EXPECT_TRUE(pick_level_ptr != nullptr);
+    EXPECT_EQ(pick_level_ptr->rowsets.size(), 2);
+    EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_index, 6);
+    pick_level_ptr->rowsets.pop();
+    EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_index, 5);
+
+    // calculate score
+    ASSIGN_OR_ABORT(pick_level_ptr, PrimaryCompactionPolicy::pick_max_level(true, rowset_vec));
+    EXPECT_TRUE(pick_level_ptr != nullptr);
+    EXPECT_EQ(pick_level_ptr->rowsets.size(), 7);
+    EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_index, 6);
+    pick_level_ptr->rowsets.pop();
+    EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_index, 5);
+    pick_level_ptr->rowsets.pop();
+    EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_index, 4);
+    rowset_metas.clear();
+    rowset_vec.clear();
+
+    // Example-2
+    // 500MB, 500MB, 400MB, 100KB, 100KB, 50KB, 10KB
+    generate_test_rowsets(
+            {500 * 1024 * 1024, 500 * 1024 * 1024, 400 * 1024 * 1024, 100 * 1024, 100 * 1024, 50 * 1024, 10 * 1024},
+            &rowset_metas, &rowset_vec);
+    ASSIGN_OR_ABORT(pick_level_ptr, PrimaryCompactionPolicy::pick_max_level(false, rowset_vec));
+    EXPECT_TRUE(pick_level_ptr != nullptr);
+    EXPECT_EQ(pick_level_ptr->rowsets.size(), 4);
+    EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_index, 6);
+    pick_level_ptr->rowsets.pop();
+    EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_index, 5);
+    pick_level_ptr->rowsets.pop();
+    EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_index, 4);
+    pick_level_ptr->rowsets.pop();
+    EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_index, 3);
+    pick_level_ptr->rowsets.pop();
+    rowset_metas.clear();
+    rowset_vec.clear();
+
+    // Example-3
+    // 400MB, 100KB, 100KB, 50KB, 10KB, 500MB, 500MB
+    generate_test_rowsets(
+            {400 * 1024 * 1024, 100 * 1024, 100 * 1024, 50 * 1024, 10 * 1024, 500 * 1024 * 1024, 500 * 1024 * 1024},
+            &rowset_metas, &rowset_vec);
+    ASSIGN_OR_ABORT(pick_level_ptr, PrimaryCompactionPolicy::pick_max_level(false, rowset_vec));
+    EXPECT_TRUE(pick_level_ptr != nullptr);
+    EXPECT_EQ(pick_level_ptr->rowsets.size(), 4);
+    EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_index, 4);
+    pick_level_ptr->rowsets.pop();
+    EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_index, 3);
+    pick_level_ptr->rowsets.pop();
+    EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_index, 2);
+    pick_level_ptr->rowsets.pop();
+    EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_index, 1);
+    pick_level_ptr->rowsets.pop();
+    rowset_metas.clear();
+    rowset_vec.clear();
+
+    // Example-4
+    // 127KB, 50KB, 10KB, 1KB, 128
+    generate_test_rowsets({127 * 1024, 50 * 1024, 10 * 1024, 1024, 128}, &rowset_metas, &rowset_vec);
+    ASSIGN_OR_ABORT(pick_level_ptr, PrimaryCompactionPolicy::pick_max_level(false, rowset_vec));
+    EXPECT_TRUE(pick_level_ptr != nullptr);
+    EXPECT_EQ(pick_level_ptr->rowsets.size(), 5);
+    EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_index, 4);
+    pick_level_ptr->rowsets.pop();
+    EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_index, 3);
+    pick_level_ptr->rowsets.pop();
+    EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_index, 2);
+    pick_level_ptr->rowsets.pop();
+    EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_index, 1);
+    pick_level_ptr->rowsets.pop();
+    EXPECT_EQ(pick_level_ptr->rowsets.top().rowset_index, 0);
+    pick_level_ptr->rowsets.pop();
+    rowset_metas.clear();
+    rowset_vec.clear();
+    config::enable_pk_size_tiered_compaction_strategy = old_val;
 }
 
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyCompactionTest, LakePrimaryKeyCompactionTest,

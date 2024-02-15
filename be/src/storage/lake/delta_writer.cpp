@@ -444,6 +444,7 @@ Status DeltaWriterImpl::finish(DeltaWriter::FinishMode mode) {
     op_write->mutable_rowset()->set_num_rows(_tablet_writer->num_rows());
     op_write->mutable_rowset()->set_data_size(_tablet_writer->data_size());
     op_write->mutable_rowset()->set_overlapped(op_write->rowset().segments_size() > 1);
+    _tablet_manager->get_compaction_amp()->add_ingest_bytes(_tablet_id, _tablet_writer->data_size());
 
     const auto is_partial_update = (_write_schema->num_columns() < _tablet_schema->num_columns());
 

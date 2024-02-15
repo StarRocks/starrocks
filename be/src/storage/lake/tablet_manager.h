@@ -45,6 +45,30 @@ using TxnLogIter = MetadataIterator<TxnLogPtr>;
 class CompactionScheduler;
 class Metacache;
 class VersionedTablet;
+class TabletManager;
+
+class CompactionAmp {
+public:
+    CompactionAmp(TabletManager* tablet_mgr) : _tablet_mgr(tablet_mgr) {}
+    ~CompactionAmp() = default;
+    void add_ingest_bytes(int64_t tablet_id, int64_t bytes) {
+        _write_bytes.fetch_add(bytes);
+        _ingest_bytes.fetch_add(bytes);
+        _debug(tablet_id);
+    }
+    void add_write_bytes(int64_t tablet_id, int64_t bytes) {
+        _write_bytes.fetch_add(bytes);
+        _debug(tablet_id);
+    }
+
+private:
+    void _debug(int64_t tablet_id);
+
+private:
+    TabletManager* _tablet_mgr = nullptr;
+    std::atomic<int64_t> _write_bytes{0};
+    std::atomic<int64_t> _ingest_bytes{0};
+};
 
 class TabletManager {
     friend class Tablet;
@@ -168,6 +192,8 @@ public:
                                       const LakeIOOptions& lake_io_opts, bool fill_metadata_cache,
                                       TabletSchemaPtr tablet_schema);
 
+    CompactionAmp* get_compaction_amp() { return _compaction_amp.get(); }
+
 private:
     static std::string global_schema_cache_key(int64_t index_id);
     static std::string tablet_schema_cache_key(int64_t tablet_id);
@@ -188,6 +214,8 @@ private:
 
     std::shared_mutex _meta_lock;
     std::unordered_map<int64_t, std::unordered_map<int64_t, int64_t>> _tablet_in_writing_txn_size;
+
+    std::unique_ptr<CompactionAmp> _compaction_amp;
 };
 
 } // namespace starrocks::lake
