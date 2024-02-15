@@ -70,7 +70,7 @@ TEST_F(JITFunctionCacheTest, cache) {
             expr->_children.push_back(&col2);
 
             auto expr_name = expr->jit_func_name();
-            auto func_obj = std::make_unique<JitObjectCache>(expr_name, engine->get_lru_cache());
+            auto func_obj = std::make_unique<JitObjectCache>(expr_name, engine->get_func_cache());
             auto found = engine->lookup_function(func_obj.get());
             ASSERT_FALSE(found);
 
@@ -116,7 +116,7 @@ TEST_F(JITFunctionCacheTest, cache) {
             expr->_children.push_back(&col2);
 
             auto expr_name = expr->jit_func_name();
-            auto func_obj = std::make_unique<JitObjectCache>(expr_name, engine->get_lru_cache());
+            auto func_obj = std::make_unique<JitObjectCache>(expr_name, engine->get_func_cache());
             auto found = engine->lookup_function(func_obj.get());
             ASSERT_FALSE(found);
 
@@ -162,7 +162,7 @@ TEST_F(JITFunctionCacheTest, cache) {
             expr->_children.push_back(&col2);
 
             auto expr_name = expr->jit_func_name();
-            auto func_obj = std::make_unique<JitObjectCache>(expr_name, engine->get_lru_cache());
+            auto func_obj = std::make_unique<JitObjectCache>(expr_name, engine->get_func_cache());
             auto found = engine->lookup_function(func_obj.get());
             ASSERT_FALSE(found);
 

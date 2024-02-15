@@ -39,23 +39,18 @@ public:
     bool is_jit_compiled() { return _jit_function != nullptr; }
 
 protected:
-    /**
-     * @brief Prepare the expression, including:
-     * 1. Compile the expression into native code and retrieve the function pointer.
-     * 2. Create a function context and set the function pointer.
-     */
+    // Compile the expression into native code and retrieve the function pointer.
+    // if compile failed, fallback to original expr.
     Status prepare(RuntimeState* state, ExprContext* context) override;
 
-    /**
-     * @brief Evaluate the expression using the compiled function.
-     */
+    // Evaluate the expression using the compiled function.
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
 
 private:
     Expr* _expr; // The original expression.
     bool _is_prepared = false;
     JITScalarFunction _jit_function = nullptr;
-    std::unique_ptr<JitObjectCache> _func_obj;
+    std::unique_ptr<JitObjectCache> _jit_obj_cache;
 };
 
 } // namespace starrocks

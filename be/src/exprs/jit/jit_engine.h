@@ -25,7 +25,6 @@
 #include <memory>
 #include <mutex>
 #include <string>
-#include <unordered_map>
 
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
@@ -35,6 +34,7 @@
 
 namespace starrocks {
 
+// cache the compiled code, and register to the LRU cache
 class JitObjectCache : public llvm::ObjectCache {
 public:
     explicit JitObjectCache(const std::string& expr_name, Cache* cache);
@@ -53,9 +53,7 @@ public:
         _obj_code = std::move(obj_code);
         _func = func;
     }
-    JITScalarFunction get_func() const {
-        return _func;
-    }
+    JITScalarFunction get_func() const { return _func; }
 
 private:
     const std::string _cache_key;
@@ -64,9 +62,7 @@ private:
     std::shared_ptr<llvm::MemoryBuffer> _obj_code = nullptr;
 };
 
-/**
- * JITEngine is a wrapper of LLVM JIT engine, based on ORCv2.
- */
+// JITEngine is a wrapper of LLVM JIT engine, based on ORCv2.
 class JITEngine {
 public:
     JITEngine() = default;
@@ -84,64 +80,59 @@ public:
 
     Status init();
 
-    /**
-     * @brief Returns whether the JIT engine is initialized.
-     */
     inline bool initialized() const { return _initialized; }
 
-    /**
-     * @brief Returns whether the JIT engine is supported.
-     */
     inline bool support_jit() { return _support_jit; }
 
-    /**
-     * @brief Compile the expr into LLVM IR and return the function pointer.
-     */
+    // Compile the expr into LLVM IR and register the compiled function into LRU cache.
     static Status compile_scalar_function(ExprContext* context, JitObjectCache* obj, Expr* expr);
 
-    bool lookup_function(JitObjectCache* obj);
-    // used in UT
+    bool lookup_function(JitObjectCache* const obj);
+
     Cache* get_func_cache() const { return _func_cache; }
 
     static Status generate_scalar_function_ir(ExprContext* context, llvm::Module& module, Expr* expr);
 
-    Cache* get_lru_cache() { return _func_cache; }
+    size_t get_cache_mem_usage() const {
+        DCHECK(_func_cache != nullptr);
+        return _func_cache->get_memory_usage();
+    }
+
+    static std::string dump_module_ir(const llvm::Module& module);
 
 private:
+    // make an engine instance for each time of JIT
+    class Engine {
+    public:
+        ~Engine() = default;
+
+        Engine(const Engine&) = delete;
+
+        Engine& operator=(const Engine&) = delete;
+
+        llvm::Module* module() const;
+
+        static StatusOr<std::unique_ptr<Engine>> create(std::reference_wrapper<JitObjectCache> object_cache);
+
+        Status optimize_and_finalize_module();
+
+        StatusOr<JITScalarFunction> get_compiled_func(const std::string& function);
+
+    private:
+        Engine(std::unique_ptr<llvm::orc::LLJIT> lljit, std::unique_ptr<llvm::TargetMachine> target_machine);
+
+        std::unique_ptr<llvm::LLVMContext> context_;
+        std::unique_ptr<llvm::orc::LLJIT> lljit_;
+        std::unique_ptr<llvm::IRBuilder<>> ir_builder_;
+        std::unique_ptr<llvm::Module> module_;
+
+        bool module_finalized_ = false;
+        std::unique_ptr<llvm::TargetMachine> target_machine_;
+    };
+
     bool _initialized = false;
     bool _support_jit = false;
     Cache* _func_cache;
-};
-
-class Engine {
-public:
-    ~Engine();
-    llvm::LLVMContext* context() { return context_.get(); }
-    llvm::IRBuilder<>* ir_builder() { return ir_builder_.get(); }
-    llvm::Module* module();
-
-    static StatusOr<std::unique_ptr<Engine>> create(bool cached, std::reference_wrapper<JitObjectCache> object_cache);
-
-    Status optimize_and_finalize_module();
-
-    StatusOr<JITScalarFunction> get_compiled_func(const std::string& function);
-
-    const std::string& ir();
-
-private:
-    Engine(std::unique_ptr<llvm::orc::LLJIT> lljit, std::unique_ptr<llvm::TargetMachine> target_machine, bool cached);
-
-    std::unique_ptr<llvm::LLVMContext> context_;
-    std::unique_ptr<llvm::orc::LLJIT> lljit_;
-    std::unique_ptr<llvm::IRBuilder<>> ir_builder_;
-    std::unique_ptr<llvm::Module> module_;
-
-    bool optimize_ = true;
-    bool module_finalized_ = false;
-    bool cached_;
-    bool functions_loaded_ = false;
-    std::string module_ir_;
-    std::unique_ptr<llvm::TargetMachine> target_machine_;
 };
 
 } // namespace starrocks

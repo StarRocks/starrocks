@@ -99,6 +99,7 @@ Status JitObjectCache::register_func(JITScalarFunction func) {
         LOG(WARNING) << "JIT register func failed, func = " << _cache_key << ", ir size = " << cache_func_size;
         return Status::JitCompileError("JIT register func failed");
     } else {
+        // as caller holds the shared ptr of obj_buff, the function ptr is valid, so the handle can be released here.
         _lru_cache->release(handle);
     }
     return Status::OK();
@@ -129,8 +130,6 @@ Status JITEngine::init() {
     llvm::InitializeNativeTargetDisassembler();
     llvm::sys::DynamicLibrary::LoadLibraryPermanently(nullptr);
 
-    _initialized = true;
-    _support_jit = true;
 #if BE_TEST
     _func_cache = new_lru_cache(32000); // 1k capacity per cache of 32 shards in LRU cache
 #else
@@ -140,12 +139,15 @@ Status JITEngine::init() {
     }
     _func_cache = new_lru_cache(jit_lru_cache_size);
 #endif
+    DCHECK(_func_cache != nullptr);
+    _initialized = true;
+    _support_jit = true;
     return Status::OK();
 }
 
 Status JITEngine::compile_scalar_function(ExprContext* context, JitObjectCache* func_cache, Expr* expr) {
     auto* instance = JITEngine::get_instance();
-    if (!instance->initialized()) {
+    if (UNLIKELY(!instance->initialized())) {
         return Status::JitCompileError("JIT engine is not initialized");
     }
 
@@ -154,7 +156,7 @@ Status JITEngine::compile_scalar_function(ExprContext* context, JitObjectCache* 
         return Status::OK();
     }
 
-    ASSIGN_OR_RETURN(auto engine, Engine::create(false, *func_cache))
+    ASSIGN_OR_RETURN(auto engine, Engine::create(*func_cache))
     // TODO: check need set module?
     // generate ir to module
     RETURN_IF_ERROR(generate_scalar_function_ir(context, *engine->module(), expr));
@@ -163,6 +165,13 @@ Status JITEngine::compile_scalar_function(ExprContext* context, JitObjectCache* 
     ASSIGN_OR_RETURN(auto function, engine->get_compiled_func(func_cache->get_func_name()));
     RETURN_IF_ERROR(func_cache->register_func(function));
     return Status::OK();
+}
+
+std::string JITEngine::dump_module_ir(const llvm::Module& module) {
+    std::string ir;
+    llvm::raw_string_ostream stream(ir);
+    module.print(stream, nullptr);
+    return ir;
 }
 
 Status JITEngine::generate_scalar_function_ir(ExprContext* context, llvm::Module& module, Expr* expr) {
@@ -242,7 +251,7 @@ Status JITEngine::generate_scalar_function_ir(ExprContext* context, llvm::Module
     return Status::OK();
 }
 
-bool JITEngine::lookup_function(JitObjectCache* obj) {
+bool JITEngine::lookup_function(JitObjectCache* const obj) {
     auto* handle = _func_cache->lookup(obj->get_func_name());
     if (handle == nullptr) {
         return false;
@@ -263,24 +272,15 @@ StatusOr<T> as_JIT_result(llvm::Expected<T>& expected, const std::string& error_
 
 StatusOr<llvm::orc::JITTargetMachineBuilder> make_target_machine_builder() {
     llvm::orc::JITTargetMachineBuilder jtmb((llvm::Triple(llvm::sys::getDefaultTargetTriple())));
-    auto const opt_level = true ? llvm::CodeGenOpt::Aggressive : llvm::CodeGenOpt::None;
+    auto const opt_level = llvm::CodeGenOpt::Aggressive; // or llvm::CodeGenOpt::None;
     jtmb.setCodeGenOptLevel(opt_level);
     return jtmb;
 }
 
-std::string dump_module_ir(const llvm::Module& module) {
-    std::string ir;
-    llvm::raw_string_ostream stream(ir);
-    module.print(stream, nullptr);
-    return ir;
-}
-
 void add_absolute_symbol(llvm::orc::LLJIT& lljit, const std::string& name, void* function_ptr) {
     llvm::orc::MangleAndInterner mangle(lljit.getExecutionSession(), lljit.getDataLayout());
-
     llvm::JITEvaluatedSymbol symbol(reinterpret_cast<llvm::JITTargetAddress>(function_ptr),
                                     llvm::JITSymbolFlags::Exported);
-
     auto error = lljit.getMainJITDylib().define(llvm::orc::absoluteSymbols({{mangle(name), symbol}}));
     llvm::cantFail(std::move(error));
 }
@@ -316,7 +316,6 @@ StatusOr<std::unique_ptr<llvm::orc::LLJIT>> build_JIT(llvm::orc::JITTargetMachin
     llvm::orc::LLJITBuilder jit_builder;
     RETURN_IF_ERROR(use_JIT_link(jit_builder));
     jit_builder.setJITTargetMachineBuilder(std::move(jtmb));
-
     jit_builder.setCompileFunctionCreator(
             [&object_cache](llvm::orc::JITTargetMachineBuilder JTMB)
                     -> llvm::Expected<std::unique_ptr<llvm::orc::IRCompileLayer::IRCompiler>> {
@@ -331,37 +330,31 @@ StatusOr<std::unique_ptr<llvm::orc::LLJIT>> build_JIT(llvm::orc::JITTargetMachin
 
     auto maybe_jit = jit_builder.create();
     ASSIGN_OR_RETURN(auto jit, as_JIT_result(maybe_jit, "Could not create LLJIT instance: "));
-
     add_process_symbol(*jit);
     return std::move(jit);
 }
 
-Engine::Engine(std::unique_ptr<llvm::orc::LLJIT> lljit, std::unique_ptr<llvm::TargetMachine> target_machine,
-               bool cached)
+JITEngine::Engine::Engine(std::unique_ptr<llvm::orc::LLJIT> lljit, std::unique_ptr<llvm::TargetMachine> target_machine)
         : context_(std::make_unique<llvm::LLVMContext>()),
           lljit_(std::move(lljit)),
           ir_builder_(std::make_unique<llvm::IRBuilder<>>(*context_)),
-          optimize_(1),
-          cached_(cached),
           target_machine_(std::move(target_machine)) {
-    // LLVM 10 doesn't like the expr function name to be the same as the module name
-    auto module_id = "gdv_module_" + std::to_string(reinterpret_cast<uintptr_t>(this));
+    auto module_id = "sr_module_" + std::to_string(reinterpret_cast<uintptr_t>(this));
     module_ = std::make_unique<llvm::Module>(module_id, *context_);
 }
 
-Engine::~Engine() {}
-
-/// factory method to construct the engine.
-StatusOr<std::unique_ptr<Engine>> Engine::create(bool cached, std::reference_wrapper<JitObjectCache> object_cache) {
+// factory method to construct the engine.
+StatusOr<std::unique_ptr<JITEngine::Engine>> JITEngine::Engine::create(
+        std::reference_wrapper<JitObjectCache> object_cache) {
     ASSIGN_OR_RETURN(auto jtmb, make_target_machine_builder());
     ASSIGN_OR_RETURN(auto jit, build_JIT(jtmb, object_cache));
     auto maybe_tm = jtmb.createTargetMachine();
     ASSIGN_OR_RETURN(auto target_machine, as_JIT_result(maybe_tm, "Could not create target machine: "));
-    std::unique_ptr<Engine> engine{new Engine(std::move(jit), std::move(target_machine), cached)};
+    std::unique_ptr<Engine> engine{new Engine(std::move(jit), std::move(target_machine))};
     return engine;
 }
 
-llvm::Module* Engine::module() {
+llvm::Module* JITEngine::Engine::module() const {
     DCHECK(!module_finalized_) << "module cannot be accessed after finalized";
     return module_.get();
 }
@@ -404,55 +397,43 @@ static void optimize_module(llvm::Module& module, llvm::TargetIRAnalysis target_
 }
 
 // Optimise and compile the module.
-Status Engine::optimize_and_finalize_module() {
+Status JITEngine::Engine::optimize_and_finalize_module() {
     std::string error;
     llvm::raw_string_ostream errs(error);
     if (llvm::verifyModule(*module_, &errs)) {
         return Status::JitCompileError(fmt::format("Failed to generate scalar function IR, errors: {}", errs.str()));
     }
-    cached_ = false;
-    optimize_ = true;
-    if (!cached_) {
-        if (optimize_) {
-            auto target_analysis = target_machine_->getTargetIRAnalysis();
-            optimize_module(*module_, std::move(target_analysis));
-        }
 
-        if (llvm::verifyModule(*module_, &errs)) {
-            return Status::JitCompileError(
-                    fmt::format("Failed to optimize scalar function IR, errors: {}", errs.str()));
-        }
+    auto target_analysis = target_machine_->getTargetIRAnalysis();
+    optimize_module(*module_, std::move(target_analysis));
 
-        llvm::orc::ThreadSafeModule tsm(std::move(module_), std::move(context_));
-        auto error = lljit_->addIRModule(std::move(tsm));
-        if (error) {
-            return Status::JitCompileError("Failed to add IR module to LLJIT: " + llvm::toString(std::move(error)));
-        }
+    if (llvm::verifyModule(*module_, &errs)) {
+        return Status::JitCompileError(fmt::format("Failed to optimize scalar function IR, errors: {}", errs.str()));
     }
+
+    llvm::orc::ThreadSafeModule tsm(std::move(module_), std::move(context_));
+    auto err = lljit_->addIRModule(std::move(tsm));
+    if (err) {
+        return Status::JitCompileError("Failed to add IR module to LLJIT: " + llvm::toString(std::move(err)));
+    }
+
     module_finalized_ = true;
     return Status::OK();
 }
 
-StatusOr<JITScalarFunction> Engine::get_compiled_func(const std::string& function) {
+StatusOr<JITScalarFunction> JITEngine::Engine::get_compiled_func(const std::string& function) {
     DCHECK(module_finalized_) << "module must be finalized before getting compiled function";
     auto sym = lljit_->lookup(function);
     if (!sym) {
         return Status::JitCompileError("Failed to look up function: " + function +
                                        " error: " + llvm::toString(sym.takeError()));
     }
-
     auto fn_addr = sym->getValue();
-
     auto fn_ptr = reinterpret_cast<JITScalarFunction>(fn_addr);
     if (fn_ptr == nullptr) {
         return Status::JitCompileError("Failed to get address for function: " + function);
     }
     return fn_ptr;
-}
-
-const std::string& Engine::ir() {
-    DCHECK(!module_ir_.empty()) << "dump_ir in Configuration must be set for dumping IR";
-    return module_ir_;
 }
 
 } // namespace starrocks

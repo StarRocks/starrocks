@@ -62,9 +62,9 @@ Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
             return Status::JitCompileError("JIT is not supported");
         }
         auto expr_name = _expr->jit_func_name();
-        _func_obj = std::make_unique<JitObjectCache>(expr_name, JITEngine::get_instance()->get_lru_cache());
+        _jit_obj_cache = std::make_unique<JitObjectCache>(expr_name, JITEngine::get_instance()->get_func_cache());
 
-        auto st = jit_engine->compile_scalar_function(context, _func_obj.get(), _expr);
+        auto st = jit_engine->compile_scalar_function(context, _jit_obj_cache.get(), _expr);
 
         auto elapsed = MonotonicNanos() - start;
         if (!st.ok()) {
@@ -72,9 +72,9 @@ Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
                       << " Reason: " << st;
         } else {
             LOG(INFO) << "JIT: JIT compile success, time cost: " << elapsed / 1000000.0 << " ms";
-            _jit_function = _func_obj->get_func();
+            _jit_function = _jit_obj_cache->get_func();
             if (_jit_function == nullptr) {
-                EXIT_IF_ERROR(Status::RuntimeError("JIT func must be not null"));
+                EXIT_IF_ERROR(Status::RuntimeError("JIT func must be not null")); // TODO: RETURN_IF_ERROR
             }
         }
     }
