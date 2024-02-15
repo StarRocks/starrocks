@@ -110,7 +110,7 @@ FileMetaData* FileReader::get_file_metadata() {
     return _file_metadata.get();
 }
 
-Status FileReader::_parse_footer(std::shared_ptr<FileMetaData>* file_metadata_ptr, int64_t* file_metadata_size) {
+Status FileReader::_parse_footer(FileMetaDataPtr* file_metadata_ptr, int64_t* file_metadata_size) {
     std::vector<char> footer_buffer;
     ASSIGN_OR_RETURN(uint32_t footer_read_size, _get_footer_read_size());
     footer_buffer.resize(footer_read_size);
@@ -161,7 +161,7 @@ Status FileReader::_get_footer() {
         SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_cache_read_ns);
         Status st = _cache->read_object(_metacache_key, &_cache_handle);
         if (st.ok()) {
-            _file_metadata.reset((FileMetaData*)_cache_handle.ptr());
+            _file_metadata = *(static_cast<const FileMetaDataPtr*>(_cache_handle.ptr()));
             _scanner_ctx->stats->footer_cache_read_count += 1;
             return st;
         }
@@ -170,10 +170,9 @@ Status FileReader::_get_footer() {
     int64_t file_metadata_size = 0;
     RETURN_IF_ERROR(_parse_footer(&_file_metadata, &file_metadata_size));
     if (file_metadata_size > 0) {
-        std::shared_ptr<FileMetaData> capture = _file_metadata;
+        FileMetaDataPtr capture = _file_metadata;
         auto deleter = [capture]() {};
-        Status st =
-                _cache->write_object(_metacache_key, _file_metadata.get(), file_metadata_size, deleter, &_cache_handle);
+        Status st = _cache->write_object(_metacache_key, &_file_metadata, file_metadata_size, deleter, &_cache_handle);
         if (st.ok()) {
             _scanner_ctx->stats->footer_cache_write_bytes += file_metadata_size;
             _scanner_ctx->stats->footer_cache_write_count += 1;
