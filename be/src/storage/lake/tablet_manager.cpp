@@ -60,33 +60,12 @@ static bvar::LatencyRecorder g_get_txn_log_latency("lake", "get_txn_log");
 static bvar::LatencyRecorder g_put_txn_log_latency("lake", "put_txn_log");
 static bvar::LatencyRecorder g_del_txn_log_latency("lake", "del_txn_log");
 
-void CompactionAmp::_debug(int64_t tablet_id) {
-    static std::atomic<int64_t> last_print_ts;
-    if (time(nullptr) > last_print_ts.load() + 30) {
-        TabletMetadataPtr meta_ptr = _tablet_mgr->get_latest_cached_tablet_metadata(tablet_id);
-        if (meta_ptr == nullptr) {
-            return;
-        }
-        int64_t total_bytes = 0;
-        int64_t iops_score = 0;
-        for (const auto& rs : meta_ptr->rowsets()) {
-            total_bytes += rs.data_size();
-            iops_score += (rs.overlapped() ? rs.segments_size() : 1) * (rs.num_dels() > 0 ? 2 : 1);
-        }
-        LOG(INFO) << fmt::format("[Write Amp] ingest/total : {}/{} [Read Amp] iops/bandwith : {}/{}",
-                                 _ingest_bytes.load(), _write_bytes.load(), iops_score, total_bytes);
-        last_print_ts.store(time(nullptr));
-    }
-    return;
-}
-
 TabletManager::TabletManager(LocationProvider* location_provider, UpdateManager* update_mgr, int64_t cache_capacity)
         : _location_provider(location_provider),
           _metacache(std::make_unique<Metacache>(cache_capacity)),
           _compaction_scheduler(std::make_unique<CompactionScheduler>(this)),
           _update_mgr(update_mgr) {
     _update_mgr->set_tablet_mgr(this);
-    _compaction_amp = std::make_unique<CompactionAmp>(this);
 }
 
 TabletManager::~TabletManager() = default;
