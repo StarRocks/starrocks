@@ -32,6 +32,10 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends \
         ln -fs /usr/share/zoneinfo/UTC /etc/localtime && \
         dpkg-reconfigure -f noninteractive tzdata && \
         rm -rf /var/lib/apt/lists/*
+
+# Install locales and generate en_US.UTF-8, which is required by a downstream scalar udf STRING_TO_DOUBLE.
+RUN apt-get install -y locales && locale-gen en_US.UTF-8
+
 RUN echo "export PATH=/usr/lib/linux-tools/5.15.0-60-generic:$PATH" >> /etc/bash.bashrc
 ENV JAVA_HOME=/lib/jvm/default-java
 
