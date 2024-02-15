@@ -62,6 +62,8 @@
 #include "common/config.h"
 #include "common/status.h"
 #include "exprs/expr.h"
+#include "runtime/exec_env.h"
+#include "runtime/mem_tracker.h"
 #include "util/defer_op.h"
 
 namespace starrocks {
@@ -74,7 +76,7 @@ struct JitCacheEntry {
 };
 
 JitObjectCache::JitObjectCache(const std::string& expr_name, Cache* cache)
-        : _cache_key(expr_name), _lru_cache(std::move(cache)) {}
+        : _cache_key(std::move(expr_name)), _lru_cache(std::move(cache)) {}
 
 void JitObjectCache::notifyObjectCompiled(const llvm::Module* M, llvm::MemoryBufferRef Obj) {
     std::unique_ptr<llvm::MemoryBuffer> obj_buffer =
@@ -90,8 +92,11 @@ Status JitObjectCache::register_func(JITScalarFunction func) {
     auto cache_func_size = _obj_code->getBufferSize();
     // put into LRU cache
     auto* cache = new JitCacheEntry(_obj_code, _func);
+    GlobalEnv::GetInstance()->jit_cache_mem_tracker()->consume(cache_func_size);
     auto* handle = _lru_cache->insert(_cache_key, (void*)cache, cache_func_size, [](const CacheKey& key, void* value) {
         auto* entry = ((JitCacheEntry*)value);
+        // maybe release earlier as the std::shared_ptr<llvm::MemoryBuffer> is hold by caller
+        GlobalEnv::GetInstance()->jit_cache_mem_tracker()->release(entry->obj_buff->getBufferSize());
         delete entry;
     });
     if (handle == nullptr) {
@@ -428,8 +433,7 @@ StatusOr<JITScalarFunction> JITEngine::Engine::get_compiled_func(const std::stri
         return Status::JitCompileError("Failed to look up function: " + function +
                                        " error: " + llvm::toString(sym.takeError()));
     }
-    auto fn_addr = sym->getValue();
-    auto fn_ptr = reinterpret_cast<JITScalarFunction>(fn_addr);
+    JITScalarFunction fn_ptr = reinterpret_cast<JITScalarFunction>(sym->getValue());
     if (fn_ptr == nullptr) {
         return Status::JitCompileError("Failed to get address for function: " + function);
     }
