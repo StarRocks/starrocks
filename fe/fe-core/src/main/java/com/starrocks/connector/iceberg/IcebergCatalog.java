@@ -26,7 +26,10 @@ import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.exceptions.NoSuchTableException;
+import org.apache.iceberg.io.CloseableIterable;
+import org.apache.iceberg.io.CloseableIterator;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -79,18 +82,24 @@ public interface IcebergCatalog {
         org.apache.iceberg.Table icebergTable = getTable(dbName, tableName);
         List<String> partitionNames = Lists.newArrayList();
 
-        // all partitions specs are unpartitioned
         if (icebergTable.specs().values().stream().allMatch(PartitionSpec::isUnpartitioned)) {
             return partitionNames;
         }
 
         TableScan tableScan = icebergTable.newScan().planWith(executorService);
-        List<FileScanTask> tasks = Lists.newArrayList(tableScan.planFiles());
+        try (CloseableIterable<FileScanTask> fileScanTaskIterable = tableScan.planFiles();
+                CloseableIterator<FileScanTask> fileScanTaskIterator = fileScanTaskIterable.iterator()) {
 
-        for (FileScanTask fileScanTask : tasks) {
-            StructLike partition = fileScanTask.file().partition();
-            partitionNames.add(convertIcebergPartitionToPartitionName(fileScanTask.spec(), partition));
+            while (fileScanTaskIterator.hasNext()) {
+                FileScanTask scanTask = fileScanTaskIterator.next();
+                StructLike partition = scanTask.file().partition();
+                partitionNames.add(convertIcebergPartitionToPartitionName(scanTask.spec(), partition));
+            }
+        } catch (IOException e) {
+            throw new StarRocksConnectorException(String.format("Failed to list iceberg partition names %s.%s",
+                    dbName, tableName), e);
         }
+
         return partitionNames;
     }
 

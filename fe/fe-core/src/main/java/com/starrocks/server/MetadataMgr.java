@@ -25,8 +25,10 @@ import com.google.common.cache.RemovalListener;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ExternalCatalogTableBasicInfo;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
@@ -339,6 +341,24 @@ public class MetadataMgr {
     public boolean tableExists(String catalogName, String dbName, String tblName) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         return connectorMetadata.map(metadata -> metadata.tableExists(dbName, tblName)).orElse(false);
+    }
+        
+    /**
+     * getTableLocally avoids network interactions with external metadata service when using external catalog(e.g. hive catalog).
+     * In this case, only basic information of namespace and table type (derived from the type of its connector) is returned.
+     * For default/internal catalog, this method is equivalent to {@link MetadataMgr#getTable(String, String, String)}.
+     * Use this method if you are absolutely sure, otherwise use MetadataMgr#getTable.
+     */
+    public BasicTable getBasicTable(String catalogName, String dbName, String tblName) {
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+            return getTable(catalogName, dbName, tblName);
+        }
+
+        // for external catalog, do not reach external metadata service
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        return connectorMetadata.map(
+                        metadata -> new ExternalCatalogTableBasicInfo(catalogName, dbName, tblName, metadata.getTableType()))
+                .orElse(null);
     }
 
     public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String catalogName, String dbName, String tblName) {

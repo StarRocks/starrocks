@@ -63,6 +63,8 @@ public class RestBaseAction extends BaseAction {
     protected static final String LABEL_KEY = "label";
     private static final Logger LOG = LogManager.getLogger(RestBaseAction.class);
 
+    protected static ObjectMapper mapper = new ObjectMapper();
+
     public RestBaseAction(ActionController controller) {
         super(controller);
     }
@@ -131,7 +133,6 @@ public class RestBaseAction extends BaseAction {
 
     public void sendResultByJson(BaseRequest request, BaseResponse response, Object obj) {
         String result = "";
-        ObjectMapper mapper = new ObjectMapper();
         try {
             result = mapper.writeValueAsString(obj);
         } catch (Exception e) {

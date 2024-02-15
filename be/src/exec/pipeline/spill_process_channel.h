@@ -73,7 +73,7 @@ using SpillProcessChannelFactoryPtr = std::shared_ptr<SpillProcessChannelFactory
 // SpillProcessOperator
 class SpillProcessChannel {
 public:
-    SpillProcessChannel(SpillProcessChannelFactory* factory) : _parent(factory) {}
+    SpillProcessChannel() {}
 
     bool add_spill_task(SpillProcessTask&& task) {
         DCHECK(!_is_finishing);
@@ -124,7 +124,6 @@ private:
     std::shared_ptr<spill::Spiller> _spiller;
     UnboundedBlockingQueue<SpillProcessTask> _spill_tasks;
     SpillProcessTask _current_task;
-    SpillProcessChannelFactory* _parent;
 };
 
 class SpillProcessTasksBuilder {

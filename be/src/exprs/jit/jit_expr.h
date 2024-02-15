@@ -47,7 +47,8 @@ protected:
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
 
 private:
-    Expr* _expr; // The original expression.
+    // The original expression.
+    Expr* _expr;
     bool _is_prepared = false;
     JITScalarFunction _jit_function = nullptr;
     std::unique_ptr<JitObjectCache> _jit_obj_cache;

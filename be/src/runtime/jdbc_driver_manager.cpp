@@ -192,10 +192,9 @@ Status JDBCDriverManager::_download_driver(const std::string& url, JDBCDriverEnt
     }
     LOG(INFO) << fmt::format("download jdbc driver {} from url {}, expected checksum is: {}", entry->name, url,
                              entry->checksum);
-    std::string tmp_file = fmt::format("{}/{}_{}.tmp", _driver_dir, entry->name, entry->checksum);
     std::string target_file = entry->location;
     std::string expected_checksum = entry->checksum;
-    RETURN_IF_ERROR(DownloadUtil::download(url, tmp_file, target_file, expected_checksum));
+    RETURN_IF_ERROR(DownloadUtil::download(url, target_file, expected_checksum));
     entry->is_downloaded = true;
     entry->is_available.store(true);
     return Status::OK();
