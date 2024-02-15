@@ -153,6 +153,7 @@ set(EXEC_FILES
         ./formats/orc/orc_chunk_reader_test.cpp
         ./formats/orc/orc_column_reader_test.cpp
         ./formats/orc/orc_lazy_load_test.cpp
+        ./formats/orc/utils_test.cpp
         ./formats/parquet/arrow_parquet_writer_test.cpp
         ./formats/parquet/parquet_schema_test.cpp
         ./formats/parquet/encoding_test.cpp

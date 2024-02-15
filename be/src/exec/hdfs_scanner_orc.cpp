@@ -399,17 +399,36 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     // select out strips we are going to read.
     {
         uint64_t stripe_number = reader->getNumberOfStripes();
-        std::vector<ORCHdfsFileStream::StripeInformation> stripes;
+        std::vector<DiskRange> stripe_disk_ranges{};
         for (uint64_t idx = 0; idx < stripe_number; idx++) {
-            ORCHdfsFileStream::StripeInformation s;
             auto stripeInfo = reader->getStripeInOrcFormat(idx);
             if (_orc_row_reader_filter->filterOnOpeningStripe(idx, &stripeInfo)) continue;
-            s.offset = stripeInfo.offset();
-            s.length = stripeInfo.datalength() + stripeInfo.indexlength() + stripeInfo.footerlength();
-            stripes.emplace_back(s);
-            _app_stats.orc_stripe_sizes.push_back(s.length);
+            int64_t offset = stripeInfo.offset();
+            int64_t length = stripeInfo.datalength() + stripeInfo.indexlength() + stripeInfo.footerlength();
+            stripe_disk_ranges.emplace_back(offset, length);
+            _app_stats.orc_stripe_sizes.push_back(length);
         }
-        orc_hdfs_file_stream->setStripes(std::move(stripes));
+
+        {
+            bool tiny_stripe_read = true;
+            for (const DiskRange& disk_range : stripe_disk_ranges) {
+                if (disk_range.length > config::orc_tiny_stripe_threshold_size) {
+                    tiny_stripe_read = false;
+                    break;
+                }
+            }
+            // we need to start tiny stripe optimization if all stripe's size smaller than config::orc_tiny_stripe_threshold_size
+            if (tiny_stripe_read) {
+                std::vector<io::SharedBufferedInputStream::IORange> io_ranges{};
+                DiskRangeHelper::mergeAdjacentDiskRanges(io_ranges, stripe_disk_ranges,
+                                                         config::io_coalesce_read_max_distance_size,
+                                                         config::orc_tiny_stripe_threshold_size);
+                for (const auto& it : io_ranges) {
+                    _app_stats.orc_total_tiny_stripe_size += it.size;
+                }
+                RETURN_IF_ERROR(orc_hdfs_file_stream->setIORanges(io_ranges));
+            }
+        }
     }
 
     RETURN_IF_ERROR(_orc_reader->init(std::move(reader)));
@@ -575,9 +594,26 @@ void HdfsOrcScanner::do_update_counter(HdfsScanProfile* profile) {
     RuntimeProfile::Counter* total_stripe_number_counter = root->add_child_counter(
             "TotalStripeNumber", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM),
             orcProfileSectionPrefix);
+    RuntimeProfile::Counter* total_tiny_stripe_size_counter = root->add_child_counter(
+            "TotalTinyStripeSize", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM),
+            orcProfileSectionPrefix);
 
     COUNTER_UPDATE(total_stripe_size_counter, total_stripe_size);
     COUNTER_UPDATE(total_stripe_number_counter, _app_stats.orc_stripe_sizes.size());
+<<<<<<< HEAD
+=======
+    COUNTER_UPDATE(total_tiny_stripe_size_counter, _app_stats.orc_total_tiny_stripe_size);
+
+    RuntimeProfile::Counter* stripe_active_lazy_coalesce_together_counter = root->add_child_counter(
+            "StripeActiveLazyColumnIOCoalesceTogether", TUnit::UNIT,
+            RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM), orcProfileSectionPrefix);
+    RuntimeProfile::Counter* stripe_active_lazy_coalesce_seperately_counter = root->add_child_counter(
+            "StripeActiveLazyColumnIOCoalesceSeperately", TUnit::UNIT,
+            RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM), orcProfileSectionPrefix);
+    COUNTER_UPDATE(stripe_active_lazy_coalesce_together_counter, _app_stats.orc_stripe_active_lazy_coalesce_together);
+    COUNTER_UPDATE(stripe_active_lazy_coalesce_seperately_counter,
+                   _app_stats.orc_stripe_active_lazy_coalesce_seperately);
+>>>>>>> a11db24a30 ([Refactor] Refactor orc tiny stripe optimization (#40793))
 }
 
 } // namespace starrocks
