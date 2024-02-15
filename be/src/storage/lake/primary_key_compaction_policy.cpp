@@ -14,6 +14,7 @@
 
 #include "storage/lake/primary_key_compaction_policy.h"
 
+#include "gutil/strings/join.h"
 #include "storage/lake/update_manager.h"
 
 namespace starrocks::lake {
@@ -35,12 +36,10 @@ StatusOr<std::unique_ptr<PKSizeTieredLevel>> PrimaryCompactionPolicy::pick_max_l
     std::vector<RowsetCandidate> current_level_rowsets;
     const int64_t level_multiple = config::size_tiered_level_multiple;
     int64_t level_size = -1;
-    int64_t total_size = 0;
     for (const auto& rowset : rowsets) {
         int64_t rowset_size = rowset.read_bytes() > 0 ? rowset.read_bytes() : 1;
         if (level_size == -1) {
             level_size = rowset_size < max_level_size ? rowset_size : max_level_size;
-            total_size = 0;
         }
 
         // When calculate score, we don't need to distribute rowsets into different levels.
@@ -53,10 +52,8 @@ StatusOr<std::unique_ptr<PKSizeTieredLevel>> PrimaryCompactionPolicy::pick_max_l
             }
             current_level_rowsets.clear();
             level_size = rowset_size < max_level_size ? rowset_size : max_level_size;
-            total_size = 0;
         }
 
-        total_size += rowset_size;
         current_level_rowsets.emplace_back(rowset);
     }
 
@@ -64,10 +61,11 @@ StatusOr<std::unique_ptr<PKSizeTieredLevel>> PrimaryCompactionPolicy::pick_max_l
         order_levels.emplace(current_level_rowsets, !calc_score);
     }
 
-    // When largest score level only have one rowset, merge with second larger score level.
     auto top_level_ptr = std::make_unique<PKSizeTieredLevel>(order_levels.top());
     order_levels.pop();
-    if (!calc_score && top_level_ptr->rowsets.size() == 1 && !order_levels.empty()) {
+    // When largest score level only have one rowset (without segment overlapped), merge with second larger score level.
+    if (!calc_score && top_level_ptr->rowsets.size() == 1 &&
+        !top_level_ptr->rowsets.top().multi_segment_with_overlapped() && !order_levels.empty()) {
         auto second_level_ptr = std::make_unique<PKSizeTieredLevel>(order_levels.top());
         second_level_ptr->merge_top(*top_level_ptr);
         return second_level_ptr;
@@ -80,16 +78,16 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets() {
     return pick_rowsets(_tablet_metadata, false, nullptr);
 }
 
-StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(
+StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
         const std::shared_ptr<const TabletMetadataPB>& tablet_metadata, bool calc_score, std::vector<bool>* has_dels) {
-    std::vector<RowsetPtr> input_rowsets;
     UpdateManager* mgr = _tablet_mgr->update_mgr();
+    std::vector<int64_t> rowset_indexes;
     std::vector<RowsetCandidate> rowset_vec;
     const auto tablet_id = tablet_metadata->id();
     const auto tablet_version = tablet_metadata->version();
     const int64_t compaction_data_size_threshold =
             static_cast<int64_t>((double)_get_data_size(tablet_metadata) * config::update_compaction_ratio_threshold);
-    // 1. generate rowset condidate vector
+    // 1. generate rowset candidate vector
     for (int i = 0, sz = tablet_metadata->rowsets_size(); i < sz; i++) {
         const RowsetMetadataPB& rowset_pb = tablet_metadata->rowsets(i);
         RowsetStat stat;
@@ -105,21 +103,18 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(
     // 2. pick largest score level
     ASSIGN_OR_RETURN(auto pick_level_ptr, pick_max_level(calc_score, rowset_vec));
     if (pick_level_ptr == nullptr) {
-        return input_rowsets;
+        return rowset_indexes;
     }
 
     // 3. pick input rowsets from level
     size_t cur_compaction_result_bytes = 0;
-    std::stringstream input_infos;
     while (!pick_level_ptr->rowsets.empty()) {
         const auto& rowset_candidate = pick_level_ptr->rowsets.top();
         cur_compaction_result_bytes += rowset_candidate.read_bytes();
-        input_rowsets.emplace_back(
-                std::make_shared<Rowset>(_tablet_mgr, tablet_metadata, rowset_candidate.rowset_index));
+        rowset_indexes.push_back(rowset_candidate.rowset_index);
         if (has_dels != nullptr) {
             has_dels->push_back(rowset_candidate.delete_bytes() > 0);
         }
-        input_infos << input_rowsets.back()->id() << "|";
 
         if (cur_compaction_result_bytes >
             std::max(config::update_compaction_result_bytes, compaction_data_size_threshold)) {
@@ -128,19 +123,34 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(
         // If calc_score is true, we skip `config::lake_pk_compaction_max_input_rowsets` check,
         // because `config::lake_pk_compaction_max_input_rowsets` is only used to limit the number
         // of rowsets for real compaction merges
-        if (!calc_score && input_rowsets.size() >= config::lake_pk_compaction_max_input_rowsets) {
+        if (!calc_score && rowset_indexes.size() >= config::lake_pk_compaction_max_input_rowsets) {
             break;
         }
         pick_level_ptr->rowsets.pop();
     }
-    VLOG(2) << strings::Substitute("lake PrimaryCompactionPolicy pick_rowsets tabletid:$0 version:$1 inputs:$2",
-                                   tablet_id, tablet_metadata->version(), input_infos.str());
 
+    return rowset_indexes;
+}
+
+StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(
+        const std::shared_ptr<const TabletMetadataPB>& tablet_metadata, bool calc_score, std::vector<bool>* has_dels) {
+    std::vector<RowsetPtr> input_rowsets;
+    ASSIGN_OR_RETURN(auto rowset_indexes, pick_rowset_indexes(tablet_metadata, calc_score, has_dels));
+    input_rowsets.reserve(rowset_indexes.size());
+    for (auto rowset_index : rowset_indexes) {
+        input_rowsets.emplace_back(std::make_shared<Rowset>(_tablet_mgr, tablet_metadata, rowset_index));
+    }
+    VLOG(2) << strings::Substitute(
+            "lake PrimaryCompactionPolicy pick_rowsets tabletid:$0 version:$1 inputs:$2", tablet_metadata->id(),
+            tablet_metadata->version(),
+            JoinMapped(
+                    input_rowsets, [&](const RowsetPtr& rowset) -> std::string { return std::to_string(rowset->id()); },
+                    "|"));
     return input_rowsets;
 }
 
 int64_t PrimaryCompactionPolicy::_get_data_size(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata) {
-    int size = 0;
+    int64_t size = 0;
     for (const auto& rowset : tablet_metadata->rowsets()) {
         size += rowset.data_size();
     }

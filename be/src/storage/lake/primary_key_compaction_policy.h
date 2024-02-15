@@ -62,6 +62,10 @@ public:
     }
     double read_bytes() const { return (double)stat.bytes - delete_bytes() + 1; }
     void calculate_score() { score = (io_count() * 1024 * 1024) / read_bytes(); }
+    // Rowset has multi segments and these segments are overlapped
+    bool multi_segment_with_overlapped() const {
+        return rowset_meta_ptr->overlapped() && rowset_meta_ptr->segments_size() > 1;
+    }
     bool operator<(const RowsetCandidate& other) const { return score < other.score; }
 
     const RowsetMetadataPB* rowset_meta_ptr;
@@ -92,8 +96,11 @@ struct PKSizeTieredLevel {
 
     // Merge another level's top rowset
     void merge_top(const PKSizeTieredLevel& other) {
+        DCHECK(other.rowsets.size() == 1);
         if (!other.rowsets.empty()) {
             const auto& top_rowset = other.rowsets.top();
+            // Rowset with overlap segments shouldn't be merged here.
+            DCHECK(!top_rowset.multi_segment_with_overlapped());
             rowsets.push(top_rowset);
             score += top_rowset.score;
         }
@@ -115,6 +122,12 @@ public:
     StatusOr<std::vector<RowsetPtr>> pick_rowsets() override;
     StatusOr<std::vector<RowsetPtr>> pick_rowsets(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata,
                                                   bool calc_score, std::vector<bool>* has_dels);
+
+    // Common function to return the picked rowset indexes.
+    // For compaction score, only picked rowset indexes are needed.
+    // For compaction, picked rowsets can be constructed by picked rowset indexes.
+    StatusOr<std::vector<int64_t>> pick_rowset_indexes(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata,
+                                                       bool calc_score, std::vector<bool>* has_dels);
 
     // When using Sized-tiered compaction policy, we need this function to pick highest score level.
     static StatusOr<std::unique_ptr<PKSizeTieredLevel>> pick_max_level(bool calc_score,
