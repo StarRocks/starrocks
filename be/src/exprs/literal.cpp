@@ -186,7 +186,7 @@ StatusOr<LLVMDatum> VectorizedLiteral::generate_ir_impl(ExprContext* context, JI
 
 std::string VectorizedLiteral::debug_string() const {
     std::stringstream out;
-    out << "Literal("
+    out << "VectorizedLiteral("
         << "type=" << this->type().debug_string() << ", value=" << _value->debug_string() << ")";
     return out.str();
 }
