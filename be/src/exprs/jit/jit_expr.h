@@ -40,6 +40,8 @@ public:
 
     bool is_jit_compiled() { return _jit_function != nullptr && !_jit_expr_name.empty(); }
 
+    void set_uncompilable_children(RuntimeState* state);
+
 protected:
     /**
      * @brief Prepare the expression, including:

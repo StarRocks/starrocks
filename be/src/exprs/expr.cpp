@@ -746,7 +746,9 @@ Status Expr::replace_compilable_exprs(Expr** expr, ObjectPool* pool, RuntimeStat
     if ((*expr)->should_compile(state)) {
         // If the current expression is compilable, we will replace it with a JITExpr.
         // This expression and its compilable subexpressions will be compiled into a single function.
-        *expr = JITExpr::create(pool, *expr);
+        auto* jit_expr = JITExpr::create(pool, *expr);
+        jit_expr->set_uncompilable_children(state);
+        *expr = jit_expr;
     }
 
     for (auto& child : (*expr)->_children) {

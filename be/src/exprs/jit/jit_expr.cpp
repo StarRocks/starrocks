@@ -40,8 +40,11 @@ JITExpr* JITExpr::create(ObjectPool* pool, Expr* expr) {
     return pool->add(new JITExpr(node, expr));
 }
 
-JITExpr::JITExpr(const TExprNode& node, Expr* expr) : Expr(node), _expr(expr) {
-    _children.push_back(_expr); // let _expr be prepared/open/next/closed in specific cases
+JITExpr::JITExpr(const TExprNode& node, Expr* expr) : Expr(node), _expr(expr) {}
+
+void JITExpr::set_uncompilable_children(RuntimeState* state) {
+    _children.clear();
+    _expr->get_uncompilable_exprs(_children, state);
 }
 
 Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
@@ -51,8 +54,6 @@ Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
         return Status::OK();
     }
     _is_prepared = true;
-    _children.clear();
-    _expr->get_uncompilable_exprs(_children, state);
 
     if (!is_constant()) {
         auto start = MonotonicNanos();
