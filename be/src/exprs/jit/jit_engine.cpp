@@ -433,7 +433,7 @@ StatusOr<JITScalarFunction> JITEngine::Engine::get_compiled_func(const std::stri
         return Status::JitCompileError("Failed to look up function: " + function +
                                        " error: " + llvm::toString(sym.takeError()));
     }
-    JITScalarFunction fn_ptr = reinterpret_cast<JITScalarFunction>(sym->getValue());
+    JITScalarFunction fn_ptr = sym->toPtr<JITScalarFunction>();
     if (fn_ptr == nullptr) {
         return Status::JitCompileError("Failed to get address for function: " + function);
     }
