@@ -14,6 +14,9 @@
 
 #include "exprs/arithmetic_expr.h"
 
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/Value.h>
+
 #include <optional>
 
 #include "column/type_traits.h"
@@ -27,8 +30,6 @@
 #include "exprs/jit/ir_helper.h"
 #include "exprs/overflow.h"
 #include "exprs/unary_function.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Value.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 
@@ -128,6 +129,11 @@ public:
         return state->is_jit_arithmetic_op() && IRHelper::support_jit(Type);
     }
 
+    std::string jit_func_name() const override {
+        return "{" + _children[0]->jit_func_name() + get_op_name<OP>() + _children[1]->jit_func_name() + "}" +
+               (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
+    }
+
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
         std::vector<LLVMDatum> datums(2);
         ASSIGN_OR_RETURN(datums[0], _children[0]->generate_ir_impl(context, jit_ctx))
@@ -146,9 +152,9 @@ public:
     std::string debug_string() const override {
         std::stringstream out;
         auto expr_debug_string = Expr::debug_string();
-        out << "VectorizedArithmeticExpr ("
-            << "lhs=" << _children[0]->type().debug_string() << ", rhs=" << _children[1]->type().debug_string()
-            << ", result=" << this->type().debug_string() << ", lhs_is_constant=" << _children[0]->is_constant()
+        out << "VectorizedArithmeticExpr [" << get_op_name<OP>() << "](lhs=" << _children[0]->type().debug_string()
+            << ", rhs=" << _children[1]->type().debug_string() << ", result=" << this->type().debug_string()
+            << ", lhs_is_constant=" << _children[0]->is_constant()
             << ", rhs_is_constant=" << _children[1]->is_constant() << ", expr (" << expr_debug_string << ") )";
         return out.str();
     }
@@ -192,6 +198,11 @@ public:
 
     bool is_compilable(RuntimeState* state) const override {
         return state->is_jit_div_op() && Type != TYPE_LARGEINT && IRHelper::support_jit(Type);
+    }
+
+    std::string jit_func_name() const override {
+        return "{" + _children[0]->jit_func_name() + "/" + _children[1]->jit_func_name() + "}" +
+               (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
     }
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
@@ -269,6 +280,11 @@ public:
         return state->is_jit_mod_op() && Type != TYPE_LARGEINT && IRHelper::support_jit(Type);
     }
 
+    std::string jit_func_name() const override {
+        return "{" + _children[0]->jit_func_name() + "%" + _children[1]->jit_func_name() + "}" +
+               (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
+    }
+
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
         std::vector<LLVMDatum> datums(2);
         ASSIGN_OR_RETURN(datums[0], _children[0]->generate_ir_impl(context, jit_ctx))
@@ -309,6 +325,11 @@ public:
         return state->is_jit_arithmetic_op() && IRHelper::support_jit(Type);
     }
 
+    std::string jit_func_name() const override {
+        return "{!" + _children[0]->jit_func_name() + "}" + (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") +
+               type().debug_string();
+    }
+
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
         ASSIGN_OR_RETURN(auto datum, _children[0]->generate_ir_impl(context, jit_ctx))
         using ArithmeticBitNot = ArithmeticUnaryOperator<BitNotOp, Type>;
@@ -340,6 +361,11 @@ public:
 
     bool is_compilable(RuntimeState* state) const override {
         return state->is_jit_arithmetic_op() && IRHelper::support_jit(Type);
+    }
+
+    std::string jit_func_name() const override {
+        return "{" + _children[0]->jit_func_name() + get_op_name<OP>() + _children[1]->jit_func_name() + "}" +
+               (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
     }
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {

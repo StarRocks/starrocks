@@ -739,6 +739,13 @@ void Expr::get_uncompilable_exprs(std::vector<Expr*>& exprs, RuntimeState* state
     }
 }
 
+std::string Expr::jit_func_name() const {
+    // DCHECK(!is_compilable());
+    // uncompilable inputs, reducing string size.
+    return std::string("col[") + (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string() +
+           "]";
+}
+
 // This method attempts to traverse the entire expression tree from the current expression downwards, seeking to replace expressions with JITExprs.
 // This method searches from top to bottom for compilable expressions.
 // Once a compilable expression is found, it skips over its compilable subexpressions and continues the search downwards.

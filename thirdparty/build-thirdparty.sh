@@ -241,7 +241,9 @@ build_llvm() {
         "LLVMBinaryFormat"
         "LLVMDebugInfoDWARF"
         "LLVMObjCARCOpts"
+        "LLVMPasses"
         "LLVMCodeGen"
+        "LLVMFrontendOpenMP"
         "LLVMMCDisassembler"
         "LLVMSupport"
         "LLVMJITLink"
@@ -257,10 +259,14 @@ build_llvm() {
         "LLVMAnalysis"
         "LLVMGlobalISel"
         "LLVMScalarOpts"
+        "LLVMLinker"
+        "LLVMCoroutines"
         "LLVMTargetParser"
         "LLVMDemangle"
         "LLVMRemarks"
         "LLVMDebugInfoCodeView"
+        "LLVMAggressiveInstCombine"
+        "LLVMIRPrinter"
         "LLVMOrcShared"
         "LLVMOrcJIT"
         "LLVMTextAPI"
@@ -270,6 +276,9 @@ build_llvm() {
         "LLVMTransformUtils"
         "LLVMSelectionDAG"
         "LLVMMCParser"
+        "LLVMX86AsmParser"
+        "LLVMX86Disassembler"
+        "LLVMSupport"
     )
     if [ "${LLVM_TARGET}" == "X86" ]; then
         LLVM_TARGETS_TO_BUILD+=("LLVMX86Info" "LLVMX86Desc" "LLVMX86CodeGen")
@@ -308,7 +317,7 @@ build_llvm() {
 
     # TODO(yueyang): Add more targets.
     # This is a little bit hack, we need to minimize the build time and binary size.
-    ${BUILD_SYSTEM} -j$PARALLEL REQUIRES_RTTI=1 ${LLVM_TARGETS_TO_BUILD[@]}
+    ${BUILD_SYSTEM} -j$PARALLEL ${LLVM_TARGETS_TO_BUILD[@]}
     ${BUILD_SYSTEM} install-llvm-headers
     ${BUILD_SYSTEM} ${LLVM_TARGETS_TO_INSTALL[@]}
 

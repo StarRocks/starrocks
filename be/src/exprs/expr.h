@@ -44,8 +44,6 @@
 #include "exprs/expr_context.h"
 #include "exprs/function_context.h"
 #include "gen_cpp/Opcodes_types.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Module.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
 
@@ -226,6 +224,8 @@ public:
 
     // Return true if this expression supports JIT compilation.
     virtual bool is_compilable(RuntimeState* state) const { return false; }
+
+    virtual std::string jit_func_name() const;
 
     // This function will collect all uncompiled expressions in this expression tree.
     // The uncompiled expressions are those expressions which are not supported by JIT, it will become the input of JIT function.

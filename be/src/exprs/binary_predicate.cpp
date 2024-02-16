@@ -14,6 +14,10 @@
 
 #include "exprs/binary_predicate.h"
 
+#include <llvm/IR/Constants.h>
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/Value.h>
+
 #include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
@@ -21,9 +25,6 @@
 #include "exprs/binary_function.h"
 #include "exprs/jit/ir_helper.h"
 #include "exprs/unary_function.h"
-#include "llvm/IR/Constants.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Value.h"
 #include "runtime/runtime_state.h"
 #include "storage/column_predicate.h"
 #include "types/logical_type.h"
@@ -97,6 +98,25 @@ struct BinaryPredFunc {
         return CMP()(l, r);
     }
 };
+
+template <LogicalType Type, typename OP>
+std::string get_cmp_op_name() {
+    if constexpr (std::is_same_v<OP, BinaryPredFunc<EvalEq<Type>>>) {
+        return "=";
+    } else if constexpr (std::is_same_v<OP, BinaryPredFunc<EvalNe<Type>>>) {
+        return "!=";
+    } else if constexpr (std::is_same_v<OP, BinaryPredFunc<EvalLt<Type>>>) {
+        return "<";
+    } else if constexpr (std::is_same_v<OP, BinaryPredFunc<EvalLe<Type>>>) {
+        return "<=";
+    } else if constexpr (std::is_same_v<OP, BinaryPredFunc<EvalGt<Type>>>) {
+        return ">";
+    } else if constexpr (std::is_same_v<OP, BinaryPredFunc<EvalGe<Type>>>) {
+        return ">=";
+    } else {
+        return "unknown";
+    }
+}
 
 template <LogicalType Type, typename OP>
 class VectorizedBinaryPredicate final : public Predicate {
@@ -173,6 +193,11 @@ public:
             result.null_flag = b.CreateOr(datums[0].null_flag, datums[1].null_flag);
             return result;
         }
+    }
+
+    std::string jit_func_name() const override {
+        return "{" + _children[0]->jit_func_name() + get_cmp_op_name<Type, OP>() + _children[1]->jit_func_name() + "}" +
+               (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
     }
 
     std::string debug_string() const override {
@@ -419,6 +444,11 @@ public:
             // always not null
             return result;
         }
+    }
+
+    std::string jit_func_name() const override {
+        return "{" + _children[0]->jit_func_name() + "<=>" + _children[1]->jit_func_name() + "}" +
+               (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
     }
 
     std::string debug_string() const override {
