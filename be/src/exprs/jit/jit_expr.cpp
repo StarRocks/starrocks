@@ -40,7 +40,7 @@ JITExpr* JITExpr::create(ObjectPool* pool, Expr* expr) {
     return pool->add(new JITExpr(node, expr));
 }
 
-JITExpr::JITExpr(ObjectPool* pool, const TExprNode& node, Expr* expr) : Expr(node), _pool(pool), _expr(expr) {
+JITExpr::JITExpr(const TExprNode& node, Expr* expr) : Expr(node), _expr(expr) {
     _children.push_back(_expr); // let _expr be prepared/open/next/closed in specific cases
 }
 
