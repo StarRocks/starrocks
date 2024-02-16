@@ -154,6 +154,7 @@ set(EXEC_FILES
     schema_scanner/schema_be_datacache_metrics_scanner.cpp
     schema_scanner/sys_object_dependencies.cpp
     schema_scanner/sys_fe_locks.cpp
+    schema_scanner/sys_fe_memory_usage.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp
     sorting/merge_column.cpp
@@ -199,6 +200,7 @@ set(EXEC_FILES
     pipeline/scan/schema_scan_operator.cpp
     pipeline/scan/schema_scan_context.cpp
     pipeline/sink/iceberg_table_sink_operator.cpp
+    pipeline/sink/sink_io_buffer.cpp
     pipeline/sink/hive_table_sink_operator.cpp
     pipeline/sink/table_function_table_sink_operator.cpp
     pipeline/sink/blackhole_table_sink_operator.cpp

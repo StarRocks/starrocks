@@ -286,6 +286,7 @@ set(EXEC_FILES
         ./storage/push_handler_test.cpp
         ./storage/range_test.cpp
         ./storage/replication_txn_manager_test.cpp
+        ./storage/replication_utils_test.cpp
         ./storage/segment_stream_converter_test.cpp
         ./storage/row_source_mask_test.cpp
         ./storage/union_iterator_test.cpp
@@ -404,6 +405,7 @@ set(EXEC_FILES
         ./util/timezone_utils_test.cpp
         ./util/concurrent_limiter_test.cpp
         ./util/stack_trace_mutex_test.cpp
+        ./util/download_util_test.cpp
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp

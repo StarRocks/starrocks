@@ -68,7 +68,7 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     @SerializedName(value = "sortKeyUniqueIds")
     public List<Integer> sortKeyUniqueIds;
     @SerializedName(value = "schemaVersion")
-    private int schemaVersion = -1;
+    private int schemaVersion = 0;
     @SerializedName(value = "schemaHash")
     private int schemaHash;
     @SerializedName(value = "schemaId")

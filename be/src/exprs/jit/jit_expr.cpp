@@ -37,7 +37,7 @@ JITExpr* JITExpr::create(ObjectPool* pool, Expr* expr) {
     node.type = expr->type().to_thrift();
     node.output_scale = expr->output_scale();
     node.is_monotonic = expr->is_monotonic();
-    return pool->add(new JITExpr(pool, node, expr));
+    return pool->add(new JITExpr(node, expr));
 }
 
 JITExpr::JITExpr(ObjectPool* pool, const TExprNode& node, Expr* expr) : Expr(node), _pool(pool), _expr(expr) {
@@ -83,6 +83,7 @@ Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
     } else { // reset children, so it can fall back the original expr safely
         _children.clear();
         _children.push_back(_expr);
+        RETURN_IF_ERROR(Expr::prepare(state, context)); // jitExpr becomes an empty node, fallback to original expr.
     }
     return Status::OK();
 }
