@@ -455,12 +455,6 @@ public:
         errno = ret_errno;
         throw std::runtime_error(ret_message);
     }
-
-    void prepareCache(PrepareCacheScope scope, uint64_t offset, uint64_t length) override {
-        errno = ret_errno;
-        throw std::runtime_error(ret_message);
-    }
-
     int ret_errno = 0;
     std::string ret_message;
 };
