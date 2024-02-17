@@ -30,6 +30,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -37,6 +38,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.TransformationRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.BestMvSelector;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVColumnPruner;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVPartitionPruner;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter;
@@ -94,9 +96,20 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
     @Override
     public List<OptExpression> transform(OptExpression queryExpression, OptimizerContext context) {
         try {
-            return doTransform(queryExpression, context);
+            List<OptExpression> expressions = doTransform(queryExpression, context);
+            if (expressions == null || expressions.isEmpty()) {
+                return Lists.newArrayList();
+            }
+            if (context.isInMemoPhase()) {
+                return expressions;
+            } else {
+                // in rule phase, only return the best one result
+                BestMvSelector bestMvSelector = new BestMvSelector(
+                        expressions, context, queryExpression.getOp() instanceof LogicalAggregationOperator);
+                return Lists.newArrayList(bestMvSelector.selectBest());
+            }
         } catch (Exception e) {
-            String errMsg = ExceptionUtils.getMessage(e);
+            String errMsg = ExceptionUtils.getStackTrace(e);
             // for mv rewrite rules, do not disturb query when exception.
             logMVRewrite(context, this, "mv rewrite exception, exception message:{}", errMsg);
             return Lists.newArrayList();
@@ -116,6 +129,8 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             mvCandidateContexts.addAll(context.getCandidateMvs());
         }
         mvCandidateContexts.removeIf(x -> !x.prune(context, queryExpression));
+
+        // Order all candidate mvs by priority so can be rewritten fast.
         MaterializationContext.RewriteOrdering ordering =
                 new MaterializationContext.RewriteOrdering(queryExpression, context.getColumnRefFactory());
         mvCandidateContexts.sort(ordering);

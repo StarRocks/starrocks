@@ -16,6 +16,8 @@ CREATE [OR REPLACE] PIPE [db_name.]<pipe_name>
 AS <INSERT_SQL>
 ```
 
+StarRocks supports CREATE [OR REPLACE] PIPE from v3.2.3 onwards. When you use CREATE [OR REPLACE] PIPE to create a pipe and the pipe name specified in `pipe_name` is the same as the name of an existing pipe in the current database, the existing database is replaced by the new pipe.
+
 ## Parameters
 
 ### db_name
@@ -28,7 +30,7 @@ The unique name of the database to which the pipe belongs.
 
 ### pipe_name
 
-The name of the pipe. The pipe name must be unique within the database in which the pipe is created.
+The name of the pipe. The pipe name must be unique within the database in which the pipe is created. For the naming conventions, see [System limits](../../../reference/System_limit.md).
 
 ### INSERT_SQL
 

@@ -1746,7 +1746,6 @@ public class StmtExecutor {
                 context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
             }
         }
-        context.getState().setEof();
     }
 
     public void setQueryStatistics(PQueryStatistics statistics) {

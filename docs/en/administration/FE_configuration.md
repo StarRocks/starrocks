@@ -928,6 +928,13 @@ Data loading tasks consist of two phases: data writing and data committing (COMM
 - **Description**: Whether to refresh an asynchronous materialized view immediately after creation. When this item is set to `true`, newly created materialized view will be refreshed immediately.
 - **Introduced in**: v3.2.3
 
+##### default_mv_refresh_partition_num
+
+- **Unit**: -
+- **Default**: 1
+- **Description**: When multiple partitions need to be updated during a materialized view refresh, the task will be split in batches. This item specifies the number of paritions to be refreshed in each batch.
+- **Introduced in**: v3.2.3
+
 ## Configure FE static parameters
 
 This section provides an overview of the static parameters that you can configure in the FE configuration file **fe.conf**. After you reconfigure these parameters for an FE, you must restart the FE for the changes to take effect.

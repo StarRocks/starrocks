@@ -204,7 +204,7 @@ public class AnalyzeMgr implements Writable {
 
     public void dropExternalBasicStatsData(String tableUUID) {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
-        statisticExecutor.dropTableStatistics(StatisticUtils.buildConnectContext(), tableUUID);
+        statisticExecutor.dropExternalTableStatistics(StatisticUtils.buildConnectContext(), tableUUID);
     }
 
     public void dropAnalyzeJob(String catalogName, String dbName, String tblName) {

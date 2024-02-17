@@ -456,7 +456,11 @@ public class StarRocksAssert {
             createTableStmt.getProperties().put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
             return this.withTable(sql);
         } else if (statementBase instanceof CreateMaterializedViewStatement) {
-            return this.withMaterializedView(sql, true, false);
+            CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement) statementBase;
+            StarRocksAssert starRocksAssert = this.withMaterializedView(sql, true, false);
+            starRocksAssert.getCtx().executeSql(String.format("refresh materialized view %s with sync mode",
+                    createMaterializedViewStatement.getTableName().getTbl()));
+            return starRocksAssert;
         } else {
             throw new AnalysisException("Sql is not supported in withSingleReplicaTable:" + sql);
         }

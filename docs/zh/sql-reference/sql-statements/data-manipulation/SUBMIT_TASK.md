@@ -61,7 +61,6 @@ SELECT * FROM information_schema.task_runs WHERE task_name = '<task_name>';
 | task_runs_queue_length       | 500        | 最多可同时等待运行的 TaskRun 的数量。如同时等待运行的 TaskRun 的数量超过该参数的默认值，您将无法继续执行 Task。 |
 | task_runs_max_history_number | 10000      | 保留的最多历史 TaskRun 任务数量。 |
 
-
 ## 示例
 
 示例一：为 `CREATE TABLE tbl1 AS SELECT * FROM src_tbl` 创建异步任务，并命名为 `etl0`：

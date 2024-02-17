@@ -171,6 +171,12 @@ StarRocks 数据库支持的字符集，当前仅支持 UTF8 编码 （`utf8`）
 
 外表查询时每个 Scan 算子能同时下发的 I/O 任务的最大数量。取值为整数，默认值 16。目前外表查询时会使用自适应算法来调整并发 I/O 任务的数量，通过 `enable_connector_adaptive_io_tasks` 开关来控制，默认打开。
 
+### connector_sink_compression_codec（3.2.3 及以后）
+
+用于指定写入 Hive 表或 Iceberg 表时以及使用 Files() 导出数据时的压缩算法。
+
+有效值：`gzip`、`brotli`、`zstd` 和 `lz4`。
+
 ### count_distinct_column_buckets（2.5 及以后）
 
 group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该变量只有在 `enable_distinct_column_bucketization` 设置为 `true` 时才会生效。默认值：1024。
@@ -662,6 +668,17 @@ set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
 ### time_zone
 
 用于设置当前会话的时区。时区会对某些时间函数的结果产生影响。
+
+### trace_log_mode
+
+- 含义：用于控制 Query Trace Profile 的 Logs 的输出位置。有效值包括：
+  - `command`：在执行 TRACE LOGS 后作为 **Explain String** 返回。
+  - `file`：在 FE 日志文件 **fe.log** 中以 `FileLogTracer` 为类名返回。
+
+  有关 Query Trace Profile 的更多信息，请参阅 [Query Trace Profile](../developers/trace-tools/query_trace_profile.md)。
+
+- 默认值：`command`
+- 引入版本：v3.2.0
 
 ### transaction_read_only
 
