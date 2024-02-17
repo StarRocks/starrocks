@@ -92,7 +92,8 @@ public:
 
     Cache* get_func_cache() const { return _func_cache; }
 
-    static Status generate_scalar_function_ir(ExprContext* context, llvm::Module& module, Expr* expr);
+    static Status generate_scalar_function_ir(ExprContext* context, llvm::Module& module, Expr* expr,
+                                              const std::vector<Expr*>& uncompilable_exprs);
 
     size_t get_cache_mem_usage() const {
         DCHECK(_func_cache != nullptr);
