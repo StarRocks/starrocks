@@ -53,7 +53,7 @@ public class BloomFilterIndexUtil {
         return bfFpp;
     }
 
-    public static void analyzeBloomFilterGramNum(Map<String, String> properties) throws SemanticException {
+    private static void analyzeBloomFilterGramNum(Map<String, String> properties) throws SemanticException {
         if (properties != null && properties.containsKey(GRAM_NUM_KEY)) {
             int gram_num = Integer.parseInt(properties.get(GRAM_NUM_KEY));
             if (gram_num <= 0) {
@@ -90,7 +90,7 @@ public class BloomFilterIndexUtil {
         }
 
         for (Index index : newIndexs) {
-            if (bfColumns.contains(index.getColumns().get(0))) {
+            if (index.getIndexType() == IndexDef.IndexType.NGRAMBF && bfColumns.contains(index.getColumns().get(0))) {
                 throw new AnalysisException("column " + index.getColumns().get(0) +
                         " should only have one bloom filter index " +
                         "or ngram bloom filter index");

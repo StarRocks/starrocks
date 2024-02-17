@@ -230,12 +230,6 @@ public:
                 }
             }
 
-            std::string str;
-            for (auto& iter : _values) {
-                str += iter.to_string();
-                str += ", ";
-            }
-
             // move to next row
             ++cur_slice;
         }

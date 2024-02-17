@@ -44,7 +44,7 @@ public class FeConstants {
     public static final double DEFAULT_BLOOM_FILTER_FPP = 0.05;
 
     // NGRAM Bloom filter's default gram number
-    public static final double DEFAULT_GRAM_NUM = 0.05;
+    public static final int DEFAULT_GRAM_NUM = 2;
     // general model
     @Deprecated
     // for rollback compatible

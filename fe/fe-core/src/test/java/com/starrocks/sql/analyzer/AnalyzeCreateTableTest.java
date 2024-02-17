@@ -399,4 +399,31 @@ public class AnalyzeCreateTableTest {
                     "AGGREGATE KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 " +
                     "PROPERTIES(\"replication_num\" = \"1\", \"replicated_storage\"=\"true\");");
     }
+
+    @Test
+    public void testNgrambloomIndex() throws Exception {
+        // create index with wrong column
+        String sql = "CREATE TABLE TABLE1 (COL1 INT, COL2 VARCHAR(10)," +
+                "INDEX INDEX1(COL3) USING NGRAMBF ('BLOOM_FILTER_FPP' = '0.01', 'GRAM_NUM' = '2'))" +
+                "AGGREGATE KEY(COL1, COL2) DISTRIBUTED BY HASH(COL1) BUCKETS 10;";
+        analyzeFail(sql, "INDEX1 column does not exist in table.");
+
+        // create index with wrong fpp
+        sql = "CREATE TABLE TABLE1 (COL1 INT, COL2 VARCHAR(10)," +
+                "INDEX INDEX1(COL2) USING NGRAMBF ('BLOOM_FILTER_FPP' = '1', 'GRAM_NUM' = '2'))" +
+                "AGGREGATE KEY(COL1, COL2) DISTRIBUTED BY HASH(COL1) BUCKETS 10;";
+        analyzeFail(sql, "Bloom filter fpp should in [1.0E-4, 0.05]");
+
+        // create index with wrong gram num
+        sql = "CREATE TABLE TABLE1 (COL1 INT, COL2 VARCHAR(10)," +
+                "INDEX INDEX1(COL2) USING NGRAMBF ('BLOOM_FILTER_FPP' = '0.01', 'GRAM_NUM' = '0'))" +
+                "AGGREGATE KEY(COL1, COL2) DISTRIBUTED BY HASH(COL1) BUCKETS 10;";
+        analyzeFail(sql, "Ngram Bloom filter's gram_num should be positive number");
+
+        // create index with correct fpp and gram num
+        sql = "CREATE TABLE TABLE1 (COL1 INT, COL2 VARCHAR(10)," +
+                "INDEX INDEX1(COL2) USING NGRAMBF ('BLOOM_FILTER_FPP' = '0.01', 'GRAM_NUM' = '2'))" +
+                "AGGREGATE KEY(COL1, COL2) DISTRIBUTED BY HASH(COL1) BUCKETS 10;";
+        analyzeSuccess(sql);
+    }
 }
