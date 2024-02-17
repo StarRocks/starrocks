@@ -259,7 +259,6 @@ public:
     void set_spill_channel(SpillProcessChannelPtr channel) { _spill_channel = std::move(channel); }
     const auto& spiller() { return _spiller; }
     const SpillProcessChannelPtr& spill_channel() { return _spill_channel; }
-    auto& io_executor() { return *spill_channel()->io_executor(); }
     void set_spill_strategy(spill::SpillStrategy strategy) { _spill_strategy = strategy; }
     spill::SpillStrategy spill_strategy() { return _spill_strategy; }
 

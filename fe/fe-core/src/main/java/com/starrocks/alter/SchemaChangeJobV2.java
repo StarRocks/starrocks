@@ -75,6 +75,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.journal.JournalTask;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
@@ -116,7 +117,6 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -712,8 +712,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
          * we just check whether all new replicas are healthy.
          */
         EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
-        Future<Boolean> future;
-        long start;
+        JournalTask journalTask;
         locker.lockDatabase(db, LockType.WRITE);
         try {
             OlapTable tbl = (OlapTable) db.getTable(tableId);
@@ -729,7 +728,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                 PhysicalPartition partition = tbl.getPhysicalPartition(partitionId);
                 Preconditions.checkNotNull(partition, partitionId);
 
-                long visiableVersion = partition.getVisibleVersion();
+                long visibleVersion = partition.getVisibleVersion();
                 short expectReplicationNum = tbl.getPartitionInfo().getReplicationNum(partition.getParentId());
 
                 Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(partitionId);
@@ -748,7 +747,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                         int healthyReplicaNum = 0;
                         for (Replica replica : replicas) {
                             if (replica.getLastFailedVersion() < 0
-                                    && replica.checkVersionCatchUp(visiableVersion, false)) {
+                                    && replica.checkVersionCatchUp(visibleVersion, false)) {
                                 healthyReplicaNum++;
                             }
                         }
@@ -774,13 +773,12 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             this.jobState = JobState.FINISHED;
             this.finishedTimeMs = System.currentTimeMillis();
 
-            start = System.nanoTime();
-            future = editLog.logAlterJobNoWait(this);
+            journalTask = editLog.logAlterJobNoWait(this);
         } finally {
             locker.unLockDatabase(db, LockType.WRITE);
         }
 
-        EditLog.waitInfinity(start, future);
+        EditLog.waitInfinity(journalTask);
 
         LOG.info("schema change job finished: {}", jobId);
         this.span.end();

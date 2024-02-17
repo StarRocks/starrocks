@@ -10,7 +10,7 @@ PROPERTIES (
 "replication_num" = "1",
 "in_memory" = "false",
 "enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"replicated_storage" = "false",
 "compression" = "LZ4"
 );
 -- result:
@@ -44,7 +44,7 @@ PROPERTIES (
 "replication_num" = "1",
 "in_memory" = "false",
 "enable_persistent_index" = "false",
-"replicated_storage" = "true",
+"replicated_storage" = "false",
 "compression" = "LZ4"
 );
 -- result:

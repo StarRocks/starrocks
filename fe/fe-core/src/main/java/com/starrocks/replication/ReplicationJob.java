@@ -35,6 +35,8 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -469,7 +471,8 @@ public class ReplicationJob implements GsonPostProcessable {
             throw new MetaNotFoundException("Database " + request.database_id + " not found");
         }
 
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             Table table = db.getTable(request.table_id);
             if (table == null) {
@@ -503,7 +506,7 @@ public class ReplicationJob implements GsonPostProcessable {
                 partitionInfos.put(partitionInfo.getPartitionId(), partitionInfo);
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
         return new TableInfo(tableType, tableDataSize, partitionInfos);
     }

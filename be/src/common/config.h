@@ -152,8 +152,8 @@ CONF_mInt32(compact_threads, "4");
 CONF_Int32(compact_thread_pool_queue_size, "100");
 
 // The count of thread to replication
-CONF_Int32(replication_threads, "0");
-CONF_Int32(clear_expired_replcation_snapshots_interval_seconds, "3600");
+CONF_mInt32(replication_threads, "0");
+CONF_mInt32(clear_expired_replcation_snapshots_interval_seconds, "3600");
 
 // The log dir.
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
@@ -810,12 +810,12 @@ CONF_Int64(text_io_range_size, "16777216");
 
 // orc reader
 CONF_Bool(enable_orc_late_materialization, "true");
-CONF_Int32(orc_row_index_cache_max_size, "1048576");
-CONF_Int32(orc_stripe_cache_max_size, "8388608");
 CONF_Bool(enable_orc_libdeflate_decompression, "true");
-CONF_Int32(orc_file_cache_max_size, "8388608");
 CONF_Int32(orc_natural_read_size, "8388608");
 CONF_mBool(orc_coalesce_read_enable, "true");
+// For orc tiny stripe optimization
+// Default is 8MB for tiny stripe threshold size
+CONF_Int32(orc_tiny_stripe_threshold_size, "8388608");
 
 // parquet reader
 CONF_mBool(parquet_coalesce_read_enable, "true");
@@ -1212,4 +1212,7 @@ CONF_mInt64(pk_dump_interval_seconds, "3600"); // 1 hour
 
 // whether enable query profile for queries initiated by spark or flink
 CONF_mBool(enable_profile_for_external_plan, "false");
+
+// the max length supported for varchar type
+CONF_mInt32(olap_string_max_length, "1048576");
 } // namespace starrocks::config

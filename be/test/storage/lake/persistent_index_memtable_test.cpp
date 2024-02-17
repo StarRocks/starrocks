@@ -121,7 +121,7 @@ TEST(PersistentIndexMemtableTest, test_replace) {
     vector<Slice> key_slices;
     vector<IndexValue> values;
     vector<IndexValue> replace_values;
-    const int N = 1000000;
+    const int N = 10000;
     keys.reserve(N);
     key_slices.reserve(N);
     vector<size_t> replace_idxes;

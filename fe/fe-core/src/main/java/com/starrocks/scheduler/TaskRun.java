@@ -51,6 +51,7 @@ public class TaskRun implements Comparable<TaskRun> {
     public static final String FORCE = "FORCE";
     public static final String START_TASK_RUN_ID = "START_TASK_RUN_ID";
     public static final String IS_TEST = "__IS_TEST__";
+    private boolean isKilled = false;
 
     private long taskId;
 
@@ -137,6 +138,14 @@ public class TaskRun implements Comparable<TaskRun> {
 
     public String getUUID() {
         return taskRunId;
+    }
+
+    public void kill() {
+        isKilled = true;
+    }
+
+    public boolean isKilled() {
+        return isKilled;
     }
 
     public Map<String, String> refreshTaskProperties(ConnectContext ctx) {
@@ -229,6 +238,7 @@ public class TaskRun implements Comparable<TaskRun> {
         taskRunContext.setTaskType(type);
         taskRunContext.setStatus(status);
         taskRunContext.setExecuteOption(executeOption);
+        taskRunContext.setTaskRun(this);
 
         processor.processTaskRun(taskRunContext);
 
@@ -306,6 +316,7 @@ public class TaskRun implements Comparable<TaskRun> {
         status.setExpireTime(System.currentTimeMillis() + Config.task_runs_ttl_second * 1000L);
         status.getMvTaskRunExtraMessage().setExecuteOption(this.executeOption);
 
+        LOG.info("init task status, task:{}, query_id:{}, create_time:{}", task.getName(), queryId, status.getCreateTime());
         this.status = status;
         return status;
     }

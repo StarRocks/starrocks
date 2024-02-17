@@ -380,9 +380,7 @@ public:
     const SpillProcessChannelPtr spill_channel() const { return _spill_channel; }
     void set_spill_channel(SpillProcessChannelPtr channel) { _spill_channel = std::move(channel); }
 
-    auto& io_executor() { return *spill_channel()->io_executor(); }
-
-    [[nodiscard]] Status spill_aggregate_data(RuntimeState* state, std::function<StatusOr<ChunkPtr>()> chunk_provider);
+    Status spill_aggregate_data(RuntimeState* state, std::function<StatusOr<ChunkPtr>()> chunk_provider);
 
     bool has_pending_data() const { return _spiller != nullptr && _spiller->has_pending_data(); }
     bool has_pending_restore() const { return _spiller != nullptr && !_spiller->restore_finished(); }

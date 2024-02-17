@@ -4,6 +4,59 @@ displayed_sidebar: "English"
 
 # StarRocks version 3.2
 
+## 3.2.3
+
+Release date: February 8, 2024
+
+### New Features
+
+- [Preview] Supports hybrid row-column storage for tables. It allows better performance for high-concurrency, low-latency point lookups against Primary Key tables and partial data updates. Currently, this feature does not support modification via ALTER TABLE, changing Sort Key, and partial updates in column mode.
+- Supports backing up and restoring asynchronous materialized views.
+- Broker Load supports loading JSON-type data.
+- Supports query rewrite using asynchronous materialized views created upon views. Queries against a view can be rewritten based on materialized views that are created upon that view.
+- Supports CREATE OR REPLACE PIPE. [#37658](https://github.com/StarRocks/starrocks/pull/37658)
+
+### Behavior Changes
+
+- Added the session variable `enable_strict_order_by`. When this variable is set to the default value `TRUE`, an error is reported for such a query pattern: Duplicate alias is used in different expressions of the query and this alias is also a sorting field in ORDER BY, for example, `select distinct t1.* from tbl1 t1 order by t1.k1;`. The logic is the same as that in v2.3 and earlier. When this variable is set to `FALSE`, a loose deduplication mechanism is used, which processes such queries as valid SQL queries. [#37910](https://github.com/StarRocks/starrocks/pull/37910)
+- Added the session variable `enable_materialized_view_for_insert`, which controls whether materialized views rewrite the queries in INSERT INTO SELECT statements. The default value is `false`. [#37505](https://github.com/StarRocks/starrocks/pull/37505)
+- When a single query is executed within the Pipeline framework, its memory limit is now constrained by the variable `query_mem_limit` instead of `exec_mem_limit`. Setting the value of `query_mem_limit` to `0` indicates no limit. [#34120](https://github.com/StarRocks/starrocks/pull/34120) 
+
+### Parameter Changes
+
+- Added the FE configuration item `http_worker_threads_num`, which specifies the number of threads for HTTP server to deal with HTTP requests. The default value is `0`. If the value for this parameter is set to a negative value or `0`, the actual thread number is twice the number of CPU cores. [#37530](https://github.com/StarRocks/starrocks/pull/37530)
+- Added the BE configuration item `lake_pk_compaction_max_input_rowsets`, which controls the maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data StarRocks cluster. This helps optimize resource consumption for compaction tasks. [#39611](https://github.com/StarRocks/starrocks/pull/39611)
+- Added the session variable `connector_sink_compression_codec`, which specifies the compression algorithm used for writing data into Hive tables or Iceberg tables, or exporting data with Files(). Valid algorithms include GZIP, BROTLI, ZSTD, and LZ4. [#37912](https://github.com/StarRocks/starrocks/pull/37912)
+- Added the FE configuration item `routine_load_unstable_threshold_second`. [#36222](https://github.com/StarRocks/starrocks/pull/36222)
+- Added the BE configuration item `pindex_major_compaction_limit_per_disk` to configure the maximum concurrency of compaction on a disk. This addresses the issue of uneven I/O across disks due to compaction. This issue can cause excessively high I/O for certain disks. The default value is `1`. [#36681](https://github.com/StarRocks/starrocks/pull/36681)
+- Added the BE configuration item `enable_lazy_delta_column_compaction`. The default value is `true`, indicating that StarRocks does not perform frequent compaction operations on delta columns. [#36654](https://github.com/StarRocks/starrocks/pull/36654)
+- Added the FE configuration item `default_mv_refresh_immediate`, which specifies whether to immediately refresh the materialized view after the materialized view is created. The default value is `true`. [#37093](https://github.com/StarRocks/starrocks/pull/37093)
+- Changed the default value of the FE configuration item `default_mv_refresh_partition_num`to `1`. This indicates that when multiple partitions need to be updated during a materialized view refresh, the task will be split in batches, refreshing only one partition at a time. This helps reduce resource consumption during each refresh. [#36560](https://github.com/StarRocks/starrocks/pull/36560)
+
+### Improvements
+
+- Added date formats `yyyy-MM-ddTHH:mm` and `yyyy-MM-dd HH:mm` to support TIMESTAMP partition fields in Apache Iceberg tables. [#39986](https://github.com/StarRocks/starrocks/pull/39986)
+- Added Data Cache-related metrics to the monitoring API. [#40375](https://github.com/StarRocks/starrocks/pull/40375)
+- Optimized BE log printing to prevent too many irrelevant logs. [#22820](https://github.com/StarRocks/starrocks/pull/22820) [#36187](https://github.com/StarRocks/starrocks/pull/36187)
+- Added the field `storage_medium` to the view `information_schema.be_tablets`. [#37070](https://github.com/StarRocks/starrocks/pull/37070)
+- Supports `SET_VAR` in multiple sub-queries. [#36871](https://github.com/StarRocks/starrocks/pull/36871)
+- A new field `LatestSourcePosition` is added to the return result of SHOW ROUTINE LOAD to record the position of the latest message in each partition of the Kafka topic, helping check the latencies of data loading. [#38298](https://github.com/StarRocks/starrocks/pull/38298)
+- When the string on the right side of the LIKE operator within the WHERE clause does not include `%` or `_`, the LIKE operator is converted into the `=` operator. [#37515](https://github.com/StarRocks/starrocks/pull/37515)
+- The default retention period of trash files is changed to 1 day from the original 3 days. [#37113](https://github.com/StarRocks/starrocks/pull/37113)
+- Supports collecting statistics from Iceberg tables with Partition Transform. [#39907](https://github.com/StarRocks/starrocks/pull/39907)
+- The scheduling policy for Routine Load is optimized, so that slow tasks do not block the execution of the other normal tasks. [#37638](https://github.com/StarRocks/starrocks/pull/37638)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- The execution of ANALYZE TABLE gets stuck occasionally. [#36836](https://github.com/StarRocks/starrocks/pull/36836)
+- The memory consumption by PageCache exceeds the threshold specified by the BE dynamic parameter `storage_page_cache_limit` in certain circumstances. [#37740](https://github.com/StarRocks/starrocks/pull/37740)
+- Hive metadata in Hive catalogs is not automatically refreshed when new fields are added to Hive tables. [#37549](https://github.com/StarRocks/starrocks/pull/37549)
+- In some cases, `bitmap_to_string` may return incorrect results due to data type overflow. [#37405](https://github.com/StarRocks/starrocks/pull/37405)
+- When `SELECT ... FROM ... INTO OUTFILE` is executed to export data into CSV files, the error "Unmatched number of columns" is reported if the FROM clause contains multiple constants. [#38045](https://github.com/StarRocks/starrocks/pull/38045)
+- In some cases, querying semi-structured data in tables may cause BEs to crash. [#40208](https://github.com/StarRocks/starrocks/pull/40208)
+
 ## 3.2.2
 
 Release date: December 30, 2023

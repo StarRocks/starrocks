@@ -720,24 +720,30 @@ public class LocalMetastore implements ConnectorMetadata {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
 
-        AlterDatabaseQuotaStmt.QuotaType quotaType = stmt.getQuotaType();
-        if (quotaType == AlterDatabaseQuotaStmt.QuotaType.DATA) {
-            db.setDataQuotaWithLock(stmt.getQuota());
-        } else if (quotaType == AlterDatabaseQuotaStmt.QuotaType.REPLICA) {
-            db.setReplicaQuotaWithLock(stmt.getQuota());
-        }
-        long quota = stmt.getQuota();
-        DatabaseInfo dbInfo = new DatabaseInfo(db.getFullName(), "", quota, quotaType);
+        DatabaseInfo dbInfo = new DatabaseInfo(db.getFullName(), "", stmt.getQuota(), stmt.getQuotaType());
         GlobalStateMgr.getCurrentState().getEditLog().logAlterDb(dbInfo);
+
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
+        try {
+            replayAlterDatabaseQuota(dbInfo);
+        } finally {
+            locker.unLockDatabase(db, LockType.WRITE);
+        }
     }
 
-    public void replayAlterDatabaseQuota(String dbName, long quota, AlterDatabaseQuotaStmt.QuotaType quotaType) {
-        Database db = getDb(dbName);
+    public void replayAlterDatabaseQuota(DatabaseInfo dbInfo) {
+        String dbName = dbInfo.getDbName();
+        LOG.info("Begin to unprotect alter db info {}", dbName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        AlterDatabaseQuotaStmt.QuotaType quotaType = dbInfo.getQuotaType();
+        long quota = dbInfo.getQuota();
+
         Preconditions.checkNotNull(db);
         if (quotaType == AlterDatabaseQuotaStmt.QuotaType.DATA) {
-            db.setDataQuotaWithLock(quota);
+            db.setDataQuota(quota);
         } else if (quotaType == AlterDatabaseQuotaStmt.QuotaType.REPLICA) {
-            db.setReplicaQuotaWithLock(quota);
+            db.setReplicaQuota(quota);
         }
     }
 
@@ -765,7 +771,13 @@ public class LocalMetastore implements ConnectorMetadata {
                 throw new DdlException("Database name[" + newFullDbName + "] is already used");
             }
             // 1. rename db
-            db.setNameWithLock(newFullDbName);
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.WRITE);
+            try {
+                db.setName(newFullDbName);
+            } finally {
+                locker.unLockDatabase(db, LockType.WRITE);
+            }
 
             // 2. add to meta. check again
             fullNameToDb.remove(fullDbName);
@@ -2466,7 +2478,6 @@ public class LocalMetastore implements ConnectorMetadata {
             chooseBackendsArbitrary = true;
         }
 
-
         try {
             if (chooseBackendsArbitrary) {
                 backendsPerBucketSeq = Lists.newArrayList();
@@ -2538,7 +2549,7 @@ public class LocalMetastore implements ConnectorMetadata {
         List<Long> chosenBackendIds =
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getNodeSelector()
                         .seqChooseBackendIdsByStorageMedium(replicationNum,
-                        true, true, locReq, storageMedium);
+                                true, true, locReq, storageMedium);
         if (CollectionUtils.isEmpty(chosenBackendIds)) {
             throw new DdlException(
                     "Failed to find enough hosts with storage medium " + storageMedium +
@@ -2779,7 +2790,9 @@ public class LocalMetastore implements ConnectorMetadata {
                 LOG.warn("replay delete replica failed, db is null, meta: {}", meta);
                 continue;
             }
-            db.writeLock();
+
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.WRITE);
             try {
                 OlapTable olapTable = (OlapTable) getTableIncludeRecycleBin(db, meta.getTableId());
                 if (olapTable == null) {
@@ -2803,7 +2816,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
                 tablet.deleteReplicaByBackendId(info.getBackendId());
             } finally {
-                db.writeUnlock();
+                locker.unLockDatabase(db, LockType.WRITE);
             }
         }
     }
@@ -3147,22 +3160,18 @@ public class LocalMetastore implements ConnectorMetadata {
                 // remove this transient variable
                 properties.remove(PropertyAnalyzer.PROPERTY_MV_RANDOMIZE_START);
             }
-            if (asyncRefreshSchemeDesc.isDefineStartTime() || randomizeStart == -1) {
-                asyncRefreshContext.setStartTime(Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
-            } else if (asyncRefreshSchemeDesc.getIntervalLiteral() != null) {
-                // randomize the start time if not specified manually, to avoid refresh conflicts
-                // default random interval is min(300s, INTERVAL/2)
-                // user could specify it through mv_randomize_start
-                IntervalLiteral interval = asyncRefreshSchemeDesc.getIntervalLiteral();
-                long period = ((IntLiteral) interval.getValue()).getLongValue();
-                TimeUnit timeUnit =
-                        TimeUtils.convertUnitIdentifierToTimeUnit(interval.getUnitIdentifier().getDescription());
-                long intervalSeconds = TimeUtils.convertTimeUnitValueToSecond(period, timeUnit);
-                long currentTimeSecond = Utils.getLongFromDateTime(LocalDateTime.now());
-                long randomInterval = randomizeStart == 0 ? Math.min(300, intervalSeconds / 2) : randomizeStart;
-                long random = ThreadLocalRandom.current().nextLong(randomInterval);
-                long randomizedStart = currentTimeSecond + random;
 
+            long random = getRandomStart(asyncRefreshSchemeDesc.getIntervalLiteral(), randomizeStart);
+            if (asyncRefreshSchemeDesc.isDefineStartTime() || randomizeStart == -1) {
+                long definedStartTime = Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime());
+                // Add random set only if mv_random_start > 0 when user has already set the start time
+                if (randomizeStart > 0) {
+                    definedStartTime += random;
+                }
+                asyncRefreshContext.setStartTime(definedStartTime);
+            } else if (asyncRefreshSchemeDesc.getIntervalLiteral() != null) {
+                long currentTimeSecond = Utils.getLongFromDateTime(LocalDateTime.now());
+                long randomizedStart = currentTimeSecond + random;
                 asyncRefreshContext.setStartTime(randomizedStart);
             }
             if (asyncRefreshSchemeDesc.getIntervalLiteral() != null) {
@@ -3330,6 +3339,22 @@ public class LocalMetastore implements ConnectorMetadata {
         // NOTE: The materialized view has been added to the database, and the following procedure cannot throw exception.
         createTaskForMaterializedView(dbName, materializedView, optHints);
         DynamicPartitionUtil.registerOrRemovePartitionTTLTable(db.getId(), materializedView);
+    }
+
+    private long getRandomStart(IntervalLiteral interval,
+                                long randomizeStart) throws DdlException {
+        if (interval == null || randomizeStart == -1) {
+            return 0;
+        }
+        // randomize the start time if not specified manually, to avoid refresh conflicts
+        // default random interval is min(300s, INTERVAL/2)
+        // user could specify it through mv_randomize_start
+        long period = ((IntLiteral) interval.getValue()).getLongValue();
+        TimeUnit timeUnit =
+                TimeUtils.convertUnitIdentifierToTimeUnit(interval.getUnitIdentifier().getDescription());
+        long intervalSeconds = TimeUtils.convertTimeUnitValueToSecond(period, timeUnit);
+        long randomInterval = randomizeStart == 0 ? Math.min(300, intervalSeconds / 2) : randomizeStart;
+        return ThreadLocalRandom.current().nextLong(randomInterval);
     }
 
     private DataProperty analyzeMVDataProperties(Database db,
@@ -3735,7 +3760,7 @@ public class LocalMetastore implements ConnectorMetadata {
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         Task refreshTask = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
         if (refreshTask != null) {
-            taskManager.killTask(refreshTask.getName(), false);
+            taskManager.killTask(refreshTask.getName(), true);
         }
     }
 

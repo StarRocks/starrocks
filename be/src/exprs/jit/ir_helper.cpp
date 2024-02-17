@@ -64,11 +64,9 @@ StatusOr<llvm::Type*> IRHelper::logical_to_ir_type(llvm::IRBuilder<>& b, const L
     }
 }
 
-template <typename Type>
-StatusOr<llvm::Value*> IRHelper::create_ir_number(llvm::IRBuilder<>& b, const LogicalType& type, Type value) {
+StatusOr<llvm::Value*> IRHelper::create_ir_number(llvm::IRBuilder<>& b, const LogicalType& type, int64_t value) {
     switch (type) {
     case TYPE_BOOLEAN:
-        return b.getInt8(value);
     case TYPE_TINYINT:
         return b.getInt8(value);
     case TYPE_SMALLINT:
@@ -102,7 +100,7 @@ StatusOr<llvm::Value*> IRHelper::create_ir_number(llvm::IRBuilder<>& b, const Lo
     }
 }
 
-StatusOr<llvm::Value*> IRHelper::create_ir_number(llvm::IRBuilder<>& b, const LogicalType& type, const uint8_t* value) {
+StatusOr<llvm::Value*> IRHelper::load_ir_number(llvm::IRBuilder<>& b, const LogicalType& type, const uint8_t* value) {
     switch (type) {
     case TYPE_BOOLEAN:
         return b.getInt8(reinterpret_cast<const uint8_t*>(value)[0]);

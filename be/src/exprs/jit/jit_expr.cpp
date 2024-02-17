@@ -18,13 +18,13 @@
 #include <vector>
 
 #include "column/chunk.h"
+#include "column/column_helper.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
 #include "exprs/anyval_util.h"
 #include "exprs/expr.h"
 #include "exprs/function_context.h"
 #include "exprs/jit/jit_engine.h"
-#include "exprs/jit/jit_functions.h"
 #include "llvm/IR/IRBuilder.h"
 
 namespace starrocks {
@@ -37,10 +37,10 @@ JITExpr* JITExpr::create(ObjectPool* pool, Expr* expr) {
     node.type = expr->type().to_thrift();
     node.output_scale = expr->output_scale();
     node.is_monotonic = expr->is_monotonic();
-    return pool->add(new JITExpr(pool, node, expr));
+    return pool->add(new JITExpr(node, expr));
 }
 
-JITExpr::JITExpr(ObjectPool* pool, const TExprNode& node, Expr* expr) : Expr(node), _pool(pool), _expr(expr) {
+JITExpr::JITExpr(const TExprNode& node, Expr* expr) : Expr(node), _expr(expr) {
     _expr->get_uncompilable_exprs(_children);
 }
 
@@ -75,6 +75,9 @@ Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
     }
     if (_jit_function != nullptr) {
         _jit_expr_name = _expr->debug_string();
+        if (_jit_expr_name.empty()) {
+            return Status::RuntimeError("[JIT] expr debug_string() is empty");
+        }
     } else {
         _children.clear();
         _children.push_back(_expr);
@@ -105,24 +108,22 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
     };
     size_t num_rows = 0;
     for (Expr* child : _children) {
-        // unfolding const columns.
         ColumnPtr column = EVALUATE_NULL_IF_ERROR(context, child, ptr);
-        args.emplace_back(column);
         num_rows = std::max<size_t>(num_rows, column->size());
+        args.emplace_back(column);
     }
-    if (ptr == nullptr) {
-        if (is_constant() && num_rows == 0) {
-            num_rows = 1;
-        }
-    } else {
+    if (ptr != nullptr) {
         num_rows = ptr->num_rows();
+    }
+    auto result_column = ColumnHelper::create_column(type(), is_nullable(), false, num_rows);
+    if (num_rows == 0) {
+        return result_column;
     }
     Columns backup_args;
     backup_args.reserve(_children.size() + 1);
     for (auto i = 0; i < _children.size(); i++) {
         auto column = args[i];
         auto child = _children[i];
-
         if (UNLIKELY((column->is_constant() ^ child->is_constant()) ||
                      (column->is_nullable() ^ child->is_nullable()))) {
             LOG(INFO) << "[JIT INPUT] expr const = " << child->is_constant() << " null= " << child->is_nullable()
@@ -133,7 +134,8 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
         if (column->is_constant()) {
             column = ColumnHelper::unfold_const_column(child->type(), num_rows, column);
         }
-        DCHECK(num_rows == column->size());
+        DCHECK(num_rows == column->size())
+                << "size unequal " + std::to_string(num_rows) + " != " + std::to_string(column->size());
 
         if (child->is_nullable() && !column->is_nullable()) {
             column = NullableColumn::create(column, NullColumn::create(column->size(), 0));
@@ -142,14 +144,17 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
                 return Status::RuntimeError("[JIT]a non-nullable column has null values");
             }
         }
-
         unfold_ptr(column);
         backup_args.emplace_back(column);
     }
 
-    auto result_column = ColumnHelper::create_column(type(), is_nullable(), false, num_rows, false);
     unfold_ptr(result_column);
+    // inputs are not empty.
     _jit_function(num_rows, jit_columns.data());
+    //TODO: _jit_function return has_null
+    if (is_nullable()) {
+        down_cast<NullableColumn*>(result_column.get())->update_has_null();
+    }
     return result_column;
 }
 

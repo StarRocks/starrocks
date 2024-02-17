@@ -49,11 +49,11 @@ public:
         _stream = std::move(stream);
     }
 
-    template <class TaskExecutor, class MemGuard>
-    StatusOr<ChunkPtr> restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard);
+    template <class TaskExecutor = spill::IOTaskExecutor, class MemGuard>
+    StatusOr<ChunkPtr> restore(RuntimeState* state, MemGuard&& guard);
 
-    template <class TaskExecutor, class MemGuard>
-    [[nodiscard]] Status trigger_restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard);
+    template <class TaskExecutor = spill::IOTaskExecutor, class MemGuard>
+    Status trigger_restore(RuntimeState* state, MemGuard&& guard);
 
     bool has_output_data() { return _stream && _stream->is_ready(); }
 
@@ -147,10 +147,10 @@ public:
     }
 
     template <class TaskExecutor, class MemGuard>
-    Status spill(RuntimeState* state, const ChunkPtr& chunk, TaskExecutor&& executor, MemGuard&& guard);
+    Status spill(RuntimeState* state, const ChunkPtr& chunk, MemGuard&& guard);
 
     template <class TaskExecutor, class MemGuard>
-    Status flush(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard);
+    Status flush(RuntimeState* state, MemGuard&& guard);
 
     void prepare(RuntimeState* state) override;
 
@@ -179,7 +179,7 @@ public:
     Status yieldable_flush_task(workgroup::YieldContext& ctx, RuntimeState* state, const MemTablePtr& mem_table);
 
 public:
-    struct FlushContext {
+    struct FlushContext : public SpillIOTaskContext {
         BlockPtr block;
     };
     using FlushContextPtr = std::shared_ptr<FlushContext>;
@@ -241,13 +241,13 @@ public:
     }
 
     template <class TaskExecutor, class MemGuard>
-    Status spill(RuntimeState* state, const ChunkPtr& chunk, TaskExecutor&& executor, MemGuard&& guard);
+    Status spill(RuntimeState* state, const ChunkPtr& chunk, MemGuard&& guard);
 
     template <class TaskExecutor, class MemGuard>
-    Status flush(RuntimeState* state, bool is_final_flush, TaskExecutor&& executor, MemGuard&& guard);
+    Status flush(RuntimeState* state, bool is_final_flush, MemGuard&& guard);
 
     template <class TaskExecutor, class MemGuard>
-    Status flush_if_full(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard);
+    Status flush_if_full(RuntimeState* state, MemGuard&& guard);
 
     void get_spill_partitions(std::vector<const SpillPartitionInfo*>* partitions) override;
 
@@ -298,7 +298,7 @@ public:
     int64_t mem_consumption() const { return _mem_tracker->consumption(); }
 
 public:
-    struct PartitionedFlushContext {
+    struct PartitionedFlushContext : public SpillIOTaskContext {
         // used in spill stage
         struct SpillStageContext {
             size_t processing_idx{};

@@ -24,6 +24,7 @@ public class MvRewriteOnTpcdsTest extends MaterializedViewTestBase {
     public static void beforeClass() throws Exception {
         TPCDSPlanTestBase.beforeClass();
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
+        connectContext.getSessionVariable().setNewPlanerAggStage(1);
     }
 
     @Test
