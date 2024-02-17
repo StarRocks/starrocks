@@ -221,7 +221,7 @@ public:
         runtime_state->set_jit_level(-1);
         ObjectPool pool;
         auto* jit_expr = JITExpr::create(&pool, expr);
-
+        jit_expr->set_uncompilable_children(runtime_state);
         ExprContext exprContext(jit_expr);
         std::vector<ExprContext*> expr_ctxs = {&exprContext};
 
@@ -245,6 +245,7 @@ public:
         runtime_state->set_jit_level(-1);
         ObjectPool pool;
         auto* jit_expr = JITExpr::create(&pool, expr);
+        jit_expr->set_uncompilable_children(runtime_state);
         ExprContext exprContext(jit_expr);
         std::vector<ExprContext*> expr_ctxs = {&exprContext};
 
