@@ -44,9 +44,7 @@ public:
         return _delegate->deep_copy(dest, src, mem_pool);
     }
 
-    void direct_copy(void* dest, const void* src, MemPool* mem_pool) const override {
-        _delegate->direct_copy(dest, src, mem_pool);
-    }
+    void direct_copy(void* dest, const void* src) const override { _delegate->direct_copy(dest, src); }
 
     template <typename From, typename To>
     static inline Status to_decimal(const From* src, To* dst, int src_precision, int src_scale, int dst_precision,
