@@ -1698,7 +1698,6 @@ public class StmtExecutor {
             context.getMysqlChannel().flush();
             context.getState().setStateType(MysqlStateType.NOOP);
         }
-        context.getState().setEof();
     }
 
     public void setQueryStatistics(PQueryStatistics statistics) {
