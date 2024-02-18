@@ -354,9 +354,8 @@ Status HdfsOrcScanner::build_stripes(orc::Reader* reader, std::vector<DiskRange>
         int64_t offset = stripeInfo.offset();
 
         if (offset >= scan_start && offset < scan_end) {
-            s.offset = offset;
-            s.length = stripeInfo.datalength() + stripeInfo.indexlength() + stripeInfo.footerlength();
-            stripes->emplace_back(s);
+            int64_t length = stripeInfo.datalength() + stripeInfo.indexlength() + stripeInfo.footerlength();
+            stripes->emplace_back(DiskRange{offset, length});
             _app_stats.orc_stripe_sizes.push_back(s.length);
         }
     }
@@ -484,7 +483,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         return Status::OK();
     }
 
-    orc_hdfs_file_stream->setStripes(std::move(stripes));
+    RETURN_IF_ERROR(build_io_ranges(orc_hdfs_file_stream, stripes)
     RETURN_IF_ERROR(resolve_columns(reader.get()));
     if (_should_skip_file) {
         return Status::OK();
