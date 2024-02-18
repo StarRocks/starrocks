@@ -164,6 +164,10 @@ public class PipeAnalyzer {
         stmt.setInsertSql(insertSql);
         InsertAnalyzer.analyze(insertStmt, context);
 
+        if (stmt.getPipeName().getDbName() == null) {
+            stmt.getPipeName().setDbName(insertStmt.getTableName().getDb());
+        }
+
         // Must be the form: insert into <target_table> select <projection> from <source_table> [where_clause]
         if (!Strings.isNullOrEmpty(insertStmt.getLabel())) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_PIPE_STATEMENT, "INSERT INTO cannot with label");
@@ -186,6 +190,12 @@ public class PipeAnalyzer {
         Table rawTable = tableFunctionRelation.getTable();
         if (rawTable == null || rawTable.getType() != Table.TableType.TABLE_FUNCTION) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_PIPE_STATEMENT, "only support FileTableFunction");
+        }
+
+        if (!stmt.getPipeName().getDbName().equals(insertStmt.getTableName().getDb())) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_PIPE_STATEMENT,
+                    String.format("pipe's database [%s] and target table's database [%s] should be the same",
+                            stmt.getPipeName().getDbName(), insertStmt.getTableName().getDb()));
         }
 
         TableFunctionTable sourceTable = (TableFunctionTable) rawTable;
