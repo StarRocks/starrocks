@@ -46,12 +46,9 @@ public class PrepareAnalyzer {
             if (!(innerStmt instanceof QueryStatement)) {
                 throw new ValidateException("Invalid statement type for prepared statement", ErrorType.USER_ERROR);
             }
-            try {
-                Analyzer.analyze(innerStmt, ConnectContext.get());
-            } catch (SemanticException ignored) {
-                // ignore analyze failure, since not all expressions are supported
-                LOG.warn("analyze failed when prepare", ignored);
-            }
+            // Analyzing when preparing is only used to return the correct resultset meta, but not to generate an
+            // execution plan
+            Analyzer.analyze(innerStmt, ConnectContext.get());
         }
     }
 
