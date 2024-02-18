@@ -85,6 +85,10 @@ void JitObjectCache::notifyObjectCompiled(const llvm::Module* M, llvm::MemoryBuf
 }
 
 Status JitObjectCache::register_func(JITScalarFunction func) {
+    bool cached = JITEngine::get_instance()->lookup_function(this);
+    if (cached) {
+        return Status::OK();
+    }
     _func = func;
     if (_obj_code == nullptr) {
         return Status::JitCompileError("JIT register must wait notifyObjectCompiled()");
@@ -111,13 +115,21 @@ Status JitObjectCache::register_func(JITScalarFunction func) {
 }
 
 std::unique_ptr<llvm::MemoryBuffer> JitObjectCache::getObject(const llvm::Module* M) {
+// TODO: why get invalid handle?
+#if 0
     auto* handle = _lru_cache->lookup(_cache_key);
     if (handle != nullptr) {
-        auto cached_obj = ((JitCacheEntry*)handle)->obj_buff;
+        auto& cached_obj = ((JitCacheEntry*)handle)->obj_buff;
+        if (cached_obj == nullptr) {
+            LOG(ERROR) << "jit obj is null";
+            throw std::runtime_error("jit obj is null");
+        }
         std::unique_ptr<llvm::MemoryBuffer> cached_buffer =
                 cached_obj->getMemBufferCopy(cached_obj->getBuffer(), cached_obj->getBufferIdentifier());
+        _lru_cache->release(handle);
         return cached_buffer;
     }
+#endif
     return nullptr;
 }
 
@@ -168,6 +180,10 @@ Status JITEngine::compile_scalar_function(ExprContext* context, JitObjectCache* 
     RETURN_IF_ERROR(generate_scalar_function_ir(context, *engine->module(), expr, uncompilable_exprs));
     // optimize module and add module
     RETURN_IF_ERROR(engine->optimize_and_finalize_module());
+    cached = instance->lookup_function(func_cache);
+    if (cached) {
+        return Status::OK();
+    }
     ASSIGN_OR_RETURN(auto function, engine->get_compiled_func(func_cache->get_func_name()));
     RETURN_IF_ERROR(func_cache->register_func(function));
     return Status::OK();
@@ -229,7 +245,7 @@ Status JITEngine::generate_scalar_function_ir(ExprContext* context, llvm::Module
     counter_phi->addIncoming(llvm::ConstantInt::get(size_type, 0), entry);
 
     JITContext jc = {counter_phi, columns, module, b, 0};
-    ASSIGN_OR_RETURN(auto result, expr->generate_ir_impl(context, &jc))
+    ASSIGN_OR_RETURN(auto result, expr->generate_ir(context, &jc))
 
     // Pseudo code:
     // values_last[counter] = result_value;
@@ -364,6 +380,7 @@ llvm::Module* JITEngine::Engine::module() const {
 }
 
 static void optimize_module(llvm::Module& module, llvm::TargetIRAnalysis target_analysis) {
+#if 0
     // Setup an optimiser pipeline
     llvm::PassBuilder pass_builder;
     llvm::LoopAnalysisManager loop_am;
@@ -380,25 +397,65 @@ static void optimize_module(llvm::Module& module, llvm::TargetIRAnalysis target_
     pass_builder.registerLoopAnalyses(loop_am);
     pass_builder.crossRegisterProxies(loop_am, function_am, cgscc_am, module_am);
 
-    pass_builder.registerPipelineStartEPCallback(
-            [&](llvm::ModulePassManager& module_pm, llvm::OptimizationLevel Level) {
-                module_pm.addPass(llvm::ModuleInlinerPass());
+    pass_builder.registerPipelineStartEPCallback([&](llvm::ModulePassManager& module_pm,
+                                                     llvm::OptimizationLevel Level) {
+        module_pm.addPass(llvm::ModuleInlinerPass());
 
-                llvm::FunctionPassManager function_pm;
-                function_pm.addPass(llvm::InstCombinePass());
-                function_pm.addPass(llvm::PromotePass());
-                function_pm.addPass(llvm::GVNPass());
-                function_pm.addPass(llvm::NewGVNPass());
-                function_pm.addPass(llvm::SimplifyCFGPass());
-                function_pm.addPass(llvm::LoopVectorizePass());
-                function_pm.addPass(llvm::SLPVectorizerPass());
-                module_pm.addPass(llvm::createModuleToFunctionPassAdaptor(std::move(function_pm)));
+        llvm::FunctionPassManager function_pm;
+        function_pm.addPass(llvm::InstCombinePass());
+        function_pm.addPass(llvm::PromotePass());
+        function_pm.addPass(llvm::GVNPass());
+        function_pm.addPass(llvm::NewGVNPass());
+        function_pm.addPass(llvm::SimplifyCFGPass());
+        function_pm.addPass(llvm::LoopVectorizePass());
+        function_pm.addPass(llvm::SLPVectorizerPass());
+        module_pm.addPass(llvm::createModuleToFunctionPassAdaptor(std::move(function_pm)));
 
-                module_pm.addPass(llvm::GlobalOptPass());
-            });
+        module_pm.addPass(llvm::GlobalOptPass());
+    });
 
-    pass_builder.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O3).run(module, module_am);
+    pass_builder.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O3)
+            .run(module, module_am);
 }
+#elif 0
+    std::unique_ptr<llvm::legacy::PassManager> pass_manager(new llvm::legacy::PassManager());
+
+    pass_manager->add(llvm::createTargetTransformInfoWrapperPass(std::move(target_analysis)));
+    pass_manager->add(llvm::createFunctionInliningPass());
+    pass_manager->add(llvm::createInstructionCombiningPass());
+    pass_manager->add(llvm::createPromoteMemoryToRegisterPass());
+    pass_manager->add(llvm::createGVNPass());
+    pass_manager->add(llvm::createNewGVNPass());
+    pass_manager->add(llvm::createCFGSimplificationPass());
+    pass_manager->add(llvm::createLoopVectorizePass());
+    pass_manager->add(llvm::createSLPVectorizerPass());
+    pass_manager->add(llvm::createGlobalOptimizerPass());
+
+    // run the optimiser
+    llvm::PassManagerBuilder pass_builder;
+    pass_builder.OptLevel = 3;
+    pass_builder.populateModulePassManager(*pass_manager);
+    pass_manager->run(module);
+}
+#else
+    llvm::legacy::FunctionPassManager fpm(&module);
+    llvm::PassManagerBuilder _pass_manager_builder;
+    llvm::legacy::PassManager _pass_manager;
+    _pass_manager_builder.OptLevel = 3;
+    _pass_manager_builder.SLPVectorize = true;
+    _pass_manager_builder.LoopVectorize = true;
+    _pass_manager_builder.VerifyInput = true;
+    _pass_manager_builder.VerifyOutput = true;
+    _pass_manager_builder.populateModulePassManager(_pass_manager);
+    _pass_manager_builder.populateFunctionPassManager(fpm);
+
+    fpm.doInitialization();
+    for (auto& function : module) {
+        fpm.run(function);
+    }
+    fpm.doFinalization();
+}
+#endif
 
 // Optimise and compile the module.
 Status JITEngine::Engine::optimize_and_finalize_module() {
