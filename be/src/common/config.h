@@ -1215,4 +1215,7 @@ CONF_mBool(enable_profile_for_external_plan, "false");
 
 // the max length supported for varchar type
 CONF_mInt32(olap_string_max_length, "1048576");
+
+// jit LRU cache size for total 32 shards.
+CONF_mInt64(jit_lru_cache_size, "1073741824");
 } // namespace starrocks::config
