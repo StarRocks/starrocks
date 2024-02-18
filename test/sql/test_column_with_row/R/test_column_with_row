@@ -84,3 +84,31 @@ DROP TABLE demo.t1 FORCE;
 -- result:
 []
 -- !result
+CREATE TABLE IF NOT EXISTS demo.t2(
+                                      k1 int,
+                                      v1 int
+    )
+    PRIMARY KEY (k1)
+    distributed by hash(k1)
+    order by (v1)
+    PROPERTIES (
+                   "replication_num" = "1",
+                   "storage_type" = "column_with_row"
+               );
+-- result:
+[]
+-- !result
+INSERT INTO demo.t2(k1, v1) VALUES
+                                            (1, 2),
+                                            (2, 3);
+-- result:
+[]
+-- !result
+set enable_short_circuit = true;
+-- result:
+[]
+-- !result
+select * from demo.t2 where k1 = 2;
+-- result:
+2	3
+-- !result

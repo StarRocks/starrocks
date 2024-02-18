@@ -271,6 +271,14 @@ public:
     void generate_sort_key_idxes();
     const std::vector<ColumnId> sort_key_idxes() const { return _sort_key_idxes; }
 
+    const std::vector<ColumnId> key_idxes() const {
+        std::vector<ColumnId> key_idxes;
+        for (int i = 0; i < _num_key_columns; i++) {
+            key_idxes.emplace_back(i);
+        }
+        return key_idxes;
+    }
+
     size_t num_columns() const { return _cols.size(); }
     size_t num_key_columns() const { return _num_key_columns; }
     size_t num_short_key_columns() const { return _num_short_key_columns; }
@@ -357,6 +365,7 @@ private:
     std::vector<ColumnId> _sort_key_idxes;
     std::vector<ColumnUID> _sort_key_uids;
     std::unordered_set<ColumnUID> _sort_key_uids_set;
+    std::vector<ColumnId> _key_idxes;
 
     uint8_t _keys_type = static_cast<uint8_t>(DUP_KEYS);
     CompressionTypePB _compression_type = CompressionTypePB::LZ4_FRAME;

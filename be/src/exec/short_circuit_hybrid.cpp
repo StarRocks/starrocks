@@ -116,7 +116,7 @@ Status ShortCircuitHybridScanNode::get_next(RuntimeState* state, ChunkPtr* chunk
 Status ShortCircuitHybridScanNode::_process_key_chunk() {
     DCHECK(_tablets.size() > 0);
     _tablet_schema = _tablets[0]->tablet_schema();
-    auto& key_column_cids = _tablet_schema->sort_key_idxes();
+    auto& key_column_cids = _tablet_schema->key_idxes();
     auto key_schema = ChunkHelper::convert_schema(_tablet_schema, key_column_cids);
 
     _key_chunk = ChunkHelper::new_chunk(key_schema, _num_rows);
