@@ -112,7 +112,8 @@ public class AnalyzeAlterTableStatementTest {
         Assert.assertEquals(connectContext.getState().getErrType(), QueryState.ErrType.ANALYSIS_ERR);
         connectContext.getState().getErrorMessage()
                 .contains(
-                        "BITMAP index only used in columns of DUP_KEYS/PRIMARY_KEYS table or key columns of UNIQUE_KEYS/AGG_KEYS table");
+                        "BITMAP index only used in columns of " +
+                                "DUP_KEYS/PRIMARY_KEYS table or key columns of UNIQUE_KEYS/AGG_KEYS table");
     }
 
     @Test
