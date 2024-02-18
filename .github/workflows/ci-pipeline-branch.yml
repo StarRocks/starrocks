@@ -200,6 +200,7 @@ jobs:
           name: BE UT LOG
           path: ${{ steps.run_ut.outputs.RES_LOG }}
           retention-days: 1
+          overwrite: true
 
       - name: Clean ENV
         if: always()
@@ -412,6 +413,7 @@ jobs:
           name: FE UT LOG
           path: ${{ steps.run_ut.outputs.RES_LOG }}
           retention-days: 1
+          overwrite: true
 
       - name: Clean ENV
         if: always()
@@ -445,6 +447,7 @@ jobs:
           name: pr_num
           path: ./pr_num.txt
           retention-days: 3
+          overwrite: true
 
       - name: Upload the PR HEAD REF
         uses: actions/upload-artifact@v4

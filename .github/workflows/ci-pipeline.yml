@@ -47,6 +47,7 @@ jobs:
           name: pr_num
           path: ./pr_num.txt
           retention-days: 3
+          overwrite: true
 
       - name: Check Blacklist
         id: check_blacklist
@@ -195,6 +196,7 @@ jobs:
           name: BE UT LOG
           path: ${{ steps.run_ut.outputs.BE_LOG }}
           retention-days: 1
+          overwrite: true
 
       - name: Clean ENV
         if: always()
@@ -447,6 +449,7 @@ jobs:
           name: FE UT LOG
           path: ${{ steps.run_ut.outputs.RES_LOG }}
           retention-days: 1
+          overwrite: true
 
       - name: Clean ENV
         if: always()
@@ -550,6 +553,7 @@ jobs:
           name: base_version
           path: ./base_version.txt
           retention-days: 3
+          overwrite: true
 
       - name: clean ECI
         if: always() && steps.run_build.outputs.ECI_ID != ''
@@ -701,6 +705,7 @@ jobs:
           name: SQL-Tester Log
           path: test/log/
           retention-days: 1
+          overwrite: true
 
       - name: Clean ENV
         if: always()
@@ -831,6 +836,7 @@ jobs:
           name: pr_num
           path: ./pr_num.txt
           retention-days: 3
+          overwrite: true
 
       - name: Backup SR Info
         if: needs.deploy.outputs.deploy_conf_file != ''
