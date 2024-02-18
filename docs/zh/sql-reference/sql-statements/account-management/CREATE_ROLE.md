@@ -20,12 +20,9 @@ CREATE ROLE <role_name>
 
 ## 参数说明
 
-`role_name`：角色名称，命名要求如下：
+`role_name`：角色名称，命名要求参见[系统限制](../../../reference/System_limit.md)。
 
-- 必须由数字(0-9)、下划线(_)或字母(a-z或A-Z)组成，且只能以字母开头。
-- 总长度不能超过 64 个字符。
-
-> 注意：角色名称不能与 StarRocks 的两个系统角色 admin 和 operator 重复。
+> 注意：角色名称不能与 StarRocks 的系统预置角色 `root`，`cluster_admin`，`db_admin`，`user_admin`，`public` 重复。
 
 ## 示例
 

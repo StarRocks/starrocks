@@ -146,6 +146,21 @@ public class Config extends ConfigBase {
     @ConfField
     public static String custom_config_dir = "/conf";
 
+    /*
+     * internal log:
+     * This specifies FE MV/Statistics log dir.
+     */
+    @ConfField
+    public static String internal_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
+    @ConfField
+    public static int internal_log_roll_num = 90;
+    @ConfField
+    public static String[] internal_log_modules = {"base", "statistic"};
+    @ConfField
+    public static String internal_log_roll_interval = "DAY";
+    @ConfField
+    public static String internal_log_delete_age = "7d";
+
     /**
      * dump_log_dir:
      * This specifies FE dump log dir.
@@ -1167,6 +1182,18 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long dynamic_partition_check_interval_seconds = 600;
+
+    /**
+     * If set to true, memory tracker feature will open
+     */
+    @ConfField(mutable = true)
+    public static boolean memory_tracker_enable = true;
+
+    /**
+     * Decide how often to track the memory usage of the FE process
+     */
+    @ConfField(mutable = true)
+    public static long memory_tracker_interval_seconds = 60;
 
     /**
      * If batch creation of partitions is allowed to create half of the partitions, it is easy to generate holes.

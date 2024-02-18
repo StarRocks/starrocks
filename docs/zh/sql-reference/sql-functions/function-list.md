@@ -260,10 +260,11 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [any_match](./array-functions/any_match.md)| 判断数组中是否有元素匹配谓词中指定的条件。 |
 |  [array_agg](./array-functions/array_agg.md)| 将一列中的值（包括空值 null）串联成一个数组 (多行转一行）。 |
 |  [array_append](./array-functions/array_append.md)| 在数组末尾添加一个新的元素。 |
-|  [array_avg](./array-functions/array_avg.md)| 求取一个ARRAY中的所有数据的平均数。 |
+|  [array_avg](./array-functions/array_avg.md)| 求取一个 ARRAY 中的所有数据的平均数。 |
 |  [array_concat](./array-functions/array_concat.md)| 将多个数组拼接成一个数组。 |
 |  [array_contains](./array-functions/array_contains.md)| 检查数组中是否包含某个元素，是的话返回 1，否则返回 0。 |
-|  [array_contains_all](./array-functions/array_contains_all.md)| 检查数组 arr1 是否包含数组 arr2 中的所有元素。 |
+|  [array_contains_all](./array-functions/array_contains_all.md)| 检查数组 `arr1` 是否包含数组 `arr2` 中的所有元素。 |
+|  [array_contains_seq](./array-functions/array_contains_seq.md) | 检查数组 `arr2` 的所有元素是否以完全相同的顺序出现在数组 `arr1` 中 |
 |  [array_cum_sum](./array-functions/array_cum_sum.md)| 对数组中的元素进行向前累加。 |
 |  [array_difference](./array-functions/array_difference.md)| 对于数值型数组，返回相邻两个元素的差(从后者中减去前者)构成的数组。 |
 |  [array_distinct](./array-functions/array_distinct.md)| 数组元素去重。 |

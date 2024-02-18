@@ -8,7 +8,7 @@ displayed_sidebar: "English"
 
 Aggregates distinct values (including `NULL`) in an ARRAY column into an array (from multiple rows to one row).
 
-This function is supported from v3.2.
+This function is supported from v3.1.8.
 
 ## Syntax
 

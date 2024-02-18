@@ -116,6 +116,11 @@ public class SetStmtAnalyzer {
             }
         }
 
+        // Check variable chunk_size value if valid
+        if (variable.equalsIgnoreCase(SessionVariable.CHUNK_SIZE)) {
+            checkRangeLongVariable(resolvedExpression, SessionVariable.CHUNK_SIZE, 1L, 65535L);
+        }
+
         // Check variable load_mem_limit value is valid
         if (variable.equalsIgnoreCase(SessionVariable.LOAD_MEM_LIMIT)) {
             checkRangeLongVariable(resolvedExpression, SessionVariable.LOAD_MEM_LIMIT, 0L, null);

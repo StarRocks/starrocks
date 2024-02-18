@@ -912,7 +912,7 @@ public class SystemInfoService implements GsonPostProcessable {
             if ((atomicLong = idToReportVersionRef.get(backendId)) != null) {
                 Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
                 if (db != null) {
-                    atomicLong.set(newReportVersion);
+                    updateReportVersionIncrementally(atomicLong, newReportVersion);
                     LOG.debug("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);
                 } else {
                     LOG.warn("failed to update backend report version, db {} does not exist", dbId);
@@ -920,6 +920,12 @@ public class SystemInfoService implements GsonPostProcessable {
             } else {
                 LOG.warn("failed to update backend report version, backend {} does not exist", backendId);
             }
+        }
+    }
+
+    protected synchronized void updateReportVersionIncrementally(AtomicLong currentVersion, long newVersion) {
+        if (currentVersion.get() < newVersion) {
+            currentVersion.set(newVersion);
         }
     }
 

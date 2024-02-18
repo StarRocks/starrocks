@@ -69,7 +69,7 @@ SELECT select_expr[, select_expr ...]
   >
   > - 该参数至少需包含一个单列。
   > - 使用聚合函数创建同步物化视图时，必须指定 GROUP BY 子句，并在 `select_expr` 中指定至少一个 GROUP BY 列。
-  > - 同步物化视图不支持 JOIN、WHERE、以及 GROUP BY 的 HAVING 子句。
+  > - 同步物化视图不支持 JOIN、以及 GROUP BY 的 HAVING 子句。
   > - 从 v3.1 开始，每个同步物化视图支持为基表的每一列使用多个聚合函数，支持形如 `select b, sum(a), min(a) from table group by b` 形式的查询语句。
   > - 从 v3.1 开始，同步物化视图支持 SELECT 和聚合函数的复杂表达式，即形如 `select b, sum(a + 1) as sum_a1, min(cast (a as bigint)) as min_a from table group by b` 或 `select abs(b) as col1, a + 1 as col2, cast(a as bigint) as col3 from table` 的查询语句。同步物化视图的复杂表达式有以下限制：
   >   - 每个复杂表达式必须有一个列名，并且基表所有同步物化视图中的不同复杂表达式的别名必须不同。例如，查询语句 `select b, sum(a + 1) as sum_a from table group by b` 和`select b, sum(a) as sum_a from table group by b` 不能同时用于为相同的基表创建同步物化视图，你可以为同一复杂表达式设置多个不同别名。
@@ -77,7 +77,7 @@ SELECT select_expr[, select_expr ...]
 
 - WHERE （选填）
 
-  自 v3.2 起，同步物化视图支持通过 WHERE 子句筛选数据。
+  自 v3.1.8 起，同步物化视图支持通过 WHERE 子句筛选数据。
 
 - GROUP BY（选填）
 

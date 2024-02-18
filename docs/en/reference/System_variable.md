@@ -176,6 +176,12 @@ The maximum number of concurrent I/O tasks that can be issued by a scan operator
 
 Currently, StarRocks can adaptively adjust the number of concurrent I/O tasks when querying external tables. This feature is controlled by the variable `enable_connector_adaptive_io_tasks`, which is enabled by default.
 
+### connector_sink_compression_codec (3.2.3 and later)
+
+Specifies the compression algorithm used for writing data into Hive tables or Iceberg tables, or exporting data with Files().
+
+Valid values: `gzip`, `brotli`, `zstd`, and `lz4`.
+
 ### count_distinct_column_buckets (2.5 and later)
 
 The number of buckets for the COUNT DISTINCT column in a group-by-count-distinct query. This variable takes effect only when `enable_distinct_column_bucketization` is set to `true`. Default value: 1024.
@@ -237,6 +243,10 @@ Boolean value to control whether to enable materialized view Union query rewrite
 ### enable_rule_based_materialized_view_rewrite (2.5 and later)
 
 Boolean value to control whether to enable rule-based materialized view query rewrite. This variable is mainly used in single-table query rewrite. Default: `true`.
+
+### enable_short_circuit (3.2.3 and later)
+
+Whether to enable short circuiting for queries. Default: `false`. If it is set to true, when the table uses hybrid row-column storage and the query meets the criteria (to evaluate whether the query is a point query): the conditional columns in the WHERE clause include all primary key columns, and the operators in the WHERE clause are `=` or `IN`, the query takes the short circuit to directly query the data stored in the row-by-row fashion.
 
 ### enable_spill (3.0 and later)
 
@@ -669,6 +679,17 @@ Used to display the time zone of the current system. Cannot be changed.
 ### time_zone
 
 Used to set the time zone of the current session. The time zone can affect the results of certain time functions.
+
+### trace_log_mode
+
+* Description: Used to control where to output the logs of query trace profiles. Valid values:
+  * `command`: Return query trace profile logs as the **Explain String** after executing TRACE LOGS.
+  * `file`: Return query trace profile logs in the FE log file **fe.log** with the class name being `FileLogTracer`.
+
+  For more information on query trace profile, see [Query Trace Profile](../developers/trace-tools/query_trace_profile.md).
+
+* Default: `command`
+* Introduced in: v3.2.0
 
 ### transaction_read_only
 

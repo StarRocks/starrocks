@@ -32,6 +32,7 @@ import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.TaskAnalyzer;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubmitTaskStmt;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.LocalWarehouse;
@@ -206,5 +207,20 @@ public class SubmitTaskStmtTest {
         TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
         Assert.assertNull(tm.getTask(taskName));
         starRocksAssert.dropMaterializedView(name);
+    }
+
+    @Test
+    public void createTaskWithUser() throws Exception {
+        TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
+        connectContext.executeSql("CREATE USER 'test2' IDENTIFIED BY ''");
+        connectContext.executeSql("GRANT all on DATABASE test to test2");
+        connectContext.executeSql("GRANT all on test.* to test2");
+        connectContext.executeSql("EXECUTE AS test2 WITH NO REVERT");
+        connectContext.executeSql(("submit task task_with_user as create table t_tmp as select * from test.tbl1"));
+        Assert.assertEquals("test2", tm.getTask("task_with_user").getCreateUser());
+
+        starRocksAssert.getCtx().setCurrentUserIdentity(UserIdentity.ROOT);
+        starRocksAssert.getCtx().setCurrentRoleIds(starRocksAssert.getCtx().getGlobalStateMgr()
+                .getAuthorizationMgr().getRoleIdsByUser(UserIdentity.ROOT));
     }
 }
