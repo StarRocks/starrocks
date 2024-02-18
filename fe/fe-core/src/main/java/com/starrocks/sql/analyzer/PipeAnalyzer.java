@@ -66,18 +66,22 @@ public class PipeAnalyzer {
                     .add(PropertyAnalyzer.PROPERTIES_WAREHOUSE)
                     .build();
 
-    public static void analyzePipeName(PipeName pipeName, ConnectContext context) {
+    public static void analyzePipeName(PipeName pipeName, String db) {
         if (Strings.isNullOrEmpty(pipeName.getDbName())) {
-            if (Strings.isNullOrEmpty(context.getDatabase())) {
+            if (Strings.isNullOrEmpty(db)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
             }
-            pipeName.setDbName(context.getDatabase());
+            pipeName.setDbName(db);
         }
         if (Strings.isNullOrEmpty(pipeName.getPipeName())) {
             throw new SemanticException("empty pipe name");
         }
         FeNameFormat.checkCommonName("db", pipeName.getDbName());
         FeNameFormat.checkCommonName("pipe", pipeName.getPipeName());
+    }
+
+    public static void analyzePipeName(PipeName pipeName, ConnectContext context) {
+        analyzePipeName(pipeName, context.getDatabase());
     }
 
     private static void analyzeProperties(Map<String, String> properties) {
@@ -154,7 +158,6 @@ public class PipeAnalyzer {
     }
 
     public static void analyze(CreatePipeStmt stmt, ConnectContext context) {
-        analyzePipeName(stmt.getPipeName(), context);
         analyzeProperties(stmt.getProperties());
         Map<String, String> properties = stmt.getProperties();
 
@@ -164,9 +167,7 @@ public class PipeAnalyzer {
         stmt.setInsertSql(insertSql);
         InsertAnalyzer.analyze(insertStmt, context);
 
-        if (stmt.getPipeName().getDbName() == null) {
-            stmt.getPipeName().setDbName(insertStmt.getTableName().getDb());
-        }
+        analyzePipeName(stmt.getPipeName(), insertStmt.getTableName().getDb());
 
         // Must be the form: insert into <target_table> select <projection> from <source_table> [where_clause]
         if (!Strings.isNullOrEmpty(insertStmt.getLabel())) {
