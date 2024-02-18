@@ -85,6 +85,10 @@ void JitObjectCache::notifyObjectCompiled(const llvm::Module* M, llvm::MemoryBuf
 }
 
 Status JitObjectCache::register_func(JITScalarFunction func) {
+    bool cached = JITEngine::get_instance()->lookup_function(this);
+    if (cached) {
+        return Status::OK();
+    }
     _func = func;
     if (_obj_code == nullptr) {
         return Status::JitCompileError("JIT register must wait notifyObjectCompiled()");
@@ -113,9 +117,13 @@ Status JitObjectCache::register_func(JITScalarFunction func) {
 std::unique_ptr<llvm::MemoryBuffer> JitObjectCache::getObject(const llvm::Module* M) {
     auto* handle = _lru_cache->lookup(_cache_key);
     if (handle != nullptr) {
-        auto cached_obj = ((JitCacheEntry*)handle)->obj_buff;
+        auto& cached_obj = ((JitCacheEntry*)handle)->obj_buff;
+        if (cached_obj == nullptr) {
+            throw std::runtime_error("jit obj is null");
+        }
         std::unique_ptr<llvm::MemoryBuffer> cached_buffer =
                 cached_obj->getMemBufferCopy(cached_obj->getBuffer(), cached_obj->getBufferIdentifier());
+        _lru_cache->release(handle);
         return cached_buffer;
     }
     return nullptr;
@@ -167,6 +175,10 @@ Status JITEngine::compile_scalar_function(ExprContext* context, JitObjectCache* 
     RETURN_IF_ERROR(generate_scalar_function_ir(context, *engine->module(), expr));
     // optimize module and add module
     RETURN_IF_ERROR(engine->optimize_and_finalize_module());
+    cached = instance->lookup_function(func_cache);
+    if (cached) {
+        return Status::OK();
+    }
     ASSIGN_OR_RETURN(auto function, engine->get_compiled_func(func_cache->get_func_name()));
     RETURN_IF_ERROR(func_cache->register_func(function));
     return Status::OK();
