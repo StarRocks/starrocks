@@ -98,3 +98,34 @@
 # restful
 /fe/fe-core/src/main/java/com/starrocks/http @StarRocks/restful-maintainer
 /be/src/http @StarRocks/restful-maintainer
+
+
+# load and unload
+/fe/fe-core/src/main/java/com/starrocks/load/*                  @StarRocks/load-unload-maintainer
+/fe/fe-core/src/main/java/com/starrocks/plan/StreamLoad*        @StarRocks/load-unload-maintainer
+/fe/fe-core/src/main/java/com/starrocks/plan/*Sink.java         @StarRocks/load-unload-maintainer
+/fe/fe-core/src/main/java/com/starrocks/sql/InsertPlanner.java  @StarRocks/load-unload-maintainer
+/fe/fe-core/src/main/java/com/starrocks/sql/LoadPlanner.java    @StarRocks/load-unload-maintainer
+/fe/fe-core/src/main/java/com/starrocks/backup/*                @StarRocks/load-unload-maintainer
+/fe/fe-core/src/main/java/com/starrocks/alter/Optimize*         @StarRocks/load-unload-maintainer
+/fe/fe-core/src/main/java/com/starrocks/alter/Compaction*       @StarRocks/load-unload-maintainer
+/fe/fe-core/src/main/java/com/starrocks/catalog/*Partition*     @StarRocks/load-unload-maintainer
+
+/be/src/storage/*                                       @StarRocks/load-unload-maintainer
+/be/src/exec/tablet_sink*                               @StarRocks/load-unload-maintainer
+/be/src/exec/csv_scanner.cpp                            @StarRocks/load-unload-maintainer
+/be/src/exec/json_scanner.cpp                           @StarRocks/load-unload-maintainer
+/be/src/exec/pipeline/olap_table_sink_operator.cpp      @StarRocks/load-unload-maintainer
+/be/src/formats/avro/*                          @StarRocks/load-unload-maintainer
+/be/src/formats/csv/*                           @StarRocks/load-unload-maintainer
+/be/src/formats/json/*                          @StarRocks/load-unload-maintainer
+/be/src/http/action/compaction_action.cpp       @StarRocks/load-unload-maintainer
+/be/src/http/action/*stream_load.cpp    @StarRocks/load-unload-maintainer
+/be/src/http/action/restore*            @StarRocks/load-unload-maintainer
+/be/src/runtime/routine_load/*          @StarRocks/load-unload-maintainer
+/be/src/runtime/stream_load/*           @StarRocks/load-unload-maintainer
+/be/src/runtime/load*                   @StarRocks/load-unload-maintainer
+/be/src/runtime/tablets_channel.cpp     @StarRocks/load-unload-maintainer
+/be/src/runtime/export_sink.cpp         @StarRocks/load-unload-maintainer
+
+

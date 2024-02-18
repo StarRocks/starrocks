@@ -60,6 +60,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
@@ -111,6 +112,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
+import static com.starrocks.server.CatalogMgr.isInternalCatalog;
 
 public class MaterializedViewAnalyzer {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewAnalyzer.class);
@@ -168,7 +170,7 @@ public class MaterializedViewAnalyzer {
                         "Only supports creating materialized views based on the external table " +
                                 "which created by catalog", tableNameInfo.getPos());
             }
-            baseTableInfos.add(BaseTableInfo.fromTableName(tableNameInfo, table));
+            baseTableInfos.add(fromTableName(tableNameInfo, table));
         }
         processViews(queryStatement, baseTableInfos, withCheck);
     }
@@ -199,7 +201,16 @@ public class MaterializedViewAnalyzer {
             processBaseTables(viewRelation.getQueryStatement(), baseTableInfos, withCheck);
 
             // view itself is considered as base-table
-            baseTableInfos.add(BaseTableInfo.fromTableName(viewRelation.getName(), viewRelation.getView()));
+            baseTableInfos.add(fromTableName(viewRelation.getName(), viewRelation.getView()));
+        }
+    }
+
+    private static BaseTableInfo fromTableName(TableName name, Table table) {
+        if (isInternalCatalog(name.getCatalog())) {
+            Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(name.getCatalog(), name.getDb());
+            return new BaseTableInfo(database.getId(), database.getFullName(), table.getName(), table.getId());
+        } else {
+            return new BaseTableInfo(name.getCatalog(), name.getDb(), table.getName(), table.getTableIdentifier());
         }
     }
 

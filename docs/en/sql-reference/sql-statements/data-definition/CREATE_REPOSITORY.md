@@ -28,7 +28,7 @@ PROPERTIES ("key"="value", ...)
 | **Parameter**       | **Description**                                              |
 | ------------------- | ------------------------------------------------------------ |
 | READ ONLY           | Create a read-only repository. Note that you can only restore data from a read-only repository. When creating the same repository for two clusters to migrate data, you can create a read-only repository for the new cluster and only grant it RESTORE permissions.|
-| repository_name     | Repository name.                                             |
+| repository_name     | Repository name. For the naming conventions, see [System limits](../../../reference/System_limit.md).                           |
 | repository_location | Location of the repository in the remote storage system.     |
 | PROPERTIES          |The credential method for accessing the remote storage system. |
 
@@ -41,7 +41,7 @@ StarRocks supports creating repositories in HDFS, AWS S3, and Google GCS.
   - "password": The password of the account that you want to use to access the NameNode of the HDFS cluster.
 
 - For AWS S3:
-  - "aws.s3.use_instance_profile": Whether or not to allow instance profile and assumed role as credential methods for accessing AWS S3. Default: `false`. 
+  - "aws.s3.use_instance_profile": Whether or not to allow instance profile and assumed role as credential methods for accessing AWS S3. Default: `false`.
 
     - If you use IAM user-based credential (Access Key and Secret Key) to access AWS S3, you don't need to specify this parameter, and you need to specify "aws.s3.access_key", "aws.s3.secret_key", and "aws.s3.endpoint".
     - If you use Instance Profile to access AWS S3, you need to set this parameter to `true` and specify "aws.s3.region".

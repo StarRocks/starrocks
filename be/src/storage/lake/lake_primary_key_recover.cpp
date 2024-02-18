@@ -32,7 +32,7 @@ Status LakePrimaryKeyRecover::pre_cleanup() {
     // TODO reclaim delvec files
     _metadata->clear_delvec_meta();
     // 2. reset primary index
-    _tablet->update_mgr()->remove_primary_index_cache(_tablet->id());
+    _tablet->update_mgr()->try_remove_primary_index_cache(_tablet->id());
     DataDir* data_dir = StorageEngine::instance()->get_persistent_index_store(_tablet->id());
     if (data_dir != nullptr) {
         // clear local persistent index's index meta from rocksdb, and index files.

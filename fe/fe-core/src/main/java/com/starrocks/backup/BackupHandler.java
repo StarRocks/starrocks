@@ -446,7 +446,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
                 if (remoteTbl.isCloudNativeTable()) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_NOT_OLAP_TABLE, remoteTbl.getName());
                 }
-                mvRestoreContext.addIntoMvBaseTableBackupInfoIfNeeded(remoteTbl, jobInfo, tblInfo);
+                mvRestoreContext.addIntoMvBaseTableBackupInfoIfNeeded(db.getOriginName(), remoteTbl, jobInfo, tblInfo);
             }
         }
         restoreJob = new RestoreJob(stmt.getLabel(), stmt.getBackupTimestamp(),

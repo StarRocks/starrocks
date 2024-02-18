@@ -45,12 +45,6 @@ public class ShowDeleteTest {
         Database db = new Database();
         new Expectations(db) {
             {
-                db.readLock();
-                minTimes = 0;
-
-                db.readUnlock();
-                minTimes = 0;
-
                 db.getTable(anyString);
                 minTimes = 0;
             }
