@@ -501,14 +501,8 @@ void ChunkPipelineAccumulator::push(const ChunkPtr& chunk) {
     DCHECK(_out_chunk == nullptr);
     if (_in_chunk == nullptr) {
         _in_chunk = chunk;
-<<<<<<< HEAD
-        _mem_usage = chunk->memory_usage();
-    } else if (_in_chunk->num_rows() + chunk->num_rows() > _max_size) {
-=======
         _mem_usage = chunk->bytes_usage();
-    } else if (_in_chunk->num_rows() + chunk->num_rows() > _max_size ||
-               _in_chunk->owner_info() != chunk->owner_info()) {
->>>>>>> 3fa29e4495 ([BugFix] Accumulator uses bytes_size instead of mem_usage to count incremental memory (#40502))
+    } else if (_in_chunk->num_rows() + chunk->num_rows() > _max_size) {
         _out_chunk = std::move(_in_chunk);
         _in_chunk = chunk;
         _mem_usage = chunk->bytes_usage();
