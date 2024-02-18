@@ -34,6 +34,7 @@
 
 package com.starrocks.load;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
@@ -50,6 +51,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -78,7 +80,7 @@ import java.util.UUID;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
-public class ExportMgr {
+public class ExportMgr implements MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(ExportJob.class);
 
     // lock for export job
@@ -464,5 +466,10 @@ public class ExportMgr {
             }
             unprotectAddJob(job);
         }
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("ExportJob", (long) idToJob.size());
     }
 }

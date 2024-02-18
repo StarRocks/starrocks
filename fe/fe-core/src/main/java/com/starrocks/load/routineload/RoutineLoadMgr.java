@@ -35,6 +35,7 @@
 package com.starrocks.load.routineload;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -52,6 +53,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.RoutineLoadDesc;
+import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.RoutineLoadOperation;
@@ -85,7 +87,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
-public class RoutineLoadMgr implements Writable {
+public class RoutineLoadMgr implements Writable, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(RoutineLoadMgr.class);
 
     // be => running tasks num
@@ -704,5 +706,10 @@ public class RoutineLoadMgr implements Writable {
 
             putJob(routineLoadJob);
         }
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("RoutineLoad", (long) idToRoutineLoadJob.size());
     }
 }
