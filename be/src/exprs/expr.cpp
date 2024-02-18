@@ -699,7 +699,7 @@ ColumnRef* Expr::get_column_ref() {
 }
 
 StatusOr<LLVMDatum> Expr::generate_ir(ExprContext* context, JITContext* jit_ctx) {
-    if (this->is_compilable(context->_runtime_state)) {
+    if (this->is_compilable()) {
         return this->generate_ir_impl(context, jit_ctx);
     } else {
         return Expr::generate_ir_impl(context, jit_ctx);
