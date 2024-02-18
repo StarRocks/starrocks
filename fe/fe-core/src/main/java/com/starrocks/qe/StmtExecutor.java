@@ -38,13 +38,17 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.Parameter;
 import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.analysis.SetVarHint;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.UserVariableHint;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
@@ -115,12 +119,12 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.AddBackendBlackListStmt;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeProfileStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
-import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.DeallocateStmt;
@@ -139,7 +143,6 @@ import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetCatalogStmt;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
@@ -153,6 +156,7 @@ import com.starrocks.sql.ast.UpdateFailPointStatusStatement;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
+import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.MetaUtils;
@@ -190,7 +194,6 @@ import com.starrocks.transaction.TransactionCommitFailedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.VisibleStateWaiter;
-import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -202,7 +205,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -216,6 +219,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
+
+import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 // Do one COM_QUERY process.
 // first: Parse receive byte array to statement struct.
@@ -459,7 +464,9 @@ public class StmtExecutor {
                 context.getState().setIsQuery(isQuery);
             }
 
-            processVarHint(sessionVariableBackup);
+            if (parsedStmt.isExistQueryScopeHint()) {
+                processQueryScopeHint();
+            }
 
             if (parsedStmt.isExplain()) {
                 context.setExplainLevel(parsedStmt.getExplainLevel());
@@ -725,90 +732,67 @@ public class StmtExecutor {
                 }
             }
 
-            context.setSessionVariable(sessionVariableBackup);
+            if (parsedStmt != null && parsedStmt.isExistQueryScopeHint()) {
+                clearQueryScopeHintContext(sessionVariableBackup);
+            }
+
+        }
+    }
+
+    private void clearQueryScopeHintContext(SessionVariable sessionVariableBackup) {
+        context.setSessionVariable(sessionVariableBackup);
+        Iterator<Map.Entry<String, UserVariable>> iterator = context.userVariables.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<String, UserVariable> entry = iterator.next();
+            if (entry.getValue().isFromHint()) {
+                iterator.remove();
+            }
         }
     }
 
     // support select hint e.g. select /*+ SET_VAR(query_timeout=1) */ sleep(3);
-    private void processVarHint(SessionVariable variables) throws DdlException, CloneNotSupportedException {
-        if (parsedStmt == null) {
-            return;
-        }
-        Map<String, String> optHints = VarHintVisitor.extractAllHints(parsedStmt);
-
-        if (MapUtils.isNotEmpty(optHints)) {
-            SessionVariable sessionVariable = (SessionVariable) variables.clone();
-            for (String key : optHints.keySet()) {
-                VariableMgr.setSystemVariable(sessionVariable,
-                        new SystemVariable(key, new StringLiteral(optHints.get(key))), true);
+    private void processQueryScopeHint() throws DdlException {
+        SessionVariable clonedSessionVariable = null;
+        Map<String, UserVariable> userVariablesFromHint = Maps.newHashMap();
+        UUID queryId = context.getQueryId();
+        for (HintNode hint : parsedStmt.getAllQueryScopeHints()) {
+            if (hint instanceof SetVarHint) {
+                if (clonedSessionVariable == null) {
+                    clonedSessionVariable = (SessionVariable) context.sessionVariable.clone();
+                }
+                for (Map.Entry<String, String> entry : hint.getValue().entrySet()) {
+                    VariableMgr.setSystemVariable(clonedSessionVariable,
+                            new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true);
+                }
             }
-            context.setSessionVariable(sessionVariable);
-        }
-    }
 
-    /**
-     * Visit all SELECT query blocks
-     * <p>
-     * NOTE: for duplicated variable, it would use the first one
-     */
-    public static class VarHintVisitor extends AstTraverser<Void, Void> {
-
-        private final Map<String, String> hints = new HashMap<>();
-
-        public Map<String, String> getHints() {
-            return hints;
-        }
-
-        public static Map<String, String> extractAllHints(StatementBase stmt) {
-            VarHintVisitor visitor = new VarHintVisitor();
-            stmt.accept(visitor, null);
-            return visitor.getHints();
-        }
-
-        @Override
-        public Void visitSelect(SelectRelation node, Void context) {
-            if (node.getSelectList() != null && MapUtils.isNotEmpty(node.getSelectList().getOptHints())) {
-                node.getSelectList().getOptHints().forEach(hints::putIfAbsent);
+            if (hint instanceof UserVariableHint) {
+                UserVariableHint userVariableHint = (UserVariableHint) hint;
+                for (Map.Entry<String, UserVariable> entry : userVariableHint.getUserVariables().entrySet()) {
+                    if (context.userVariables.containsKey(entry.getKey())) {
+                        throw new SemanticException(PARSER_ERROR_MSG.invalidUserVariableHint(entry.getKey(),
+                                "the user variable name in the hint must not match any existing variable names"));
+                    }
+                    SetStmtAnalyzer.analyzeUserVariable(entry.getValue());
+                    if (entry.getValue().getEvaluatedExpression() == null) {
+                        try {
+                            context.setQueryId(UUIDUtil.genUUID());
+                            entry.getValue().deriveUserVariableExpressionResult(context);
+                        } finally {
+                            context.setQueryId(queryId);
+                            context.resetReturnRows();
+                            context.getState().reset();
+                        }
+                    }
+                    userVariablesFromHint.put(entry.getKey(), entry.getValue());
+                }
             }
-            super.visitSelect(node, context);
-            return null;
         }
 
-        @Override
-        public Void visitInsertStatement(InsertStmt node, Void context) {
-            if (MapUtils.isNotEmpty(node.getOptHints())) {
-                node.getOptHints().forEach(hints::putIfAbsent);
-            }
-            super.visitInsertStatement(node, context);
-            return null;
+        if (clonedSessionVariable != null) {
+            context.setSessionVariable(clonedSessionVariable);
         }
-
-        @Override
-        public Void visitUpdateStatement(UpdateStmt node, Void context) {
-            if (MapUtils.isNotEmpty(node.getOptHints())) {
-                node.getOptHints().forEach(hints::putIfAbsent);
-            }
-            super.visitUpdateStatement(node, context);
-            return null;
-        }
-
-        @Override
-        public Void visitDeleteStatement(DeleteStmt node, Void context) {
-            if (MapUtils.isNotEmpty(node.getOptHints())) {
-                node.getOptHints().forEach(hints::putIfAbsent);
-            }
-            super.visitDeleteStatement(node, context);
-            return null;
-        }
-
-        @Override
-        public Void visitDDLStatement(DdlStmt node, Void context) {
-            if (MapUtils.isNotEmpty(node.getOptHints())) {
-                node.getOptHints().forEach(hints::putIfAbsent);
-            }
-            super.visitDDLStatement(node, context);
-            return null;
-        }
+        context.userVariables.putAll(userVariablesFromHint);
     }
 
     private void handleCreateTableAsSelectStmt(long beginTimeInNanoSecond) throws Exception {
