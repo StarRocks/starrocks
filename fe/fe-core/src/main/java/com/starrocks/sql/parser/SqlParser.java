@@ -36,8 +36,10 @@ import org.antlr.v4.runtime.RecognitionException;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.TokenStream;
 import org.antlr.v4.runtime.Vocabulary;
+import org.antlr.v4.runtime.atn.PredictionMode;
 import org.antlr.v4.runtime.misc.Interval;
 import org.antlr.v4.runtime.misc.IntervalSet;
+import org.antlr.v4.runtime.misc.ParseCancellationException;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.text.similarity.JaroWinklerDistance;
 import org.apache.logging.log4j.LogManager;
@@ -100,8 +102,20 @@ public class SqlParser {
     private static List<StatementBase> parseWithStarRocksDialect(String sql, SessionVariable sessionVariable) {
         List<StatementBase> statements = Lists.newArrayList();
         StarRocksParser parser = parserBuilder(sql, sessionVariable);
+        StarRocksParser.SqlStatementsContext sqlStatementsContext;
+        try {
+            // first, try faster SLL mode
+            parser.getInterpreter().setPredictionMode(PredictionMode.SLL);
+            sqlStatementsContext = parser.sqlStatements();
+        } catch (ParseCancellationException e) {
+            // if we fail, parse with LL mode
+            parser.getTokenStream().seek(0); // rewind input stream
+            parser.reset();
+            parser.getInterpreter().setPredictionMode(PredictionMode.LL);
+            sqlStatementsContext = parser.sqlStatements();
+        }
         List<StarRocksParser.SingleStatementContext> singleStatementContexts =
-                parser.sqlStatements().singleStatement();
+                sqlStatementsContext.singleStatement();
         for (int idx = 0; idx < singleStatementContexts.size(); ++idx) {
             // collect hint info
             HintCollector collector = new HintCollector((CommonTokenStream) parser.getTokenStream(), sessionVariable);
