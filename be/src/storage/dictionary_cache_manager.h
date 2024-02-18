@@ -50,21 +50,6 @@ struct DictionaryCacheTypeTraits {
     using CppType = typename CppTypeTraits<logical_type>::CppType;
 };
 
-template <>
-struct DictionaryCacheTypeTraits<TYPE_VARCHAR> {
-    using CppType = Slice;
-};
-
-template <>
-struct DictionaryCacheTypeTraits<TYPE_DATE> {
-    using CppType = int32_t;
-};
-
-template <>
-struct DictionaryCacheTypeTraits<TYPE_DATETIME> {
-    using CppType = int64_t;
-};
-
 template <LogicalType logical_type>
 struct DictionaryCacheHashTraits {
     using CppType = typename DictionaryCacheTypeTraits<logical_type>::CppType;
@@ -99,7 +84,7 @@ class DictionaryCacheImpl final : public DictionaryCache {
 public:
     static constexpr uint8_t PREFETCHN = 8;
 
-    DictionaryCacheImpl(DictionaryCacheEncoderType type) : DictionaryCache(type), _total_memory_useage(0) {}
+    DictionaryCacheImpl(DictionaryCacheEncoderType type) : DictionaryCache(type), _estimated_memory_useage(0) {}
     virtual ~DictionaryCacheImpl() override = default;
 
     using KeyCppType = typename DictionaryCacheTypeTraits<KeyLogicalType>::CppType;
@@ -157,7 +142,7 @@ public:
             if (!r.second) {
                 return Status::InternalError("duplicate key found when refreshing dictionary");
             }
-            _total_memory_useage.fetch_add(_get_element_memory_usage<KeyCppType, ValueCppType>(key, value));
+            _estimated_memory_useage.fetch_add(_get_element_memory_usage<KeyCppType, ValueCppType>(key, value));
             return Status::OK();
         }
         default:
@@ -244,7 +229,7 @@ public:
         return Status::OK();
     }
 
-    virtual inline size_t memory_usage() override { return _total_memory_useage.load(); }
+    virtual inline size_t memory_usage() override { return _estimated_memory_useage.load(); }
 
     virtual std::mutex& lock() override { return _lock; }
 
@@ -289,7 +274,7 @@ private:
                                   phmap::priv::Allocator<phmap::priv::Pair<const KeyCppType, ValueCppType>>, 4,
                                   phmap::NullMutex, true>
             _dictionary;
-    std::atomic<size_t> _total_memory_useage;
+    std::atomic<size_t> _estimated_memory_useage;
     std::mutex _lock;
     MemPool _pool;
 };
@@ -380,7 +365,7 @@ public:
         switch (encoder_type) {
         case PK_ENCODE: {
             std::vector<uint32_t> idxes;
-            for (size_t i = 0; i < schema.fields().size(); i++) {
+            for (uint32_t i = 0; i < schema.fields().size(); i++) {
                 idxes.push_back((uint32_t)i);
             }
             return PrimaryKeyEncoder::encoded_primary_key_type(schema, idxes);
