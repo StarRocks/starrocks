@@ -483,7 +483,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         return Status::OK();
     }
 
-    RETURN_IF_ERROR(build_io_ranges(orc_hdfs_file_stream, stripes)
+    RETURN_IF_ERROR(build_io_ranges(orc_hdfs_file_stream, stripes));
     RETURN_IF_ERROR(resolve_columns(reader.get()));
     if (_should_skip_file) {
         return Status::OK();
