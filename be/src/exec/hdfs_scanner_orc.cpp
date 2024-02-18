@@ -423,13 +423,15 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
     std::unique_ptr<orc::Reader> reader;
     try {
+        errno = 0;
         orc::ReaderOptions options;
         options.setMemoryPool(*getOrcMemoryPool());
         reader = orc::createReader(std::move(_input_stream), options);
     } catch (std::exception& e) {
+        bool is_not_found = (errno == ENOENT);
         auto s = strings::Substitute("HdfsOrcScanner::do_open failed. reason = $0", e.what());
         LOG(WARNING) << s;
-        if (errno == ENOENT || s.find("404") != std::string::npos) {
+        if (is_not_found || s.find("404") != std::string::npos) {
             return Status::RemoteFileNotFound(s);
         }
         return Status::InternalError(s);
