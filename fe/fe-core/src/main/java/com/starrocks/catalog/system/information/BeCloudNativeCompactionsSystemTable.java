@@ -38,14 +38,7 @@ public class BeCloudNativeCompactionsSystemTable {
                         .column("FINISH_TIME", ScalarType.createType(PrimitiveType.DATETIME))
                         .column("PROGRESS", ScalarType.createType(PrimitiveType.INT))
                         .column("STATUS", ScalarType.createType(PrimitiveType.VARCHAR))
-                        .column("READER_TOTAL_TIME_MS", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("READER_IO_MS", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("READER_IO_COUNT_REMOTE", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("READER_IO_COUNT_LOCAL_DISK", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("COMPRESSED_BYTES_READ", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("SEGMENT_INIT_MS", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("COLUMN_ITERATOR_INIT_MS", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("SEGMENT_WRITE_MS", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("STATISTICS", ScalarType.createType(PrimitiveType.VARCHAR))
                         .build(), TSchemaTableType.SCH_BE_CLOUD_NATIVE_COMPACTIONS);
     }
 }

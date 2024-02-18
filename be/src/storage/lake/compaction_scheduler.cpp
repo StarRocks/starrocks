@@ -140,20 +140,13 @@ void CompactionScheduler::list_tasks(std::vector<CompactionTaskInfo>* infos) {
         info.runs = context->runs.load(std::memory_order_relaxed);
         info.start_time = context->start_time.load(std::memory_order_relaxed);
         info.progress = context->progress.value();
-        info.reader_io_ms = context->io_ns / 1000000;
-        info.segment_init_ms = context->segment_init_ns / 1000000;
-        info.column_iterator_init_ms = context->column_iterator_init_ns / 1000000;
-        info.segment_write_ms = context->segment_write_ns / 1000000;
-        info.reader_total_time_ms = context->reader_time_ns / 1000000;
-        info.compressed_bytes_read = context->compressed_bytes_read;
-        info.reader_io_count_local_disk = context->io_count_local_disk;
-        info.reader_io_count_remote = context->io_count_remote;
         // Load "finish_time" with memory_order_acquire and check its value before reading the "status" to avoid
         // the race condition between this thread and the `CompactionScheduler::thread_task` threads.
         info.finish_time = context->finish_time.load(std::memory_order_acquire);
         if (info.finish_time > 0) {
             info.status = context->status;
         }
+        info.statistic = context->to_json_stats();
     }
 }
 

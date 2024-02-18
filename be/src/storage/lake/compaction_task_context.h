@@ -15,8 +15,13 @@
 #pragma once
 
 #include <butil/containers/linked_list.h>
+#include <rapidjson/document.h>
+#include <rapidjson/rapidjson.h>
+#include <rapidjson/stringbuffer.h>
+#include <rapidjson/writer.h>
 
 #include <memory>
+#include <string>
 
 #include "common/status.h"
 
@@ -33,6 +38,17 @@ private:
     std::atomic<int> _value{0};
 };
 
+struct CompactionTaskStats {
+    int64_t io_ns = 0;
+    int64_t segment_init_ns = 0;
+    int64_t column_iterator_init_ns = 0;
+    int64_t io_count_local_disk = 0;
+    int64_t io_count_remote = 0;
+    int64_t compressed_bytes_read = 0;
+    int64_t reader_time_ns = 0;
+    int64_t segment_write_ns = 0;
+};
+
 // Context of a single tablet compaction task.
 struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     explicit CompactionTaskContext(int64_t txn_id_, int64_t tablet_id_, int64_t version_,
@@ -45,6 +61,27 @@ struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     }
 #endif
 
+    std::string to_json_stats() {
+        rapidjson::Document root;
+        root.SetObject();
+        auto& allocator = root.GetAllocator();
+        // add stats
+        root.AddMember("reader_total_time_ms", rapidjson::Value(stats->reader_time_ns / 1000000), allocator);
+        root.AddMember("reader_io_ms", rapidjson::Value(stats->segment_init_ns / 1000000), allocator);
+        root.AddMember("reader_io_count_remote", rapidjson::Value(stats->io_count_remote), allocator);
+        root.AddMember("reader_io_count_local_disk", rapidjson::Value(stats->io_count_local_disk), allocator);
+        root.AddMember("compressed_bytes_read", rapidjson::Value(stats->compressed_bytes_read), allocator);
+        root.AddMember("segment_init_ms", rapidjson::Value(stats->segment_init_ns / 1000000), allocator);
+        root.AddMember("column_iterator_init_ms", rapidjson::Value(stats->column_iterator_init_ns / 1000000),
+                       allocator);
+        root.AddMember("segment_write_ms", rapidjson::Value(stats->segment_write_ns / 1000000), allocator);
+
+        rapidjson::StringBuffer strbuf;
+        rapidjson::Writer<rapidjson::StringBuffer> writer(strbuf);
+        root.Accept(writer);
+        return std::string(strbuf.GetString());
+    }
+
     const int64_t txn_id;
     const int64_t tablet_id;
     const int64_t version;
@@ -52,17 +89,10 @@ struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     std::atomic<int64_t> finish_time{0};
     std::atomic<bool> skipped{false};
     std::atomic<int> runs{0};
-    int64_t io_ns = 0;
-    int64_t segment_init_ns = 0;
-    int64_t column_iterator_init_ns = 0;
-    int64_t io_count_local_disk = 0;
-    int64_t io_count_remote = 0;
-    int64_t compressed_bytes_read = 0;
-    int64_t reader_time_ns = 0;
-    int64_t segment_write_ns = 0;
     Status status;
     Progress progress;
     std::shared_ptr<CompactionTaskCallback> callback;
+    std::unique_ptr<CompactionTaskStats> stats = std::make_unique<CompactionTaskStats>();
 };
 
 } // namespace starrocks::lake

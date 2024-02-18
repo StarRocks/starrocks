@@ -60,6 +60,7 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
 
+    int64_t reader_time_ns = 0;
     while (true) {
         if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
             return Status::Cancelled("background worker stopped");
@@ -71,7 +72,7 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
         RETURN_IF_ERROR(tls_thread_status.mem_tracker()->check_mem_limit("Compaction"));
 #endif
         {
-            SCOPED_RAW_TIMER(&_context.reader_time_ns);
+            SCOPED_RAW_TIMER(&reader_time_ns);
             if (auto st = reader.get_next(chunk.get()); st.is_end_of_file()) {
                 break;
             } else if (!st.ok()) {
@@ -86,14 +87,15 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
         VLOG_EVERY_N(3, 1000) << "Tablet: " << _tablet.id() << ", compaction progress: " << _context.progress.value();
         // add reader stats
         auto stats = reader.stats();
-        _context.io_ns += stats.io_ns;
-        _context.segment_init_ns += stats.segment_init_ns;
-        _context.column_iterator_init_ns += stats.column_iterator_init_ns;
-        _context.io_count_local_disk += stats.io_count_local_disk;
-        _context.io_count_remote += stats.io_count_remote;
-        _context.compressed_bytes_read += stats.compressed_bytes_read;
+        _context.stats->reader_time_ns += reader_time_ns;
+        _context.stats->io_ns += stats.io_ns;
+        _context.stats->segment_init_ns += stats.segment_init_ns;
+        _context.stats->column_iterator_init_ns += stats.column_iterator_init_ns;
+        _context.stats->io_count_local_disk += stats.io_count_local_disk;
+        _context.stats->io_count_remote += stats.io_count_remote;
+        _context.stats->compressed_bytes_read += stats.compressed_bytes_read;
         // add writer stats
-        _context.segment_write_ns += writer->stats().segment_write_ns;
+        _context.stats->segment_write_ns = writer->stats().segment_write_ns;
     }
 
     // Adjust the progress here for 2 reasons:
@@ -103,7 +105,7 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     RETURN_IF_ERROR(writer->finish());
 
     // update writer stats
-    _context.segment_write_ns += writer->stats().segment_write_ns;
+    _context.stats->segment_write_ns = writer->stats().segment_write_ns;
 
     auto txn_log = std::make_shared<TxnLog>();
     auto op_compaction = txn_log->mutable_op_compaction();
@@ -129,9 +131,7 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     }
 
     VLOG(3) << "Horizontal compaction finished. tablet: " << _tablet.id() << ", txn_id: " << _txn_id
-            << ", reader total time cost(ms): " << _context.reader_time_ns / 1000000
-            << ", reader io time cost(ms): " << _context.io_ns / 1000000
-            << ", segment writer total time cost(ms): " << _context.segment_write_ns / 1000000;
+            << ", statistics: " << _context.to_json_stats();
 
     return Status::OK();
 }

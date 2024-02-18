@@ -25,8 +25,6 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/storage_engine.h"
 #include "types/logical_type.h"
-#include "util/metrics.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -41,14 +39,7 @@ SchemaScanner::ColumnDesc SchemaBeCloudNativeCompactionsScanner::_s_columns[] = 
         {"FINISH_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
         {"PROGRESS", TYPE_INT, sizeof(int32_t), false},
         {"STATUS", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"READER_TOTAL_TIME_MS", TYPE_BIGINT, sizeof(int64_t), false},
-        {"READER_IO_MS", TYPE_BIGINT, sizeof(int64_t), false},
-        {"READER_IO_COUNT_REMOTE", TYPE_BIGINT, sizeof(int64_t), false},
-        {"READER_IO_COUNT_LOCAL_DISK", TYPE_BIGINT, sizeof(int64_t), false},
-        {"COMPRESSED_BYTES_READ", TYPE_BIGINT, sizeof(int64_t), false},
-        {"SEGMENT_INIT_MS", TYPE_BIGINT, sizeof(int64_t), false},
-        {"COLUMN_ITERATOR_INIT_MS", TYPE_BIGINT, sizeof(int64_t), false},
-        {"SEGMENT_WRITE_MS", TYPE_BIGINT, sizeof(int64_t), false}};
+        {"STATISTICS", TYPE_VARCHAR, sizeof(StringValue), false}};
 
 SchemaBeCloudNativeCompactionsScanner::SchemaBeCloudNativeCompactionsScanner()
         : SchemaScanner(_s_columns, sizeof(_s_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
@@ -78,7 +69,7 @@ Status SchemaBeCloudNativeCompactionsScanner::fill_chunk(ChunkPtr* chunk) {
     for (; _cur_idx < end; _cur_idx++) {
         auto& info = _infos[_cur_idx];
         for (const auto& [slot_id, index] : slot_id_to_index_map) {
-            if (slot_id < 1 || slot_id > 18) {
+            if (slot_id < 1 || slot_id > 11) {
                 return Status::InternalError(strings::Substitute("invalid slot id:$0", slot_id));
             }
             ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
@@ -139,35 +130,8 @@ Status SchemaBeCloudNativeCompactionsScanner::fill_chunk(ChunkPtr* chunk) {
                 break;
             }
             case 11: {
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.reader_total_time_ms);
-                break;
-            }
-            case 12: {
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.reader_io_ms);
-                break;
-            }
-            case 13: {
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.reader_io_count_remote);
-                break;
-            }
-            case 14: {
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.reader_io_count_local_disk);
-                break;
-            }
-            case 15: {
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.compressed_bytes_read);
-                break;
-            }
-            case 16: {
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.segment_init_ms);
-                break;
-            }
-            case 17: {
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.column_iterator_init_ms);
-                break;
-            }
-            case 18: {
-                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.segment_write_ms);
+                Slice statistic = Slice(info.statistic);
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&statistic);
                 break;
             }
             default:

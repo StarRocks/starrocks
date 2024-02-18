@@ -96,15 +96,8 @@ struct CompactionTaskInfo {
     int64_t version;
     int64_t start_time;
     int64_t finish_time;
-    int64_t reader_io_ms;
-    int64_t reader_io_count_local_disk;
-    int64_t reader_io_count_remote;
-    int64_t segment_init_ms;
-    int64_t column_iterator_init_ms;
-    int64_t compressed_bytes_read;
-    int64_t segment_write_ms;
-    int64_t reader_total_time_ms;
     Status status;
+    std::string statistic;
     int runs;     // How many times the compaction task has been executed
     int progress; // 0-100
     bool skipped;
