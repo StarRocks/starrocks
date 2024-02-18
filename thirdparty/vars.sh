@@ -320,10 +320,10 @@ GCS_CONNECTOR_SOURCE="gcs-connector-hadoop3-2.2.11-shaded"
 GCS_CONNECTOR_MD5SUM="51fd0eb5cb913a84e4ad8a5ed2069e21"
 
 # aws-sdk-cpp
-AWS_SDK_CPP_DOWNLOAD="https://github.com/aws/aws-sdk-cpp/archive/refs/tags/1.10.36.tar.gz"
-AWS_SDK_CPP_NAME="aws-sdk-cpp-1.10.36.tar.gz"
-AWS_SDK_CPP_SOURCE="aws-sdk-cpp-1.10.36"
-AWS_SDK_CPP_MD5SUM="8fed635c5ac98b448bc1a98cf7c97c70"
+AWS_SDK_CPP_DOWNLOAD="https://github.com/aws/aws-sdk-cpp/archive/refs/tags/1.11.267.tar.gz"
+AWS_SDK_CPP_NAME="aws-sdk-cpp-1.11.267.tar.gz"
+AWS_SDK_CPP_SOURCE="aws-sdk-cpp-1.11.267"
+AWS_SDK_CPP_MD5SUM="fdf43e7262f9d08968eb34f9ad18b8e7"
 
 # velocypack: A fast and compact format for serialization and storage
 VPACK_DOWNLOAD="https://github.com/arangodb/velocypack/archive/refs/tags/XYZ1.0.tar.gz"
