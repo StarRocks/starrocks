@@ -42,7 +42,7 @@ jobs:
           echo $PR_NUMBER > pr_num.txt
 
       - name: Upload the PR number
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: pr_num
           path: ./pr_num.txt
@@ -98,7 +98,7 @@ jobs:
           mkdir -p ${{ github.workspace }}
 
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -189,7 +189,7 @@ jobs:
           eci rm ${{ steps.run_ut.outputs.ECI_ID }}
 
       - name: Upload Log
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always() && steps.run_ut.outcome == 'failure'
         with:
           name: BE UT LOG
@@ -294,7 +294,7 @@ jobs:
           echo ${{github.base_ref}}
           echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -338,7 +338,7 @@ jobs:
       BRANCH: ${{ github.base_ref }}
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -442,7 +442,7 @@ jobs:
 
       - name: Upload log
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: FE UT LOG
           path: ${{ steps.run_ut.outputs.RES_LOG }}
@@ -545,7 +545,7 @@ jobs:
           echo ${{ steps.run_build.outputs.BASE_VERSION }} > ./base_version.txt
 
       - name: Upload the Base Version
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: base_version
           path: ./base_version.txt
@@ -653,7 +653,7 @@ jobs:
           rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
 
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -695,7 +695,7 @@ jobs:
           ossutil64 --config-file ~/.ossutilconfig cp test/ oss://${bucket_prefix}-ci-release/$branch/Release/pr/SQL-Tester-XML/${PR_NUMBER}/ --include "*.xml" --recursive --force --tagging="type=ci"
 
       - name: Upload log
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: SQL-Tester Log
@@ -826,7 +826,7 @@ jobs:
           echo $PR_NUMBER > pr_num.txt
 
       - name: Upload the PR number
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: pr_num
           path: ./pr_num.txt
