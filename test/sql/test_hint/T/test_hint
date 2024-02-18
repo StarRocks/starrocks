@@ -70,6 +70,10 @@ select /*+ set_user_variable(@a = select from t0) */ @a from t1;
 set @a = 1;
 select /*+ set_user_variable(@a = 1) */ @a from t1;
 
+select /*+ set_user_variable(@b = 1) */ @a, @b from t1;
+
+select  @a, @b from t1;
+
 with cte_1 as (select * from t1)
 select /*+ set_user_variable(@a = (select max(c3) from t1)), @b = 1) */ /*+ set_user_variable(@c = (select min(c3) from t1)) */
 group_concat(@a, @b, @c) from cte_1;

@@ -62,12 +62,12 @@ None	None
 -- !result
 select * from t2;
 -- result:
-1	a	Value1	60
+4	a	Value4	60
 None	a	Value3	60
 2	a	Value2	60
 5	a	Value5	60
 5	a	Value6	60
-4	a	Value4	60
+1	a	Value1	60
 -- !result
 select /*+ set_user_variable(@a = (select max(c3) from t1)) */ /*+ set_user_variable(@b = (select min(c3) from t1)) */ @a, @b from t1;
 -- result:
@@ -109,6 +109,24 @@ set @a = 1;
 select /*+ set_user_variable(@a = 1) */ @a from t1;
 -- result:
 E: (1064, "Getting analyzing error. Detail message: Failed to evaluate user variable hint 'a', because the user variable name in the hint must not match any existing variable names.")
+-- !result
+select /*+ set_user_variable(@b = 1) */ @a, @b from t1;
+-- result:
+1	1
+1	1
+1	1
+1	1
+1	1
+1	1
+-- !result
+select  @a, @b from t1;
+-- result:
+1	None
+1	None
+1	None
+1	None
+1	None
+1	None
 -- !result
 with cte_1 as (select * from t1)
 select /*+ set_user_variable(@a = (select max(c3) from t1)), @b = 1) */ /*+ set_user_variable(@c = (select min(c3) from t1)) */
