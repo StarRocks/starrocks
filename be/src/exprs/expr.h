@@ -226,10 +226,7 @@ public:
     // Get the first column ref in expr.
     ColumnRef* get_column_ref();
 
-    /**
-     * @brief For JIT compile, generate specific evaluation IR code for this expr.
-     * Its internal logic is similar to the 'evaluate_checked' function.
-     */
+    StatusOr<LLVMDatum> generate_ir(ExprContext* context, JITContext* jit_ctx);
 
     virtual StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx);
 
