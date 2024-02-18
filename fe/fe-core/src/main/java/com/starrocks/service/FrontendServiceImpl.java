@@ -64,6 +64,7 @@ import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.sys.GrantsTo;
 import com.starrocks.catalog.system.sys.RoleEdges;
 import com.starrocks.catalog.system.sys.SysFeLocks;
+import com.starrocks.catalog.system.sys.SysFeMemoryUsage;
 import com.starrocks.catalog.system.sys.SysObjectDependencies;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
@@ -158,6 +159,8 @@ import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TFeLocksReq;
 import com.starrocks.thrift.TFeLocksRes;
+import com.starrocks.thrift.TFeMemoryReq;
+import com.starrocks.thrift.TFeMemoryRes;
 import com.starrocks.thrift.TFeResult;
 import com.starrocks.thrift.TFetchResourceResult;
 import com.starrocks.thrift.TFinishSlotRequirementRequest;
@@ -510,6 +513,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TFeLocksRes listFeLocks(TFeLocksReq params) throws TException {
         return SysFeLocks.listLocks(params, true);
+    }
+
+    @Override
+    public TFeMemoryRes listFeMemoryUsage(TFeMemoryReq request) throws TException {
+        return SysFeMemoryUsage.listFeMemoryUsage(request);
     }
 
     // list MaterializedView table match pattern
