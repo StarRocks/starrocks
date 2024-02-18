@@ -445,7 +445,7 @@ TEST_F(HdfsScannerTest, TestOrcSkipFile) {
 
     READ_SCANNER_ROWS(scanner, 0);
     EXPECT_EQ(scanner->raw_rows_read(), 0);
-    scanner->close();
+    scanner->close(_runtime_state);
 }
 
 class BadOrcFileStream : public ORCHdfsFileStream {
@@ -498,7 +498,7 @@ TEST_F(HdfsScannerTest, TestOrcReaderException) {
         status = scanner->open(_runtime_state);
         EXPECT_FALSE(status.ok()) << status.message();
         EXPECT_EQ(status.code(), ec.ret_code);
-        scanner->close();
+        scanner->close(_runtime_state);
     }
 }
 
