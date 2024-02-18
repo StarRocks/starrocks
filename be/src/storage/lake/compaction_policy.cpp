@@ -134,6 +134,9 @@ public:
     StatusOr<std::vector<RowsetPtr>> pick_rowsets() override;
     StatusOr<std::vector<RowsetPtr>> pick_rowsets(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata,
                                                   bool calc_score, std::vector<bool>* has_dels);
+    // Common function to return the picked rowset indexes.
+    // For compaction score, only picked rowset indexes are needed.
+    // For compaction, picked rowsets can be constructed by picked rowset indexes.
     StatusOr<std::vector<int64_t>> pick_rowset_indexes(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata,
                                                        bool calc_score, std::vector<bool>* has_dels);
 
