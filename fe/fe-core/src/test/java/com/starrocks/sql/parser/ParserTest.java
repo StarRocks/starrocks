@@ -70,6 +70,15 @@ class ParserTest {
     }
 
     @Test
+    void test() {
+        String sql = "@`a` = 1";
+        SessionVariable sessionVariable = new SessionVariable();
+        List<Expr> exprs = SqlParser.parseSqlToExprs(sql, sessionVariable);
+        System.out.println();
+
+    }
+
+    @Test
     void sqlParseErrorInfoTest() {
         String sql = "select 1 form tbl";
         SessionVariable sessionVariable = new SessionVariable();

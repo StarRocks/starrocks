@@ -38,6 +38,7 @@ import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -115,6 +116,15 @@ public class SetExecutorTest {
         executor.execute();
         Assert.assertEquals(1, ctx.getModifiedSessionVariables().getSetListItems().size());
         Assert.assertEquals(9, ctx.sessionVariable.getQueryTimeoutS());
+
+        ctx.modifyUserVariable(new UserVariable("test_b", new IntLiteral(1), true, NodePosition.ZERO));
+        String userVarSql = "set @a = 10";
+        stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(userVarSql, ctx);
+        executor = new SetExecutor(ctx, stmt);
+        executor.execute();
+        Assert.assertEquals(2, ctx.getModifiedSessionVariables().getSetListItems().size());
+        Assert.assertEquals("10", ctx.getModifiedSessionVariables().getSetListItems().get(1).toSql());
+        ctx.getUserVariables().remove("test_b");
     }
 
     public void testUserVariableImp(LiteralExpr value, Type type) throws Exception {
@@ -123,7 +133,7 @@ public class SetExecutorTest {
         SetStmt stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         SetExecutor executor = new SetExecutor(ctx, stmt);
         executor.execute();
-        UserVariable userVariable = ctx.getUserVariables("var");
+        UserVariable userVariable = ctx.getUserVariable("var");
         Assert.assertTrue(userVariable.getEvaluatedExpression().getType().matchesType(type));
         Assert.assertEquals(value.getStringValue(), userVariable.getEvaluatedExpression().getStringValue());
         String planFragment = UtFrameUtils.getPlanAndFragment(ctx, "select @var").second.
@@ -155,7 +165,7 @@ public class SetExecutorTest {
         SetStmt stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         SetExecutor executor = new SetExecutor(ctx, stmt);
         executor.execute();
-        UserVariable userVariable = ctx.getUserVariables("var");
+        UserVariable userVariable = ctx.getUserVariable("var");
         Assert.assertTrue(userVariable.getEvaluatedExpression().getType().isDecimalV3());
         Assert.assertEquals("10", userVariable.getEvaluatedExpression().getStringValue());
 
@@ -163,7 +173,7 @@ public class SetExecutorTest {
         stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         executor = new SetExecutor(ctx, stmt);
         executor.execute();
-        userVariable = ctx.getUserVariables("var");
+        userVariable = ctx.getUserVariable("var");
         Assert.assertTrue(userVariable.getEvaluatedExpression().getType().isBoolean());
         BoolLiteral literal = (BoolLiteral) userVariable.getEvaluatedExpression();
         Assert.assertTrue(literal.getValue());
@@ -172,7 +182,7 @@ public class SetExecutorTest {
         stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         executor = new SetExecutor(ctx, stmt);
         executor.execute();
-        userVariable = ctx.getUserVariables("var");
+        userVariable = ctx.getUserVariable("var");
         Assert.assertTrue(userVariable.getEvaluatedExpression().getType().isBoolean());
         literal = (BoolLiteral) userVariable.getEvaluatedExpression();
         Assert.assertFalse(literal.getValue());

@@ -14,43 +14,40 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
+import java.util.stream.Collectors;
 
-public class SetVarHint extends HintNode {
+public class UserVariableHint extends HintNode {
 
-    public static final String SET_VAR = "SET_VAR";
-    public static final int LEAST_LEN = 9;
+    public static final String SET_USER_VARIABLE = "SET_USER_VARIABLE";
 
-    private Map<String, String> value;
-    public SetVarHint(NodePosition pos, Map<String, String> value, String hintStr) {
+    public static final int LEAST_LEN = 19;
+
+    private Map<String, UserVariable> userVariables;
+
+    public UserVariableHint(NodePosition pos, Map<String, UserVariable> userVariables, String hintStr) {
         super(pos, hintStr);
-        this.value = value;
+        this.userVariables = userVariables;
     }
 
-    public long getSqlModeHintValue() {
-        long sqlMode = 0L;
-        if (value.containsKey("sql_mode")) {
-            try {
-                sqlMode = SqlModeHelper.encode(value.get("sql_mode"));
-            } catch (Exception e) {
-                // do nothing
-            }
-        }
-        return sqlMode;
+    public Map<String, UserVariable> getUserVariables() {
+        return userVariables;
     }
 
     @Override
     public Map<String, String> getValue() {
-        return value;
+        return userVariables.entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().toSql()));
     }
 
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitSetVarHint(this, context);
+        return visitor.visitUserVariableHint(this, context);
     }
+
 }
