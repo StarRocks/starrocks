@@ -35,6 +35,7 @@
 package com.starrocks.backup;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -56,6 +57,7 @@ import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -92,7 +94,7 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
-public class BackupHandler extends LeaderDaemon implements Writable {
+public class BackupHandler extends LeaderDaemon implements Writable, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(BackupHandler.class);
 
     public static final int SIGNATURE_VERSION = 1;
@@ -718,6 +720,12 @@ public class BackupHandler extends LeaderDaemon implements Writable {
             seqlock.unlock();
         }
     }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("BackupOrRestoreJob", (long) dbIdToBackupOrRestoreJob.size());
+    }
+
 }
 
 

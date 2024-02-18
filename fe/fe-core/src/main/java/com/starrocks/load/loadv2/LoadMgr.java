@@ -35,6 +35,7 @@
 package com.starrocks.load.loadv2;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -55,6 +56,7 @@ import com.starrocks.load.EtlJobType;
 import com.starrocks.load.FailMsg;
 import com.starrocks.load.FailMsg.CancelType;
 import com.starrocks.load.Load;
+import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -100,7 +102,7 @@ import java.util.stream.Collectors;
  * LoadManager.lock
  * LoadJob.lock
  */
-public class LoadMgr implements Writable {
+public class LoadMgr implements Writable, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(LoadMgr.class);
 
     private Map<Long, LoadJob> idToLoadJob = Maps.newConcurrentMap();
@@ -796,4 +798,10 @@ public class LoadMgr implements Writable {
             GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(loadJob);
         }
     }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("LoadJob", (long) idToLoadJob.size());
+    }
+
 }
