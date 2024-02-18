@@ -434,7 +434,7 @@ public:
         errno = 0;
         Status ret;
         struct dirent* entry;
-        // FIXME: readdir is not thread-safe, replace it with readdir_r
+        // FIXME: readdir is not required to be thread-safe, replace it with readdir_r
         while ((entry = readdir(d)) != nullptr) {
             std::string_view name(entry->d_name);
             if (name == "." || name == "..") {
