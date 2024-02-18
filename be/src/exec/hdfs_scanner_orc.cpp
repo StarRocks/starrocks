@@ -313,26 +313,10 @@ Status HdfsOrcScanner::build_iceberg_delete_builder() {
                                                       _scanner_params.conjunct_ctxs, _scanner_params.materialize_slots,
                                                       &_need_skip_rowids);
 
-<<<<<<< HEAD
-    SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
-    std::unique_ptr<orc::Reader> reader;
-    try {
-        orc::ReaderOptions options;
-        options.setMemoryPool(*getOrcMemoryPool());
-        reader = orc::createReader(std::move(input_stream), options);
-    } catch (std::exception& e) {
-        auto s = strings::Substitute("HdfsOrcScanner::do_open failed. reason = $0", e.what());
-        LOG(WARNING) << s;
-        if (errno == ENOENT) {
-            return Status::RemoteFileNotFound(s);
-        }
-        return Status::InternalError(s);
-=======
     for (const auto& tdelete_file : _scanner_params.deletes) {
         RETURN_IF_ERROR(iceberg_delete_builder.build_orc(_runtime_state->timezone(), *tdelete_file,
                                                          _scanner_params.mor_params.equality_slots, _runtime_state,
                                                          _mor_processor));
->>>>>>> ad5482440d ([Refactor] refactor hdfs scanner orc code (#41004))
     }
     _app_stats.iceberg_delete_files_per_scan += _scanner_params.deletes.size();
     return Status::OK();
