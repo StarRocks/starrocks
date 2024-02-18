@@ -39,6 +39,8 @@ public:
                                                 const TGetTablesParams& request,
                                                 TListMaterializedViewStatusResult* result);
 
+    static Status list_fe_memory_usage(const std::string& ip, int32_t port, const TFeMemoryReq& req, TFeMemoryRes* res);
+
     static Status get_tables_info(const std::string& ip, const int32_t port, const TGetTablesInfoRequest& request,
                                   TGetTablesInfoResponse* response);
 

@@ -62,6 +62,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.sys.GrantsTo;
 import com.starrocks.catalog.system.sys.RoleEdges;
+import com.starrocks.catalog.system.sys.SysFeMemoryUsage;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.AuthenticationException;
@@ -147,6 +148,8 @@ import com.starrocks.thrift.TDescribeTableParams;
 import com.starrocks.thrift.TDescribeTableResult;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TExprNode;
+import com.starrocks.thrift.TFeMemoryReq;
+import com.starrocks.thrift.TFeMemoryRes;
 import com.starrocks.thrift.TFeResult;
 import com.starrocks.thrift.TFetchResourceResult;
 import com.starrocks.thrift.TFinishTaskRequest;
@@ -481,6 +484,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         Preconditions.checkState(params.isSetType() && TTableType.MATERIALIZED_VIEW.equals(params.getType()));
         return listMaterializedViewStatus(limit, matcher, currentUser, params);
+    }
+
+    @Override
+    public TFeMemoryRes listFeMemoryUsage(TFeMemoryReq request) throws TException {
+        return SysFeMemoryUsage.listFeMemoryUsage(request);
     }
 
     // list MaterializedView table match pattern
