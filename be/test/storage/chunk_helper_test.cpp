@@ -187,13 +187,13 @@ TEST_F(ChunkHelperTest, Accumulator) {
 
 class ChunkPipelineAccumulatorTest : public ::testing::Test {
 protected:
-    ChunkPtr _generate_chunk(size_t rows, size_t cols);
+    ChunkPtr _generate_chunk(size_t rows, size_t cols, size_t reserve_size = 0);
 };
 
-ChunkPtr ChunkPipelineAccumulatorTest::_generate_chunk(size_t rows, size_t cols) {
+ChunkPtr ChunkPipelineAccumulatorTest::_generate_chunk(size_t rows, size_t cols, size_t reserve_size) {
     auto chunk = std::make_shared<Chunk>();
     for (size_t i = 0; i < cols; i++) {
-        auto col = Int8Column::create(rows, 0);
+        auto col = Int8Column::create(rows, reserve_size);
         chunk->append_column(col, i);
     }
     return chunk;
@@ -254,6 +254,18 @@ TEST_F(ChunkPipelineAccumulatorTest, test_push) {
     result_chunk = std::move(accumulator.pull());
     ASSERT_EQ(result_chunk->num_rows(), 3000);
     accumulator.finalize();
+    ASSERT_TRUE(accumulator.has_output());
+    result_chunk = std::move(accumulator.pull());
+    ASSERT_EQ(result_chunk->num_rows(), 3000);
+    ASSERT_FALSE(accumulator.has_output());
+
+    // reserve large and use less
+    accumulator.reset_state();
+    accumulator.push(_generate_chunk(1000, 25, 4000));
+    ASSERT_FALSE(accumulator.has_output());
+    accumulator.push(_generate_chunk(1000, 25, 4000));
+    ASSERT_FALSE(accumulator.has_output());
+    accumulator.push(_generate_chunk(1000, 25, 4000));
     ASSERT_TRUE(accumulator.has_output());
     result_chunk = std::move(accumulator.pull());
     ASSERT_EQ(result_chunk->num_rows(), 3000);
