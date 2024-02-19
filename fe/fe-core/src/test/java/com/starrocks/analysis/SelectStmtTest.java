@@ -621,7 +621,6 @@ public class SelectStmtTest {
                 "GROUP BY name\n" +
                 "ORDER BY name ASC";
         String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
-        System.out.println(plan);
         Assert.assertTrue(plan, plan.contains("PLAN FRAGMENT 0(F00)\n" +
                 "  Output Exprs:7: expr\n" +
                 "  Input Partition: UNPARTITIONED\n" +
