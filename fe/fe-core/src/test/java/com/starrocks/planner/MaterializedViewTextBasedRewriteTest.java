@@ -1,0 +1,215 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.planner;
+
+import com.starrocks.analysis.ParseNode;
+import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import org.junit.Assert;
+import org.junit.BeforeClass;
+import org.junit.Test;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.TestMethodOrder;
+
+@TestMethodOrder(MethodOrderer.MethodName.class)
+public class MaterializedViewTextBasedRewriteTest extends MaterializedViewTestBase {
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        MaterializedViewTestBase.beforeClass();
+
+        connectContext.getSessionVariable().setEnableMaterializedViewTextMatchRewrite(true);
+
+        starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
+        starRocksAssert.useTable("depts");
+        starRocksAssert.useTable("depts_null");
+        starRocksAssert.useTable("locations");
+        starRocksAssert.useTable("emps");
+        starRocksAssert.useTable("emps_null");
+        starRocksAssert.useTable("emps_bigint");
+        starRocksAssert.useTable("emps_no_constraint");
+        starRocksAssert.useTable("dependents");
+
+        starRocksAssert.withTable("create table user_tags (" +
+                " time date, " +
+                " user_id int, " +
+                " user_name varchar(20), " +
+                " tag_id int" +
+                ")  partition by range (time) (partition p1 values less than MAXVALUE) " +
+                "   distributed by hash(time)");
+    }
+
+    @Test
+    public void testTextMatchRewrite0() {
+        {
+            String query= "select user_id, time, sum(tag_id) from user_tags group by user_id, time " +
+                    "order by user_id, time;";
+            testRewriteOK(query, query);
+        }
+        {
+            String query= "select user_id, time, sum(tag_id) from user_tags group by user_id, time " +
+                    "order by user_id, time limit 10;";
+            testRewriteOK(query, query);
+        }
+        {
+            String query= "select user_id, time, sum(tag_id) as alias from user_tags " +
+                    "group by user_id, time order by user_id, time limit 10;";
+            testRewriteOK(query, query);
+        }
+        {
+            String query= "select user_id, time, sum(tag_id) as alias1, sum(tag_id + 1) as alias2, sum(tag_id + 3)  as alias3 " +
+                    "from user_tags " +
+                    "group by user_id, time order by user_id, time limit 10;";
+            testRewriteOK(query, query);
+        }
+        {
+            String mv = "select user_id, time, sum(tag_id) as alias from user_tags " +
+                    "group by user_id, time order by user_id, time limit 10;";
+            String query= "select user_id, time, sum(tag_id + 1) as alias from user_tags " +
+                    "group by user_id, time order by user_id, time limit 10;";
+            testRewriteFail(mv, query);
+        }
+        // TODO: subset of mv
+        {
+            String mv = "select user_id, time, sum(tag_id) as alias1, sum(tag_id + 1) as alias2 from user_tags " +
+                    "group by user_id, time order by user_id, time limit 10;";
+            String query= "select user_id, time, sum(tag_id + 1) as alias1 from user_tags " +
+                    "group by user_id, time order by user_id, time limit 10;";
+            testRewriteFail(mv, query);
+        }
+        {
+            // with noisy space or \n
+            String mv = "select user_id, time, sum(tag_id) as alias1 from user_tags \n" +
+                    "group by user_id, time order by user_id, time limit 10;";
+            String query= "select user_id, time, sum(tag_id) as alias1 from  user_tags " +
+                    "group by user_id, time order by user_id, time limit 10;";
+            testRewriteOK(mv, query);
+        }
+    }
+
+    @Test
+    public void testTextMatchRewrite1() {
+        {
+            String query= "select user_id, time, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id, time " +
+                    "order by user_id, time;";
+            testRewriteOK(query, query);
+        }
+        {
+            String query= "select user_id, time, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id, time " +
+                    "order by user_id, time limit 10;";
+            testRewriteOK(query, query);
+        }
+        {
+            String query= "select user_id, time, bitmap_union(to_bitmap(tag_id)) as alias from user_tags " +
+                    "group by user_id, time order by user_id, time limit 10;";
+            testRewriteOK(query, query);
+        }
+        {
+            // TODO: support different aliases
+            String mv = "select user_id, time, bitmap_union(to_bitmap(tag_id)) as alias1 from user_tags " +
+                    "group by user_id, time order by user_id, time limit 10;";
+            String query= "select user_id, time, bitmap_union(to_bitmap(tag_id)) as alias2 from user_tags " +
+                    "group by user_id, time order by user_id, time limit 10;";
+            testRewriteFail(mv, query);
+        }
+        {
+            // with noisy space or \n
+            String mv = "select user_id, time, bitmap_union(to_bitmap(tag_id)) as alias1 from user_tags \n" +
+                    "group by user_id, time order by user_id, time limit 10;";
+            String query= "select user_id, time, bitmap_union(to_bitmap(tag_id)) as alias1 from  user_tags " +
+                    "group by user_id, time order by user_id, time limit 10;";
+            testRewriteOK(mv, query);
+        }
+        {
+            // TODO: with different output order
+            String mv = "select time, user_id, bitmap_union(to_bitmap(tag_id)) as alias1 from user_tags \n" +
+                    "group by user_id, time order by user_id, time limit 10;";
+            String query= "select user_id, time, bitmap_union(to_bitmap(tag_id)) as alias1 from  user_tags " +
+                    "group by user_id, time order by user_id, time limit 10;";
+            testRewriteFail(mv, query);
+        }
+    }
+
+    @Test
+    public void testTextMatchRewrite2() {
+        String mv = "select user_id, time, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id, time " +
+                " order by user_id, time";
+        // sub-query's order by will be squashed.
+        testRewriteFail(mv, "select * from (" + mv + ") as a;");
+        // TODO: support order by push-down
+        testRewriteFail(mv, "select * from (select user_id, time, bitmap_union(to_bitmap(tag_id)) " +
+                "from user_tags group by user_id, time) as a order by user_id, time;");
+    }
+
+    @Test
+    public void testTextMatchRewrite3() {
+        String mv = "select user_id, time, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id, time";
+        testRewriteOK(mv, "select * from (" + mv + ") as a;");
+        testRewriteOK(mv, "select * from (" + mv + ") as a order by user_id, time;");
+        testRewriteOK(mv, "select * from (" + mv + ") as a order by user_id, time limit 10;");
+    }
+
+    @Test
+    public void testTextMatchRewrite4() {
+        String query = "select user_id, time, bitmap_union(to_bitmap(tag_id)) from user_tags where time = '2023-01-01' " +
+                " group by user_id, time" +
+                "  union all " +
+                " select user_id, time, bitmap_union(to_bitmap(tag_id)) from user_tags where time = '2023-01-01' " +
+                " group by user_id, time;";
+        testRewriteOK(query, query);
+    }
+
+    @Test
+    public void testTextMatchRewrite5() {
+        String mv = "select user_id, time, bitmap_union(to_bitmap(tag_id)) as a from user_tags group by user_id, time";
+        {
+            String query = String.format("select * from (%s) a where time = '2023-01-01'", mv);
+            testRewriteOK(mv, query);
+        }
+        {
+            String query = String.format("select * from (%s) a where time = '2023-01-01' " +
+                    "union all select * from (%s) b where time = '2023-01-02'", mv, mv);
+            testRewriteOK(mv, query);
+        }
+        {
+            String query = String.format("select count(*) from (" +
+                    " select * from (%s) a where time = '2023-01-01' " +
+                    " union all " +
+                    " select * from (%s) b where time = '2023-01-02'" +
+                    ") total", mv, mv);
+            testRewriteOK(mv, query);
+        }
+        {
+            String query = String.format("select time, bitmap_union(total.a) from (" +
+                    " select * from (%s) a where time = '2023-01-01' " +
+                    " union all " +
+                    " select * from (%s) b where time = '2023-01-02'" +
+                    ") total group by time", mv, mv);
+            testRewriteOK(mv, query);
+        }
+    }
+
+    @Test
+    public void testMvAstCache() {
+        String query = "select user_id, time, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id, time " +
+                "order by user_id, time;";
+        ParseNode parseNode1 = MvUtils.getQueryAst(query);
+        ParseNode parseNode2 = MvUtils.getQueryAst(query);
+        Assert.assertFalse(parseNode2.equals(parseNode1));
+
+        CachingMvPlanContextBuilder.AstKey astKey1 = new CachingMvPlanContextBuilder.AstKey(parseNode1);
+        CachingMvPlanContextBuilder.AstKey astKey2 = new CachingMvPlanContextBuilder.AstKey(parseNode2);
+        Assert.assertTrue(astKey2.equals(astKey1));
+    }
+}

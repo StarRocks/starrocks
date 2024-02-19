@@ -39,6 +39,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 public class OptimizerContext {
     private final UUID queryId;
@@ -163,7 +164,8 @@ public class OptimizerContext {
     }
 
     public List<MaterializationContext> getCandidateMvs() {
-        return candidateMvs;
+        return candidateMvs.stream().filter(MaterializationContext::isValidPlan)
+                .collect(Collectors.toList());
     }
 
     public void addCandidateMvs(MaterializationContext candidateMv) {

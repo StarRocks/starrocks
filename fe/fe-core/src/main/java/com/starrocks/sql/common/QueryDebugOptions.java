@@ -38,6 +38,7 @@ public class QueryDebugOptions {
         // To make unit test more stable, add retry times for refreshing materialized views.
         if (FeConstants.runningUnitTest) {
             this.maxRefreshMaterializedViewRetryNum = 3;
+            this.enableQueryTraceLog = true;
         }
     }
 

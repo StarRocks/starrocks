@@ -453,4 +453,8 @@ public class MaterializationContext {
     public Map<Pair<LogicalScanOperator, Boolean>, List<ScalarOperator>> getScanOpToPartitionCompensatePredicates() {
         return scanOpToPartitionCompensatePredicates;
     }
+
+    public boolean isValidPlan() {
+        return MvUtils.isValidMVPlan(mvExpression);
+    }
 }

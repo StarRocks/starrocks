@@ -17,7 +17,9 @@ package com.starrocks.sql;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.KeysType;
@@ -47,7 +49,6 @@ import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ValuesRelation;
@@ -60,6 +61,7 @@ import com.starrocks.sql.optimizer.OptimizerTraceUtil;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.TransformerContext;
@@ -133,7 +135,7 @@ public class StatementPlanner {
                     needWholePhaseLock = false;
                     plan = createQueryPlanWithReTry(queryStmt, session, resultSinkType);
                 } else {
-                    plan = createQueryPlan(queryStmt.getQueryRelation(), session, resultSinkType);
+                    plan = createQueryPlan(queryStmt, session, resultSinkType);
                 }
                 setOutfileSink(queryStmt, plan);
                 return plan;
@@ -169,18 +171,20 @@ public class StatementPlanner {
                 && !session.getSessionVariable().isCboUseDBLock();
     }
 
-    private static ExecPlan createQueryPlan(Relation relation,
+    private static ExecPlan createQueryPlan(StatementBase stmt,
                                             ConnectContext session,
                                             TResultSinkType resultSinkType) {
-        QueryRelation query = (QueryRelation) relation;
+        QueryStatement queryStmt = (QueryStatement) stmt;
+        QueryRelation query = (QueryRelation) queryStmt.getQueryRelation();
         List<String> colNames = query.getColumnOutputNames();
         // 1. Build Logical plan
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan;
+        Map<Operator, ParseNode> optToAstMap = Maps.newHashMap();
 
         try (Timer ignored = Tracers.watchScope("Transformer")) {
             // get a logicalPlan without inlining views
-            TransformerContext transformerContext = new TransformerContext(columnRefFactory, session);
+            TransformerContext transformerContext = new TransformerContext(columnRefFactory, session, optToAstMap);
             logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(query);
         }
 
@@ -193,6 +197,8 @@ public class StatementPlanner {
             optimizedPlan = optimizer.optimize(
                     session,
                     root,
+                    optToAstMap,
+                    stmt,
                     new PhysicalPropertySet(),
                     new ColumnRefSet(logicalPlan.getOutputColumn()),
                     columnRefFactory);
@@ -235,9 +241,10 @@ public class StatementPlanner {
             }
 
             LogicalPlan logicalPlan;
+            Map<Operator, ParseNode> optToAstMap = Maps.newHashMap();
             try (Timer ignored = Tracers.watchScope("Transformer")) {
                 // get a logicalPlan without inlining views
-                TransformerContext transformerContext = new TransformerContext(columnRefFactory, session);
+                TransformerContext transformerContext = new TransformerContext(columnRefFactory, session, optToAstMap);
                 logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(query);
             }
 
@@ -255,6 +262,8 @@ public class StatementPlanner {
                 optimizedPlan = optimizer.optimize(
                         session,
                         root,
+                        optToAstMap,
+                        queryStmt,
                         new PhysicalPropertySet(),
                         new ColumnRefSet(logicalPlan.getOutputColumn()),
                         columnRefFactory);

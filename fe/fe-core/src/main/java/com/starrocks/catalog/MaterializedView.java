@@ -27,6 +27,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
@@ -75,6 +76,7 @@ import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatsConstants;
@@ -434,6 +436,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     // which means 0th of query output column is in 1th mv's output columns, and 1th -> 0th, 2th -> 2th.
     @SerializedName(value = "queryOutputIndices")
     protected List<Integer> queryOutputIndices = Lists.newArrayList();
+
+    protected Optional<ParseNode> optDefineQueryParseNode = Optional.empty();
 
     public MaterializedView() {
         super(TableType.MATERIALIZED_VIEW);
@@ -859,6 +863,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     public void onDrop(Database db, boolean force, boolean replay) {
         super.onDrop(db, force, replay);
 
+        CachingMvPlanContextBuilder.getInstance().invalidMvByAst(this);
+
         // 1. Remove from plan cache
         MvId mvId = new MvId(db.getId(), getId());
         CachingMvPlanContextBuilder.getInstance().invalidateFromCache(this);
@@ -890,12 +896,20 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     @Override
+    public void onCreate(Database db) {
+        super.onCreate(db);
+        CachingMvPlanContextBuilder.getInstance().putAstIfAbsent(this);
+    }
+
+    @Override
     public void onReload() {
         try {
             boolean desiredActive = active;
             active = false;
             boolean reloadActive = onReloadImpl();
             if (desiredActive && reloadActive) {
+                // cache by ast
+                CachingMvPlanContextBuilder.getInstance().putAstIfAbsent(this);
                 setActive();
             }
         } catch (Throwable e) {
@@ -1973,5 +1987,15 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
         // recheck again
         fixRelationship();
+    }
+
+    public ParseNode getDefineQueryParseNode() {
+        if (optDefineQueryParseNode.isPresent()) {
+            return optDefineQueryParseNode.get();
+        } else {
+            ParseNode parseNode = MvUtils.getQueryAst(viewDefineSql);
+            optDefineQueryParseNode = Optional.of(parseNode);
+            return parseNode;
+        }
     }
 }

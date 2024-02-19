@@ -699,7 +699,10 @@ public class MvRewritePreprocessor {
             MaterializedView mv = mvWithPlanContext.getMv();
             MvPlanContext mvPlanContext = mvWithPlanContext.getMvPlanContext();
             try {
-                preprocessMv(mv, mvPlanContext, queryTables, originQueryColumns);
+                MaterializationContext materializationContext =
+                        getMaterializationContext(mv, mvPlanContext, queryTables, originQueryColumns);
+                context.addCandidateMvs(materializationContext);
+                logMVPrepare(connectContext, mv, "Prepare MV {} success", mv.getName());
             } catch (Exception e) {
                 List<String> tableNames = queryTables.stream().map(Table::getName).collect(Collectors.toList());
                 logMVPrepare(connectContext, "Preprocess MV {} failed: {}", mv.getName(), e.getMessage());
@@ -718,9 +721,11 @@ public class MvRewritePreprocessor {
                 candidateMvNames);
     }
 
-    private void preprocessMv(MaterializedView mv, MvPlanContext mvPlanContext,
-                              Set<Table> queryTables,
-                              Set<ColumnRefOperator> originQueryColumns) throws AnalysisException {
+    private MaterializationContext getMaterializationContext(
+            MaterializedView mv,
+            MvPlanContext mvPlanContext,
+            Set<Table> queryTables,
+            Set<ColumnRefOperator> originQueryColumns) throws AnalysisException {
         Preconditions.checkState(mvPlanContext != null);
         OptExpression mvPlan = mvPlanContext.getLogicalPlan();
         Preconditions.checkState(mvPlan != null);
@@ -729,7 +734,7 @@ public class MvRewritePreprocessor {
         if (!mv.getPartitionNamesToRefreshForMv(partitionNamesToRefresh, true)) {
             logMVPrepare(connectContext, mv, "MV {} cannot be used for rewrite, " +
                     "stale partitions {}", mv.getName(), partitionNamesToRefresh);
-            return;
+            return null;
         }
         PartitionInfo partitionInfo = mv.getPartitionInfo();
         if (partitionInfo instanceof SinglePartitionInfo) {
@@ -745,7 +750,7 @@ public class MvRewritePreprocessor {
                 }
                 logMVPrepare(connectContext, mv, "MV {} is outdated, stale partitions {}, detailed version info: {}",
                         mv.getName(), partitionNamesToRefresh, sb.toString());
-                return;
+                return null;
             }
         } else if (!mv.getPartitionNames().isEmpty() && partitionNamesToRefresh.containsAll(mv.getPartitionNames())) {
             // if the mv is partitioned, and all partitions need refresh,
@@ -766,7 +771,7 @@ public class MvRewritePreprocessor {
             logMVPrepare(connectContext, mv, "MV {} is outdated and all its partitions need to be " +
                             "refreshed: {}, refreshed mv partitions: {}, base table detailed info: {}", mv.getName(),
                     partitionNamesToRefresh, mv.getPartitionNames(), sb.toString());
-            return;
+            return null;
         }
 
         ScalarOperator mvPartialPartitionPredicates = null;
@@ -777,7 +782,7 @@ public class MvRewritePreprocessor {
             if (mvPartialPartitionPredicates == null) {
                 logMVPrepare(connectContext, mv, "Partitioned MV {} is outdated which contains some partitions " +
                         "to be refreshed: {}, and cannot compensate it to predicate", mv.getName(), partitionNamesToRefresh);
-                return;
+                return null;
             }
         }
         logMVPrepare(connectContext, mv, "MV' partitions to refresh: {}", partitionNamesToRefresh);
@@ -803,7 +808,6 @@ public class MvRewritePreprocessor {
                     refTableUpdatedPartitionNames);
         }
 
-
         // If query tables are set which means use related mv for non lock optimization,
         // copy mv's metadata into a ready-only object.
         MaterializedView copiedMV = (context.getQueryTables() != null) ? copyOnlyMaterializedView(mv) : mv;
@@ -814,7 +818,8 @@ public class MvRewritePreprocessor {
                         mvPartialPartitionPredicates, refTableUpdatedPartitionNames);
         List<ColumnRefOperator> mvOutputColumns = mvPlanContext.getOutputColumns();
         // generate scan mv plan here to reuse it in rule applications
-        LogicalOlapScanOperator scanMvOp = createScanMvOperator(materializationContext, partitionNamesToRefresh);
+        LogicalOlapScanOperator scanMvOp = createScanMvOperator(mv,
+                materializationContext.getMvColumnRefFactory(), partitionNamesToRefresh);
         materializationContext.setScanMvOperator(scanMvOp);
         // should keep the sequence of schema
         List<ColumnRefOperator> scanMvOutputColumns = Lists.newArrayList();
@@ -834,11 +839,10 @@ public class MvRewritePreprocessor {
             outputMapping.put(mvOutputColumns.get(i), scanMvOutputColumns.get(i));
         }
         materializationContext.setOutputMapping(outputMapping);
-        context.addCandidateMvs(materializationContext);
-        logMVPrepare(connectContext, copiedMV, "Prepare MV {} success", copiedMV.getName());
+        return materializationContext;
     }
 
-    public List<Column> getMvOutputColumns(MaterializedView mv) {
+    public static List<Column> getMvOutputColumns(MaterializedView mv) {
         if (mv.getQueryOutputIndices() == null || mv.getQueryOutputIndices().isEmpty()) {
             return mv.getBaseSchema();
         } else {
@@ -858,14 +862,12 @@ public class MvRewritePreprocessor {
      * - original MV's predicates which can be deduced from MV opt expression and be used
      * for partition/distribution pruning.
      */
-    private LogicalOlapScanOperator createScanMvOperator(MaterializationContext mvContext,
-                                                         Set<String> excludedPartitions) {
-        final MaterializedView mv = mvContext.getMv();
-
+    public static LogicalOlapScanOperator createScanMvOperator(MaterializedView mv,
+                                                               ColumnRefFactory columnRefFactory,
+                                                               Set<String> excludedPartitions) {
         final ImmutableMap.Builder<ColumnRefOperator, Column> colRefToColumnMetaMapBuilder = ImmutableMap.builder();
         final ImmutableMap.Builder<Column, ColumnRefOperator> columnMetaToColRefMapBuilder = ImmutableMap.builder();
 
-        final ColumnRefFactory columnRefFactory = mvContext.getQueryRefFactory();
         int relationId = columnRefFactory.getNextRelationId();
 
         // first add base schema to avoid replaced in full schema.
@@ -914,7 +916,7 @@ public class MvRewritePreprocessor {
                 .setTable(mv)
                 .setColRefToColumnMetaMap(colRefToColumnMetaMapBuilder.build())
                 .setColumnMetaToColRefMap(columnMetaToColRefMap)
-                .setDistributionSpec(getTableDistributionSpec(mvContext, columnMetaToColRefMap))
+                .setDistributionSpec(getTableDistributionSpec(mv, columnMetaToColRefMap))
                 .setSelectedIndexId(mv.getBaseIndexId())
                 .setSelectedPartitionId(selectPartitionIds)
                 .setPartitionNames(partitionNames)
@@ -926,10 +928,8 @@ public class MvRewritePreprocessor {
                 .build();
     }
 
-    private DistributionSpec getTableDistributionSpec(
-            MaterializationContext mvContext, Map<Column, ColumnRefOperator> columnMetaToColRefMap) {
-        final MaterializedView mv = mvContext.getMv();
-
+    private static DistributionSpec getTableDistributionSpec(MaterializedView mv,
+                                                             Map<Column, ColumnRefOperator> columnMetaToColRefMap) {
         DistributionSpec distributionSpec = null;
         // construct distribution
         DistributionInfo distributionInfo = mv.getDefaultDistributionInfo();
