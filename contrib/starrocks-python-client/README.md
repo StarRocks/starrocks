@@ -30,11 +30,28 @@ starrocks://<User>:<Password>@<Host>:<Port>/<Catalog>.<Database>
 It is recommended to use python 3.x to connect to the StarRocks database, eg:
 ```
 from sqlalchemy import create_engine
-from sqlalchemy.schema import Table, MetaData
+from sqlalchemy.schema import Table, MetaData, Column
 from sqlalchemy.sql.expression import select, text
 
 engine = create_engine('starrocks://root:xxx@localhost:9030/hive_catalog.hive_db')
 connection = engine.connect()
 
 rows = connection.execute(text("SELECT * FROM hive_table")).fetchall()
+
+meta = MetaData()
+tbl = Table(
+    'table1',
+    meta,
+    Column("id", Integer),
+    starrocks_engine='OLAP',
+    starrocks_comment='table comment',
+    starrocks_properties=(
+        ("storage_medium", "SSD"),
+        ("storage_cooldown_time", "2015-06-04 00:00:00"),
+    ))
+
+meta.createall()
+with connection.begin() as con:
+    tbl.insert().values(id=1)
+rows = connection.execute(tbl.select()).fetchall()
 ```
