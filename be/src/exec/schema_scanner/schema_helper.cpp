@@ -67,6 +67,12 @@ Status SchemaHelper::list_fe_locks(const std::string& ip, int32_t port, const TF
             ip, port, [&req, &res](FrontendServiceConnection& client) { client->listFeLocks(*res, req); });
 }
 
+Status SchemaHelper::list_fe_memory_usage(const std::string& ip, int32_t port, const TFeMemoryReq& req,
+                                          TFeMemoryRes* res) {
+    return ThriftRpcHelper::rpc<FrontendServiceClient>(
+            ip, port, [&req, &res](FrontendServiceConnection& client) { client->listFeMemoryUsage(*res, req); });
+}
+
 Status SchemaHelper::get_tables_info(const std::string& ip, const int32_t port, const TGetTablesInfoRequest& request,
                                      TGetTablesInfoResponse* response) {
     return ThriftRpcHelper::rpc<FrontendServiceClient>(

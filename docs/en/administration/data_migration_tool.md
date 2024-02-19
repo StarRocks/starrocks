@@ -65,7 +65,7 @@ The following FE parameters are dynamic configuration items. Refer to [Configure
 | ------------------------------------- | ----------- | -------- | ------------------------------------------------------------ |
 | replication_max_parallel_table_count  | 100         | -        | The maximum number of concurrent data synchronization tasks allowed. StarRocks creates one synchronization task for each table. |
 | replication_max_parallel_data_size_mb | 10240       | MB       | The maximum size of data allowed for concurrent synchronization. |
-| replication_transaction_timeout_sec   | 3600        | 秒       | The timeout duration for synchronization tasks.              |
+| replication_transaction_timeout_sec   | 3600        | Seconds  | The timeout duration for synchronization tasks.              |
 
 #### BE Parameters
 

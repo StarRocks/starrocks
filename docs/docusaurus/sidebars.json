@@ -237,7 +237,14 @@
             "administration/Scale_up_down",
             "administration/Backup_and_restore",
             "administration/Configuration",
-            "administration/Monitor_and_Alert",
+            {
+              "type": "category",
+              "label": "Monitor and Alert",
+              "link": {"type": "doc", "id": "administration/Monitor_and_Alert"},
+              "items": [
+                "administration/metrics"
+              ]
+            },
             "administration/audit_loader",
             "administration/enable_fqdn",
             "administration/timezone",
@@ -876,7 +883,14 @@
             "administration/Scale_up_down",
             "administration/Backup_and_restore",
             "administration/Configuration",
-            "administration/Monitor_and_Alert",
+            {
+              "type": "category",
+              "label": "监控报警",
+              "link": {"type": "doc", "id": "administration/Monitor_and_Alert"},
+              "items": [
+                "administration/metrics"
+              ]
+            },
             "administration/audit_loader",
             "administration/enable_fqdn",
             "administration/timezone",

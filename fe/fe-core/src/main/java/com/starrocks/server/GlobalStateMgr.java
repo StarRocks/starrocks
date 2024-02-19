@@ -175,6 +175,7 @@ import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.load.routineload.RoutineLoadScheduler;
 import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
 import com.starrocks.load.streamload.StreamLoadMgr;
+import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.Auth;
@@ -550,6 +551,8 @@ public class GlobalStateMgr {
     private final SlotManager slotManager = new SlotManager(resourceUsageMonitor);
     private final SlotProvider slotProvider = new SlotProvider();
 
+    private MemoryUsageTracker memoryUsageTracker;
+
     public NodeMgr getNodeMgr() {
         return nodeMgr;
     }
@@ -814,6 +817,8 @@ public class GlobalStateMgr {
 
         this.replicationMgr = new ReplicationMgr();
         nodeMgr.registerLeaderChangeListener(slotProvider::leaderChangeListener);
+
+        this.memoryUsageTracker = new MemoryUsageTracker();
     }
 
     public static void destroyCheckpoint() {
@@ -1496,6 +1501,9 @@ public class GlobalStateMgr {
         slotManager.start();
 
         lockChecker.start();
+
+        // The memory tracker should be placed at the end
+        memoryUsageTracker.start();
     }
 
     private void transferToNonLeader(FrontendNodeType newType) {
@@ -2693,6 +2701,7 @@ public class GlobalStateMgr {
                         .append(partitionDuration).append("\"");
             }
 
+            Map<String, String> properties = olapTable.getTableProperty().getProperties();
             if (table.isCloudNativeTable()) {
                 Map<String, String> storageProperties = olapTable.getProperties();
 
@@ -2771,9 +2780,6 @@ public class GlobalStateMgr {
                     sb.append(WriteQuorum.writeQuorumToName(olapTable.writeQuorum())).append("\"");
                 }
 
-                // storage media
-                Map<String, String> properties = olapTable.getTableProperty().getProperties();
-
                 if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
                     sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
                             .append("\" = \"");
@@ -2787,13 +2793,6 @@ public class GlobalStateMgr {
                             .append(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)
                             .append("\" = \"")
                             .append(storageCoolDownTTL).append("\"");
-                }
-
-                // partition live number
-                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
-                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)
-                            .append("\" = \"");
-                    sb.append(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)).append("\"");
                 }
 
                 // unique constraint
@@ -2812,6 +2811,13 @@ public class GlobalStateMgr {
                     sb.append(ForeignKeyConstraint.getShowCreateTableConstraintDesc(olapTable.getForeignKeyConstraints()))
                             .append("\"");
                 }
+            }
+
+            // partition live number
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)
+                        .append("\" = \"");
+                sb.append(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)).append("\"");
             }
 
             // compression type

@@ -1417,6 +1417,22 @@ enum TGrantsToType {
     USER,
 }
 
+struct TFeMemoryItem {
+    1: optional string module_name
+    2: optional string class_name
+    3: optional i64 current_consumption
+    4: optional i64 peak_consumption
+    5: optional string counter_info
+}
+
+struct TFeMemoryReq {
+    1: optional TAuthInfo auth_info
+}
+
+struct TFeMemoryRes {
+    1: optional list<TFeMemoryItem> items
+}
+
 struct TGetGrantsToRolesOrUserRequest {
     1: optional TGrantsToType type;
 }
@@ -1564,6 +1580,9 @@ service FrontendService {
 
     // sys.fe_locks
     TFeLocksRes listFeLocks(1: TFeLocksReq request)
+
+    // sys.fe_memory_usage
+    TFeMemoryRes listFeMemoryUsage(1: TFeMemoryReq request)
 
     TRequireSlotResponse requireSlotAsync(1: TRequireSlotRequest request)
     TFinishSlotRequirementResponse finishSlotRequirement(1: TFinishSlotRequirementRequest request)
