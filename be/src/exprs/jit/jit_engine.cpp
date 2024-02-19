@@ -175,7 +175,7 @@ Status JITEngine::generate_scalar_function_ir(ExprContext* context, llvm::Module
     counter_phi->addIncoming(llvm::ConstantInt::get(size_type, 0), entry);
 
     JITContext jc = {counter_phi, columns, module, b, 0};
-    ASSIGN_OR_RETURN(auto result, expr->generate_ir_impl(context, &jc))
+    ASSIGN_OR_RETURN(auto result, expr->generate_ir(context, &jc))
 
     // Pseudo code:
     // values_last[counter] = result_value;
