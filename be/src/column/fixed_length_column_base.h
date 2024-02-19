@@ -94,6 +94,11 @@ public:
 
     size_t byte_size(size_t idx __attribute__((unused))) const override { return sizeof(ValueType); }
 
+    size_t byte_size(size_t from, size_t size) const override {
+        DCHECK_LE(from + size, this->size()) << "Range error";
+        return sizeof(ValueType) * size;
+    }
+
     void reserve(size_t n) override { _data.reserve(n); }
 
     void resize(size_t n) override { _data.resize(n); }
