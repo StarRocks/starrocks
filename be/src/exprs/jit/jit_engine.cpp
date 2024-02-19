@@ -65,6 +65,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "util/defer_op.h"
+#include "util/mem_info.h"
 
 namespace starrocks {
 
@@ -133,26 +134,39 @@ JITEngine::~JITEngine() {
     delete _func_cache;
 }
 
+constexpr int64_t JIT_CACHE_LOWEST_LIMIT = (1UL << 34); // 16GB
+
 Status JITEngine::init() {
     if (_initialized) {
         return Status::OK();
     }
+#if BE_TEST
+    _func_cache = new_lru_cache(32000); // 1k capacity per cache of 32 shards in LRU cache
+#else
+    int64_t mem_limit = MemInfo::physical_mem();
+    if (GlobalEnv::GetInstance()->process_mem_tracker()->has_limit()) {
+        mem_limit = GlobalEnv::GetInstance()->process_mem_tracker()->limit();
+    }
+    int64_t jit_lru_cache_size = config::jit_lru_cache_size;
+    if (jit_lru_cache_size <= 0) {
+        if (mem_limit < JIT_CACHE_LOWEST_LIMIT) {
+            _initialized = true;
+            _support_jit = false;
+            LOG(WARNING) << "System or Process memory limit is less than 16GB, disable JIT";
+            return Status::OK();
+        } else {
+            jit_lru_cache_size = std::min<int64_t>((1UL << 30), (int64_t)(mem_limit * 0.01));
+        }
+    }
+    LOG(INFO) << "JIT LRU cache size = " << jit_lru_cache_size;
+    _func_cache = new_lru_cache(jit_lru_cache_size);
+#endif
+    DCHECK(_func_cache != nullptr);
     llvm::InitializeNativeTarget();
     llvm::InitializeNativeTargetAsmPrinter();
     llvm::InitializeNativeTargetAsmParser();
     llvm::InitializeNativeTargetDisassembler();
     llvm::sys::DynamicLibrary::LoadLibraryPermanently(nullptr);
-
-#if BE_TEST
-    _func_cache = new_lru_cache(32000); // 1k capacity per cache of 32 shards in LRU cache
-#else
-    int64_t jit_lru_cache_size = config::jit_lru_cache_size;
-    if (jit_lru_cache_size < 0) {
-        jit_lru_cache_size = (1UL << 30); // total 1GB for 32 shards in LRU cache
-    }
-    _func_cache = new_lru_cache(jit_lru_cache_size);
-#endif
-    DCHECK(_func_cache != nullptr);
     _initialized = true;
     _support_jit = true;
     return Status::OK();
