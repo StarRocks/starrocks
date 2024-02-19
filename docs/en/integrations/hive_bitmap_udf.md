@@ -134,19 +134,7 @@ Supported source and target data types:
    mysql> create table t1(c1 int, c2 bitmap bitmap_union) aggregate key(c1)  distributed by hash(c1);
    ```
 
-4. Load Bitmap data into StarRocks in different ways.
-
-   - Load data via the [files](../sql-reference/sql-functions/table-functions/files.md) function.
-
-   ```sql
-   mysql> insert into t1 select c1, bitmap_from_binary(c2) from files (
-       "path" = "hdfs://<hdfs_ip>:<hdfs_port>/<hdfs_db>/t_bitmap/*",
-       "format"="parquet",
-       "compression" = "uncompressed"
-       );
-   ```
-
-   - Load data via [Hive Catalog](../data_source/catalog/hive_catalog.md).
+4. Load Bitmap data into StarRocks via [Hive Catalog](../data_source/catalog/hive_catalog.md).
 
    ```sql
    mysql> insert into t1 select c1, bitmap_from_binary(c2) from hive_catalog_hms.xxx_db.t_bitmap;
