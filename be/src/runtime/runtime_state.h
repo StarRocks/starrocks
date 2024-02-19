@@ -447,9 +447,11 @@ public:
 
     bool is_jit_comparison_op() const { return (_query_options.jit_level == 1) || ((_query_options.jit_level & 16)); }
 
-    bool is_jit_div_op() const { return (_query_options.jit_level == 1) || ((_query_options.jit_level & 32)); }
+    bool is_jit_logical_op() const { return (_query_options.jit_level == 1) || ((_query_options.jit_level & 32)); }
 
-    bool is_jit_mod_op() const { return (_query_options.jit_level == 1) || ((_query_options.jit_level & 64)); }
+    bool is_jit_div_op() const { return (_query_options.jit_level == 1) || ((_query_options.jit_level & 64)); }
+
+    bool is_jit_mod_op() const { return (_query_options.jit_level == 1) || ((_query_options.jit_level & 128)); }
 
     std::string_view get_sql_dialect() const { return _query_options.sql_dialect; }
 

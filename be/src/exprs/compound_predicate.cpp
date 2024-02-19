@@ -60,7 +60,7 @@ public:
         return VectorizedLogicPredicateBinaryFunction<AndNullImpl, AndImpl>::template evaluate<TYPE_BOOLEAN>(l, r);
     }
 
-    bool is_compilable() const override { return true; }
+    bool is_compilable(RuntimeState* state) const override { return state->is_jit_logical_op(); }
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
         std::vector<LLVMDatum> datums(2);
@@ -117,7 +117,7 @@ public:
         return VectorizedLogicPredicateBinaryFunction<OrNullImpl, OrImpl>::template evaluate<TYPE_BOOLEAN>(l, r);
     }
 
-    bool is_compilable() const override { return true; }
+    bool is_compilable(RuntimeState* state) const override { return state->is_jit_logical_op(); }
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
         std::vector<LLVMDatum> datums(2);
@@ -156,7 +156,7 @@ public:
         return VectorizedStrictUnaryFunction<CompoundPredNot>::template evaluate<TYPE_BOOLEAN>(l);
     }
 
-    bool is_compilable() const override { return true; }
+    bool is_compilable(RuntimeState* state) const override { return state->is_jit_logical_op(); }
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
         ASSIGN_OR_RETURN(LLVMDatum datum, _children[0]->generate_ir(context, jit_ctx))
