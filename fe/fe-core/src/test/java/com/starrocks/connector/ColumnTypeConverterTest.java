@@ -34,7 +34,6 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 
-import static com.starrocks.catalog.ScalarType.CATALOG_MAX_VARCHAR_LENGTH;
 import static com.starrocks.catalog.ScalarType.getOlapMaxVarcharLength;
 import static com.starrocks.catalog.Type.UNKNOWN_TYPE;
 import static com.starrocks.connector.ColumnTypeConverter.columnEquals;

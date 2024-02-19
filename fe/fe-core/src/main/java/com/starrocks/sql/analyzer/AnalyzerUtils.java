@@ -882,7 +882,7 @@ public class AnalyzerUtils {
                     ScalarType scalarType = (ScalarType) srcType;
                     if (scalarType.getLength() > 0) {
                         len = scalarType.getLength();
-                   }
+                    }
                 }
                 ScalarType stringType = ScalarType.createVarcharType(len);
                 newType = stringType;
