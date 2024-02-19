@@ -271,9 +271,7 @@ group by tiny_column;
       , ... |
       GROUPING SETS [, ...] (  groupSet [ , groupSet [ , ... ] ] ) |
       ROLLUP(expr  [ , expr [ , ... ] ]) |
-      expr  [ , expr [ , ... ] ] WITH ROLLUP |
-      CUBE(expr  [ , expr [ , ... ] ]) |
-      expr  [ , expr [ , ... ] ] WITH CUBE
+      CUBE(expr  [ , expr [ , ... ] ])
       ]
   [ ... ]
   ```
