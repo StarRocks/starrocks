@@ -276,6 +276,8 @@ struct TQueryOptions {
 
   117: optional bool enable_spill_to_remote_storage;
   118: optional TSpillToRemoteStorageOptions spill_to_remote_storage_options;
+  
+  130: optional bool enable_wait_dependent_event = false;
 }
 
 

@@ -46,6 +46,13 @@ public:
     std::string to_string() const;
     virtual std::string name() const { return "base_event"; }
 
+    bool need_wait_dependencies_finished() const { return _need_wait_dependencies_finished; }
+    void set_need_wait_dependencies_finished(bool need_wait_dependencies_finished) {
+        _need_wait_dependencies_finished = need_wait_dependencies_finished;
+    }
+
+    bool dependencies_finished() const { return _num_finished_dependencies.load() == _num_dependencies; }
+
 public:
     static EventPtr create_event();
     static EventPtr create_collect_stats_source_initialize_event(DriverExecutor* executor,
@@ -58,6 +65,8 @@ protected:
 
     std::atomic<bool> _finished{false};
     std::atomic<size_t> _num_finished_dependencies{0};
+
+    bool _need_wait_dependencies_finished{};
 };
 
 } // namespace starrocks::pipeline

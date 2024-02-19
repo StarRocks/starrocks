@@ -36,6 +36,10 @@ public:
 
     void add_pipeline(const OpFactories& operators) {
         _pipelines.emplace_back(std::make_shared<Pipeline>(next_pipe_id(), operators));
+        bool enable_wait_event = _fragment_context->runtime_state()->enable_wait_dependent_event();
+        if (enable_wait_event && !_dependent_pipelines.empty()) {
+            subscribe_pipeline_event(_pipelines.back().get(), _dependent_pipelines.back()->pipeline_event());
+        }
     }
 
     OpFactories maybe_interpolate_local_broadcast_exchange(RuntimeState* state, int32_t plan_node_id,
@@ -137,6 +141,8 @@ public:
 
     void push_dependent_pipeline(const Pipeline* pipeline);
     void pop_dependent_pipeline();
+
+    void subscribe_pipeline_event(Pipeline* pipeline, Event* event);
 
 private:
     OpFactories _maybe_interpolate_local_passthrough_exchange(RuntimeState* state, int32_t plan_node_id,
