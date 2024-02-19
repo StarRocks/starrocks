@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 StarRocks supports real-time data synchronization from MySQL within seconds, delivering ultra-low latency real-time analytics at scale and enabling users to query real-time data as they happen.
 
-This tutorial helps you learn how you can bring real-time analytics to your business and users. It demonstrates how to synchronize data from MySQL to StarRocks in real time by using the following tools: StarRocks Migration Tools (SMT), Flink, Flink CDC Connector, and flink-starrocks-connector.
+This tutorial helps you learn how you can bring real-time analytics to your business and users. It demonstrates how to synchronize data from MySQL to StarRocks in real time by using the following tools: StarRocks Migration Tools (SMT), Flink, Flink CDC Connector, and flink-connector-starrocks.
 
 > **NOTICE**
 >
@@ -34,9 +34,9 @@ Real-time synchronization from MySQL is implemented in two stages: synchronizing
 
    a. The Flink SQL client executes the data loading statement `INSERT INTO SELECT` to submit one or more Flink jobs to the Flink cluster.
 
-   b. The Flink cluster runs the Flink jobs to obtain data. The [Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/blob/master/docs/content/quickstart/build-real-time-data-lake-tutorial.md) first reads full historical data from the source database, then seamlessly switches to incremental reading, and sends the data to flink-starrocks-connector.
+   b. The Flink cluster runs the Flink jobs to obtain data. The [Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/blob/master/docs/content/quickstart/build-real-time-data-lake-tutorial.md) first reads full historical data from the source database, then seamlessly switches to incremental reading, and sends the data to flink-connector-starrocks.
 
-   c. flink-starrocks-connector accumulates data in mini-batches, and synchronizes each batch of data to StarRocks.
+   c. flink-connector-starrocks accumulates data in mini-batches, and synchronizes each batch of data to StarRocks.
 
 > **Note**
 >
@@ -52,7 +52,7 @@ Flink calculates the real-time ranking of commodity sales based on the original 
 
 ### Download and install synchronization tools
 
-To synchronize data from MySQL, you need to install the following tools: SMT, Flink, Flink CDC connector, and flink-starrocks-connector.
+To synchronize data from MySQL, you need to install the following tools: SMT, Flink, Flink CDC connector, and flink-connector-starrocks.
 
 1. Download and install Flink, and start the Flink cluster. You can also perform this step by following the instructions in [Flink official documentation](https://nightlies.apache.org/flink/flink-docs-release-1.13/docs/try-flink/local_installation/).
 
@@ -177,7 +177,7 @@ To synchronize data from MySQL in real time, the system needs to read data from 
 ## Synchronize database & table schema
 
 1. Edit the SMT configuration file.
-   Go to the SMT `conf` directory and edit the configuration file `config_prod.conf`, such as MySQL connection information, the matching rules of the database & table to be synchronized, and configuration information of flink-starrocks-connector.
+   Go to the SMT `conf` directory and edit the configuration file `config_prod.conf`, such as MySQL connection information, the matching rules of the database & table to be synchronized, and configuration information of flink-connector-starrocks.
 
     ```Bash
     [db]

@@ -236,9 +236,9 @@ public:
     // Column container memory usage
     size_t container_memory_usage() const;
     // Element memory usage that is not in the container, such as memory referenced by pointer.
-    size_t element_memory_usage() const { return element_memory_usage(0, num_rows()); }
+    size_t reference_memory_usage() const { return reference_memory_usage(0, num_rows()); }
     // Element memory usage of |size| rows from |from| in chunk
-    size_t element_memory_usage(size_t from, size_t size) const;
+    size_t reference_memory_usage(size_t from, size_t size) const;
 
     // Chunk bytes usage, used for memtable data size statistic.
     // Including element data size only.

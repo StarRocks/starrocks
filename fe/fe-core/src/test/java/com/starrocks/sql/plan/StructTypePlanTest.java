@@ -41,6 +41,15 @@ public class StructTypePlanTest extends PlanTestBase {
                 "c3 struct<a int, b int, c struct<a int, b int>, d array<int>>) " +
                 "duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
+        starRocksAssert.withTable("create table array_struct_nest(c1 int, " +
+                "c2 array<struct<c2_sub1 int, c2_sub2 int>>, " +
+                "c3 struct<c3_sub1 array<struct<c3_sub1_sub1 int, c3_sub1_sub2 int>>, c3_sub2 int>) " +
+                "duplicate key(c1) distributed by hash(c1) buckets 1 " +
+                "properties('replication_num'='1');");
+        starRocksAssert.withTable("create table index_struct_nest(c1 int,\n" +
+                "index_struct array<struct<`index` bigint(20), char_col varchar(1048576)>>)\n" +
+                "duplicate key(c1) distributed by hash(c1) buckets 1\n" +
+                "properties('replication_num'='1')");
         FeConstants.runningUnitTest = false;
     }
 
@@ -68,6 +77,12 @@ public class StructTypePlanTest extends PlanTestBase {
                 "  |----6:EXCHANGE\n" +
                 "  |    \n" +
                 "  3:EXCHANGE");
+        assertContains(plan, "CAST(3: c2 AS STRUCT<int(11), varchar(10)>)");
+
+        sql = "select index_struct[1].`index` from index_struct_nest";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "1:Project\n" +
+                "  |  <slot 3> : 2: index_struct[1].index");
     }
 
     @Test

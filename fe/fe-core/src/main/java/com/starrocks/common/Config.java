@@ -598,6 +598,13 @@ public class Config extends ConfigBase {
     public static boolean http_web_page_display_hardware = true;
 
     /**
+     * Whether to enable the detail metrics for http. It may be expensive
+     * to get those metrics, and only enable it for debug in general.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_http_detail_metrics = false;
+
+    /**
      * Cluster name will be shown as the title of web page
      */
     @ConfField
@@ -1089,6 +1096,18 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long dynamic_partition_check_interval_seconds = 600;
+
+    /**
+     * If set to true, memory tracker feature will open
+     */
+    @ConfField(mutable = true)
+    public static boolean memory_tracker_enable = true;
+
+    /**
+     * Decide how often to track the memory usage of the FE process
+     */
+    @ConfField(mutable = true)
+    public static long memory_tracker_interval_seconds = 60;
 
     /**
      * If batch creation of partitions is allowed to create half of the partitions, it is easy to generate holes.

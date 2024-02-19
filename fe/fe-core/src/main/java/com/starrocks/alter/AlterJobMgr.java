@@ -102,7 +102,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.AlterTableStatementAnalyzer;
 import com.starrocks.sql.analyzer.Analyzer;
-import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
@@ -361,9 +360,12 @@ public class AlterJobMgr {
                     return;
                 }
                 processChangeMaterializedViewStatus(materializedView, status, false);
-                GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .refreshMaterializedView(dbName, materializedView.getName(), true, null,
-                                Constants.TaskRunPriority.NORMAL.value(), true, false);
+                // for manual refresh type, do not refresh
+                if (materializedView.getRefreshScheme().getType() != MaterializedView.RefreshType.MANUAL) {
+                    GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .refreshMaterializedView(dbName, materializedView.getName(), true, null,
+                                    Constants.TaskRunPriority.NORMAL.value(), true, false);
+                }
             } else if (AlterMaterializedViewStmt.INACTIVE.equalsIgnoreCase(status)) {
                 if (!materializedView.isActive()) {
                     return;
@@ -403,10 +405,8 @@ public class AlterJobMgr {
                         "\n\nCause an error: %s", materializedView.getName(), viewDefineSql, e.getMessage(), e);
             }
 
-            // Skip checks to maintain eventual consistency when replay
-            Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllConnectorTableAndView(mvQueryStatement);
             List<BaseTableInfo> baseTableInfos =
-                    Lists.newArrayList(MaterializedViewAnalyzer.getBaseTableInfos(tableNameTableMap, !isReplay));
+                    MaterializedViewAnalyzer.processBaseTables(mvQueryStatement, !isReplay);
             materializedView.setBaseTableInfos(baseTableInfos);
             materializedView.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
             materializedView.onReload();

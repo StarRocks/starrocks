@@ -43,7 +43,7 @@ public:
     void close(RuntimeState* state) override;
 
 private:
-    void _process_chunk(bthread::TaskIterator<ChunkPtr>& iter) override;
+    void _add_chunk(const ChunkPtr& chunk) override;
 
     Status _open_file_writer();
 
@@ -83,19 +83,7 @@ void ExportSinkIOBuffer::close(RuntimeState* state) {
     SinkIOBuffer::close(state);
 }
 
-void ExportSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
-    --_num_pending_chunks;
-    if (_is_finished) {
-        return;
-    }
-
-    if (_is_cancelled && !_is_finished) {
-        if (_num_pending_chunks == 0) {
-            close(_state);
-        }
-        return;
-    }
-
+void ExportSinkIOBuffer::_add_chunk(const ChunkPtr& chunk) {
     if (_file_builder == nullptr) {
         if (Status status = _open_file_writer(); !status.ok()) {
             LOG(WARNING) << "open file write failed, error: " << status.to_string();
@@ -103,13 +91,7 @@ void ExportSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
             return;
         }
     }
-    const auto& chunk = *iter;
-    if (chunk == nullptr) {
-        // this is the last chunk
-        DCHECK_EQ(_num_pending_chunks, 0);
-        close(_state);
-        return;
-    }
+
     if (Status status = _file_builder->add_chunk(chunk.get()); !status.ok()) {
         LOG(WARNING) << "add chunk to file builder failed, error: " << status.to_string();
         _fragment_ctx->cancel(status);

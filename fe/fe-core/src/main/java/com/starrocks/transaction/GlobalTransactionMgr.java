@@ -34,6 +34,7 @@
 
 package com.starrocks.transaction;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
@@ -45,6 +46,7 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
+import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -91,7 +93,7 @@ import javax.validation.constraints.NotNull;
  * Attention: all api in txn manager should get db lock or load lock first, then get txn manager's lock, or
  * there will be dead lock
  */
-public class GlobalTransactionMgr implements Writable {
+public class GlobalTransactionMgr implements Writable, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(GlobalTransactionMgr.class);
 
     private Map<Long, DatabaseTransactionMgr> dbIdToDatabaseTransactionMgrs = Maps.newConcurrentMap();
@@ -848,5 +850,14 @@ public class GlobalTransactionMgr implements Writable {
             return "";
         }
         return dbTransactionMgr.getTxnPublishTimeoutDebugInfo(txnId);
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        long count = 0;
+        for (DatabaseTransactionMgr databaseTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
+            count += databaseTransactionMgr.getTransactionNum();
+        }
+        return ImmutableMap.of("Transaction", count);
     }
 }

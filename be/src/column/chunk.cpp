@@ -329,13 +329,13 @@ size_t Chunk::container_memory_usage() const {
     return container_memory_usage;
 }
 
-size_t Chunk::element_memory_usage(size_t from, size_t size) const {
+size_t Chunk::reference_memory_usage(size_t from, size_t size) const {
     DCHECK_LE(from + size, num_rows()) << "Range error";
-    size_t element_memory_usage = 0;
+    size_t reference_memory_usage = 0;
     for (const auto& column : _columns) {
-        element_memory_usage += column->element_memory_usage(from, size);
+        reference_memory_usage += column->reference_memory_usage(from, size);
     }
-    return element_memory_usage;
+    return reference_memory_usage;
 }
 
 size_t Chunk::bytes_usage() const {

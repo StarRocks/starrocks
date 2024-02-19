@@ -132,7 +132,7 @@ DISTRIBUTED BY HASH(<bucket_key>[,<bucket_key2> ...]) [BUCKETS <bucket_number>]
 -- refresh_moment
     [IMMEDIATE | DEFERRED]
 -- refresh_scheme
-    [ASYNC [START (<start_time>)] [EVERY (INTERVAL <refresh_interval>)] | MANUAL]
+    [ASYNC | ASYNC [START (<start_time>)] EVERY (INTERVAL <refresh_interval>) | MANUAL]
 ]
 -- partition_expression
 [PARTITION BY 
@@ -196,8 +196,9 @@ The refresh moment of the materialized view. Default value: `IMMEDIATE`. Valid v
 
 The refresh strategy of the asynchronous materialized view. Valid values:
 
-- `ASYNC`: Asynchronous refresh mode. Each time the base table data changes, the materialized view is automatically refreshed according to the pre-defined refresh interval. You can further specify the refresh start time as `START('yyyy-MM-dd hh:mm:ss')`, and specify the refresh interval as `EVERY (interval n day/hour/minute/second)` using the following units: `DAY`, `HOUR`, `MINUTE`, and `SECOND`. Example: `ASYNC START ('2023-09-12 16:30:25') EVERY (INTERVAL 5 MINUTE)`. If you do not specify the interval, the default value `10 MINUTE` is used.
-- `MANUAL`: Manual refresh mode. The materialized view will not be automatically refreshed. The refresh tasks can only be triggered manually by users.
+- `ASYNC`: Automatic refresh mode. Each time the base table data changes, the materialized view is automatically refreshed.
+- `ASYNC [START (<start_time>)] EVERY(INTERVAL <interval>) `: Regular refresh mode. The materialized view is refreshed regularly at the interval defined. You can specify the interval as `EVERY (interval n day/hour/minute/second)` using the following units: `DAY`, `HOUR`, `MINUTE`, and `SECOND`. The default value is `10 MINUTE`. You can further specify the refresh start time as `START('yyyy-MM-dd hh:mm:ss')`. If the start time is not specified, the current time is used. Example: `ASYNC START ('2023-09-12 16:30:25') EVERY (INTERVAL 5 MINUTE)`.
+- `MANUAL`: Manual refresh mode. The materialized view will not be refreshed unless you trigger a refresh task manually.
 
 If this parameter is not specified, the default value `MANUAL` is used.
 

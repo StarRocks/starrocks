@@ -276,6 +276,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    // TODO: refactor the postProcessing code into listener-based instead of procedure-oriented
     public TableProperty buildMvProperties() {
         buildPartitionTTL();
         buildPartitionRefreshNumber();
@@ -283,6 +284,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildExcludedTriggerTables();
         buildConstraint();
         buildMvSortKeys();
+        buildQueryRewrite();
         return this;
     }
 
@@ -701,15 +703,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildEnablePersistentIndex();
         buildCompressionType();
         buildWriteQuorum();
-        buildPartitionTTL();
         buildPartitionLiveNumber();
-        buildAutoRefreshPartitionsLimit();
-        buildPartitionRefreshNumber();
-        buildExcludedTriggerTables();
         buildReplicatedStorage();
-        buildQueryRewrite();
         buildBinlogConfig();
         buildBinlogAvailableVersion();
-        buildConstraint();
+        buildMvProperties();
     }
 }

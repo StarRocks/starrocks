@@ -338,6 +338,16 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
             _index_cache.remove(index_entry);
         }
     }
+
+    // tablet maybe dropped during ingestion, add some log
+    if (!st.ok()) {
+        if (tablet->tablet_state() == TABLET_SHUTDOWN) {
+            std::string msg = strings::Substitute("tablet $0 in TABLET_SHUTDOWN, maybe deleted by other thread",
+                                                  tablet->tablet_id());
+            LOG(WARNING) << msg;
+        }
+    }
+
     VLOG(1) << "UpdateManager::on_rowset_finished finish tablet:" << tablet->tablet_id()
             << " rowset:" << rowset_unique_id;
     return st;

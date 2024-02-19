@@ -30,7 +30,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.CaseSensibility;
-import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.mysql.privilege.PrivPredicate;
@@ -253,17 +252,12 @@ public class InformationSchemaDataSource {
         StringBuilder partitionKeySb = new StringBuilder();
         if (partitionInfo.isRangePartition()) {
             int idx = 0;
-            try {
-                for (Column column : partitionInfo.getPartitionColumns()) {
-                    if (idx != 0) {
-                        partitionKeySb.append(", ");
-                    }
-                    partitionKeySb.append("`").append(column.getName()).append("`");
-                    idx++;
+            for (Column column : partitionInfo.getPartitionColumns()) {
+                if (idx != 0) {
+                    partitionKeySb.append(", ");
                 }
-            } catch (NotImplementedException e) {
-                partitionKeySb.append(DEFAULT_EMPTY_STRING);
-                LOG.warn("The partition of type range seems not implement getPartitionColumns");
+                partitionKeySb.append("`").append(column.getName()).append("`");
+                idx++;
             }
         } else {
             partitionKeySb.append(DEFAULT_EMPTY_STRING);

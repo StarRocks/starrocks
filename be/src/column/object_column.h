@@ -171,9 +171,9 @@ public:
 
     size_t container_memory_usage() const override { return _pool.capacity() * type_size(); }
 
-    size_t element_memory_usage() const override { return byte_size(); }
+    size_t reference_memory_usage() const override { return byte_size(); }
 
-    size_t element_memory_usage(size_t from, size_t size) const override { return byte_size(from, size); }
+    size_t reference_memory_usage(size_t from, size_t size) const override { return byte_size(from, size); }
 
     void swap_column(Column& rhs) override {
         auto& r = down_cast<ObjectColumn&>(rhs);

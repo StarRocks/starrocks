@@ -33,7 +33,15 @@ select TASK_NAME, SCHEDULE from information_schema.tasks where `DATABASE`='test_
 -- !result
 select TASK_NAME, STATE, ERROR_MESSAGE from information_schema.task_runs where `DATABASE`='test_drop_task_${uuid0}';
 -- result:
+<<<<<<< HEAD
 test_kill	FAILED	CANCELLED
+=======
+test_kill	FAILED	kill TaskRun
+-- !result
+drop task not_exist_task;
+-- result:
+E: (1064, 'Unexpected exception: Getting analyzing error. Detail message: Task not_exist_task is not exist.')
+>>>>>>> 99ef459e4b ([BugFix] fix dangling task when dropping materialized view  (#39932))
 -- !result
 drop database test_drop_task_${uuid0};
 -- result:

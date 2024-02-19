@@ -133,6 +133,7 @@ set(EXEC_FILES
     schema_scanner/starrocks_role_edges_scanner.cpp
     schema_scanner/starrocks_grants_to_scanner.cpp
     schema_scanner/schema_helper.cpp
+    schema_scanner/sys_fe_memory_usage.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp
     sorting/merge_column.cpp
@@ -175,6 +176,7 @@ set(EXEC_FILES
     pipeline/scan/olap_schema_chunk_source.cpp
     pipeline/scan/olap_schema_scan_operator.cpp
     pipeline/scan/olap_schema_scan_context.cpp
+    pipeline/sink/sink_io_buffer.cpp
     pipeline/scan/morsel.cpp
     pipeline/scan/chunk_buffer_limiter.cpp
     pipeline/sink/file_sink_operator.cpp

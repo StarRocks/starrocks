@@ -1126,8 +1126,8 @@ public class HdfsFsManager {
         try {
             fileSystem.getDFSFileSystem().delete(filePath, true);
         } catch (IOException e) {
-            LOG.error("errors while delete path " + path);
-            throw new UserException("delete path " + path + "error");
+            LOG.error("errors while delete path " + path, e);
+            throw new UserException("delete path " + path + "error", e);
         }
     }
 
@@ -1156,8 +1156,8 @@ public class HdfsFsManager {
                 throw new UserException("failed to rename path from " + srcPath + " to " + destPath);
             }
         } catch (IOException e) {
-            LOG.error("errors while rename path from " + srcPath + " to " + destPath);
-            throw new UserException("errors while rename " + srcPath + "to " + destPath);
+            LOG.error("errors while rename path from " + srcPath + " to " + destPath, e);
+            throw new UserException("errors while rename " + srcPath + "to " + destPath, e);
         }
     }
 
@@ -1168,8 +1168,8 @@ public class HdfsFsManager {
         try {
             return fileSystem.getDFSFileSystem().exists(filePath);
         } catch (IOException e) {
-            LOG.error("errors while check path exist: " + path);
-            throw new UserException("errors while check if path " + path + " exist");
+            LOG.error("errors while check path exist: " + path, e);
+            throw new UserException("errors while check if path " + path + " exist", e);
         }
     }
 
@@ -1186,7 +1186,7 @@ public class HdfsFsManager {
             return fd;
         } catch (IOException e) {
             LOG.error("errors while open path", e);
-            throw new UserException("could not open file " + path);
+            throw new UserException("could not open file " + path, e);
         }
     }
 
@@ -1236,7 +1236,7 @@ public class HdfsFsManager {
                 }
             } catch (IOException e) {
                 LOG.error("errors while read data from stream", e);
-                throw new UserException("errors while read data from stream");
+                throw new UserException("errors while read data from stream", e);
             }
         }
     }
@@ -1252,7 +1252,7 @@ public class HdfsFsManager {
                 fsDataInputStream.close();
             } catch (IOException e) {
                 LOG.error("errors while close file input stream", e);
-                throw new UserException("errors while close file input stream");
+                throw new UserException("errors while close file input stream", e);
             } finally {
                 ioStreamManager.removeInputStream(fd);
             }
@@ -1273,7 +1273,7 @@ public class HdfsFsManager {
             return fd;
         } catch (IOException e) {
             LOG.error("errors while open path", e);
-            throw new UserException("could not open file " + path);
+            throw new UserException("could not open file " + path, e);
         }
     }
 
@@ -1289,7 +1289,7 @@ public class HdfsFsManager {
                 fsDataOutputStream.write(data);
             } catch (IOException e) {
                 LOG.error("errors while write file " + fd + " to output stream", e);
-                throw new UserException("errors while write data to output stream");
+                throw new UserException("errors while write data to output stream", e);
             }
         }
     }
@@ -1302,7 +1302,7 @@ public class HdfsFsManager {
                 fsDataOutputStream.close();
             } catch (IOException e) {
                 LOG.error("errors while close file " + fd + " output stream", e);
-                throw new UserException("errors while close file output stream");
+                throw new UserException("errors while close file output stream", e);
             } finally {
                 ioStreamManager.removeOutputStream(fd);
             }

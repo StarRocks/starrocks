@@ -429,6 +429,7 @@ public class ListPartitionInfo extends PartitionInfo {
             this.idToValues.put(partitionId, values);
             this.setLiteralExprValues(partitionId, values);
         }
+        idToIsTempPartition.put(partitionId, false);
     }
 
     @Override

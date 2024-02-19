@@ -66,6 +66,7 @@ import java.util.ArrayList;
 
 public class LeaderOpExecutor {
     private static final Logger LOG = LogManager.getLogger(LeaderOpExecutor.class);
+    public static final int MAX_FORWARD_TIMES = 30;
 
     private final OriginStatement originStmt;
     private StatementBase parsedStmt;
@@ -151,7 +152,16 @@ public class LeaderOpExecutor {
 
     // Send request to Leader
     private void forward() throws Exception {
-        Pair<String, Integer> ipAndPort = GlobalStateMgr.getCurrentState().getLeaderIpAndRpcPort();
+        int forwardTimes = ctx.getForwardTimes() + 1;
+        if (forwardTimes > 1) {
+            LOG.info("forward multi times: {}", forwardTimes);
+        }
+        if (forwardTimes > MAX_FORWARD_TIMES) {
+            LOG.warn("too many forward times, max allowed forward time is {}", MAX_FORWARD_TIMES);
+            throw new DdlException("forward too many times");
+        }
+
+        Pair<String, Integer> ipAndPort = GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort();
         TNetworkAddress thriftAddress = new TNetworkAddress(ipAndPort.first, ipAndPort.second);
         TMasterOpRequest params = new TMasterOpRequest();
         params.setCluster(SystemInfoService.DEFAULT_CLUSTER);
@@ -166,6 +176,7 @@ public class LeaderOpExecutor {
         params.setStmt_id(ctx.getStmtId());
         params.setEnableStrictMode(ctx.getSessionVariable().getEnableInsertStrict());
         params.setCurrent_user_ident(ctx.getCurrentUserIdentity().toThrift());
+        params.setForward_times(forwardTimes);
 
         TUserRoles currentRoles = new TUserRoles();
         Preconditions.checkState(ctx.getCurrentRoleIds() != null);
@@ -192,6 +203,10 @@ public class LeaderOpExecutor {
                 thriftTimeoutMs,
                 Config.thrift_rpc_retry_times,
                 client -> client.forward(params));
+    }
+
+    public TMasterOpResult getResult() {
+        return result;
     }
 
     public ByteBuffer getOutputPacket() {

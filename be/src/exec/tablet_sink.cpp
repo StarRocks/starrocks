@@ -826,6 +826,7 @@ Status NodeChannel::close_wait(RuntimeState* state) {
 }
 
 void NodeChannel::cancel(const Status& err_st) {
+    if (_cancel_finished) return;
     // cancel rpc request, accelerate the release of related resources
     for (auto closure : _add_batch_closures) {
         closure->cancel();
@@ -834,6 +835,11 @@ void NodeChannel::cancel(const Status& err_st) {
     for (int i = 0; i < _rpc_request.requests_size(); i++) {
         _cancel(_rpc_request.requests(i).index_id(), err_st);
     }
+    _cancel_finished = true;
+}
+
+void NodeChannel::cancel() {
+    cancel(_err_st);
 }
 
 void NodeChannel::_cancel(int64_t index_id, const Status& err_st) {
@@ -1578,6 +1584,8 @@ Status OlapTableSink::try_close(RuntimeState* state) {
                     err_st = st;
                     this->mark_as_failed(ch);
                 }
+            } else {
+                ch->cancel();
             }
             if (this->has_intolerable_failure()) {
                 intolerable_failure = true;
@@ -1598,6 +1606,8 @@ Status OlapTableSink::try_close(RuntimeState* state) {
                                     err_st = st;
                                     index_channel->mark_as_failed(ch);
                                 }
+                            } else {
+                                ch->cancel();
                             }
                             if (index_channel->has_intolerable_failure()) {
                                 intolerable_failure = true;
@@ -1630,6 +1640,8 @@ Status OlapTableSink::try_close(RuntimeState* state) {
                                     err_st = st;
                                     index_channel->mark_as_failed(ch);
                                 }
+                            } else {
+                                ch->cancel();
                             }
                             if (index_channel->has_intolerable_failure()) {
                                 intolerable_failure = true;
@@ -1647,6 +1659,8 @@ Status OlapTableSink::try_close(RuntimeState* state) {
                             err_st = st;
                             index_channel->mark_as_failed(ch);
                         }
+                    } else {
+                        ch->cancel(Status::Cancelled("channel failed"));
                     }
                     if (index_channel->has_intolerable_failure()) {
                         intolerable_failure = true;

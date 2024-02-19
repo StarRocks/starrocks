@@ -197,7 +197,7 @@ public class JoinPredicatePushdown {
                         .build();
             } else {
                 newJoinOperator = new LogicalJoinOperator.Builder().withOperator(join)
-                        .setPredicate(Utils.compoundAnd(remainingFilter)).build();
+                        .setPredicate(Utils.compoundAnd(Utils.compoundAnd(remainingFilter), join.getPredicate())).build();
             }
         } else {
             newJoinOperator = join;

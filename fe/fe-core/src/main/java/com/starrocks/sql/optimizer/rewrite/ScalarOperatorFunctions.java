@@ -58,6 +58,9 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.hive.Partition;
+import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.MemoryUsageTracker;
+import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.TaskRunManager;
@@ -69,7 +72,9 @@ import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.collections4.SetUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.spark.util.SizeEstimator;
 
+import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.DayOfWeek;
@@ -922,7 +927,7 @@ public class ScalarOperatorFunctions {
 
     // =================================== meta functions ==================================== //
 
-    private static Table inspectExternalTable(TableName tableName) {
+    public static Table inspectExternalTable(TableName tableName) {
         Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName)
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName));
         ConnectContext connectContext = ConnectContext.get();
@@ -930,7 +935,7 @@ public class ScalarOperatorFunctions {
         return table;
     }
 
-    private static Pair<Database, Table> inspectTable(TableName tableName) {
+    public static Pair<Database, Table> inspectTable(TableName tableName) {
         Database db = GlobalStateMgr.getCurrentState().mayGetDb(tableName.getDb())
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR, tableName.getDb()));
         Table table = db.tryGetTable(tableName.getTbl())
@@ -1078,4 +1083,64 @@ public class ScalarOperatorFunctions {
         }
         return values[values.length - 1];
     }
+
+    @ConstantFunction(name = "inspect_memory", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator inspectMemory(ConstantOperator moduleName) {
+        Map<String, MemoryTrackable> statMap = MemoryUsageTracker.REFERENCE.get(moduleName.getVarchar());
+        if (statMap == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                    "Module " + moduleName + " not found.");
+        }
+        long estimateSize = 0;
+        for (Map.Entry<String, MemoryTrackable> statEntry : statMap.entrySet()) {
+            MemoryTrackable tracker = statEntry.getValue();
+            estimateSize += tracker.estimateSize();
+        }
+
+        return ConstantOperator.createVarchar(new ByteSizeValue(estimateSize).toString());
+    }
+
+    @ConstantFunction(name = "inspect_memory_detail", argTypes = {VARCHAR, VARCHAR},
+            returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator inspectMemoryDetail(ConstantOperator moduleName, ConstantOperator clazzInfo) {
+        Map<String, MemoryTrackable> statMap = MemoryUsageTracker.REFERENCE.get(moduleName.getVarchar());
+        if (statMap == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                    "Module " + moduleName + " not found.");
+        }
+        String classInfo = clazzInfo.getVarchar();
+        String clazzName;
+        String fieldName = null;
+        if (classInfo.contains(".")) {
+            clazzName = classInfo.split("\\.")[0];
+            fieldName = classInfo.split("\\.")[1];
+        } else {
+            clazzName = classInfo;
+        }
+        MemoryTrackable memoryTrackable = statMap.get(clazzName);
+        if (memoryTrackable == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                    "In module " + moduleName + " - " + clazzName + " not found.");
+        }
+        long estimateSize = 0;
+        if (fieldName == null) {
+            estimateSize = memoryTrackable.estimateSize();
+        } else {
+            try {
+                Field field = memoryTrackable.getClass().getDeclaredField(fieldName);
+                field.setAccessible(true);
+                Object object = field.get(memoryTrackable);
+                estimateSize = SizeEstimator.estimate(object);
+            } catch (NoSuchFieldException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                        "In module " + moduleName + " - " + clazzName + " field " + fieldName + " not found.");
+            } catch (IllegalAccessException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                        "Get module " + moduleName + " - " + clazzName + " field " + fieldName + " error.");
+            }
+        }
+
+        return ConstantOperator.createVarchar(new ByteSizeValue(estimateSize).toString());
+    }
+
 }

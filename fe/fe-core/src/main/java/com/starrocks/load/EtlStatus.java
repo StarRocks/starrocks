@@ -198,6 +198,7 @@ public class EtlStatus implements Writable {
         this.progress = 0;
         this.failMsg = "";
         this.dppResult = null;
+        loadStatistic.reset();
     }
 
     @Override
@@ -506,6 +507,18 @@ public class EtlStatus implements Writable {
             if (params.done && unfinishedBackendIds.containsKey(loadStr)) {
                 unfinishedBackendIds.get(loadStr).remove(params.backend_id);
             }
+        }
+
+        public synchronized void reset() {
+            counterTbl.clear();
+            sinkBytesCounterTbl.clear();
+            sourceRowsCounterTbl.clear();
+            sourceBytesCounterTbl.clear();
+            filteredRowsCounterTbl.clear();
+            unselectedRowsCounterTbl.clear();
+            sourceScanBytesCounterTbl.clear();
+            unfinishedBackendIds.clear();
+            allBackendIds.clear();
         }
 
         // used for `show load`
