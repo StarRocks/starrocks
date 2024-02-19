@@ -118,9 +118,6 @@ public class SqlParser {
             }
             statements.add(statement);
         }
-        if (ConnectContext.get() != null) {
-            ConnectContext.get().setRelationAliasCaseInSensitive(false);
-        }
         return statements;
     }
 
