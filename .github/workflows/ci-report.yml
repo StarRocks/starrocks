@@ -331,11 +331,12 @@ jobs:
           echo "size=${size}" >> $GITHUB_OUTPUT
           if [[ "$size" != "0" ]]; then
             ossutil64 --config-file ~/.ossutilconfig cp ${oss_path} . --recursive
+          else
+            cp /var/local/env/sqltester_empty_coverage.xml .
           fi
 
       - name: Prepare Tools
         id: prepare-tools
-        if: steps.download-SQL-Tester-xml.outputs.size != '0'
         run: |
           mkdir -p .actions/nose-report-action
           cd .actions/nose-report-action
