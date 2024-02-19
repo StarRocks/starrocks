@@ -845,8 +845,8 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         // Accumulate chunks before sending to result sink
         if (runtime_state->query_options().__isset.enable_result_sink_accumulate &&
             runtime_state->query_options().enable_result_sink_accumulate) {
-            fragment_ctx->pipelines().back()->add_op_factory(
-                    std::make_shared<ChunkAccumulateOperatorFactory>(context->next_operator_id(), 0));
+            ExecNode::may_add_chunk_accumulate_operator(fragment_ctx->pipelines().back()->get_op_factories(), context,
+                                                        Operator::s_pseudo_plan_node_id_for_final_sink);
         }
 
         // Result sink doesn't have plan node id;
