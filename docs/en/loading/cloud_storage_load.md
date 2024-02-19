@@ -1,6 +1,5 @@
 ---
 displayed_sidebar: "English"
-keywords: ['Broker Load']
 ---
 
 # Load data from cloud storage
