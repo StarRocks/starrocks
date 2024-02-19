@@ -367,6 +367,7 @@ private:
         size_t byte_size = 0;
         size_t row_size = 0;
         int64_t compaction_score = 0;
+        int32_t compaction_level = -1;
         bool partial_update_by_column = false;
         std::string to_string() const;
     };
@@ -407,6 +408,7 @@ private:
 
     Status _do_compaction(std::unique_ptr<CompactionInfo>* pinfo);
 
+    int32_t _calc_compaction_level(RowsetStats* stats);
     void _calc_compaction_score(RowsetStats* stats);
 
     Status _do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t condition_column, int64_t read_version,
@@ -473,7 +475,7 @@ private:
 
     StatusOr<ExtraFileSize> _get_extra_file_size() const;
 
-    int _calc_compaction_level(RowsetStats& stat);
+    void _get_allowed_compaction_level(std::set<int32_t>* allow_compaction_level);
 
 private:
     Tablet& _tablet;
@@ -530,10 +532,6 @@ private:
     // the whole BE, and more more operation on this tablet is allowed
     std::atomic<bool> _error{false};
     std::string _error_msg;
-
-    int64_t _max_level;
-    int64_t _max_level_size;
-    int64_t _level_multiple;
 };
 
 } // namespace starrocks

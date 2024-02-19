@@ -77,11 +77,7 @@ std::string EditVersion::to_string() const {
     }
 }
 
-TabletUpdates::TabletUpdates(Tablet& tablet) : _tablet(tablet), _unused_rowsets(UINT64_MAX) {
-    _max_level = config::size_tiered_level_num;
-    _level_multiple = config::size_tiered_level_multiple;
-    _max_level_size = config::size_tiered_min_level_size * pow(_level_multiple, _max_level);
-}
+TabletUpdates::TabletUpdates(Tablet& tablet) : _tablet(tablet), _unused_rowsets(UINT64_MAX) {}
 
 TabletUpdates::~TabletUpdates() {
     _stop_and_wait_apply_done();
@@ -2491,8 +2487,9 @@ struct CompactionEntry {
     bool operator<(const CompactionEntry& rhs) const { return score_per_row > rhs.score_per_row; }
 };
 
-static string int_list_to_string(const vector<uint32_t>& l) {
-    string ret;
+template <typename T>
+static std::string int_list_to_string(const std::vector<T>& l) {
+    std::string ret;
     for (size_t i = 0; i < l.size(); i++) {
         if (i > 0) {
             ret.append(",");
@@ -2627,23 +2624,6 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
     return st;
 }
 
-int TabletUpdates::_calc_compaction_level(RowsetStats& stat) {
-    size_t byte_size = stat.byte_size;
-    size_t new_rows = stat.num_rows - stat.num_dels;
-    size_t new_bytes = byte_size * new_rows / stat.num_rows;
-
-    if (new_bytes <= config::size_tiered_min_level_size) {
-        return 0;
-    }
-
-    if (new_bytes >= _max_level_size) {
-        return _level_multiple;
-    }
-
-    auto x = (double)new_bytes / config::size_tiered_min_level_size;
-    return log(x) / log((double)_level_multiple);
-}
-
 Status TabletUpdates::compaction_for_size_tiered(MemTracker* mem_tracker) {
     if (_error) {
         return Status::InternalError(strings::Substitute(
@@ -2653,7 +2633,6 @@ Status TabletUpdates::compaction_for_size_tiered(MemTracker* mem_tracker) {
     if (!_compaction_running.compare_exchange_strong(was_runing, true)) {
         return Status::InternalError("illegal state: another compaction is running");
     }
-    EditVersion version;
     vector<uint32_t> rowsets;
     std::unique_ptr<CompactionInfo> info = std::make_unique<CompactionInfo>();
     {
@@ -2664,14 +2643,14 @@ Status TabletUpdates::compaction_for_size_tiered(MemTracker* mem_tracker) {
             return Status::InternalError(msg);
         }
         // 1. start compaction at current apply version
-        version = _edit_version_infos[_apply_version_idx]->version;
+        info->start_version = _edit_version_infos[_apply_version_idx]->version;
         rowsets = _edit_version_infos[_apply_version_idx]->rowsets;
     }
+
     size_t total_valid_rowsets = 0;
     size_t total_valid_segments = 0;
     // level -1 keep empty rowsets and have no IO overhead, so we can merge them with any level
     std::map<int, vector<CompactionEntry>> candidates_by_level;
-    candidates_by_level.insert(std::make_pair(-1, std::vector<CompactionEntry>{}));
     {
         std::lock_guard lg(_rowset_stats_lock);
         for (auto rowsetid : rowsets) {
@@ -2686,13 +2665,8 @@ Status TabletUpdates::compaction_for_size_tiered(MemTracker* mem_tracker) {
                 auto& stat = *itr->second;
                 total_valid_rowsets++;
                 total_valid_segments += stat.num_segments;
-                int level = -1;
-                if (stat.num_rows == stat.num_dels) {
-                    candidates_by_level[level].emplace_back();
-                } else {
-                    level = _calc_compaction_level(stat);
-                    candidates_by_level[level].emplace_back();
-                }
+                int32_t level = _calc_compaction_level(&stat);
+                candidates_by_level[level].emplace_back();
                 auto& e = candidates_by_level[level].back();
                 e.rowsetid = itr->first;
                 e.score_per_row =
@@ -2705,101 +2679,96 @@ Status TabletUpdates::compaction_for_size_tiered(MemTracker* mem_tracker) {
         }
     }
 
-    struct PKSizeTieredLevel {
-        PKSizeTieredLevel(std::unique_ptr<CompactionInfo> f, int64_t s, int64_t l, int64_t ts, int64_t r, int64_t b,
-                          int64_t rc, int64_t bc)
-                : info(std::move(f)),
-                  score(s),
-                  level(l),
-                  total_segments(ts),
-                  total_rows(r),
-                  total_bytes(b),
-                  total_rows_after_compaction(rc),
-                  total_bytes_after_compaction(bc) {}
-        std::unique_ptr<CompactionInfo> info;
-        int64_t score;
-        int64_t level;
-        int64_t total_segments;
-        int64_t total_rows;
-        int64_t total_bytes;
-        int64_t total_rows_after_compaction;
-        int64_t total_bytes_after_compaction;
-    };
-
-    struct LevelComparator {
-        bool operator()(const PKSizeTieredLevel* left, const PKSizeTieredLevel* right) const {
-            return left->score > right->score || (left->score == right->score && left->level < right->level);
-        }
-    };
-    std::vector<std::unique_ptr<PKSizeTieredLevel>> order_levels;
-    std::set<PKSizeTieredLevel*, LevelComparator> priority_levels;
-
+    int64_t total_segments = 0;
+    int64_t total_rows = 0;
+    int64_t total_bytes = 0;
+    int32_t compaction_level = -1;
+    int64_t max_score = 0;
     for (auto& [level, candidates] : candidates_by_level) {
-        std::unique_ptr<CompactionInfo> level_info = std::make_unique<CompactionInfo>();
-        level_info->start_version = version;
-        std::sort(candidates.begin(), candidates.end());
-
-        int64_t score = 0;
-        int64_t total_segments = 0;
-        int64_t total_rows = 0;
-        int64_t total_bytes = 0;
-        int64_t total_rows_after_compaction = 0;
-        int64_t total_bytes_after_compaction = 0;
+        if (level == -1) {
+            continue;
+        }
+        int64_t level_score = 0;
         for (auto& e : candidates) {
-            size_t new_rows = total_rows_after_compaction + e.num_rows - e.num_dels;
-            size_t new_bytes = total_bytes_after_compaction;
+            level_score += e.score_per_row * (e.num_rows - e.num_dels);
+        }
+        if (level_score > max_score) {
+            compaction_level = level;
+            max_score = level_score;
+        }
+    }
+
+    auto iter = candidates_by_level.find(compaction_level);
+    // should not happened
+    if (iter == candidates_by_level.end()) {
+        string msg = strings::Substitute("tablet:$0 can not find level $1 candidate rowsets", _tablet.tablet_id(),
+                                         compaction_level);
+        _compaction_running = false;
+        return Status::InternalError(msg);
+    }
+    RowsetStats stat;
+    std::set<int32_t> compaction_level_candidate;
+    do {
+        auto iter = candidates_by_level.find(compaction_level);
+        for (auto& e : iter->second) {
+            size_t new_rows = stat.num_rows + e.num_rows - e.num_dels;
+            size_t new_bytes = stat.byte_size;
             if (e.num_rows != 0) {
                 new_bytes += e.bytes * (e.num_rows - e.num_dels) / e.num_rows;
             }
-            if (total_bytes_after_compaction > 0 && new_bytes > config::update_compaction_result_bytes * 2) {
+            if ((stat.byte_size > 0 && new_bytes > config::update_compaction_result_bytes * 2) ||
+                info->inputs.size() >= config::max_update_compaction_num_singleton_deltas) {
                 break;
             }
-            level_info->inputs.push_back(e.rowsetid);
-            score += e.score_per_row * (e.num_rows - e.num_dels);
-            total_rows_after_compaction = new_rows;
-            total_bytes_after_compaction = new_bytes;
+            max_score += e.score_per_row * (e.num_rows - e.num_dels);
+            info->inputs.emplace_back(e.rowsetid);
+            stat.num_rows = new_rows;
+            stat.byte_size = new_bytes;
             total_rows += e.num_rows;
             total_bytes += e.bytes;
             total_segments += e.num_segments;
-            if (total_bytes_after_compaction > config::update_compaction_result_bytes ||
-                level_info->inputs.size() >= config::max_update_compaction_num_singleton_deltas) {
-                break;
-            }
         }
-        auto pk_level = std::make_unique<PKSizeTieredLevel>(std::move(level_info), score, level, total_segments,
-                                                            total_rows, total_bytes, total_rows_after_compaction,
-                                                            total_bytes_after_compaction);
-        priority_levels.emplace(pk_level.get());
-        order_levels.emplace_back(std::move(pk_level));
-    }
-    // give 10s time gitter, so same table's compaction don't start at same time
-    _last_compaction_time_ms = UnixMillis() + rand() % 10000;
-    PKSizeTieredLevel* selected_level = nullptr;
-    if (!priority_levels.empty()) {
-        selected_level = *priority_levels.begin();
-        if (selected_level->level != -1) {
-            for (auto& e : candidates_by_level[-1]) {
-                selected_level->info->inputs.push_back(e.rowsetid);
-            }
+        compaction_level_candidate.insert(compaction_level);
+        compaction_level = _calc_compaction_level(&stat);
+    } while (stat.byte_size <= config::update_compaction_result_bytes * 2 &&
+             info->inputs.size() < config::max_update_compaction_num_singleton_deltas &&
+             compaction_level_candidate.find(compaction_level) == compaction_level_candidate.end() &&
+             candidates_by_level.find(compaction_level) != candidates_by_level.end());
+
+    if (compaction_level_candidate.find(-1) != compaction_level_candidate.end()) {
+        for (auto& e : candidates_by_level[-1]) {
+            info->inputs.emplace_back(e.rowsetid);
+            compaction_level_candidate.insert(-1);
         }
-        info = std::move(selected_level->info);
     }
 
-    if (info->inputs.empty() || (selected_level->level == -1 && info->inputs.size() == 1)) {
+    size_t version_count = rowsets.size() - info->inputs.size() + _pending_commits.size();
+    // too many rowsets, try to trigger compaction again
+    if (version_count >= config::tablet_max_versions * 80 / 100) {
+        LOG(INFO) << strings::Substitute(
+                "tablet:$0 will try to trigger compaction again because of too many compaction version_count:$1, "
+                "pending:$2",
+                _tablet.tablet_id(), version_count, _pending_commits.size());
+    } else {
+        // give 10s time gitter, so same table's compaction don't start at same time
+        _last_compaction_time_ms = UnixMillis() + rand() % 10000;
+    }
+
+    if (info->inputs.empty()) {
         LOG(INFO) << "no candidate rowset to do update compaction, tablet:" << _tablet.tablet_id();
         _compaction_running = false;
         return Status::OK();
     }
     std::sort(info->inputs.begin(), info->inputs.end());
+    std::vector<int32_t> levels(compaction_level_candidate.begin(), compaction_level_candidate.end());
     LOG(INFO) << "update compaction start tablet:" << _tablet.tablet_id()
-              << " version:" << info->start_version.to_string() << " score:" << selected_level->score
-              << " level:" << selected_level->level << " pick:" << info->inputs.size() << "("
-              << candidates_by_level[-1].size() << ")/valid:" << total_valid_rowsets << "/all:" << rowsets.size() << " "
-              << int_list_to_string(info->inputs) << " #pick_segments:" << selected_level->total_segments
-              << " #valid_segments:" << total_valid_segments << " #rows:" << selected_level->total_rows << "->"
-              << selected_level->total_rows_after_compaction
-              << " bytes:" << PrettyPrinter::print(selected_level->total_bytes, TUnit::BYTES) << "->"
-              << PrettyPrinter::print(selected_level->total_bytes_after_compaction, TUnit::BYTES) << "(estimate)";
+              << " version:" << info->start_version.to_string() << " score:" << max_score
+              << " merge levels:" << int_list_to_string(levels) << " pick:" << info->inputs.size()
+              << "/valid:" << total_valid_rowsets << "/all:" << rowsets.size() << " "
+              << int_list_to_string(info->inputs) << " #pick_segments:" << total_segments
+              << " #valid_segments:" << total_valid_segments << " #rows:" << total_rows << "->" << stat.num_rows
+              << " bytes:" << PrettyPrinter::print(total_bytes, TUnit::BYTES) << "->"
+              << PrettyPrinter::print(stat.byte_size, TUnit::BYTES) << "(estimate)";
 
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker);
     DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
@@ -3100,6 +3069,30 @@ void TabletUpdates::get_compaction_status(std::string* json_result) {
     *json_result = std::string(strbuf.GetString());
 }
 
+int32_t TabletUpdates::_calc_compaction_level(RowsetStats* stats) {
+    if (stats->num_rows == 0) {
+        return -1;
+    }
+    size_t new_rows = stats->num_rows - stats->num_dels;
+    size_t new_bytes = stats->byte_size * new_rows / stats->num_rows;
+
+    int64_t level_multiple = config::size_tiered_level_multiple;
+    int64_t min_level_size = config::size_tiered_min_level_size;
+    int64_t level_num = config::size_tiered_level_num;
+    int64_t max_level_size = min_level_size * pow(level_multiple, level_num);
+
+    if (new_bytes == 0) {
+        return -1;
+    } else if (new_bytes <= min_level_size) {
+        return 0;
+    } else if (new_bytes >= max_level_size) {
+        return level_num;
+    } else {
+        auto x = (double)new_bytes / min_level_size;
+        return log(x) / log((double)level_multiple);
+    }
+}
+
 void TabletUpdates::_calc_compaction_score(RowsetStats* stats) {
     if (stats->num_rows == 0) {
         stats->compaction_score = config::update_compaction_size_threshold;
@@ -3264,9 +3257,11 @@ int64_t TabletUpdates::get_average_row_size() {
 }
 
 std::string TabletUpdates::RowsetStats::to_string() const {
-    return strings::Substitute("[seg:$0 row:$1 del:$2 bytes:$3 row_size:$4 compaction:$5 partial_update_by_column:$6]",
-                               num_segments, num_rows, num_dels, byte_size, row_size, compaction_score,
-                               partial_update_by_column);
+    return strings::Substitute(
+            "[seg:$0 row:$1 del:$2 bytes:$3 row_size:$4 compaction_score:$5 compaction_level:$6 "
+            "partial_update_by_column:$7]",
+            num_segments, num_rows, num_dels, byte_size, row_size, compaction_score, compaction_level,
+            partial_update_by_column);
 }
 
 std::string TabletUpdates::debug_string() const {
