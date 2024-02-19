@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "English"
+keywords: ['Stream Load']
 ---
 
 # Load data using Stream Load transaction interface
