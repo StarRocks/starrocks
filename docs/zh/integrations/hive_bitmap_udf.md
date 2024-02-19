@@ -134,19 +134,7 @@ UDF 定义的 Bitmap 格式与 StarRocks 里格式一致，可直接用于导入
     mysql> create table t1(c1 int, c2 bitmap bitmap_union) aggregate key(c1)  distributed by hash(c1);
     ```
 
-4. 通过不同方式导入到 StarRocks。
-
-   - 通过 [files](../sql-reference/sql-functions/table-functions/files.md) 函数导入。
-
-    ```sql
-    mysql> insert into t1 select c1, bitmap_from_binary(c2) from files (
-        "path" = "hdfs://<hdfs_ip>:<hdfs_port>/<hdfs_db>/t_bitmap/*",
-        "format"="parquet",
-        "compression" = "uncompressed"
-        );
-    ```
-
-   - 通过 [Hive Catalog](../data_source/catalog/hive_catalog.md) 导入。
+4. 通过 [Hive Catalog](../data_source/catalog/hive_catalog.md) 导入数据到 StarRocks。
 
     ```sql
     mysql> insert into t1 select c1, bitmap_from_binary(c2) from hive_catalog_hms.xxx_db.t_bitmap;
