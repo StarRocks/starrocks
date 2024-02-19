@@ -37,10 +37,19 @@ Status SysFeMemoryUsage::start(RuntimeState* state) {
     RETURN_IF(!_param->ip || !_param->port, Status::InternalError("IP or port not exists"));
 
     RETURN_IF_ERROR(SchemaScanner::start(state));
-
-    TAuthInfo auth = build_auth_info();
+    TAuthInfo auth_info;
+    if (nullptr != _param->current_user_ident) {
+        auth_info.__set_current_user_ident(*(_param->current_user_ident));
+    } else {
+        if (nullptr != _param->user) {
+            auth_info.__set_user(*(_param->user));
+        }
+        if (nullptr != _param->user_ip) {
+            auth_info.__set_user_ip(*(_param->user_ip));
+        }
+    }
     TFeMemoryReq request;
-    request.__set_auth_info(auth);
+    request.__set_auth_info(auth_info);
 
     return (SchemaHelper::list_fe_memory_usage(*(_param->ip), _param->port, request, &_result));
 }
