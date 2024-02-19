@@ -69,7 +69,7 @@ SELECT * FROM student_score ORDER BY id;
 +------+--------------+
 
 -- Use UNNEST to flatten the scores column into multiple rows.
-SELECT id, scores, unnest FROM student_score, unnest(scores);
+SELECT id, scores, unnest FROM student_score, unnest(scores) AS unnest;
 +------+--------------+--------+
 | id   | scores       | unnest |
 +------+--------------+--------+
@@ -121,7 +121,7 @@ SELECT * FROM example_table;
 
 -- Use UNNEST to convert type and scores into multiple rows.
 SELECT id, unnest.type, unnest.scores
-FROM example_table, unnest(split(type, ";"), scores) as unnest(type,scores);
+FROM example_table, unnest(split(type, ";"), scores) AS unnest(type,scores);
 +------+-------+--------+
 | id   | type  | scores |
 +------+-------+--------+
