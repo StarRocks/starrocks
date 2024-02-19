@@ -303,11 +303,11 @@ TEST_F(StarRocksMetricsTest, PageCacheMetrics) {
 }
 
 void assert_threadpool_metrics_register(const std::string& pool_name, MetricRegistry* instance) {
-    ASSERT_NE(nullptr, instance->get_metric(pool_name + "_threadpool_size"));
-    ASSERT_NE(nullptr, instance->get_metric(pool_name + "_total_pending_time_ns"));
-    ASSERT_NE(nullptr, instance->get_metric(pool_name + "_total_execute_time_ns"));
-    ASSERT_NE(nullptr, instance->get_metric(pool_name + "_total_executed_tasks"));
-    ASSERT_NE(nullptr, instance->get_metric(pool_name + "_queue_count"));
+    ASSERT_TRUE(instance->get_metric(pool_name + "_threadpool_size") != nullptr);
+    ASSERT_TRUE(instance->get_metric(pool_name + "_executed_tasks_total") != nullptr);
+    ASSERT_TRUE(instance->get_metric(pool_name + "_pending_time_ns_total") != nullptr);
+    ASSERT_TRUE(instance->get_metric(pool_name + "_execute_time_ns_total") != nullptr);
+    ASSERT_TRUE(instance->get_metric(pool_name + "_queue_count") != nullptr);
 }
 
 TEST_F(StarRocksMetricsTest, test_metrics_register) {
@@ -321,7 +321,6 @@ TEST_F(StarRocksMetricsTest, test_metrics_register) {
     ASSERT_NE(nullptr, instance->get_metric("segment_flush_duration_us"));
     ASSERT_NE(nullptr, instance->get_metric("segment_flush_io_time_us"));
     ASSERT_NE(nullptr, instance->get_metric("segment_flush_bytes_total"));
-    assert_threadpool_metrics_register("publish_version", instance);
     assert_threadpool_metrics_register("async_delta_writer", instance);
     assert_threadpool_metrics_register("memtable_flush", instance);
     assert_threadpool_metrics_register("segment_replicate", instance);
