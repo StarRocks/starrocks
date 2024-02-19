@@ -264,7 +264,6 @@ public class Load {
         List<DictQueryExpr> result = Lists.newArrayList();
         checkExpr.collect(DictQueryExpr.class, result);
         for (DictQueryExpr expr : result) {
-            LOG.info("set dictquery dbname");
             expr.setDbName(dbName);
         }
         return result.size() != 0;
