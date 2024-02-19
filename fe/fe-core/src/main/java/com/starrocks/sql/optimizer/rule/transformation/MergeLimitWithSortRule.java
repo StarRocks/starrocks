@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -32,27 +33,20 @@ public class MergeLimitWithSortRule extends TransformationRule {
                 .addChildren(Pattern.create(OperatorType.LOGICAL_TOPN, OperatorType.PATTERN_LEAF)));
     }
 
-    public boolean check(final OptExpression input, OptimizerContext context) {
-        LogicalTopNOperator topN = (LogicalTopNOperator) input.getInputs().get(0).getOp();
-        LogicalLimitOperator limit = ((LogicalLimitOperator) input.getOp());
-
-        // Merge Init-Limit/Local-limit and Sort
-        // Local-limit may be generate at MergeLimitWithLimitRule
-        return limit.isInit() || limit.isLocal();
-    }
-
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         // will transform to topN
         LogicalLimitOperator limit = (LogicalLimitOperator) input.getOp();
         LogicalTopNOperator sort = (LogicalTopNOperator) input.getInputs().get(0).getOp();
 
+        Preconditions.checkState(!(limit.isGlobal() && limit.hasOffset() && sort.hasOffset()),
+                "unsupported a global limit with offset above a topN node with offset");
         long minLimit = limit.getLimit();
         if (sort.hasLimit()) {
             minLimit = Math.min(minLimit, sort.getLimit());
         }
         OptExpression result = new OptExpression(
-                new LogicalTopNOperator(sort.getOrderByElements(), limit.getLimit(), limit.getOffset()));
+                new LogicalTopNOperator(sort.getOrderByElements(), minLimit, limit.getOffset()));
         result.getInputs().addAll(input.getInputs().get(0).getInputs());
         return Lists.newArrayList(result);
     }
