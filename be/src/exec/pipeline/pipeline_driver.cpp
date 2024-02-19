@@ -19,6 +19,7 @@
 
 #include "column/chunk.h"
 #include "common/statusor.h"
+#include "exec/pipeline/adaptive/event.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/scan/olap_scan_operator.h"
@@ -198,7 +199,7 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     }
 
     // Driver has no dependencies always sets _all_dependencies_ready to true;
-    _all_dependencies_ready = _dependencies.empty();
+    _all_dependencies_ready = _dependencies.empty() && !_pipeline->pipeline_event()->need_wait_dependencies_finished();
     // Driver has no local rf to wait for completion always sets _all_local_rf_ready to true;
     _all_local_rf_ready = _local_rf_holders.empty();
     // Driver has no global rf to wait for completion always sets _all_global_rf_ready_or_timeout to true;
@@ -458,6 +459,17 @@ Status PipelineDriver::check_short_circuit() {
     return Status::OK();
 }
 
+bool PipelineDriver::dependencies_block() {
+    if (_all_dependencies_ready) {
+        return false;
+    }
+    auto pipline_event = _pipeline->pipeline_event();
+    _all_dependencies_ready =
+            std::all_of(_dependencies.begin(), _dependencies.end(), [](auto& dep) { return dep->is_ready(); }) &&
+            (!pipline_event->need_wait_dependencies_finished() || pipline_event->dependencies_finished());
+    return !_all_dependencies_ready;
+}
+
 bool PipelineDriver::need_report_exec_state() {
     if (is_finished()) {
         return false;
@@ -558,6 +570,9 @@ void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* track
     if (!state->enable_spill() || !mem_resource_mgr.releaseable()) return;
 
     if (UNLIKELY(state->spill_mode() == TSpillMode::RANDOM)) {
+        // random spill mode
+        // if the random number is less than the spill ratio, then convert to low-memory mode
+        // otherwise, do nothing
         static thread_local std::mt19937_64 generator{std::random_device{}()};
         static std::uniform_real_distribution<double> distribution(0.0, 1.0);
         if (distribution(generator) < state->spill_rand_ratio()) {

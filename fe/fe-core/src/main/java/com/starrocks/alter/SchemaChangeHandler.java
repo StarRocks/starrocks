@@ -46,6 +46,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IndexDef;
+import com.starrocks.analysis.IndexDef.IndexType;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.AggregateType;
@@ -2312,6 +2313,10 @@ public class SchemaChangeHandler extends AlterHandler {
             return;
         }
 
+        if (newIndex.getIndexType() == IndexType.GIN && olapTable.enableReplicatedStorage()) {
+            throw new SemanticException("GIN does not support replicated mode");
+        }
+
         List<Index> existedIndexes = olapTable.getIndexes();
         IndexDef indexDef = alterClause.getIndexDef();
         Set<String> newColset = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
@@ -2340,7 +2345,12 @@ public class SchemaChangeHandler extends AlterHandler {
         for (String col : indexDef.getColumns()) {
             Column column = olapTable.getColumn(col);
             if (column != null) {
-                indexDef.checkColumn(column, olapTable.getKeysType());
+                // only throw DdlException
+                try {
+                    indexDef.checkColumn(column, olapTable.getKeysType());
+                } catch (Exception e) {
+                    throw new DdlException(e.getMessage());
+                }
             } else {
                 throw new DdlException("BITMAP column does not exist in table. invalid column: " + col);
             }

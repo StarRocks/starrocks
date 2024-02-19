@@ -127,8 +127,8 @@ public:
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
         std::vector<LLVMDatum> datums(2);
-        ASSIGN_OR_RETURN(datums[0], _children[0]->generate_ir_impl(context, jit_ctx))
-        ASSIGN_OR_RETURN(datums[1], _children[1]->generate_ir_impl(context, jit_ctx))
+        ASSIGN_OR_RETURN(datums[0], _children[0]->generate_ir(context, jit_ctx))
+        ASSIGN_OR_RETURN(datums[1], _children[1]->generate_ir(context, jit_ctx))
 
         if constexpr (lt_is_decimal<Type>) {
             // TODO(yueyang): Implement decimal arithmetic in LLVM IR.
@@ -191,8 +191,8 @@ public:
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
         std::vector<LLVMDatum> datums(2);
-        ASSIGN_OR_RETURN(datums[0], _children[0]->generate_ir_impl(context, jit_ctx))
-        ASSIGN_OR_RETURN(datums[1], _children[1]->generate_ir_impl(context, jit_ctx))
+        ASSIGN_OR_RETURN(datums[0], _children[0]->generate_ir(context, jit_ctx))
+        ASSIGN_OR_RETURN(datums[1], _children[1]->generate_ir(context, jit_ctx))
 
         if constexpr (lt_is_decimal<Type>) {
             // TODO(yueyang): Implement decimal arithmetic in LLVM IR.
@@ -264,8 +264,8 @@ public:
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
         std::vector<LLVMDatum> datums(2);
-        ASSIGN_OR_RETURN(datums[0], _children[0]->generate_ir_impl(context, jit_ctx))
-        ASSIGN_OR_RETURN(datums[1], _children[1]->generate_ir_impl(context, jit_ctx))
+        ASSIGN_OR_RETURN(datums[0], _children[0]->generate_ir(context, jit_ctx))
+        ASSIGN_OR_RETURN(datums[1], _children[1]->generate_ir(context, jit_ctx))
 
         if constexpr (lt_is_decimal<Type>) {
             // TODO(yueyang): Implement decimal arithmetic in LLVM IR.
@@ -301,7 +301,7 @@ public:
     bool is_compilable() const override { return IRHelper::support_jit(Type); }
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
-        ASSIGN_OR_RETURN(auto datum, _children[0]->generate_ir_impl(context, jit_ctx))
+        ASSIGN_OR_RETURN(auto datum, _children[0]->generate_ir(context, jit_ctx))
         using ArithmeticBitNot = ArithmeticUnaryOperator<BitNotOp, Type>;
         datum.value = ArithmeticBitNot::generate_ir(jit_ctx->builder, datum.value);
         return datum;
@@ -333,8 +333,8 @@ public:
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
         std::vector<LLVMDatum> datums(2);
-        ASSIGN_OR_RETURN(datums[0], _children[0]->generate_ir_impl(context, jit_ctx))
-        ASSIGN_OR_RETURN(datums[1], _children[1]->generate_ir_impl(context, jit_ctx))
+        ASSIGN_OR_RETURN(datums[0], _children[0]->generate_ir(context, jit_ctx))
+        ASSIGN_OR_RETURN(datums[1], _children[1]->generate_ir(context, jit_ctx))
 
         using ArithmeticOp = ArithmeticBinaryOperator<OP, Type>;
         using CppType = RunTimeCppType<Type>;
