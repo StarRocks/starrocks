@@ -57,13 +57,8 @@ StarRocks 支持的 BITMAP、STRING、ARRAY、Column 之间的类型转化关系
         `v2` string NULL COMMENT "",
         `v3` string NULL COMMENT ""
     )
-<<<<<<< HEAD
-    duplicate key(v1)
-    DISTRIBUTED BY HASH(`v1`) BUCKETS 1
-=======
     DUPLICATE KEY(v1)
     DISTRIBUTED BY HASH(`v1`)
->>>>>>> 3cf4995f7e ([Doc] Optimize syntax of alias in unnest (#41111))
     PROPERTIES (
         "replication_num" = "3",
         "storage_format" = "DEFAULT"
@@ -133,13 +128,8 @@ StarRocks 支持的 BITMAP、STRING、ARRAY、Column 之间的类型转化关系
         `v1` bigint(20) NULL COMMENT "",
         `v2` ARRAY<int> NULL COMMENT ""
     ) 
-<<<<<<< HEAD
-    duplicate key(v1)
-    DISTRIBUTED BY HASH(`v1`) BUCKETS 1
-=======
     DUPLICATE KEY(v1)
     DISTRIBUTED BY HASH(`v1`)
->>>>>>> 3cf4995f7e ([Doc] Optimize syntax of alias in unnest (#41111))
     PROPERTIES (
         "replication_num" = "3",
         "storage_format" = "DEFAULT"
@@ -191,13 +181,8 @@ StarRocks 支持的 BITMAP、STRING、ARRAY、Column 之间的类型转化关系
     `v1` bigint(20) NULL COMMENT "",
     `v2` Bitmap BITMAP_UNION COMMENT ""
     )
-<<<<<<< HEAD
-    Aggregate key(v1)
-    DISTRIBUTED BY HASH(`v1`) BUCKETS 1;
-=======
     AGGREGATE KEY(v1)
     DISTRIBUTED BY HASH(`v1`);
->>>>>>> 3cf4995f7e ([Doc] Optimize syntax of alias in unnest (#41111))
 
     INSERT INTO lateral_test3 VALUES (1, bitmap_from_string('1, 2')), (2, to_bitmap(3));
     ~~~
