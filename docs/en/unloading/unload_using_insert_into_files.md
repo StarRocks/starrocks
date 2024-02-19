@@ -113,6 +113,28 @@ FILES(
 SELECT * FROM sales_records;
 ```
 
+### Unload data into a single file and in S3 (min.io)
+
+Here is another example of unloading into S3.
+
+```SQL
+INSERT INTO 
+FILES(
+    "path" = "s3://huditest/item_sample_data.parquet",
+    "format" = "parquet",
+        "aws.s3.access_key" = "admin",
+        "aws.s3.secret_key" = "password",
+        "aws.s3.region" = "us-west-2",
+        "aws.s3.use_instance_profile" = "false",
+        "aws.s3.enable_ssl" = "false",
+        "aws.s3.enable_path_style_access" = "true",
+        "compression" = "zstd",
+        "single" = "true",
+        "aws.s3.endpoint" = "http://minio:9000"
+)
+SELECT * FROM item;
+```
+
 ## See also
 
 - For more instructions on the usage of INSERT, see [SQL reference - INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md).
