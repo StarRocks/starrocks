@@ -28,7 +28,7 @@ POST 'http://<fe_ip>:<fe_http_port>/api/v1/catalogs/<catalog_name>/databases/<da
 | ------------------------ | :----------------------------------------------------------- |
 |  fe_ip                   | FE node IP address.                                                  |
 |  fe_http_port            | FE HTTP port.                                           |
-|  catalog_name            | The catalog name. Currently, this API supports querying only internal tables, which means `<catalog_name>` can only be set to `default_catalog`. |
+|  catalog_name            | The catalog name. In v3.2.0, you can use this API to query only StarRocks internal tables, which means `<catalog_name>` can only be set to `default_catalog`. Since v3.2.1, you can use this API to query tables in [external catalogs](../../data_source/catalog/catalog_overview.md). |
 |  database_name           | The database name. If no database name is specified in the request line and a table name is used in the SQL query, you must prefix the table name with its database name, for example, `database_name.table_name`. |
 
 - Query data across databases in a specified catalog. If a table is used in the SQL query, you must prefix the table name with its database name.
@@ -149,22 +149,40 @@ The following example uses `\n` as the separator. StarRocks transmits data using
 
 ### Run a SELECT query
 
-```shell
-curl -X POST 'http://127.0.0.1:8030/api/v1/catalogs/default_catalog/databases/test/sql' -u 'root:' -d '{"query": "select * from agg;"}' --header "Content-Type: application/json"
-```
+- Query data from a StarRocks internal table (`catalog_name` is `default_catalog`).
 
-Result:
+  ```shell
+  curl -X POST 'http://127.0.0.1:8030/api/v1/catalogs/default_catalog/databases/test/sql' -u 'root:' -d '{"query": "select * from agg;"}' --header "Content-Type: application/json"
+  ```
 
-```json
-{"connectionId":49}
-{"meta":[{"name":"no","type":"int(11)"},{"name":"k","type":"decimal64(10, 2)"},{"name":"v","type":"decimal64(10, 2)"}]}
-{"data":[1,"10.00",null]}
-{"data":[2,"10.00","11.00"]}
-{"data":[2,"20.00","22.00"]}
-{"data":[2,"25.00",null]}
-{"data":[2,"30.00","35.00"]}
-{"statistics":{"scanRows":0,"scanBytes":0,"returnRows":5}}
-```
+  Result:
+
+  ```json
+  {"connectionId":49}
+  {"meta":[{"name":"no","type":"int(11)"},{"name":"k","type":"decimal64(10, 2)"},{"name":"v","type":"decimal64(10, 2)"}]}
+  {"data":[1,"10.00",null]}
+  {"data":[2,"10.00","11.00"]}
+  {"data":[2,"20.00","22.00"]}
+  {"data":[2,"25.00",null]}
+  {"data":[2,"30.00","35.00"]}
+  {"statistics":{"scanRows":0,"scanBytes":0,"returnRows":5}}
+  ```
+
+- Query data from an Iceberg table.
+
+  ```shell
+  curl -X POST 'http://172.26.93.145:8030/api/v1/catalogs/iceberg_catalog/databases/ywb/sql' -u 'root:' -d '{"query": "select * from iceberg_analyze;"}' --header "Content-Type: application/json"
+  ```
+
+  Result:
+
+  ```json
+  {"connectionId":13}
+  {"meta":[{"name":"k1","type":"int(11)"},{"name":"k2","type":"int(11)"}]}
+  {"data":[1,2]}
+  {"data":[1,1]}
+  {"statistics":{"scanRows":0,"scanBytes":0,"returnRows":2}}
+  ```
 
 ### Cancel a query
 
