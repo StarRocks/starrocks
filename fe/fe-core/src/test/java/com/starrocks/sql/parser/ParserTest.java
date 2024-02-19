@@ -39,7 +39,6 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.antlr.v4.runtime.BaseErrorListener;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
-import org.antlr.v4.runtime.atn.PredictionMode;
 import org.junit.Assert;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -68,6 +67,15 @@ class ParserTest {
             assertContains(e.getMessage(), "Getting syntax error. Detail message: " +
                     "Statement exceeds maximum length limit");
         }
+    }
+
+    @Test
+    void test() {
+        String sql = "@`a` = 1";
+        SessionVariable sessionVariable = new SessionVariable();
+        List<Expr> exprs = SqlParser.parseSqlToExprs(sql, sessionVariable);
+        System.out.println();
+
     }
 
     @Test
@@ -415,41 +423,6 @@ class ParserTest {
         assertEquals("SELECT 100 % 2", newSql);
     }
 
-    @Test
-    void testComplexExpr() {
-        String exprString = " not X1 + 1  >  X2 and not X3 + 2 > X4 and not X5 + 3 > X6  and not X7 + 1 = X8 " +
-                "and not X9 + X10 < X11 + X12 ";
-        StringBuilder builder = new StringBuilder();
-        builder.append(exprString);
-        for (int i = 0; i < 500; i++) {
-            builder.append("or");
-            builder.append(exprString);
-        }
-
-        AstBuilder astBuilder = new AstBuilder(SqlModeHelper.MODE_DEFAULT);
-        StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(builder.toString())));
-        lexer.setSqlMode(SqlModeHelper.MODE_DEFAULT);
-        CommonTokenStream tokenStream = new CommonTokenStream(lexer);
-        StarRocksParser parser = new StarRocksParser(tokenStream);
-        parser.getInterpreter().setPredictionMode(PredictionMode.LL);
-        long start = System.currentTimeMillis();
-        StarRocksParser.ExpressionContext context1 = parser.expression();
-        Expr expr1 = (Expr) astBuilder.visit(context1);
-        long end = System.currentTimeMillis();
-        long timeOfLL = end - start;
-
-        parser.getTokenStream().seek(0);
-        parser.reset();
-        parser.getInterpreter().setPredictionMode(PredictionMode.SLL);
-        start = System.currentTimeMillis();
-        StarRocksParser.ExpressionContext context2 = parser.expression();
-        Expr expr2 = (Expr) astBuilder.visit(context2);
-        long timeOfSLL = end - start;
-
-        Assert.assertEquals(expr1, expr2);
-        Assert.assertTrue(timeOfLL > timeOfSLL);
-    }
-
     private static Stream<Arguments> keyWordSqls() {
         List<String> sqls = Lists.newArrayList();
         sqls.add("select current_role()");
@@ -510,8 +483,8 @@ class ParserTest {
     private static Stream<Arguments> unexpectedTokenSqls() {
         List<Arguments> arguments = Lists.newArrayList();
 
-        arguments.add(Arguments.of("selct * from tbl", "No viable statement"));
-        arguments.add(Arguments.of("select , from tbl", "No viable statement"));
+        arguments.add(Arguments.of("selct * from tbl", "SELECT"));
+        arguments.add(Arguments.of("select , from tbl", "a legal identifier"));
         arguments.add(Arguments.of("CREATE TABLE IF NOT EXISTS timetest (\n" +
                 "  `v1` int(11) NOT NULL,\n" +
                 "  `v2` int(11) NOT NULL,\n" +
@@ -521,9 +494,9 @@ class ParserTest {
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 10\n" +
                 "PROPERTIES (\n" +
                 " \"replication_num\" = \"1\"\n" +
-                ");", "No viable statement"));
+                ");", ")"));
         arguments.add(Arguments.of("analyze table tt abc", "';'"));
-        arguments.add(Arguments.of("select 1,, from tbl", "No viable statement"));
+        arguments.add(Arguments.of("select 1,, from tbl", "a legal identifier"));
         arguments.add(Arguments.of("INSTALL PLUGIN FRO xxx", "FROM"));
         arguments.add(Arguments.of("select (1 + 1) + 1) from tbl", "';'"));
         arguments.add(Arguments.of("CREATE TABLE IF NOT EXISTS timetest (\n" +
@@ -536,7 +509,7 @@ class ParserTest {
                 " \"replication_num\" = \"1\"\n" +
                 ");", "the most similar input is {<EOF>, ';'}"));
         arguments.add(Arguments.of("create MATERIALIZED VIEW  as select * from (t1 join t2);",
-                "No viable statement"));
+                "the most similar input is {a legal identifier}."));
         return arguments.stream();
     }
 

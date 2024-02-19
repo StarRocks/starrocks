@@ -15,6 +15,7 @@
 package com.starrocks.sql.parser;
 
 import org.antlr.v4.runtime.InputMismatchException;
+import org.antlr.v4.runtime.NoViableAltException;
 import org.antlr.v4.runtime.Parser;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.RecognitionException;
@@ -41,6 +42,16 @@ public class StarRocksBailErrorStrategy extends StarRocksDefaultErrorStrategy {
         }
 
         throw new ParseCancellationException(e);
+    }
+
+    @Override
+    public void reportNoViableAlternative(Parser recognizer, NoViableAltException e) {
+        InputMismatchException e1 = new InputMismatchException(recognizer);
+        for (ParserRuleContext context = recognizer.getContext(); context != null; context = context.getParent()) {
+            context.exception = e1;
+        }
+
+        throw new ParseCancellationException(e1);
     }
 
     @Override
