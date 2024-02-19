@@ -413,6 +413,16 @@ public:
                _query_options.enable_collect_table_level_scan_stats;
     }
 
+<<<<<<< HEAD
+=======
+    bool is_jit_enabled() const { return _query_options.__isset.enable_jit && _query_options.enable_jit; }
+    bool enable_wait_dependent_event() const {
+        return _query_options.__isset.enable_wait_dependent_event && _query_options.enable_wait_dependent_event;
+    }
+
+    std::string_view get_sql_dialect() const { return _query_options.sql_dialect; }
+
+>>>>>>> 43d45329bb ([Feature] support probe side subscribe pipeline finish event (#39482))
 private:
     // Set per-query state.
     void _init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,

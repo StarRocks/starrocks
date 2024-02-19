@@ -442,6 +442,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_STRICT_ORDER_BY = "enable_strict_order_by";
     private static final String CBO_SPLIT_SCAN_PREDICATE_WITH_DATE = "enable_split_scan_predicate_with_date";
 
+    public static final String ENABLE_WAIT_DEPENDENT_EVENT = "enable_wait_dependent_event";
+
     // Flag to control whether to proxy follower's query statement to leader/follower.
     public enum FollowerQueryForwardMode {
         DEFAULT,    // proxy queries by the follower's replay progress (default)
@@ -1645,6 +1647,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_STRICT_ORDER_BY)
     private boolean enableStrictOrderBy = true;
+
+    // enable wait dependent event in plan fragment
+    // the operators will wait for the dependent event to be completed before executing
+    // all of the probe side operators will wait for the build side operators to complete.
+    // Scenarios where AGG is present in the probe side will reduce peak memory usage, 
+    // but in some cases will result in increased latency for individual queries.
+    // 
+    @VarAttr(name = ENABLE_WAIT_DEPENDENT_EVENT)
+    private boolean enableWaitDependentEvent = false;
 
     public void setFollowerQueryForwardMode(String mode) {
         this.followerForwardMode = mode;
@@ -3167,6 +3178,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setScan_use_query_mem_ratio(scanUseQueryMemRatio);
         tResult.setEnable_collect_table_level_scan_stats(enableCollectTableLevelScanStats);
         tResult.setEnable_pipeline_level_shuffle(enablePipelineLevelShuffle);
+<<<<<<< HEAD
+=======
+        tResult.setEnable_hyperscan_vec(enableHyperscanVec);
+        tResult.setEnable_jit(enableJit);
+        tResult.setEnable_wait_dependent_event(enableWaitDependentEvent);
+>>>>>>> 43d45329bb ([Feature] support probe side subscribe pipeline finish event (#39482))
         return tResult;
     }
 

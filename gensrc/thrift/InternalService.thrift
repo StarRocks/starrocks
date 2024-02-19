@@ -253,6 +253,16 @@ struct TQueryOptions {
   112: optional bool enable_pipeline_level_shuffle;
 
   115: optional TTimeUnit big_query_profile_threshold_unit = TTimeUnit.SECOND;
+<<<<<<< HEAD
+=======
+  
+  116: optional string sql_dialect;
+
+  117: optional bool enable_spill_to_remote_storage;
+  118: optional TSpillToRemoteStorageOptions spill_to_remote_storage_options;
+  
+  130: optional bool enable_wait_dependent_event = false;
+>>>>>>> 43d45329bb ([Feature] support probe side subscribe pipeline finish event (#39482))
 }
 
 
