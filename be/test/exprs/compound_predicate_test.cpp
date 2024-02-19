@@ -428,9 +428,8 @@ TEST_F(VectorizedCompoundPredicateTest, testOnlyNullAndZeroRow) {
 
     {
         ColumnPtr v = expr->evaluate(nullptr, nullptr);
-        ExprsTestHelper::verify_with_jit(v, expr.get(), &runtime_state, [](ColumnPtr const& v) {
-            ASSERT_EQ(0, v->size());
-        });
+        ExprsTestHelper::verify_with_jit(v, expr.get(), &runtime_state,
+                                         [](ColumnPtr const& v) { ASSERT_EQ(0, v->size()); });
     }
 }
 
