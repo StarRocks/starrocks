@@ -60,15 +60,17 @@ public class PartitionDiffer {
 
     private Range<PartitionKey> rangeToInclude;
     private int partitionTTLNumber;
+    private int partitionRefreshNumber;
     private PeriodDuration partitionTTL;
     private PartitionInfo partitionInfo;
 
     public PartitionDiffer(Range<PartitionKey> rangeToInclude, int partitionTTLNumber, PeriodDuration partitionTTL,
-                           PartitionInfo partitionInfo) {
+                           PartitionInfo partitionInfo, int partitionRefreshNumber) {
         this.rangeToInclude = rangeToInclude;
         this.partitionTTLNumber = partitionTTLNumber;
         this.partitionInfo = partitionInfo;
         this.partitionTTL = partitionTTL;
+        this.partitionRefreshNumber = partitionRefreshNumber;
     }
 
     public PartitionDiffer() {
@@ -85,9 +87,10 @@ public class PartitionDiffer {
             rangeToInclude = SyncPartitionUtils.createRange(start, end, partitionColumn);
         }
         int partitionTTLNumber = materializedView.getTableProperty().getPartitionTTLNumber();
+        int partitionRefreshNumber = materializedView.getTableProperty().getPartitionRefreshNumber();
         PeriodDuration partitionTTL = materializedView.getTableProperty().getPartitionTTL();
         return new PartitionDiffer(rangeToInclude, partitionTTLNumber, partitionTTL,
-                materializedView.getPartitionInfo());
+                materializedView.getPartitionInfo(), partitionRefreshNumber);
     }
 
     /**
@@ -178,6 +181,17 @@ public class PartitionDiffer {
                     ttlCandidate.stream().map(PartitionRange::getPartitionName)
                             .collect(Collectors.toSet());
             res.keySet().removeIf(prunedPartitions::contains);
+        }
+
+        if (partitionRefreshNumber > 0 && res.size() > partitionRefreshNumber) {
+            // Keep only first N partitions
+            Set<String> kept = addPartitions.entrySet()
+                    .stream().map(entry -> new PartitionRange(entry.getKey(), entry.getValue()))
+                    .sorted()
+                    .limit(partitionRefreshNumber)
+                    .map(PartitionRange::getPartitionName)
+                    .collect(Collectors.toSet());
+            res.keySet().removeIf(Predicates.not(kept::contains));
         }
 
         return res;
