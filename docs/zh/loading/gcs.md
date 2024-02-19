@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: "Chinese"
 toc_max_heading_level: 4
+keywords: ['Broker Load']
 ---
 
 # 从 GCS 导入
