@@ -738,7 +738,7 @@ public class LimitTest extends PlanTestBase {
                 "LIMIT \n" +
                 "  61202;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "7:MERGING-EXCHANGE\n" +
+        assertContains(plan, "5:MERGING-EXCHANGE\n" +
                 "     offset: 6\n" +
                 "     limit: 15");
         assertContains(plan, "4:TOP-N\n" +
@@ -771,7 +771,7 @@ public class LimitTest extends PlanTestBase {
                 "  |  order by: <slot 9> 9: expr ASC, <slot 4> 4: S_NATIONKEY ASC\n" +
                 "  |  offset: 0\n" +
                 "  |  limit: 21");
-        assertContains(plan, "5:MERGING-EXCHANGE\n" +
+        assertContains(plan, "3:MERGING-EXCHANGE\n" +
                 "     offset: 6\n" +
                 "     limit: 15");
     }
@@ -819,12 +819,12 @@ public class LimitTest extends PlanTestBase {
                 "select distinct 2 from with_t_0, (select v10, v11 from t3) subt right SEMI join t0 on subt.v11 = v3;";
         String plan = getFragmentPlan(sql);
         System.out.println(plan);
-        assertContains(plan, "7:UNION\n" +
+        assertContains(plan, "6:UNION\n" +
                 "  |  \n" +
-                "  |----33:EXCHANGE\n" +
+                "  |----32:EXCHANGE\n" +
                 "  |       limit: 1\n" +
                 "  |    \n" +
-                "  20:EXCHANGE\n" +
+                "  19:EXCHANGE\n" +
                 "     limit: 1");
     }
 }
