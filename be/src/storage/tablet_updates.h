@@ -186,7 +186,7 @@ public:
 
     // perform compaction, should only be called by compaction thread
     Status compaction(MemTracker* mem_tracker);
-    Status copmaction_for_size_tiered(MemTracker* mem_tracker);
+    Status compaction_for_size_tiered(MemTracker* mem_tracker);
 
     // perform compaction with specified rowsets, this may be a manual compaction invoked by tools or data fixing jobs
     Status compaction(MemTracker* mem_tracker, const vector<uint32_t>& input_rowset_ids);
@@ -460,6 +460,12 @@ private:
 
     // these functions is only used in ut
     void stop_apply(bool apply_stopped) { _apply_stopped = apply_stopped; }
+    void stop_compaction(bool running) {
+        _compaction_running = running;
+        if (running) {
+            _last_compaction_time_ms = UnixMillis();
+        }
+    }
 
     void check_for_apply() { _check_for_apply(); }
 
@@ -525,6 +531,7 @@ private:
     std::atomic<bool> _error{false};
     std::string _error_msg;
 
+    int64_t _max_level;
     int64_t _max_level_size;
     int64_t _level_multiple;
 };

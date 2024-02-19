@@ -78,8 +78,9 @@ std::string EditVersion::to_string() const {
 }
 
 TabletUpdates::TabletUpdates(Tablet& tablet) : _tablet(tablet), _unused_rowsets(UINT64_MAX) {
-    _max_level_size = config::size_tiered_min_level_size * pow(_level_multiple, config::size_tiered_level_num);
+    _max_level = config::size_tiered_level_num;
     _level_multiple = config::size_tiered_level_multiple;
+    _max_level_size = config::size_tiered_min_level_size * pow(_level_multiple, _max_level);
 }
 
 TabletUpdates::~TabletUpdates() {
@@ -2503,7 +2504,7 @@ static string int_list_to_string(const vector<uint32_t>& l) {
 
 Status TabletUpdates::compaction(MemTracker* mem_tracker) {
     if (config::enable_pk_size_tiered_compaction_strategy) {
-        return copmaction_for_size_tiered(mem_tracker);
+        return compaction_for_size_tiered(mem_tracker);
     }
     if (_error) {
         return Status::InternalError(strings::Substitute(
@@ -2640,10 +2641,10 @@ int TabletUpdates::_calc_compaction_level(RowsetStats& stat) {
     }
 
     auto x = (double)new_bytes / config::size_tiered_min_level_size;
-    return log(x) / log(_level_multiple);
+    return log(x) / log((double)_level_multiple);
 }
 
-Status TabletUpdates::copmaction_for_size_tiered(MemTracker* mem_tracker) {
+Status TabletUpdates::compaction_for_size_tiered(MemTracker* mem_tracker) {
     if (_error) {
         return Status::InternalError(strings::Substitute(
                 "compaction failed, tablet updates is in error state: tablet:$0 $1", _tablet.tablet_id(), _error_msg));
@@ -2654,6 +2655,7 @@ Status TabletUpdates::copmaction_for_size_tiered(MemTracker* mem_tracker) {
     }
     EditVersion version;
     vector<uint32_t> rowsets;
+    std::unique_ptr<CompactionInfo> info = std::make_unique<CompactionInfo>();
     {
         std::lock_guard rl(_lock);
         if (_edit_version_infos.empty()) {
@@ -2684,17 +2686,17 @@ Status TabletUpdates::copmaction_for_size_tiered(MemTracker* mem_tracker) {
                 auto& stat = *itr->second;
                 total_valid_rowsets++;
                 total_valid_segments += stat.num_segments;
+                int level = -1;
                 if (stat.num_rows == stat.num_dels) {
-                    candidates_by_level[-1].emplace_back();
+                    candidates_by_level[level].emplace_back();
                 } else {
-                    int level = _calc_compaction_level(stat);
+                    level = _calc_compaction_level(stat);
                     candidates_by_level[level].emplace_back();
                 }
-                auto& e = candidates_by_level[(stat.num_rows == stat.num_dels) ? -1 : _calc_compaction_level(stat)].back();
+                auto& e = candidates_by_level[level].back();
                 e.rowsetid = itr->first;
-                e.score_per_row = (stat.num_rows == stat.num_dels)
-                                          ? 0
-                                          : (float)((double)stat.compaction_score / (stat.num_rows - stat.num_dels));
+                e.score_per_row =
+                        (level == -1) ? 0 : (float)((double)stat.compaction_score / (stat.num_rows - stat.num_dels));
                 e.num_rows = stat.num_rows;
                 e.num_dels = stat.num_dels;
                 e.bytes = stat.byte_size;
@@ -2745,7 +2747,10 @@ Status TabletUpdates::copmaction_for_size_tiered(MemTracker* mem_tracker) {
         int64_t total_bytes_after_compaction = 0;
         for (auto& e : candidates) {
             size_t new_rows = total_rows_after_compaction + e.num_rows - e.num_dels;
-            size_t new_bytes = total_bytes_after_compaction + e.bytes * (e.num_rows - e.num_dels) / e.num_rows;
+            size_t new_bytes = total_bytes_after_compaction;
+            if (e.num_rows != 0) {
+                new_bytes += e.bytes * (e.num_rows - e.num_dels) / e.num_rows;
+            }
             if (total_bytes_after_compaction > 0 && new_bytes > config::update_compaction_result_bytes * 2) {
                 break;
             }
@@ -2769,7 +2774,6 @@ Status TabletUpdates::copmaction_for_size_tiered(MemTracker* mem_tracker) {
     }
     // give 10s time gitter, so same table's compaction don't start at same time
     _last_compaction_time_ms = UnixMillis() + rand() % 10000;
-    std::unique_ptr<CompactionInfo> info = std::make_unique<CompactionInfo>();
     PKSizeTieredLevel* selected_level = nullptr;
     if (!priority_levels.empty()) {
         selected_level = *priority_levels.begin();
