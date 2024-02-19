@@ -112,4 +112,6 @@ public class SystemId {
     public static final long MEMORY_USAGE_ID = 106L;
     public static final long PIPE_FILES_ID = 120L;
     public static final long PIPES_ID = 121L;
+
+    public static final long PARTITIONS_META_ID = 140L;
 }
