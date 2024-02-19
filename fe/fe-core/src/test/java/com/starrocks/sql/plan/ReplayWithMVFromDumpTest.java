@@ -124,7 +124,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mv_join"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("16:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("6:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (PARTITIONED)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 384: cast = 209: tenant_id\n" +

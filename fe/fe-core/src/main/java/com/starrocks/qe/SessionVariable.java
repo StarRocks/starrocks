@@ -2127,6 +2127,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableQueryDump;
     }
 
+    public void setEnableQueryDump(boolean enable) {
+        this.enableQueryDump = enable;
+    }
+
     public boolean getEnableGlobalRuntimeFilter() {
         return enableGlobalRuntimeFilter;
     }
