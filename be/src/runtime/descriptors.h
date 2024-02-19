@@ -343,6 +343,13 @@ public:
 private:
     std::string _hive_column_names;
     std::string _hive_column_types;
+}
+
+class KuduTableDescriptor : public HiveTableDescriptor {
+public:
+    KuduTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
+    ~KuduTableDescriptor() override = default;
+    bool has_partition() const override { return false; }
 };
 
 // ===========================================

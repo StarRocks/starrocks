@@ -20,6 +20,7 @@
         <module>hadoop-ext</module>
         <module>odps-reader</module>
         <module>iceberg-metadata-reader</module>
+        <module>kudu-reader</module>
     </modules>
     <name>starrocks-java-extensions</name>
 
