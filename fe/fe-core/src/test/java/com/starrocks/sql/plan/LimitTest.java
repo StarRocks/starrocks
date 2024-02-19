@@ -734,6 +734,7 @@ public class LimitTest extends PlanTestBase {
                 "LIMIT \n" +
                 "  61202;";
         String plan = getFragmentPlan(sql);
+        System.out.println(plan);
         assertContains(plan, "7:MERGING-EXCHANGE\n" +
                 "     offset: 6\n" +
                 "     limit: 15");
@@ -897,6 +898,7 @@ public class LimitTest extends PlanTestBase {
         String sql = "select distinct v1 from (select t0.* from t0 join (select * from t1 where false) t1 " +
                 "right join t2 on t0.v1 = t2.v7) t";
         String plan = getFragmentPlan(sql);
+        System.out.println(plan);
         assertCContains(plan, "1:Project\n" +
                 "  |  <slot 1> : NULL\n" +
                 "  |  limit: 1\n" +
