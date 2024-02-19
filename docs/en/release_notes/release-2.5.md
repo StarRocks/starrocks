@@ -4,6 +4,40 @@ displayed_sidebar: "English"
 
 # StarRocks version 2.5
 
+## 2.5.19
+
+Release date: February 8, 2024
+
+### New features
+
+- Added a pattern-matching function: [regexp_extract_all](https://docs.starrocks.io/docs/sql-reference/sql-functions/like-predicate-functions/regexp_extract_all/).
+- Added Bitmap value processing functions: serialize, deserialize, and serializeToString. [#40162](https://github.com/StarRocks/starrocks/pull/40162/files)
+
+### Improvements
+
+- Supports automatic activation of inactive materialized views when refreshing these materialized views. [#38521](https://github.com/StarRocks/starrocks/pull/38521)
+- Optimized BE log printing to prevent too many irrelevant logs. [#22820](https://github.com/StarRocks/starrocks/pull/22820) [#36187](https://github.com/StarRocks/starrocks/pull/36187)
+- Supports using [Hive UDFs](https://docs.starrocks.io/docs/integrations/hive_bitmap_udf/) to process and load Bitmap data into StarRocks and export Bitmap data from StarRocks to Hive. [#40165](https://github.com/StarRocks/starrocks/pull/40165) [#40168](https://github.com/StarRocks/starrocks/pull/40168)
+- Added date formats `yyyy-MM-ddTHH:mm` and `yyyy-MM-dd HH:mm` to support TIMESTAMP partition fields in Apache Iceberg tables. [#39986](https://github.com/StarRocks/starrocks/pull/39986)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Running a Spark Load job that has no PROPERTIES specified causes null pointer exceptions (NPEs). [#38765](https://github.com/StarRocks/starrocks/pull/38765)
+- INSERT INTO SELECT occasionally encounters the error "timeout by txn manager". [#36688](https://github.com/StarRocks/starrocks/pull/36688)
+- The memory consumption of PageCache exceeds the threshold specified by the BE dynamic parameter `storage_page_cache_limit` in certain circumstances. [#37740](https://github.com/StarRocks/starrocks/pull/37740)
+- After a table is dropped and then re-created with the same table name, refreshing asynchronous materialized views created on that table fails. [#38008](https://github.com/StarRocks/starrocks/pull/38008) [#38982](https://github.com/StarRocks/starrocks/pull/38982)
+- Writing data to S3 buckets using SELECT INTO occasionally encounters the error "The tablet write operation update metadata take a long time". [#38443](https://github.com/StarRocks/starrocks/pull/38443)
+- Some operations during data loading may encounter "reached timeout". [#36746](https://github.com/StarRocks/starrocks/pull/36746)
+- The DECIMAL type returned by SHOW CREATE TABLE is inconsistent with that specified in CREATE TABLE. [#39297](https://github.com/StarRocks/starrocks/pull/39297)
+- If partition columns in external tables contain null values, queries against those tables will cause BEs to crash. [#38888](https://github.com/StarRocks/starrocks/pull/38888)
+- When deleting data from a Duplicate Key table, if the condition in the WHERE clause of the DELETE statement has a leading space, the deleted data can still be queried using SELECT. [#39797](https://github.com/StarRocks/starrocks/pull/39797)
+- Loading `array<string>` data from ORC files into StarRocks (`array<json>`) may cause BEs to crash. [#39233](https://github.com/StarRocks/starrocks/pull/39233)
+- Querying Hive catalogs may be stuck and even expire. [#39863](https://github.com/StarRocks/starrocks/pull/39863)
+- Partitions cannot be dynamically created if hour-level partitions are specified in the PARTITION BY clause. [#40256](https://github.com/StarRocks/starrocks/pull/40256)
+- The error message "failed to call frontend service" is returned during loading from Apache Flink. [#40710](https://github.com/StarRocks/starrocks/pull/40710)
+
 ## 2.5.18
 
 Release date: Jan 10, 2024

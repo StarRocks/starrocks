@@ -810,12 +810,12 @@ CONF_Int64(text_io_range_size, "16777216");
 
 // orc reader
 CONF_Bool(enable_orc_late_materialization, "true");
-CONF_Int32(orc_row_index_cache_max_size, "1048576");
-CONF_Int32(orc_stripe_cache_max_size, "8388608");
 CONF_Bool(enable_orc_libdeflate_decompression, "true");
-CONF_Int32(orc_file_cache_max_size, "8388608");
 CONF_Int32(orc_natural_read_size, "8388608");
 CONF_mBool(orc_coalesce_read_enable, "true");
+// For orc tiny stripe optimization
+// Default is 8MB for tiny stripe threshold size
+CONF_Int32(orc_tiny_stripe_threshold_size, "8388608");
 
 // parquet reader
 CONF_mBool(parquet_coalesce_read_enable, "true");

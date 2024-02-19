@@ -423,6 +423,85 @@ TEST_F(HdfsScannerTest, TestOrcGetNext) {
     scanner->close();
 }
 
+TEST_F(HdfsScannerTest, TestOrcSkipFile) {
+    auto scanner = std::make_shared<HdfsOrcScanner>();
+
+    auto* range = _create_scan_range(mtypes_orc_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(mtypes_orc_descs);
+    auto* param = _create_param(mtypes_orc_file, range, tuple_desc);
+    // partition values for [PART_x, PART_y]
+    std::vector<int64_t> values = {10, 20};
+    extend_partition_values(&_pool, param, values);
+
+    ASSERT_OK(Expr::prepare(param->partition_values, _runtime_state));
+    ASSERT_OK(Expr::open(param->partition_values, _runtime_state));
+
+    Status status = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(status.ok());
+
+    scanner->_should_skip_file = true;
+    status = scanner->open(_runtime_state);
+    EXPECT_TRUE(status.ok());
+
+    READ_SCANNER_ROWS(scanner, 0);
+    EXPECT_EQ(scanner->raw_rows_read(), 0);
+    scanner->close();
+}
+
+class BadOrcFileStream : public ORCHdfsFileStream {
+public:
+    BadOrcFileStream() : ORCHdfsFileStream(nullptr, 1024 * 1024, nullptr) {}
+    void read(void* buf, uint64_t length, uint64_t offset) override {
+        errno = ret_errno;
+        throw std::runtime_error(ret_message);
+    }
+    int ret_errno = 0;
+    std::string ret_message;
+};
+
+TEST_F(HdfsScannerTest, TestOrcReaderException) {
+    struct ErrorContent {
+        int ret_errno;
+        std::string ret_message;
+        TStatusCode::type ret_code;
+    };
+
+    std::vector<ErrorContent> error_contents = {
+            ErrorContent{.ret_errno = 0, .ret_message = "read error", .ret_code = TStatusCode::INTERNAL_ERROR},
+            ErrorContent{.ret_errno = ENOENT,
+                         .ret_message = "S3 SDK Error. Code = 404",
+                         .ret_code = TStatusCode::REMOTE_FILE_NOT_FOUND},
+    };
+
+    for (const auto& ec : error_contents) {
+        auto scanner = std::make_shared<HdfsOrcScanner>();
+
+        auto* range = _create_scan_range(mtypes_orc_file, 0, 0);
+        auto* tuple_desc = _create_tuple_desc(mtypes_orc_descs);
+        auto* param = _create_param(mtypes_orc_file, range, tuple_desc);
+
+        // partition values for [PART_x, PART_y]
+        std::vector<int64_t> values = {10, 20};
+        extend_partition_values(&_pool, param, values);
+
+        ASSERT_OK(Expr::prepare(param->partition_values, _runtime_state));
+        ASSERT_OK(Expr::open(param->partition_values, _runtime_state));
+
+        std::unique_ptr<BadOrcFileStream> file_stream(new BadOrcFileStream());
+        file_stream->ret_errno = ec.ret_errno;
+        file_stream->ret_message = ec.ret_message;
+        scanner->_input_stream = std::move(file_stream);
+
+        Status status = scanner->init(_runtime_state, *param);
+        EXPECT_TRUE(status.ok());
+
+        status = scanner->open(_runtime_state);
+        EXPECT_FALSE(status.ok()) << status.message();
+        EXPECT_EQ(status.code(), ec.ret_code);
+        scanner->close();
+    }
+}
+
 static void extend_mtypes_orc_min_max_conjuncts(ObjectPool* pool, HdfsScannerParams* params,
                                                 const std::vector<int>& values) {
     const TupleDescriptor* min_max_tuple_desc = params->min_max_tuple_desc;
