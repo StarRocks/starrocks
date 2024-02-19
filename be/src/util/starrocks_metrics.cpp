@@ -56,6 +56,13 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
 
     REGISTER_STARROCKS_METRIC(memtable_flush_total);
     REGISTER_STARROCKS_METRIC(memtable_flush_duration_us);
+    REGISTER_STARROCKS_METRIC(memtable_flush_io_time_us);
+    REGISTER_STARROCKS_METRIC(memtable_flush_memory_bytes_total);
+    REGISTER_STARROCKS_METRIC(memtable_flush_disk_bytes_total);
+    REGISTER_STARROCKS_METRIC(segment_flush_total);
+    REGISTER_STARROCKS_METRIC(segment_flush_duration_us);
+    REGISTER_STARROCKS_METRIC(segment_flush_io_time_us);
+    REGISTER_STARROCKS_METRIC(segment_flush_bytes_total);
 
     REGISTER_STARROCKS_METRIC(update_rowset_commit_request_total);
     REGISTER_STARROCKS_METRIC(update_rowset_commit_request_failed);
