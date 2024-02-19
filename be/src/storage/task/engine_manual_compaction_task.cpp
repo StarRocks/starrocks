@@ -35,7 +35,7 @@ EngineManualCompactionTask::EngineManualCompactionTask(MemTracker* mem_tracker, 
                                                        bool base_compaction)
         : _tablet_id(tablet_id), _base_compaction(base_compaction) {
     _mem_tracker =
-            std::make_unique<MemTracker>(-1, "manual_compact_task_of_tablet_" + std::to_string(tablet_id), mem_tracker);
+            std::make_unique<MemTracker>(-1, fmt::format("manual_compact_task_of_tablet_{}", tablet_id), mem_tracker);
 }
 
 Status EngineManualCompactionTask::execute() {
