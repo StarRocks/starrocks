@@ -22,6 +22,7 @@ import com.starrocks.connector.MetadataCollectJob;
 import com.starrocks.connector.MetadataExecutor;
 import com.starrocks.connector.PlanMode;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.AsyncIterable;
 import com.starrocks.connector.share.iceberg.CommonMetadataBean;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QeProcessorImpl;
@@ -33,7 +34,6 @@ import com.starrocks.thrift.TIcebergMetadata;
 import com.starrocks.thrift.TMetadataEntry;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TResultSinkType;
-import com.starrocks.thrift.TRowBatch;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.expressions.ManifestEvaluator;
@@ -53,11 +53,14 @@ import org.apache.thrift.TException;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.FutureTask;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -69,7 +72,7 @@ public class DistributedDataScan
         extends DataScan<TableScan, FileScanTask, CombinedScanTask> implements TableScan {
     private static final Logger LOG = LogManager.getLogger(DistributedDataScan.class);
     private static final long LOCAL_PLANNING_MAX_SLOT_SIZE = 8L * 1024 * 1024;
-    private Map<Integer, PartitionData> partitionDataTemplates = new HashMap<>();
+    private final Map<Integer, PartitionData> partitionDataTemplates = new ConcurrentHashMap<>();
     private final int localParallelism;
     private final long localPlanningSizeThreshold;
     private final String catalogName;
@@ -77,11 +80,22 @@ public class DistributedDataScan
     private final String tableName;
     private final PlanMode planMode;
     private boolean loadColumnStats;
-    private final Kryo kryo = new Kryo();
-    private boolean isPartitionedTable;
-    private boolean finished;
+    private final boolean isPartitionedTable;
+    private boolean fetchResultFinished;
+    AtomicBoolean buildScanTaskFinished = new AtomicBoolean(false);
 
-    private final ConcurrentLinkedQueue<TResultBatch> queue = new ConcurrentLinkedQueue<>();
+    private final ConcurrentLinkedQueue<TResultBatch> resultBatchQueue = new ConcurrentLinkedQueue<>();
+    private final ConcurrentLinkedQueue<FileScanTask> fileScanTaskQueue = new ConcurrentLinkedQueue<>();
+
+    private final Map<Integer, String> specStringCache;
+    private final Map<Integer, ResidualEvaluator> residualCache;
+    private final String schemaString;
+
+    private final ThreadLocal<Kryo> kryoThreadLocal = ThreadLocal.withInitial(() -> {
+        Kryo kryo = new Kryo();
+        kryo.register(CommonMetadataBean.class);
+        return kryo;
+    });
 
     public static TableScanContext newTableScanContext(Table table) {
         if (table instanceof BaseTable) {
@@ -102,6 +116,9 @@ public class DistributedDataScan
         this.tableName = tableName;
         this.planMode = planMode;
         this.isPartitionedTable = table.spec().isPartitioned();
+        this.specStringCache = specCache(PartitionSpecParser::toJson);
+        this.residualCache = specCache(this::newResidualEvaluator);
+        this.schemaString = SchemaParser.toJson(tableSchema());
     }
 
     @Override
@@ -131,77 +148,108 @@ public class DistributedDataScan
         }
 
 
-        kryo.register(CommonMetadataBean.class);
         if (shouldPlanLocally(dataManifests, loadColumnStats)) {
             return planFileTasksLocally(dataManifests, deleteManifests);
         } else {
             try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.planFileTaskRemotely")) {
-                return planFileTasksRemotely(deleteManifests);
+                scanMetrics().scannedDataManifests().increment(dataManifests.size());
+                scanMetrics().scannedDeleteManifests().increment(deleteManifests.size());
+                long liveFilesCount = liveFilesCount(dataManifests);
+                return planFileTasksRemotely(deleteManifests, liveFilesCount);
             }
         }
     }
 
-    private CloseableIterable<FileScanTask> planFileTasksRemotely(List<ManifestFile> deleteManifests) {
+    private CloseableIterable<FileScanTask> planFileTasksRemotely(List<ManifestFile> deleteManifests, long liveFilesCount) {
         LOG.info("Planning file tasks remotely for table {}.{}", dbName, tableName);
 
         String predicate = filter() == Expressions.alwaysTrue() ? "" : SerializationUtil.serializeToBase64(filter());
-        ConnectContext currentContext = ConnectContext.get();
-
-        Coordinator coord;
-            // TODO(stephen): refactor this
-        MetadataCollectJob collectJob = new MetadataCollectJob(catalogName, dbName, tableName,
-                snapshot().snapshotId(), predicate, TResultSinkType.METADATA_ICEBERG);
-        collectJob.build();
-        coord = MetadataExecutor.executeDQL(collectJob);
-
-        // TODO(stephen): use stream to process according to the file content
-//        currentContext.setThreadLocalInfo();
-
-        List<DataFile> dataFiles = new ArrayList<>();
-
-        executeInNewThread("xxx", () -> fetchResult(coord));
-//        try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.deserializedAndBuild")) {
-//            dataFiles = deserializedMetadata(resultBatches);
-//        }
-        try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.deserMetadata")) {
-            while (!finished) {
-                if (!queue.isEmpty()) {
-                    TResultBatch resultBatch = queue.poll();
-                    dataFiles.addAll(deserializedMetadata(resultBatch));
-                }
-            }
-        }
-
-        currentContext.setThreadLocalInfo();
         DeleteFileIndex deleteFileIndex;
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.buildDeleteIndex")) {
             deleteFileIndex = planDeletesLocally(deleteManifests);
         }
 
-        try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.toFileTask")) {
-            return CloseableIterable.withNoopClose(toFileTasks(dataFiles, deleteFileIndex));
-        }
+        ConnectContext currentContext = ConnectContext.get();
+
+        Coordinator coord;
+        MetadataCollectJob collectJob = new MetadataCollectJob(catalogName, dbName, tableName,
+                snapshot().snapshotId(), predicate, TResultSinkType.METADATA_ICEBERG);
+        collectJob.build();
+        coord = MetadataExecutor.executeDQL(collectJob);
+
+        long currentTimestamp = System.currentTimeMillis();
+        Tracers tracers = Tracers.get();
+        executeInNewThread(String.format("%s-%s-%s-%d-fetch_result", catalogName, dbName, tableName, currentTimestamp),
+                () -> fetchResult(coord, tracers));
+        executeInNewThread(String.format("%s-%s-%s-%d-parallel_deserialize", catalogName, dbName, tableName, currentTimestamp),
+                () -> parallelBuildFileScanTask(tracers, fileScanTaskQueue, deleteFileIndex, liveFilesCount));
+
+        currentContext.setThreadLocalInfo();
+        return new AsyncIterable<>(fileScanTaskQueue, buildScanTaskFinished);
     }
 
-    private boolean fetchResult(Coordinator coord) {
-        Long start = System.currentTimeMillis();
-        try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.getRowBatch")) {
+    private boolean fetchResult(Coordinator coord, Tracers tracers) {
+        try (Timer ignored = Tracers.watchScope(tracers, EXTERNAL, "ICEBERG.getRowBatch")) {
             RowBatch batch;
             do {
                 batch = coord.getNext();
                 if (batch.getBatch() != null) {
-                    queue.add(batch.getBatch());
+                    resultBatchQueue.add(batch.getBatch());
                 }
             } while (!batch.isEos());
         } catch (Exception e) {
             throw new RuntimeException(e);
         } finally {
-            finished = true;
-            LOG.error("=================fetch result cost : {}", System.currentTimeMillis() - start);
+            this.fetchResultFinished = true;
             QeProcessorImpl.INSTANCE.unregisterQuery(ConnectContext.get().getExecutionId());
-            return true;
         }
+        return true;
     }
+    
+    private boolean parallelBuildFileScanTask(Tracers tracers, ConcurrentLinkedQueue<FileScanTask> fileScanTaskQueue,
+                                              DeleteFileIndex deleteFileIndex, long liveFilesCount) {
+        ExecutorService executorService = planExecutor();
+        List<Future<Boolean>> taskFutures = new ArrayList<>();
+        try (Timer ignored = Tracers.watchScope(tracers, EXTERNAL, "ICEBERG.ParallelDeserializeMetadata")) {
+            while (!fetchResultFinished || !resultBatchQueue.isEmpty()) {
+                if (!resultBatchQueue.isEmpty()) {
+                    TResultBatch resultBatch = resultBatchQueue.poll();
+                    taskFutures.add(executorService.submit(() -> {
+                        List<FileScanTask> scanTasks = buildFileScanTask(resultBatch, deleteFileIndex);
+                        return fileScanTaskQueue.addAll(scanTasks);
+                    }));
+                }
+            }
+        }
+
+        try (Timer ignored = Tracers.watchScope(tracers, EXTERNAL, "ICEBERG.getFutures")) {
+            for (Future<Boolean> future : taskFutures) {
+                try {
+                    future.get();
+                } catch (InterruptedException | ExecutionException e) {
+                    LOG.error("build file scan task failed", e);
+                    fileScanTaskQueue.clear();
+                }
+            }
+        } finally {
+            while (true) {
+                if (fileScanTaskQueue.isEmpty()) {
+                    buildScanTaskFinished.set(true);
+                    break;
+                }
+
+                try {
+                    Thread.sleep(50);
+                } catch (InterruptedException e) {
+                    LOG.error(e);
+                }
+            }
+        }
+
+        scanMetrics().skippedDataFiles().increment(liveFilesCount - scanMetrics().resultDataFiles().value());
+        return true;
+    }
+    
     private DeleteFileIndex planDeletesLocally(List<ManifestFile> deleteManifests) {
         DeleteFileIndex.Builder builder = DeleteFileIndex.builderFor(io(), deleteManifests);
 
@@ -280,28 +328,30 @@ public class DistributedDataScan
             List<ManifestFile> dataManifests, List<ManifestFile> deleteManifests) {
         LOG.info("Planning file tasks locally for table {}", table().name());
         ManifestGroup manifestGroup = newManifestGroup(dataManifests, deleteManifests);
-        CloseableIterable<? extends ScanTask> fileTasks = manifestGroup.planFiles();
-        return (CloseableIterable<FileScanTask>) fileTasks;
+        return manifestGroup.planFiles();
+    }
+    
+    private List<FileScanTask> buildFileScanTask(TResultBatch resultBatch, DeleteFileIndex deleteFileIndex) {
+        List<DataFile> dataFiles = deserializedMetadata(resultBatch);
+        return toFileScanTasks(dataFiles, deleteFileIndex);
     }
 
     private List<DataFile> deserializedMetadata(TResultBatch resultBatch) {
         List<DataFile> dataFiles = new ArrayList<>();
         TDeserializer deserializer = new TDeserializer();
-//        try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.deserializeRowBatch")) {
-            for (ByteBuffer bb : resultBatch.rows) {
-                TMetadataEntry entry;
-                entry = new TMetadataEntry();
-                byte[] bytes = new byte[bb.limit() - bb.position()];
-                bb.get(bytes);
-                try {
-                    deserializer.deserialize(entry, bytes);
-                } catch (TException e) {
-                    throw new RuntimeException(e);
-                }
-                DataFile baseFile = (DataFile) buildIcebergFile(entry);
-                dataFiles.add(baseFile);
+        for (ByteBuffer bb : resultBatch.rows) {
+            TMetadataEntry entry;
+            entry = new TMetadataEntry();
+            byte[] bytes = new byte[bb.limit() - bb.position()];
+            bb.get(bytes);
+            try {
+                deserializer.deserialize(entry, bytes);
+            } catch (TException e) {
+                throw new RuntimeException(e);
             }
-//        }
+            DataFile baseFile = (DataFile) buildIcebergFile(entry);
+            dataFiles.add(baseFile);
+        }
 
         return dataFiles;
     }
@@ -315,7 +365,7 @@ public class DistributedDataScan
 
         int specId = thrift.getSpec_id();
         String filePath = thrift.getFile_path();
-        // FileFormat fileFormat = FileFormat.fromString(thrift.getFile_format());
+        FileFormat fileFormat = FileFormat.fromString(thrift.getFile_format());
 
         PartitionData partitionData;
         partitionData = buildPartitionData(thrift);
@@ -332,7 +382,7 @@ public class DistributedDataScan
             GenericDataFile dataFile = new GenericDataFile(
                         specId,
                         filePath,
-                        FileFormat.PARQUET,
+                        fileFormat,
                         partitionData,
                         fileLength,
                         metrics,
@@ -340,35 +390,34 @@ public class DistributedDataScan
                         splitOffset,
                         equalityFiledIds,
                         null);
-//            dataFile.setSplitOffsets(splitOffset);
             if (thrift.isSetFile_sequence_number()) {
                 dataFile.setFileSequenceNumber(thrift.getFile_sequence_number());
             }
             if (thrift.isSetData_sequence_number()) {
                 dataFile.setDataSequenceNumber(thrift.getData_sequence_number());
             }
-                return dataFile;
+            return dataFile;
         } else {
-                GenericDeleteFile deleteFile = new GenericDeleteFile(
-                        specId,
-                        content,
-                        filePath,
-                        FileFormat.PARQUET,
-                        partitionData,
-                        fileLength,
-                        metrics,
-                        equalityFiledIds,
-                        sortId,
-                        splitOffset,
-                        null
-                );
-                if (thrift.isSetFile_sequence_number()) {
-                    deleteFile.setFileSequenceNumber(thrift.getFile_sequence_number());
-                }
-                if (thrift.isSetData_sequence_number()) {
-                    deleteFile.setDataSequenceNumber(thrift.getData_sequence_number());
-                }
-                return deleteFile;
+            GenericDeleteFile deleteFile = new GenericDeleteFile(
+                    specId,
+                    content,
+                    filePath,
+                    FileFormat.PARQUET,
+                    partitionData,
+                    fileLength,
+                    metrics,
+                    equalityFiledIds,
+                    sortId,
+                    splitOffset,
+                    null
+            );
+            if (thrift.isSetFile_sequence_number()) {
+                deleteFile.setFileSequenceNumber(thrift.getFile_sequence_number());
+            }
+            if (thrift.isSetData_sequence_number()) {
+                deleteFile.setDataSequenceNumber(thrift.getData_sequence_number());
+            }
+            return deleteFile;
         }
     }
 
@@ -379,13 +428,11 @@ public class DistributedDataScan
             return EMPTY_PARTITION_DATA;
         }
 
-        CommonMetadataBean bean;
         PartitionData partitionDataTemplate = partitionDataTemplates.computeIfAbsent(specId,
                 k -> new PartitionData(spec.partitionType()));
 
-        long start = System.currentTimeMillis();
         Input input = new Input(org.apache.thrift.TBaseHelper.rightSize(thrift.partition_data).array());
-        bean = kryo.readObject(input, CommonMetadataBean.class);
+        CommonMetadataBean bean = kryoThreadLocal.get().readObject(input, CommonMetadataBean.class);
         input.close();
 
         return new PartitionData(partitionDataTemplate, bean.getValues());
@@ -398,36 +445,27 @@ public class DistributedDataScan
     }
 
 
-    private List<FileScanTask> toFileTasks(
+    private List<FileScanTask> toFileScanTasks(
             List<DataFile> dataFiles,
             DeleteFileIndex deleteFileIndex) {
-        Map<Integer, String> specStringCache;
-        Map<Integer, ResidualEvaluator> residualCache;
-        String schemaString = SchemaParser.toJson(tableSchema());
-        specStringCache = specCache(PartitionSpecParser::toJson);
-        residualCache = specCache(this::newResidualEvaluator);
-
         List<FileScanTask> scanTasks = new ArrayList<>();
         for (DataFile dataFile : dataFiles) {
-            FileScanTask task = toFileTasks(dataFile, deleteFileIndex, schemaString, specStringCache, residualCache);
+            FileScanTask task = toFileScanTasks(dataFile, deleteFileIndex);
             scanTasks.add(task);
         }
 
         return scanTasks;
     }
 
-    private FileScanTask toFileTasks(
+    private FileScanTask toFileScanTasks(
             DataFile dataFile,
-            DeleteFileIndex deleteFileIndex,
-            String schemaString,
-            Map<Integer, String> specStringCache,
-            Map<Integer, ResidualEvaluator> residualCache) {
+            DeleteFileIndex deleteFileIndex) {
         String specString = specStringCache.get(dataFile.specId());
         ResidualEvaluator residuals = residualCache.get(dataFile.specId());
 
         DeleteFile[] deleteFiles = deleteFileIndex.forDataFile(dataFile);
 
-//        ScanMetricsUtil.fileTask(scanMetrics(), dataFile, deleteFiles);
+        ScanMetricsUtil.fileTask(scanMetrics(), dataFile, deleteFiles);
 
         return new BaseFileScanTask(
                 dataFile,
@@ -447,7 +485,7 @@ public class DistributedDataScan
     }
 
     private <R> Map<Integer, R> specCache(Function<PartitionSpec, R> load) {
-        Map<Integer, R> cache = new HashMap<>();
+        Map<Integer, R> cache = new ConcurrentHashMap<>();
         table().specs().forEach((specId, spec) -> cache.put(specId, load.apply(spec)));
         return cache;
     }
@@ -461,5 +499,13 @@ public class DistributedDataScan
     public CloseableIterable<CombinedScanTask> planTasks() {
         return TableScanUtil.planTasks(
                 planFiles(), targetSplitSize(), splitLookback(), splitOpenFileCost());
+    }
+
+    private int liveFilesCount(List<ManifestFile> manifests) {
+        return manifests.stream().mapToInt(this::liveFilesCount).sum();
+    }
+
+    private int liveFilesCount(ManifestFile manifest) {
+        return manifest.existingFilesCount() + manifest.addedFilesCount();
     }
 }

@@ -124,6 +124,11 @@ public class Tracers {
         THREAD_LOCAL.remove();
     }
 
+    // for record metrics in parallel
+    public static Tracers get() {
+        return THREAD_LOCAL.get();
+    }
+
     private static Module getTraceModule(String str) {
         try {
             if (str != null) {
@@ -142,6 +147,10 @@ public class Tracers {
 
     public static Timer watchScope(Module module, String name) {
         Tracers tracers = THREAD_LOCAL.get();
+        return tracers.tracer(module, Mode.TIMER).watchScope(name);
+    }
+
+    public static synchronized Timer watchScope(Tracers tracers, Module module, String name) {
         return tracers.tracer(module, Mode.TIMER).watchScope(name);
     }
 

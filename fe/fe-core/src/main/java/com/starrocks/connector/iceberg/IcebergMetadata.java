@@ -622,49 +622,47 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         // FileScanTask are splits of file. Avoid calculating statistics for a file multiple times.
         Set<String> filePaths = new HashSet<>();
-        try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.splitTaskCost")) {
-            while (fileScanTasks.hasNext()) {
-                FileScanTask scanTask = fileScanTasks.next();
+        while (fileScanTasks.hasNext()) {
+            FileScanTask scanTask = fileScanTasks.next();
 
-                FileScanTask icebergSplitScanTask = scanTask;
-                if (enableCollectColumnStatistics()) {
-                    try (Timer ignored1 = Tracers.watchScope(EXTERNAL, "ICEBERG.buildSplitScanTask")) {
-                        icebergSplitScanTask = buildIcebergSplitScanTask(scanTask, icebergPredicate, key);
-                    }
-
-                    List<Types.NestedField> fullColumns = nativeTbl.schema().columns();
-                    Map<Integer, Type.PrimitiveType> idToTypeMapping = fullColumns.stream()
-                            .filter(column -> column.type().isPrimitiveType())
-                            .collect(Collectors.toMap(Types.NestedField::fieldId, column -> column.type().asPrimitiveType()));
-
-                    Set<Integer> identityPartitionIds = nativeTbl.spec().fields().stream()
-                            .filter(x -> x.transform().isIdentity())
-                            .map(PartitionField::sourceId)
-                            .collect(Collectors.toSet());
-
-                    List<Types.NestedField> nonPartitionPrimitiveColumns = fullColumns.stream()
-                            .filter(column -> !identityPartitionIds.contains(column.fieldId()) &&
-                                    column.type().isPrimitiveType())
-                            .collect(toImmutableList());
-
-                    try (Timer ignored2 = Tracers.watchScope(EXTERNAL, "ICEBERG.updateIcebergFileStats")) {
-                        statisticProvider.updateIcebergFileStats(
-                                icebergTable, scanTask, idToTypeMapping, nonPartitionPrimitiveColumns, key);
-                    }
+            FileScanTask icebergSplitScanTask = scanTask;
+            if (enableCollectColumnStatistics()) {
+                try (Timer ignored1 = Tracers.watchScope(EXTERNAL, "ICEBERG.buildSplitScanTask")) {
+                    icebergSplitScanTask = buildIcebergSplitScanTask(scanTask, icebergPredicate, key);
                 }
 
-                icebergScanTasks.add(icebergSplitScanTask);
+                List<Types.NestedField> fullColumns = nativeTbl.schema().columns();
+                Map<Integer, Type.PrimitiveType> idToTypeMapping = fullColumns.stream()
+                        .filter(column -> column.type().isPrimitiveType())
+                        .collect(Collectors.toMap(Types.NestedField::fieldId, column -> column.type().asPrimitiveType()));
 
-                if (canPruneManifests) {
-                    String filePath = icebergSplitScanTask.file().path().toString();
-                    if (!filePaths.contains(filePath)) {
-                        filePaths.add(filePath);
-                        totalReadCount += scanTask.file().recordCount();
-                    }
+                Set<Integer> identityPartitionIds = nativeTbl.spec().fields().stream()
+                        .filter(x -> x.transform().isIdentity())
+                        .map(PartitionField::sourceId)
+                        .collect(Collectors.toSet());
 
-                    if (totalReadCount >= limit) {
-                        break;
-                    }
+                List<Types.NestedField> nonPartitionPrimitiveColumns = fullColumns.stream()
+                        .filter(column -> !identityPartitionIds.contains(column.fieldId()) &&
+                                column.type().isPrimitiveType())
+                        .collect(toImmutableList());
+
+                try (Timer ignored2 = Tracers.watchScope(EXTERNAL, "ICEBERG.updateIcebergFileStats")) {
+                    statisticProvider.updateIcebergFileStats(
+                            icebergTable, scanTask, idToTypeMapping, nonPartitionPrimitiveColumns, key);
+                }
+            }
+
+            icebergScanTasks.add(icebergSplitScanTask);
+
+            if (canPruneManifests) {
+                String filePath = icebergSplitScanTask.file().path().toString();
+                if (!filePaths.contains(filePath)) {
+                    filePaths.add(filePath);
+                    totalReadCount += scanTask.file().recordCount();
+                }
+
+                if (totalReadCount >= limit) {
+                    break;
                 }
             }
         }
@@ -1002,6 +1000,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         return PlanMode.fromName(ConnectContext.get().getSessionVariable().getPlanMode());
     }
 
+    // TODO(stephen): metadata query shouldn't clear it.
     @Override
     public void clear() {
         splitTasks.clear();
