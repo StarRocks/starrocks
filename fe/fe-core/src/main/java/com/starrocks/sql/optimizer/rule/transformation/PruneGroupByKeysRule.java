@@ -157,11 +157,7 @@ public class PruneGroupByKeysRule extends TransformationRule {
                     op.setLimit(1);
                 }
                 OptExpression result = OptExpression.create(
-<<<<<<< HEAD
-                        new LogicalLimitOperator(1, 0, LogicalLimitOperator.Phase.INIT),
-=======
                         LogicalLimitOperator.global(1, 0),
->>>>>>> 9cb912ddbc ([BugFix] split limit directly in some rules  (#35875) (#36051))
                         OptExpression.create(
                                 projectOperator, input.inputAt(0).getInputs()));
                 return Lists.newArrayList(result);
