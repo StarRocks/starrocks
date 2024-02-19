@@ -648,7 +648,7 @@ jobs:
       CLUSTER_NAME: ${{ needs.deploy.outputs.cluster_name }}
       FE_NODE: ${{ needs.deploy.outputs.fe }}
       BE_NODE: ${{ needs.deploy.outputs.be }}
-      BASE_VERSION: ${{needs.build.outputs.base_version}}
+      BASE_VERSION: ${{ needs.build.outputs.base_version }}
     outputs:
       MYSQL_ECI_ID: ${{ steps.run_case.outputs.MYSQL_ECI_ID }}
     steps:
