@@ -198,6 +198,16 @@ public class PlanTestNoneDBBase {
         assertContains(plan, "  MultiCastDataSinks");
     }
 
+    public static void assertMatches(String text, String pattern) {
+        Pattern regex = Pattern.compile(pattern);
+        Assert.assertTrue(text, regex.matcher(text).find());
+    }
+
+    public static void assertNotMatches(String text, String pattern) {
+        Pattern regex = Pattern.compile(pattern);
+        Assert.assertFalse(text, regex.matcher(text).find());
+    }
+
     public static void assertContains(String text, List<String> patterns) {
         for (String s : patterns) {
             Assert.assertTrue(text, text.contains(s));
@@ -581,7 +591,6 @@ public class PlanTestNoneDBBase {
         return false;
     }
 
-
     public static String format(String result) {
         StringBuilder sb = new StringBuilder();
         Arrays.stream(result.split("\n")).forEach(d -> sb.append(d.trim()).append("\n"));
@@ -589,7 +598,8 @@ public class PlanTestNoneDBBase {
     }
 
     private void debugSQL(BufferedWriter writer, boolean hasResult, boolean hasFragment, boolean hasDump,
-                          boolean hasStatistics, boolean hasScheduler, int nthPlan, String sql, String plan, String fragment,
+                          boolean hasStatistics, boolean hasScheduler, int nthPlan, String sql, String plan,
+                          String fragment,
                           String dump,
                           String statistic,
                           String comment,

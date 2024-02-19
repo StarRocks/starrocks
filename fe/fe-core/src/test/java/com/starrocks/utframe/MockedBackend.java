@@ -20,8 +20,24 @@ package com.starrocks.utframe;
 import com.google.common.collect.Queues;
 import com.starrocks.common.ClientPool;
 import com.starrocks.leader.LeaderImpl;
+import com.starrocks.proto.AbortCompactionRequest;
+import com.starrocks.proto.AbortCompactionResponse;
+import com.starrocks.proto.AbortTxnRequest;
+import com.starrocks.proto.AbortTxnResponse;
+import com.starrocks.proto.CompactRequest;
+import com.starrocks.proto.CompactResponse;
+import com.starrocks.proto.DeleteDataRequest;
+import com.starrocks.proto.DeleteDataResponse;
+import com.starrocks.proto.DeleteTabletRequest;
+import com.starrocks.proto.DeleteTabletResponse;
+import com.starrocks.proto.DeleteTxnLogRequest;
+import com.starrocks.proto.DeleteTxnLogResponse;
+import com.starrocks.proto.DropTableRequest;
+import com.starrocks.proto.DropTableResponse;
 import com.starrocks.proto.ExecuteCommandRequestPB;
 import com.starrocks.proto.ExecuteCommandResultPB;
+import com.starrocks.proto.LockTabletMetadataRequest;
+import com.starrocks.proto.LockTabletMetadataResponse;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PCollectQueryStatisticsResult;
@@ -42,8 +58,24 @@ import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.PUpdateFailPointStatusRequest;
 import com.starrocks.proto.PUpdateFailPointStatusResponse;
+import com.starrocks.proto.PublishLogVersionBatchRequest;
+import com.starrocks.proto.PublishLogVersionRequest;
+import com.starrocks.proto.PublishLogVersionResponse;
+import com.starrocks.proto.PublishVersionRequest;
+import com.starrocks.proto.PublishVersionResponse;
+import com.starrocks.proto.RestoreSnapshotsRequest;
+import com.starrocks.proto.RestoreSnapshotsResponse;
 import com.starrocks.proto.StatusPB;
+import com.starrocks.proto.TabletStatRequest;
+import com.starrocks.proto.TabletStatResponse;
+import com.starrocks.proto.UnlockTabletMetadataRequest;
+import com.starrocks.proto.UnlockTabletMetadataResponse;
+import com.starrocks.proto.UploadSnapshotsRequest;
+import com.starrocks.proto.UploadSnapshotsResponse;
+import com.starrocks.proto.VacuumRequest;
+import com.starrocks.proto.VacuumResponse;
 import com.starrocks.rpc.BrpcProxy;
+import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.PBackendService;
 import com.starrocks.rpc.PCollectQueryStatisticsRequest;
 import com.starrocks.rpc.PExecBatchPlanFragmentsRequest;
@@ -100,6 +132,7 @@ import org.apache.commons.lang3.NotImplementedException;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -133,6 +166,8 @@ public class MockedBackend {
 
     private final MockPBackendService pbService;
 
+    private final MockLakeService lakeService;
+
     public MockedBackend(String host) {
         this(host, BASE_PORT.getAndIncrement());
     }
@@ -150,6 +185,8 @@ public class MockedBackend {
         thriftClient = new MockBeThriftClient(this);
         pbService = new MockPBackendService();
 
+        lakeService = new MockLakeService();
+
         ((MockGenericPool<?>) ClientPool.beHeartbeatPool).register(this);
         ((MockGenericPool<?>) ClientPool.backendPool).register(this);
 
@@ -157,6 +194,11 @@ public class MockedBackend {
             @Mock
             private synchronized PBackendService getBackendService(TNetworkAddress address) {
                 return pbService;
+            }
+
+            @Mock
+            private synchronized LakeService getLakeServiceImpl(TNetworkAddress address) {
+                return lakeService;
             }
         };
 
@@ -473,6 +515,88 @@ public class MockedBackend {
 
         public Future<PProcessDictionaryCacheResult> processDictionaryCache(PProcessDictionaryCacheRequest request) {
             return null;
+        }
+    }
+
+    private static class MockLakeService implements LakeService {
+        @Override
+        public Future<PublishVersionResponse> publishVersion(PublishVersionRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<AbortTxnResponse> abortTxn(AbortTxnRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<CompactResponse> compact(CompactRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<DeleteTabletResponse> deleteTablet(DeleteTabletRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<DeleteTxnLogResponse> deleteTxnLog(DeleteTxnLogRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<DeleteDataResponse> deleteData(DeleteDataRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<TabletStatResponse> getTabletStats(TabletStatRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<DropTableResponse> dropTable(DropTableRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<PublishLogVersionResponse> publishLogVersion(PublishLogVersionRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<PublishLogVersionResponse> publishLogVersionBatch(PublishLogVersionBatchRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<LockTabletMetadataResponse> lockTabletMetadata(LockTabletMetadataRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<UnlockTabletMetadataResponse> unlockTabletMetadata(UnlockTabletMetadataRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<UploadSnapshotsResponse> uploadSnapshots(UploadSnapshotsRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<RestoreSnapshotsResponse> restoreSnapshots(RestoreSnapshotsRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<AbortCompactionResponse> abortCompaction(AbortCompactionRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<VacuumResponse> vacuum(VacuumRequest request) {
+            return CompletableFuture.completedFuture(null);
         }
     }
 }

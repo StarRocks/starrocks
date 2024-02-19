@@ -559,7 +559,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public TableProperty buildConstraint() {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
             try {
-                uniqueConstraints = UniqueConstraint.parse(
+                uniqueConstraints = UniqueConstraint.parse(null, null, null,
                         properties.getOrDefault(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, ""));
             } catch (Exception e) {
                 LOG.warn("Failed to parse unique constraints, ignore this unique constraint", e);
