@@ -120,8 +120,8 @@ public:
             return Status::NotSupported("JIT of decimal cmp not support");
         } else {
             std::vector<LLVMDatum> datums(2);
-            ASSIGN_OR_RETURN(datums[0], _children[0]->generate_ir_impl(context, jit_ctx))
-            ASSIGN_OR_RETURN(datums[1], _children[1]->generate_ir_impl(context, jit_ctx))
+            ASSIGN_OR_RETURN(datums[0], _children[0]->generate_ir(context, jit_ctx))
+            ASSIGN_OR_RETURN(datums[1], _children[1]->generate_ir(context, jit_ctx))
 
             auto* l = datums[0].value;
             auto* r = datums[1].value;
@@ -388,8 +388,8 @@ public:
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
         std::vector<LLVMDatum> datums(2);
-        ASSIGN_OR_RETURN(datums[0], _children[0]->generate_ir_impl(context, jit_ctx))
-        ASSIGN_OR_RETURN(datums[1], _children[1]->generate_ir_impl(context, jit_ctx))
+        ASSIGN_OR_RETURN(datums[0], _children[0]->generate_ir(context, jit_ctx))
+        ASSIGN_OR_RETURN(datums[1], _children[1]->generate_ir(context, jit_ctx))
         auto& b = jit_ctx->builder;
         if constexpr (lt_is_decimal<Type>) {
             // TODO(yueyang): Implement decimal cmp in LLVM IR.
