@@ -1727,7 +1727,11 @@ public class ExpressionAnalyzer {
             TableName tableName;
             if (dictTableFullName.length == 1) {
                 tableName = new TableName(null, dictTableFullName[0]);
-                tableName.normalization(session);
+                if (node.getDbName() != null) {
+                    tableName.setDb(node.getDbName());
+                } else {
+                    tableName.normalization(session);
+                }
             } else if (dictTableFullName.length == 2) {
                 tableName = new TableName(dictTableFullName[0], dictTableFullName[1]);
             } else {
@@ -1765,7 +1769,7 @@ public class ExpressionAnalyzer {
                     valueColumn = column;
                 }
             }
-            // (table, keys..., value_column, strict_mode)
+            // (table, keys..., value_column, null_if_not_found)
             int valueColumnIdx;
             int strictModeIdx;
             if (params.size() == keyColumns.size() + 1) {
@@ -1809,7 +1813,7 @@ public class ExpressionAnalyzer {
             if (strictModeIdx >= 0) {
                 Expr strictModeExpr = params.get(strictModeIdx);
                 if (!(strictModeExpr instanceof BoolLiteral)) {
-                    throw new SemanticException("dict_mapping function strict_mode param should be bool constant");
+                    throw new SemanticException("dict_mapping function null_if_not_found param should be bool constant");
                 }
                 strictMode = ((BoolLiteral) strictModeExpr).getValue();
             }
@@ -1838,12 +1842,22 @@ public class ExpressionAnalyzer {
                     expectTypeNames.add("VARCHAR value_field_name");
                 }
                 if (strictModeIdx >= 0) {
-                    expectTypeNames.add("BOOLEAN strict_mode");
+                    expectTypeNames.add("BOOLEAN null_if_not_found");
                 }
-                List<String> actualTypeNames = actualTypes.stream().map(Type::canonicalName).collect(Collectors.toList());
-                throw new SemanticException(
-                        String.format("dict_mapping function params not match expected,\nExpect: %s\nActual: %s",
-                            String.join(", ", expectTypeNames), String.join(", ", actualTypeNames)));
+
+                for (int i = 0; i < node.getChildren().size(); ++i) {
+                    Expr actual = node.getChildren().get(i);
+                    Type expectedType = expectTypes.get(i);
+                    if (!Type.canCastTo(actual.getType(), expectedType)) {
+                        List<String> actualTypeNames = actualTypes.stream().map(Type::canonicalName).collect(Collectors.toList());
+                        throw new SemanticException(
+                                String.format("dict_mapping function params not match expected,\nExpect: %s\nActual: %s",
+                                    String.join(", ", expectTypeNames), String.join(", ", actualTypeNames)));
+                    }
+
+                    Expr castExpr = new CastExpr(expectedType, actual);
+                    node.getChildren().set(i, castExpr);
+                }
             }
 
             Type valueType = ScalarType.createType(valueColumn.getType().getPrimitiveType());

@@ -44,6 +44,7 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.CastExpr;
+import com.starrocks.analysis.DictQueryExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -257,6 +258,16 @@ public class Load {
             shadowColumnDescs.add(importColumnDesc);
         }
         return shadowColumnDescs;
+    }
+
+    public static boolean checDictQueryExpr(Expr checkExpr, String dbName) {
+        List<DictQueryExpr> result = Lists.newArrayList();
+        checkExpr.collect(DictQueryExpr.class, result);
+        for (DictQueryExpr expr : result) {
+            LOG.info("set dictquery dbname");
+            expr.setDbName(dbName);
+        }
+        return result.size() != 0;
     }
 
     public static boolean tableSupportOpColumn(Table tbl) {
@@ -591,6 +602,14 @@ public class Load {
         for (Column column : tbl.getFullSchema()) {
             if (column.getDefineExpr() != null) {
                 mvDefineExpr.put(column.getName(), column.getDefineExpr());
+            }
+        }
+
+        if (dbName != "") {
+            for (Entry<String, Expr> entry : exprsByName.entrySet()) {
+                if (entry.getValue() != null) {
+                    checDictQueryExpr(entry.getValue(), dbName);
+                }
             }
         }
 

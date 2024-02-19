@@ -30,6 +30,7 @@ import java.util.List;
 public class DictQueryExpr extends FunctionCallExpr {
 
     private TDictQueryExpr dictQueryExpr;
+    private String dbName;
 
     public DictQueryExpr(List<Expr> params) throws SemanticException {
         super(FunctionSet.DICT_MAPPING, params);
@@ -45,8 +46,8 @@ public class DictQueryExpr extends FunctionCallExpr {
     protected DictQueryExpr(DictQueryExpr other) {
         super(other);
         this.dictQueryExpr = other.getDictQueryExpr();
+        this.dbName = other.getDbName();
     }
-
 
     @Override
     protected void toThrift(TExprNode msg) {
@@ -75,5 +76,13 @@ public class DictQueryExpr extends FunctionCallExpr {
 
     public void setDictQueryExpr(TDictQueryExpr dictQueryExpr) {
         this.dictQueryExpr = dictQueryExpr;
+    }
+
+    public void setDbName(String dbName) {
+        this.dbName = dbName;
+    }
+
+    public String getDbName() {
+        return this.dbName;
     }
 }
