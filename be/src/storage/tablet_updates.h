@@ -186,6 +186,7 @@ public:
 
     // perform compaction, should only be called by compaction thread
     Status compaction(MemTracker* mem_tracker);
+    Status copmaction_for_size_tiered(MemTracker* mem_tracker);
 
     // perform compaction with specified rowsets, this may be a manual compaction invoked by tools or data fixing jobs
     Status compaction(MemTracker* mem_tracker, const vector<uint32_t>& input_rowset_ids);
@@ -466,6 +467,8 @@ private:
 
     StatusOr<ExtraFileSize> _get_extra_file_size() const;
 
+    int _calc_compaction_level(RowsetStats& stat);
+
 private:
     Tablet& _tablet;
 
@@ -521,6 +524,9 @@ private:
     // the whole BE, and more more operation on this tablet is allowed
     std::atomic<bool> _error{false};
     std::string _error_msg;
+
+    int64_t _max_level_size;
+    int64_t _level_multiple;
 };
 
 } // namespace starrocks

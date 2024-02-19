@@ -77,7 +77,10 @@ std::string EditVersion::to_string() const {
     }
 }
 
-TabletUpdates::TabletUpdates(Tablet& tablet) : _tablet(tablet), _unused_rowsets(UINT64_MAX) {}
+TabletUpdates::TabletUpdates(Tablet& tablet) : _tablet(tablet), _unused_rowsets(UINT64_MAX) {
+    _max_level_size = config::size_tiered_min_level_size * pow(_level_multiple, config::size_tiered_level_num);
+    _level_multiple = config::size_tiered_level_multiple;
+}
 
 TabletUpdates::~TabletUpdates() {
     _stop_and_wait_apply_done();
@@ -2499,6 +2502,9 @@ static string int_list_to_string(const vector<uint32_t>& l) {
 }
 
 Status TabletUpdates::compaction(MemTracker* mem_tracker) {
+    if (config::enable_pk_size_tiered_compaction_strategy) {
+        return copmaction_for_size_tiered(mem_tracker);
+    }
     if (_error) {
         return Status::InternalError(strings::Substitute(
                 "compaction failed, tablet updates is in error state: tablet:$0 $1", _tablet.tablet_id(), _error_msg));
@@ -2606,6 +2612,190 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
               << " #valid_segments:" << total_valid_segments << " #rows:" << total_rows << "->"
               << total_rows_after_compaction << " bytes:" << PrettyPrinter::print(total_bytes, TUnit::BYTES) << "->"
               << PrettyPrinter::print(total_bytes_after_compaction, TUnit::BYTES) << "(estimate)";
+
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker);
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
+    Status st = _do_compaction(&info);
+    if (!st.ok()) {
+        _compaction_running = false;
+        _last_compaction_failure_millis = UnixMillis();
+    } else {
+        _last_compaction_success_millis = UnixMillis();
+    }
+    return st;
+}
+
+int TabletUpdates::_calc_compaction_level(RowsetStats& stat) {
+    size_t byte_size = stat.byte_size;
+    size_t new_rows = stat.num_rows - stat.num_dels;
+    size_t new_bytes = byte_size * new_rows / stat.num_rows;
+
+    if (new_bytes <= config::size_tiered_min_level_size) {
+        return 0;
+    }
+
+    if (new_bytes >= _max_level_size) {
+        return _level_multiple;
+    }
+
+    auto x = (double)new_bytes / config::size_tiered_min_level_size;
+    return log(x) / log(_level_multiple);
+}
+
+Status TabletUpdates::copmaction_for_size_tiered(MemTracker* mem_tracker) {
+    if (_error) {
+        return Status::InternalError(strings::Substitute(
+                "compaction failed, tablet updates is in error state: tablet:$0 $1", _tablet.tablet_id(), _error_msg));
+    }
+    bool was_runing = false;
+    if (!_compaction_running.compare_exchange_strong(was_runing, true)) {
+        return Status::InternalError("illegal state: another compaction is running");
+    }
+    EditVersion version;
+    vector<uint32_t> rowsets;
+    {
+        std::lock_guard rl(_lock);
+        if (_edit_version_infos.empty()) {
+            string msg = strings::Substitute("tablet deleted when compaction tablet:$0", _tablet.tablet_id());
+            LOG(WARNING) << msg;
+            return Status::InternalError(msg);
+        }
+        // 1. start compaction at current apply version
+        version = _edit_version_infos[_apply_version_idx]->version;
+        rowsets = _edit_version_infos[_apply_version_idx]->rowsets;
+    }
+    size_t total_valid_rowsets = 0;
+    size_t total_valid_segments = 0;
+    // level -1 keep empty rowsets and have no IO overhead, so we can merge them with any level
+    std::map<int, vector<CompactionEntry>> candidates_by_level;
+    candidates_by_level.insert(std::make_pair(-1, std::vector<CompactionEntry>{}));
+    {
+        std::lock_guard lg(_rowset_stats_lock);
+        for (auto rowsetid : rowsets) {
+            auto itr = _rowset_stats.find(rowsetid);
+            if (itr == _rowset_stats.end()) {
+                // should not happen
+                string msg = strings::Substitute("rowset not found in rowset stats tablet=$0 rowset=$1",
+                                                 _tablet.tablet_id(), rowsetid);
+                DCHECK(false) << msg;
+                LOG(WARNING) << msg;
+            } else if (itr->second->compaction_score > 0) {
+                auto& stat = *itr->second;
+                total_valid_rowsets++;
+                total_valid_segments += stat.num_segments;
+                if (stat.num_rows == stat.num_dels) {
+                    candidates_by_level[-1].emplace_back();
+                } else {
+                    int level = _calc_compaction_level(stat);
+                    candidates_by_level[level].emplace_back();
+                }
+                auto& e = candidates_by_level[(stat.num_rows == stat.num_dels) ? -1 : _calc_compaction_level(stat)].back();
+                e.rowsetid = itr->first;
+                e.score_per_row = (stat.num_rows == stat.num_dels)
+                                          ? 0
+                                          : (float)((double)stat.compaction_score / (stat.num_rows - stat.num_dels));
+                e.num_rows = stat.num_rows;
+                e.num_dels = stat.num_dels;
+                e.bytes = stat.byte_size;
+                e.num_segments = stat.num_segments;
+            }
+        }
+    }
+
+    struct PKSizeTieredLevel {
+        PKSizeTieredLevel(std::unique_ptr<CompactionInfo> f, int64_t s, int64_t l, int64_t ts, int64_t r, int64_t b,
+                          int64_t rc, int64_t bc)
+                : info(std::move(f)),
+                  score(s),
+                  level(l),
+                  total_segments(ts),
+                  total_rows(r),
+                  total_bytes(b),
+                  total_rows_after_compaction(rc),
+                  total_bytes_after_compaction(bc) {}
+        std::unique_ptr<CompactionInfo> info;
+        int64_t score;
+        int64_t level;
+        int64_t total_segments;
+        int64_t total_rows;
+        int64_t total_bytes;
+        int64_t total_rows_after_compaction;
+        int64_t total_bytes_after_compaction;
+    };
+
+    struct LevelComparator {
+        bool operator()(const PKSizeTieredLevel* left, const PKSizeTieredLevel* right) const {
+            return left->score > right->score || (left->score == right->score && left->level < right->level);
+        }
+    };
+    std::vector<std::unique_ptr<PKSizeTieredLevel>> order_levels;
+    std::set<PKSizeTieredLevel*, LevelComparator> priority_levels;
+
+    for (auto& [level, candidates] : candidates_by_level) {
+        std::unique_ptr<CompactionInfo> level_info = std::make_unique<CompactionInfo>();
+        level_info->start_version = version;
+        std::sort(candidates.begin(), candidates.end());
+
+        int64_t score = 0;
+        int64_t total_segments = 0;
+        int64_t total_rows = 0;
+        int64_t total_bytes = 0;
+        int64_t total_rows_after_compaction = 0;
+        int64_t total_bytes_after_compaction = 0;
+        for (auto& e : candidates) {
+            size_t new_rows = total_rows_after_compaction + e.num_rows - e.num_dels;
+            size_t new_bytes = total_bytes_after_compaction + e.bytes * (e.num_rows - e.num_dels) / e.num_rows;
+            if (total_bytes_after_compaction > 0 && new_bytes > config::update_compaction_result_bytes * 2) {
+                break;
+            }
+            level_info->inputs.push_back(e.rowsetid);
+            score += e.score_per_row * (e.num_rows - e.num_dels);
+            total_rows_after_compaction = new_rows;
+            total_bytes_after_compaction = new_bytes;
+            total_rows += e.num_rows;
+            total_bytes += e.bytes;
+            total_segments += e.num_segments;
+            if (total_bytes_after_compaction > config::update_compaction_result_bytes ||
+                level_info->inputs.size() >= config::max_update_compaction_num_singleton_deltas) {
+                break;
+            }
+        }
+        auto pk_level = std::make_unique<PKSizeTieredLevel>(std::move(level_info), score, level, total_segments,
+                                                            total_rows, total_bytes, total_rows_after_compaction,
+                                                            total_bytes_after_compaction);
+        priority_levels.emplace(pk_level.get());
+        order_levels.emplace_back(std::move(pk_level));
+    }
+    // give 10s time gitter, so same table's compaction don't start at same time
+    _last_compaction_time_ms = UnixMillis() + rand() % 10000;
+    std::unique_ptr<CompactionInfo> info = std::make_unique<CompactionInfo>();
+    PKSizeTieredLevel* selected_level = nullptr;
+    if (!priority_levels.empty()) {
+        selected_level = *priority_levels.begin();
+        if (selected_level->level != -1) {
+            for (auto& e : candidates_by_level[-1]) {
+                selected_level->info->inputs.push_back(e.rowsetid);
+            }
+        }
+        info = std::move(selected_level->info);
+    }
+
+    if (info->inputs.empty() || (selected_level->level == -1 && info->inputs.size() == 1)) {
+        LOG(INFO) << "no candidate rowset to do update compaction, tablet:" << _tablet.tablet_id();
+        _compaction_running = false;
+        return Status::OK();
+    }
+    std::sort(info->inputs.begin(), info->inputs.end());
+    LOG(INFO) << "update compaction start tablet:" << _tablet.tablet_id()
+              << " version:" << info->start_version.to_string() << " score:" << selected_level->score
+              << " level:" << selected_level->level << " pick:" << info->inputs.size() << "("
+              << candidates_by_level[-1].size() << ")/valid:" << total_valid_rowsets << "/all:" << rowsets.size() << " "
+              << int_list_to_string(info->inputs) << " #pick_segments:" << selected_level->total_segments
+              << " #valid_segments:" << total_valid_segments << " #rows:" << selected_level->total_rows << "->"
+              << selected_level->total_rows_after_compaction
+              << " bytes:" << PrettyPrinter::print(selected_level->total_bytes, TUnit::BYTES) << "->"
+              << PrettyPrinter::print(selected_level->total_bytes_after_compaction, TUnit::BYTES) << "(estimate)";
 
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker);
     DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
