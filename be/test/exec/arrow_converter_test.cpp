@@ -1668,4 +1668,15 @@ PARALLEL_TEST(ArrowConverterTest, test_convert_struct_more_column) {
     ASSERT_EQ(st_col->debug_item(8), "{col1:8,col2:'char-8'}");
 }
 
+PARALLEL_TEST(ArrowConverterTest, test_filter_all) {
+    Filter filter;
+    filter.resize(32, 1);
+
+    filter_all(32, &filter, 0);
+
+    for (int i = 0; i < 32; i++) {
+        EXPECT_EQ(filter[i], 0);
+    }
+}
+
 } // namespace starrocks
