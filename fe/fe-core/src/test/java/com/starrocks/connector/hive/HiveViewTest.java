@@ -116,8 +116,7 @@ public class HiveViewTest extends PlanTestBase {
         expectedException.expect(SemanticException.class);
         expectedException.expectMessage("Column '`t0`.`v1`' cannot be resolved");
         sql = "select * from hive0.tpch.customer_case_insensitive_view v1 join test.t0 T0 on v1.c_custkey = t0.v1";
-        sqlPlan = getFragmentPlan(sql);
-        System.out.println(sqlPlan);
+        getFragmentPlan(sql);
     }
 
     @Test

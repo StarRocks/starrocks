@@ -723,9 +723,10 @@ public class QueryAnalyzer {
             } catch (SemanticException e) {
                 throw new SemanticException("View " + node.getName() + " references invalid table(s) or column(s) or " +
                         "function(s) or definer/invoker of view lack rights to use them: " + e.getMessage(), e);
-            }
-            if (ConnectContext.get() != null && node.getView().isHiveView()) {
-                ConnectContext.get().setRelationAliasCaseInSensitive(isRelationAliasCaseInSensitive);
+            } finally {
+                if (ConnectContext.get() != null && node.getView().isHiveView()) {
+                    ConnectContext.get().setRelationAliasCaseInSensitive(isRelationAliasCaseInSensitive);
+                }
             }
 
             View view = node.getView();
