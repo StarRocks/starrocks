@@ -170,7 +170,9 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
                 new_metadata->mutable_orphan_files()->Clear();
             }
 
-            if (base_metadata->compaction_inputs_size() > 0 || base_metadata->orphan_files_size() > 0) {
+            if (base_metadata->compaction_inputs_size() > 0 || base_metadata->orphan_files_size() > 0 ||
+                base_metadata->version() - base_metadata->prev_garbage_version() >=
+                        config::lake_vacuum_max_retained_versions) {
                 new_metadata->set_prev_garbage_version(base_metadata->version());
             }
 
