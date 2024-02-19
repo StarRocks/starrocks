@@ -193,9 +193,9 @@ public class PipeAnalyzer {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_PIPE_STATEMENT, "only support FileTableFunction");
         }
 
-        if (!stmt.getPipeName().getDbName().equals(insertStmt.getTableName().getDb())) {
+        if (!stmt.getPipeName().getDbName().equalsIgnoreCase(insertStmt.getTableName().getDb())) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_PIPE_STATEMENT,
-                    String.format("pipe's database [%s] and target table's database [%s] should be the same",
+                    String.format("pipe's database [%s] and target table's database [%s] should be the same ignoring case",
                             stmt.getPipeName().getDbName(), insertStmt.getTableName().getDb()));
         }
 
