@@ -35,6 +35,7 @@
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
 #include "testutil/assert.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -495,6 +496,30 @@ TEST_F(MemTableTest, testPrimaryKeysSizeLimitCompositePK) {
     std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
     _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
     ASSERT_FALSE(_mem_table->finalize().ok());
+}
+
+TEST_F(MemTableTest, test_metrics) {
+    const string path = "./MemTableTest_test_metrics";
+    MySetUp(create_tablet_schema("pk int,name varchar,pv int", 1, KeysType::DUP_KEYS), "pk int,name varchar,pv int",
+            path);
+    const size_t n = 1000;
+    auto pchunk = gen_chunk(*_slots, n);
+    vector<uint32_t> indexes;
+    indexes.reserve(n);
+    for (int i = 0; i < n; i++) {
+        indexes.emplace_back(i);
+    }
+    std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
+    auto res = _mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+    ASSERT_TRUE(res.ok());
+    ASSERT_TRUE(_mem_table->finalize().ok());
+    ASSERT_OK(_mem_table->flush());
+    // just verify the metrics have value, rather than verify it accurately
+    // because other test cases may also update the metrics concurrently if
+    // run tests in parallel, and it's hard to get the accurate value
+    ASSERT_TRUE(StarRocksMetrics::instance()->memtable_flush_total.value() > 0);
+    ASSERT_TRUE(StarRocksMetrics::instance()->memtable_flush_memory_bytes_total.value() > 0);
+    ASSERT_TRUE(StarRocksMetrics::instance()->memtable_flush_disk_bytes_total.value() > 0);
 }
 
 } // namespace starrocks

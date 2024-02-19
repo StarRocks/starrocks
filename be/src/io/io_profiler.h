@@ -58,10 +58,12 @@ public:
     static Status start(IOMode op);
     static void stop();
     static void reset();
+    static IOMode get_context_io_mode() { return static_cast<IOMode>(_context_io_mode.load()); }
 
     static void set_context(uint32_t tag, uint64_t tablet_id);
     static void set_context(IOStatEntry* entry);
     static IOStatEntry* get_context();
+    static IOStat get_context_io();
     static void clear_context();
 
     static bool is_empty();
@@ -92,6 +94,8 @@ public:
 
         IOStat current_scoped_tls_io() { return calculate_scoped_tls_io(_tls_io_snapshot); }
 
+        IOStat current_context_io() { return get_context_io(); }
+
     private:
         IOStatEntry* _old{nullptr};
         // A snapshot of the thread local io stat when this scope is created
@@ -103,15 +107,15 @@ public:
 
     static inline void add_read(int64_t bytes, int64_t latency_ns) {
         _add_tls_read(bytes, latency_ns);
-        if (_context_io_mode & IOMode::IOMODE_WRITE) {
-            _add_context_write(bytes);
+        if (_context_io_mode & IOMode::IOMODE_READ) {
+            _add_context_read(bytes);
         }
     }
 
     static inline void add_write(int64_t bytes, int64_t latency_ns) {
         _add_tls_write(bytes, latency_ns);
-        if (_context_io_mode & IOMode::IOMODE_READ) {
-            _add_context_read(bytes);
+        if (_context_io_mode & IOMode::IOMODE_WRITE) {
+            _add_context_write(bytes);
         }
     }
 

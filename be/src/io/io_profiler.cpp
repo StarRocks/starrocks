@@ -142,6 +142,15 @@ IOStatEntry* IOProfiler::get_context() {
     return current_io_stat;
 }
 
+IOProfiler::IOStat IOProfiler::get_context_io() {
+    if (current_io_stat != nullptr) {
+        return IOStat{current_io_stat->read_ops,  current_io_stat->read_bytes,  0,
+                      current_io_stat->write_ops, current_io_stat->write_bytes, 0};
+    } else {
+        return IOStat{0, 0, 0, 0, 0, 0};
+    }
+}
+
 void IOProfiler::set_context(IOStatEntry* entry) {
     current_io_stat = entry;
 }
