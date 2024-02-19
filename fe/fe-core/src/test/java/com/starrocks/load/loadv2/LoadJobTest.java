@@ -112,6 +112,7 @@ public class LoadJobTest {
         jobProperties.put(LoadStmt.MAX_FILTER_RATIO_PROPERTY, "0.1");
         jobProperties.put(LoadStmt.LOAD_MEM_LIMIT, "1024");
         jobProperties.put(LoadStmt.STRICT_MODE, "True");
+        jobProperties.put(LoadStmt.FLEXIBLE_COLUMN_MAPPING, "True");
 
         LoadJob loadJob = new BrokerLoadJob();
         try {
@@ -120,6 +121,7 @@ public class LoadJobTest {
             Assert.assertEquals(0.1, Deencapsulation.getField(loadJob, "maxFilterRatio"), 0);
             Assert.assertEquals(1024, (long) Deencapsulation.getField(loadJob, "loadMemLimit"));
             Assert.assertTrue(Deencapsulation.getField(loadJob, "strictMode"));
+            Assert.assertTrue(Deencapsulation.getField(loadJob, "flexibleColumnMapping"));
         } catch (DdlException e) {
             Assert.fail(e.getMessage());
         }
