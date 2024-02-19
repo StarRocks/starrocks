@@ -479,7 +479,7 @@ Status ParquetScanner::open_next_reader() {
         auto parquet_file = std::make_shared<ParquetChunkFile>(file, 0);
         auto parquet_reader = std::make_shared<ParquetReaderWrap>(std::move(parquet_file), _num_of_columns_from_file,
                                                                   range_desc.start_offset, range_desc.size);
-        if (_scan_range.params.enable_flexible_column_mapping) parquet_reader->enable_flexible_column_mapping();
+        if (_scan_range.params.flexible_column_mapping) parquet_reader->enable_flexible_column_mapping();
         _next_file++;
         int64_t file_size;
         RETURN_IF_ERROR(parquet_reader->size(&file_size));
