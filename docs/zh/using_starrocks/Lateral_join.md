@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+keywords: ['爆裂函数','一行转多行','炸开','explode']
 ---
 
 # 使用 Lateral Join 实现列转行
@@ -56,14 +57,14 @@ StarRocks 支持的 BITMAP、STRING、ARRAY、Column 之间的类型转化关系
         `v2` string NULL COMMENT "",
         `v3` string NULL COMMENT ""
     )
-    duplicate key(v1)
+    DUPLICATE KEY(v1)
     DISTRIBUTED BY HASH(`v1`)
     PROPERTIES (
         "replication_num" = "3",
         "storage_format" = "DEFAULT"
     );
 
-    insert into lateral_test2 values (1, "1,2,3","1,2"), (2, "1,3","1,3");
+    INSERT INTO lateral_test2 VALUES (1, "1,2,3","1,2"), (2, "1,3","1,3");
     ~~~
 
 2. 检查展开前的数据。
@@ -83,7 +84,7 @@ StarRocks 支持的 BITMAP、STRING、ARRAY、Column 之间的类型转化关系
 
     ~~~Plain Text
     -- 对单行数据进行 Unnest 操作。
-    mysql> select v1, unnest from lateral_test2, unnest(split(v2, ","));
+    mysql> select v1, unnest from lateral_test2, unnest(split(v2, ",")) as unnest;
 
     +------+--------+
     | v1   | unnest |
@@ -127,14 +128,14 @@ StarRocks 支持的 BITMAP、STRING、ARRAY、Column 之间的类型转化关系
         `v1` bigint(20) NULL COMMENT "",
         `v2` ARRAY<int> NULL COMMENT ""
     ) 
-    duplicate key(v1)
+    DUPLICATE KEY(v1)
     DISTRIBUTED BY HASH(`v1`)
     PROPERTIES (
         "replication_num" = "3",
         "storage_format" = "DEFAULT"
     );
 
-    insert into lateral_test values (1, [1,2]), (2, [1, null, 3]), (3, null);
+    INSERT INTO lateral_test VALUES (1, [1,2]), (2, [1, null, 3]), (3, null);
     ~~~
 
 2. 检查展开前的数据。
@@ -154,7 +155,7 @@ StarRocks 支持的 BITMAP、STRING、ARRAY、Column 之间的类型转化关系
 3. 展开 ARRAY 数据。
 
     ~~~Plain Text
-    mysql> select v1, v2, unnest from lateral_test, unnest(v2);
+    mysql> select v1, v2, unnest from lateral_test, unnest(v2) as unnest;
 
     +------+------------+--------+
     | v1   | v2         | unnest |
@@ -180,10 +181,10 @@ StarRocks 支持的 BITMAP、STRING、ARRAY、Column 之间的类型转化关系
     `v1` bigint(20) NULL COMMENT "",
     `v2` Bitmap BITMAP_UNION COMMENT ""
     )
-    Aggregate key(v1)
+    AGGREGATE KEY(v1)
     DISTRIBUTED BY HASH(`v1`);
 
-    insert into lateral_test3 values (1, bitmap_from_string('1, 2')), (2, to_bitmap(3));
+    INSERT INTO lateral_test3 VALUES (1, bitmap_from_string('1, 2')), (2, to_bitmap(3));
     ~~~
 
 2. 检查当前数据中 `v1` 以及 `bitmap_to_string(v2)`。
@@ -221,7 +222,7 @@ StarRocks 支持的 BITMAP、STRING、ARRAY、Column 之间的类型转化关系
 5. 展开 Bitmap 类型数据。
 
     ~~~Plain Text
-    mysql> select v1, unnest from lateral_test3, unnest(bitmap_to_array(v2));
+    mysql> select v1, unnest from lateral_test3, unnest(bitmap_to_array(v2)) as unnest;
 
     +------+--------+
     | v1   | unnest |
@@ -232,7 +233,3 @@ StarRocks 支持的 BITMAP、STRING、ARRAY、Column 之间的类型转化关系
     |    2 |      3 |
     +------+--------+
     ~~~
-
-## Keywords
-
-explode，爆裂函数
