@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "English"
+keywords: ['explode']
 ---
 
 # Use Lateral Join for column-to-row conversion
@@ -80,7 +81,7 @@ Together with unnest(), you can achieve the following column-to-row conversion f
     ~~~Plain Text
     -- Perform unnest on a single column.
 
-    select v1,unnest from lateral_test2, unnest(split(v2, ","));
+    select v1,unnest from lateral_test2, unnest(split(v2, ",")) as unnest;
 
     +------+--------+
     | v1   | unnest |
@@ -150,7 +151,7 @@ Together with unnest(), you can achieve the following column-to-row conversion f
 3. Expand `v2` into multiple rows.
 
     ~~~Plain Text
-    select v1,v2,unnest from lateral_test , unnest(v2) ;
+    select v1,v2,unnest from lateral_test , unnest(v2) as unnest;
 
     +------+------------+--------+
     | v1   | v2         | unnest |
@@ -208,7 +209,7 @@ Together with unnest(), you can achieve the following column-to-row conversion f
 4. Expand data in `v2` into multiple rows.
 
     ~~~Plain Text
-    select v1,unnest from lateral_test3 , unnest(bitmap_to_array(v2));
+    select v1,unnest from lateral_test3, unnest(bitmap_to_array(v2)) as unnest;
 
     +------+--------+
     | v1   | unnest |
