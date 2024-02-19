@@ -566,13 +566,8 @@ TEST_F(StringFunctionConcatTest, concatWsBigOversizeTest) {
     auto col3 = BinaryColumn::create();
     auto sep_null_col = NullColumn::create();
     auto null_col = NullColumn::create();
-<<<<<<< HEAD
-    for (int i = 3786; i < 3796; ++i) {
-        sep->append(Slice(std::string(OLAP_STRING_MAX_LENGTH - i, 'x')));
-=======
     for (int i = 3795; i < 3796; ++i) {
         sep->append(Slice(std::string(get_olap_string_max_length() - i, 'x')));
->>>>>>> caaee45137 ([Enhancement] Make maximal varchar string length configurable in fe.conf and be.conf. (#38957))
         col0->append(Slice(std::string(100, 'y')));
         col1->append(Slice(std::string(i + 1, 'z')));
         col2->append(Slice(std::string(4096 - i, 'w')));

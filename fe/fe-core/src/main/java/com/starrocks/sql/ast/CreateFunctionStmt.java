@@ -323,11 +323,7 @@ public class CreateFunctionStmt extends DdlStmt {
         argsDef.analyze();
         returnType.analyze();
 
-<<<<<<< HEAD
-        intermediateType = TypeDef.createVarchar(ScalarType.MAX_VARCHAR_LENGTH);
-=======
         intermediateType = TypeDef.createVarchar(ScalarType.getOlapMaxVarcharLength());
->>>>>>> caaee45137 ([Enhancement] Make maximal varchar string length configurable in fe.conf and be.conf. (#38957))
 
         String type = properties.get(TYPE_KEY);
         if (TYPE_STARROCKS_JAR.equals(type)) {
