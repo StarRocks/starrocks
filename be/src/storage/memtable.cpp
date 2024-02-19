@@ -299,9 +299,11 @@ Status MemTable::flush(SegmentPB* seg_info) {
     StarRocksMetrics::instance()->memtable_flush_duration_us.increment(duration_ns / 1000);
     StarRocksMetrics::instance()->memtable_flush_io_time_us.increment(io_stat.write_time_ns / 1000);
     auto flush_bytes = memory_usage();
-    StarRocksMetrics::instance()->memtable_flush_bytes_total.increment(flush_bytes);
+    StarRocksMetrics::instance()->memtable_flush_memory_bytes_total.increment(flush_bytes);
+    StarRocksMetrics::instance()->memtable_flush_disk_bytes_total.increment(io_stat.write_bytes);
     VLOG(1) << "memtable of tablet " << _tablet_id << " flush duration: " << duration_ns / 1000 << "us, "
-            << "io time: " << io_stat.write_time_ns / 1000 << "us, bytes: " << flush_bytes;
+            << "io time: " << io_stat.write_time_ns / 1000 << "us, memory bytes: " << flush_bytes
+            << ", disk bytes: " << io_stat.write_bytes;
     return Status::OK();
 }
 
