@@ -66,17 +66,17 @@ public class PipeAnalyzer {
                     .add(PropertyAnalyzer.PROPERTIES_WAREHOUSE)
                     .build();
 
-    public static void analyzePipeName(PipeName pipeName, String db) {
+    public static void analyzePipeName(PipeName pipeName, String defaultDbName) {
         if (Strings.isNullOrEmpty(pipeName.getDbName())) {
-            if (Strings.isNullOrEmpty(db)) {
+            if (Strings.isNullOrEmpty(defaultDbName)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
             }
-            pipeName.setDbName(db);
+            pipeName.setDbName(defaultDbName);
         }
         if (Strings.isNullOrEmpty(pipeName.getPipeName())) {
             throw new SemanticException("empty pipe name");
         }
-        FeNameFormat.checkCommonName("db", pipeName.getDbName());
+        FeNameFormat.checkDbName(pipeName.getDbName());
         FeNameFormat.checkCommonName("pipe", pipeName.getPipeName());
     }
 
@@ -169,6 +169,12 @@ public class PipeAnalyzer {
 
         analyzePipeName(stmt.getPipeName(), insertStmt.getTableName().getDb());
 
+        if (!stmt.getPipeName().getDbName().equalsIgnoreCase(insertStmt.getTableName().getDb())) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_PIPE_STATEMENT,
+                    String.format("pipe's database [%s] and target table's database [%s] should be the same ignoring case",
+                            stmt.getPipeName().getDbName(), insertStmt.getTableName().getDb()));
+        }
+
         // Must be the form: insert into <target_table> select <projection> from <source_table> [where_clause]
         if (!Strings.isNullOrEmpty(insertStmt.getLabel())) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_PIPE_STATEMENT, "INSERT INTO cannot with label");
@@ -191,12 +197,6 @@ public class PipeAnalyzer {
         Table rawTable = tableFunctionRelation.getTable();
         if (rawTable == null || rawTable.getType() != Table.TableType.TABLE_FUNCTION) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_PIPE_STATEMENT, "only support FileTableFunction");
-        }
-
-        if (!stmt.getPipeName().getDbName().equalsIgnoreCase(insertStmt.getTableName().getDb())) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_PIPE_STATEMENT,
-                    String.format("pipe's database [%s] and target table's database [%s] should be the same ignoring case",
-                            stmt.getPipeName().getDbName(), insertStmt.getTableName().getDb()));
         }
 
         TableFunctionTable sourceTable = (TableFunctionTable) rawTable;
