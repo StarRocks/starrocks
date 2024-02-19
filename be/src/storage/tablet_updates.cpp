@@ -2286,8 +2286,8 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
     LOG(INFO) << "commit compaction tablet:" << _tablet.tablet_id() << " gtid:" << edit_version_info_ptr->gtid
               << " version:" << edit_version_info_ptr->version.to_string();
     VLOG(1) << "commit compaction tablet:" << _tablet.tablet_id() << " gtid:" << edit_version_info_ptr->gtid
-            << " version:" << edit_version_info_ptr->version.to_string() << " rowset:" << rowsetid
-            << " #seg:" << rowset->num_segments() << " #row:" << rowset->num_rows()
+            << ", disk:" << _tablet.data_dir()->path() << " version:" << edit_version_info_ptr->version.to_string()
+            << " rowset:" << rowsetid << " #seg:" << rowset->num_segments() << " #row:" << rowset->num_rows()
             << " size:" << PrettyPrinter::print(rowset->data_disk_size(), TUnit::BYTES)
             << " #pending:" << _pending_commits.size()
             << " state_memory:" << PrettyPrinter::print(_compaction_state->memory_usage(), TUnit::BYTES);
@@ -3049,7 +3049,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
         return Status::OK();
     }
     std::sort(info->inputs.begin(), info->inputs.end());
-    VLOG(1) << "update compaction start tablet:" << _tablet.tablet_id()
+    VLOG(1) << "update compaction start tablet:" << _tablet.tablet_id() << ", disk:" << _tablet.data_dir()->path()
             << " version:" << info->start_version.to_string() << " score:" << total_score
             << " pick:" << info->inputs.size() << "/valid:" << total_valid_rowsets << "/all:" << rowsets.size() << " "
             << int_list_to_string(info->inputs) << " #pick_segments:" << total_segments

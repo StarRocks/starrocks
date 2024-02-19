@@ -309,7 +309,7 @@ public:
         StarRocksMetrics::instance()->update_compaction_outputs_bytes_total.increment(writer->total_data_size());
         std::stringstream ss;
         ss << "update compaction merge finished. tablet=" << tablet.tablet_id()
-           << " #key=" << schema.sort_key_idxes().size()
+           << ", disk=" << tablet.data_dir()->path() << ", #key=" << schema.sort_key_idxes().size()
            << " algorithm=" << CompactionUtils::compaction_algorithm_to_string(cfg.algorithm)
            << " column_group_size=" << column_groups.size() << " chunk_size min:" << _min_chunk_size
            << " max:" << _max_chunk_size << " input("

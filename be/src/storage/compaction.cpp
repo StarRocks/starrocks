@@ -96,8 +96,9 @@ Status Compaction::do_compaction_impl() {
             CompactionUtils::get_segment_max_rows(config::max_segment_file_size, _input_row_num, _input_rowsets_size);
 
     LOG(INFO) << "start " << compaction_name() << ". tablet=" << _tablet->tablet_id()
-              << ", output version is=" << _output_version.first << "-" << _output_version.second
-              << ", max rows per segment=" << max_rows_per_segment << ", segment iterator num=" << segment_iterator_num
+              << ", disk=" << _tablet->data_dir()->path() << ", output version is=" << _output_version.first << "-"
+              << _output_version.second << ", max rows per segment=" << max_rows_per_segment
+              << ", segment iterator num=" << segment_iterator_num
               << ", algorithm=" << CompactionUtils::compaction_algorithm_to_string(algorithm)
               << ", column group size=" << _column_groups.size()
               << ", columns per group=" << config::vertical_compaction_max_columns_per_group;
@@ -146,8 +147,8 @@ Status Compaction::do_compaction_impl() {
     }
 
     LOG(INFO) << "succeed to do " << compaction_name() << ". tablet=" << _tablet->tablet_id()
-              << ", output_version=" << _output_version.first << "-" << _output_version.second
-              << ", input infos [segments=" << segments_num << ", rows=" << _input_row_num
+              << ", disk=" << _tablet->data_dir()->path() << ", output_version=" << _output_version.first << "-"
+              << _output_version.second << ", input infos [segments=" << segments_num << ", rows=" << _input_row_num
               << ", disk size=" << _input_rowsets_size << "]"
               << ", output infos [segments=" << _output_rowset->num_segments()
               << ", rows=" << _output_rowset->num_rows() << ", disk size=" << _output_rowset->data_disk_size() << "]"

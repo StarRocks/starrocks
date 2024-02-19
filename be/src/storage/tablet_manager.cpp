@@ -771,7 +771,7 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
     if (best_tablet != nullptr) {
         VLOG(2) << "Found the best tablet to compact. "
                 << "compaction_type=" << compaction_type_str << " tablet_id=" << best_tablet->tablet_id()
-                << " highest_score=" << highest_score;
+                << " disk=" << best_tablet->data_dir()->path() << " highest_score=" << highest_score;
         // TODO(lingbin): Remove 'max' from metric name, it would be misunderstood as the
         // biggest in history(like peak), but it is really just the value at current moment.
         if (compaction_type == CompactionType::BASE_COMPACTION) {
@@ -876,9 +876,10 @@ TabletSharedPtr TabletManager::find_best_tablet_to_do_update_compaction(DataDir*
     }
 
     if (best_tablet != nullptr) {
-        VLOG(2) << "Found the best tablet to compact. "
-                << "compaction_type=update"
-                << " tablet_id=" << best_tablet->tablet_id() << " highest_score=" << highest_score;
+        LOG(INFO) << "Found the best tablet to compact. "
+                  << "compaction_type=update"
+                  << " tablet_id=" << best_tablet->tablet_id() << ", disk=" << best_tablet->data_dir()->path()
+                  << ", highest_score=" << highest_score;
         StarRocksMetrics::instance()->tablet_update_max_compaction_score.set_value(highest_score);
     }
     return best_tablet;
