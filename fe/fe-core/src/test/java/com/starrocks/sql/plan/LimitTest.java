@@ -819,12 +819,12 @@ public class LimitTest extends PlanTestBase {
                 "select distinct 2 from with_t_0, (select v10, v11 from t3) subt right SEMI join t0 on subt.v11 = v3;";
         String plan = getFragmentPlan(sql);
         System.out.println(plan);
-        assertContains(plan, "6:UNION\n" +
+        assertContains(plan, "7:UNION\n" +
                 "  |  \n" +
-                "  |----32:EXCHANGE\n" +
+                "  |----33:EXCHANGE\n" +
                 "  |       limit: 1\n" +
                 "  |    \n" +
-                "  19:EXCHANGE\n" +
+                "  20:EXCHANGE\n" +
                 "     limit: 1");
     }
 }
