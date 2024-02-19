@@ -1633,7 +1633,7 @@ public class StmtExecutor {
         return explainString;
     }
 
-    private void handleDdlStmt() {
+    private void handleDdlStmt() throws DdlException {
         try {
             ShowResultSet resultSet = DDLStmtExecutorEPack.execute(parsedStmt, context);
             if (resultSet == null) {
@@ -1655,6 +1655,10 @@ public class StmtExecutor {
                 LOG.warn("DDL statement (" + sql + ") process failed.", e);
             }
             context.setState(e.getQueryState());
+        } catch (DdlException e) {
+            // let StmtExecutor.execute catch this exception
+            // which will set error as ANALYSIS_ERR
+            throw e;
         } catch (Throwable e) {
             // Maybe our bug or wrong input parameters
             String sql = AstToStringBuilder.toString(parsedStmt);

@@ -45,7 +45,7 @@ create table t0(k int) properties('bucket_size'='0');
 -- !result
 create table t(k int) properties('bucket_size'='-1');
 -- result:
-E: (1064, 'Unexpected exception: Illegal bucket size: -1')
+E: (1064, 'Illegal bucket size: -1')
 -- !result
 create table t(k int) properties('bucket_size'='1024');
 -- result:

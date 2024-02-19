@@ -12,35 +12,35 @@ INSERT INTO t0 VALUES(0, '2024-01-01 00:00:00', 10, '100');
 -- !result
 ALTER TABLE t0 ADD COLUMN k0 FLOAT;
 -- result:
-E: (1064, 'Unexpected exception: Repeatedly add same column with different definition: k0')
+E: (1064, 'Repeatedly add same column with different definition: k0')
 -- !result
 ALTER TABLE t0 ADD COLUMN v0 BIGINT;
 -- result:
-E: (1064, 'Unexpected exception: Repeatedly add same column with different definition: v0')
+E: (1064, 'Repeatedly add same column with different definition: v0')
 -- !result
 ALTER TABLE t0 DROP COLUMN k1;
 -- result:
-E: (1064, 'Unexpected exception: Can not drop key column in primary data model table')
+E: (1064, 'Can not drop key column in primary data model table')
 -- !result
 ALTER TABLE t0 DROP COLUMN k0;
 -- result:
-E: (1064, 'Unexpected exception: Can not drop key column in primary data model table')
+E: (1064, 'Can not drop key column in primary data model table')
 -- !result
 ALTER TABLE t0 MODIFY COLUMN k0 INT;
 -- result:
-E: (1064, 'Unexpected exception: Can not modify key column: k0 for primary key table')
+E: (1064, 'Can not modify key column: k0 for primary key table')
 -- !result
 ALTER TABLE t0 MODIFY COLUMN k0 LARGEINT;
 -- result:
-E: (1064, 'Unexpected exception: Can not modify key column: k0 for primary key table')
+E: (1064, 'Can not modify key column: k0 for primary key table')
 -- !result
 ALTER TABLE t0 MODIFY COLUMN v0 BIGINT;
 -- result:
-E: (1064, 'Unexpected exception: Can not modify sort column in primary data model table')
+E: (1064, 'Can not modify sort column in primary data model table')
 -- !result
 ALTER TABLE t0 MODIFY COLUMN v1 VARCHAR(200), MODIFY COLUMN v0 BIGINT;
 -- result:
-E: (1064, 'Unexpected exception: Can not modify sort column in primary data model table')
+E: (1064, 'Can not modify sort column in primary data model table')
 -- !result
 ALTER TABLE t0 MODIFY COLUMN v1 VARCHAR(100) MAX;
 -- result:
@@ -51,7 +51,7 @@ E: (1064, "Getting analyzing error from line 1, column 26 to line 1, column 38. 
 -- !result
 ALTER TABLE t0 ADD COLUMN v2 BIGINT, ADD COLUMN v2 FLOAT;
 -- result:
-E: (1064, 'Unexpected exception: Repeatedly add same column with different definition: v2')
+E: (1064, 'Repeatedly add same column with different definition: v2')
 -- !result
 ALTER TABLE t0 ADD COLUMN v2 BIGINT, ADD COLUMN v2 BIGINT KEY;
 -- result:
@@ -73,27 +73,27 @@ v1	varchar(100)	YES	false	None
 -- !result
 ALTER TABLE t0 ADD COLUMN v2 BIGINT, ADD COLUMN v0 BIGINT;
 -- result:
-E: (1064, 'Unexpected exception: Repeatedly add same column with different definition: v0')
+E: (1064, 'Repeatedly add same column with different definition: v0')
 -- !result
 ALTER TABLE t0 DROP COLUMN k0;
 -- result:
-E: (1064, 'Unexpected exception: Can not drop key column in primary data model table')
+E: (1064, 'Can not drop key column in primary data model table')
 -- !result
 ALTER TABLE t0 DROP COLUMN v1, DROP COLUMN k0;
 -- result:
-E: (1064, 'Unexpected exception: Can not drop key column in primary data model table')
+E: (1064, 'Can not drop key column in primary data model table')
 -- !result
 ALTER TABLE t0 DROP COLUMN v0;
 -- result:
-E: (1064, 'Unexpected exception: Can not drop sort column in primary data model table')
+E: (1064, 'Can not drop sort column in primary data model table')
 -- !result
 ALTER TABLE t0 DROP COLUMN v1, DROP COLUMN v0;
 -- result:
-E: (1064, 'Unexpected exception: Can not drop sort column in primary data model table')
+E: (1064, 'Can not drop sort column in primary data model table')
 -- !result
 ALTER TABLE t0 DROP COLUMN v1, DROP COLUMN v100;
 -- result:
-E: (1064, 'Unexpected exception: Column does not exists: v100')
+E: (1064, 'Column does not exists: v100')
 -- !result
 DESC t0;
 -- result:
@@ -122,15 +122,15 @@ E: (1064, "Getting analyzing error from line 1, column 26 to line 1, column 42. 
 -- !result
 ALTER TABLE t1 ADD column v2 BIGINT MIN;
 -- result:
-E: (1064, 'Unexpected exception: Can not assign aggregation method on column in Unique data model table: v2')
+E: (1064, 'Can not assign aggregation method on column in Unique data model table: v2')
 -- !result
 ALTER TABLE t1 ADD COLUMN v2 BIGINT, ADD COLUMN v2 FLOAT;
 -- result:
-E: (1064, 'Unexpected exception: Repeatedly add same column with different definition: v2')
+E: (1064, 'Repeatedly add same column with different definition: v2')
 -- !result
 ALTER TABLE t1 ADD COLUMN v2 BIGINT, ADD COLUMN v2 BIGINT KEY;
 -- result:
-E: (1064, 'Unexpected exception: Repeatedly add same column with different definition: v2')
+E: (1064, 'Repeatedly add same column with different definition: v2')
 -- !result
 ALTER TABLE t1 ADD COLUMN v2 BIGINT, DROP COLUMN v2;
 -- result:
@@ -144,23 +144,23 @@ v1	varchar(100)	YES	false	None
 -- !result
 ALTER TABLE t1 ADD COLUMN v2 BIGINT, ADD COLUMN v0 BIGINT;
 -- result:
-E: (1064, 'Unexpected exception: Can not add column which already exists in base table: v0')
+E: (1064, 'Can not add column which already exists in base table: v0')
 -- !result
 ALTER TABLE t1 DROP COLUMN k1;
 -- result:
-E: (1064, 'Unexpected exception: Can not drop key column in Unique data model table')
+E: (1064, 'Can not drop key column in Unique data model table')
 -- !result
 ALTER TABLE t1 DROP COLUMN v0, DROP COLUMN k1;
 -- result:
-E: (1064, 'Unexpected exception: Can not drop key column in Unique data model table')
+E: (1064, 'Can not drop key column in Unique data model table')
 -- !result
 ALTER TABLE t1 DROP COLUMN v0, DROP COLUMN v100;
 -- result:
-E: (1064, 'Unexpected exception: Column does not exists: v100')
+E: (1064, 'Column does not exists: v100')
 -- !result
 ALTER TABLE t1 MODIFY COLUMN v1 VARCHAR(100) MAX;
 -- result:
-E: (1064, 'Unexpected exception: Can not assign aggregation method on column in Unique data model table: v1')
+E: (1064, 'Can not assign aggregation method on column in Unique data model table: v1')
 -- !result
 DESC t1;
 -- result:
@@ -189,30 +189,30 @@ E: (1064, "Getting analyzing error from line 1, column 26 to line 1, column 42. 
 -- !result
 ALTER TABLE t2 ADD column v2 BIGINT MIN;
 -- result:
-E: (1064, 'Unexpected exception: Can not assign aggregation method on column in Duplicate data model table: v2')
+E: (1064, 'Can not assign aggregation method on column in Duplicate data model table: v2')
 -- !result
 ALTER TABLE t2 ADD COLUMN v2 BIGINT, ADD COLUMN v2 FLOAT;
 -- result:
-E: (1064, 'Unexpected exception: Repeatedly add same column with different definition: v2')
+E: (1064, 'Repeatedly add same column with different definition: v2')
 -- !result
 ALTER TABLE t2 ADD COLUMN v2 BIGINT, ADD COLUMN v2 BIGINT KEY;
 -- result:
-E: (1064, 'Unexpected exception: Repeatedly add same column with different definition: v2')
+E: (1064, 'Repeatedly add same column with different definition: v2')
 -- !result
 ALTER TABLE t2 ADD COLUMN v2 BIGINT, DROP COLUMN v2;
 -- result:
 -- !result
 ALTER TABLE t2 ADD COLUMN v2 BIGINT, ADD COLUMN v0 BIGINT;
 -- result:
-E: (1064, 'Unexpected exception: Can not add column which already exists in base table: v0')
+E: (1064, 'Can not add column which already exists in base table: v0')
 -- !result
 ALTER TABLE t2 DROP COLUMN v0, DROP COLUMN v100;
 -- result:
-E: (1064, 'Unexpected exception: Column does not exists: v100')
+E: (1064, 'Column does not exists: v100')
 -- !result
 ALTER TABLE t2 MODIFY COLUMN v1 VARCHAR(100) MAX;
 -- result:
-E: (1064, 'Unexpected exception: Can not assign aggregation method on column in Duplicate data model table: v1')
+E: (1064, 'Can not assign aggregation method on column in Duplicate data model table: v1')
 -- !result
 DESC t2;
 -- result:
@@ -241,7 +241,7 @@ PROPERTIES ("fast_schema_evolution" = "true", "replication_num"="1");
 -- !result
 ALTER TABLE t9 DROP COLUMN c1;
 -- result:
-E: (1064, 'Unexpected exception: Partition column[c1] cannot be dropped. index[t9]')
+E: (1064, 'Partition column[c1] cannot be dropped. index[t9]')
 -- !result
 CREATE TABLE t10 (
 c0 int(11) NULL COMMENT "",
@@ -258,7 +258,7 @@ PROPERTIES ("fast_schema_evolution" = "false", "replication_num"="1");
 -- !result
 ALTER TABLE t10 DROP COLUMN c1;
 -- result:
-E: (1064, 'Unexpected exception: Partition column[c1] cannot be dropped. index[t10]')
+E: (1064, 'Partition column[c1] cannot be dropped. index[t10]')
 -- !result
 CREATE TABLE site_access1 (
     event_day DATETIME NOT NULL,
@@ -275,10 +275,10 @@ PROPERTIES('replication_num'='1');
 -- !result
 ALTER TABLE site_access1 DROP COLUMN event_day;
 -- result:
-E: (1064, 'Unexpected exception: Partition column[event_day] cannot be dropped. index[site_access1]')
+E: (1064, 'Partition column[event_day] cannot be dropped. index[site_access1]')
 -- !result
 ALTER TABLE site_access1 DROP COLUMN site_id;
 -- result:
-E: (1064, 'Unexpected exception: Distribution column[site_id] cannot be dropped. index[site_access1]')
+E: (1064, 'Distribution column[site_id] cannot be dropped. index[site_access1]')
 -- !result
 

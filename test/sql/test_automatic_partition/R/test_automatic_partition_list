@@ -124,7 +124,7 @@ ALTER TABLE list_auto_single ADD PARTITION psingle VALUES IN ("2023-04-01");
 -- !result
 ALTER TABLE list_auto_single ADD PARTITION pmul VALUES IN ("2022-04-01", "2022-04-02");
 -- result:
-E: (1064, 'Unexpected exception: Automatically partitioned tables does not support multiple values in the same partition')
+E: (1064, 'Automatically partitioned tables does not support multiple values in the same partition')
 -- !result
 CREATE TABLE list_normal_single (
     id bigint  ,
