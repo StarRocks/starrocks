@@ -167,6 +167,10 @@ public class MetadataMgr {
     }
 
     public void removeQueryMetadata() {
+        if (ConnectContext.get() != null && ConnectContext.get().isMetadataContext()) {
+            return;
+        }
+
         Optional<String> queryId = getOptionalQueryID();
         if (queryId.isPresent()) {
             QueryMetadatas queryMetadatas = metadataCacheByQueryId.getIfPresent(queryId.get());

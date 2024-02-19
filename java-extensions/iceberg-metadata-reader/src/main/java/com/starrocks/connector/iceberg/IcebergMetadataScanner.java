@@ -111,6 +111,8 @@ public class IcebergMetadataScanner extends ConnectorScanner {
         this.serializedTable = params.get("serialized_table");
         this.manifestBean = params.get("split_info");
         this.classLoader = this.getClass().getClassLoader();
+        System.setProperty("software.amazon.awssdk.http.service.impl",
+                "software.amazon.awssdk.http.urlconnection.UrlConnectionSdkHttpService");
     }
 
     @Override

@@ -14,7 +14,6 @@
 
 package com.starrocks.connector.iceberg;
 
-import com.starrocks.credential.aws.AWSCloudConfigurationProvider;
 import org.apache.iceberg.aws.AwsClientFactory;
 import org.apache.iceberg.aws.AwsProperties;
 import org.apache.logging.log4j.LogManager;
@@ -45,32 +44,48 @@ import java.net.URI;
 import java.util.Map;
 import java.util.UUID;
 
-import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_ACCESS_KEY;
-import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_ENDPOINT;
-import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_EXTERNAL_ID;
-import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_IAM_ROLE_ARN;
-import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_REGION;
-import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_SECRET_KEY;
-import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_SESSION_TOKEN;
-import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_STS_ENDPOINT;
-import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_STS_REGION;
-import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_USE_AWS_SDK_DEFAULT_BEHAVIOR;
-import static com.starrocks.credential.CloudConfigurationConstants.AWS_GLUE_USE_INSTANCE_PROFILE;
-import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ACCESS_KEY;
-import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS;
-import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ENDPOINT;
-import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_EXTERNAL_ID;
-import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN;
-import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_REGION;
-import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_SECRET_KEY;
-import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_SESSION_TOKEN;
-import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_STS_ENDPOINT;
-import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_STS_REGION;
-import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
-import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE;
-
 public class IcebergAwsClientFactory implements AwsClientFactory {
-    private static final long serialVersionUID = 1234567899L;
+    private static final long serialVersionUID = 1234567899L; // 显式定义 serialVersionUID
+
+    public static final String AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR = "aws.s3.use_aws_sdk_default_behavior";
+    public static final String AWS_S3_USE_INSTANCE_PROFILE = "aws.s3.use_instance_profile";
+    public static final String AWS_S3_ACCESS_KEY = "aws.s3.access_key";
+    public static final String AWS_S3_SECRET_KEY = "aws.s3.secret_key";
+    public static final String AWS_S3_SESSION_TOKEN = "aws.s3.session_token";
+    public static final String AWS_S3_IAM_ROLE_ARN = "aws.s3.iam_role_arn";
+    public static final String AWS_S3_STS_REGION = "aws.s3.sts.region";
+    public static final String AWS_S3_STS_ENDPOINT = "aws.s3.sts.endpoint";
+    public static final String AWS_S3_EXTERNAL_ID = "aws.s3.external_id";
+    public static final String AWS_S3_REGION = "aws.s3.region";
+    public static final String AWS_S3_ENDPOINT = "aws.s3.endpoint";
+
+    // Configuration for AWS s3
+
+    /**
+     * Enable S3 path style access ie disabling the default virtual hosting behaviour.
+     * Useful for S3A-compliant storage providers as it removes the need to set up DNS for virtual hosting.
+     * Default value: [false]
+     */
+    public static final String AWS_S3_ENABLE_PATH_STYLE_ACCESS = "aws.s3.enable_path_style_access";
+
+    /**
+     * Enables or disables SSL connections to AWS services.
+     * You must set true if you want to assume role.
+     * Default value: [true]
+     */
+    public static final String AWS_S3_ENABLE_SSL = "aws.s3.enable_ssl";
+
+    public static final String AWS_GLUE_USE_AWS_SDK_DEFAULT_BEHAVIOR = "aws.glue.use_aws_sdk_default_behavior";
+    public static final String AWS_GLUE_USE_INSTANCE_PROFILE = "aws.glue.use_instance_profile";
+    public static final String AWS_GLUE_ACCESS_KEY = "aws.glue.access_key";
+    public static final String AWS_GLUE_SECRET_KEY = "aws.glue.secret_key";
+    public static final String AWS_GLUE_SESSION_TOKEN = "aws.glue.session_token";
+    public static final String AWS_GLUE_IAM_ROLE_ARN = "aws.glue.iam_role_arn";
+    public static final String AWS_GLUE_STS_REGION = "aws.glue.sts.region";
+    public static final String AWS_GLUE_STS_ENDPOINT = "aws.glue.sts.endpoint";
+    public static final String AWS_GLUE_EXTERNAL_ID = "aws.glue.external_id";
+    public static final String AWS_GLUE_REGION = "aws.glue.region";
+    public static final String AWS_GLUE_ENDPOINT = "aws.glue.endpoint";
     private static final Logger LOG = LogManager.getLogger(IcebergAwsClientFactory.class);
     public static final String HTTPS_SCHEME = "https://";
 
@@ -262,7 +277,7 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
         if (!strRegion.isEmpty()) {
             return Region.of(strRegion);
         }
-        Region region = Region.of(AWSCloudConfigurationProvider.DEFAULT_AWS_REGION);
+        Region region = Region.of("us-east-1");
         try {
             DefaultAwsRegionProviderChain providerChain = DefaultAwsRegionProviderChain.builder()
                     .profileFile(ProfileFile::defaultProfileFile)

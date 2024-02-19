@@ -1790,7 +1790,7 @@ public class Config extends ConfigBase {
     public static long statistic_collect_query_timeout = 3600; // 1h
 
     @ConfField(mutable = true)
-    public static long metadata_collect_query_timeout = 10; // 10s
+    public static long metadata_collect_query_timeout = 60; // 60s
 
     @ConfField
     public static long statistic_cache_columns = 100000;

@@ -18,6 +18,7 @@
         <iceberg.version>1.4.2</iceberg.version>
         <slf4j.version>1.7.32</slf4j.version>
         <hadoop.version>3.3.4</hadoop.version>
+        <awsv2.version>2.17.257</awsv2.version>
     </properties>
 
     <dependencies>
@@ -31,6 +32,18 @@
             <groupId>com.starrocks</groupId>
             <artifactId>hadoop-ext</artifactId>
             <version>1.0.0</version>
+        </dependency>
+
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>url-connection-client</artifactId>
+            <version>${awsv2.version}</version>
+            <exclusions>
+                <exclusion>
+                    <artifactId>utils</artifactId>
+                    <groupId>software.amazon.awssdk</groupId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>
@@ -60,6 +73,18 @@
         <dependency>
             <groupId>org.apache.iceberg</groupId>
             <artifactId>iceberg-core</artifactId>
+            <version>${iceberg.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>bundle</artifactId>
+            <version>${awsv2.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.iceberg</groupId>
+            <artifactId>iceberg-aws</artifactId>
             <version>${iceberg.version}</version>
         </dependency>
 
