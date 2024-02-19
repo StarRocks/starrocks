@@ -178,6 +178,7 @@
       "link": {"type": "doc", "id": "integrations/integrations"},
       "items": [
         "integrations/authenticate_to_aws_resources",
+        "integrations/hive_bitmap_udf",
         "integrations/other_integrations/intro"
       ]
     },
@@ -727,6 +728,7 @@
       "link": {"type": "doc", "id": "integrations/integrations"},
       "items": [
         "integrations/authenticate_to_aws_resources",
+        "integrations/hive_bitmap_udf",
         "integrations/other_integrations/intro"
       ]
     },
