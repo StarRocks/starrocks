@@ -95,6 +95,11 @@ public enum RuleType {
     TF_PRUNE_CTE_CONSUME_COLUMNS,
     TF_PRUNE_GROUP_BY_KEYS,
     TF_PRUNE_SUBFIELD,
+<<<<<<< HEAD
+=======
+    TF_PRUNE_UKFK_JOIN,
+    TF_SUBFILED_NOCOPY,
+>>>>>>> c5d633f32b ([Enhancement] UK FK Join optimization (1) (#39358))
 
     TF_SCALAR_OPERATORS_REUSE,
     TF_PRUNE_EMPTY_WINDOW,
