@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+keywords: ['Stream Load']
 ---
 
 # 从本地文件系统导入
