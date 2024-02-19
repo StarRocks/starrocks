@@ -597,4 +597,53 @@ public class SelectStmtTest {
             Assert.fail("Should not throw an exception");
         }
     }
+
+    @Test
+    void testMergeLimitAfterPruneGroupByKeys() throws Exception {
+        String sql = "SELECT\n" +
+                "    name\n" +
+                "FROM\n" +
+                "    (\n" +
+                "        select\n" +
+                "            case\n" +
+                "                when a.emp_name in('Alice', 'Bob') then 'RD'\n" +
+                "                when a.emp_name in('Bob', 'Charlie') then 'QA'\n" +
+                "                else 'BD'\n" +
+                "            end as role,\n" +
+                "            a.emp_name as name\n" +
+                "        from\n" +
+                "            (\n" +
+                "                select 'Alice' as emp_name\n" +
+                "                union   all\n" +
+                "                select 'Bob' as emp_name\n" +
+                "                union all\n" +
+                "                select 'Charlie' as emp_name\n" +
+                "            ) a\n" +
+                "    ) SUB_QRY\n" +
+                "WHERE name IS NOT NULL AND role IN ('QA')\n" +
+                "GROUP BY name\n" +
+                "ORDER BY name ASC";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
+        Assert.assertTrue(plan, plan.contains("PLAN FRAGMENT 0(F00)\n" +
+                "  Output Exprs:7: expr\n" +
+                "  Input Partition: UNPARTITIONED\n" +
+                "  RESULT SINK\n" +
+                "\n" +
+                "  2:SORT\n" +
+                "  |  order by: [7, VARCHAR, false] ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  output columns:\n" +
+                "  |  7 <-> 'Charlie'\n" +
+                "  |  limit: 1\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         NULL\n" +
+                "     limit: 1\n" +
+                "     cardinality: 1\n"));
+    }
 }
