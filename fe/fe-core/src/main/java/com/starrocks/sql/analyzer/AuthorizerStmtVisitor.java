@@ -963,97 +963,30 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitAnalyzeStatement(AnalyzeStmt statement, ConnectContext context) {
-        try {
-            Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    statement.getTableName(), PrivilegeType.SELECT);
-        } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(
-                    statement.getTableName().getCatalog(),
-                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.SELECT.name(), ObjectType.TABLE.name(), statement.getTableName().getTbl());
-        }
-        try {
-            Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    statement.getTableName(), PrivilegeType.INSERT);
-        } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(
-                    statement.getTableName().getCatalog(),
-                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.INSERT.name(), ObjectType.TABLE.name(), statement.getTableName().getTbl());
-        }
-
+        Authorizer.checkActionForAnalyzeStatement(context.getCurrentUserIdentity(),
+                context.getCurrentRoleIds(), statement.getTableName());
         return null;
     }
 
     @Override
     public Void visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, ConnectContext context) {
         Set<TableName> tableNames = AnalyzerUtils.getAllTableNamesForAnalyzeJobStmt(statement.getDbId(), statement.getTableId());
-        tableNames.forEach(tableName -> {
-            try {
-                Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        tableName, PrivilegeType.SELECT);
-            } catch (AccessDeniedException e) {
-                AccessDeniedException.reportAccessDenied(
-                        tableName.getCatalog(),
-                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        PrivilegeType.SELECT.name(), ObjectType.TABLE.name(), tableName.getTbl());
-            }
-            try {
-                Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        tableName, PrivilegeType.INSERT);
-            } catch (AccessDeniedException e) {
-                AccessDeniedException.reportAccessDenied(
-                        tableName.getCatalog(),
-                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        PrivilegeType.INSERT.name(), ObjectType.TABLE.name(), tableName.getTbl());
-            }
-        });
+        tableNames.forEach(tableName -> Authorizer.checkActionForAnalyzeStatement(context.getCurrentUserIdentity(),
+                context.getCurrentRoleIds(), tableName));
         return null;
     }
 
     @Override
     public Void visitDropHistogramStatement(DropHistogramStmt statement, ConnectContext context) {
-        try {
-            Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    statement.getTableName(), PrivilegeType.SELECT);
-        } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(
-                    statement.getTableName().getCatalog(),
-                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.SELECT.name(), ObjectType.TABLE.name(), statement.getTableName().getTbl());
-        }
-        try {
-            Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    statement.getTableName(), PrivilegeType.INSERT);
-        } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(
-                    statement.getTableName().getCatalog(),
-                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.INSERT.name(), ObjectType.TABLE.name(), statement.getTableName().getTbl());
-        }
+        Authorizer.checkActionForAnalyzeStatement(context.getCurrentUserIdentity(),
+                context.getCurrentRoleIds(), statement.getTableName());
         return null;
     }
 
     @Override
     public Void visitDropStatsStatement(DropStatsStmt statement, ConnectContext context) {
-        try {
-            Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    statement.getTableName(), PrivilegeType.SELECT);
-        } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(
-                    statement.getTableName().getCatalog(),
-                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.SELECT.name(), ObjectType.TABLE.name(), statement.getTableName().getTbl());
-        }
-        try {
-            Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    statement.getTableName(), PrivilegeType.INSERT);
-        } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(
-                    statement.getTableName().getCatalog(),
-                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.INSERT.name(), ObjectType.TABLE.name(), statement.getTableName().getTbl());
-        }
+        Authorizer.checkActionForAnalyzeStatement(context.getCurrentUserIdentity(),
+                context.getCurrentRoleIds(), statement.getTableName());
         return null;
     }
 
@@ -1088,7 +1021,7 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitKillAnalyzeStatement(KillAnalyzeStmt statement, ConnectContext context) {
         // `kill analyze {id}` can only kill analyze job that user has privileges(SELECT + INSERT) on,
-        // we will check it in the execution logic, not here, see `ShowExecutor#handleKillAnalyzeStmt()`
+        // we will check it in the execution logic, not here, see `ShowExecutor#checkPrivilegeForKillAnalyzeStmt()`
         // for details.
         return null;
     }
@@ -2578,51 +2511,6 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
         }
         return tableName;
     }
-
-
-
-
-    /*
-    private static void checkTblPrivilegeForKillAnalyzeStmt(ConnectContext context, String catalogName, String dbName,
-                                                            String tableName, long analyzeId) {
-        Database db = MetaUtils.getDatabase(catalogName, dbName);
-        Table table = MetaUtils.getTable(catalogName, dbName, tableName);
-        if (db != null && table != null) {
-            if (!PrivilegeActions.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-             catalogName, dbName, tableName, PrivilegeType.SELECT) ||
-                    !PrivilegeActions.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    catalogName, dbName, tableName, PrivilegeType.INSERT)
-            ) {
-                throw new SemanticException(String.format(
-                        "You need SELECT and INSERT action on %s.%s.%s to kill analyze job %d",
-                        catalogName, dbName, tableName, analyzeId));
-            }
-        }
-    }
-
-    public static void checkPrivilegeForKillAnalyzeStmt(ConnectContext context, long analyzeId) {
-        AnalyzeMgr analyzeManager = GlobalStateMgr.getCurrentAnalyzeMgr();
-        AnalyzeStatus analyzeStatus = analyzeManager.getAnalyzeStatus(analyzeId);
-        AnalyzeJob analyzeJob = analyzeManager.getAnalyzeJob(analyzeId);
-        if (analyzeStatus != null) {
-            try {
-                String catalogName = analyzeStatus.getCatalogName();
-                String dbName = analyzeStatus.getDbName();
-                String tableName = analyzeStatus.getTableName();
-                checkTblPrivilegeForKillAnalyzeStmt(context, catalogName, dbName, tableName, analyzeId);
-            } catch (MetaNotFoundException ignore) {
-                // If the db or table doesn't exist anymore, we won't check privilege on it
-            }
-        } else if (analyzeJob != null) {
-            Set<TableName> tableNames = getAllTableNamesForAnalyzeJobStmt(analyzeJob.getDbId(),
-                    analyzeJob.getTableId());
-            tableNames.forEach(tableName -> {
-                checkTblPrivilegeForKillAnalyzeStmt(context, tableName.getCatalog(), tableName.getDb(),
-                        tableName.getTbl(), analyzeId);
-            });
-        }
-    }
-     */
 
     private void checkOperateLoadPrivilege(ConnectContext context, String dbName, String label) {
         GlobalStateMgr globalStateMgr = context.getGlobalStateMgr();
