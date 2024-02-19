@@ -66,12 +66,14 @@ public:
 
         TColumn k2;
         k2.column_name = "k2";
+        k2.__set_is_key(true);
         k2.__set_default_value("2");
         k2.column_type.type = TPrimitiveType::BIGINT;
         request.tablet_schema.columns.push_back(k2);
 
         TColumn k3;
         k3.column_name = "k3";
+        k3.__set_is_key(true);
         k3.__set_default_value("3");
         k3.column_type.type = TPrimitiveType::BIGINT;
         request.tablet_schema.columns.push_back(k3);
@@ -90,8 +92,9 @@ public:
                                             const std::vector<TColumn>* tcolumns = nullptr) {
         auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
         auto chunk = ChunkHelper::new_chunk(schema, 0);
+        chunk->reset_slot_id_to_index();
         for (size_t i = 0; i < chunk->num_columns(); ++i) {
-            chunk->set_slot_id_to_index(i, i);
+            chunk->set_slot_id_to_index(i + 1, i);
             if (i < 3) {
                 down_cast<Int64Column*>(chunk->get_column_by_index(i).get())->append(i);
             } else {
@@ -113,9 +116,12 @@ public:
             TDescriptorTableBuilder dtb;
             TTupleDescriptorBuilder tuple_builder;
 
-            tuple_builder.add_slot(TSlotDescriptorBuilder().type(TYPE_BIGINT).column_name("k1").column_pos(1).build());
-            tuple_builder.add_slot(TSlotDescriptorBuilder().type(TYPE_BIGINT).column_name("k2").column_pos(2).build());
-            tuple_builder.add_slot(TSlotDescriptorBuilder().type(TYPE_BIGINT).column_name("k3").column_pos(3).build());
+            tuple_builder.add_slot(
+                    TSlotDescriptorBuilder().type(TYPE_BIGINT).column_name("k1").column_pos(1).id(1).build());
+            tuple_builder.add_slot(
+                    TSlotDescriptorBuilder().type(TYPE_BIGINT).column_name("k2").column_pos(2).id(2).build());
+            tuple_builder.add_slot(
+                    TSlotDescriptorBuilder().type(TYPE_BIGINT).column_name("k3").column_pos(3).id(3).build());
 
             if (tcolumns != nullptr) {
                 for (int i = 0; i < tcolumns->size(); ++i) {
@@ -124,6 +130,7 @@ public:
                                                    .string_type(60000)
                                                    .column_name(column_name)
                                                    .column_pos(i + 4)
+                                                   .id(i + 4)
                                                    .build());
                 }
             }
@@ -190,10 +197,11 @@ public:
         DictionaryCachePtr dictionary = std::move(res.value());
         ASSERT_TRUE(dictionary.get() != nullptr);
 
-        auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
-        auto chunk = ChunkHelper::new_chunk(schema, 0);
+        auto schema = dictionary_cache_manager->get_dictionary_schema_by_id(dict_id);
+        auto chunk = ChunkHelper::new_chunk(*schema, 0);
+        chunk->reset_slot_id_to_index();
         for (size_t i = 0; i < chunk->num_columns(); ++i) {
-            chunk->set_slot_id_to_index(i, i);
+            chunk->set_slot_id_to_index(i + 1, i);
             if (i < 3) {
                 down_cast<Int64Column*>(chunk->get_column_by_index(i).get())->append(i);
             } else {
@@ -207,10 +215,10 @@ public:
             vids.emplace_back(id);
         }
 
-        ChunkPtr key_chunk = ChunkHelper::new_chunk(Schema(&schema, kids), 0);
+        ChunkPtr key_chunk = ChunkHelper::new_chunk(Schema(schema.get(), kids), 0);
         key_chunk->get_column_by_index(0)->append(*chunk->get_column_by_index(0));
 
-        ChunkPtr value_chunk = ChunkHelper::new_chunk(Schema(&schema, vids), 0);
+        ChunkPtr value_chunk = ChunkHelper::new_chunk(Schema(schema.get(), vids), 0);
         auto st = DictionaryCacheManager::probe_given_dictionary_cache(
                 *key_chunk->schema().get(), *value_chunk->schema().get(), dictionary, key_chunk, value_chunk);
         ASSERT_TRUE(st.ok());
@@ -270,12 +278,11 @@ TEST_F(DictionaryCacheManagerTest, large_column_refresh_and_read) {
     for (size_t i = 0; i < N; i++) {
         TColumn k;
         k.column_name = "large_column_" + std::to_string(i);
-        k.__set_is_key(false);
+        k.__set_is_key(true);
         k.__set_default_value("");
         k.column_type.type = TPrimitiveType::VARCHAR;
         large_string_column.push_back(k);
     }
-
     auto test_tablet = create_tablet(9144, 6544, &large_string_column);
     create_new_dictionary_cache(dictionary_cache_manager, 300, 301, test_tablet, &large_string_column);
     read_dictionary(dictionary_cache_manager, test_tablet, 300, 301);

@@ -56,6 +56,7 @@ StatusOr<ColumnPtr> DictionaryGetExpr::evaluate_checked(ExprContext* context, Ch
         ColumnPtr key_column = columns[1 + i];
         key_chunk->update_column_by_index(key_column, i);
     }
+    value_chunk->reserve(size);
 
     // assign the value chunk
     RETURN_IF_ERROR(DictionaryCacheManager::probe_given_dictionary_cache(
@@ -65,7 +66,7 @@ StatusOr<ColumnPtr> DictionaryGetExpr::evaluate_checked(ExprContext* context, Ch
     auto fields = down_cast<StructColumn*>(struct_column.get())->fields_column();
     for (size_t i = 0; i < value_chunk->columns().size(); ++i) {
         auto column = value_chunk->columns()[i];
-        fields[i]->append(*column.get(), 0, column->size());
+        fields[i]->append(*column, 0, column->size());
     }
 
     return struct_column;
