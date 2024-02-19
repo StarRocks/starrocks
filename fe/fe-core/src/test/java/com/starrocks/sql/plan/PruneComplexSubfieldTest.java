@@ -1029,4 +1029,19 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "     table: pc0, rollup: pc0");
         assertContains(plan, "ColumnAccessPath");
     }
+
+    @Test
+    public void testJsonArray() throws Exception {
+        String sql = "select j1->'[0]' from js0;";
+        String plan = getVerboseExplain(sql);
+        assertNotContains(plan, "ColumnAccessPath:");
+
+        sql = "select j1->' [0]' from js0;";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "ColumnAccessPath:");
+
+        sql = "select j1->'a. [0]' from js0;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/j1/a]");
+    }
 }
