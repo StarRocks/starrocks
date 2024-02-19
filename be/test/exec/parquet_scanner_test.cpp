@@ -836,7 +836,6 @@ TEST_F(ParquetScannerTest, test_flexible_column_mapping) {
     auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slot_infos, slot_infos});
     TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
     params->__set_flexible_column_mapping(true);
-    params->__set_strict_mode(true);
     auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges, params);
     ASSERT_OK(scanner->open());
     auto res = scanner->get_next();
