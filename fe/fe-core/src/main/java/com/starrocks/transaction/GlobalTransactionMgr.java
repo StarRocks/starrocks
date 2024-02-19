@@ -46,6 +46,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -438,6 +439,7 @@ public class GlobalTransactionMgr implements Writable, MemoryTrackable {
             db.writeUnlock();
         }
 
+        MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
         stopWatch.stop();
         long publishTimeoutMillis = timeoutMillis - stopWatch.getTime();
         if (publishTimeoutMillis < 0) {
