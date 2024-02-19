@@ -185,6 +185,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // Table pruning on update statement is risky, so turn off in default.
     public static final String ENABLE_TABLE_PRUNE_ON_UPDATE = "enable_table_prune_on_update";
 
+    public static final String ENABLE_UKFK_OPT = "enable_ukfk_opt";
+    public static final String ENABLE_UKFK_JOIN_REORDER = "enable_ukfk_join_reorder";
+    public static final String MAX_UKFK_JOIN_REORDER_SCALE_RATIO = "max_ukfk_join_reorder_scale_ratio";
+    public static final String MAX_UKFK_JOIN_REORDER_FK_ROWS = "max_ukfk_join_reorder_fk_rows";
+
     // if set to true, some of stmt will be forwarded to leader FE to get result
 
     // if set to true, some of stmt will be forwarded to leader FE to get result
@@ -1020,6 +1025,19 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_TABLE_PRUNE_ON_UPDATE)
     private boolean enableTablePruneOnUpdate = false;
+
+    @VarAttr(name = ENABLE_UKFK_OPT)
+    private boolean enableUKFKOpt = false;
+
+    @VarAttr(name = ENABLE_UKFK_JOIN_REORDER)
+    private boolean enableUKFKJoinReorder = false;
+
+    @VarAttr(name = MAX_UKFK_JOIN_REORDER_SCALE_RATIO, flag = VariableMgr.INVISIBLE)
+    private int maxUKFKJoinReorderScaleRatio = 100;
+
+    @VarAttr(name = MAX_UKFK_JOIN_REORDER_FK_ROWS, flag = VariableMgr.INVISIBLE)
+    private int maxUKFKJoinReorderFKRows = 100000000;
+
     @VariableMgr.VarAttr(name = FORWARD_TO_LEADER, alias = FORWARD_TO_MASTER)
     private boolean forwardToLeader = false;
 
@@ -2165,6 +2183,38 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableTablePruneOnUpdate() {
         return enableTablePruneOnUpdate;
+    }
+
+    public boolean isEnableUKFKOpt() {
+        return enableUKFKOpt;
+    }
+
+    public void setEnableUKFKOpt(boolean enableUKFKOpt) {
+        this.enableUKFKOpt = enableUKFKOpt;
+    }
+
+    public boolean isEnableUKFKJoinReorder() {
+        return enableUKFKJoinReorder;
+    }
+
+    public void setEnableUKFKJoinReorder(boolean enableUKFKJoinReorder) {
+        this.enableUKFKJoinReorder = enableUKFKJoinReorder;
+    }
+
+    public int getMaxUKFKJoinReorderScaleRatio() {
+        return maxUKFKJoinReorderScaleRatio;
+    }
+
+    public void setMaxUKFKJoinReorderScaleRatio(int maxUKFKJoinReorderScaleRatio) {
+        this.maxUKFKJoinReorderScaleRatio = maxUKFKJoinReorderScaleRatio;
+    }
+
+    public int getMaxUKFKJoinReorderFKRows() {
+        return maxUKFKJoinReorderFKRows;
+    }
+
+    public void setMaxUKFKJoinReorderFKRows(int maxUKFKJoinReorderFKRows) {
+        this.maxUKFKJoinReorderFKRows = maxUKFKJoinReorderFKRows;
     }
 
     public int getSpillMemTableSize() {

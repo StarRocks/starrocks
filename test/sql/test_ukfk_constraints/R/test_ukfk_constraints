@@ -1,0 +1,372 @@
+-- name: test_ukfk_constraints
+CREATE TABLE t_uk (
+  uk int(11) NULL,
+  v1 int(11) NULL,
+  v2 int(11) NULL,
+  v3 int(11) NULL,
+  v4 int(11) NULL,
+  v5 int(11) NULL
+) ENGINE=OLAP
+DUPLICATE KEY(uk)
+DISTRIBUTED BY HASH(uk) BUCKETS 10
+PROPERTIES (
+ "replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE t_fk (
+  id int(11) NULL,
+  v1 int(11) NULL,
+  v2 int(11) NULL,
+  v3 int(11) NULL,
+  v4 int(11) NULL,
+  v5 int(11) NULL,
+  fk int(11) NULL
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 10
+PROPERTIES (
+ "replication_num" = "1"
+);
+-- result:
+-- !result
+ALTER TABLE t_uk SET ("unique_constraints" = "uk");
+-- result:
+-- !result
+ALTER TABLE t_fk SET ("foreign_key_constraints" = "(fk) REFERENCES t_uk(uk)");
+-- result:
+-- !result
+INSERT INTO t_uk(uk, v1, v2, v3, v4, v5) VALUES
+(1, 2, 3, 4, 5, 6),
+(2, 3, 4, 5, 6, 7),
+(3, 4, 5, 6, 7, 8),
+(4, 5, 6, 7, 8, 9),
+(5, 6, 7, 8, 9, 0);
+-- result:
+-- !result
+INSERT INTO t_fk(id, v1, v2, v3, v4, v5, fk) VALUES
+(1, 1, 1, 1, 1, 1, 1),
+(2, 2, 2, 2, 2, 2, 1),
+(3, 3, 3, 3, 3, 3, 1),
+(4, 4, 4, 4, 4, 4, 1),
+(5, 5, 5, 5, 5, 5, 1),
+
+(6, 1, 1, 1, 1, 1, 2),
+(7, 2, 2, 2, 2, 2, 2),
+(8, 3, 3, 3, 3, 3, 2),
+(9, 4, 4, 4, 4, 4, 2),
+
+(10, 1, 1, 1, 1, 1, 3),
+(11, 2, 2, 2, 2, 2, 3),
+(12, 3, 3, 3, 3, 3, 3),
+
+(13, 1, 1, 1, 1, 1, 4),
+(14, 2, 2, 2, 2, 2, 4),
+
+(15, 1, 1, 1, 1, 1, 5),
+(16, 2, 2, 2, 2, 2, 5),
+(17, 3, 3, 3, 3, 3, 5),
+
+(18, 1, 1, 1, 1, 1, NULL),
+(19, 2, 2, 2, 2, 2, NULL),
+(20, 3, 3, 3, 3, 3, NULL);
+-- result:
+-- !result
+set enable_ukfk_opt=true;
+-- result:
+-- !result
+set enable_ukfk_join_reorder=true;
+-- result:
+-- !result
+SELECT t_fk.*, t_uk.uk FROM t_fk JOIN t_uk ON t_uk.uk = t_fk.fk ORDER BY t_fk.id;
+-- result:
+1	1	1	1	1	1	1	1
+2	2	2	2	2	2	1	1
+3	3	3	3	3	3	1	1
+4	4	4	4	4	4	1	1
+5	5	5	5	5	5	1	1
+6	1	1	1	1	1	2	2
+7	2	2	2	2	2	2	2
+8	3	3	3	3	3	2	2
+9	4	4	4	4	4	2	2
+10	1	1	1	1	1	3	3
+11	2	2	2	2	2	3	3
+12	3	3	3	3	3	3	3
+13	1	1	1	1	1	4	4
+14	2	2	2	2	2	4	4
+15	1	1	1	1	1	5	5
+16	2	2	2	2	2	5	5
+17	3	3	3	3	3	5	5
+-- !result
+SELECT t_fk.*, t_uk.uk + 5 FROM t_fk JOIN t_uk ON t_uk.uk = t_fk.fk ORDER BY t_fk.id;
+-- result:
+1	1	1	1	1	1	1	6
+2	2	2	2	2	2	1	6
+3	3	3	3	3	3	1	6
+4	4	4	4	4	4	1	6
+5	5	5	5	5	5	1	6
+6	1	1	1	1	1	2	7
+7	2	2	2	2	2	2	7
+8	3	3	3	3	3	2	7
+9	4	4	4	4	4	2	7
+10	1	1	1	1	1	3	8
+11	2	2	2	2	2	3	8
+12	3	3	3	3	3	3	8
+13	1	1	1	1	1	4	9
+14	2	2	2	2	2	4	9
+15	1	1	1	1	1	5	10
+16	2	2	2	2	2	5	10
+17	3	3	3	3	3	5	10
+-- !result
+SELECT sum(t_fk.fk), avg(t_uk.uk) FROM t_fk JOIN t_uk ON t_uk.uk = t_fk.fk;
+-- result:
+45	2.6470588235294117
+-- !result
+SELECT t_fk.*, t_uk.uk FROM t_fk JOIN t_uk ON t_uk.uk = t_fk.fk WHERE t_uk.uk = 1 ORDER BY t_fk.id;
+-- result:
+1	1	1	1	1	1	1	1
+2	2	2	2	2	2	1	1
+3	3	3	3	3	3	1	1
+4	4	4	4	4	4	1	1
+5	5	5	5	5	5	1	1
+-- !result
+SELECT t_fk.*, t_uk.uk + 5 FROM t_fk JOIN t_uk ON t_uk.uk = t_fk.fk WHERE t_uk.uk * (t_uk.uk + 3) < 10 ORDER BY t_fk.id;
+-- result:
+1	1	1	1	1	1	1	6
+2	2	2	2	2	2	1	6
+3	3	3	3	3	3	1	6
+4	4	4	4	4	4	1	6
+5	5	5	5	5	5	1	6
+-- !result
+SELECT sum(t_fk.fk), avg(t_uk.uk) FROM t_fk JOIN t_uk ON t_uk.uk = t_fk.fk WHERE t_uk.uk > 2 AND t_uk.uk < 5;
+-- result:
+17	3.4
+-- !result
+SELECT t_fk.*, t_uk.uk FROM t_fk LEFT OUTER JOIN t_uk ON t_uk.uk = t_fk.fk ORDER BY t_fk.id;
+-- result:
+1	1	1	1	1	1	1	1
+2	2	2	2	2	2	1	1
+3	3	3	3	3	3	1	1
+4	4	4	4	4	4	1	1
+5	5	5	5	5	5	1	1
+6	1	1	1	1	1	2	2
+7	2	2	2	2	2	2	2
+8	3	3	3	3	3	2	2
+9	4	4	4	4	4	2	2
+10	1	1	1	1	1	3	3
+11	2	2	2	2	2	3	3
+12	3	3	3	3	3	3	3
+13	1	1	1	1	1	4	4
+14	2	2	2	2	2	4	4
+15	1	1	1	1	1	5	5
+16	2	2	2	2	2	5	5
+17	3	3	3	3	3	5	5
+18	1	1	1	1	1	None	None
+19	2	2	2	2	2	None	None
+20	3	3	3	3	3	None	None
+-- !result
+SELECT t_fk.*, t_uk.uk + 5 FROM t_fk LEFT OUTER JOIN t_uk ON t_uk.uk = t_fk.fk ORDER BY t_fk.id;
+-- result:
+1	1	1	1	1	1	1	6
+2	2	2	2	2	2	1	6
+3	3	3	3	3	3	1	6
+4	4	4	4	4	4	1	6
+5	5	5	5	5	5	1	6
+6	1	1	1	1	1	2	7
+7	2	2	2	2	2	2	7
+8	3	3	3	3	3	2	7
+9	4	4	4	4	4	2	7
+10	1	1	1	1	1	3	8
+11	2	2	2	2	2	3	8
+12	3	3	3	3	3	3	8
+13	1	1	1	1	1	4	9
+14	2	2	2	2	2	4	9
+15	1	1	1	1	1	5	10
+16	2	2	2	2	2	5	10
+17	3	3	3	3	3	5	10
+18	1	1	1	1	1	None	None
+19	2	2	2	2	2	None	None
+20	3	3	3	3	3	None	None
+-- !result
+SELECT sum(t_fk.fk), avg(t_uk.uk) FROM t_fk LEFT OUTER JOIN t_uk ON t_uk.uk = t_fk.fk;
+-- result:
+45	2.6470588235294117
+-- !result
+SELECT t_fk.*, t_uk.uk FROM t_fk LEFT OUTER JOIN t_uk ON t_uk.uk = t_fk.fk WHERE t_uk.uk = 1 ORDER BY t_fk.id;
+-- result:
+1	1	1	1	1	1	1	1
+2	2	2	2	2	2	1	1
+3	3	3	3	3	3	1	1
+4	4	4	4	4	4	1	1
+5	5	5	5	5	5	1	1
+-- !result
+SELECT t_fk.*, t_uk.uk + 5 FROM t_fk LEFT OUTER JOIN t_uk ON t_uk.uk = t_fk.fk WHERE t_uk.uk * (t_uk.uk + 3) < 10 ORDER BY t_fk.id;
+-- result:
+1	1	1	1	1	1	1	6
+2	2	2	2	2	2	1	6
+3	3	3	3	3	3	1	6
+4	4	4	4	4	4	1	6
+5	5	5	5	5	5	1	6
+-- !result
+SELECT sum(t_fk.fk), avg(t_uk.uk) FROM t_fk LEFT OUTER JOIN t_uk ON t_uk.uk = t_fk.fk WHERE t_uk.uk > 2 AND t_uk.uk < 5;
+-- result:
+17	3.4
+-- !result
+SELECT t_fk.*, t_uk.uk FROM t_uk RIGHT OUTER JOIN t_fk ON t_uk.uk = t_fk.fk ORDER BY t_fk.id;
+-- result:
+1	1	1	1	1	1	1	1
+2	2	2	2	2	2	1	1
+3	3	3	3	3	3	1	1
+4	4	4	4	4	4	1	1
+5	5	5	5	5	5	1	1
+6	1	1	1	1	1	2	2
+7	2	2	2	2	2	2	2
+8	3	3	3	3	3	2	2
+9	4	4	4	4	4	2	2
+10	1	1	1	1	1	3	3
+11	2	2	2	2	2	3	3
+12	3	3	3	3	3	3	3
+13	1	1	1	1	1	4	4
+14	2	2	2	2	2	4	4
+15	1	1	1	1	1	5	5
+16	2	2	2	2	2	5	5
+17	3	3	3	3	3	5	5
+18	1	1	1	1	1	None	None
+19	2	2	2	2	2	None	None
+20	3	3	3	3	3	None	None
+-- !result
+SELECT t_fk.*, t_uk.uk + 5 FROM t_uk RIGHT OUTER JOIN t_fk ON t_uk.uk = t_fk.fk ORDER BY t_fk.id;
+-- result:
+1	1	1	1	1	1	1	6
+2	2	2	2	2	2	1	6
+3	3	3	3	3	3	1	6
+4	4	4	4	4	4	1	6
+5	5	5	5	5	5	1	6
+6	1	1	1	1	1	2	7
+7	2	2	2	2	2	2	7
+8	3	3	3	3	3	2	7
+9	4	4	4	4	4	2	7
+10	1	1	1	1	1	3	8
+11	2	2	2	2	2	3	8
+12	3	3	3	3	3	3	8
+13	1	1	1	1	1	4	9
+14	2	2	2	2	2	4	9
+15	1	1	1	1	1	5	10
+16	2	2	2	2	2	5	10
+17	3	3	3	3	3	5	10
+18	1	1	1	1	1	None	None
+19	2	2	2	2	2	None	None
+20	3	3	3	3	3	None	None
+-- !result
+SELECT sum(t_fk.fk), avg(t_uk.uk) FROM t_uk RIGHT OUTER JOIN t_fk ON t_uk.uk = t_fk.fk;
+-- result:
+45	2.6470588235294117
+-- !result
+SELECT t_fk.*, t_uk.uk FROM t_uk RIGHT OUTER JOIN t_fk ON t_uk.uk = t_fk.fk WHERE t_uk.uk = 1 ORDER BY t_fk.id;
+-- result:
+1	1	1	1	1	1	1	1
+2	2	2	2	2	2	1	1
+3	3	3	3	3	3	1	1
+4	4	4	4	4	4	1	1
+5	5	5	5	5	5	1	1
+-- !result
+SELECT t_fk.*, t_uk.uk + 5 FROM t_uk RIGHT OUTER JOIN t_fk ON t_uk.uk = t_fk.fk WHERE t_uk.uk * (t_uk.uk + 3) < 10 ORDER BY t_fk.id;
+-- result:
+1	1	1	1	1	1	1	6
+2	2	2	2	2	2	1	6
+3	3	3	3	3	3	1	6
+4	4	4	4	4	4	1	6
+5	5	5	5	5	5	1	6
+-- !result
+SELECT sum(t_fk.fk), avg(t_uk.uk) FROM t_uk RIGHT OUTER JOIN t_fk ON t_uk.uk = t_fk.fk WHERE t_uk.uk > 2 AND t_uk.uk < 5;
+-- result:
+17	3.4
+-- !result
+SELECT * FROM t_fk LEFT SEMI JOIN t_uk ON t_uk.uk = t_fk.fk ORDER BY t_fk.id;
+-- result:
+1	1	1	1	1	1	1
+2	2	2	2	2	2	1
+3	3	3	3	3	3	1
+4	4	4	4	4	4	1
+5	5	5	5	5	5	1
+6	1	1	1	1	1	2
+7	2	2	2	2	2	2
+8	3	3	3	3	3	2
+9	4	4	4	4	4	2
+10	1	1	1	1	1	3
+11	2	2	2	2	2	3
+12	3	3	3	3	3	3
+13	1	1	1	1	1	4
+14	2	2	2	2	2	4
+15	1	1	1	1	1	5
+16	2	2	2	2	2	5
+17	3	3	3	3	3	5
+-- !result
+SELECT * FROM t_fk LEFT SEMI JOIN t_uk ON t_uk.uk = t_fk.fk AND t_uk.uk = 1 ORDER BY t_fk.id;
+-- result:
+1	1	1	1	1	1	1
+2	2	2	2	2	2	1
+3	3	3	3	3	3	1
+4	4	4	4	4	4	1
+5	5	5	5	5	5	1
+-- !result
+SELECT * FROM t_fk LEFT SEMI JOIN t_uk ON t_uk.uk = t_fk.fk AND t_uk.uk * (t_uk.uk + 3) < 10 ORDER BY t_fk.id;
+-- result:
+1	1	1	1	1	1	1
+2	2	2	2	2	2	1
+3	3	3	3	3	3	1
+4	4	4	4	4	4	1
+5	5	5	5	5	5	1
+-- !result
+SELECT * FROM t_fk LEFT SEMI JOIN t_uk ON t_uk.uk = t_fk.fk AND t_uk.uk > 2 AND t_uk.uk < 5 ORDER BY t_fk.id;
+-- result:
+10	1	1	1	1	1	3
+11	2	2	2	2	2	3
+12	3	3	3	3	3	3
+13	1	1	1	1	1	4
+14	2	2	2	2	2	4
+-- !result
+SELECT * FROM t_uk RIGHT SEMI JOIN t_fk ON t_uk.uk = t_fk.fk ORDER BY t_fk.id;
+-- result:
+1	1	1	1	1	1	1
+2	2	2	2	2	2	1
+3	3	3	3	3	3	1
+4	4	4	4	4	4	1
+5	5	5	5	5	5	1
+6	1	1	1	1	1	2
+7	2	2	2	2	2	2
+8	3	3	3	3	3	2
+9	4	4	4	4	4	2
+10	1	1	1	1	1	3
+11	2	2	2	2	2	3
+12	3	3	3	3	3	3
+13	1	1	1	1	1	4
+14	2	2	2	2	2	4
+15	1	1	1	1	1	5
+16	2	2	2	2	2	5
+17	3	3	3	3	3	5
+-- !result
+SELECT * FROM t_uk RIGHT SEMI JOIN t_fk ON t_uk.uk = t_fk.fk AND t_uk.uk = 1 ORDER BY t_fk.id;
+-- result:
+1	1	1	1	1	1	1
+2	2	2	2	2	2	1
+3	3	3	3	3	3	1
+4	4	4	4	4	4	1
+5	5	5	5	5	5	1
+-- !result
+SELECT * FROM t_uk RIGHT SEMI JOIN t_fk ON t_uk.uk = t_fk.fk AND t_uk.uk * (t_uk.uk + 3) < 10 ORDER BY t_fk.id;
+-- result:
+1	1	1	1	1	1	1
+2	2	2	2	2	2	1
+3	3	3	3	3	3	1
+4	4	4	4	4	4	1
+5	5	5	5	5	5	1
+-- !result
+SELECT * FROM t_uk RIGHT SEMI JOIN t_fk ON t_uk.uk = t_fk.fk AND t_uk.uk > 2 AND t_uk.uk < 5 ORDER BY t_fk.id;
+-- result:
+10	1	1	1	1	1	3
+11	2	2	2	2	2	3
+12	3	3	3	3	3	3
+13	1	1	1	1	1	4
+14	2	2	2	2	2	4
+-- !result
