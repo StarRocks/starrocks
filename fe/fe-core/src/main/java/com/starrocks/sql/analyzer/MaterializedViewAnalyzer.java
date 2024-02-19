@@ -130,7 +130,15 @@ public class MaterializedViewAnalyzer {
                     Table.TableType.ICEBERG,
                     Table.TableType.JDBC,
                     Table.TableType.MYSQL,
+<<<<<<< HEAD
                     Table.TableType.VIEW);
+=======
+                    Table.TableType.PAIMON,
+                    Table.TableType.ODPS,
+                    Table.TableType.DELTALAKE,
+                    Table.TableType.VIEW,
+                    Table.TableType.HIVE_VIEW);
+>>>>>>> 3e0918313c ([BugFix] Fix hive view query table/view/alias name are not case-insensitive (#40921))
 
     public static void analyze(StatementBase stmt, ConnectContext session) {
         new MaterializedViewAnalyzerVisitor().visit(stmt, session);
