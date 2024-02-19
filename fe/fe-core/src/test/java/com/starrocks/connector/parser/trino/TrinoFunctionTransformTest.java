@@ -197,7 +197,7 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "2014-03-08 10:00:00");
 
         sql = "select date_add('week', 1, TIMESTAMP '2014-03-08 09:00:00');";
-        assertPlanContains(sql, "weeks_add('2014-03-08 09:00:00', 1)");
+        assertPlanContains(sql, "2014-03-15 09:00:00");
 
         sql = "select date_add('month', 1, TIMESTAMP '2014-03-08 09:00:00');";
         assertPlanContains(sql, "'2014-04-08 09:00:00'");
@@ -227,16 +227,16 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "years_add(8: th, 2)");
 
         sql = "select date_add('quarter', 2, TIMESTAMP '2014-03-08 09:00:00');";
-        assertPlanContains(sql, "quarters_add('2014-03-08 09:00:00', 2)");
+        assertPlanContains(sql, "2014-09-08 09:00:00");
 
         sql = "select date_add('quarter', -1, TIMESTAMP '2014-03-08 09:00:00');";
-        assertPlanContains(sql, "quarters_add('2014-03-08 09:00:00', -1)");
+        assertPlanContains(sql, "2013-12-08 09:00:00");
 
         sql = "select date_add('millisecond', 20, TIMESTAMP '2014-03-08 09:00:00');";
-        assertPlanContains(sql, "milliseconds_add('2014-03-08 09:00:00', 20)");
+        assertPlanContains(sql, "2014-03-08 09:00:00.020000");
 
         sql = "select date_add('millisecond', -100, TIMESTAMP '2014-03-08 09:00:00');";
-        assertPlanContains(sql, "milliseconds_add('2014-03-08 09:00:00', -100)");
+        assertPlanContains(sql, "2014-03-08 08:59:59.900000");
     }
 
     @Test
