@@ -588,7 +588,7 @@ None
 -- !result
 ALTER TABLE tab1 DROP COLUMN v5;
 -- result:
-E: (1064, 'Unexpected exception: No key column left. index[mv1]')
+E: (1064, 'No key column left. index[mv1]')
 -- !result
 function: wait_alter_table_finish()
 -- result:
@@ -596,7 +596,7 @@ function: wait_alter_table_finish()
 -- !result
 ALTER TABLE tab1 ADD COLUMN v5 tinyint;
 -- result:
-E: (1064, 'Unexpected exception: Repeatedly add same column with different definition: v5')
+E: (1064, 'Repeatedly add same column with different definition: v5')
 -- !result
 function: wait_alter_table_finish()
 -- result:

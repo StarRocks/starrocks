@@ -60,12 +60,13 @@ jobs:
           eci rm ${{ steps.run_ut.outputs.ECI_ID }}
 
       - name: Upload log
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: BE UT LOG
           path: ${{ steps.run_ut.outputs.RES_LOG }}
           retention-days: 1
+          overwrite: true
 
       - name: Clean ENV
         if: always()
@@ -113,11 +114,12 @@ jobs:
 
       - name: Upload log
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: FE UT LOG
           path: ${{ steps.run_ut.outputs.RES_LOG }}
           retention-days: 1
+          overwrite: true
 
       - name: Download FE UT XML
         if: always()
@@ -293,7 +295,7 @@ jobs:
           rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
 
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -334,12 +336,13 @@ jobs:
           report_paths: 'test/*.xml'
 
       - name: Upload log
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: SQL-Tester Log
           path: test/log/
           retention-days: 1
+          overwrite: true
 
       - name: Clean ENV
         if: always()

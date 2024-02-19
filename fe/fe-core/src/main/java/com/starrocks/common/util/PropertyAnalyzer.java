@@ -1005,7 +1005,8 @@ public class PropertyAnalyzer {
             if (Strings.isNullOrEmpty(uniqueConstraintStr)) {
                 return uniqueConstraints;
             }
-            uniqueConstraints = UniqueConstraint.parse(uniqueConstraintStr);
+            uniqueConstraints = UniqueConstraint.parse(table.getCatalogName(), db.getFullName(), table.getName(),
+                    uniqueConstraintStr);
             if (uniqueConstraints == null || uniqueConstraints.isEmpty()) {
                 throw new SemanticException(String.format("invalid unique constraint:%s", uniqueConstraintStr));
             }
