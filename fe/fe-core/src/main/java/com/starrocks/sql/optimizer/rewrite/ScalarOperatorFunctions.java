@@ -198,7 +198,7 @@ public class ScalarOperatorFunctions {
 
     @ConstantFunction(name = "quarters_add", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
     public static ConstantOperator quartersAdd(ConstantOperator date, ConstantOperator quarter) {
-        return ConstantOperator.createDatetimeOrNull(
+        return ConstantOperator.createDatetime(
                 date.getDatetime().plus(quarter.getInt(), IsoFields.QUARTER_YEARS));
     }
 
@@ -220,7 +220,7 @@ public class ScalarOperatorFunctions {
 
     @ConstantFunction(name = "weeks_add", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
     public static ConstantOperator weeksAdd(ConstantOperator date, ConstantOperator week) {
-        return ConstantOperator.createDatetimeOrNull(date.getDatetime().plusWeeks(week.getInt()));
+        return ConstantOperator.createDatetime(date.getDatetime().plusWeeks(week.getInt()));
     }
 
     @ConstantFunction.List(list = {
@@ -247,13 +247,10 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDatetime(date.getDatetime().plusSeconds(second.getInt()));
     }
 
-<<<<<<< HEAD
-=======
     @ConstantFunction(name = "milliseconds_add", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
     public static ConstantOperator millisecondsAdd(ConstantOperator date, ConstantOperator millisecond) {
-        return ConstantOperator.createDatetimeOrNull(date.getDatetime().plus(millisecond.getInt(), ChronoUnit.MILLIS));
+        return ConstantOperator.createDatetime(date.getDatetime().plus(millisecond.getInt(), ChronoUnit.MILLIS));
     }
->>>>>>> 2617f1405b ([Enhancement] Evaluate time functions with constant arguments (#41115))
 
     @ConstantFunction.List(list = {
             @ConstantFunction(name = "date_trunc", argTypes = {VARCHAR, DATETIME}, returnType = DATETIME, isMonotonic = true),
@@ -392,7 +389,7 @@ public class ScalarOperatorFunctions {
 
     @ConstantFunction(name = "quarters_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
     public static ConstantOperator quartersSub(ConstantOperator date, ConstantOperator quarter) {
-        return ConstantOperator.createDatetimeOrNull(
+        return ConstantOperator.createDatetime(
                 date.getDatetime().minus(quarter.getInt(), IsoFields.QUARTER_YEARS));
     }
 
@@ -412,7 +409,7 @@ public class ScalarOperatorFunctions {
 
     @ConstantFunction(name = "weeks_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
     public static ConstantOperator weeksSub(ConstantOperator date, ConstantOperator week) {
-        return ConstantOperator.createDatetimeOrNull(date.getDatetime().minusWeeks(week.getInt()));
+        return ConstantOperator.createDatetime(date.getDatetime().minusWeeks(week.getInt()));
     }
 
     @ConstantFunction(name = "hours_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
@@ -432,7 +429,7 @@ public class ScalarOperatorFunctions {
 
     @ConstantFunction(name = "milliseconds_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
     public static ConstantOperator millisecondsSub(ConstantOperator date, ConstantOperator millisecond) {
-        return ConstantOperator.createDatetimeOrNull(date.getDatetime().minus(millisecond.getInt(), ChronoUnit.MILLIS));
+        return ConstantOperator.createDatetime(date.getDatetime().minus(millisecond.getInt(), ChronoUnit.MILLIS));
     }
 
     @ConstantFunction.List(list = {
