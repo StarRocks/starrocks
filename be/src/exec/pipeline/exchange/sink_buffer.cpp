@@ -256,6 +256,7 @@ void SinkBuffer::_try_to_merge_query_statistics(TransmitChunkInfo& request) {
 }
 
 Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::function<void()>& pre_works) {
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
     std::lock_guard<Mutex> l(*_mutexes[instance_id.lo]);
     pre_works();
 
@@ -286,7 +287,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
 
         TransmitChunkInfo& request = buffer.front();
         bool need_wait = false;
-        DeferOp pop_defer([&need_wait, &buffer, mem_tracker = _mem_tracker]() {
+        DeferOp pop_defer([&need_wait, &buffer]() {
             if (need_wait) {
                 return;
             }
@@ -294,7 +295,6 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             // The request memory is acquired by ExchangeSinkOperator,
             // so use the instance_mem_tracker passed from ExchangeSinkOperator to release memory.
             // This must be invoked before decrease_defer desctructed to avoid sink_buffer and fragment_ctx released.
-            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
             buffer.pop();
         });
 
@@ -401,8 +401,8 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
 
         // Attachment will be released by process_mem_tracker in closure->Run() in bthread, when receiving the response,
         // so decrease the memory usage of attachment from instance_mem_tracker immediately before sending the request.
-        _mem_tracker->release(request.attachment_physical_bytes);
-        GlobalEnv::GetInstance()->process_mem_tracker()->consume(request.attachment_physical_bytes);
+        //_mem_tracker->release(request.attachment_physical_bytes);
+        //GlobalEnv::GetInstance()->process_mem_tracker()->consume(request.attachment_physical_bytes);
 
         closure->cntl.Reset();
         closure->cntl.set_timeout_ms(_brpc_timeout_ms);
