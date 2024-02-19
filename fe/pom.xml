@@ -215,6 +215,12 @@ under the License.
                 <version>2.3</version>
             </dependency>
 
+            <dependency>
+                <groupId>org.apache.kudu</groupId>
+                <artifactId>kudu-client</artifactId>
+                <version>1.16.0</version>
+            </dependency>
+
             <!-- https://mvnrepository.com/artifact/commons-net/commons-net -->
             <dependency>
                 <groupId>commons-net</groupId>

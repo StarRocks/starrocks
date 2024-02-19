@@ -495,7 +495,8 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
     case TPlanNodeType::TABLE_FUNCTION_NODE:
         *node = pool->add(new TableFunctionNode(pool, tnode, descs));
         return Status::OK();
-    case TPlanNodeType::HDFS_SCAN_NODE: {
+    case TPlanNodeType::HDFS_SCAN_NODE:
+    case TPlanNodeType::KUDU_SCAN_NODE: {
         TPlanNode new_node = tnode;
         TConnectorScanNode connector_scan_node;
         connector_scan_node.connector_name = connector::Connector::HIVE;
