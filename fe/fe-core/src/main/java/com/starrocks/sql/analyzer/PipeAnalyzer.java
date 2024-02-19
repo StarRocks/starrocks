@@ -171,7 +171,7 @@ public class PipeAnalyzer {
 
         if (!stmt.getPipeName().getDbName().equalsIgnoreCase(insertStmt.getTableName().getDb())) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_PIPE_STATEMENT,
-                    String.format("pipe's database [%s] and target table's database [%s] should be the same ignoring case",
+                    String.format("pipe's database [%s] and target table's database [%s] should be the same",
                             stmt.getPipeName().getDbName(), insertStmt.getTableName().getDb()));
         }
 
@@ -188,7 +188,8 @@ public class PipeAnalyzer {
         }
         SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
         if (selectRelation.hasAggregation() || selectRelation.hasOrderByClause() || selectRelation.hasLimit()) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_PIPE_STATEMENT, "must be a vanilla select statement");
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_PIPE_STATEMENT, "must be a vanilla select statement." +
+                    " Aggregation, order by clause, limit clause are not supported yet.");
         }
         if (!(selectRelation.getRelation() instanceof FileTableFunctionRelation)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_PIPE_STATEMENT, "only support FileTableFunction");
