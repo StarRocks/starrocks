@@ -2340,7 +2340,12 @@ public class SchemaChangeHandler extends AlterHandler {
         for (String col : indexDef.getColumns()) {
             Column column = olapTable.getColumn(col);
             if (column != null) {
-                indexDef.checkColumn(column, olapTable.getKeysType());
+                // only throw DdlException
+                try {
+                    indexDef.checkColumn(column, olapTable.getKeysType());
+                } catch (Exception e) {
+                    throw new DdlException(e.getMessage());
+                }
             } else {
                 throw new DdlException("BITMAP column does not exist in table. invalid column: " + col);
             }
