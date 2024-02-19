@@ -103,6 +103,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PruneScanColumnRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneTableFunctionColumnRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneTopNColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneTrueFilterRule;
+import com.starrocks.sql.optimizer.rule.transformation.PruneUKFKJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneUnionColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneValuesColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneWindowColumnsRule;
@@ -348,6 +349,10 @@ public class RuleSet {
 
         REWRITE_RULES.put(RuleSetType.PRUNE_ASSERT_ROW, ImmutableList.of(
                 new PruneAssertOneRowRule()
+        ));
+
+        REWRITE_RULES.put(RuleSetType.PRUNE_UKFK_JOIN, ImmutableList.of(
+                new PruneUKFKJoinRule()
         ));
 
         REWRITE_RULES.put(RuleSetType.AGGREGATE_REWRITE, ImmutableList.of(
