@@ -196,6 +196,12 @@ public class ScalarOperatorFunctions {
         }
     }
 
+    @ConstantFunction(name = "quarters_add", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
+    public static ConstantOperator quartersAdd(ConstantOperator date, ConstantOperator quarter) {
+        return ConstantOperator.createDatetime(
+                date.getDatetime().plus(quarter.getInt(), IsoFields.QUARTER_YEARS));
+    }
+
     @ConstantFunction.List(list = {
             @ConstantFunction(name = "months_add", argTypes = {DATETIME,
                     INT}, returnType = DATETIME, isMonotonic = true),
@@ -210,6 +216,11 @@ public class ScalarOperatorFunctions {
         } else {
             return ConstantOperator.createDatetime(date.getDatetime().plusMonths(month.getInt()));
         }
+    }
+
+    @ConstantFunction(name = "weeks_add", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
+    public static ConstantOperator weeksAdd(ConstantOperator date, ConstantOperator week) {
+        return ConstantOperator.createDatetime(date.getDatetime().plusWeeks(week.getInt()));
     }
 
     @ConstantFunction.List(list = {
@@ -236,6 +247,10 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDatetime(date.getDatetime().plusSeconds(second.getInt()));
     }
 
+    @ConstantFunction(name = "milliseconds_add", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
+    public static ConstantOperator millisecondsAdd(ConstantOperator date, ConstantOperator millisecond) {
+        return ConstantOperator.createDatetime(date.getDatetime().plus(millisecond.getInt(), ChronoUnit.MILLIS));
+    }
 
     @ConstantFunction.List(list = {
             @ConstantFunction(name = "date_trunc", argTypes = {VARCHAR, DATETIME}, returnType = DATETIME, isMonotonic = true),
@@ -372,6 +387,12 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDatetime(date.getDatetime().minusYears(year.getInt()));
     }
 
+    @ConstantFunction(name = "quarters_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
+    public static ConstantOperator quartersSub(ConstantOperator date, ConstantOperator quarter) {
+        return ConstantOperator.createDatetime(
+                date.getDatetime().minus(quarter.getInt(), IsoFields.QUARTER_YEARS));
+    }
+
     @ConstantFunction(name = "months_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
     public static ConstantOperator monthsSub(ConstantOperator date, ConstantOperator month) {
         return ConstantOperator.createDatetime(date.getDatetime().minusMonths(month.getInt()));
@@ -384,6 +405,11 @@ public class ScalarOperatorFunctions {
     })
     public static ConstantOperator daysSub(ConstantOperator date, ConstantOperator day) {
         return ConstantOperator.createDatetime(date.getDatetime().minusDays(day.getInt()));
+    }
+
+    @ConstantFunction(name = "weeks_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
+    public static ConstantOperator weeksSub(ConstantOperator date, ConstantOperator week) {
+        return ConstantOperator.createDatetime(date.getDatetime().minusWeeks(week.getInt()));
     }
 
     @ConstantFunction(name = "hours_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
@@ -399,6 +425,11 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "seconds_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
     public static ConstantOperator secondsSub(ConstantOperator date, ConstantOperator second) {
         return ConstantOperator.createDatetime(date.getDatetime().minusSeconds(second.getInt()));
+    }
+
+    @ConstantFunction(name = "milliseconds_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
+    public static ConstantOperator millisecondsSub(ConstantOperator date, ConstantOperator millisecond) {
+        return ConstantOperator.createDatetime(date.getDatetime().minus(millisecond.getInt(), ChronoUnit.MILLIS));
     }
 
     @ConstantFunction.List(list = {
