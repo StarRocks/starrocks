@@ -567,7 +567,11 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
+<<<<<<< HEAD
         Assert.assertEquals(26, jobs.size());
+=======
+        Assert.assertEquals(30, jobs.size());
+>>>>>>> 3e0918313c ([BugFix] Fix hive view query table/view/alias name are not case-insensitive (#40921))
     }
 
     @Test

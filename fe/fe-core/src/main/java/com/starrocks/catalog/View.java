@@ -99,7 +99,11 @@ public class View extends Table {
     }
 
     public View(long id, String name, List<Column> schema) {
-        super(id, name, TableType.VIEW, schema);
+        this(id, name, schema, TableType.VIEW);
+    }
+
+    public View(long id, String name, List<Column> schema, TableType type) {
+        super(id, name, type, schema);
     }
 
     public QueryStatement getQueryStatement() throws StarRocksPlannerException {
