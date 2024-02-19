@@ -688,7 +688,7 @@ jobs:
           is_self_build: ${{ needs.deploy.outputs.is_self_build }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/run-sql-tester.sh || true
+          ./bin/run-sql-tester.sh
 
       - name: Upload SQL-Tester XML
         if: success() || failure()
