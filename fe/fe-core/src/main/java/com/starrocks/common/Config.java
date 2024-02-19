@@ -804,6 +804,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean http_web_page_display_hardware = true;
 
+    @ConfField
+    public static String http_health_check_subnet = "100.64.0.0/10";
+
     /**
      * Whether to enable the detail metrics for http. It may be expensive
      * to get those metrics, and only enable it for debug in general.

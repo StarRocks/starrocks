@@ -35,6 +35,7 @@
 package com.starrocks.http;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.http.action.IndexAction;
 import com.starrocks.http.action.NotFoundAction;
 import io.netty.buffer.Unpooled;
@@ -191,8 +192,10 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        LOG.warn(String.format("[remote=%s] Exception caught: %s",
-                ctx.channel().remoteAddress(), cause.getMessage()), cause);
+        if (!NetUtils.isInRange(ctx.channel().remoteAddress().toString(), Config.http_health_check_subnet)) {
+            LOG.warn(String.format("[remote=%s] Exception caught: %s",
+                    ctx.channel().remoteAddress(), cause.getMessage()), cause);
+        }
         ctx.close();
     }
 

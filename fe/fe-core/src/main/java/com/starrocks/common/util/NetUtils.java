@@ -217,4 +217,16 @@ public class NetUtils {
         }
         return host;
     }
+
+    /**
+     * check if ip in the range of subnet
+     * @param ipStr
+     * @param subnetStr
+     * @return
+     */
+    public static boolean isInRange(String ipStr, String subnetStr) {
+        SubnetUtils subnetUtils = new SubnetUtils(subnetStr);
+        subnetUtils.setInclusiveHostCount(true);
+        return subnetUtils.getInfo().isInRange(ipStr);
+    }
 }
