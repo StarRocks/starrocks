@@ -20,8 +20,8 @@
 
 #include "exec/hdfs_scanner.h"
 #include "formats/parquet/group_reader.h"
+#include "formats/parquet/metadata.h"
 #include "gen_cpp/Descriptors_types.h"
-#include "metadata.h"
 #include "runtime/descriptors.h"
 
 namespace starrocks::parquet {
