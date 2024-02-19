@@ -804,6 +804,8 @@ CONF_Int64(object_storage_connect_timeout_ms, "-1");
 // When it's 0, low speed limit check will be disabled.
 CONF_Int64(object_storage_request_timeout_ms, "-1");
 
+CONF_Strings(fallback_to_hadoop_fs_list, "");
+
 // text reader
 // Spilt text file's scan range into io ranges of 16mb size
 CONF_Int64(text_io_range_size, "16777216");
