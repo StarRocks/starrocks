@@ -27,14 +27,8 @@ class ScanTaskQueue;
 
 class ScanExecutor {
 public:
-<<<<<<< HEAD
     explicit ScanExecutor(std::unique_ptr<ThreadPool> thread_pool, std::unique_ptr<ScanTaskQueue> task_queue);
-    virtual ~ScanExecutor();
-=======
-    explicit ScanExecutor(std::unique_ptr<ThreadPool> thread_pool, std::unique_ptr<ScanTaskQueue> task_queue,
-                          bool add_metrics = true);
     virtual ~ScanExecutor() = default;
->>>>>>> c3baa3bf9b ([BugFix] Fix the problem of be exit being stuck due to BRPC. (#39329))
 
     void initialize(int32_t num_threads);
     void close();
