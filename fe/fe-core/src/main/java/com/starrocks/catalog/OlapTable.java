@@ -2500,6 +2500,7 @@ public class OlapTable extends Table {
         }
     }
 
+<<<<<<< HEAD
     @Override
     public void onDrop(Database db, boolean force, boolean replay) {
         // drop all temp partitions of this table, so that there is no temp partitions in recycle bin,
@@ -2511,6 +2512,11 @@ public class OlapTable extends Table {
 
     public void onErase(boolean isReplay) {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+=======
+    // Remove all Tablets belonging to this table from TabletInvertedIndex
+    public void removeTabletsFromInvertedIndex() {
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+>>>>>>> 1ad87cf4d3 ([Enhancement] (1/n) Improve data cleanup performance for dropped tables in shared data mode (#39883))
         Collection<Partition> allPartitions = getAllPartitions();
         for (Partition partition : allPartitions) {
             for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
@@ -2519,15 +2525,36 @@ public class OlapTable extends Table {
                 }
             }
         }
+    }
 
+    // If you are modifying this function, please check if you need to modify LakeTable.onDrop also.
+    @Override
+    public void onDrop(Database db, boolean force, boolean replay) {
+        // drop all temp partitions of this table, so that there is no temp partitions
+        // in recycle bin,
+        // which make things easier.
+        dropAllTempPartitions();
+        LocalMetastore.inactiveRelatedMaterializedView(db, this,
+                MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(getName()));
+        if (!replay && hasAutoIncrementColumn()) {
+            sendDropAutoIncrementMapTask();
+        }
+    }
+
+    public void removeTableBinds(boolean isReplay) {
+        GlobalStateMgr.getCurrentState().getLocalMetastore().removeAutoIncrementIdByTableId(getId(), isReplay);
         GlobalStateMgr.getCurrentState().getColocateTableIndex().removeTable(getId(), this, isReplay);
         GlobalStateMgr.getCurrentState().getStorageVolumeMgr().unbindTableToStorageVolume(getId());
     }
 
     @Override
-    public Runnable delete(boolean replay) {
-        onErase(replay);
-        return replay ? null : new DeleteOlapTableTask(this);
+    public boolean delete(long dbId, boolean isReplay) {
+        removeTableBinds(isReplay);
+        removeTabletsFromInvertedIndex();
+        if (!isReplay) {
+            deleteAllReplicas();
+        }
+        return true;
     }
 
     @Override
@@ -2539,6 +2566,7 @@ public class OlapTable extends Table {
         return new OlapTableAlterJobV2Builder(this);
     }
 
+<<<<<<< HEAD
     private static class DeleteOlapTableTask implements Runnable {
         private final OlapTable table;
 
@@ -2557,6 +2585,23 @@ public class OlapTable extends Table {
                 for (MaterializedIndex materializedIndex : allIndices) {
                     long indexId = materializedIndex.getId();
                     int schemaHash = table.getSchemaHashByIndexId(indexId);
+=======
+    public OptimizeJobV2Builder optimizeTable() {
+        return new OptimizeJobV2Builder(this);
+    }
+
+    private void deleteAllReplicas() {
+        HashMap<Long, AgentBatchTask> batchTaskMap = new HashMap<>();
+
+        // drop all replicas
+        for (Partition partition : getAllPartitions()) {
+            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                List<MaterializedIndex> allIndices = physicalPartition
+                        .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                for (MaterializedIndex materializedIndex : allIndices) {
+                    long indexId = materializedIndex.getId();
+                    int schemaHash = getSchemaHashByIndexId(indexId);
+>>>>>>> 1ad87cf4d3 ([Enhancement] (1/n) Improve data cleanup performance for dropped tables in shared data mode (#39883))
                     for (Tablet tablet : materializedIndex.getTablets()) {
                         long tabletId = tablet.getId();
                         List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
@@ -2570,6 +2615,7 @@ public class OlapTable extends Table {
                             }
                             batchTask.addTask(dropTask);
                             LOG.info("delete tablet[{}] from backend[{}] because table {}-{} is dropped",
+<<<<<<< HEAD
                                     tabletId, backendId, table.getId(), table.getName());
                         } // end for replicas
                     } // end for tablets
@@ -2597,7 +2643,36 @@ public class OlapTable extends Table {
                     }
                 } else {
                     AgentTaskExecutor.submit(originTasks);
+=======
+                                    tabletId, backendId, getId(), getName());
+                        } // end for replicas
+                    } // end for tablets
+>>>>>>> 1ad87cf4d3 ([Enhancement] (1/n) Improve data cleanup performance for dropped tables in shared data mode (#39883))
                 }
+            } // end for indices
+        } // end for partitions
+
+        int numDropTaskPerBe = Config.max_agent_tasks_send_per_be;
+        for (Map.Entry<Long, AgentBatchTask> entry : batchTaskMap.entrySet()) {
+            AgentBatchTask originTasks = entry.getValue();
+            if (originTasks.getTaskNum() > numDropTaskPerBe) {
+                AgentBatchTask partTask = new AgentBatchTask();
+                List<AgentTask> allTasks = originTasks.getAllTasks();
+                int curTask = 1;
+                for (AgentTask task : allTasks) {
+                    partTask.addTask(task);
+                    if (curTask++ > numDropTaskPerBe) {
+                        AgentTaskExecutor.submit(partTask);
+                        curTask = 1;
+                        partTask = new AgentBatchTask();
+                        ThreadUtil.sleepAtLeastIgnoreInterrupts(1000);
+                    }
+                }
+                if (!partTask.getAllTasks().isEmpty()) {
+                    AgentTaskExecutor.submit(partTask);
+                }
+            } else {
+                AgentTaskExecutor.submit(originTasks);
             }
         }
     }

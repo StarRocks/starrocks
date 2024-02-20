@@ -133,6 +133,7 @@ import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.CreateDbInfo;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DatabaseInfo;
+import com.starrocks.persist.DisableTableRecoveryInfo;
 import com.starrocks.persist.DropDbInfo;
 import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.ListPartitionPersistInfo;
@@ -474,7 +475,6 @@ public class LocalMetastore implements ConnectorMetadata {
             unlock();
         }
 
-        List<Runnable> runnableList;
         // 2. drop tables in db
         db.writeLock();
         try {
@@ -491,7 +491,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
             // save table names for recycling
             Set<String> tableNames = new HashSet<>(db.getTableNamesViewWithLock());
-            runnableList = unprotectDropDb(db, isForceDrop, false);
+            unprotectDropDb(db, isForceDrop, false);
             if (!isForceDrop) {
                 recycleBin.recycleDatabase(db, tableNames);
             } else {
@@ -521,33 +521,31 @@ public class LocalMetastore implements ConnectorMetadata {
         } finally {
             db.writeUnlock();
         }
-
-        for (Runnable runnable : runnableList) {
-            runnable.run();
-        }
     }
 
     @NotNull
-    public List<Runnable> unprotectDropDb(Database db, boolean isForeDrop, boolean isReplay) {
-        List<Runnable> runnableList = new ArrayList<>();
+    public void unprotectDropDb(Database db, boolean isForeDrop, boolean isReplay) {
         for (Table table : db.getTables()) {
-            Runnable runnable = db.unprotectDropTable(table.getId(), isForeDrop, isReplay);
-            if (runnable != null) {
-                runnableList.add(runnable);
+            db.unprotectDropTable(table.getId(), isForeDrop, isReplay);
+            if (isForeDrop) {
+                // Normally we should delete table after releasing the database lock, to
+                // avoid occupying the database lock for too long. However, at this point
+                // we are in the process of dropping the database, which means that the
+                // database should no longer be in use, and occupying the database lock
+                // should have no effect.
+                table.delete(db.getId(), isReplay);
             }
         }
-        return runnableList;
     }
 
     public void replayDropDb(String dbName, boolean isForceDrop) throws DdlException {
-        List<Runnable> runnableList;
         tryLock(true);
         try {
             Database db = fullNameToDb.get(dbName);
             db.writeLock();
             try {
                 Set<String> tableNames = new HashSet(db.getTableNamesViewWithLock());
-                runnableList = unprotectDropDb(db, isForceDrop, true);
+                unprotectDropDb(db, isForceDrop, true);
                 if (!isForceDrop) {
                     recycleBin.recycleDatabase(db, tableNames);
                 } else {
@@ -566,10 +564,6 @@ public class LocalMetastore implements ConnectorMetadata {
             LOG.info("finish replay drop db, name: {}, id: {}", dbName, db.getId());
         } finally {
             unlock();
-        }
-
-        for (Runnable runnable : runnableList) {
-            runnable.run();
         }
     }
 
@@ -2097,10 +2091,7 @@ public class LocalMetastore implements ConnectorMetadata {
             }
             if (!db.registerTableUnlocked(table)) {
                 if (!isSetIfNotExists) {
-                    if (table instanceof OlapTable) {
-                        OlapTable olapTable = (OlapTable) table;
-                        olapTable.onErase(false);
-                    }
+                    table.delete(db.getId(), false);
                     ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(),
                             "table already exists");
                 } else {
@@ -2409,27 +2400,35 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public void replayDropTable(Database db, long tableId, boolean isForceDrop) {
+<<<<<<< HEAD
         Runnable runnable;
         db.writeLock();
+=======
+        Table table;
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
+>>>>>>> 1ad87cf4d3 ([Enhancement] (1/n) Improve data cleanup performance for dropped tables in shared data mode (#39883))
         try {
-            runnable = db.unprotectDropTable(tableId, isForceDrop, true);
+            table = db.unprotectDropTable(tableId, isForceDrop, true);
         } finally {
             db.writeUnlock();
         }
-        if (runnable != null) {
-            runnable.run();
+        if (table != null && isForceDrop) {
+            table.delete(db.getId(), true);
         }
     }
 
     public void replayEraseTable(long tableId) {
-        recycleBin.replayEraseTable(tableId);
+        recycleBin.replayEraseTable(Collections.singletonList(tableId));
     }
 
     public void replayEraseMultiTables(MultiEraseTableInfo multiEraseTableInfo) {
         List<Long> tableIds = multiEraseTableInfo.getTableIds();
-        for (Long tableId : tableIds) {
-            recycleBin.replayEraseTable(tableId);
-        }
+        recycleBin.replayEraseTable(tableIds);
+    }
+
+    public void replayDisableTableRecovery(DisableTableRecoveryInfo disableTableRecoveryInfo) {
+        recycleBin.replayDisableTableRecovery(disableTableRecoveryInfo.getTableIds());
     }
 
     public void replayRecoverTable(RecoverInfo info) {
@@ -4991,14 +4990,13 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public void removeAutoIncrementIdByTableId(Long tableId, boolean isReplay) {
-        if (!isReplay) {
+        Long id = tableIdToIncrementId.remove(tableId);
+        if (!isReplay && id != null) {
             ConcurrentHashMap<Long, Long> deltaMap = new ConcurrentHashMap<>();
             deltaMap.put(tableId, 0L);
             AutoIncrementInfo info = new AutoIncrementInfo(deltaMap);
             GlobalStateMgr.getCurrentState().getEditLog().logSaveDeleteAutoIncrementId(info);
         }
-
-        tableIdToIncrementId.remove(tableId);
     }
 
     public ConcurrentHashMap<Long, Long> tableIdToIncrementId() {

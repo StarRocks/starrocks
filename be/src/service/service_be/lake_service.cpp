@@ -415,6 +415,7 @@ void LakeServiceImpl::drop_table(::google::protobuf::RpcController* controller,
         cntl->SetFailed("no thread pool to run task");
         return;
     }
+    response->mutable_status()->set_status_code(0);
     auto latch = BThreadCountDownLatch(1);
     auto task = [&]() {
         DeferOp defer([&] { latch.count_down(); });
@@ -422,14 +423,18 @@ void LakeServiceImpl::drop_table(::google::protobuf::RpcController* controller,
         auto st = fs::remove_all(location);
         if (!st.ok() && !st.is_not_found()) {
             LOG(ERROR) << "Fail to remove " << location << ": " << st;
-            cntl->SetFailed("Fail to remove " + location);
+            st.to_protobuf(response->mutable_status());
         }
     };
 
     auto st = thread_pool->submit_func(task);
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit drop table task: " << st;
+<<<<<<< HEAD
         cntl->SetFailed(st.get_error_msg());
+=======
+        st.to_protobuf(response->mutable_status());
+>>>>>>> 1ad87cf4d3 ([Enhancement] (1/n) Improve data cleanup performance for dropped tables in shared data mode (#39883))
         latch.count_down();
     }
 
