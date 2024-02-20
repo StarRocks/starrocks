@@ -16,8 +16,8 @@ package com.starrocks.server;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.IndexDef.IndexType;
 import com.starrocks.analysis.BloomFilterIndexUtil;
+import com.starrocks.analysis.IndexDef.IndexType;
 import com.starrocks.analysis.KeysDesc;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.ColocateTableIndex;

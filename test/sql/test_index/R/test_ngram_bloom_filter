@@ -17,19 +17,10 @@ show index from ngram_index;
 -- result:
 ngram_bloom_filter_db_1.ngram_index		idx_name1		username						NGRAMBF("bloom_filter_fpp" = "0.05", "gram_num" = "4")	
 -- !result
-insert into ngram_index values ('2023-01-01',"chinese",3);
+insert into ngram_index values ('2023-01-01',"chinese",3),('2023-01-02',"cheeeinese",4),('2023-01-03',"我爱吃烤全羊yangyang",4),('2023-01-04',"tonightisgread",4);
 -- result:
 -- !result
-insert into ngram_index values ('2023-01-02',"cheeeinese",4);
--- result:
--- !result
-insert into ngram_index values ('2023-01-03',"我爱吃烤全羊yangyang",4);
--- result:
--- !result
-insert into ngram_index values ('2023-01-04',"tonightisgread",4);
--- result:
--- !result
-select * from ngram_index order by timestamp;
+select * from ngram_index order by ngram_search(username, 'chinese',4) desc;
 -- result:
 2023-01-01 00:00:00	chinese	3
 2023-01-02 00:00:00	cheeeinese	4
@@ -57,7 +48,7 @@ show index from ngram_index;
 -- result:
 ngram_bloom_filter_db_1.ngram_index		idx_name1		username						NGRAMBF("bloom_filter_fpp" = "0.01", "gram_num" = "4")	
 -- !result
-select * from ngram_index order by timestamp;
+select * from ngram_index order by  ngram_search(username, 'chinese',4) desc;
 -- result:
 2023-01-01 00:00:00	chinese	3
 2023-01-02 00:00:00	cheeeinese	4
