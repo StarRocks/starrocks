@@ -34,6 +34,7 @@ public class HllTest {
         Assert.assertTrue(Hll.getLongTailZeroNum(0) == 0);
         Assert.assertTrue(Hll.getLongTailZeroNum(1) == 0);
         Assert.assertTrue(Hll.getLongTailZeroNum(1l << 30) == 30);
+        Assert.assertTrue(Hll.getLongTailZeroNum(1l << 30) == 30);
         Assert.assertTrue(Hll.getLongTailZeroNum(1l << 62) == 62);
     }
 
