@@ -8,7 +8,7 @@ keywords: ['Broker Load']
 
 import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
 
-StarRocks provides the following options for loading data from AWS S3:
+StarRocks provides the following options for loading data from Azure:
 
 - Synchronous loading using [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md)+[`FILES()`](../sql-reference/sql-functions/table-functions/files.md)
 - Asynchronous loading using [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)
