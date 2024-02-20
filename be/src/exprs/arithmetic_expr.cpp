@@ -129,8 +129,8 @@ public:
         return state->is_jit_arithmetic_op() && IRHelper::support_jit(Type);
     }
 
-    std::string jit_func_name() const override {
-        return "{" + _children[0]->jit_func_name() + get_op_name<OP>() + _children[1]->jit_func_name() + "}" +
+    std::string jit_func_name_impl(RuntimeState* state) const override {
+        return "{" + _children[0]->jit_func_name(state) + get_op_name<OP>() + _children[1]->jit_func_name(state) + "}" +
                (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
     }
 
@@ -200,8 +200,8 @@ public:
         return state->is_jit_div_op() && Type != TYPE_LARGEINT && IRHelper::support_jit(Type);
     }
 
-    std::string jit_func_name() const override {
-        return "{" + _children[0]->jit_func_name() + "/" + _children[1]->jit_func_name() + "}" +
+    std::string jit_func_name_impl(RuntimeState* state) const override {
+        return "{" + _children[0]->jit_func_name(state) + "/" + _children[1]->jit_func_name(state) + "}" +
                (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
     }
 
@@ -280,8 +280,8 @@ public:
         return state->is_jit_mod_op() && Type != TYPE_LARGEINT && IRHelper::support_jit(Type);
     }
 
-    std::string jit_func_name() const override {
-        return "{" + _children[0]->jit_func_name() + "%" + _children[1]->jit_func_name() + "}" +
+    std::string jit_func_name_impl(RuntimeState* state) const override {
+        return "{" + _children[0]->jit_func_name(state) + "%" + _children[1]->jit_func_name(state) + "}" +
                (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
     }
 
@@ -325,8 +325,8 @@ public:
         return state->is_jit_arithmetic_op() && IRHelper::support_jit(Type);
     }
 
-    std::string jit_func_name() const override {
-        return "{!" + _children[0]->jit_func_name() + "}" + (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") +
+    std::string jit_func_name_impl(RuntimeState* state) const override {
+        return "{!" + _children[0]->jit_func_name(state) + "}" + (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") +
                type().debug_string();
     }
 
@@ -363,8 +363,8 @@ public:
         return state->is_jit_arithmetic_op() && IRHelper::support_jit(Type);
     }
 
-    std::string jit_func_name() const override {
-        return "{" + _children[0]->jit_func_name() + get_op_name<OP>() + _children[1]->jit_func_name() + "}" +
+    std::string jit_func_name_impl(RuntimeState* state) const override {
+        return "{" + _children[0]->jit_func_name(state) + get_op_name<OP>() + _children[1]->jit_func_name(state) + "}" +
                (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
     }
 

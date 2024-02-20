@@ -178,7 +178,7 @@ public:
         }
     }
 
-    std::string jit_func_name() const override {
+    std::string jit_func_name_impl(RuntimeState* state) const override {
         std::stringstream out;
         out << "{";
         for (auto i = 0; i < _children.size(); i++) {
@@ -197,7 +197,7 @@ public:
                     out << "T";
                 }
             }
-            out << "<" << _children[i]->jit_func_name() << ">";
+            out << "<" << _children[i]->jit_func_name(state) << ">";
         }
         out << "}" << (is_constant() ? "c:" : "") << (is_nullable() ? "n:" : "") << type().debug_string();
         return out.str();

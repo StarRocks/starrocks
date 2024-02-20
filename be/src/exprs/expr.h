@@ -222,7 +222,9 @@ public:
     // Return true if this expression supports JIT compilation.
     virtual bool is_compilable(RuntimeState* state) const { return false; }
 
-    virtual std::string jit_func_name() const;
+    std::string jit_func_name(RuntimeState* state) const;
+
+    virtual std::string jit_func_name_impl(RuntimeState* state) const;
 
     // This function will collect all uncompiled expressions in this expression tree.
     // The uncompiled expressions are those expressions which are not supported by JIT, it will become the input of JIT function.

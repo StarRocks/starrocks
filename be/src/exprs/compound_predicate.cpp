@@ -75,6 +75,11 @@ public:
         return result;
     }
 
+    std::string jit_func_name_impl(RuntimeState* state) const override {
+        return "{" + _children[0]->jit_func_name(state) + " & " + _children[1]->jit_func_name(state) + "}" +
+               (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
+    }
+
     std::string debug_string() const override {
         std::stringstream out;
         auto expr_debug_string = Expr::debug_string();
@@ -132,6 +137,11 @@ public:
         return result;
     }
 
+    std::string jit_func_name_impl(RuntimeState* state) const override {
+        return "{" + _children[0]->jit_func_name(state) + " | " + _children[1]->jit_func_name(state) + "}" +
+               (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
+    }
+
     std::string debug_string() const override {
         std::stringstream out;
         auto expr_debug_string = Expr::debug_string();
@@ -165,6 +175,11 @@ public:
         result.value = b.CreateSelect(IRHelper::bool_to_cond(b, datum.value), b.getInt8(0), b.getInt8(1));
         result.null_flag = datum.null_flag;
         return result;
+    }
+
+    std::string jit_func_name_impl(RuntimeState* state) const override {
+        return "{!" + _children[0]->jit_func_name(state) + "}" + (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") +
+               type().debug_string();
     }
 
     std::string debug_string() const override {

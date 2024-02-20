@@ -747,7 +747,15 @@ void Expr::get_uncompilable_exprs(std::vector<Expr*>& exprs, RuntimeState* state
     }
 }
 
-std::string Expr::jit_func_name() const {
+std::string Expr::jit_func_name(RuntimeState* state) const {
+    if (this->is_compilable(state)) {
+        return this->jit_func_name_impl(state);
+    } else {
+        return Expr::jit_func_name_impl(state);
+    }
+}
+
+std::string Expr::jit_func_name_impl(RuntimeState* state) const {
     // DCHECK(!is_compilable());
     // uncompilable inputs, reducing string size.
     return std::string("col[") + (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string() +
