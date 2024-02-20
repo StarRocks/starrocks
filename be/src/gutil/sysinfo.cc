@@ -447,14 +447,4 @@ double CyclesPerSecond() {
     return cpuinfo_cycles_per_second;
 }
 
-int NumCPUs() {
-    InitializeSystemInfo();
-    return cpuinfo_num_cpus;
-}
-
-int MaxCPUIndex() {
-    InitializeSystemInfo();
-    return cpuinfo_max_cpu_index;
-}
-
 } // namespace base
