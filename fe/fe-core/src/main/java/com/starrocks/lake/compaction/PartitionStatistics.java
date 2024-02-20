@@ -32,12 +32,12 @@ public class PartitionStatistics {
     @SerializedName(value = "compactionScore")
     private Quantiles compactionScore;
 
-    // default priority is -1, manual compaction will have priority value 1
+    // default priority is 0, manual compaction will have priority value 1
     @SerializedName(value = "priority")
     private volatile CompactionPriority priority = CompactionPriority.DEFAULT;
 
     public enum CompactionPriority {
-        DEFAULT(-1),
+        DEFAULT(0),
         MANUAL_COMPACT(1);
 
         private final int value;
@@ -103,7 +103,9 @@ public class PartitionStatistics {
     }
 
     public CompactionPriority getPriority() {
-        return priority;
+        // For backward compatibility
+        // prevent null value when deserializing JSON that doesn't include the priority field
+        return priority == null ? CompactionPriority.DEFAULT : priority;
     }
 
     public synchronized void setPriority(CompactionPriority priority) {

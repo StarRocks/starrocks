@@ -219,9 +219,7 @@ public class CompactionMgr {
             v.setPriority(PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
             return v;
         });
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("Trigger manual compaction, {}", statistics);
-        }
+        LOG.info("Trigger manual compaction, {}", statistics);
         return statistics;
     }
 }
