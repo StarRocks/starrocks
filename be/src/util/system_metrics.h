@@ -61,6 +61,7 @@ public:
     METRIC_DEFINE_INT_GAUGE(schema_change_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(column_pool_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(storage_page_cache_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(jit_cache_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(update_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(chunk_allocator_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(clone_mem_bytes, MetricUnit::BYTES);

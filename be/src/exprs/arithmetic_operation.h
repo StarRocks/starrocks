@@ -14,12 +14,13 @@
 
 #pragma once
 
+#include <llvm/IR/Constants.h>
+#include <llvm/IR/Value.h>
+
 #include "column/type_traits.h"
 #include "common/status.h"
 #include "exprs/expr_context.h"
 #include "exprs/jit/ir_helper.h"
-#include "llvm/IR/Constants.h"
-#include "llvm/IR/Value.h"
 #include "runtime/decimalv3.h"
 #include "types/logical_type.h"
 #include "util/guard.h"
