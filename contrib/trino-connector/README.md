@@ -11,13 +11,13 @@ To connect to StarRocks, you need:
 To configure the StarRocks connector, create a catalog properties file in `etc/catalog` named, for example, example.properties, to mount the StarRocks connector as the starrocks catalog. Create the file with the following contents, replacing the connection properties as appropriate for your setup:
 ```
 connector.name=starrocks
-connection-url=jdbc:mysql://starrocks:9030
+connection-url=jdbc:mariadb://starrocks:9030
 connection-user=root
 connection-password=
 starrocks.client.load-url=starrocks:8080
 ```
 
-The `connection-url` defines the connection information and parameters to pass to the MySQL JDBC driver. The `connection-user` and `connection-password` are typically required and determine the user credentials for the connection, often a service user. You can use secrets to avoid actual values in the catalog properties files.
+The `connection-url` defines the connection information and parameters to pass to the MariaDB JDBC driver. The `connection-user` and `connection-password` are typically required and determine the user credentials for the connection, often a service user. You can use secrets to avoid actual values in the catalog properties files.
 
 The following table describes configuration properties for connection credentials:
 | Property name | Required | Default value | Description |
