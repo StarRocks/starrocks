@@ -1476,15 +1476,15 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### snapshot_expire_time_sec
 
-- 含义：快照文件清理的间隔，默认 48 个小时。
+- 含义：快照文件的保留时长，默认 48 个小时。后台会按照配置的清理间隔来定期清理保留时长超过 `snapshot_expire_time_sec` 的快照文件。清理间隔受磁盘空间使用率影响：当磁盘空间使用率小于 60% 时，会按照最大清理间隔 `max_garbage_sweep_interval` 来清理；当磁盘空间大于 80% 时，会按照最小清理间隔 `min_garbage_sweep_interval` 来清理。
 - 单位：秒
 - 默认值：172800
 
 #### trash_file_expire_time_sec
 
-- 含义：回收站清理的间隔，默认 24 个小时。自 v2.5.17、v3.0.9 以及 v3.1.6 起，默认值由 259,200 变为 86,400。
+- 含义：Trash 目录下文件的保留时长，默认 1 天。后台会按照配置的清理间隔来定期清理保留时长超过 `trash_file_expire_time_sec` 的文件内容。清理间隔受磁盘空间使用率影响：当磁盘空间使用率小于 60% 时，会按照最大清理间隔 `max_garbage_sweep_interval` 来清理；当磁盘空间大于 80% 时，会按照最小清理间隔 `min_garbage_sweep_interval` 来清理。自 v2.5.17、v3.0.9 以及 v3.1.6 起，默认值由 259200 变为 86400。
 - 单位：秒
-- 默认值：86,400
+- 默认值：86400
 
 #### base_compaction_check_interval_seconds
 

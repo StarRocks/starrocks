@@ -591,7 +591,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - **Unit**: s
 - **Default**: 86400
-- **Description**: The longest duration the metadata can be retained after a table or database is deleted. If this duration expires, the data will be deleted and cannot be recovered. Unit: seconds.
+- **Description**: The longest duration the metadata can be retained after a database, table, or partition is dropped. If this duration expires, the data will be deleted and cannot be recovered through the [RECOVER](../sql-reference/sql-statements/data-definition/RECOVER.md) command.
 
 ##### alter_table_timeout_second
 
@@ -1547,12 +1547,12 @@ BE dynamic parameters are as follows.
 #### snapshot_expire_time_sec
 
 - **Default:** 172,800 seconds
-- **Description:** The expiration time of snapshot files.
+- **Description:** The expiration time of snapshot files. The system cleans snapshot files at a specified interval. If a snapshot is retained for a duration longer than the value of this parameter, it will be cleaned. The clean interval depends on disk space usage. If the disk space usage is less than 60%, the clean interval is `max_garbage_sweep_interval`. If the disk space usage is larger than 80%, the clean interval is `min_garbage_sweep_interval`.
 
 #### trash_file_expire_time_sec
 
 - **Default:** 86,400 seconds
-- **Description:** The time interval at which to clean trash files. The default value has been changed from 259,200 to 86,400 since v2.5.17, v3.0.9, and v3.1.6.
+- **Description:** The maximum duration files can be retained in trash. The system cleans trash files at a specified interval. If a trash file is retained for a duration longer than the value of this parameter, it will be cleaned. The clean interval depends on disk space usage. If the disk space usage is less than 60%, the clean interval is `max_garbage_sweep_interval`. If the disk space usage is larger than 80%, the clean interval is `min_garbage_sweep_interval`. Since v2.5.17, v3.0.9, and v3.1.6, the default value has been changed from 259200 to 86400.
 
 #### base_compaction_check_interval_seconds
 
