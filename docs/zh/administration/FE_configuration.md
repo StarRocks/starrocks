@@ -526,7 +526,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 #### catalog_trash_expire_second
 
-- 含义：删除表/数据库之后，元数据在回收站中保留的时长，超过这个时长，数据就不可以再恢复。
+- 含义：删除（DROP）数据库、表或分区之后，元数据在回收站中保留的时长，超过这个时长，数据就不可以通过 RECOVER 命令再恢复。
 - 单位：秒
 - 默认值：86400
 
