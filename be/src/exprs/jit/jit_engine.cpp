@@ -65,6 +65,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "util/defer_op.h"
+#include "util/mem_info.h"
 
 namespace starrocks {
 
@@ -115,21 +116,6 @@ Status JitObjectCache::register_func(JITScalarFunction func) {
 }
 
 std::unique_ptr<llvm::MemoryBuffer> JitObjectCache::getObject(const llvm::Module* M) {
-// TODO: why get invalid handle?
-#if 0
-    auto* handle = _lru_cache->lookup(_cache_key);
-    if (handle != nullptr) {
-        auto& cached_obj = ((JitCacheEntry*)handle)->obj_buff;
-        if (cached_obj == nullptr) {
-            LOG(ERROR) << "jit obj is null";
-            throw std::runtime_error("jit obj is null");
-        }
-        std::unique_ptr<llvm::MemoryBuffer> cached_buffer =
-                cached_obj->getMemBufferCopy(cached_obj->getBuffer(), cached_obj->getBufferIdentifier());
-        _lru_cache->release(handle);
-        return cached_buffer;
-    }
-#endif
     return nullptr;
 }
 
@@ -137,26 +123,39 @@ JITEngine::~JITEngine() {
     delete _func_cache;
 }
 
+constexpr int64_t JIT_CACHE_LOWEST_LIMIT = (1UL << 34); // 16GB
+
 Status JITEngine::init() {
     if (_initialized) {
         return Status::OK();
     }
+#if BE_TEST
+    _func_cache = new_lru_cache(32000); // 1k capacity per cache of 32 shards in LRU cache
+#else
+    int64_t mem_limit = MemInfo::physical_mem();
+    if (GlobalEnv::GetInstance()->process_mem_tracker()->has_limit()) {
+        mem_limit = GlobalEnv::GetInstance()->process_mem_tracker()->limit();
+    }
+    int64_t jit_lru_cache_size = config::jit_lru_cache_size;
+    if (jit_lru_cache_size <= 0) {
+        if (mem_limit < JIT_CACHE_LOWEST_LIMIT) {
+            _initialized = true;
+            _support_jit = false;
+            LOG(WARNING) << "System or Process memory limit is less than 16GB, disable JIT";
+            return Status::OK();
+        } else {
+            jit_lru_cache_size = std::min<int64_t>((1UL << 30), (int64_t)(mem_limit * 0.01));
+        }
+    }
+    LOG(INFO) << "JIT LRU cache size = " << jit_lru_cache_size;
+    _func_cache = new_lru_cache(jit_lru_cache_size);
+#endif
+    DCHECK(_func_cache != nullptr);
     llvm::InitializeNativeTarget();
     llvm::InitializeNativeTargetAsmPrinter();
     llvm::InitializeNativeTargetAsmParser();
     llvm::InitializeNativeTargetDisassembler();
     llvm::sys::DynamicLibrary::LoadLibraryPermanently(nullptr);
-
-#if BE_TEST
-    _func_cache = new_lru_cache(32000); // 1k capacity per cache of 32 shards in LRU cache
-#else
-    int64_t jit_lru_cache_size = config::jit_lru_cache_size;
-    if (jit_lru_cache_size < 0) {
-        jit_lru_cache_size = (1UL << 30); // total 1GB for 32 shards in LRU cache
-    }
-    _func_cache = new_lru_cache(jit_lru_cache_size);
-#endif
-    DCHECK(_func_cache != nullptr);
     _initialized = true;
     _support_jit = true;
     return Status::OK();
@@ -380,7 +379,6 @@ llvm::Module* JITEngine::Engine::module() const {
 }
 
 static void optimize_module(llvm::Module& module, llvm::TargetIRAnalysis target_analysis) {
-#if 0
     // Setup an optimiser pipeline
     llvm::PassBuilder pass_builder;
     llvm::LoopAnalysisManager loop_am;
@@ -397,65 +395,25 @@ static void optimize_module(llvm::Module& module, llvm::TargetIRAnalysis target_
     pass_builder.registerLoopAnalyses(loop_am);
     pass_builder.crossRegisterProxies(loop_am, function_am, cgscc_am, module_am);
 
-    pass_builder.registerPipelineStartEPCallback([&](llvm::ModulePassManager& module_pm,
-                                                     llvm::OptimizationLevel Level) {
-        module_pm.addPass(llvm::ModuleInlinerPass());
+    pass_builder.registerPipelineStartEPCallback(
+            [&](llvm::ModulePassManager& module_pm, llvm::OptimizationLevel Level) {
+                module_pm.addPass(llvm::ModuleInlinerPass());
 
-        llvm::FunctionPassManager function_pm;
-        function_pm.addPass(llvm::InstCombinePass());
-        function_pm.addPass(llvm::PromotePass());
-        function_pm.addPass(llvm::GVNPass());
-        function_pm.addPass(llvm::NewGVNPass());
-        function_pm.addPass(llvm::SimplifyCFGPass());
-        function_pm.addPass(llvm::LoopVectorizePass());
-        function_pm.addPass(llvm::SLPVectorizerPass());
-        module_pm.addPass(llvm::createModuleToFunctionPassAdaptor(std::move(function_pm)));
+                llvm::FunctionPassManager function_pm;
+                function_pm.addPass(llvm::InstCombinePass());
+                function_pm.addPass(llvm::PromotePass());
+                function_pm.addPass(llvm::GVNPass());
+                function_pm.addPass(llvm::NewGVNPass());
+                function_pm.addPass(llvm::SimplifyCFGPass());
+                function_pm.addPass(llvm::LoopVectorizePass());
+                function_pm.addPass(llvm::SLPVectorizerPass());
+                module_pm.addPass(llvm::createModuleToFunctionPassAdaptor(std::move(function_pm)));
 
-        module_pm.addPass(llvm::GlobalOptPass());
-    });
+                module_pm.addPass(llvm::GlobalOptPass());
+            });
 
-    pass_builder.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O3)
-            .run(module, module_am);
+    pass_builder.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O3).run(module, module_am);
 }
-#elif 0
-    std::unique_ptr<llvm::legacy::PassManager> pass_manager(new llvm::legacy::PassManager());
-
-    pass_manager->add(llvm::createTargetTransformInfoWrapperPass(std::move(target_analysis)));
-    pass_manager->add(llvm::createFunctionInliningPass());
-    pass_manager->add(llvm::createInstructionCombiningPass());
-    pass_manager->add(llvm::createPromoteMemoryToRegisterPass());
-    pass_manager->add(llvm::createGVNPass());
-    pass_manager->add(llvm::createNewGVNPass());
-    pass_manager->add(llvm::createCFGSimplificationPass());
-    pass_manager->add(llvm::createLoopVectorizePass());
-    pass_manager->add(llvm::createSLPVectorizerPass());
-    pass_manager->add(llvm::createGlobalOptimizerPass());
-
-    // run the optimiser
-    llvm::PassManagerBuilder pass_builder;
-    pass_builder.OptLevel = 3;
-    pass_builder.populateModulePassManager(*pass_manager);
-    pass_manager->run(module);
-}
-#else
-    llvm::legacy::FunctionPassManager fpm(&module);
-    llvm::PassManagerBuilder _pass_manager_builder;
-    llvm::legacy::PassManager _pass_manager;
-    _pass_manager_builder.OptLevel = 3;
-    _pass_manager_builder.SLPVectorize = true;
-    _pass_manager_builder.LoopVectorize = true;
-    _pass_manager_builder.VerifyInput = true;
-    _pass_manager_builder.VerifyOutput = true;
-    _pass_manager_builder.populateModulePassManager(_pass_manager);
-    _pass_manager_builder.populateFunctionPassManager(fpm);
-
-    fpm.doInitialization();
-    for (auto& function : module) {
-        fpm.run(function);
-    }
-    fpm.doFinalization();
-}
-#endif
 
 // Optimise and compile the module.
 Status JITEngine::Engine::optimize_and_finalize_module() {
