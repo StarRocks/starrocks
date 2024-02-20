@@ -61,7 +61,7 @@ public class TPCHPlanTest extends PlanTestBase {
 
     @Test
     public void testInSubquery() {
-        runFileUnitTest("subquery/in-subquery", true);
+        runFileUnitTest("subquery/in-subquery");
     }
 
     @Test
