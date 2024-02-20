@@ -188,7 +188,32 @@ Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, std::sha
     _schema = schema;
     _num_remaining_senders.store(params.num_senders(), std::memory_order_release);
     _senders = std::vector<Sender>(params.num_senders());
+<<<<<<< HEAD
     RETURN_IF_ERROR(_create_delta_writers(params));
+=======
+    if (_is_incremental_channel) {
+        _num_remaining_senders.fetch_add(1, std::memory_order_release);
+        _senders[params.sender_id()].has_incremental_open = true;
+    } else {
+        _num_remaining_senders.store(params.num_senders(), std::memory_order_release);
+        _num_initial_senders.store(params.num_senders(), std::memory_order_release);
+    }
+    RETURN_IF_ERROR(_create_delta_writers(params, false));
+
+    for (auto& [id, writer] : _delta_writers) {
+        auto st = writer->check_immutable();
+        if (!st.ok()) {
+            LOG(WARNING) << "check immutable failed, tablet " << id << ", txn " << _txn_id << ", status " << st;
+        }
+        if (writer->is_immutable()) {
+            result->add_immutable_tablet_ids(id);
+            result->add_immutable_partition_ids(writer->partition_id());
+        }
+        VLOG(1) << "check tablet writer for tablet " << id << ", partition " << writer->partition_id() << ", txn "
+                << _txn_id << ", is_immutable  " << writer->is_immutable();
+    }
+
+>>>>>>> e98040cde9 ([BugFix] Fix data ingestion stuck when the new automatic partition and the old partition are distributed on different backends (#40638))
     return Status::OK();
 }
 
@@ -343,11 +368,27 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
 
     if (close_channel) {
         _load_channel->remove_tablets_channel(_index_id);
+<<<<<<< HEAD
+=======
+    } else if (request.wait_all_sender_close()) {
+        _num_initial_senders.fetch_sub(1);
+        std::string msg = fmt::format("LakeTabletsChannel txn_id: {} load_id: {}", _txn_id, print_id(request.id()));
+        // wait for senders to be closed, may be timed out
+        auto remain = request.timeout_ms();
+        remain -= std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
+        LOG(INFO) << msg << ", wait for all senders closed ...";
+
+        // unlock write lock so that incremental open can aquire read lock
+        rolk.unlock();
+        drain_senders(remain * 1000, msg);
+>>>>>>> e98040cde9 ([BugFix] Fix data ingestion stuck when the new automatic partition and the old partition are distributed on different backends (#40638))
     }
 }
 
 int LakeTabletsChannel::_close_sender(const int64_t* partitions, size_t partitions_size) {
     int n = _num_remaining_senders.fetch_sub(1);
+    // if sender close means data send finished, we need to decrease _num_initial_senders
+    _num_initial_senders.fetch_sub(1);
     std::lock_guard l(_dirty_partitions_lock);
     for (int i = 0; i < partitions_size; i++) {
         _dirty_partitions.insert(partitions[i]);
@@ -421,7 +462,7 @@ void LakeTabletsChannel::cancel() {
 
 StatusOr<std::unique_ptr<LakeTabletsChannel::WriteContext>> LakeTabletsChannel::_create_write_context(
         Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response) {
-    if (chunk == nullptr && !request.eos()) {
+    if (chunk == nullptr && !request.eos() && !request.wait_all_sender_close()) {
         return Status::InvalidArgument("PTabletWriterAddChunkRequest has no chunk or eos");
     }
 

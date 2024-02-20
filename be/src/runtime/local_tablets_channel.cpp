@@ -86,6 +86,7 @@ Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, std::sh
         _senders[params.sender_id()].has_incremental_open = true;
     } else {
         _num_remaining_senders.store(params.num_senders(), std::memory_order_release);
+        _num_initial_senders.store(params.num_senders(), std::memory_order_release);
     }
 
     RETURN_IF_ERROR(_open_all_writers(params));
@@ -330,6 +331,7 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
         }
         auto st = StorageEngine::instance()->txn_manager()->persist_tablet_related_txns(tablets);
         LOG_IF(WARNING, !st.ok()) << "failed to persist transactions: " << st;
+<<<<<<< HEAD
     } else if (request.eos() && request.wait_all_sender_close()) {
         int i = 0;
         while (_num_remaining_senders.load(std::memory_order_acquire) != 0) {
@@ -341,6 +343,13 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
                           << _num_remaining_senders << " sender";
                 break;
             }
+=======
+    } else if (request.wait_all_sender_close()) {
+        _num_initial_senders.fetch_sub(1);
+        std::string msg = fmt::format("LocalTabletsChannel txn_id: {} load_id: {}", _txn_id, print_id(request.id()));
+        auto remain = request.timeout_ms();
+        remain -= std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
+>>>>>>> e98040cde9 ([BugFix] Fix data ingestion stuck when the new automatic partition and the old partition are distributed on different backends (#40638))
 
             if (++i % 6000 == 0) {
                 LOG(INFO) << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
@@ -453,6 +462,9 @@ int LocalTabletsChannel::_close_sender(const int64_t* partitions, size_t partiti
     // So we need to make sure that all partitions are added to _partition_ids when committing
     int n = _num_remaining_senders.fetch_sub(1);
     DCHECK_GE(n, 1);
+
+    // if sender close means data send finished, we need to decrease _num_initial_senders
+    _num_initial_senders.fetch_sub(1);
 
     VLOG(1) << "LocalTabletsChannel txn_id: " << _txn_id << " close " << partitions_size << " partitions remaining "
             << n - 1 << " senders";
@@ -609,7 +621,7 @@ void LocalTabletsChannel::abort(const std::vector<int64_t>& tablet_ids, const st
 
 StatusOr<std::shared_ptr<LocalTabletsChannel::WriteContext>> LocalTabletsChannel::_create_write_context(
         Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response) {
-    if (chunk == nullptr && !request.eos()) {
+    if (chunk == nullptr && !request.eos() && !request.wait_all_sender_close()) {
         return Status::InvalidArgument("PTabletWriterAddChunkRequest has no chunk or eos");
     }
 

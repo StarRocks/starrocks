@@ -62,6 +62,21 @@ public:
     virtual void abort() = 0;
 
     virtual void abort(const std::vector<int64_t>& tablet_ids, const std::string& reason) = 0;
+<<<<<<< HEAD
+=======
+
+    // timeout: in microseconds
+    virtual bool drain_senders(int64_t timeout, const std::string& log_msg);
+
+protected:
+    // counter of remaining senders
+    std::atomic<int> _num_remaining_senders = 0;
+
+    // counter of initial senders
+    std::atomic<int> _num_initial_senders = 0;
+
+    std::unordered_map<int64_t, std::atomic<int>> _tablet_id_to_num_remaining_senders;
+>>>>>>> e98040cde9 ([BugFix] Fix data ingestion stuck when the new automatic partition and the old partition are distributed on different backends (#40638))
 };
 
 struct TabletsChannelKey {
