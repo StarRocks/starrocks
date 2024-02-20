@@ -163,7 +163,7 @@ BE dynamic parameters are as follows.
 #### trash_file_expire_time_sec
 
 - **Default:** 86,400 seconds
-- **Description:** The time interval at which to clean trash files. The default value has been changed from 259,200 to 86,400 since v2.5.17, v3.0.9, and v3.1.6.
+- **Description:** The maximum duration the files can be retained in trash. The system cleans trash files at the interval specified by `min_garbage_sweep_interval`. If a trash file is retained for a duration longer than the value of this parameter, it will be cleaned. Since v2.5.17, v3.0.9, and v3.1.6, the default value has been changed from 259200 to 86400.
 
 #### base_compaction_check_interval_seconds
 
