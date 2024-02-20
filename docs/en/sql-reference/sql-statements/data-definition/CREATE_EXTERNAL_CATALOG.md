@@ -15,7 +15,6 @@ Creates an external catalog. You can use external catalogs to query data in exte
 - [JDBC catalog](../../../data_source/catalog/jdbc_catalog.md): used to query data from JDBC-compatible data sources.
 - [Elasticsearch catalog](../../../data_source/catalog/elasticsearch_catalog.md): used to query data from Elasticsearch. Elasticsearch catalogs are supported from v3.1 onwards.
 - [Paimon catalog](../../../data_source/catalog/paimon_catalog.md): used to query data from Apache Paimon. Paimon catalogs are supported from v3.1 onwards.
-- [Unified catalog](../../../data_source/catalog/unified_catalog.md): used to query data from from Hive, Iceberg, Hudi, and Delta Lake data sources as a unified data source. Unified catalogs are supported from v3.2 onwards.
 
 > **NOTE**
 >
