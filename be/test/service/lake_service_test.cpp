@@ -1518,7 +1518,6 @@ TEST_F(LakeServiceTest, test_drop_table_duplicate_request) {
                             request.set_path(path);
                             brpc::Controller cntl;
                             _lake_service.drop_table(&cntl, &request, &response, nullptr);
-                            auto& status = response.status();
                             result_status[id] = Status(response.status());
                         }));
     }
