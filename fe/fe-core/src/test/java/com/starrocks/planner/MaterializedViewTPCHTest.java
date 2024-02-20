@@ -15,7 +15,6 @@
 package com.starrocks.planner;
 
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.MockTpchStatisticStorage;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -78,9 +77,7 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     @Test
     @Ignore
     public void testQuery7() {
-        FeConstants.isCanonizePredicateAfterMVRewrite = true;
         runFileUnitTest("materialized-view/tpch/q7");
-        FeConstants.isCanonizePredicateAfterMVRewrite = false;
     }
 
     @Test

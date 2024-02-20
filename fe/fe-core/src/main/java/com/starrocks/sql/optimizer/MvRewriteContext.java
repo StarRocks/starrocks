@@ -47,13 +47,15 @@ public class MvRewriteContext {
 
     private List<JoinDeriveContext> joinDeriveContexts;
 
+
     public MvRewriteContext(
             MaterializationContext materializationContext,
             List<Table> queryTables,
             OptExpression queryExpression,
             ReplaceColumnRefRewriter queryColumnRefRewriter,
             PredicateSplit queryPredicateSplit,
-            List<ScalarOperator> onPredicates, Rule rule) {
+            List<ScalarOperator> onPredicates,
+            Rule rule) {
         this.materializationContext = materializationContext;
         this.queryTables = queryTables;
         this.queryExpression = queryExpression;

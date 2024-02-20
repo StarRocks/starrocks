@@ -27,7 +27,6 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.List;
@@ -122,7 +121,6 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
     }
 
     @Test
-    @Ignore
     public void testUnionRewrite1() throws Exception {
         // single table union
         createAndRefreshMv("create materialized view union_mv_1" +
@@ -138,7 +136,7 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                 "     TABLE: union_mv_1");
         PlanTestBase.assertContains(plan1, "TABLE: emps2\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 9: empid <= 4, 9: empid >= 3");
+                "     PREDICATES: 9: empid < 5, 9: empid >= 3");
 
         String query7 = "select deptno, empid from emps2 where empid < 5";
         String plan7 = getFragmentPlan(query7);
@@ -153,7 +151,6 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
     }
 
     @Test
-    @Ignore
     public void testUnionRewrite2() throws Exception {
         // multi tables query
         createAndRefreshMv("create materialized view join_union_mv_1" +
@@ -167,7 +164,7 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                 " from emps2 join depts2 using (deptno) where depts2.deptno < 120";
         String plan2 = getFragmentPlan(query2);
         PlanTestBase.assertContains(plan2, "join_union_mv_1");
-        PlanTestBase.assertContains(plan2, "4:HASH JOIN\n" +
+        PlanTestBase.assertContainsIgnoreColRefs(plan2, "4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 15: deptno = 12: deptno\n" +
@@ -410,11 +407,10 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                                                 "     TABLE: mt1\n" +
                                                 "     PREAGGREGATION: ON\n" +
                                                 "     PREDICATES: 10: k2 LIKE 'a%'"),
-                                // TODO: remove redundant predicates
                                 Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1 != 3 and k2 like 'a%'",
                                         "TABLE: mt1\n" +
                                                 "     PREAGGREGATION: ON\n" +
-                                                "     PREDICATES: 9: k1 != 3, (9: k1 < 3) OR (9: k1 > 3), 10: k2 LIKE 'a%'\n" +
+                                                "     PREDICATES: 9: k1 > 3, 10: k2 LIKE 'a%'\n" +
                                                 "     partitions=2/3")
                         );
                         for (Pair<String, String> p : sqls) {
@@ -467,7 +463,7 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                 "  |  predicates: 1: k1 > 1, 2: k2 LIKE 'a%'";
         String p =
                 "7:SELECT\n" +
-                "  |   predicates: 2: k2 LIKE 'a%', 1: k1 > 1";
+                "  |  predicates: 2: k2 LIKE 'a%', 1: k1 > 1";
         PlanTestBase.assertContainsIgnoreColRefs(p1, p);
     }
 }

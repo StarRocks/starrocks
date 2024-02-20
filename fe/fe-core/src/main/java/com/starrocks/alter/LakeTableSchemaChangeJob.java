@@ -680,7 +680,7 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                                     "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
                             mvColumn.getName(), tbl.getName());
                     mv.setInactiveAndReason(
-                            "base-table schema changed for columns: " + StringUtils.join(modifiedColumns, ","));
+                            "base table schema changed for columns: " + StringUtils.join(modifiedColumns, ","));
                     return;
                 }
             }

@@ -297,9 +297,9 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
             String query = "select sum(t1f) as total, t1a, t1b from test.test_all_type group by t1a, t1b;";
             {
                 sql(query, true).match("mv0")
-                        .containsIgnoreColRefs("1:t1a := 12:t1a\n" +
-                                "            2:t1b := 14:t1b\n" +
-                                "            11:sum := 13:total");
+                        .contains("1:t1a := 12:t1a\n" +
+                                "            2:t1b := 13:t1b\n" +
+                                "            11:sum := 14:total");
             }
             starRocksAssert.dropMaterializedView("mv0");
         }
