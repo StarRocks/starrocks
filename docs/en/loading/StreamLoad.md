@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "English"
+keywords: ['Stream Load']
 ---
 
 # Load data from a local file system
