@@ -35,11 +35,13 @@
 
 namespace starrocks {
 
-#define DEFINE_CLASS_CONSTRUCTOR(CLASS_NAME)          \
-    CLASS_NAME(const TExprNode& node) : Expr(node) {} \
-    virtual ~CLASS_NAME() {}                          \
-                                                      \
-    virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new CLASS_NAME(*this)); }
+#define DEFINE_CLASS_CONSTRUCTOR(CLASS_NAME)               \
+    CLASS_NAME(const TExprNode& node) : Expr(node) {}      \
+    virtual ~CLASS_NAME() {}                               \
+                                                           \
+    virtual Expr* clone(ObjectPool* pool) const override { \
+        return pool->add(new CLASS_NAME(*this));           \
+    }
 
 static std::optional<LogicalType> eliminate_trivial_cast_for_decimal_mul(const Expr* e) {
     DIAGNOSTIC_PUSH
@@ -326,8 +328,8 @@ public:
     }
 
     std::string jit_func_name_impl(RuntimeState* state) const override {
-        return "{!" + _children[0]->jit_func_name(state) + "}" + (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") +
-               type().debug_string();
+        return "{!" + _children[0]->jit_func_name(state) + "}" + (is_constant() ? "c:" : "") +
+               (is_nullable() ? "n:" : "") + type().debug_string();
     }
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {

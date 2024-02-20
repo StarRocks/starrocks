@@ -3444,7 +3444,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_collect_table_level_scan_stats(enableCollectTableLevelScanStats);
         tResult.setEnable_pipeline_level_shuffle(enablePipelineLevelShuffle);
         tResult.setEnable_hyperscan_vec(enableHyperscanVec);
-        tResult.setEnable_jit(enableJit);
+        tResult.setJit_level(jitLevel);
         tResult.setEnable_wait_dependent_event(enableWaitDependentEvent);
         return tResult;
     }

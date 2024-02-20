@@ -197,8 +197,9 @@ public:
     }
 
     std::string jit_func_name_impl(RuntimeState* state) const override {
-        return "{" + _children[0]->jit_func_name(state) + get_cmp_op_name<Type, OP>() + _children[1]->jit_func_name(state) + "}" +
-               (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
+        return "{" + _children[0]->jit_func_name(state) + get_cmp_op_name<Type, OP>() +
+               _children[1]->jit_func_name(state) + "}" + (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") +
+               type().debug_string();
     }
 
     std::string debug_string() const override {
