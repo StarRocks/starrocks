@@ -1063,6 +1063,10 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         return isConstantImpl();
     }
 
+    public final boolean isParameter() {
+        return this instanceof Parameter;
+    }
+
     /**
      * Implements isConstant() - computes the value without using 'isConstant_'.
      */
