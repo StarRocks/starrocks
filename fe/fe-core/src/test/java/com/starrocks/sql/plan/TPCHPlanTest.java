@@ -61,7 +61,7 @@ public class TPCHPlanTest extends PlanTestBase {
 
     @Test
     public void testInSubquery() {
-        runFileUnitTest("subquery/in-subquery");
+        runFileUnitTest("subquery/in-subquery", true);
     }
 
     @Test
@@ -107,7 +107,13 @@ public class TPCHPlanTest extends PlanTestBase {
     @ParameterizedTest(name = "Tpch.{0}")
     @MethodSource("tpchSource")
     public void testTPCH(String name, String sql, String resultFile) {
-        runFileUnitTest(sql, resultFile);
+        if ("q16".equals(name)) {
+            connectContext.getSessionVariable().setNewPlanerAggStage(0);
+            runFileUnitTest(sql, resultFile);
+            connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        } else {
+            runFileUnitTest(sql, resultFile);
+        }
     }
 
     private static Stream<Arguments> tpchSource() {
