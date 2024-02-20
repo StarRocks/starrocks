@@ -34,7 +34,7 @@ The session variables can be set by 'key' = 'value', which can limit the concurr
 
 - query_mem_limit
 
-  Memory limit of query, can be adjusted when a query reports insufficient memory.
+  Memory limit of a query on each BE node, can be adjusted when a query reports insufficient memory.
 
 - load_mem_limit
 
