@@ -33,6 +33,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.monitor.unit.TimeValue;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
@@ -114,6 +115,11 @@ public class SetStmtAnalyzer {
             if (!value.equalsIgnoreCase("broadcast") && !value.equalsIgnoreCase("shuffle")) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_VALUE_FOR_VAR, "prefer_join_method", value);
             }
+        }
+
+        // Check variable chunk_size value if valid
+        if (variable.equalsIgnoreCase(SessionVariable.CHUNK_SIZE)) {
+            checkRangeLongVariable(resolvedExpression, SessionVariable.CHUNK_SIZE, 1L, 65535L);
         }
 
         // Check variable load_mem_limit value is valid
@@ -220,6 +226,15 @@ public class SetStmtAnalyzer {
                         EnumUtils.getEnumList(SessionVariable.FollowerQueryForwardMode.class), ",");
                 throw new SemanticException(String.format("Unsupported follower query forward mode: %s, " +
                         "supported list is %s", queryFollowerForwardMode, supportedList));
+            }
+        }
+
+        // big_query_profile_threshold
+        if (variable.equalsIgnoreCase(SessionVariable.BIG_QUERY_PROFILE_THRESHOLD)) {
+            String timeStr = resolvedExpression.getStringValue();
+            TimeValue timeValue = TimeValue.parseTimeValue(timeStr, null);
+            if (timeValue == null) {
+                throw new SemanticException(String.format("failed to parse time value %s", timeStr));
             }
         }
 

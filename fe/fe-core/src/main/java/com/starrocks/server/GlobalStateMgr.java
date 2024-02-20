@@ -175,6 +175,7 @@ import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.load.routineload.RoutineLoadScheduler;
 import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
 import com.starrocks.load.streamload.StreamLoadMgr;
+import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.Auth;
@@ -406,6 +407,9 @@ public class GlobalStateMgr {
     // false if default_cluster is not created.
     private boolean isDefaultClusterCreated = false;
 
+    // True indicates that the node is transferring to the leader, using this state avoids forwarding stmt to its own node.
+    private volatile boolean isInTransferringToLeader = false;
+
     // false if default_warehouse is not created.
     private boolean isDefaultWarehouseCreated = false;
 
@@ -547,6 +551,8 @@ public class GlobalStateMgr {
     private final SlotManager slotManager = new SlotManager(resourceUsageMonitor);
     private final SlotProvider slotProvider = new SlotProvider();
 
+    private MemoryUsageTracker memoryUsageTracker;
+
     public NodeMgr getNodeMgr() {
         return nodeMgr;
     }
@@ -643,12 +649,22 @@ public class GlobalStateMgr {
         private static final GlobalStateMgr INSTANCE = new GlobalStateMgr();
     }
 
-    private GlobalStateMgr() {
-        this(false);
+    @VisibleForTesting
+    protected GlobalStateMgr() {
+        this(new NodeMgr());
+    }
+
+    @VisibleForTesting
+    protected GlobalStateMgr(NodeMgr nodeMgr) {
+        this(false, nodeMgr);
+    }
+
+    private GlobalStateMgr(boolean isCkptGlobalState) {
+        this(isCkptGlobalState, new NodeMgr());
     }
 
     // if isCkptGlobalState is true, it means that we should not collect thread pool metric
-    private GlobalStateMgr(boolean isCkptGlobalState) {
+    private GlobalStateMgr(boolean isCkptGlobalState, NodeMgr nodeMgr) {
         if (!isCkptGlobalState) {
             RunMode.detectRunMode();
         }
@@ -658,7 +674,7 @@ public class GlobalStateMgr {
         }
 
         // System Manager
-        this.nodeMgr = new NodeMgr();
+        this.nodeMgr = nodeMgr == null ? new NodeMgr() : nodeMgr;
         this.heartbeatMgr = new HeartbeatMgr(!isCkptGlobalState);
         this.portConnectivityChecker = new PortConnectivityChecker();
 
@@ -775,7 +791,12 @@ public class GlobalStateMgr {
         this.execution = new StateChangeExecution() {
             @Override
             public void transferToLeader() {
-                gsm.transferToLeader();
+                isInTransferringToLeader = true;
+                try {
+                    gsm.transferToLeader();
+                } finally {
+                    isInTransferringToLeader = false;
+                }
             }
 
             @Override
@@ -796,6 +817,8 @@ public class GlobalStateMgr {
 
         this.replicationMgr = new ReplicationMgr();
         nodeMgr.registerLeaderChangeListener(slotProvider::leaderChangeListener);
+
+        this.memoryUsageTracker = new MemoryUsageTracker();
     }
 
     public static void destroyCheckpoint() {
@@ -1086,47 +1109,62 @@ public class GlobalStateMgr {
         // we already set these variables in constructor. but GlobalStateMgr is a singleton class.
         // so they may be set before Config is initialized.
         // set them here again to make sure these variables use values in fe.conf.
-
         setMetaDir();
 
-        // 0. get local node and helper node info
-        nodeMgr.initialize(args);
+        // must judge whether it is first time start here before initializing GlobalStateMgr.
+        // Possibly remove clusterId and role to ensure that the system is not left in a half-initialized state.
+        boolean isFirstTimeStart = nodeMgr.isVersionAndRoleFilesNotExist();
+        try {
+            // 0. get local node and helper node info
+            nodeMgr.initialize(args);
 
-        // 1. create dirs and files
-        if (Config.edit_log_type.equalsIgnoreCase("bdb")) {
-            File imageDir = new File(this.imageDir);
-            if (!imageDir.exists()) {
-                imageDir.mkdirs();
+            // 1. create dirs and files
+            if (Config.edit_log_type.equalsIgnoreCase("bdb")) {
+                File imageDir = new File(this.imageDir);
+                if (!imageDir.exists()) {
+                    imageDir.mkdirs();
+                }
+            } else {
+                LOG.error("Invalid edit log type: {}", Config.edit_log_type);
+                System.exit(-1);
             }
-        } else {
-            LOG.error("Invalid edit log type: {}", Config.edit_log_type);
-            System.exit(-1);
-        }
 
-        // init plugin manager
-        pluginMgr.init();
-        auditEventProcessor.start();
+            // init plugin manager
+            pluginMgr.init();
+            auditEventProcessor.start();
 
-        // 2. get cluster id and role (Observer or Follower)
-        nodeMgr.getClusterIdAndRoleOnStartup();
+            // 2. get cluster id and role (Observer or Follower)
+            nodeMgr.getClusterIdAndRoleOnStartup();
 
-        // 3. Load image first and replay edits
-        initJournal();
-        loadImage(this.imageDir); // load image file
+            // 3. Load image first and replay edits
+            initJournal();
+            loadImage(this.imageDir); // load image file
 
-        // 4. create load and export job label cleaner thread
-        createLabelCleaner();
+            // 4. create load and export job label cleaner thread
+            createLabelCleaner();
 
-        // 5. create txn timeout checker thread
-        createTxnTimeoutChecker();
+            // 5. create txn timeout checker thread
+            createTxnTimeoutChecker();
 
-        // 6. start task cleaner thread
-        createTaskCleaner();
+            // 6. start task cleaner thread
+            createTaskCleaner();
 
-        // 7. init starosAgent
-        if (RunMode.isSharedDataMode() && !starOSAgent.init(null)) {
-            LOG.error("init starOSAgent failed");
-            System.exit(-1);
+            // 7. init starosAgent
+            if (RunMode.isSharedDataMode() && !starOSAgent.init(null)) {
+                LOG.error("init starOSAgent failed");
+                System.exit(-1);
+            }
+        } catch (Exception e) {
+            try {
+                if (isFirstTimeStart) {
+                    // If it is the first time we start, we remove the cluster ID and role
+                    // to prevent leaving the system in an inconsistent state.
+                    nodeMgr.removeClusterIdAndRole();
+                }
+            } catch (Throwable t) {
+                e.addSuppressed(t);
+            }
+            throw e;
         }
     }
 
@@ -1463,6 +1501,9 @@ public class GlobalStateMgr {
         slotManager.start();
 
         lockChecker.start();
+
+        // The memory tracker should be placed at the end
+        memoryUsageTracker.start();
     }
 
     private void transferToNonLeader(FrontendNodeType newType) {
@@ -2660,6 +2701,7 @@ public class GlobalStateMgr {
                         .append(partitionDuration).append("\"");
             }
 
+            Map<String, String> properties = olapTable.getTableProperty().getProperties();
             if (table.isCloudNativeTable()) {
                 Map<String, String> storageProperties = olapTable.getProperties();
 
@@ -2738,9 +2780,6 @@ public class GlobalStateMgr {
                     sb.append(WriteQuorum.writeQuorumToName(olapTable.writeQuorum())).append("\"");
                 }
 
-                // storage media
-                Map<String, String> properties = olapTable.getTableProperty().getProperties();
-
                 if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
                     sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
                             .append("\" = \"");
@@ -2754,13 +2793,6 @@ public class GlobalStateMgr {
                             .append(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)
                             .append("\" = \"")
                             .append(storageCoolDownTTL).append("\"");
-                }
-
-                // partition live number
-                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
-                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)
-                            .append("\" = \"");
-                    sb.append(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)).append("\"");
                 }
 
                 // unique constraint
@@ -2779,6 +2811,13 @@ public class GlobalStateMgr {
                     sb.append(ForeignKeyConstraint.getShowCreateTableConstraintDesc(olapTable.getForeignKeyConstraints()))
                             .append("\"");
                 }
+            }
+
+            // partition live number
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)
+                        .append("\" = \"");
+                sb.append(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)).append("\"");
             }
 
             // compression type
@@ -4123,5 +4162,9 @@ public class GlobalStateMgr {
 
     public ResourceUsageMonitor getResourceUsageMonitor() {
         return resourceUsageMonitor;
+    }
+
+    public boolean isInTransferringToLeader() {
+        return isInTransferringToLeader;
     }
 }

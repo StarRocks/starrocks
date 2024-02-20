@@ -17,6 +17,7 @@ package com.starrocks.qe;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.server.GlobalStateMgr;
@@ -115,5 +116,20 @@ public class LeaderOpExecutorTest {
                 return client;
             }
         };
+    }
+
+    @Test
+    public void testForwardTooManyTimes() {
+        ConnectContext connectContext = new ConnectContext();
+        connectContext.setForwardTimes(LeaderOpExecutor.MAX_FORWARD_TIMES);
+
+        try {
+            new LeaderOpExecutor(new OriginStatement("show frontends", 0), connectContext, RedirectStatus.FORWARD_NO_SYNC)
+                    .execute();
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof DdlException);
+            return;
+        }
+        Assert.fail("should throw ERR_FORWARD_TOO_MANY_TIMES exception");
     }
 }

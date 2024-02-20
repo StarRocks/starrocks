@@ -669,7 +669,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     protected ParseNode visitSubscriptExpression(SubscriptExpression node, ParseTreeContext context) {
         Expr value = (Expr) visit(node.getBase(), context);
         Expr index = (Expr) visit(node.getIndex(), context);
-        return new CollectionElementExpr(value, index);
+        return new CollectionElementExpr(value, index, true);
     }
 
     @Override

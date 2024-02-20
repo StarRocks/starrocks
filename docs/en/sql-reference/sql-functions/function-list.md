@@ -67,7 +67,6 @@ You can find a function based on the following categories:
 - [variance, variance_pop, var_pop](./aggregate-functions/variance.md)
 - [var_samp](./aggregate-functions/var_samp.md)
 - [window_funnel](./aggregate-functions/window_funnel.md)
->>>>>>> e0a42cf6fc ([Doc] Update 3.1.7 date trunc/adddate/time_slice interval, add days_add, count_if (#39397))
 
 ## Array functions
 
@@ -98,6 +97,7 @@ You can find a function based on the following categories:
 - [array_sum](../sql-functions/array-functions/array_sum.md)
 - [arrays_overlap](../sql-functions/array-functions/arrays_overlap.md)
 - [array_to_bitmap](../sql-functions/array-functions/array_to_bitmap.md)
+- [array_unique_agg](../sql-functions/array-functions/array_unique_agg.md)
 - [cardinality](../sql-functions/array-functions/cardinality.md)
 - [element_at](../sql-functions/array-functions/element_at.md)
 - [reverse](../sql-functions/array-functions/reverse.md)

@@ -231,25 +231,15 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
     if (context->start_time.load(std::memory_order_relaxed) == 0) {
         context->start_time.store(start_time, std::memory_order_relaxed);
     }
-    const auto runs = context->runs.fetch_add(1, std::memory_order_relaxed);
 
     auto status = Status::OK();
-    if (config::lake_compaction_check_txn_log_first && runs == 0 && txn_log_exists(tablet_id, txn_id)) {
-        context->skipped.store(true, std::memory_order_relaxed);
-        context->progress.update(100);
-        VLOG(2) << "Skipped already succeeded compaction task. tablet_id=" << tablet_id << " txn_id=" << txn_id
-                << " version=" << version;
+    auto task_or = _tablet_mgr->compact(tablet_id, version, txn_id);
+    if (task_or.ok()) {
+        auto should_cancel = [&]() { return context->callback->has_error() || context->callback->timeout_exceeded(); };
+        TEST_SYNC_POINT("CompactionScheduler::do_compaction:before_execute_task");
+        status.update(task_or.value()->execute(&context->progress, std::move(should_cancel)));
     } else {
-        auto task_or = _tablet_mgr->compact(tablet_id, version, txn_id);
-        if (task_or.ok()) {
-            auto should_cancel = [&]() {
-                return context->callback->has_error() || context->callback->timeout_exceeded();
-            };
-            TEST_SYNC_POINT("CompactionScheduler::do_compaction:before_execute_task");
-            status.update(task_or.value()->execute(&context->progress, std::move(should_cancel)));
-        } else {
-            status.update(task_or.status());
-        }
+        status.update(task_or.status());
     }
 
     auto finish_time = std::max<int64_t>(::time(nullptr), start_time);
@@ -292,12 +282,6 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
     }
 
     return status;
-}
-
-bool CompactionScheduler::txn_log_exists(int64_t tablet_id, int64_t txn_id) const {
-    auto txn_log = _tablet_mgr->txn_log_location(tablet_id, txn_id);
-    auto fs_or = FileSystem::CreateSharedFromString(txn_log);
-    return fs_or.ok() && fs_or.value()->path_exists(txn_log).ok();
 }
 
 Status CompactionScheduler::abort(int64_t txn_id) {

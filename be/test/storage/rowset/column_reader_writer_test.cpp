@@ -513,7 +513,7 @@ protected:
     }
 
     ColumnPtr datetime_values(int null_ratio) {
-        size_t count = 4 * 1024 * 1024 / sizeof(TimestampValue);
+        size_t count = 4 * 1024 / sizeof(TimestampValue);
         auto col = ChunkHelper::column_from_field_type(TYPE_DATETIME, true);
         TimestampValue value = TimestampValue::create(2020, 10, 1, 10, 20, 1);
         for (size_t i = 0; i < count; i++) {

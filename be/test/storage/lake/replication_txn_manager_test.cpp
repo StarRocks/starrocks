@@ -60,7 +60,8 @@ public:
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->metadata_root_location(1)));
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->txn_log_root_location(1)));
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->segment_root_location(1)));
-        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider.get());
+        _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
+        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider.get(), _mem_tracker.get());
         _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider.get(), _update_manager.get(), 16384);
         _replication_txn_manager = std::make_unique<lake::ReplicationTxnManager>(_tablet_manager.get());
 
@@ -203,6 +204,7 @@ protected:
     std::unique_ptr<starrocks::lake::TabletManager> _tablet_manager;
     std::string _test_dir;
     std::unique_ptr<lake::LocationProvider> _location_provider;
+    std::unique_ptr<MemTracker> _mem_tracker;
     std::unique_ptr<lake::UpdateManager> _update_manager;
     std::unique_ptr<lake::ReplicationTxnManager> _replication_txn_manager;
 

@@ -425,7 +425,7 @@ void* StorageEngine::_pk_dump_thread_callback(void* arg) {
         SLEEP_IN_BG_WORKER(60);
         // disable pk dump generation when pk_dump_interval_seconds less than 0
         if (config::pk_dump_interval_seconds > 0) {
-            auto st = StorageEngine::instance()->tablet_manager()->generate_pk_dump_in_error_state();
+            auto st = StorageEngine::instance()->tablet_manager()->generate_pk_dump();
             if (!st.ok()) {
                 LOG(ERROR) << "generate pk dump failed, st: " << st;
             }

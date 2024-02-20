@@ -415,6 +415,7 @@ void LakeServiceImpl::drop_table(::google::protobuf::RpcController* controller,
         cntl->SetFailed("no thread pool to run task");
         return;
     }
+    response->mutable_status()->set_status_code(0);
     auto latch = BThreadCountDownLatch(1);
     auto task = [&]() {
         DeferOp defer([&] { latch.count_down(); });
@@ -422,14 +423,14 @@ void LakeServiceImpl::drop_table(::google::protobuf::RpcController* controller,
         auto st = fs::remove_all(location);
         if (!st.ok() && !st.is_not_found()) {
             LOG(ERROR) << "Fail to remove " << location << ": " << st;
-            cntl->SetFailed("Fail to remove " + location);
+            st.to_protobuf(response->mutable_status());
         }
     };
 
     auto st = thread_pool->submit_func(task);
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit drop table task: " << st;
-        cntl->SetFailed(st.get_error_msg());
+        st.to_protobuf(response->mutable_status());
         latch.count_down();
     }
 

@@ -19,7 +19,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
-import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -90,13 +89,20 @@ public class MergeLimitWithLimitRule extends TransformationRule {
             limit = 0;
         }
 
-        Operator result;
+        LogicalLimitOperator result;
         if (l1.getLimit() <= l2.getLimit()) {
             result = LogicalLimitOperator.local(limit, l2.getOffset());
         } else {
             result = LogicalLimitOperator.init(limit, l2.getOffset());
         }
 
-        return Lists.newArrayList(OptExpression.create(result, input.getInputs().get(0).getInputs()));
+        List<OptExpression> inputs = input.getInputs().get(0).getInputs();
+        if (result.isInit()) {
+            LogicalLimitOperator global = LogicalLimitOperator.global(result.getLimit(), result.getOffset());
+            LogicalLimitOperator local = LogicalLimitOperator.local(result.getLimit() + result.getOffset());
+            return Lists.newArrayList(OptExpression.create(global, OptExpression.create(local, inputs)));
+        } else {
+            return Lists.newArrayList(OptExpression.create(result, inputs));
+        }
     }
 }

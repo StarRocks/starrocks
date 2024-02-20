@@ -146,6 +146,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Default: TRUE
 - Description: Whether to support the DECIMAL V3 data type.
 
+##### expr_children_limit
+
+- Unit: -
+- Default: 10000
+- Description: The maximum number of child expressions allowed in an expression.
+
 ##### enable_sql_blacklist
 
 - Unit: -
@@ -372,8 +378,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 ##### max_running_txn_num_per_db
 
 - **Unit**: -
-- **Default**: 100
-- **Description**: The maximum number of load transactions allowed to be running for each database within a StarRocks cluster. The default value is `100`. When the actual number of load transactions running for a database exceeds the value of this parameter, new load requests will not be processed. New requests for synchronous load jobs will be denied, and new requests for asynchronous load jobs will be placed in queue. We do not recommend you increase the value of this parameter because this will increase system load.
+- **Default**: 1000
+- **Description**: The maximum number of load transactions allowed to be running for each database within a StarRocks cluster. The default value is `1000`. From v3.1 onwards, the default value is changed to `1000` from `100`. When the actual number of load transactions running for a database exceeds the value of this parameter, new load requests will not be processed. New requests for synchronous load jobs will be denied, and new requests for asynchronous load jobs will be placed in queue. We do not recommend you increase the value of this parameter because this will increase system load.
 
 ##### load_parallel_instance_num
 
@@ -385,7 +391,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - **Unit**: -
 - **Default**: FALSE
-- **Description**: Whether to disable loading when the cluster encounters an error. This prevents any loss caused by cluster errors. The default value is `FALSE`, indicating that loading is not disabled.
+- **Description**: Whether to disable loading when the cluster encounters an error. This prevents any loss caused by cluster errors. The default value is `FALSE`, indicating that loading is not disabled. `TRUE` indicates loading is disabled and the cluster is in read-only state.
 
 ##### history_job_keep_max_second
 
@@ -585,7 +591,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - **Unit**: s
 - **Default**: 86400
-- **Description**: The longest duration the metadata can be retained after a table or database is deleted. If this duration expires, the data will be deleted and cannot be recovered. Unit: seconds.
+- **Description**: The longest duration the metadata can be retained after a database, table, or partition is dropped. If this duration expires, the data will be deleted and cannot be recovered through the [RECOVER](../sql-reference/sql-statements/data-definition/RECOVER.md) command.
 
 ##### alter_table_timeout_second
 
@@ -1536,17 +1542,17 @@ BE dynamic parameters are as follows.
 #### tablet_rowset_stale_sweep_time_sec
 
 - **Default:** 1,800 seconds
-- **Description:** The time interval at which to sweep the stale rowsets in tablets.
+- **Description:** The time interval at which to sweep the stale rowsets in tablets. A shorter interval can reduce metadata usage during loading.
 
 #### snapshot_expire_time_sec
 
 - **Default:** 172,800 seconds
-- **Description:** The expiration time of snapshot files.
+- **Description:** The expiration time of snapshot files. The system cleans snapshot files at a specified interval. If a snapshot is retained for a duration longer than the value of this parameter, it will be cleaned. The clean interval depends on disk space usage. If the disk space usage is less than 60%, the clean interval is `max_garbage_sweep_interval`. If the disk space usage is larger than 80%, the clean interval is `min_garbage_sweep_interval`.
 
 #### trash_file_expire_time_sec
 
 - **Default:** 86,400 seconds
-- **Description:** The time interval at which to clean trash files. The default value has been changed from 259,200 to 86,400 since v2.5.17, v3.0.9, and v3.1.6.
+- **Description:** The maximum duration files can be retained in trash. The system cleans trash files at a specified interval. If a trash file is retained for a duration longer than the value of this parameter, it will be cleaned. The clean interval depends on disk space usage. If the disk space usage is less than 60%, the clean interval is `max_garbage_sweep_interval`. If the disk space usage is larger than 80%, the clean interval is `min_garbage_sweep_interval`. Since v2.5.17, v3.0.9, and v3.1.6, the default value has been changed from 259200 to 86400.
 
 #### base_compaction_check_interval_seconds
 
@@ -1827,16 +1833,17 @@ BE dynamic parameters are as follows.
 - **Unit**: Byte
 - **Description**: The maximum memory usage per compaction thread.
 
-#### internal_service_async_thread_num
-
-- **Default:** 10 (Number of Threads)
-- **Description:** The thread pool size allowed on each BE for interacting with Kafka. Currently, the FE responsible for processing Routine Load requests depends on BEs to interact with Kafka, and each BE in StarRocks has its own thread pool for interactions with Kafka. If a large number of Routine Load tasks are distributed to a BE, the BE's thread pool for interactions with Kafka may be too busy to process all tasks in a timely manner. In this situation, you can adjust the value of this parameter to suit your needs.
-
 #### lake_enable_vertical_compaction_fill_data_cache
 
 - **Default:** false
 - **Description:** Whether to allow compaction tasks to cache data on local disks in a shared-data cluster.
 - **Introduced in:** v3.1.7, v3.2.3
+
+#### lake_pk_compaction_max_input_rowsets
+
+- **Default:** 5
+- **Description:** The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster.
+- **Introduced in:** v3.1.8, v3.2.3
 
 #### compact_threads
 
@@ -2255,7 +2262,12 @@ BE static parameters are as follows.
 
 - **Default**: 10
 - **Unit**: N/A
-- **Description**: The thread pool size for Routine Load on each BE. Since v3.1.0, this parameter is deprecated. The thread pool size for Routine Load on each BE is now controlled by the FE dynamic parameter max_routine_load_task_num_per_be.
+- **Description**: The thread pool size for Routine Load on each BE. Since v3.1.0, this parameter is deprecated. The thread pool size for Routine Load on each BE is now controlled by the FE dynamic parameter `max_routine_load_task_num_per_be`.
+
+#### internal_service_async_thread_num
+
+- **Default:** 10 (Number of Threads)
+- **Description:** The thread pool size allowed on each BE for interacting with Kafka. Currently, the FE responsible for processing Routine Load requests depends on BEs to interact with Kafka, and each BE in StarRocks has its own thread pool for interactions with Kafka. If a large number of Routine Load tasks are distributed to a BE, the BE's thread pool for interactions with Kafka may be too busy to process all tasks in a timely manner. In this situation, you can adjust the value of this parameter to suit your needs. **Since v3.1.0, this parameter is deprecated. The thread pool size for Routine Load on each BE is now controlled by the FE dynamic parameter `max_routine_load_task_num_per_be`.**
 
 #### brpc_max_body_size
 

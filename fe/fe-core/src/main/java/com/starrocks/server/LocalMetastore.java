@@ -56,7 +56,6 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.binlog.BinlogConfig;
-import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.ColocateGroupSchema;
@@ -121,7 +120,6 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.CountingLatch;
 import com.starrocks.connector.ConnectorMetadata;
-import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeMaterializedView;
@@ -135,6 +133,7 @@ import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.CreateDbInfo;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DatabaseInfo;
+import com.starrocks.persist.DisableTableRecoveryInfo;
 import com.starrocks.persist.DropDbInfo;
 import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.ListPartitionPersistInfo;
@@ -220,7 +219,6 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.common.SyncPartitionUtils;
-import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.Backend;
@@ -477,7 +475,6 @@ public class LocalMetastore implements ConnectorMetadata {
             unlock();
         }
 
-        List<Runnable> runnableList;
         // 2. drop tables in db
         db.writeLock();
         try {
@@ -494,7 +491,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
             // save table names for recycling
             Set<String> tableNames = new HashSet<>(db.getTableNamesViewWithLock());
-            runnableList = unprotectDropDb(db, isForceDrop, false);
+            unprotectDropDb(db, isForceDrop, false);
             if (!isForceDrop) {
                 recycleBin.recycleDatabase(db, tableNames);
             } else {
@@ -524,33 +521,31 @@ public class LocalMetastore implements ConnectorMetadata {
         } finally {
             db.writeUnlock();
         }
-
-        for (Runnable runnable : runnableList) {
-            runnable.run();
-        }
     }
 
     @NotNull
-    public List<Runnable> unprotectDropDb(Database db, boolean isForeDrop, boolean isReplay) {
-        List<Runnable> runnableList = new ArrayList<>();
+    public void unprotectDropDb(Database db, boolean isForeDrop, boolean isReplay) {
         for (Table table : db.getTables()) {
-            Runnable runnable = db.unprotectDropTable(table.getId(), isForeDrop, isReplay);
-            if (runnable != null) {
-                runnableList.add(runnable);
+            db.unprotectDropTable(table.getId(), isForeDrop, isReplay);
+            if (isForeDrop) {
+                // Normally we should delete table after releasing the database lock, to
+                // avoid occupying the database lock for too long. However, at this point
+                // we are in the process of dropping the database, which means that the
+                // database should no longer be in use, and occupying the database lock
+                // should have no effect.
+                table.delete(db.getId(), isReplay);
             }
         }
-        return runnableList;
     }
 
     public void replayDropDb(String dbName, boolean isForceDrop) throws DdlException {
-        List<Runnable> runnableList;
         tryLock(true);
         try {
             Database db = fullNameToDb.get(dbName);
             db.writeLock();
             try {
                 Set<String> tableNames = new HashSet(db.getTableNamesViewWithLock());
-                runnableList = unprotectDropDb(db, isForceDrop, true);
+                unprotectDropDb(db, isForceDrop, true);
                 if (!isForceDrop) {
                     recycleBin.recycleDatabase(db, tableNames);
                 } else {
@@ -569,10 +564,6 @@ public class LocalMetastore implements ConnectorMetadata {
             LOG.info("finish replay drop db, name: {}, id: {}", dbName, db.getId());
         } finally {
             unlock();
-        }
-
-        for (Runnable runnable : runnableList) {
-            runnable.run();
         }
     }
 
@@ -2100,10 +2091,7 @@ public class LocalMetastore implements ConnectorMetadata {
             }
             if (!db.registerTableUnlocked(table)) {
                 if (!isSetIfNotExists) {
-                    if (table instanceof OlapTable) {
-                        OlapTable olapTable = (OlapTable) table;
-                        olapTable.onErase(false);
-                    }
+                    table.delete(db.getId(), false);
                     ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(),
                             "table already exists");
                 } else {
@@ -2412,27 +2400,29 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public void replayDropTable(Database db, long tableId, boolean isForceDrop) {
-        Runnable runnable;
+        Table table;
         db.writeLock();
         try {
-            runnable = db.unprotectDropTable(tableId, isForceDrop, true);
+            table = db.unprotectDropTable(tableId, isForceDrop, true);
         } finally {
             db.writeUnlock();
         }
-        if (runnable != null) {
-            runnable.run();
+        if (table != null && isForceDrop) {
+            table.delete(db.getId(), true);
         }
     }
 
     public void replayEraseTable(long tableId) {
-        recycleBin.replayEraseTable(tableId);
+        recycleBin.replayEraseTable(Collections.singletonList(tableId));
     }
 
     public void replayEraseMultiTables(MultiEraseTableInfo multiEraseTableInfo) {
         List<Long> tableIds = multiEraseTableInfo.getTableIds();
-        for (Long tableId : tableIds) {
-            recycleBin.replayEraseTable(tableId);
-        }
+        recycleBin.replayEraseTable(tableIds);
+    }
+
+    public void replayDisableTableRecovery(DisableTableRecoveryInfo disableTableRecoveryInfo) {
+        recycleBin.replayDisableTableRecovery(disableTableRecoveryInfo.getTableIds());
     }
 
     public void replayRecoverTable(RecoverInfo info) {
@@ -3335,6 +3325,9 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
+    /**
+     * Leave some clean up work to {@link MaterializedView#onDrop}
+     */
     @Override
     public void dropMaterializedView(DropMaterializedViewStmt stmt) throws DdlException, MetaNotFoundException {
         Database db = getDb(stmt.getDbName());
@@ -3352,35 +3345,7 @@ public class LocalMetastore implements ConnectorMetadata {
             Authorizer.checkMaterializedViewAction(ConnectContext.get().getCurrentUserIdentity(),
                     ConnectContext.get().getCurrentRoleIds(), stmt.getDbMvName(), PrivilegeType.DROP);
 
-            MaterializedView mv = (MaterializedView) table;
-            MaterializedViewMgr.getInstance().stopMaintainMV(mv);
-
-            MvId mvId = new MvId(db.getId(), table.getId());
             db.dropTable(table.getName(), stmt.isSetIfExists(), true);
-            CachingMvPlanContextBuilder.getInstance().invalidateFromCache(mv);
-            List<BaseTableInfo> baseTableInfos = ((MaterializedView) table).getBaseTableInfos();
-            if (baseTableInfos != null) {
-                for (BaseTableInfo baseTableInfo : baseTableInfos) {
-                    Table baseTable = baseTableInfo.getTable();
-                    if (baseTable != null) {
-                        baseTable.removeRelatedMaterializedView(mvId);
-                        if (!baseTable.isNativeTableOrMaterializedView()) {
-                            // remove relatedMaterializedViews for connector table
-                            GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().
-                                    removeConnectorTableInfo(baseTableInfo.getCatalogName(),
-                                            baseTableInfo.getDbName(),
-                                            baseTableInfo.getTableIdentifier(),
-                                            ConnectorTableInfo.builder().setRelatedMaterializedViews(
-                                                    Sets.newHashSet(mvId)).build());
-                        }
-                    }
-                }
-            }
-            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-            Task refreshTask = taskManager.getTask(TaskBuilder.getMvTaskName(table.getId()));
-            if (refreshTask != null) {
-                taskManager.dropTasks(Lists.newArrayList(refreshTask.getId()), false);
-            }
         } else {
             stateMgr.getAlterJobMgr().processDropMaterializedView(stmt);
         }
@@ -3476,7 +3441,7 @@ public class LocalMetastore implements ConnectorMetadata {
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         Task refreshTask = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
         if (refreshTask != null) {
-            taskManager.killTask(refreshTask.getName(), false);
+            taskManager.killTask(refreshTask.getName(), true);
         }
     }
 
@@ -5019,14 +4984,13 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public void removeAutoIncrementIdByTableId(Long tableId, boolean isReplay) {
-        if (!isReplay) {
+        Long id = tableIdToIncrementId.remove(tableId);
+        if (!isReplay && id != null) {
             ConcurrentHashMap<Long, Long> deltaMap = new ConcurrentHashMap<>();
             deltaMap.put(tableId, 0L);
             AutoIncrementInfo info = new AutoIncrementInfo(deltaMap);
             GlobalStateMgr.getCurrentState().getEditLog().logSaveDeleteAutoIncrementId(info);
         }
-
-        tableIdToIncrementId.remove(tableId);
     }
 
     public ConcurrentHashMap<Long, Long> tableIdToIncrementId() {

@@ -67,6 +67,12 @@ Status SchemaHelper::list_fe_locks(const std::string& ip, int32_t port, const TF
             ip, port, [&req, &res](FrontendServiceConnection& client) { client->listFeLocks(*res, req); });
 }
 
+Status SchemaHelper::list_fe_memory_usage(const std::string& ip, int32_t port, const TFeMemoryReq& req,
+                                          TFeMemoryRes* res) {
+    return ThriftRpcHelper::rpc<FrontendServiceClient>(
+            ip, port, [&req, &res](FrontendServiceConnection& client) { client->listFeMemoryUsage(*res, req); });
+}
+
 Status SchemaHelper::get_tables_info(const std::string& ip, const int32_t port, const TGetTablesInfoRequest& request,
                                      TGetTablesInfoResponse* response) {
     return ThriftRpcHelper::rpc<FrontendServiceClient>(
@@ -174,6 +180,17 @@ Status SchemaHelper::get_grants_to(const std::string& ip, const int32_t port,
     return ThriftRpcHelper::rpc<FrontendServiceClient>(
             ip, port,
             [&request, &response](FrontendServiceConnection& client) { client->getGrantsTo(*response, request); },
+            timeout_ms);
+}
+
+Status SchemaHelper::get_partitions_meta(const std::string& ip, const int32_t port,
+                                         const TGetPartitionsMetaRequest& var_params,
+                                         TGetPartitionsMetaResponse* var_result, int timeout_ms) {
+    return ThriftRpcHelper::rpc<FrontendServiceClient>(
+            ip, port,
+            [&var_params, &var_result](FrontendServiceConnection& client) {
+                client->getPartitionsMeta(*var_result, var_params);
+            },
             timeout_ms);
 }
 

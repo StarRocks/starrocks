@@ -221,6 +221,32 @@ public class NodeMgr {
         return brokerMgr;
     }
 
+    public boolean isVersionAndRoleFilesNotExist() {
+        File roleFile = new File(this.imageDir, Storage.ROLE_FILE);
+        File versionFile = new File(this.imageDir, Storage.VERSION_FILE);
+        return !roleFile.exists() && !versionFile.exists();
+    }
+
+    private void removeMetaFileIfExist(String fileName) {
+        try {
+            File file = new File(this.imageDir, fileName);
+            if (file.exists()) {
+                if (file.delete()) {
+                    LOG.warn("Deleted file {}, maybe because the firstly startup failed.", file.getAbsolutePath());
+                } else {
+                    LOG.warn("Failed to delete role file {}.", file.getAbsolutePath());
+                }
+            }
+        } catch (Exception e) {
+            LOG.warn("Exception occurs while deleting file {}, reason: {}", fileName, e.getMessage());
+        }
+    }
+
+    public void removeClusterIdAndRole() {
+        removeMetaFileIfExist(Storage.ROLE_FILE);
+        removeMetaFileIfExist(Storage.VERSION_FILE);
+    }
+
     public void getClusterIdAndRoleOnStartup() throws IOException {
         File roleFile = new File(this.imageDir, Storage.ROLE_FILE);
         File versionFile = new File(this.imageDir, Storage.VERSION_FILE);

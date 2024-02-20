@@ -171,8 +171,8 @@ CONF_mInt32(compact_threads, "4");
 CONF_Int32(compact_thread_pool_queue_size, "100");
 
 // The count of thread to replication
-CONF_Int32(replication_threads, "0");
-CONF_Int32(clear_expired_replcation_snapshots_interval_seconds, "3600");
+CONF_mInt32(replication_threads, "0");
+CONF_mInt32(clear_expired_replcation_snapshots_interval_seconds, "3600");
 
 // The log dir.
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
@@ -928,7 +928,6 @@ CONF_mInt32(starlet_fs_read_prefetch_threadpool_size, "128");
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
 CONF_mBool(lake_print_delete_log, "true");
-CONF_mBool(lake_compaction_check_txn_log_first, "false");
 // Used to ensure service availability in extreme situations by sacrificing a certain degree of correctness
 CONF_mBool(experimental_lake_ignore_lost_segment, "false");
 CONF_mInt64(experimental_lake_wait_per_put_ms, "0");
@@ -942,6 +941,8 @@ CONF_mInt64(lake_vacuum_retry_max_attempts, "5");
 CONF_mInt64(lake_vacuum_retry_min_delay_ms, "10");
 CONF_mBool(enable_primary_key_recover, "false");
 CONF_mInt64(lake_pk_compaction_max_input_rowsets, "5");
+// Used for control memory usage of update state cache and compaction state cache
+CONF_mInt32(lake_pk_preload_memory_limit_percent, "30");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
@@ -1038,7 +1039,7 @@ CONF_mInt64(l0_snapshot_size, "16777216"); // 16MB
 CONF_mInt64(max_tmp_l1_num, "10");
 CONF_mBool(enable_parallel_get_and_bf, "true");
 // Control if using the minor compaction strategy
-CONF_Bool(enable_pindex_minor_compaction, "false");
+CONF_Bool(enable_pindex_minor_compaction, "true");
 // if l2 num is larger than this, stop doing async compaction,
 // add this config to prevent l2 grow too large.
 CONF_mInt64(max_allow_pindex_l2_num, "5");
@@ -1151,4 +1152,6 @@ CONF_mInt64(lake_local_pk_index_unused_threshold_seconds, "86400"); // 1 day
 // Disable when pk_dump_interval_seconds <= 0
 CONF_mInt64(pk_dump_interval_seconds, "3600"); // 1 hour
 
+// whether enable query profile for queries initiated by spark or flink
+CONF_mBool(enable_profile_for_external_plan, "false");
 } // namespace starrocks::config

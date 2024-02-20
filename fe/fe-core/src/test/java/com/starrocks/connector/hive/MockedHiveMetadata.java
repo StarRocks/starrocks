@@ -62,6 +62,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.Table.TableType.HIVE;
 import static com.starrocks.common.util.DateUtils.DATE_FORMATTER_UNIX;
 import static com.starrocks.connector.hive.CachingHiveMetastore.createCatalogLevelInstance;
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
@@ -146,6 +147,11 @@ public class MockedHiveMetadata implements ConnectorMetadata {
             }
         }
         return ret;
+    }
+
+    @Override
+    public com.starrocks.catalog.Table.TableType getTableType() {
+        return HIVE;
     }
 
     @Override
@@ -337,6 +343,16 @@ public class MockedHiveMetadata implements ConnectorMetadata {
                         "VIRTUAL_VIEW");
         HiveView view4 = HiveMetastoreApiConverter.toHiveView(hmsView4, MOCKED_HIVE_CATALOG_NAME);
         mockTables.put(hmsView4.getTableName(), new HiveTableInfo(view4));
+
+        Table hmsView5 =
+                new Table("customer_case_insensitive_view", "tpch", null, 0, 0, 0, sd, Lists.newArrayList(), Maps.newHashMap(),
+                        null,
+                        "select customer_upper.c_custkey, customer_upper.c_name, customer_upper.c_address, " +
+                                "CUSTOMER_UPPER.c_nationkey, CUSTOMER_UPPER.c_phone, CUSTOMER_UPPER.c_mktsegment, " +
+                                "CUSTOMER_UPPER.c_comment from (select * from TPCH.CUSTOMER) CUSTOMER_UPPER",
+                        "VIRTUAL_VIEW");
+        HiveView view5 = HiveMetastoreApiConverter.toHiveView(hmsView5, MOCKED_HIVE_CATALOG_NAME);
+        mockTables.put(hmsView5.getTableName(), new HiveTableInfo(view5));
     }
 
     private static void mockSubfieldTable() {

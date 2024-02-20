@@ -540,6 +540,16 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
             _index_cache.remove(index_entry);
         }
     }
+
+    // tablet maybe dropped during ingestion, add some log
+    if (!st.ok()) {
+        if (tablet->tablet_state() == TABLET_SHUTDOWN) {
+            std::string msg = strings::Substitute("tablet $0 in TABLET_SHUTDOWN, maybe deleted by other thread",
+                                                  tablet->tablet_id());
+            LOG(WARNING) << msg;
+        }
+    }
+
     VLOG(1) << "UpdateManager::on_rowset_finished finish tablet:" << tablet->tablet_id()
             << " rowset:" << rowset_unique_id;
     return st;
@@ -569,13 +579,13 @@ bool UpdateManager::TEST_update_state_exist(Tablet* tablet, Rowset* rowset) {
         auto column_state_entry =
                 _update_column_state_cache.get(strings::Substitute("$0_$1", tablet->tablet_id(), rowset_unique_id));
         if (column_state_entry != nullptr) {
-            _update_column_state_cache.remove(column_state_entry);
+            _update_column_state_cache.release(column_state_entry);
             return true;
         }
     } else {
         auto state_entry = _update_state_cache.get(strings::Substitute("$0_$1", tablet->tablet_id(), rowset_unique_id));
         if (state_entry != nullptr) {
-            _update_state_cache.remove(state_entry);
+            _update_state_cache.release(state_entry);
             return true;
         }
     }

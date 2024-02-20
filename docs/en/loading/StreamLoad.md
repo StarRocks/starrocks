@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "English"
+keywords: ['Stream Load']
 ---
 
 # Load data from a local file system
@@ -14,7 +15,7 @@ StarRocks provides two methods of loading data from a local file system:
 Each of these options has its own advantages:
 
 - Stream Load supports CSV and JSON file formats. This method is recommended if you want to load data from a small number of files whose individual sizes do not exceed 10 GB.
-- Broker Load supports Parquet, ORC, and CSV file formats. This method is recommended if you want to load data from a large number of files whose individual sizes exceed 10 GB, or if the files are stored in a network attached storage (NAS) device. **This feature is supported from v2.5 onwards. Note that if you choose this method, you must [deploy a broker](../deployment/deploy_broker.md) on the machine on which your data files are located.**
+- Broker Load supports Parquet, ORC, CSV, and JSON file formats (JSON file format is supported from v3.2.3 onwards). This method is recommended if you want to load data from a large number of files whose individual sizes exceed 10 GB, or if the files are stored in a network attached storage (NAS) device. **Using Broker Load to load data from a local file system is supported from v2.5 onwards. Note that before you can use Broker Load to load data from a local file system, you must [deploy a broker](../deployment/deploy_broker.md) on the machine on which your data files are located.**
 
 For CSV data, take note of the following points:
 

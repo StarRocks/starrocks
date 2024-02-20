@@ -167,6 +167,8 @@ add_library(Storage STATIC
     size_tiered_compaction_policy.cpp
     cluster_id_mgr.cpp
     push_utils.cpp
+    primary_key_recover.cpp
+    local_primary_key_recover.cpp
     lake/async_delta_writer.cpp
     lake/compaction_policy.cpp
     lake/compaction_scheduler.cpp
@@ -192,7 +194,7 @@ add_library(Storage STATIC
     lake/lake_primary_index.cpp
     lake/vertical_compaction_task.cpp
     lake/metacache.cpp
-    lake/primary_key_recover.cpp
+    lake/lake_primary_key_recover.cpp
     binlog_util.cpp
     binlog_file_writer.cpp
     binlog_file_reader.cpp

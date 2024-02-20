@@ -28,6 +28,7 @@ public class TaskRunContext {
     Map<String, String> properties;
     Constants.TaskType type;
     TaskRunStatus status;
+    TaskRun taskRun;
 
     public ConnectContext getCtx() {
         return ctx;
@@ -91,5 +92,13 @@ public class TaskRunContext {
 
     public void setStatus(TaskRunStatus status) {
         this.status = status;
+    }
+
+    public TaskRun getTaskRun() {
+        return taskRun;
+    }
+
+    public void setTaskRun(TaskRun taskRun) {
+        this.taskRun = taskRun;
     }
 }
