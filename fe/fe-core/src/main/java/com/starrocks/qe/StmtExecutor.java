@@ -114,6 +114,7 @@ import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
@@ -1649,16 +1650,17 @@ public class StmtExecutor {
 
     private void sendStmtPrepareOK(PrepareStmt prepareStmt) throws IOException {
         // https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_stmt_prepare.html#sect_protocol_com_stmt_prepare_response
+        QueryStatement query = (QueryStatement) prepareStmt.getInnerStmt();
+        int numColumns = query.getQueryRelation().getRelationFields().size();
+        int numParams = prepareStmt.getParameters().size();
         serializer.reset();
         // 0x00 OK
         serializer.writeInt1(0);
         // statement_id
         serializer.writeInt4(Integer.valueOf(prepareStmt.getName()));
         // num_columns
-        int numColumns = 0;
         serializer.writeInt2(numColumns);
         // num_params
-        int numParams = prepareStmt.getParameters().size();
         serializer.writeInt2(numParams);
         // reserved_1
         serializer.writeInt1(0);
@@ -1667,6 +1669,7 @@ public class StmtExecutor {
         // metadata follows
         serializer.writeInt1(1);
         context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
+
         if (numParams > 0) {
             List<String> colNames = prepareStmt.getParameterLabels();
             List<Parameter> parameters = prepareStmt.getParameters();
@@ -1675,11 +1678,24 @@ public class StmtExecutor {
                 serializer.writeField(colNames.get(i), parameters.get(i).getType());
                 context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
             }
-            context.getState().setEof();
-        } else {
-            context.getMysqlChannel().flush();
-            context.getState().setStateType(MysqlStateType.NOOP);
+            MysqlEofPacket eofPacket = new MysqlEofPacket(context.getState());
+            eofPacket.writeTo(serializer);
+            context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
         }
+
+        if (numColumns > 0) {
+            for (Field field : query.getQueryRelation().getRelationFields().getAllFields()) {
+                serializer.reset();
+                serializer.writeField(field.getName(), field.getType());
+                context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
+            }
+            MysqlEofPacket eofPacket = new MysqlEofPacket(context.getState());
+            eofPacket.writeTo(serializer);
+            context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
+        }
+
+        context.getMysqlChannel().flush();
+        context.getState().setStateType(MysqlStateType.NOOP);
     }
 
     public void setQueryStatistics(PQueryStatistics statistics) {
