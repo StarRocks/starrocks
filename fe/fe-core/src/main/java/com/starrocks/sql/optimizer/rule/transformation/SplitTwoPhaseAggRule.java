@@ -84,7 +84,7 @@ public class SplitTwoPhaseAggRule extends SplitAggregateRule {
 
         LogicalAggregationOperator aggOp = input.getOp().cast();
         Optional<List<ColumnRefOperator>> distinctCols = Utils.extractCommonDistinctCols(aggOp.getAggregations().values());
-        if (distinctCols.isEmpty()) {
+        if (!distinctCols.isPresent()) {
             throw new StarRocksPlannerException("The query contains multiple distinct agg functions, " +
                     "each can't have multi columns.", ErrorType.USER_ERROR);
         }
