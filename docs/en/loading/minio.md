@@ -422,7 +422,6 @@ This method supports the following file formats:
 
 ### Advantages of Broker Load
 
-- Broker Load supports [data transformation](../loading/Etl_in_loading.md) and [data changes such as UPSERT and DELETE operations](../loading/Load_to_Primary_Key_tables.md) during loading.
 - Broker Load runs in the background and clients do not need to stay connected for the job to continue.
 - Broker Load is preferred for long-running jobs, with the default timeout spanning 4 hours.
 - In addition to Parquet and ORC file format, Broker Load supports CSV file format and JSON file format (JSON file format is supported from v3.2.3 onwards).
@@ -472,6 +471,16 @@ PROPERTIES
 
 Run the following command to start a Broker Load job that loads data from the sample dataset `user_behavior_ten_million_rows.parquet` to the `user_behavior` table:
 
+:::tip
+
+The highlighted section of the command includes the settings that you may need to change:
+
+- Set the `endpoint` and `DATA INFILE` to match your MinIO system
+- If your MinIO system uses SSL set `enable_ssl` to `true`
+- Substitute your MinIO access key and secret for `AAA` and `BBB`.
+
+:::
+
 ```sql
 LOAD LABEL UserBehavior
 (
@@ -509,13 +518,11 @@ For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-referen
 
 #### Check load progress
 
-You can query the progress of Broker Load jobs from the [`information_schema.loads`](../reference/information_schema/loads.md) view. This feature is supported from v3.1 onwards.
+You can query the progress of Broker Load jobs from the [loads`](../reference/information_schema/loads.md) view in the StarRocks Information Schema. This feature is supported from v3.1 onwards.
 
 ```SQL
 SELECT * FROM information_schema.loads;
 ```
-
-For information about the fields provided in the `loads` view, see [Information Schema](../reference/information_schema/loads.md).
 
 If you have submitted multiple load jobs, you can filter on the `LABEL` associated with the job. Example:
 
@@ -551,6 +558,8 @@ WHERE LABEL = 'UserBehavior'\G
 REJECTED_RECORD_PATH: NULL
 1 row in set (0.02 sec)
 ```
+
+For information about the fields provided in the `loads` view, see [loads](../reference/information_schema/loads.md).
 
 After you confirm that the load job has finished, you can check a subset of the destination table to see if the data has been successfully loaded. Example:
 
