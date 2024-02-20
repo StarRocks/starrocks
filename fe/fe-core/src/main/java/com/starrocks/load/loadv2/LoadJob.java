@@ -147,7 +147,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     // only for persistence param. see readFields() for usage
     private boolean isJobTypeRead = false;
 
-    private boolean startLoad = false;
+    protected boolean startLoad = false;
 
     // only for log replay
     public LoadJob() {
@@ -224,6 +224,10 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
     public long getTransactionId() {
         return transactionId;
+    }
+
+    public long getLoadStartTimestamp() {
+        return loadStartTimestamp;
     }
 
     public void initLoadProgress(TUniqueId loadId, Set<TUniqueId> fragmentIds, List<Long> relatedBackendIds) {
