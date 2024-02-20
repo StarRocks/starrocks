@@ -1529,7 +1529,7 @@ TEST_F(LakeServiceTest, test_drop_table_duplicate_request) {
     auto path = "/path/for/test/drop/table";
 
     bthread_t tids[2];
-    std::string error_texts[2];
+    Status result_status[2];
     for (int i = 0; i < 2; i++) {
         ASSIGN_OR_ABORT(tids[i], bthreads::start_bthread([&, id = i]() {
                             lake::DropTableRequest request;
@@ -1538,14 +1538,20 @@ TEST_F(LakeServiceTest, test_drop_table_duplicate_request) {
                             request.set_path(path);
                             brpc::Controller cntl;
                             _lake_service.drop_table(&cntl, &request, &response, nullptr);
-                            error_texts[id] = cntl.ErrorText();
+                            auto& status = response.status();
+                            result_status[id] = Status(response.status());
                         }));
     }
     bthread_join(tids[0], nullptr);
     bthread_join(tids[1], nullptr);
     auto expect_error_msg = "Previous delete task for the same path has not yet finished";
-    ASSERT_TRUE(error_texts[0] == expect_error_msg || error_texts[1] == expect_error_msg)
-            << error_texts[0] << ", " << error_texts[1];
+    if (result_status[0].ok()) {
+        ASSERT_TRUE(result_status[1].is_already_exist()) << result_status[1];
+    } else if (result_status[1].ok()) {
+        ASSERT_TRUE(result_status[0].is_already_exist()) << result_status[0];
+    } else {
+        FAIL() << "All tasks failed. " << result_status[0] << " : " << result_status[1];
+    }
 }
 
 // NOLINTNEXTLINE
