@@ -56,7 +56,7 @@ jobs:
           cp fe/checkstyle* .
 
       - name: Run java checkstyle
-        uses: dbelyaev/action-checkstyle@v1.5.6
+        uses: dbelyaev/action-checkstyle@v0.7.5
         with:
           workdir: "./fe"
           checkstyle_config: checkstyle.xml
