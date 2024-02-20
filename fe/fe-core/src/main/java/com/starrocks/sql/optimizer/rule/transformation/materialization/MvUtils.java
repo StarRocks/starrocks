@@ -29,6 +29,7 @@ import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -432,8 +433,9 @@ public class MvUtils {
         Preconditions.checkState(mvStmt instanceof QueryStatement);
         Analyzer.analyze(mvStmt, connectContext);
         QueryRelation query = ((QueryStatement) mvStmt).getQueryRelation();
+        Map<Operator, ParseNode> optToAstMap = Maps.newHashMap();
         TransformerContext transformerContext =
-                new TransformerContext(columnRefFactory, connectContext, inlineView);
+                new TransformerContext(columnRefFactory, connectContext, inlineView, optToAstMap);
         LogicalPlan logicalPlan = new RelationTransformer(transformerContext).transform(query);
         Optimizer optimizer = new Optimizer(optimizerConfig);
         OptExpression optimizedPlan = optimizer.optimize(
@@ -1194,5 +1196,18 @@ public class MvUtils {
     public static boolean isAppliedUnionAllRewrite(Operator op) {
         int opRuleMask = op.getOpRuleMask();
         return (opRuleMask & OP_UNION_ALL_BIT) != 0;
+    }
+
+    public static ParseNode getQueryAst(String query) {
+        try {
+            List<StatementBase> statementBases =
+                    com.starrocks.sql.parser.SqlParser.parse(query, new com.starrocks.qe.SessionVariable());
+            Preconditions.checkState(statementBases.size() == 1);
+            StatementBase stmt = statementBases.get(0);
+            return stmt;
+        } catch (ParsingException parsingException) {
+            LOG.warn("Parse query {} failed:{}", query, parsingException);
+        }
+        return null;
     }
 }
