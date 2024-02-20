@@ -78,8 +78,8 @@ The following example queries the sample dataset previously added to your MinIO 
 
 The highlighted section of the command includes the settings that you may need to change:
 
-- Set the `endpoint` and `path` to match your MinIO system
-- If your MinIO system uses SSL set `enable_ssl` to `true`
+- Set the `endpoint` and `path` to match your MinIO system.
+- If your MinIO system uses SSL set `enable_ssl` to `true`.
 - Substitute your MinIO access key and secret for `AAA` and `BBB`.
 
 :::
@@ -475,8 +475,8 @@ Run the following command to start a Broker Load job that loads data from the sa
 
 The highlighted section of the command includes the settings that you may need to change:
 
-- Set the `endpoint` and `DATA INFILE` to match your MinIO system
-- If your MinIO system uses SSL set `enable_ssl` to `true`
+- Set the `endpoint` and `DATA INFILE` to match your MinIO system.
+- If your MinIO system uses SSL set `enable_ssl` to `true`.
 - Substitute your MinIO access key and secret for `AAA` and `BBB`.
 
 :::
