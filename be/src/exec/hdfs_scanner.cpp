@@ -441,7 +441,8 @@ void HdfsScannerContext::append_or_update_partition_column_to_chunk(ChunkPtr* ch
     for (size_t i = 0; i < partition_columns.size(); i++) {
         SlotDescriptor* slot_desc = partition_columns[i].slot_desc;
         DCHECK(partition_values[i]->is_constant());
-        auto partition_value = partition_values[i];
+        auto partition_value = partition_values[i]->clone();
+        partition_value->resize(row_count);
         if (ck->is_slot_exist(slot_desc->id())) {
             ck->update_column(std::move(partition_value), slot_desc->id());
         } else {
