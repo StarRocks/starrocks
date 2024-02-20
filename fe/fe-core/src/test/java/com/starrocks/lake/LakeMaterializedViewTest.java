@@ -17,8 +17,6 @@ package com.starrocks.lake;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
-import com.staros.proto.AwsCredentialInfo;
-import com.staros.proto.AwsDefaultCredentialInfo;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
@@ -47,22 +45,17 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.FastByteArrayOutputStream;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.Task;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.server.SharedDataStorageVolumeMgr;
-import com.starrocks.server.SharedNothingStorageVolumeMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
-import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.utframe.StarRocksAssert;
@@ -87,14 +80,12 @@ import static com.starrocks.sql.optimizer.MVTestUtils.waitForSchemaChangeAlterJo
 public class LakeMaterializedViewTest {
     private static final String DB = "db_for_lake_mv";
 
-    private static PseudoCluster cluster;
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
     @BeforeClass
     public static void setUp() throws Exception {
-        PseudoCluster.getOrCreateWithRandomPort(true, 3);
-        cluster = PseudoCluster.getInstance();
+        UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         connectContext = UtFrameUtils.createDefaultCtx();
 
         // set default config for async mvs
@@ -103,6 +94,7 @@ public class LakeMaterializedViewTest {
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase(DB).useDatabase(DB);
 
+<<<<<<< HEAD
         new MockUp<StarOSAgent>() {
             @Mock
             public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) {
@@ -166,6 +158,8 @@ public class LakeMaterializedViewTest {
             }
         };
 
+=======
+>>>>>>> f7221ffedc ([UT] Refactor some lake tests by using StarRocks mini cluster (#41202))
         starRocksAssert.withTable("CREATE TABLE base_table\n" +
                 "(\n" +
                 "    k1 date,\n" +
@@ -182,7 +176,7 @@ public class LakeMaterializedViewTest {
 
     @AfterClass
     public static void tearDown() {
-        PseudoCluster.getInstance().shutdown(true);
+
     }
 
     @Test
@@ -326,7 +320,7 @@ public class LakeMaterializedViewTest {
 
         LakeMaterializedView lakeMv = (LakeMaterializedView) mv;
         // same as PseudoStarOSAgent.allocateFilePath
-        Assert.assertEquals("s3://test-bucket/1/", lakeMv.getDefaultFilePathInfo().getFullPath());
+        Assert.assertTrue(lakeMv.getDefaultFilePathInfo().getFullPath().startsWith("s3://dummy_unittest_bucket/dummy_sub_path"));
         // check table default cache info
         FileCacheInfo cacheInfo = lakeMv.getPartitionFileCacheInfo(0L);
         Assert.assertTrue(cacheInfo.getEnableCache());

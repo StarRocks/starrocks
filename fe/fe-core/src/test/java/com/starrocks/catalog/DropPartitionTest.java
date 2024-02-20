@@ -34,39 +34,21 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.collect.Lists;
-import com.staros.proto.AwsCredentialInfo;
-import com.staros.proto.AwsDefaultCredentialInfo;
-import com.staros.proto.FileCacheInfo;
-import com.staros.proto.FilePathInfo;
-import com.staros.proto.FileStoreInfo;
-import com.staros.proto.FileStoreType;
-import com.staros.proto.S3FileStoreInfo;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
-import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.lake.StarOSAgent;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
-import com.starrocks.server.SharedNothingStorageVolumeMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
-import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
-import mockit.Mock;
-import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.List;
-import java.util.Map;
 
 public class DropPartitionTest {
     private static ConnectContext connectContext;
@@ -86,6 +68,7 @@ public class DropPartitionTest {
                 + "buckets 1 properties('replication_num' = '1');";
         createDb(createDbStmtStr);
         createTable(createTableStr);
+<<<<<<< HEAD
 
         StarOSAgent agent = new StarOSAgent();
 
@@ -154,6 +137,8 @@ public class DropPartitionTest {
                 + " DISTRIBUTED BY HASH(k2) BUCKETS 3"
                 + " PROPERTIES ( \"datacache.enable\" = \"true\")";
         createTable(createLakeTableStr);
+=======
+>>>>>>> f7221ffedc ([UT] Refactor some lake tests by using StarRocks mini cluster (#41202))
     }
 
     private static void createDb(String sql) throws Exception {
@@ -227,6 +212,7 @@ public class DropPartitionTest {
         Assert.assertEquals(1, replicaList.size());
         Assert.assertNull(partition);
     }
+<<<<<<< HEAD
 
     @Test
     public void testNormalDropLakePartition() throws Exception {
@@ -269,4 +255,6 @@ public class DropPartitionTest {
                 "No partition named p1 in table lake_table",
                 () -> GlobalStateMgr.getCurrentState().recoverPartition(recoverPartitionStmt));
     }
+=======
+>>>>>>> f7221ffedc ([UT] Refactor some lake tests by using StarRocks mini cluster (#41202))
 }

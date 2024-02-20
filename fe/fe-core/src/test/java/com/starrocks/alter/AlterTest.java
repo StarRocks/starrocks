@@ -35,14 +35,6 @@
 package com.starrocks.alter;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Range;
-import com.staros.proto.AwsCredentialInfo;
-import com.staros.proto.AwsDefaultCredentialInfo;
-import com.staros.proto.FileCacheInfo;
-import com.staros.proto.FilePathInfo;
-import com.staros.proto.FileStoreInfo;
-import com.staros.proto.FileStoreType;
-import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
@@ -54,7 +46,6 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
@@ -65,13 +56,9 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
-import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.lake.DataCacheInfo;
-import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
-import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.scheduler.Constants;
@@ -79,8 +66,6 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
-import com.starrocks.server.SharedNothingStorageVolumeMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AddPartitionClause;
@@ -108,14 +93,11 @@ import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UserIdentity;
-import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
-import mockit.Mocked;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -1171,6 +1153,7 @@ public class AlterTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testAddPartitionForLakeTable(@Mocked StarOSAgent agent) throws Exception {
 
         FilePathInfo.Builder builder = FilePathInfo.newBuilder();
@@ -1391,6 +1374,8 @@ public class AlterTest {
     }
 
     @Test
+=======
+>>>>>>> f7221ffedc ([UT] Refactor some lake tests by using StarRocks mini cluster (#41202))
     public void testAddBackend() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
 
@@ -2273,6 +2258,7 @@ public class AlterTest {
         file.delete();
     }
 
+<<<<<<< HEAD
     @Test
     public void testSingleRangePartitionPersistInfo(@Mocked StarOSAgent agent) throws Exception {
         FilePathInfo.Builder builder = FilePathInfo.newBuilder();
@@ -2404,6 +2390,8 @@ public class AlterTest {
         file.delete();
     }
 
+=======
+>>>>>>> f7221ffedc ([UT] Refactor some lake tests by using StarRocks mini cluster (#41202))
     @Test(expected = DdlException.class)
     public void testAddSingleListPartitionSamePartitionNameShouldThrowError() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
