@@ -2438,7 +2438,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static String lake_compaction_warehouse = "default_warehouse";
-    
+
     @ConfField(mutable = true, comment = "the max number of threads for lake table publishing version")
     public static int lake_publish_version_max_threads = 512;
 
@@ -2738,6 +2738,24 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static String access_control = "native";
+
+    /**
+     * Kerberos principal used for mutual authentication with ranger
+     */
+    @ConfField(mutable = true)
+    public static String ranger_spnego_kerberos_principal = "";
+
+    /**
+     * Kerberos keytab file used for mutual authentication with ranger
+     */
+    @ConfField(mutable = true)
+    public static String ranger_spnego_kerberos_keytab = "";
+
+    /**
+     * Kerberos krb5.conf configure path, default /etc/krb5.conf
+     */
+    @ConfField(mutable = true)
+    public static String ranger_kerberos_krb5_conf = "";
 
     /**
      * Whether to use the unix group as the ranger authentication group
