@@ -19,12 +19,14 @@
 #include "runtime/global_dict/parser.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/conjunctive_predicates.h"
+#include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/olap_runtime_range_pruner.hpp"
 #include "storage/predicate_parser.h"
 #include "storage/projection_iterator.h"
+#include "storage/rowset/short_key_range_option.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks::connector {
@@ -48,6 +50,10 @@ public:
     int64_t num_rows_read() const override { return _num_rows_read; }
     int64_t num_bytes_read() const override { return _bytes_read; }
     int64_t cpu_time_spent() const override { return _cpu_time_spent_ns; }
+
+    void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) override {
+        _reader->get_split_tasks(split_tasks);
+    }
 
 private:
     Status get_tablet(const TInternalScanRange& scan_range);
@@ -185,9 +191,21 @@ public:
     // Make cloud native table behavior same as olap table
     bool always_shared_scan() const override { return false; }
 
+    StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
+            const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
+            bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
+            size_t num_total_scan_ranges) override;
+
 protected:
     ConnectorScanNode* _scan_node;
     const TLakeScanNode _t_lake_scan_node;
+
+private:
+    StatusOr<bool> _could_tablet_internal_parallel(const std::vector<TScanRangeParams>& scan_ranges,
+                                                   int32_t pipeline_dop, size_t num_total_scan_ranges,
+                                                   TTabletInternalParallelMode::type tablet_internal_parallel_mode,
+                                                   int64_t* scan_dop, int64_t* splitted_scan_rows) const;
+    StatusOr<bool> _could_split_tablet_physically(const std::vector<TScanRangeParams>& scan_ranges) const;
 };
 
 // ================================
@@ -398,6 +416,8 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     _params.use_page_cache = !config::disable_storage_page_cache && _scan_range.fill_data_cache;
     _params.lake_io_opts.fill_data_cache = _scan_range.fill_data_cache;
     _params.runtime_range_pruner = OlapRuntimeScanRangePruner(parser, _conjuncts_manager.unarrived_runtime_filters());
+    _params.splitted_scan_rows = _provider->get_splitted_scan_rows();
+    _params.scan_dop = _provider->get_scan_dop();
 
     std::vector<PredicatePtr> preds;
     RETURN_IF_ERROR(_conjuncts_manager.get_column_predicates(parser, &preds));
@@ -464,9 +484,28 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(init_unused_output_columns(thrift_lake_scan_node.unused_output_column_name));
     RETURN_IF_ERROR(init_scanner_columns(scanner_columns));
     RETURN_IF_ERROR(init_reader_params(_scanner_ranges, scanner_columns, reader_columns));
+
+    if (_split_context != nullptr) {
+        auto split_context = down_cast<const pipeline::LakeSplitContext*>(_split_context);
+        if (_provider->could_split_physically()) {
+            // physical
+            _params.rowid_range_option = split_context->rowid_range;
+        } else {
+            // logical
+            _params.short_key_ranges_option = split_context->short_key_range;
+        }
+    }
     starrocks::Schema child_schema = ChunkHelper::convert_schema(_tablet_schema, reader_columns);
 
-    ASSIGN_OR_RETURN(_reader, _tablet.new_reader(std::move(child_schema)));
+    // need to split
+    bool need_split = _provider->could_split() && _split_context == nullptr;
+    if (need_split) {
+        // used to construct a new morsel
+        _params.plan_node_id = _morsel->get_plan_node_id();
+        _params.scan_range = _morsel->get_scan_range();
+    }
+    ASSIGN_OR_RETURN(_reader,
+                     _tablet.new_reader(std::move(child_schema), need_split, _provider->could_split_physically()));
     if (reader_columns.size() == scanner_columns.size()) {
         _prj_iter = _reader;
     } else {
@@ -742,6 +781,80 @@ const TupleDescriptor* LakeDataSourceProvider::tuple_descriptor(RuntimeState* st
 DataSourceProviderPtr LakeConnector::create_data_source_provider(ConnectorScanNode* scan_node,
                                                                  const TPlanNode& plan_node) const {
     return std::make_unique<LakeDataSourceProvider>(scan_node, plan_node);
+}
+
+StatusOr<pipeline::MorselQueuePtr> LakeDataSourceProvider::convert_scan_range_to_morsel_queue(
+        const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
+        bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
+        size_t num_total_scan_ranges) {
+    auto morsel_queue = DataSourceProvider::convert_scan_range_to_morsel_queue(
+            scan_ranges, node_id, pipeline_dop, enable_tablet_internal_parallel, tablet_internal_parallel_mode,
+            num_total_scan_ranges);
+    if (enable_tablet_internal_parallel) {
+        int64_t scan_dop;
+        ASSIGN_OR_RETURN(_could_split, _could_tablet_internal_parallel(scan_ranges, pipeline_dop, num_total_scan_ranges,
+                                                                       tablet_internal_parallel_mode, &scan_dop,
+                                                                       &splitted_scan_rows));
+        if (_could_split) {
+            ASSIGN_OR_RETURN(_could_split_physically, _could_split_tablet_physically(scan_ranges));
+        }
+    }
+    return morsel_queue;
+}
+
+StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
+        const std::vector<TScanRangeParams>& scan_ranges, int32_t pipeline_dop, size_t num_total_scan_ranges,
+        TTabletInternalParallelMode::type tablet_internal_parallel_mode, int64_t* scan_dop,
+        int64_t* splitted_scan_rows) const {
+    //if (_t_lake_scan_node.use_pk_index) {
+    //    return false;
+    //}
+    bool force_split = tablet_internal_parallel_mode == TTabletInternalParallelMode::type::FORCE_SPLIT;
+    // The enough number of tablets shouldn't use tablet internal parallel.
+    if (!force_split && num_total_scan_ranges >= pipeline_dop) {
+        return false;
+    }
+
+    int64_t num_table_rows = 0;
+    for (const auto& tablet_scan_range : scan_ranges) {
+        int64_t version = std::stoll(scan_ranges[0].scan_range.internal_scan_range.version);
+        ASSIGN_OR_RETURN(auto tablet_num_rows,
+                         ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet_num_rows(
+                                 tablet_scan_range.scan_range.internal_scan_range.tablet_id, &version));
+        num_table_rows += static_cast<int64_t>(tablet_num_rows);
+    }
+
+    // splitted_scan_rows is restricted in the range [min_splitted_scan_rows, max_splitted_scan_rows].
+    *splitted_scan_rows =
+            config::tablet_internal_parallel_max_splitted_scan_bytes / _scan_node->estimated_scan_row_bytes();
+    *splitted_scan_rows =
+            std::max(config::tablet_internal_parallel_min_splitted_scan_rows,
+                     std::min(*splitted_scan_rows, config::tablet_internal_parallel_max_splitted_scan_rows));
+    // scan_dop is restricted in the range [1, dop].
+    *scan_dop = num_table_rows / *splitted_scan_rows;
+    *scan_dop = std::max<int64_t>(1, std::min<int64_t>(*scan_dop, pipeline_dop));
+
+    if (force_split) {
+        return true;
+    }
+
+    bool could = *scan_dop >= pipeline_dop || *scan_dop >= config::tablet_internal_parallel_min_scan_dop;
+    return could;
+}
+
+StatusOr<bool> LakeDataSourceProvider::_could_split_tablet_physically(
+        const std::vector<TScanRangeParams>& scan_ranges) const {
+    // Keys type needn't merge or aggregate.
+    int64_t version = std::stoll(scan_ranges[0].scan_range.internal_scan_range.version);
+    ASSIGN_OR_RETURN(auto first_tablet_schema,
+                     ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet_schema(
+                             scan_ranges[0].scan_range.internal_scan_range.tablet_id, &version));
+    KeysType keys_type = first_tablet_schema->keys_type();
+    const auto skip_aggr = _t_lake_scan_node.is_preaggregation;
+    bool is_keys_type_matched = keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS ||
+                                ((keys_type == UNIQUE_KEYS || keys_type == AGG_KEYS) && skip_aggr);
+
+    return is_keys_type_matched;
 }
 
 } // namespace starrocks::connector
