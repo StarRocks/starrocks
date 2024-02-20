@@ -32,7 +32,7 @@ import org.mariadb.jdbc.Driver;
 import static com.google.common.base.Strings.isNullOrEmpty;
 
 public class StarRocksJdbcConfig
-    extends BaseJdbcConfig
+        extends BaseJdbcConfig
 {
     public static final Pattern CONNECTION_STRING_PTRN = Pattern.compile("(?<scheme>[\\w\\+:%]+)\\s*"
         + "(?://(?<authority>[^/?#]*))?\\s*"

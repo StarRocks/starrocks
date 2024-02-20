@@ -188,7 +188,7 @@ import static java.util.Objects.requireNonNull;
 import static java.util.stream.Collectors.joining;
 
 public class StarRocksClient
-    extends BaseJdbcClient
+        extends BaseJdbcClient
 {
     private static final Logger log = Logger.get(StarRocksClient.class);
     private static final int MAX_SUPPORTED_DATE_TIME_PRECISION = 6;
