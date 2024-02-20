@@ -109,9 +109,6 @@ public class SqlParser {
             statement.setOrigStmt(new OriginStatement(sql, idx));
             statements.add(statement);
         }
-        if (ConnectContext.get() != null) {
-            ConnectContext.get().setRelationAliasCaseInSensitive(false);
-        }
         return statements;
     }
 

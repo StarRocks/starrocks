@@ -288,12 +288,16 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return type == TableType.MATERIALIZED_VIEW;
     }
 
-    public boolean isView() {
+    public boolean isOlapView() {
         return type == TableType.VIEW;
     }
 
     public boolean isHiveView() {
         return type == TableType.HIVE_VIEW;
+    }
+
+    public boolean isView() {
+        return isOlapView() || isHiveView();
     }
 
     public boolean isOlapTableOrMaterializedView() {
@@ -781,6 +785,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     public boolean isTable() {
         return !type.equals(TableType.MATERIALIZED_VIEW) &&
                 !type.equals(TableType.CLOUD_NATIVE_MATERIALIZED_VIEW) &&
-                !type.equals(TableType.VIEW);
+                !type.equals(TableType.VIEW) &&
+                !type.equals(TableType.HIVE_VIEW);
     }
 }

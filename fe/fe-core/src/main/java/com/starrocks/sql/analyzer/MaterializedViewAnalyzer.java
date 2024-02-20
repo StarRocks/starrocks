@@ -130,7 +130,8 @@ public class MaterializedViewAnalyzer {
                     Table.TableType.ICEBERG,
                     Table.TableType.JDBC,
                     Table.TableType.MYSQL,
-                    Table.TableType.VIEW);
+                    Table.TableType.VIEW,
+                    Table.TableType.HIVE_VIEW);
 
     public static void analyze(StatementBase stmt, ConnectContext session) {
         new MaterializedViewAnalyzerVisitor().visit(stmt, session);
