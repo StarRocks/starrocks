@@ -434,6 +434,10 @@ public:
                _query_options.enable_collect_table_level_scan_stats;
     }
 
+    bool enable_wait_dependent_event() const {
+        return _query_options.__isset.enable_wait_dependent_event && _query_options.enable_wait_dependent_event;
+    }
+
     bool is_jit_enabled() const { return _query_options.__isset.jit_level && _query_options.jit_level; }
 
     void set_jit_level(const int level) { _query_options.__set_jit_level(level); }
