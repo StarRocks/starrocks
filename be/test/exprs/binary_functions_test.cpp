@@ -51,7 +51,7 @@ public:
         return BinaryFunctions::from_binary(ctx.get(), columns);
     }
 
-    Slice hex_binary(const Slice& str) {
+    std::string hex_binary(const Slice& str) {
         std::stringstream ss;
         ss << std::hex << std::uppercase << std::setfill('0');
         for (int i = 0; i < str.size; ++i) {
@@ -88,9 +88,9 @@ TEST_F(BinaryFunctionsTest, TestToBinaryNormal) {
         ASSERT_TRUE(!v->is_null(0));
         ASSERT_EQ(v->size(), 1);
         if (binary_type == BinaryFormatType::HEX) {
-            ASSERT_EQ(Slice(expect), hex_binary(v->get_data()[0]));
+            ASSERT_EQ(expect, hex_binary(v->get_data()[0]));
         } else {
-            ASSERT_EQ(Slice(expect), v->get_data()[0]);
+            ASSERT_EQ(expect, v->get_data()[0]);
         }
     }
 
