@@ -738,6 +738,14 @@ StatusOr<LLVMDatum> Expr::generate_ir_impl(ExprContext* context, JITContext* jit
 }
 
 std::string Expr::jit_func_name() const {
+    if (this->is_compilable()) {
+        return this->jit_func_name_impl();
+    } else {
+        return Expr::jit_func_name_impl();
+    }
+}
+
+std::string Expr::jit_func_name_impl() const {
     DCHECK(!is_compilable());
     // uncompilable inputs, reducing string size.
     return std::string("col[") + (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string() +

@@ -126,7 +126,7 @@ public:
 
     bool is_compilable() const override { return IRHelper::support_jit(Type); }
 
-    std::string jit_func_name() const override {
+    std::string jit_func_name_impl() const override {
         return "{" + _children[0]->jit_func_name() + get_op_name<OP>() + _children[1]->jit_func_name() + "}" +
                (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
     }
@@ -195,7 +195,7 @@ public:
 
     bool is_compilable() const override { return Type != TYPE_LARGEINT && IRHelper::support_jit(Type); }
 
-    std::string jit_func_name() const override {
+    std::string jit_func_name_impl() const override {
         return "{" + _children[0]->jit_func_name() + "/" + _children[1]->jit_func_name() + "}" +
                (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
     }
@@ -273,7 +273,7 @@ public:
 
     bool is_compilable() const override { return Type != TYPE_LARGEINT && IRHelper::support_jit(Type); }
 
-    std::string jit_func_name() const override {
+    std::string jit_func_name_impl() const override {
         return "{" + _children[0]->jit_func_name() + "%" + _children[1]->jit_func_name() + "}" +
                (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
     }
@@ -316,7 +316,7 @@ public:
 
     bool is_compilable() const override { return IRHelper::support_jit(Type); }
 
-    std::string jit_func_name() const override {
+    std::string jit_func_name_impl() const override {
         return "{!" + _children[0]->jit_func_name() + "}" + (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") +
                type().debug_string();
     }
@@ -352,7 +352,7 @@ public:
 
     bool is_compilable() const override { return IRHelper::support_jit(Type); }
 
-    std::string jit_func_name() const override {
+    std::string jit_func_name_impl() const override {
         return "{" + _children[0]->jit_func_name() + get_op_name<OP>() + _children[1]->jit_func_name() + "}" +
                (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
     }

@@ -169,7 +169,7 @@ bool VectorizedLiteral::is_compilable() const {
     return IRHelper::support_jit(_type.type);
 }
 
-std::string VectorizedLiteral::jit_func_name() const {
+std::string VectorizedLiteral::jit_func_name_impl() const {
     return "{" + type().debug_string() + "[" + _value->debug_string() + "]}";
 }
 

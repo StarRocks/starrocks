@@ -177,7 +177,7 @@ public:
         }
     }
 
-    std::string jit_func_name() const override {
+    std::string jit_func_name_impl() const override {
         std::stringstream out;
         out << "{";
         for (auto i = 0; i < _children.size(); i++) {

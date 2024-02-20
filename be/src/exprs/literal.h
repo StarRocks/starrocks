@@ -32,7 +32,7 @@ public:
 
     bool is_compilable() const override;
 
-    std::string jit_func_name() const override;
+    std::string jit_func_name_impl() const override;
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override;
 
