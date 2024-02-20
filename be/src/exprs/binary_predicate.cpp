@@ -187,6 +187,7 @@ public:
                 LOG(WARNING) << "unsupported cmp op";
                 return Status::InternalError("unsupported cmp op");
             }
+            result.value = b.CreateIntCast(result.value, b.getInt8Ty(), false);
             result.null_flag = b.CreateOr(datums[0].null_flag, datums[1].null_flag);
             return result;
         }
@@ -436,6 +437,7 @@ public:
                 auto* cmp = b.CreateICmpEQ(l, r);
                 result.value = b.CreateSelect(if_value, llvm_true, b.CreateSelect(elseif_value, llvm_false, cmp));
             }
+            result.value = b.CreateIntCast(result.value, b.getInt8Ty(), false);
             // always not null
             return result;
         }
