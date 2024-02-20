@@ -1308,6 +1308,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 }
             }
         });
+
+        if (RunMode.isSharedDataMode()) {
+            String sv = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeNameOfTable(this.getId());
+            propsMap.put(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME, sv);
+        }
         return propsMap;
     }
 
