@@ -146,6 +146,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Default: TRUE
 - Description: Whether to support the DECIMAL V3 data type.
 
+##### expr_children_limit
+
+- Unit: -
+- Default: 10000
+- Description: The maximum number of child expressions allowed in an expression.
+
 ##### enable_sql_blacklist
 
 - Unit: -
@@ -385,7 +391,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - **Unit**: -
 - **Default**: FALSE
-- **Description**: Whether to disable loading when the cluster encounters an error. This prevents any loss caused by cluster errors. The default value is `FALSE`, indicating that loading is not disabled.
+- **Description**: Whether to disable loading when the cluster encounters an error. This prevents any loss caused by cluster errors. The default value is `FALSE`, indicating that loading is not disabled. `TRUE` indicates loading is disabled and the cluster is in read-only state.
 
 ##### history_job_keep_max_second
 
@@ -1536,7 +1542,7 @@ BE dynamic parameters are as follows.
 #### tablet_rowset_stale_sweep_time_sec
 
 - **Default:** 1,800 seconds
-- **Description:** The time interval at which to sweep the stale rowsets in tablets.
+- **Description:** The time interval at which to sweep the stale rowsets in tablets. A shorter interval can reduce metadata usage during loading.
 
 #### snapshot_expire_time_sec
 
@@ -1826,11 +1832,6 @@ BE dynamic parameters are as follows.
 - **Default**: 2147483648 (2 GB)
 - **Unit**: Byte
 - **Description**: The maximum memory usage per compaction thread.
-
-#### internal_service_async_thread_num
-
-- **Default:** 10 (Number of Threads)
-- **Description:** The thread pool size allowed on each BE for interacting with Kafka. Currently, the FE responsible for processing Routine Load requests depends on BEs to interact with Kafka, and each BE in StarRocks has its own thread pool for interactions with Kafka. If a large number of Routine Load tasks are distributed to a BE, the BE's thread pool for interactions with Kafka may be too busy to process all tasks in a timely manner. In this situation, you can adjust the value of this parameter to suit your needs.
 
 #### lake_enable_vertical_compaction_fill_data_cache
 
@@ -2261,7 +2262,12 @@ BE static parameters are as follows.
 
 - **Default**: 10
 - **Unit**: N/A
-- **Description**: The thread pool size for Routine Load on each BE. Since v3.1.0, this parameter is deprecated. The thread pool size for Routine Load on each BE is now controlled by the FE dynamic parameter max_routine_load_task_num_per_be.
+- **Description**: The thread pool size for Routine Load on each BE. Since v3.1.0, this parameter is deprecated. The thread pool size for Routine Load on each BE is now controlled by the FE dynamic parameter `max_routine_load_task_num_per_be`.
+
+#### internal_service_async_thread_num
+
+- **Default:** 10 (Number of Threads)
+- **Description:** The thread pool size allowed on each BE for interacting with Kafka. Currently, the FE responsible for processing Routine Load requests depends on BEs to interact with Kafka, and each BE in StarRocks has its own thread pool for interactions with Kafka. If a large number of Routine Load tasks are distributed to a BE, the BE's thread pool for interactions with Kafka may be too busy to process all tasks in a timely manner. In this situation, you can adjust the value of this parameter to suit your needs. **Since v3.1.0, this parameter is deprecated. The thread pool size for Routine Load on each BE is now controlled by the FE dynamic parameter `max_routine_load_task_num_per_be`.**
 
 #### brpc_max_body_size
 

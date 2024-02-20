@@ -146,16 +146,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 含义：是否开启 Decimal V3。
 - 默认值：TRUE
 
-<<<<<<< HEAD:docs/zh/administration/Configuration.md
-##### enable_sql_blacklist
-=======
-#### expr_children_limit
+##### expr_children_limit
 
 - 含义：一个表达式中子表达式的最大数量。
 - 默认值：10000
 
-#### enable_sql_blacklist
->>>>>>> f454bdcd08 ([Doc] Optimize info in parameters and SQL according to feedback (#41235)):docs/zh/administration/FE_configuration.md
+##### enable_sql_blacklist
 
 - 含义：是否开启 SQL Query 黑名单校验。如果开启，在黑名单中的 Query 不能被执行。
 - 默认值：FALSE
@@ -356,7 +352,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### disable_load_job
 
-- 含义：是否禁用任何导入任务，集群出问题时的止损措施。设置为 TRUE 时，无法进行导入任务，集群仅处于可读状态。
+- 含义：是否禁用任何导入任务，集群出问题时的止损措施。设置为 TRUE 时，无法进行导入任务，集群仅处于可读状态。设置为 `TRUE` 时，无法进行导入任务，集群仅处于可读状态。
 - 默认值：FALSE
 
 ##### history_job_keep_max_second
@@ -1474,7 +1470,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### tablet_rowset_stale_sweep_time_sec
 
-- 含义：失效 rowset 的清理间隔。
+- 含义：失效 rowset 的清理间隔。缩短该间隔可以降低导入时元数据的占用。
 - 单位：秒
 - 默认值：1800
 
@@ -1787,11 +1783,6 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 - 含义：Compaction 线程数上限（即 Base Compaction + Cumulative Compaction 的最大并发）。该参数防止 Compaction 占用过多内存。 -1 代表没有限制。0 表示不允许 compaction。
 - 默认值：-1
-
-#### internal_service_async_thread_num
-
-- 含义：单个 BE 上与 Kafka 交互的线程池大小。当前 Routine Load FE 与 Kafka 的交互需经由 BE 完成，而每个 BE 上实际执行操作的是一个单独的线程池。当 Routine Load 任务较多时，可能会出现线程池线程繁忙的情况，可以调整该配置。
-- 默认值：10
 
 #### lake_enable_vertical_compaction_fill_data_cache
 
@@ -2156,8 +2147,12 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### routine_load_thread_pool_size
 
-- 含义：单节点上 Routine Load 线程池大小。从 3.1.0 版本起，该参数已经废弃。单节点上 Routine Load 线程池大小完全由 FE 动态参数`max_routine_load_task_num_per_be` 控制。
+- 含义：单节点上 Routine Load 线程池大小。从 3.1.0 版本起，该参数已经废弃。单节点上 Routine Load 线程池大小完全由 FE 动态参数 `max_routine_load_task_num_per_be` 控制。
 - 默认值：10
+
+#### internal_service_async_thread_num
+
+- 含义：单个 BE 上与 Kafka 交互的线程池大小。当前 Routine Load FE 与 Kafka 的交互需经由 BE 完成，而每个 BE 上实际执行操作的是一个单独的线程池。当 Routine Load 任务较多时，可能会出现线程池线程繁忙的情况，可以调整该配置。从 3.1.0 版本起，该参数已经废弃。单节点上 Routine Load 线程池大小完全由 FE 动态参数 `max_routine_load_task_num_per_be` 控制。
 
 #### brpc_max_body_size
 
