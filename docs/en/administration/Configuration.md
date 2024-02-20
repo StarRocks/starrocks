@@ -1740,7 +1740,7 @@ BE static parameters are as follows.
 
 - **Default**: 128
 - **Unit**: N/A
-- **Description**: Specifies the size of the Hedged Read thread pool on your HDFS client. The thread pool size limits the number of threads to dedicate to the running of hedged reads in your HDFS client. This parameter is supported from v3.0 onwards. It is equivalent to the `dfs.client.hedged.read.threadpool.size parameter` in the `hdfs-site.xml` file of your HDFS cluster.
+- **Description**: Specifies the size of the Hedged Read thread pool on your HDFS client. The thread pool size limits the number of threads to dedicate to the running of hedged reads in your HDFS client. This parameter is supported from v3.0 onwards. It is equivalent to the `dfs.client.hedged.read.threadpool.size` parameter in the `hdfs-site.xml` file of your HDFS cluster.
 
 #### hdfs_client_hedged_read_threshold_millis
 
