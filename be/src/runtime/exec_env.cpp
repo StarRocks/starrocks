@@ -260,8 +260,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
             new pipeline::GlobalDriverExecutor("wg_pip_exe", std::move(wg_driver_executor_thread_pool), true);
     _wg_driver_executor->initialize(_max_executor_threads);
 
-    int connector_num_io_threads =
-            int(config::pipeline_connector_scan_thread_num_per_cpu * std::thread::hardware_concurrency());
+    int connector_num_io_threads = int(config::pipeline_connector_scan_thread_num_per_cpu * CpuInfo::num_cores());
     CHECK_GT(connector_num_io_threads, 0) << "pipeline_connector_scan_thread_num_per_cpu should greater than 0";
 
     if (config::hdfs_client_enable_hedged_read) {
