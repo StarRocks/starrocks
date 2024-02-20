@@ -57,6 +57,11 @@ public:
                  TupleDescriptor* delete_column_tuple_desc, const TIcebergSchema* iceberg_equal_delete_schema,
                  RuntimeState* stage) override;
 
+private:
+    FileSystem* _fs;
+    std::string _datafile_path;
+};
+
 class ParquetEqualityDeleteBuilder : public EqualityDeleteBuilder {
 public:
     ParquetEqualityDeleteBuilder(FileSystem* fs, std::string datafile_path)
@@ -67,11 +72,6 @@ public:
                  std::shared_ptr<DefaultMORProcessor> mor_processor, std::vector<SlotDescriptor*> slots,
                  TupleDescriptor* delete_column_tuple_desc, const TIcebergSchema* iceberg_equal_delete_schema,
                  RuntimeState* stage) override;
-
-private:
-    FileSystem* _fs;
-    std::string _datafile_path;
-};
 
 private:
     FileSystem* _fs;
