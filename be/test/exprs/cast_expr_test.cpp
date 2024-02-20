@@ -312,17 +312,15 @@ static void numeric_cast_with_jit(RuntimeState* runtime_state, TExprNode& cast_e
     } else {
         cast_expr.is_nullable = false;
     }
-
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr));
-
     cast_expr.type = gen_type_desc(cast_expr.child_type);
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr));
 
     for (auto& d : data) {
         MockVectorizedExpr<FromType> col1(cast_expr, 1, d);
+        expr->_children.clear();
         expr->_children.push_back(&col1);
 
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
-
         ExprsTestHelper::verify_result_with_jit(ptr, expr.get(), runtime_state);
     }
 }

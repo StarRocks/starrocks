@@ -1028,6 +1028,11 @@ displayed_sidebar: "Chinese"
 - 单位：Byte
 - 描述：Storage Page Cache 使用的内存。
 
+#### jit_cache_mem_bytes
+
+- 单位：Byte
+- 描述：jit 编译函数使用的内存。
+
 #### column_partial_update_apply_total
 
 - 单位：个

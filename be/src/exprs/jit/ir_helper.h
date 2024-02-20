@@ -14,12 +14,12 @@
 
 #pragma once
 
+#include <llvm/IR/IRBuilder.h>
+
 #include <cstdint>
 
 #include "column/type_traits.h"
 #include "common/statusor.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Value.h"
 #include "runtime/types.h"
 
 namespace starrocks {

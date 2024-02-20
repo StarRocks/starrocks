@@ -17,7 +17,6 @@
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "llvm/IR/Constants.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

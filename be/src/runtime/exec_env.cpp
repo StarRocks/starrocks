@@ -226,6 +226,7 @@ Status GlobalEnv::_init_mem_tracker() {
     _schema_change_mem_tracker = regist_tracker(-1, "schema_change", _process_mem_tracker.get());
     _column_pool_mem_tracker = regist_tracker(-1, "column_pool", _process_mem_tracker.get());
     _page_cache_mem_tracker = regist_tracker(-1, "page_cache", _process_mem_tracker.get());
+    _jit_cache_mem_tracker = regist_tracker(-1, "jit_cache", _process_mem_tracker.get());
     int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
     _update_mem_tracker = regist_tracker(bytes_limit * update_mem_percent / 100, "update", nullptr);
     _chunk_allocator_mem_tracker = regist_tracker(-1, "chunk_allocator", _process_mem_tracker.get());

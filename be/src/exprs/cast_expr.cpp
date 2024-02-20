@@ -15,6 +15,9 @@
 #include "exprs/cast_expr.h"
 
 #include <llvm/ADT/APInt.h>
+#include <llvm/IR/Constants.h>
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/Value.h>
 #include <ryu/ryu.h>
 
 #include <limits>
@@ -39,9 +42,6 @@
 #include "exprs/unary_function.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
-#include "llvm/IR/Constants.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Value.h"
 #include "runtime/datetime_value.h"
 #include "runtime/large_int_value.h"
 #include "runtime/runtime_state.h"
@@ -1143,6 +1143,11 @@ public:
                IRHelper::support_jit(FromType) && IRHelper::support_jit(ToType);
     }
 
+    std::string jit_func_name() const override {
+        return "{cast(" + _children[0]->jit_func_name() + ")}" + (is_constant() ? "c:" : "") +
+               (is_nullable() ? "n:" : "") + type().debug_string();
+    }
+
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
         ASSIGN_OR_RETURN(auto datum, _children[0]->generate_ir(context, jit_ctx))
         auto* l = datum.value;
@@ -1203,8 +1208,7 @@ public:
         std::stringstream out;
         auto expr_debug_string = Expr::debug_string();
         out << "VectorizedCastExpr ("
-            << "from=" << _children[0]->type().debug_string() << ", to=" << this->type().debug_string()
-            << ", expr=" << expr_debug_string << ")";
+            << "from=" << _children[0]->type().debug_string() << ", to expr=" << expr_debug_string << ")";
         return out.str();
     }
 };
