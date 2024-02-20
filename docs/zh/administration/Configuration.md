@@ -146,7 +146,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 含义：是否开启 Decimal V3。
 - 默认值：TRUE
 
+<<<<<<< HEAD:docs/zh/administration/Configuration.md
 ##### enable_sql_blacklist
+=======
+#### expr_children_limit
+
+- 含义：一个表达式中子表达式的最大数量。
+- 默认值：10000
+
+#### enable_sql_blacklist
+>>>>>>> f454bdcd08 ([Doc] Optimize info in parameters and SQL according to feedback (#41235)):docs/zh/administration/FE_configuration.md
 
 - 含义：是否开启 SQL Query 黑名单校验。如果开启，在黑名单中的 Query 不能被执行。
 - 默认值：FALSE
@@ -347,7 +356,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### disable_load_job
 
-- 含义：是否禁用任何导入任务，集群出问题时的止损措施。
+- 含义：是否禁用任何导入任务，集群出问题时的止损措施。设置为 TRUE 时，无法进行导入任务，集群仅处于可读状态。
 - 默认值：FALSE
 
 ##### history_job_keep_max_second
