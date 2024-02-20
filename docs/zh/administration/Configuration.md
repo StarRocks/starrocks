@@ -71,6 +71,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |max_allowed_in_element_num_of_delete|10000|DELETE 语句中 IN 谓词最多允许的元素数量。|
 |enable_materialized_view|TRUE|是否允许创建物化视图。|
 |enable_decimal_v3|TRUE|是否开启 Decimal V3。|
+|expr_children_limit |  10000 |  一个表达式中子表达式的最大数量。|
 |enable_sql_blacklist|FALSE|是否开启 SQL Query 黑名单校验。如果开启，在黑名单中的 Query 不能被执行。|
 |dynamic_partition_check_interval_seconds|600|动态分区检查的时间周期。如果有新数据生成，会自动生成分区。|
 |dynamic_partition_enable|TRUE|是否开启动态分区功能。打开后，您可以按需为新数据动态创建分区，同时 StarRocks 会⾃动删除过期分区，从而确保数据的时效性。|
@@ -108,9 +109,9 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |desired_max_waiting_jobs|1024|最多等待的任务数，适用于所有的任务，建表、导入、schema change。<br />如果 FE 中处于 PENDING 状态的作业数目达到该值，FE 会拒绝新的导入请求。该参数配置仅对异步执行的导入有效。从 2.5 版本开始，该参数默认值从 100 变为 1024。|
 |max_load_timeout_second|259200|导入作业的最大超时时间，适用于所有导入，单位为秒。|
 |min_load_timeout_second|1|导入作业的最小超时时间，适用于所有导入，单位为秒。|
-|max_running_txn_num_per_db|1000|StarRocks 集群每个数据库中正在运行的导入相关事务的最大个数，默认值为 `1000`。自 3.1 版本起，默认值由 100 变为 1000。<br />当数据库中正在运行的导入相关事务超过最大个数限制时，后续的导入不会执行。如果是同步的导入作业请求，作业会被拒绝；如果是异步的导入作业请求，作业会在队列中等待。不建议调大该值，会增加系统负载。|
-|load_parallel_instance_num|1|单个 BE 上每个作业允许的最大并发实例数。自 3.1 版本起弃用。|
-|disable_load_job|FALSE|是否禁用任何导入任务，集群出问题时的止损措施。|
+|max_running_txn_num_per_db|1000|StarRocks 集群每个数据库中正在运行的导入相关事务的最大个数，默认值为 `1000`。<br/>当数据库中正在运行的导入相关事务超过最大个数限制时，后续的导入不会执行。如果是同步的导入作业请求，作业会被拒绝；如果是异步的导入作业请求，作业会在队列中等待。不建议调大该值，会增加系统负载。|
+|load_parallel_instance_num|1|单个 BE 上每个作业允许的最大并发实例数。|
+|disable_load_job|FALSE|是否禁用任何导入任务，集群出问题时的止损措施。设置为 TRUE 时，无法进行导入任务，集群仅处于可读状态。|
 |history_job_keep_max_second|604800|历史任务最大的保留时长，例如 schema change 任务，单位为秒。|
 |label_keep_max_num|1000|一定时间内所保留导入任务的最大数量。超过之后历史导入作业的信息会被删除。|
 |label_keep_max_second|259200|已经完成、且处于 FINISHED 或 CANCELLED 状态的导入作业记录在 StarRocks 系统 label 的保留时长，默认值为 3 天。<br />该参数配置适用于所有模式的导入作业。单位为秒。设定过大将会消耗大量内存。|
@@ -355,7 +356,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | default_num_rows_per_column_file_block                | 1024        | N/A    | 每个 row block 最多存放的行数。                                |
 | pending_data_expire_time_sec                          | 1800        | second | 存储引擎保留的未生效数据的最大时长。                         |
 | inc_rowset_expired_sec                                | 1800        | second | 导入生效的数据，存储引擎保留的时间，用于增量克隆。           |
-| tablet_rowset_stale_sweep_time_sec                    | 1800        | second | 失效 rowset 的清理间隔。                                       |
+| tablet_rowset_stale_sweep_time_sec                    | 1800        | second | 失效 rowset 的清理间隔。缩短该间隔可以降低导入时元数据的占用。                                       |
 | snapshot_expire_time_sec                              | 172800      | second | 快照文件清理的间隔，默认 48 个小时。                         |
 | trash_file_expire_time_sec                            | 86,400      | second | 回收站清理的间隔，默认 24 个小时。自 v2.5.17、v3.0.9 以及 v3.1.6 起，默认值由 259,200 变为 86,400。                           |
 | base_compaction_check_interval_seconds                | 60          | second | BaseCompaction 线程轮询的间隔。                              |
@@ -396,8 +397,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | size_tiered_min_level_size                            | 131072      | Byte   | Size-tiered Compaction 策略中，最小 level 的大小，小于此数值的 rowset 会直接触发 compaction。 |
 | storage_page_cache_limit | 20% | N/A | PageCache 的容量，STRING，可写为容量大小，例如： `20G`、`20480M`、`20971520K` 或 `21474836480B`。也可以写为 PageCache 占系统内存的比例，例如，`20%`。该参数仅在 `disable_storage_page_cache` 为 `false` 时生效。|
 |max_compaction_concurrency|-1| N/A | Compaction 线程数上限（即 BaseCompaction + CumulativeCompaction 的最大并发）。该参数防止 Compaction 占用过多内存。 -1 代表没有限制。0 表示不允许 compaction。|
-| internal_service_async_thread_num | 10 | N/A | 单个 BE 上与 Kafka 交互的线程池大小。当前 Routine Load FE 与 Kafka 的交互需经由 BE 完成，而每个 BE 上实际执行操作的是一个单独的线程池。当 Routine Load 任务较多时，可能会出现线程池线程繁忙的情况，可以调整该配置。|
-|alter_tablet_worker_count|3|N/A|进行 schema change 的线程数。自 2.5 版本起，该参数由静态变为动态。|
+|alter_tablet_worker_count|3|N/A | 进行 schema change 的线程数。自 2.5 版本起，该参数由静态变为动态。|
 
 ### 配置 BE 静态参数
 
@@ -461,7 +461,10 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |load_process_max_memory_limit_bytes|107374182400|单节点上所有的导入线程占据的内存上限，100GB。|
 |load_process_max_memory_limit_percent|30|单节点上所有的导入线程占据的内存上限比例。|
 |sync_tablet_meta|FALSE|存储引擎是否开 sync 保留到磁盘上。|
-|routine_load_thread_pool_size|10|Routine Load 的线程池数目。|
+|routine_load_thread_pool_size|10|单节点上 Routine Load 线程池大小。从 3.1.0 版本起，该参数废弃。单节点上 Routine Load 线程池大小完全由 FE 动态参数 `max_routine_load_task_num_per_be` 控制。|
+|internal_service_async_thread_num | 10 | N/A | 单个 BE 上与 Kafka 交互的线程池大小。当前 Routine Load FE 与 Kafka 的交互需经由 BE 完成，而每个 BE 上实际执行操作的是一个单独的线程池。当 Routine Load 任务较多时，可能会出现线程池线程繁忙的情况，可以调整该配置。从 3.1.0 版本起，该参数废弃。单节点上 Routine Load 线程池大小完全由 FE 动态参数 `max_routine_load_task_num_per_be` 控制。|
+|max_garbage_sweep_interval|3600|s|磁盘进行垃圾清理的最大间隔。|
+|min_garbage_sweep_interval|180|s|磁盘进行垃圾清理的最小间隔。|
 |brpc_max_body_size|2147483648|bRPC 最大的包容量，单位为 Byte。|
 |tablet_map_shard_size|32|Tablet 分组数。|
 |enable_bitmap_union_disk_format_with_set|FALSE|Bitmap 新存储格式，可以优化 bitmap_union 性能。|
