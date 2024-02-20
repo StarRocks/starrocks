@@ -107,9 +107,10 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     public void testTPCDS54() throws Exception {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds54"));
         // Check the size of the left and right tables
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  49:NESTLOOP JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("51:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
-                "  |  other join predicates: cast([208: d_month_seq, INT, true] as BIGINT) <= [291: expr, BIGINT, true]\n" +
+                "  |  other join predicates: cast([208: d_month_seq, INT, true] as BIGINT) <= [291: expr, BIGINT, " +
+                "true]\n" +
                 "  |  cardinality: 18262\n" +
                 "  |  column statistics: \n" +
                 "  |  * d_date_sk-->[2415022.0, 2488070.0, 0.0, 4.0, 18262.25] ESTIMATE\n" +
@@ -496,9 +497,9 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     public void testCorrelatedPredicateRewrite() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/union_with_subquery"), null, TExplainLevel.COSTS);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("1110:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("1201:HASH JOIN\n" +
                 "  |  join op: RIGHT OUTER JOIN (BUCKET_SHUFFLE(S))\n" +
-                "  |  equal join conjunct: [3807: ref_id, BIGINT, true] = [3680: deal_id, BIGINT, true]"));
+                "  |  equal join conjunct: [3802: ref_id, BIGINT, true] = [3681: customer_id, BIGINT, true]"));
     }
 
     @Ignore

@@ -51,4 +51,12 @@ public class SessionVariableConstants {
             return this == AUTO || this == ADAPTIVE_DECREASE;
         }
     }
+
+    public enum AggregationStage {
+        AUTO,
+        ONE_STAGE,
+        TWO_STAGE,
+        THREE_STAGE,
+        FOUR_STAGE
+    }
 }
