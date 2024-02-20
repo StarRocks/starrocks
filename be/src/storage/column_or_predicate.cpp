@@ -48,7 +48,7 @@ bool ColumnOrPredicate::zone_map_filter(const ZoneMapDetail& detail) const {
 }
 
 Status ColumnOrPredicate::_evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
-    _child[0]->evaluate(column, selection, from, to);
+    RETURN_IF_ERROR(_child[0]->evaluate(column, selection, from, to));
     for (size_t i = 1; i < _child.size(); i++) {
         RETURN_IF_ERROR(_child[i]->evaluate_or(column, selection, from, to));
     }

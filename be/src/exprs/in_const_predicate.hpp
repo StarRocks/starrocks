@@ -107,7 +107,7 @@ public:
     }
 
     Status prepare(RuntimeState* state, ExprContext* context) override {
-        Expr::prepare(state, context);
+        RETURN_IF_ERROR(Expr::prepare(state, context));
 
         if (_is_prepare) {
             return Status::OK();
