@@ -21,8 +21,9 @@
 
 #include <gtest/gtest.h>
 
-#include "common/status.h"
 #include <thread>
+
+#include "common/status.h"
 
 namespace starrocks {
 using namespace config;
@@ -137,6 +138,19 @@ TEST_F(ConfigTest, UpdateConfigs) {
     ASSERT_FALSE(s.ok());
     ASSERT_EQ(s.to_string(), "Not supported: 'cfg_std_string' is not support to modify");
     ASSERT_EQ(cfg_std_string, "starrocks_config_test_string");
+
+    auto configs = config::list_configs();
+    for (const auto& c : configs) {
+        if (c.name == "cfg_std_string") {
+            ASSERT_FALSE(c.valmutable);
+            ASSERT_EQ("starrocks_config_test_string", c.value);
+            ASSERT_EQ("starrocks_config_test_string", c.defval);
+        } else if (c.name == "cfg_std_string_mutable") {
+            ASSERT_TRUE(c.valmutable);
+            ASSERT_EQ("starrocks_config_test_string_mutable", c.defval);
+            ASSERT_EQ("hello SR", c.value);
+        }
+    }
 }
 
 TEST_F(ConfigTest, test_read_write_mutable_string_concurrently) {
@@ -149,7 +163,7 @@ TEST_F(ConfigTest, test_read_write_mutable_string_concurrently) {
     std::vector<std::thread> threads;
     threads.reserve(5);
     for (int i = 0; i < 5; i++) {
-        threads.emplace_back([&, id=i]() {
+        threads.emplace_back([&, id = i]() {
             if (id < 2) { // writer
                 for (int j = 0; j < 200; j++) {
                     auto st = set_config("config_test_mstring", std::to_string(id));
