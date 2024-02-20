@@ -304,8 +304,7 @@ public class LakeMaterializedViewTest {
         Assert.assertTrue(baseProperties.contains("\"datacache.enable\" = \"true\""));
         Assert.assertTrue(baseProperties.contains("\"enable_async_write_back\" = \"true\""));
 
-        Assert.assertNull(mv.delete(true));
-        Assert.assertNotNull(mv.delete(false));
+        Assert.assertTrue(mv.delete(dbId, false));
     }
 
     @Test

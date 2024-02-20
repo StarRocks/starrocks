@@ -90,6 +90,7 @@ public class InfoSchemaDb extends Database {
     }
 
     @Override
+<<<<<<< HEAD
     public void dropTableWithLock(String name) {
         // Do nothing.
     }
@@ -97,6 +98,10 @@ public class InfoSchemaDb extends Database {
     @Override
     public void dropTable(String name) {
         // Do nothing.
+=======
+    public Table dropTable(String name) {
+        return null;
+>>>>>>> 1ad87cf4d3 ([Enhancement] (1/n) Improve data cleanup performance for dropped tables in shared data mode (#39883))
     }
 
     @Override

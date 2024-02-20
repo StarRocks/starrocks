@@ -480,8 +480,13 @@ public class Database extends MetaObject implements Writable {
 
     public void dropTable(String tableName, boolean isSetIfExists, boolean isForce) throws DdlException {
         Table table;
+<<<<<<< HEAD
         Runnable runnable;
         writeLock();
+=======
+        Locker locker = new Locker();
+        locker.lockDatabase(this, LockType.WRITE);
+>>>>>>> 1ad87cf4d3 ([Enhancement] (1/n) Improve data cleanup performance for dropped tables in shared data mode (#39883))
         try {
             table = getTable(tableName);
             if (table == null && isSetIfExists) {
@@ -497,33 +502,44 @@ public class Database extends MetaObject implements Writable {
                         "] cannot be dropped. If you want to forcibly drop(cannot be recovered)," +
                         " please use \"DROP TABLE <table> FORCE\".");
             }
-            runnable = unprotectDropTable(table.getId(), isForce, false);
+            unprotectDropTable(table.getId(), isForce, false);
             DropInfo info = new DropInfo(id, table.getId(), -1L, isForce);
             GlobalStateMgr.getCurrentState().getEditLog().logDropTable(info);
         } finally {
             writeUnlock();
         }
 
-        if (runnable != null) {
-            runnable.run();
+        if (isForce) {
+            table.delete(getId(), false);
         }
-        LOG.info("finished dropping table: {}, type:{} from db: {}, is force: {}", tableName, table.getType(), fullQualifiedName,
-                isForce);
+
+        LOG.info("Finished log drop table '{}' from database '{}'. tableId: {} tableType: {} force: {}",
+                tableName, fullQualifiedName, table.getId(), table.getType(), isForce);
     }
 
-    public Runnable unprotectDropTable(long tableId, boolean isForceDrop, boolean isReplay) {
-        Runnable runnable;
-        Table table = getTable(tableId);
-        // delete from db meta
-        if (table == null) {
-            return null;
-        }
-
-        if (table instanceof OlapTable && table.hasAutoIncrementColumn()) {
-            if (!isReplay) {
-                ((OlapTable) table).sendDropAutoIncrementMapTask();
+    /**
+     * Drop a table from this database.
+     *
+     * <p>
+     * Note: Prefer to modify {@link Table#onDrop(Database, boolean, boolean)} and
+     * {@link Table#delete(long, boolean)} rather than this function.
+     *
+     * @param tableId the id of the table to be dropped
+     * @param isForceDrop is this a force drop
+     * @param isReplay is this a log replay operation
+     * @return The dropped table
+     */
+    public Table unprotectDropTable(long tableId, boolean isForceDrop, boolean isReplay) {
+        Table table = dropTable(tableId);
+        if (table != null) {
+            table.onDrop(this, isForceDrop, isReplay);
+            if (!isForceDrop) {
+                GlobalStateMgr.getCurrentState().getRecycleBin().recycleTable(id, table, true);
             }
+            LOG.info("Finished drop table '{}' from database '{}'. tableId: {} force: {} replay: {}",
+                    table.getName(), getOriginName(), tableId, isForceDrop, isReplay);
         }
+<<<<<<< HEAD
 
         table.onDrop(this, isForceDrop, isReplay);
 
@@ -555,11 +571,27 @@ public class Database extends MetaObject implements Writable {
     }
 
     public void dropTable(String tableName) {
+=======
+        return table;
+    }
+
+    public Table dropTable(long tableId) {
+        Table table = this.idToTable.get(tableId);
+        if (table != null) {
+            this.nameToTable.remove(table.getName());
+            this.idToTable.remove(tableId);
+        }
+        return table;
+    }
+
+    public Table dropTable(String tableName) {
+>>>>>>> 1ad87cf4d3 ([Enhancement] (1/n) Improve data cleanup performance for dropped tables in shared data mode (#39883))
         Table table = this.nameToTable.get(tableName);
         if (table != null) {
             this.nameToTable.remove(tableName);
             this.idToTable.remove(table.getId());
         }
+        return table;
     }
 
     public List<Table> getTables() {

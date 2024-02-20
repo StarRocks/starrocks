@@ -37,13 +37,18 @@ public class SysDb extends Database {
     }
 
     @Override
+<<<<<<< HEAD
     public void dropTableWithLock(String name) {
         // Do nothing.
     }
 
     @Override
     public void dropTable(String name) {
+=======
+    public Table dropTable(String name) {
+>>>>>>> 1ad87cf4d3 ([Enhancement] (1/n) Improve data cleanup performance for dropped tables in shared data mode (#39883))
         // Do nothing.
+        return null;
     }
 
     @Override
