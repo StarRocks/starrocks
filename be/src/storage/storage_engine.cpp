@@ -134,6 +134,7 @@ StorageEngine::StorageEngine(const EngineOptions& options)
 StorageEngine::~StorageEngine() {
     // tablet manager need to destruct before set storage engine instance to nullptr because tablet may access storage
     // engine instance during their destruction.
+    _update_manager.reset();
     _tablet_manager.reset();
 #ifdef BE_TEST
     if (_s_instance == this) {
