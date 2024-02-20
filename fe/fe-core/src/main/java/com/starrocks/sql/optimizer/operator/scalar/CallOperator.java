@@ -49,6 +49,9 @@ public class CallOperator extends ScalarOperator {
     // The flag for distinct function
     private boolean isDistinct;
 
+    // The flag for remove distinct agg func because add extra agg steps in SplitMultiPhaseAggRule
+    private boolean removedDistinct;
+
     // Ignore nulls.
     private boolean ignoreNulls = false;
 
@@ -62,11 +65,17 @@ public class CallOperator extends ScalarOperator {
 
     public CallOperator(String fnName, Type returnType, List<ScalarOperator> arguments, Function fn,
                         boolean isDistinct) {
+        this(fnName, returnType, arguments, fn, isDistinct, false);
+    }
+
+    public CallOperator(String fnName, Type returnType, List<ScalarOperator> arguments, Function fn,
+                        boolean isDistinct, boolean removedDistinct) {
         super(OperatorType.CALL, returnType);
         this.fnName = requireNonNull(fnName, "fnName is null");
         this.arguments = new ArrayList<>(requireNonNull(arguments, "arguments is null"));
         this.fn = fn;
         this.isDistinct = isDistinct;
+        this.removedDistinct = removedDistinct;
     }
 
     public void setIgnoreNulls(boolean ignoreNulls) {
@@ -103,6 +112,35 @@ public class CallOperator extends ScalarOperator {
 
     public boolean isAggregate() {
         return fn != null && fn instanceof AggregateFunction;
+    }
+
+    public boolean isRemovedDistinct() {
+        return removedDistinct;
+    }
+
+    public void setRemovedDistinct(boolean removedDistinct) {
+        this.removedDistinct = removedDistinct;
+    }
+
+    public List<ScalarOperator> getDistinctChildren() {
+        if (!isDistinct) {
+            throw new IllegalArgumentException("callOperator: " + this + " should be a distinct function.");
+        }
+        List<ScalarOperator> res = Lists.newArrayList();
+        if (FunctionSet.GROUP_CONCAT.equals(fnName)) {
+            AggregateFunction aggFunc = (AggregateFunction) fn;
+            int idx = arguments.size() - aggFunc.getIsAscOrder().size() - 1;
+            for (int i = 0; i < arguments.size(); i++) {
+                if (idx == i) {
+                    // skip the separator argument
+                    continue;
+                }
+                res.add(arguments.get(i));
+            }
+        } else {
+            res = arguments;
+        }
+        return res;
     }
 
     @Override
@@ -193,7 +231,7 @@ public class CallOperator extends ScalarOperator {
             return false;
         }
         CallOperator other = (CallOperator) obj;
-        return isDistinct == other.isDistinct &&
+        return isDistinct == other.isDistinct && removedDistinct == other.removedDistinct &&
                 Objects.equals(fnName, other.fnName) &&
                 Objects.equals(type, other.type) &&
                 Objects.equals(arguments, other.arguments) &&
