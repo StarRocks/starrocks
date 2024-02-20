@@ -421,6 +421,8 @@ public class SparkLoadJob extends BulkLoadJob {
             loadingStatus = etlStatus;
             progress = 0;
             unprotectedUpdateState(JobState.LOADING);
+            loadStartTimestamp = System.currentTimeMillis();
+            startLoad = true;
             LOG.info("update to {} state success. job id: {}", state, id);
         } catch (Exception e) {
             LOG.warn("update to {} state failed. job id: {}", state, id, e);
