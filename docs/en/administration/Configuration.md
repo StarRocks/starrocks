@@ -1677,12 +1677,6 @@ BE dynamic parameters are as follows.
 - **Default:** 20%
 - **Description:** The PageCache size. It can be specified as size, for example, `20G`, `20,480M`, `20,971,520K`, or `21,474,836,480B`. It can also be specified as the ratio (percentage) to the memory size, for example, `20%`. It takes effect only when `disable_storage_page_cache` is set to `false`.
 
-<<<<<<< HEAD
-#### internal_service_async_thread_num
-
-- **Default:** 10 (Number of Threads)
-- **Description:** The thread pool size allowed on each BE for interacting with Kafka. Currently, the FE responsible for processing Routine Load requests depends on BEs to interact with Kafka, and each BE in StarRocks has its own thread pool for interactions with Kafka. If a large number of Routine Load tasks are distributed to a BE, the BE's thread pool for interactions with Kafka may be too busy to process all tasks in a timely manner. In this situation, you can adjust the value of this parameter to suit your needs.
-=======
 #### compaction_memory_limit_per_worker
 
 - **Default**: 2147483648 (2 GB)
@@ -1729,7 +1723,6 @@ BE dynamic parameters are as follows.
 - **Default**: 8
 - **Unit**: N/A
 - **Description**: The number of scan threads assigned to Pipeline Connector per CPU core in the BE node. This configuration is changed to dynamic from v3.1.7 onwards.
->>>>>>> 805606f914 ([Doc] Optimize info in parameters and SQL according to feedback (backport #41235) (#41243))
 
 ### Configure BE static parameters
 
@@ -1747,13 +1740,13 @@ BE static parameters are as follows.
 
 - **Default**: 128
 - **Unit**: N/A
-- **Description**: Specifies the size of the Hedged Read thread pool on your HDFS client. The thread pool size limits the number of threads to dedicate to the running of hedged reads in your HDFS client. This parameter is supported from v3.0 onwards. It is equivalent to the dfs.client.hedged.read.threadpool.size parameter in the hdfs-site.xml file of your HDFS cluster.
+- **Description**: Specifies the size of the Hedged Read thread pool on your HDFS client. The thread pool size limits the number of threads to dedicate to the running of hedged reads in your HDFS client. This parameter is supported from v3.0 onwards. It is equivalent to the `dfs.client.hedged.read.threadpool.size parameter` in the `hdfs-site.xml` file of your HDFS cluster.
 
 #### hdfs_client_hedged_read_threshold_millis
 
 - **Default**: 2500
 - **Unit**: Millisecond
-- **Description**: Specifies the number of milliseconds to wait before starting up a hedged read. For example, you have set this parameter to 30. In this situation, if a read from a block has not returned within 30 milliseconds, your HDFS client immediately starts up a new read against a different block replica. This parameter is supported from v3.0 onwards. It is equivalent to the dfs.client.hedged.read.threshold.millis parameter in the hdfs-site.xml file of your HDFS cluster.
+- **Description**: Specifies the number of milliseconds to wait before starting up a hedged read. For example, you have set this parameter to 30. In this situation, if a read from a block has not returned within 30 milliseconds, your HDFS client immediately starts up a new read against a different block replica. This parameter is supported from v3.0 onwards. It is equivalent to the dfs.client.hedged.read.threshold.millis parameter in the `hdfs-site.xml` file of your HDFS cluster.
 
 #### be_port
 
@@ -2098,16 +2091,12 @@ BE static parameters are as follows.
 
 - **Default**: 10
 - **Unit**: N/A
-<<<<<<< HEAD
-- **Description**: The thread pool size for Routine Load on each BE.
-=======
 - **Description**: The thread pool size for Routine Load on each BE. Since v3.1.0, this parameter is deprecated. The thread pool size for Routine Load on each BE is now controlled by the FE dynamic parameter `max_routine_load_task_num_per_be`.
 
 #### internal_service_async_thread_num
 
 - **Default:** 10 (Number of Threads)
 - **Description:** The thread pool size allowed on each BE for interacting with Kafka. Currently, the FE responsible for processing Routine Load requests depends on BEs to interact with Kafka, and each BE in StarRocks has its own thread pool for interactions with Kafka. If a large number of Routine Load tasks are distributed to a BE, the BE's thread pool for interactions with Kafka may be too busy to process all tasks in a timely manner. In this situation, you can adjust the value of this parameter to suit your needs. **Since v3.1.0, this parameter is deprecated. The thread pool size for Routine Load on each BE is now controlled by the FE dynamic parameter `max_routine_load_task_num_per_be`.**
->>>>>>> 805606f914 ([Doc] Optimize info in parameters and SQL according to feedback (backport #41235) (#41243))
 
 #### brpc_max_body_size
 
