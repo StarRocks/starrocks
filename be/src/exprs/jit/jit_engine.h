@@ -86,14 +86,14 @@ public:
 
     // Compile the expr into LLVM IR and register the compiled function into LRU cache.
     static Status compile_scalar_function(ExprContext* context, JitObjectCache* obj, Expr* expr,
-                                          const std::vector<Expr*> uncompilable_exprs);
+                                          const std::vector<Expr*>& uncompilable_exprs);
 
     bool lookup_function(JitObjectCache* const obj);
 
     Cache* get_func_cache() const { return _func_cache; }
 
     static Status generate_scalar_function_ir(ExprContext* context, llvm::Module& module, Expr* expr,
-                                              const std::vector<Expr*> uncompilable_exprs, JitObjectCache* obj);
+                                              const std::vector<Expr*>& uncompilable_exprs, JitObjectCache* obj);
 
     size_t get_cache_mem_usage() const {
         DCHECK(_func_cache != nullptr);

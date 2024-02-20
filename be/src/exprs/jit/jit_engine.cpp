@@ -162,7 +162,7 @@ Status JITEngine::init() {
 }
 
 Status JITEngine::compile_scalar_function(ExprContext* context, JitObjectCache* func_cache, Expr* expr,
-                                          const std::vector<Expr*> uncompilable_exprs) {
+                                          const std::vector<Expr*>& uncompilable_exprs) {
     auto* instance = JITEngine::get_instance();
     if (UNLIKELY(!instance->initialized())) {
         return Status::JitCompileError("JIT engine is not initialized");
@@ -196,7 +196,7 @@ std::string JITEngine::dump_module_ir(const llvm::Module& module) {
 }
 
 Status JITEngine::generate_scalar_function_ir(ExprContext* context, llvm::Module& module, Expr* expr,
-                                              const std::vector<Expr*> uncompilable_exprs, JitObjectCache* obj) {
+                                              const std::vector<Expr*>& uncompilable_exprs, JitObjectCache* obj) {
     llvm::IRBuilder<> b(module.getContext());
     size_t args_size = uncompilable_exprs.size();
 
