@@ -49,7 +49,7 @@ ADD 'https://dtdg.co/latest-java-tracer' /datadog/dd-java-agent.jar
 
 # Get ddprof for BE profiling
 RUN imagearch=$(arch | sed 's/aarch64/arm64/; s/x86_64/amd64/') \
-    && wget --no-check-certificate "https://github.com/DataDog/ddprof/releases/download/v0.15.3/ddprof-0.15.3-${imagearch}-linux.tar.xz" -O ddprof-linux.tar.xz \
+    && wget --no-check-certificate "https://github.com/DataDog/ddprof/releases/latest/download/ddprof-${imagearch}-linux.tar.xz" -O ddprof-linux.tar.xz \
     && tar xvf ddprof-linux.tar.xz && mkdir -p /datadog/  \
     && mv ddprof/bin/ddprof /datadog/ \
     && chmod 755 /datadog/ddprof
