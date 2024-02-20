@@ -181,7 +181,24 @@ public class IcebergHadoopCatalog implements IcebergCatalog {
 
     @Override
     public boolean dropTable(String dbName, String tableName, boolean purge) {
-        return delegate.dropTable(TableIdentifier.of(dbName, tableName), purge);
+        TableIdentifier tableIdentifier = TableIdentifier.of(dbName, tableName);
+        String location = delegate.loadTable(tableIdentifier).location();
+
+        if (!delegate.dropTable(tableIdentifier, purge)) {
+            return false;
+        }
+
+        // delete table directory if purge
+        if (purge) {
+            Path path = new Path(location);
+            try {
+                FileSystem fileSystem = FileSystem.get(path.toUri(), conf);
+                fileSystem.delete(path, true); // recursively
+            } catch (Exception e) {
+                LOG.error("Fail to delete table directory", e);
+            }
+        }
+        return true;
     }
 
     @Override
