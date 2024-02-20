@@ -646,6 +646,29 @@ public class Column implements Writable {
         return comment.equals(other.getComment());
     }
 
+    public boolean isSchemaCompatible(Column other) {
+        if (!this.name.equalsIgnoreCase(other.getName())) {
+            return false;
+        }
+        if (!this.getType().equals(other.getType())) {
+            return false;
+        }
+        if (!(aggregationType == other.aggregationType || (AggregateType.isNullOrNone(aggregationType) &&
+                AggregateType.isNullOrNone(other.getAggregationType())))) {
+            return false;
+        }
+        if (this.isAggregationTypeImplicit != other.isAggregationTypeImplicit()) {
+            return false;
+        }
+        if (this.isKey != other.isKey()) {
+            return false;
+        }
+        if (this.isAllowNull != other.isAllowNull) {
+            return false;
+        }
+        return true;
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
         String json = GsonUtils.GSON.toJson(this);
