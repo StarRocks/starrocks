@@ -49,7 +49,7 @@ import static io.airlift.configuration.ConfigBinder.configBinder;
 import static io.trino.plugin.starrocks.StarRocksJdbcConfig.transConnectionUrl;
 
 public class StarRocksClientModule
-    extends AbstractConfigurationAwareModule
+        extends AbstractConfigurationAwareModule
 {
     public static final String EMPTY = "";
 
@@ -82,13 +82,13 @@ public class StarRocksClientModule
     @Singleton
     @ForBaseJdbc
     public static ConnectionFactory createConnectionFactory(BaseJdbcConfig config, CredentialProvider credentialProvider, StarRocksJdbcConfig starRocksJdbcConfig)
-        throws SQLException
+            throws SQLException
     {
         return new DriverConnectionFactory(
-            new Driver(),
-            transConnectionUrl(config.getConnectionUrl()),
-            getConnectionProperties(starRocksJdbcConfig),
-            credentialProvider);
+                new Driver(),
+                transConnectionUrl(config.getConnectionUrl()),
+                getConnectionProperties(starRocksJdbcConfig),
+                credentialProvider);
     }
 
     public static Properties getConnectionProperties(StarRocksJdbcConfig starRocksJdbcConfig)
@@ -114,25 +114,25 @@ public class StarRocksClientModule
     public static StreamLoadProperties getStreamLoadProperties(StarRocksConfig starRocksConfig, BaseJdbcConfig baseJdbcConfig, CredentialConfig credentialConfig)
     {
         StreamLoadTableProperties streamLoadTableProperties = StreamLoadTableProperties.builder()
-            .database(EMPTY)
-            .table(EMPTY)
-            .streamLoadDataFormat(StreamLoadDataFormat.JSON)
-            .chunkLimit(starRocksConfig.getChunkLimit())
-            .enableUpsertDelete(Boolean.TRUE)
-            .addProperty("format", "json")
-            .addProperty("strict_mode", "true")
-            .addProperty("Expect", "100-continue")
-            .addProperty("strip_outer_array", "true")
-            .build();
+                .database(EMPTY)
+                .table(EMPTY)
+                .streamLoadDataFormat(StreamLoadDataFormat.JSON)
+                .chunkLimit(starRocksConfig.getChunkLimit())
+                .enableUpsertDelete(Boolean.TRUE)
+                .addProperty("format", "json")
+                .addProperty("strict_mode", "true")
+                .addProperty("Expect", "100-continue")
+                .addProperty("strip_outer_array", "true")
+                .build();
         return StreamLoadProperties.builder()
-            .loadUrls(starRocksConfig.getLoadUrls().toArray(new String[0]))
-            .jdbcUrl(transConnectionUrl(baseJdbcConfig.getConnectionUrl()))
-            .tableProperties(streamLoadTableProperties)
-            .cacheMaxBytes(starRocksConfig.getMaxCacheBytes())
-            .connectTimeout(starRocksConfig.getConnectTimeout())
-            .labelPrefix(starRocksConfig.getLabelPrefix())
-            .username(credentialConfig.getConnectionUser().orElse(EMPTY))
-            .password(credentialConfig.getConnectionPassword().orElse(EMPTY))
-            .build();
+                .loadUrls(starRocksConfig.getLoadUrls().toArray(new String[0]))
+                .jdbcUrl(transConnectionUrl(baseJdbcConfig.getConnectionUrl()))
+                .tableProperties(streamLoadTableProperties)
+                .cacheMaxBytes(starRocksConfig.getMaxCacheBytes())
+                .connectTimeout(starRocksConfig.getConnectTimeout())
+                .labelPrefix(starRocksConfig.getLabelPrefix())
+                .username(credentialConfig.getConnectionUser().orElse(EMPTY))
+                .password(credentialConfig.getConnectionPassword().orElse(EMPTY))
+                .build();
     }
 }
