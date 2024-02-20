@@ -2574,14 +2574,8 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public void replayDropTable(Database db, long tableId, boolean isForceDrop) {
-<<<<<<< HEAD
-        Runnable runnable;
-        db.writeLock();
-=======
         Table table;
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
->>>>>>> 1ad87cf4d3 ([Enhancement] (1/n) Improve data cleanup performance for dropped tables in shared data mode (#39883))
+        db.writeLock();
         try {
             table = db.unprotectDropTable(tableId, isForceDrop, true);
         } finally {

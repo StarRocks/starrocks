@@ -417,30 +417,6 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         for (Map<Long, RecycleTableInfo> tableEntry : idToTableInfo.rowMap().values()) {
             for (Map.Entry<Long, RecycleTableInfo> entry : tableEntry.entrySet()) {
                 RecycleTableInfo tableInfo = entry.getValue();
-<<<<<<< HEAD
-
-                if (canEraseTable(tableInfo, currentTimeMs)
-                        || GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(tableInfo.dbId) == null) {
-                    tableToRemove.add(tableInfo);
-                    currentEraseOpCnt++;
-                    if (currentEraseOpCnt >= MAX_ERASE_OPERATIONS_PER_CYCLE) {
-                        break;
-                    }
-                }
-            } // end for tables
-        }
-
-        List<Long> tableIdList = Lists.newArrayList();
-        if (!tableToRemove.isEmpty()) {
-            for (RecycleTableInfo tableInfo : tableToRemove) {
-                Table table = tableInfo.getTable();
-                long tableId = table.getId();
-                GlobalStateMgr.getCurrentState().removeAutoIncrementIdByTableId(tableId, false);
-                removeRecycleMarkers(tableId);
-                nameToTableInfo.remove(tableInfo.dbId, table.getName());
-                idToTableInfo.remove(tableInfo.dbId, tableId);
-                tableIdList.add(tableId);
-=======
                 if (!canEraseTable(tableInfo, currentTimeMs)) {
                     continue;
                 }
@@ -452,7 +428,6 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 if (l1.size()  + l2.size() >= MAX_ERASE_OPERATIONS_PER_CYCLE) {
                     break outerLoop;
                 }
->>>>>>> 1ad87cf4d3 ([Enhancement] (1/n) Improve data cleanup performance for dropped tables in shared data mode (#39883))
             }
         }
         if (!l1.isEmpty()) {
@@ -507,16 +482,6 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             }
             RecycleTableInfo tableInfo = idToTableInfo.remove(dbId, tableId);
             if (tableInfo != null) {
-<<<<<<< HEAD
-                Runnable runnable = null;
-                Table table = tableInfo.getTable();
-                GlobalStateMgr.getCurrentState().removeAutoIncrementIdByTableId(tableId, true);
-                nameToTableInfo.remove(dbId, table.getName());
-                runnable = table.delete(true);
-                if (!isCheckpointThread() && runnable != null) {
-                    runnable.run();
-                }
-=======
                 removedTableInfos.add(tableInfo);
                 nameToTableInfo.remove(dbId, tableInfo.table.getName());
             }
@@ -550,7 +515,6 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 finishedTables.add(info.table.getId());
             } else {
                 setNextEraseMinTime(info.table.getId(), System.currentTimeMillis() + FAIL_RETRY_INTERVAL);
->>>>>>> 1ad87cf4d3 ([Enhancement] (1/n) Improve data cleanup performance for dropped tables in shared data mode (#39883))
             }
         }
 

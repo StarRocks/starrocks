@@ -500,7 +500,7 @@ public class CatalogRecycleBinTest {
         recycleBin.idToRecycleTime.put(table1.getId(), expireFromNow - 1000);
         recycleBin.eraseTable(now);
 
-        Assert.assertEquals(recycleBin.getTables(dbId), List.of(table2));
+        Assert.assertEquals(recycleBin.getTables(dbId), Arrays.asList(table2));
         Assert.assertNull(recycleBin.getTable(dbId, table1.getId()));
         Assert.assertSame(recycleBin.getTable(dbId, table2.getId()), table2);
 

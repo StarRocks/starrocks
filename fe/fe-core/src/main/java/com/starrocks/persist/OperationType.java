@@ -508,21 +508,6 @@ public class OperationType {
     // alter catalog
     public static final short OP_ALTER_CATALOG = 13300;
 
-<<<<<<< HEAD
-=======
-    // Dictionary
-
-    @IgnorableOnReplayFailed
-    public static final short OP_CREATE_DICTIONARY = 13400;
-
-    @IgnorableOnReplayFailed
-    public static final short OP_DROP_DICTIONARY = 13401;
-
-    @IgnorableOnReplayFailed
-    public static final short OP_MODIFY_DICTIONARY_MGR = 13402;
-
-
->>>>>>> 1ad87cf4d3 ([Enhancement] (1/n) Improve data cleanup performance for dropped tables in shared data mode (#39883))
     // Replication job
     public static final short OP_REPLICATION_JOB = 13500;
 
