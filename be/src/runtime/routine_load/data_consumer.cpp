@@ -39,6 +39,7 @@
 #include <vector>
 
 #include "common/status.h"
+#include "fmt/format.h"
 #include "gutil/strings/split.h"
 #include "runtime/small_file_mgr.h"
 #include "service/backend_options.h"
@@ -182,7 +183,8 @@ Status KafkaDataConsumer::assign_topic_partitions(const std::map<int32_t, int64_
     RdKafka::ErrorCode err = _k_consumer->assign(topic_partitions);
     if (err) {
         LOG(WARNING) << "failed to assign topic partitions: " << ctx->brief(true) << ", err: " << RdKafka::err2str(err);
-        return Status::InternalError("failed to assign topic partitions");
+        return Status::InternalError(fmt::format("failed to assign topic partitions, err: {}, {}",
+                                                 RdKafka::err2str(err), _k_event_cb.get_error_msg()));
     }
 
     return Status::OK();
@@ -302,9 +304,10 @@ Status KafkaDataConsumer::get_partition_offset(std::vector<int32_t>* partition_i
         RdKafka::ErrorCode err =
                 _k_consumer->query_watermark_offsets(_topic, p_id, &beginning_offset, &latest_offset, left_ms);
         if (err != RdKafka::ERR_NO_ERROR) {
-            LOG(WARNING) << "failed to query watermark offset of topic: " << _topic << " partition: " << p_id
+            LOG(WARNING) << "failed to get kafka topic " << _topic << " partition " << p_id << " offset"
                          << ", err: " << RdKafka::err2str(err);
-            return Status::InternalError("failed to query watermark offset, err: " + RdKafka::err2str(err));
+            return Status::InternalError(fmt::format("failed to get kafka partition offset, err: {}, {}",
+                                                     RdKafka::err2str(err), _k_event_cb.get_error_msg()));
         }
         beginning_offsets->push_back(beginning_offset);
         latest_offsets->push_back(latest_offset);
@@ -334,10 +337,11 @@ Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids
 
     // get topic metadata
     RdKafka::Metadata* metadata = nullptr;
-    RdKafka::ErrorCode err = _k_consumer->metadata(true /* for this topic */, topic, &metadata, timeout);
+    RdKafka::ErrorCode err = _k_consumer->metadata(false /* all_topics */, topic, &metadata, timeout);
     if (err != RdKafka::ERR_NO_ERROR) {
         std::stringstream ss;
-        ss << "failed to get partition meta: " << RdKafka::err2str(err);
+        ss << "failed to get kafka partition meta, err: " << RdKafka::err2str(err) << ", "
+           << _k_event_cb.get_error_msg();
         LOG(WARNING) << ss.str();
         return Status::InternalError(ss.str());
     }
@@ -390,6 +394,7 @@ Status KafkaDataConsumer::reset() {
     _cancelled = false;
     _k_consumer->unassign();
     _non_eof_partition_count = 0;
+    _k_event_cb.reset_error_msg();
     return Status::OK();
 }
 
