@@ -22,6 +22,7 @@
 #include <gtest/gtest.h>
 
 #include "common/status.h"
+#include <thread>
 
 namespace starrocks {
 using namespace config;
@@ -98,9 +99,9 @@ TEST_F(ConfigTest, UpdateConfigs) {
     ASSERT_EQ(cfg_int64_t, 4294967296124);
 
     // string
-    ASSERT_EQ(cfg_std_string_mutable, "starrocks_config_test_string_mutable");
+    ASSERT_EQ(cfg_std_string_mutable.value(), "starrocks_config_test_string_mutable");
     ASSERT_TRUE(config::set_config("cfg_std_string_mutable", "hello SR").ok());
-    ASSERT_EQ(cfg_std_string_mutable, "hello SR");
+    ASSERT_EQ(cfg_std_string_mutable.value(), "hello SR");
 
     // not exist
     Status s = config::set_config("cfg_not_exist", "123");
@@ -136,6 +137,41 @@ TEST_F(ConfigTest, UpdateConfigs) {
     ASSERT_FALSE(s.ok());
     ASSERT_EQ(s.to_string(), "Not supported: 'cfg_std_string' is not support to modify");
     ASSERT_EQ(cfg_std_string, "starrocks_config_test_string");
+}
+
+TEST_F(ConfigTest, test_read_write_mutable_string_concurrently) {
+    CONF_mString(config_test_mstring, "default");
+
+    ASSERT_TRUE(config::init(nullptr, true));
+
+    EXPECT_EQ("default", config_test_mstring.value());
+
+    std::vector<std::thread> threads;
+    threads.reserve(5);
+    for (int i = 0; i < 5; i++) {
+        threads.emplace_back([&, id=i]() {
+            if (id < 2) { // writer
+                for (int j = 0; j < 200; j++) {
+                    auto st = set_config("config_test_mstring", std::to_string(id));
+                    ASSERT_TRUE(st.ok()) << st;
+                }
+            } else { // reader
+                auto prev_val = config_test_mstring.value();
+                for (int j = 0; j < 1000; j++) {
+                    std::string val = config_test_mstring.value();
+                    if (val != "default" && val != "0" && val != "1") {
+                        GTEST_FAIL() << val;
+                    } else if (val != prev_val) {
+                        LOG(INFO) << "config value changed to " << val;
+                        prev_val = std::move(val);
+                    }
+                }
+            }
+        });
+    }
+    for (auto& t : threads) {
+        t.join();
+    }
 }
 
 } // namespace starrocks
