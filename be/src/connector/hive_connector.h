@@ -143,6 +143,9 @@ private:
     // iceberg equality delete column slots.
     std::vector<SlotDescriptor*> _equality_delete_slots;
 
+    // iceberg equality delete column tuple desc.
+    TupleDescriptor* _delete_column_tuple_desc;
+
     // partition column index in `tuple_desc`
     std::vector<int> _partition_index_in_chunk;
     // partition index in hdfs partition columns
