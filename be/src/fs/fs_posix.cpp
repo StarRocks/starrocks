@@ -521,6 +521,7 @@ public:
 
     // Delete the specified directory.
     Status delete_dir(const std::string& dirname) override {
+        TEST_ERROR_POINT("PosixFileSystem::delete_dir");
         if (rmdir(dirname.c_str()) != 0) {
             return io_error(dirname, errno);
         }
