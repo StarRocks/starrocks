@@ -58,6 +58,7 @@ The following steps take a self-managed Kafka cluster as an example to demonstra
     starrocks.database.name=inventory
     key.converter=io.confluent.connect.json.JsonSchemaConverter
     value.converter=io.confluent.connect.json.JsonSchemaConverter
+    sink.properties.strip_outer_array=true
     ```
 
     > **NOTICE**

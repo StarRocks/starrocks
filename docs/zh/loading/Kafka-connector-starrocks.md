@@ -57,6 +57,7 @@ StarRocks 提供  Apache Kafka®  连接器 (StarRocks Connector for Apache Kafk
     starrocks.database.name=inventory
     key.converter=io.confluent.connect.json.JsonSchemaConverter
     value.converter=io.confluent.connect.json.JsonSchemaConverter
+    sink.properties.strip_outer_array=true
     ```
 
     > **注意**
