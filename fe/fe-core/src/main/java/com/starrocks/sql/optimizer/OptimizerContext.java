@@ -73,6 +73,9 @@ public class OptimizerContext {
     // which should be kept to be used to convert outer join into inner join.
     private List<IsNullPredicateOperator> pushdownNotNullPredicates = Lists.newArrayList();
 
+    // does query has external table
+    private boolean hasExternalTable = false;
+
     @VisibleForTesting
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
         this.memo = memo;
@@ -284,5 +287,13 @@ public class OptimizerContext {
     // Should clear pushdownNotNullPredicates after each call of PUSH_DOWN_PREDICATE rule set
     public void reset() {
         pushdownNotNullPredicates.clear();
+    }
+
+    public boolean isHasExternalTable() {
+        return hasExternalTable;
+    }
+
+    public void setHasExternalTable(boolean hasExternalTable) {
+        this.hasExternalTable = hasExternalTable;
     }
 }

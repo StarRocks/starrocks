@@ -511,6 +511,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_FORCE_RULE_BASED_MV_REWRITE =
             "eable_force_rule_based_mv_rewrite";
 
+    public static final String ENABLE_FORCE_RULE_BASED_MV_REWRITE_FOR_EXTERNAL =
+            "enable_force_rule_based_mv_rewrite_for_external";
+
     public static final String ENABLE_MATERIALIZED_VIEW_VIEW_DELTA_REWRITE =
             "enable_materialized_view_view_delta_rewrite";
 
@@ -1485,6 +1488,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_FORCE_RULE_BASED_MV_REWRITE)
     private boolean enableForceRuleBasedMvRewrite = false;
+
+    @VarAttr(name = ENABLE_FORCE_RULE_BASED_MV_REWRITE_FOR_EXTERNAL)
+    private boolean enableForceRuleBasedMvRewriteForExternal = true;
 
     @VarAttr(name = ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE)
     private boolean enableRuleBasedMaterializedViewRewrite = true;
@@ -2929,6 +2935,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableForceRuleBasedMvRewrite(boolean enableForceRuleBasedMvRewrite) {
         this.enableForceRuleBasedMvRewrite = enableForceRuleBasedMvRewrite;
+    }
+
+    public boolean isEnableForceRuleBasedMvRewriteForExternal() {
+        return enableForceRuleBasedMvRewriteForExternal;
+    }
+
+    public void setEnableForceRuleBasedMvRewriteForExternal(boolean enableForceRuleBasedMvRewriteForExternal) {
+        this.enableForceRuleBasedMvRewriteForExternal = enableForceRuleBasedMvRewriteForExternal;
     }
 
     public boolean isEnableMaterializedViewRewritePartitionCompensate() {

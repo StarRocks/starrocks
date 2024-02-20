@@ -339,6 +339,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return isHiveTable() || isIcebergTable() || isHudiTable() || isDeltalakeTable() || isPaimonTable();
     }
 
+    public boolean isExternalTable() {
+        return !isNativeTableOrMaterializedView();
+    }
+
     public boolean isHiveTable() {
         return type == TableType.HIVE;
     }

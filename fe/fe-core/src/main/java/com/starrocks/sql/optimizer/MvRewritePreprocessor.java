@@ -231,6 +231,8 @@ public class MvRewritePreprocessor {
         }
         try (Timer ignored = Tracers.watchScope("preprocessMvs")) {
             Set<Table> queryTables = MvUtils.getAllTables(queryOptExpression).stream().collect(Collectors.toSet());
+            // check external table
+            context.setHasExternalTable(queryTables.stream().anyMatch(table -> table.isExternalTable()));
             logMVParams(connectContext, queryTables);
 
             QueryMaterializationContext queryMaterializationContext = new QueryMaterializationContext();
