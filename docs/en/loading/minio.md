@@ -1,22 +1,28 @@
 ---
 displayed_sidebar: "English"
+toc_max_heading_level: 4
 ---
 
 # Load data from MinIO
-
-import LoadMethodIntro from '../assets/commonMarkdown/loadMethodIntro.md'
 
 import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
 
 StarRocks provides the following options for loading data from MinIO:
 
-<LoadMethodIntro />
+- Synchronous loading using [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md)+[`FILES()`](../sql-reference/sql-functions/table-functions/files.md)
+- Asynchronous loading using [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)
+
+Each of these options has its own advantages, which are detailed in the following sections.
+
+In most cases, we recommend that you use the INSERT+`FILES()` method, which is much easier to use.
+
+However, the INSERT+`FILES()` method currently supports only the Parquet and ORC file formats. Therefore, if you need to load data of other file formats such as CSV, or [perform data changes such as DELETE during data loading](../loading/Load_to_Primary_Key_tables.md), you can resort to Broker Load.
 
 ## Before you begin
 
 ### Make source data ready
 
-Make sure the source data you want to load into StarRocks is properly stored in an MinIO bucket. You may also consider where the data and the database are located, because data transfer costs are much lower when your bucket and your StarRocks cluster are located in the same region.
+Make sure the source data you want to load into StarRocks is properly stored in a MinIO bucket. You may also consider where the data and the database are located, because data transfer costs are much lower when your bucket and your StarRocks cluster are located in the same region.
 
 In this topic, we provide you with a sample dataset. You can download this with `curl`:
 
