@@ -15,7 +15,6 @@ displayed_sidebar: "Chinese"
 - [JDBC catalog](../../../data_source/catalog/jdbc_catalog.md)：用于查询 JDBC 数据源中的数据。
 - [Elasticsearch catalog](../../../data_source/catalog/elasticsearch_catalog.md)：用于查询 Elasticsearch 中的数据。该特性自 3.1 版本起支持。
 - [Paimon catalog](../../../data_source/catalog/paimon_catalog.md)：用于查询 Apache Paimon 中的数据。该特性自 3.1 版本起支持。
-- [Unified catalog](../../../data_source/catalog/unified_catalog.md)：把 Hive、Iceberg、Hudi 和 Delta Lake 作为一个融合的数据源，从中查询数据。该特性自 3.2 版本起支持。
 
 > **注意**
 >
