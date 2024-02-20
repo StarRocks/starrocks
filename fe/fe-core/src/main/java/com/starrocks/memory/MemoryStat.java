@@ -18,9 +18,9 @@ public class MemoryStat {
 
     private long currentConsumption;
 
-    private long objectCount;
-
     private long peakConsumption;
+
+    private String counterInfo;
 
     public long getCurrentConsumption() {
         return currentConsumption;
@@ -30,19 +30,19 @@ public class MemoryStat {
         this.currentConsumption = currentConsumption;
     }
 
-    public long getObjectCount() {
-        return objectCount;
-    }
-
-    public void setObjectCount(long objectCount) {
-        this.objectCount = objectCount;
-    }
-
     public long getPeakConsumption() {
         return peakConsumption;
     }
 
     public void setPeakConsumption(long peakConsumption) {
         this.peakConsumption = peakConsumption;
+    }
+
+    public String getCounterInfo() {
+        return counterInfo;
+    }
+
+    public void setCounterInfo(String counterInfo) {
+        this.counterInfo = counterInfo;
     }
 }
