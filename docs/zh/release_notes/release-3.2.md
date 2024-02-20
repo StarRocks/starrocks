@@ -24,7 +24,7 @@ displayed_sidebar: "Chinese"
 
 ### 参数变更
 
-- 新增 FE 配置项  `http_worker_threads_num`，HTTP Server 用于处理 HTTP 请求的线程数。默认取值为 0。如果配置为负数或 0 ，线程数将设置为 CPU 核数的 2 倍**。**[#37530](https://github.com/StarRocks/starrocks/pull/37530)
+- 新增 FE 配置项  `http_worker_threads_num`，HTTP Server 用于处理 HTTP 请求的线程数。默认取值为 0。如果配置为负数或 0 ，线程数将设置为 CPU 核数的 2 倍。[#37530](https://github.com/StarRocks/starrocks/pull/37530)
 - 新增 BE 配置项 `lake_pk_compaction_max_input_rowsets`，用于控制存算分离集群下主键表 Compaction 任务中允许的最大输入 Rowset 数量，优化 Compaction 时资源的使用。[#39611](https://github.com/StarRocks/starrocks/pull/39611)
 - 新增 Session 变量 `connector_sink_compression_codec`，用于指定写入 Hive 表或 Iceberg 表时以及使用 Files() 导出数据时的压缩算法，可选算法包括 GZIP、BROTLI、ZSTD 以及 LZ4。 [#37912](https://github.com/StarRocks/starrocks/pull/37912)
 - 新增 FE 配置项 `routine_load_unstable_threshold_second`。[#36222](https://github.com/StarRocks/starrocks/pull/36222)
@@ -38,7 +38,7 @@ displayed_sidebar: "Chinese"
 - 对于分区字段为 TIMESTAMP 类型的 Iceberg 表，新增 `yyyy-MM-ddTHH:mm` 和 `yyyy-MM-dd HH:mm` 两种数据格式的支持。[#39986](https://github.com/StarRocks/starrocks/pull/39986)
 - 监控 API 增加 Data Cache 相关指标。 [#40375](https://github.com/StarRocks/starrocks/pull/40375)
 - 优化 BE 的日志打印，避免日志过多。 [#22820](https://github.com/StarRocks/starrocks/pull/22820) [#36187](https://github.com/StarRocks/starrocks/pull/36187)
-- 视图 `information_schema.``be_tablets` 中增加 `storage_medium` 字段。 [#37070](https://github.com/StarRocks/starrocks/pull/37070)
+- 视图 `information_schema.be_tablets` 中增加 `storage_medium` 字段。 [#37070](https://github.com/StarRocks/starrocks/pull/37070)
 - 支持在多个子查询中使用 `SET_VAR`。 [#36871](https://github.com/StarRocks/starrocks/pull/36871)
 - SHOW ROUTINE LOAD 返回结果中增加 `LatestSourcePosition`，记录数据源 Kafka 中 Topic 内各个分区的最新消息位点，便于检查导入延迟情况。[#38298](https://github.com/StarRocks/starrocks/pull/38298)
 - WHERE 子句中 LIKE 运算符右侧字符串中不包括 `%` 或者 `_` 时，LIKE 运算符会转换成 `=` 运算符。[#37515](https://github.com/StarRocks/starrocks/pull/37515)
