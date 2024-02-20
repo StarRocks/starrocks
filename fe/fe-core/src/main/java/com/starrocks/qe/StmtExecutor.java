@@ -1752,11 +1752,9 @@ public class StmtExecutor {
                 serializer.writeField(colNames.get(i), parameters.get(i).getType());
                 context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
             }
-            if (!serializer.getCapability().isDeprecateEof()) {
-                MysqlEofPacket eofPacket = new MysqlEofPacket(context.getState());
-                eofPacket.writeTo(serializer);
-                context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
-            }
+            MysqlEofPacket eofPacket = new MysqlEofPacket(context.getState());
+            eofPacket.writeTo(serializer);
+            context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
         }
 
         if (numColumns > 0) {
@@ -1765,11 +1763,9 @@ public class StmtExecutor {
                 serializer.writeField(field.getName(), field.getType());
                 context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
             }
-            if (!serializer.getCapability().isDeprecateEof()) {
-                MysqlEofPacket eofPacket = new MysqlEofPacket(context.getState());
-                eofPacket.writeTo(serializer);
-                context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
-            }
+            MysqlEofPacket eofPacket = new MysqlEofPacket(context.getState());
+            eofPacket.writeTo(serializer);
+            context.getMysqlChannel().sendOnePacket(serializer.toByteBuffer());
         }
 
         context.getMysqlChannel().flush();
