@@ -1148,11 +1148,6 @@ public:
                (is_nullable() ? "n:" : "") + type().debug_string();
     }
 
-    std::string jit_func_name_impl() const override {
-        return "{cast(" + _children[0]->jit_func_name() + ")}" + (is_constant() ? "c:" : "") +
-               (is_nullable() ? "n:" : "") + type().debug_string();
-    }
-
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
         ASSIGN_OR_RETURN(auto datum, _children[0]->generate_ir(context, jit_ctx))
         auto* l = datum.value;
