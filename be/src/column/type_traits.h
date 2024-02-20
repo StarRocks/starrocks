@@ -108,16 +108,6 @@ struct RunTimeTypeTraits<TYPE_TINYINT> {
 };
 
 template <>
-<<<<<<< HEAD
-=======
-struct RunTimeTypeTraits<TYPE_UNSIGNED_TINYINT> {
-    using CppType = uint8_t;
-    using ColumnType = UInt8Column;
-    using ProxyContainerType = ColumnType::Container;
-};
-
-template <>
->>>>>>> 11e37dfaea ([Enhancement] Avoid build slice for runtime filter evaluate (#33550))
 struct RunTimeTypeTraits<TYPE_SMALLINT> {
     using CppType = int16_t;
     using ColumnType = Int16Column;
@@ -125,16 +115,6 @@ struct RunTimeTypeTraits<TYPE_SMALLINT> {
 };
 
 template <>
-<<<<<<< HEAD
-=======
-struct RunTimeTypeTraits<TYPE_UNSIGNED_SMALLINT> {
-    using CppType = uint16_t;
-    using ColumnType = UInt16Column;
-    using ProxyContainerType = ColumnType::Container;
-};
-
-template <>
->>>>>>> 11e37dfaea ([Enhancement] Avoid build slice for runtime filter evaluate (#33550))
 struct RunTimeTypeTraits<TYPE_INT> {
     using CppType = int32_t;
     using ColumnType = Int32Column;
@@ -142,16 +122,6 @@ struct RunTimeTypeTraits<TYPE_INT> {
 };
 
 template <>
-<<<<<<< HEAD
-=======
-struct RunTimeTypeTraits<TYPE_UNSIGNED_INT> {
-    using CppType = uint32_t;
-    using ColumnType = UInt32Column;
-    using ProxyContainerType = ColumnType::Container;
-};
-
-template <>
->>>>>>> 11e37dfaea ([Enhancement] Avoid build slice for runtime filter evaluate (#33550))
 struct RunTimeTypeTraits<TYPE_BIGINT> {
     using CppType = int64_t;
     using ColumnType = Int64Column;
@@ -159,16 +129,6 @@ struct RunTimeTypeTraits<TYPE_BIGINT> {
 };
 
 template <>
-<<<<<<< HEAD
-=======
-struct RunTimeTypeTraits<TYPE_UNSIGNED_BIGINT> {
-    using CppType = uint64_t;
-    using ColumnType = UInt64Column;
-    using ProxyContainerType = ColumnType::Container;
-};
-
-template <>
->>>>>>> 11e37dfaea ([Enhancement] Avoid build slice for runtime filter evaluate (#33550))
 struct RunTimeTypeTraits<TYPE_LARGEINT> {
     using CppType = int128_t;
     using ColumnType = Int128Column;
@@ -315,16 +275,6 @@ struct RunTimeTypeTraits<TYPE_MAP> {
     using ProxyContainerType = void;
 };
 
-<<<<<<< HEAD
-=======
-template <>
-struct RunTimeTypeTraits<TYPE_ARRAY> {
-    using CppType = DatumArray;
-    using ColumnType = ArrayColumn;
-    using ProxyContainerType = void;
-};
-
->>>>>>> 11e37dfaea ([Enhancement] Avoid build slice for runtime filter evaluate (#33550))
 template <LogicalType Type>
 using RunTimeCppType = typename RunTimeTypeTraits<Type>::CppType;
 
