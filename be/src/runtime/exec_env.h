@@ -141,6 +141,7 @@ public:
     MemTracker* schema_change_mem_tracker() { return _schema_change_mem_tracker.get(); }
     MemTracker* column_pool_mem_tracker() { return _column_pool_mem_tracker.get(); }
     MemTracker* page_cache_mem_tracker() { return _page_cache_mem_tracker.get(); }
+    MemTracker* jit_cache_mem_tracker() { return _jit_cache_mem_tracker.get(); }
     MemTracker* update_mem_tracker() { return _update_mem_tracker.get(); }
     MemTracker* chunk_allocator_mem_tracker() { return _chunk_allocator_mem_tracker.get(); }
     MemTracker* clone_mem_tracker() { return _clone_mem_tracker.get(); }
@@ -203,6 +204,9 @@ private:
 
     // The memory used for page cache
     std::shared_ptr<MemTracker> _page_cache_mem_tracker;
+
+    // The memory used for jit cache
+    std::shared_ptr<MemTracker> _jit_cache_mem_tracker;
 
     // The memory tracker for update manager
     std::shared_ptr<MemTracker> _update_mem_tracker;

@@ -177,6 +177,31 @@ public:
         }
     }
 
+    std::string jit_func_name() const override {
+        std::stringstream out;
+        out << "{";
+        for (auto i = 0; i < _children.size(); i++) {
+            if (i == 0) {
+                if (_has_case_expr) {
+                    out << "C";
+                } else {
+                    out << "CW";
+                }
+            } else if (i + 1 == _children.size() && _has_else_expr) {
+                out << "EL";
+            } else {
+                if ((i + _has_case_expr) % 2 == 0) {
+                    out << "W";
+                } else {
+                    out << "T";
+                }
+            }
+            out << "<" << _children[i]->jit_func_name() << ">";
+        }
+        out << "}" << (is_constant() ? "c:" : "") << (is_nullable() ? "n:" : "") << type().debug_string();
+        return out.str();
+    }
+
     std::string debug_string() const override {
         std::stringstream out;
         auto expr_debug_string = Expr::debug_string();

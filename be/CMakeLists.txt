@@ -541,9 +541,10 @@ set (LLVM_LIBRARIES
     LLVMBinaryFormat
     LLVMDebugInfoDWARF
     LLVMObjCARCOpts
+    LLVMPasses
     LLVMCodeGen
+    LLVMFrontendOpenMP
     LLVMMCDisassembler
-    LLVMSupport
     LLVMJITLink
     LLVMCFGuard
     LLVMInstrumentation
@@ -557,10 +558,14 @@ set (LLVM_LIBRARIES
     LLVMAnalysis
     LLVMGlobalISel
     LLVMScalarOpts
+    LLVMLinker
+    LLVMCoroutines
     LLVMTargetParser
     LLVMDemangle
     LLVMRemarks
     LLVMDebugInfoCodeView
+    LLVMAggressiveInstCombine
+    LLVMIRPrinter
     LLVMOrcShared
     LLVMOrcJIT
     LLVMTextAPI
@@ -570,7 +575,11 @@ set (LLVM_LIBRARIES
     LLVMTransformUtils
     LLVMSelectionDAG
     LLVMMCParser
+    LLVMX86AsmParser
+    LLVMX86Disassembler
+    LLVMSupport
 )
+
 if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86_64")
     list(APPEND LLVM_LIBRARIES LLVMX86CodeGen LLVMX86Desc LLVMX86Info)
 elseif ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
