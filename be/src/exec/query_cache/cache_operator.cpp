@@ -21,10 +21,13 @@
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "exec/pipeline/pipeline_driver.h"
-#include "storage/rowset/rowset.h"
+#include "storage/lake/tablet.h"
+#include "storage/lake/tablet_manager.h"
+#include "storage/rowset/base_rowset.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "util/time.h"
+
 namespace starrocks::query_cache {
 enum PerLaneBufferState {
     PLBS_INIT,
@@ -40,8 +43,8 @@ struct PerLaneBuffer {
     LaneOwnerType lane_owner{-1};
     int lane;
     PerLaneBufferState state;
-    TabletSharedPtr tablet;
-    std::vector<RowsetSharedPtr> rowsets;
+    BaseTabletSharedPtr tablet;
+    std::vector<BaseRowsetSharedPtr> rowsets;
     RowsetsAcqRelPtr rowsets_acq_rel;
     int64_t required_version;
     int64_t cached_version;
@@ -233,32 +236,63 @@ void CacheOperator::_handle_stale_cache_value_for_non_pk(int64_t tablet_id, Cach
                                                          PerLaneBufferPtr& buffer, int64_t version) {
     // Try to reuse partial cache result when cached version is less than required version, delta versions
     // should be captured at first.
-    auto status = StorageEngine::instance()->tablet_manager()->capture_tablet_and_rowsets(
-            tablet_id, cache_value.version + 1, version);
+    std::shared_ptr<BaseTablet> base_tablet;
+    std::vector<BaseRowsetSharedPtr> base_rowsets;
+    RowsetsAcqRelPtr rowsets_acq_rel = nullptr;
 
-    // Cache MISS if delta versions are not captured, because aggressive cumulative compactions.
-    if (!status.ok()) {
-        buffer->state = PLBS_MISS;
-        buffer->cached_version = 0;
-        return;
+    if (!_cache_param.is_lake) {
+        auto status = StorageEngine::instance()->tablet_manager()->capture_tablet_and_rowsets(
+                tablet_id, cache_value.version + 1, version);
+        if (!status.ok()) {
+            buffer->state = PLBS_MISS;
+            buffer->cached_version = 0;
+            return;
+        }
+
+        // Delta versions are captured, several situations should be taken into consideration.
+        auto& [tablet, rowsets, acq_rel] = status.value();
+        base_tablet = std::static_pointer_cast<BaseTablet>(tablet);
+        for (auto rowset_ptr : rowsets) {
+            base_rowsets.emplace_back(std::static_pointer_cast<BaseRowset>(rowset_ptr));
+        }
+        rowsets_acq_rel = std::move(acq_rel);
+
+    } else {
+        auto status = ExecEnv::GetInstance()->lake_tablet_manager()->capture_tablet_and_rowsets(
+                tablet_id, cache_value.version, version);
+        // Cache MISS if delta versions are not captured, because aggressive cumulative compactions.
+        if (!status.ok()) {
+            buffer->state = PLBS_MISS;
+            buffer->cached_version = 0;
+            return;
+        }
+
+        auto& [tablet, rowsets] = status.value();
+        base_tablet = std::static_pointer_cast<BaseTablet>(tablet);
+        base_rowsets = std::move(rowsets);
     }
 
     // Delta versions are captured, several situations should be taken into consideration.
-    auto& [tablet, rowsets, rowsets_acq_rel] = status.value();
     auto all_rs_empty = true;
     auto min_version = std::numeric_limits<int64_t>::max();
     auto max_version = std::numeric_limits<int64_t>::min();
-    for (const auto& rs : rowsets) {
+    for (const auto& rs : base_rowsets) {
         all_rs_empty &= !rs->has_data_files();
-        min_version = std::min(min_version, rs->start_version());
-        max_version = std::max(max_version, rs->end_version());
+        if (!_cache_param.is_lake) {
+            min_version = std::min(min_version, rs->start_version());
+            max_version = std::max(max_version, rs->end_version());
+        } else {
+            min_version = cache_value.version + 1;
+            max_version = version;
+        }
     }
     Version delta_versions(min_version, max_version);
-    buffer->tablet = tablet;
-    auto has_delete_predicates = tablet->has_delete_predicates(delta_versions);
+    buffer->tablet = base_tablet;
+    auto has_delete_predicates = base_tablet->has_delete_predicates(delta_versions);
     // case 1: there exist delete predicates in delta versions, or data model can not support multiversion cache and
     // the tablet has non-empty delta rowsets; then cache result is not reuse, so cache miss.
-    if (has_delete_predicates || (!_cache_param.can_use_multiversion && !all_rs_empty)) {
+    if (!has_delete_predicates.ok() || has_delete_predicates.value() ||
+        (!_cache_param.can_use_multiversion && !all_rs_empty)) {
         buffer->state = PLBS_MISS;
         buffer->cached_version = 0;
         return;
@@ -278,7 +312,7 @@ void CacheOperator::_handle_stale_cache_value_for_non_pk(int64_t tablet_id, Cach
     // case 3: otherwise, the cache result is partial result of per-tablet computation, so delta versions must
     //  be scanned and merged with cache result to generate total result.
     buffer->state = PLBS_HIT_PARTIAL;
-    buffer->rowsets = std::move(rowsets);
+    buffer->rowsets = std::move(base_rowsets);
     buffer->rowsets_acq_rel = std::move(rowsets_acq_rel);
     buffer->num_rows = 0;
     buffer->num_bytes = 0;
@@ -295,17 +329,50 @@ void CacheOperator::_handle_stale_cache_value_for_pk(int64_t tablet_id, starrock
     DCHECK(_cache_param.keys_type == TKeysType::PRIMARY_KEYS);
     // At the present, PRIMARY_KEYS can not support merge-on-read, so we can not merge stale cache values and delta
     // rowsets. Capturing delta rowsets is meaningless and unsupported, thus we capture all rowsets of the PK tablet.
-    auto status = StorageEngine::instance()->tablet_manager()->capture_tablet_and_rowsets(tablet_id, 0, version);
-    if (!status.ok()) {
+    std::shared_ptr<BaseTablet> base_tablet;
+    std::vector<BaseRowsetSharedPtr> base_rowsets;
+    RowsetsAcqRelPtr rowsets_acq_rel = nullptr;
+
+    if (!_cache_param.is_lake) {
+        auto status = StorageEngine::instance()->tablet_manager()->capture_tablet_and_rowsets(tablet_id, 0, version);
+        if (!status.ok()) {
+            buffer->state = PLBS_MISS;
+            buffer->cached_version = 0;
+            return;
+        }
+
+        // Delta versions are captured, several situations should be taken into consideration.
+        auto& [tablet, rowsets, acq_rel] = status.value();
+        base_tablet = std::static_pointer_cast<BaseTablet>(tablet);
+        for (auto rowset_ptr : rowsets) {
+            base_rowsets.emplace_back(std::static_pointer_cast<BaseRowset>(rowset_ptr));
+        }
+        rowsets_acq_rel = std::move(acq_rel);
+
+    } else {
+        auto status = ExecEnv::GetInstance()->lake_tablet_manager()->capture_tablet_and_rowsets(tablet_id, 0, version);
+        // Cache MISS if delta versions are not captured, because aggressive cumulative compactions.
+        if (!status.ok()) {
+            buffer->state = PLBS_MISS;
+            buffer->cached_version = 0;
+            return;
+        }
+
+        auto& [tablet, rowsets] = status.value();
+        base_tablet = std::static_pointer_cast<BaseTablet>(tablet);
+        base_rowsets = std::move(rowsets);
+    }
+
+    const auto snapshot_version = cache_value.version;
+    bool can_pickup_delta_rowsets = false;
+    bool exists_non_empty_delta_rowsets = false;
+
+    if (_cache_param.is_lake && !base_rowsets.empty()) {
         buffer->state = PLBS_MISS;
         buffer->cached_version = 0;
         return;
     }
-    auto& [tablet, rowsets, rowsets_acq_rel] = status.value();
-    const auto snapshot_version = cache_value.version;
-    bool can_pickup_delta_rowsets = false;
-    bool exists_non_empty_delta_rowsets = false;
-    for (auto& rs : rowsets) {
+    for (auto& rs : base_rowsets) {
         can_pickup_delta_rowsets |= rs->start_version() == snapshot_version + 1;
         exists_non_empty_delta_rowsets |= rs->start_version() > snapshot_version && rs->has_data_files();
     }
@@ -428,10 +495,10 @@ int64_t CacheOperator::cached_version(int64_t tablet_id) {
     }
 }
 
-std::tuple<int64_t, vector<RowsetSharedPtr>> CacheOperator::delta_version_and_rowsets(int64_t tablet_id) {
+std::tuple<int64_t, vector<BaseRowsetSharedPtr>> CacheOperator::delta_version_and_rowsets(int64_t tablet_id) {
     auto lane_it = _owner_to_lanes.find(tablet_id);
     if (lane_it == _owner_to_lanes.end()) {
-        return make_tuple(0, vector<RowsetSharedPtr>{});
+        return make_tuple(0, vector<BaseRowsetSharedPtr>{});
     } else {
         auto& buffer = _per_lane_buffers[lane_it->second];
         return make_tuple(buffer->cached_version + 1, buffer->rowsets);

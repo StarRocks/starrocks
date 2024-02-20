@@ -813,4 +813,35 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
                         std::move(tablet_schema));
 }
 
+StatusOr<TabletAndRowsets> TabletManager::capture_tablet_and_rowsets(int64_t tablet_id, int64_t from_version,
+                                                                     int64_t to_version) {
+    auto tablet_ptr = std::make_shared<Tablet>(this, tablet_id);
+
+    std::vector<std::shared_ptr<BaseRowset>> rowsets;
+
+    std::vector<RowsetPtr> from_rowsets;
+    std::vector<RowsetPtr> to_rowsets;
+    if (from_version != 0) {
+        auto tablet_meta_from_version = get_tablet_metadata(tablet_id, from_version).value();
+        from_rowsets = Rowset::get_rowsets(this, tablet_meta_from_version);
+    }
+
+    auto tablet_meta_to_version = get_tablet_metadata(tablet_id, to_version).value();
+    to_rowsets = Rowset::get_rowsets(this, tablet_meta_to_version);
+
+    std::unordered_map<int64_t, std::shared_ptr<Rowset>> distinct_rowset;
+    for (const auto& rowset : from_rowsets) {
+        distinct_rowset[rowset->id()] = std::move(rowset);
+    }
+
+    for (const auto& rowset : to_rowsets) {
+        if (distinct_rowset.find(rowset->id()) != distinct_rowset.end()) {
+            auto base_rowset_ptr = std::static_pointer_cast<BaseRowset>(rowset);
+            rowsets.emplace_back(base_rowset_ptr);
+        }
+    }
+
+    return std::make_tuple(std::move(tablet_ptr), std::move(rowsets));
+}
+
 } // namespace starrocks::lake

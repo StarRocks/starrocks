@@ -140,6 +140,16 @@ public:
 
     StatusOr<bool> has_delete_predicates(int64_t version);
 
+    StatusOr<bool> has_delete_predicates(const Version& version) override {
+        for (int64_t from_version = version.first; from_version < version.second; from_version++) {
+            auto status = has_delete_predicates(from_version);
+            if ((status.ok() && status.value() == true) || !status.ok()) {
+                return status;
+            }
+        };
+        return false;
+    }
+
     UpdateManager* update_mgr() const { return _mgr->update_mgr(); }
 
     TabletManager* tablet_mgr() const { return _mgr; }
