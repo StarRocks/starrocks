@@ -311,7 +311,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
                     getNextWorker(idToBackend, DefaultWorkerProvider::getNextBackendIndex);
             Preconditions.checkNotNull(backend);
             if (!isWorkerAvailable(backend)) {
-                    continue;
+                continue;
             }
             computeNodes.put(backend.getId(), backend);
         }
