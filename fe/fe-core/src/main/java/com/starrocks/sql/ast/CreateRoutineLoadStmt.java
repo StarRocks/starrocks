@@ -137,6 +137,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
 
     private static final String NAME_TYPE = "ROUTINE LOAD NAME";
     private static final String ENDPOINT_REGEX = "[-A-Za-z0-9+&@#/%?=~_|!:,.;]+[-A-Za-z0-9+&@#/%=~_|]";
+    private static final String IPV6_REGEX = "\\[([0-9a-zA-Z\\-%._:]*)\\]:([0-9]+)";
 
     private static final ImmutableSet<String> PROPERTIES_SET = new ImmutableSet.Builder<String>()
             .add(DESIRED_CONCURRENT_NUMBER_PROPERTY)
@@ -682,9 +683,9 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         }
         String[] kafkaBrokerList = this.kafkaBrokerList.split(",");
         for (String broker : kafkaBrokerList) {
-            if (!Pattern.matches(ENDPOINT_REGEX, broker)) {
+            if (!Pattern.matches(ENDPOINT_REGEX, broker) && !Pattern.matches(IPV6_REGEX, broker)) {
                 throw new AnalysisException(KAFKA_BROKER_LIST_PROPERTY + ":" + broker
-                        + " not match pattern " + ENDPOINT_REGEX);
+                        + " not match pattern " + ENDPOINT_REGEX + " or " + IPV6_REGEX);
             }
         }
 
