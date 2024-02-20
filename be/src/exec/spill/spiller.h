@@ -25,6 +25,7 @@
 #include "common/status.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/common.h"
+#include "exec/spill/executor.h"
 #include "exec/spill/input_stream.h"
 #include "exec/spill/mem_table.h"
 #include "exec/spill/options.h"
@@ -58,16 +59,24 @@ public:
     RuntimeProfile::Counter* flush_timer = nullptr;
     // disk io time during flush
     RuntimeProfile::Counter* write_io_timer = nullptr;
+    RuntimeProfile::Counter* local_write_io_timer = nullptr;
+    RuntimeProfile::Counter* remote_write_io_timer = nullptr;
     // time spent to restore data from Spiller, which includes the time to try to get data from buffer and drive the next prefetch
     RuntimeProfile::Counter* restore_from_buffer_timer = nullptr;
     // disk io time during restore
     RuntimeProfile::Counter* read_io_timer = nullptr;
+    RuntimeProfile::Counter* local_read_io_timer = nullptr;
+    RuntimeProfile::Counter* remote_read_io_timer = nullptr;
     // the number of rows restored from Spiller
     RuntimeProfile::Counter* restore_rows = nullptr;
     // data bytes flushed to disk
     RuntimeProfile::Counter* flush_bytes = nullptr;
+    RuntimeProfile::Counter* local_flush_bytes = nullptr;
+    RuntimeProfile::Counter* remote_flush_bytes = nullptr;
     // data bytes restored from disk
     RuntimeProfile::Counter* restore_bytes = nullptr;
+    RuntimeProfile::Counter* local_restore_bytes = nullptr;
+    RuntimeProfile::Counter* remote_restore_bytes = nullptr;
     // time spent to serialize data before flush it to disk
     RuntimeProfile::Counter* serialize_timer = nullptr;
     // time spent to deserialize data after read it from disk
@@ -94,6 +103,8 @@ public:
 
     // the number of blocks created
     RuntimeProfile::Counter* block_count = nullptr;
+    RuntimeProfile::Counter* local_block_count = nullptr;
+    RuntimeProfile::Counter* remote_block_count = nullptr;
     // flush/restore task count
     RuntimeProfile::Counter* flush_io_task_count = nullptr;
     RuntimeProfile::HighWaterMarkCounter* peak_flush_io_task_count = nullptr;
@@ -127,20 +138,20 @@ public:
     // no thread-safe
     // TaskExecutor: Executor for runing io tasks
     // MemGuard: interface for record/update memory usage in io tasks
-    template <class TaskExecutor, class MemGuard>
-    Status spill(RuntimeState* state, const ChunkPtr& chunk, TaskExecutor&& executor, MemGuard&& guard);
+    template <class TaskExecutor = spill::IOTaskExecutor, class MemGuard>
+    Status spill(RuntimeState* state, const ChunkPtr& chunk, MemGuard&& guard);
 
-    template <class Processer, class TaskExecutor, class MemGuard>
+    template <class TaskExecutor = spill::IOTaskExecutor, class Processer, class MemGuard>
     Status partitioned_spill(RuntimeState* state, const ChunkPtr& chunk, SpillHashColumn* hash_column,
-                             Processer&& processer, TaskExecutor&& executor, MemGuard&& guard);
+                             Processer&& processer, MemGuard&& guard);
 
     // restore chunk from spilled chunks
-    template <class TaskExecutor, class MemGuard>
-    StatusOr<ChunkPtr> restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard);
+    template <class TaskExecutor = spill::IOTaskExecutor, class MemGuard>
+    StatusOr<ChunkPtr> restore(RuntimeState* state, MemGuard&& guard);
 
     // trigger a restore task
-    template <class TaskExecutor, class MemGuard>
-    Status trigger_restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard);
+    template <class TaskExecutor = spill::IOTaskExecutor, class MemGuard>
+    Status trigger_restore(RuntimeState* state, MemGuard&& guard);
 
     bool is_full() { return _writer->is_full(); }
 
@@ -148,18 +159,17 @@ public:
 
     // all data has been sent
     // prepared for as read
-    template <class TaskExecutor, class MemGuard>
-    Status flush(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard);
-    template <class MemGuard>
-    Status set_flush_all_call_back(const FlushAllCallBack& callback, RuntimeState* state, IOTaskExecutor& executor,
-                                   const MemGuard& guard) {
-        auto flush_call_back = [this, callback, state, &executor, guard]() {
+    template <class TaskExecutor = spill::IOTaskExecutor, class MemGuard>
+    Status flush(RuntimeState* state, MemGuard&& guard);
+    template <class TaskExecutor = spill::IOTaskExecutor, class MemGuard>
+    Status set_flush_all_call_back(const FlushAllCallBack& callback, RuntimeState* state, const MemGuard& guard) {
+        auto flush_call_back = [this, callback, state, guard]() {
             auto defer = DeferOp([&]() { guard.scoped_end(); });
             RETURN_IF(!guard.scoped_begin(), Status::Cancelled("cancelled"));
             RETURN_IF_ERROR(callback());
             if (!_is_cancel && spilled()) {
                 RETURN_IF_ERROR(_acquire_input_stream(state));
-                RETURN_IF_ERROR(trigger_restore(state, executor, guard));
+                RETURN_IF_ERROR(trigger_restore<TaskExecutor>(state, guard));
             }
             return Status::OK();
         };

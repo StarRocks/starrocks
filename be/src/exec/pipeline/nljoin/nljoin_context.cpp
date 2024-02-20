@@ -40,8 +40,7 @@ Status NJJoinBuildInputChannel::add_chunk(ChunkPtr build_chunk) {
     return Status::OK();
 }
 
-Status NJJoinBuildInputChannel::add_chunk_to_spill_buffer(RuntimeState* state, ChunkPtr build_chunk,
-                                                          spill::IOTaskExecutor& executor) {
+Status NJJoinBuildInputChannel::add_chunk_to_spill_buffer(RuntimeState* state, ChunkPtr build_chunk) {
     if (build_chunk == nullptr || build_chunk->is_empty()) {
         return Status::OK();
     }
@@ -49,7 +48,7 @@ Status NJJoinBuildInputChannel::add_chunk_to_spill_buffer(RuntimeState* state, C
     _num_rows += build_chunk->num_rows();
     RETURN_IF_ERROR(_accumulator.push(std::move(build_chunk)));
     if (auto chunk = _accumulator.pull()) {
-        RETURN_IF_ERROR(_spiller->spill(state, chunk, executor, TRACKER_WITH_SPILLER_GUARD(state, _spiller)));
+        RETURN_IF_ERROR(_spiller->spill(state, chunk, TRACKER_WITH_SPILLER_GUARD(state, _spiller)));
     }
 
     return Status::OK();
@@ -68,16 +67,16 @@ void NJJoinBuildInputChannel::close() {
     _spiller.reset();
 }
 
-Status SpillableNLJoinChunkStream::prefetch(RuntimeState* state, spill::IOTaskExecutor& executor) {
-    return _reader->trigger_restore(state, executor, RESOURCE_TLS_MEMTRACER_GUARD(state, std::weak_ptr(_reader)));
+Status SpillableNLJoinChunkStream::prefetch(RuntimeState* state) {
+    return _reader->trigger_restore(state, RESOURCE_TLS_MEMTRACER_GUARD(state, std::weak_ptr(_reader)));
 }
 
 bool SpillableNLJoinChunkStream::has_output() {
     return _reader && _reader->has_output_data();
 }
 
-StatusOr<ChunkPtr> SpillableNLJoinChunkStream::get_next(RuntimeState* state, spill::IOTaskExecutor& executor) {
-    return _reader->restore(state, executor, RESOURCE_TLS_MEMTRACER_GUARD(state, std::weak_ptr(_reader)));
+StatusOr<ChunkPtr> SpillableNLJoinChunkStream::get_next(RuntimeState* state) {
+    return _reader->restore(state, RESOURCE_TLS_MEMTRACER_GUARD(state, std::weak_ptr(_reader)));
 }
 
 Status SpillableNLJoinChunkStream::reset(RuntimeState* state, spill::Spiller* dummy_spiller) {

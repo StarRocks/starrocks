@@ -37,6 +37,8 @@ public:
 
     bool submit(ScanTask task);
 
+    void force_submit(ScanTask task);
+
 private:
     void worker_thread();
 
