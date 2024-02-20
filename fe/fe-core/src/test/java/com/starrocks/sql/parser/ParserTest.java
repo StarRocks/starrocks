@@ -453,6 +453,7 @@ class ParserTest {
         start = System.currentTimeMillis();
         StarRocksParser.ExpressionContext context2 = parser.expression();
         Expr expr2 = (Expr) astBuilder.visit(context2);
+        end = System.currentTimeMillis();
         long timeOfSLL = end - start;
 
         Assert.assertEquals(expr1, expr2);
