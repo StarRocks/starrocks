@@ -276,14 +276,12 @@ build_llvm() {
         "LLVMTransformUtils"
         "LLVMSelectionDAG"
         "LLVMMCParser"
-        "LLVMX86AsmParser"
-        "LLVMX86Disassembler"
         "LLVMSupport"
     )
     if [ "${LLVM_TARGET}" == "X86" ]; then
-        LLVM_TARGETS_TO_BUILD+=("LLVMX86Info" "LLVMX86Desc" "LLVMX86CodeGen")
+        LLVM_TARGETS_TO_BUILD+=("LLVMX86Info" "LLVMX86Desc" "LLVMX86CodeGen" "LLVMX86AsmParser" "LLVMX86Disassembler")
     elif [ "${LLVM_TARGET}" == "AArch64" ]; then
-        LLVM_TARGETS_TO_BUILD+=("LLVMAArch64Info" "LLVMAArch64Desc" "LLVMAArch64CodeGen")
+        LLVM_TARGETS_TO_BUILD+=("LLVMAArch64Info" "LLVMAArch64Desc" "LLVMAArch64CodeGen" "LLVMAArch64Utils" "LLVMAArch64AsmParser" "LLVMAArch64Disassembler")
     fi
 
     LLVM_TARGETS_TO_INSTALL=()
