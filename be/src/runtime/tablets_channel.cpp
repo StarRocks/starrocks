@@ -30,17 +30,17 @@ bool TabletsChannel::drain_senders(int64_t timeout, const std::string& log_msg) 
         if (current > next_logging) {
             LOG(INFO) << log_msg << ", wait all sender close already "
                       << std::chrono::duration_cast<std::chrono::milliseconds>(current - start).count()
-                      << "ms still has " << _num_remaining_senders << " sender";
+                      << "ms still has " << _num_initial_senders << " sender";
             next_logging += duration;
         }
     };
 
     Awaitility wait;
-    auto cond = [&]() { return _num_remaining_senders.load(std::memory_order_acquire) == 0; };
+    auto cond = [&]() { return _num_initial_senders.load(std::memory_order_acquire) <= 0; };
     auto ret = wait.timeout(timeout).interval(check_interval).interval_callback(cb).until(cond);
     if (!ret) {
         LOG(INFO) << log_msg << " wait all sender close timeout " << timeout / 1000 << "ms still has "
-                  << _num_remaining_senders << " sender";
+                  << _num_initial_senders << " sender";
     }
     return ret;
 }

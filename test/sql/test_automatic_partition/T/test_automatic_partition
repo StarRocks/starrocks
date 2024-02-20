@@ -166,3 +166,16 @@ insert into ss values('0001-02-01', 2);
 select * from ss;
 alter table ss drop partition p200201;
 select * from ss;
+
+-- name: test_two_replica
+CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1 PROPERTIES("replication_num" = "2");
+insert into ss values('2002-01-01', 2);
+insert into ss values('2002-01-02', 2);
+insert into ss values('2002-01-03', 2);
+insert into ss values('2002-01-04', 2);
+insert into ss values('2002-01-05', 2);
+insert into ss values('2002-01-06', 2);
+insert into ss values('2002-01-07', 2);
+insert into ss values('2002-01-08', 2);
+insert into ss values('2002-01-09', 2);
+select * from ss;
