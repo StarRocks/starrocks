@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+keywords: ['Stream Load']
 ---
 
 # 使用 Stream Load 事务接口导入
