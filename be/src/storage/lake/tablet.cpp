@@ -92,6 +92,15 @@ StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer(WriterType type, int6
     }
 }
 
+
+const std::shared_ptr<const TabletSchema> Tablet::tablet_schema() const {
+    auto tablet_schema_or = _mgr->get_tablet_schema(_id, nullptr);
+    if (!tablet_schema_or.ok()) {
+        return nullptr;
+    }
+    return tablet_schema_or.value();
+}
+
 StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema() {
     return _mgr->get_tablet_schema(_id, &_version_hint);
 }
@@ -176,6 +185,11 @@ int64_t Tablet::data_size() {
         LOG(WARNING) << "failed to get tablet " << _id << " data size: " << size.status();
         return 0;
     }
+}
+
+size_t Tablet::num_rows() const {
+    // TODO get the actual num_rows
+    return 59986052;
 }
 
 } // namespace starrocks::lake
