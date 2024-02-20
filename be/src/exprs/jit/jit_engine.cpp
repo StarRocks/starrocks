@@ -116,17 +116,6 @@ Status JitObjectCache::register_func(JITScalarFunction func) {
 }
 
 std::unique_ptr<llvm::MemoryBuffer> JitObjectCache::getObject(const llvm::Module* M) {
-    auto* handle = _lru_cache->lookup(_cache_key);
-    if (handle != nullptr) {
-        auto& cached_obj = ((JitCacheEntry*)handle)->obj_buff;
-        if (cached_obj == nullptr) {
-            throw std::runtime_error("jit obj is null");
-        }
-        std::unique_ptr<llvm::MemoryBuffer> cached_buffer =
-                cached_obj->getMemBufferCopy(cached_obj->getBuffer(), cached_obj->getBufferIdentifier());
-        _lru_cache->release(handle);
-        return cached_buffer;
-    }
     return nullptr;
 }
 
@@ -172,7 +161,8 @@ Status JITEngine::init() {
     return Status::OK();
 }
 
-Status JITEngine::compile_scalar_function(ExprContext* context, JitObjectCache* func_cache, Expr* expr) {
+Status JITEngine::compile_scalar_function(ExprContext* context, JitObjectCache* func_cache, Expr* expr,
+                                          const std::vector<Expr*>& uncompilable_exprs) {
     auto* instance = JITEngine::get_instance();
     if (UNLIKELY(!instance->initialized())) {
         return Status::JitCompileError("JIT engine is not initialized");
@@ -186,7 +176,7 @@ Status JITEngine::compile_scalar_function(ExprContext* context, JitObjectCache* 
     ASSIGN_OR_RETURN(auto engine, Engine::create(*func_cache))
     // TODO: check need set module?
     // generate ir to module
-    RETURN_IF_ERROR(generate_scalar_function_ir(context, *engine->module(), expr));
+    RETURN_IF_ERROR(generate_scalar_function_ir(context, *engine->module(), expr, uncompilable_exprs, func_cache));
     // optimize module and add module
     RETURN_IF_ERROR(engine->optimize_and_finalize_module());
     cached = instance->lookup_function(func_cache);
@@ -205,12 +195,10 @@ std::string JITEngine::dump_module_ir(const llvm::Module& module) {
     return ir;
 }
 
-Status JITEngine::generate_scalar_function_ir(ExprContext* context, llvm::Module& module, Expr* expr) {
+Status JITEngine::generate_scalar_function_ir(ExprContext* context, llvm::Module& module, Expr* expr,
+                                              const std::vector<Expr*>& uncompilable_exprs, JitObjectCache* obj) {
     llvm::IRBuilder<> b(module.getContext());
-
-    std::vector<Expr*> input_exprs;
-    expr->get_uncompilable_exprs(input_exprs); // duplicated
-    size_t args_size = input_exprs.size();
+    size_t args_size = uncompilable_exprs.size();
 
     /// Create function type.
     auto* size_type = b.getInt64Ty();
@@ -220,8 +208,8 @@ Status JITEngine::generate_scalar_function_ir(ExprContext* context, llvm::Module
     auto* func_type = llvm::FunctionType::get(b.getVoidTy(), {size_type, data_type->getPointerTo()}, false);
 
     /// Create function in module.
-    // Pseudo code: void "expr->jit_func_name()"(int64_t rows_count, JITColumn* columns);
-    auto* func = llvm::Function::Create(func_type, llvm::Function::ExternalLinkage, expr->jit_func_name(), module);
+    // Pseudo code: void "expr->jit_func_name"(int64_t rows_count, JITColumn* columns);
+    auto* func = llvm::Function::Create(func_type, llvm::Function::ExternalLinkage, obj->get_func_name(), module);
     auto* func_args = func->args().begin();
     llvm::Value* rows_count_arg = func_args++;
     llvm::Value* columns_arg = func_args++;
@@ -238,7 +226,7 @@ Status JITEngine::generate_scalar_function_ir(ExprContext* context, llvm::Module
         // i == args_size is the result column.
         auto* jit_column = b.CreateLoad(data_type, b.CreateConstInBoundsGEP1_64(data_type, columns_arg, i));
 
-        const auto& type = i == args_size ? expr->type() : input_exprs[i]->type();
+        const auto& type = i == args_size ? expr->type() : uncompilable_exprs[i]->type();
         columns[i].values = b.CreateExtractValue(jit_column, {0});
         columns[i].null_flags = b.CreateExtractValue(jit_column, {1});
         ASSIGN_OR_RETURN(columns[i].value_type, IRHelper::logical_to_ir_type(b, type.type));
