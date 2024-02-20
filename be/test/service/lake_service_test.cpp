@@ -1523,7 +1523,6 @@ TEST_F(LakeServiceTest, test_drop_table_duplicate_request) {
     }
     bthread_join(tids[0], nullptr);
     bthread_join(tids[1], nullptr);
-    auto expect_error_msg = "Previous delete task for the same path has not yet finished";
     if (result_status[0].ok()) {
         ASSERT_TRUE(result_status[1].is_already_exist()) << result_status[1];
     } else if (result_status[1].ok()) {
