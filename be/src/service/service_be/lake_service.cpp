@@ -430,11 +430,7 @@ void LakeServiceImpl::drop_table(::google::protobuf::RpcController* controller,
     auto st = thread_pool->submit_func(task);
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit drop table task: " << st;
-<<<<<<< HEAD
-        cntl->SetFailed(st.get_error_msg());
-=======
         st.to_protobuf(response->mutable_status());
->>>>>>> 1ad87cf4d3 ([Enhancement] (1/n) Improve data cleanup performance for dropped tables in shared data mode (#39883))
         latch.count_down();
     }
 

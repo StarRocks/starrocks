@@ -63,11 +63,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-<<<<<<< HEAD
-import javax.annotation.Nullable;
-=======
-import java.util.concurrent.CopyOnWriteArrayList;
->>>>>>> 1ad87cf4d3 ([Enhancement] (1/n) Improve data cleanup performance for dropped tables in shared data mode (#39883))
 
 /**
  * Internal representation of table-related metadata. A table contains several partitions.

@@ -86,13 +86,7 @@ import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.CreateUserInfo;
 import com.starrocks.persist.DatabaseInfo;
-<<<<<<< HEAD
-=======
-import com.starrocks.persist.DecommissionDiskInfo;
-import com.starrocks.persist.DictionaryMgrInfo;
-import com.starrocks.persist.DisableDiskInfo;
 import com.starrocks.persist.DisableTableRecoveryInfo;
->>>>>>> 1ad87cf4d3 ([Enhancement] (1/n) Improve data cleanup performance for dropped tables in shared data mode (#39883))
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.DropComputeNodeLog;
 import com.starrocks.persist.DropDbInfo;

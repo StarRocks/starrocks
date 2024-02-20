@@ -482,13 +482,7 @@ public class Database extends MetaObject implements Writable {
 
     public void dropTable(String tableName, boolean isSetIfExists, boolean isForce) throws DdlException {
         Table table;
-<<<<<<< HEAD
-        Runnable runnable;
         writeLock();
-=======
-        Locker locker = new Locker();
-        locker.lockDatabase(this, LockType.WRITE);
->>>>>>> 1ad87cf4d3 ([Enhancement] (1/n) Improve data cleanup performance for dropped tables in shared data mode (#39883))
         try {
             table = getTable(tableName);
             if (table == null && isSetIfExists) {
@@ -541,39 +535,6 @@ public class Database extends MetaObject implements Writable {
             LOG.info("Finished drop table '{}' from database '{}'. tableId: {} force: {} replay: {}",
                     table.getName(), getOriginName(), tableId, isForceDrop, isReplay);
         }
-<<<<<<< HEAD
-
-        table.onDrop(this, isForceDrop, isReplay);
-
-        dropTable(table.getName());
-
-        if (!isForceDrop) {
-            Table oldTable = GlobalStateMgr.getCurrentState().getRecycleBin().recycleTable(id, table);
-            runnable = (oldTable != null) ? oldTable.delete(isReplay) : null;
-        } else {
-            GlobalStateMgr.getCurrentState().removeAutoIncrementIdByTableId(tableId, isReplay);
-            runnable = table.delete(isReplay);
-        }
-
-        LOG.info("finished dropping table[{}] in db[{}], tableId: {}", table.getName(), getOriginName(), tableId);
-        return runnable;
-    }
-
-    public void dropTableWithLock(String tableName) {
-        writeLock();
-        try {
-            Table table = this.nameToTable.get(tableName);
-            if (table != null) {
-                this.nameToTable.remove(tableName);
-                this.idToTable.remove(table.getId());
-            }
-        } finally {
-            writeUnlock();
-        }
-    }
-
-    public void dropTable(String tableName) {
-=======
         return table;
     }
 
@@ -587,7 +548,6 @@ public class Database extends MetaObject implements Writable {
     }
 
     public Table dropTable(String tableName) {
->>>>>>> 1ad87cf4d3 ([Enhancement] (1/n) Improve data cleanup performance for dropped tables in shared data mode (#39883))
         Table table = this.nameToTable.get(tableName);
         if (table != null) {
             this.nameToTable.remove(tableName);
