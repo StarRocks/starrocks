@@ -21,6 +21,6 @@ displayed_sidebar: "Chinese"
 - VARCHAR 最大长度：
   - 对于 StarRocks 2.1 之前的版本，长度范围为 1~65533 字节。
   - 【公测中】自 StarRocks 2.1 版本开始，长度范围为 1~1048576 字节。1048578（行最大值）- 2（长度标识位，记录实际数据长度）= 1048576。
-- StarRocks 仅支持 UTF8 编码，不支持 GB 等编码。
+- StarRocks 仅支持 UTF8 编码，不支持 GBK 等编码。
 - StarRocks 不支持修改表中的列名。
-- 一个查询中子查询的最大个数默认为 10000。
+- 一个查询中子查询的最大个数默认为 10000，可以通过 FE 参数 `expr_children_limit` 设置。

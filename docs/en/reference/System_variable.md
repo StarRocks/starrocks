@@ -470,7 +470,7 @@ This variable is supported from v2.5.18 and v3.1.7.
   
 ### query_mem_limit
 
-Used to set the memory limit of a query on each BE node. Unit: Byte. The default value is 0, which means no limit for it. This item takes effect only after Pipeline Engine is enbaled.
+Used to set the memory limit of a query on each BE node. Unit: Byte. The default value is 0, which means no limit for it. This item takes effect only after Pipeline Engine is enabled.
 
   When the `Memory Exceed Limit` error happens, you could try to increase this variable.
 
