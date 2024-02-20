@@ -121,6 +121,8 @@ Status SharedBufferedInputStream::get_bytes(const uint8_t** buffer, size_t offse
         SCOPED_RAW_TIMER(&_shared_io_timer);
         _shared_io_count += 1;
         _shared_io_bytes += sb.size;
+        DCHECK(sb.size >= sb.raw_size);
+        _shared_align_io_bytes += sb.size - sb.raw_size;
         sb.buffer.reserve(sb.size);
         RETURN_IF_ERROR(_stream->read_at_fully(sb.offset, sb.buffer.data(), sb.size));
     }
