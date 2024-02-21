@@ -356,8 +356,8 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "to_date", argTypes = {DATETIME}, returnType = DATE, isMonotonic = true)
     public static ConstantOperator toDate(ConstantOperator dateTime) {
         LocalDateTime dt = dateTime.getDatetime();
-        dt.truncatedTo(ChronoUnit.DAYS);
-        return ConstantOperator.createDateOrNull(dt);
+        LocalDateTime newDt = dt.truncatedTo(ChronoUnit.DAYS);
+        return ConstantOperator.createDateOrNull(newDt);
     }
 
     @ConstantFunction(name = "years_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
