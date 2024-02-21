@@ -20,7 +20,6 @@ import com.starrocks.qe.scheduler.SchedulerTestBase;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer;
-import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.TestMethodOrder;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -36,7 +35,7 @@ import java.util.stream.Stream;
 /**
  * Attention: cases need execute in a fix order or the result may change.
  */
-@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+@TestMethodOrder(MethodOrderer.MethodName.class)
 public class SchedulerTPCHTest extends SchedulerTestBase {
     private static final String DIRECTORY = "scheduler/tpch/";
 
@@ -52,14 +51,12 @@ public class SchedulerTPCHTest extends SchedulerTestBase {
 
     @ParameterizedTest(name = "Tpch.{0}")
     @MethodSource("tpchSource")
-    @Order(1)
     public void testTPCH(String name, String sql, String resultFile) {
         runFileUnitTest(sql, resultFile);
     }
 
     @ParameterizedTest(name = "Tpch2.{0}")
     @MethodSource("listTest")
-    @Order(2)
     public void testTPCHOther(String name, String file) {
         runFileUnitTest(file);
     }
