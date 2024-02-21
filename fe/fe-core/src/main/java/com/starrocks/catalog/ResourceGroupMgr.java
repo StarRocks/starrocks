@@ -300,11 +300,7 @@ public class ResourceGroupMgr implements Writable {
     public ResourceGroup getResourceGroup(String name) {
         readLock();
         try {
-            if (resourceGroupMap.containsKey(name)) {
-                return resourceGroupMap.get(name);
-            } else {
-                return null;
-            }
+            return resourceGroupMap.getOrDefault(name, null);
         } finally {
             readUnlock();
         }
@@ -526,6 +522,8 @@ public class ResourceGroupMgr implements Writable {
                         (active && twg.getVersion() > activeResourceGroup.get(twg.getId()).getVersion())) {
                     currentResourceGroupOps.add(op);
                 }
+
+                ResourceGroup.fillDefaultConfig(twg);
             }
             return currentResourceGroupOps;
         } finally {

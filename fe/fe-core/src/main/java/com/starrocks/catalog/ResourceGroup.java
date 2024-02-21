@@ -66,10 +66,8 @@ public class ResourceGroup {
         DEFAULT_MV_WG.setId(DEFAULT_MV_WG_ID);
         DEFAULT_MV_WG.setName(DEFAULT_MV_RESOURCE_GROUP_NAME);
         DEFAULT_MV_WG.setResourceGroupType(TWorkGroupType.WG_MV);
-        DEFAULT_MV_WG.setConcurrencyLimit(0);
         DEFAULT_MV_WG.setCpuCoreLimit(BackendCoreStat.getAvgNumOfHardwareCoresOfBe());
         DEFAULT_MV_WG.setMaxCpuCores(BackendCoreStat.getAvgNumOfHardwareCoresOfBe());
-        DEFAULT_MV_WG.setMemLimit(0.8);
     }
 
     public static final ShowResultSetMetaData META_DATA =
@@ -313,6 +311,22 @@ public class ResourceGroup {
             return true;
         }
         return DEFAULT_MV_RESOURCE_GROUP_NAME.equals(rgName);
+    }
+
+    public static void fillDefaultConfig(TWorkGroup twg) {
+        ResourceGroup defaultRg = null;
+        if (twg.getId() == DEFAULT_MV_WG_ID) {
+            defaultRg = DEFAULT_MV_WG;
+        } else if (twg.getId() == DEFAULT_WG_ID) {
+            defaultRg = DEFAULT_WG;
+        }
+        if (defaultRg != null) {
+            defaultRg.setMemLimit(twg.getMem_limit());
+            defaultRg.setConcurrencyLimit(twg.getConcurrency_limit());
+            defaultRg.setCpuCoreLimit(twg.getCpu_core_limit());
+            defaultRg.setMaxCpuCores(twg.getMax_cpu_cores());
+        }
+
     }
 
     @Override
