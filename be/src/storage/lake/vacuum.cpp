@@ -87,8 +87,13 @@ bool should_retry(const Status& st, int64_t attempted_retries) {
     if (st.is_resource_busy()) {
         return true;
     }
+<<<<<<< HEAD
     Slice message = st.message();
     return MatchPattern(StringPiece(message.data, message.size), config::lake_vacuum_retry_pattern);
+=======
+    auto message = st.message();
+    return MatchPattern(message, config::lake_vacuum_retry_pattern.value());
+>>>>>>> 743cc83135 ([Enhancement] Ensure mutable string configs are thread-safe (#41259))
 }
 
 int64_t calculate_retry_delay(int64_t attempted_retries) {

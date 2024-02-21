@@ -1005,9 +1005,9 @@ CONF_Int64(max_length_for_bitmap_function, "1000000");
 
 // Configuration items for datacache
 CONF_Bool(datacache_enable, "false");
-CONF_mString(datacache_mem_size, "10%");
-CONF_mString(datacache_disk_size, "0");
-CONF_mString(datacache_disk_path, "${STARROCKS_HOME}/datacache/");
+CONF_String(datacache_mem_size, "10%");
+CONF_String(datacache_disk_size, "0");
+CONF_String(datacache_disk_path, "${STARROCKS_HOME}/datacache/");
 CONF_String(datacache_meta_path, "${STARROCKS_HOME}/datacache/");
 CONF_Int64(datacache_block_size, "262144"); // 256K
 CONF_Bool(datacache_checksum_enable, "false");
