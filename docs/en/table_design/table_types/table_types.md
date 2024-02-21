@@ -28,6 +28,8 @@ In the Primary Key table, the primary key and sort key are decoupled. The primar
 
 ## Precautions
 
+- After a table is created, you cannot modify the table types of this table. For example, you cannot change a Duplicate Key to a Primary Key table. You must create a new table.
+
 - Sort key columns must be defined prior to the other columns in the statement for table creation.
 
 - The order of sort key columns in the statement for table creation specifies the order of the conditions based on which the rows in the table are sorted.
