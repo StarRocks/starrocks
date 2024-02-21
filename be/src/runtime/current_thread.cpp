@@ -24,6 +24,7 @@ CurrentThread::~CurrentThread() {
         tls_is_thread_status_init = false;
         return;
     }
+    release_reserved();
     mem_tracker_ctx_shift();
     tls_is_thread_status_init = false;
 }
