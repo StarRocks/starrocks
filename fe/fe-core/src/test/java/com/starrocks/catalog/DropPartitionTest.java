@@ -124,7 +124,7 @@ public class DropPartitionTest {
         RecoverPartitionStmt recoverPartitionStmt =
                 (RecoverPartitionStmt) UtFrameUtils.parseStmtWithNewParser(recoverPartitionSql, connectContext);
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "No partition named p20210202 in table tbl1",
+                "No partition named 'p20210202' in recycle bin that belongs to table 'tbl1'",
                 () -> GlobalStateMgr.getCurrentState().getLocalMetastore().recoverPartition(recoverPartitionStmt));
     }
 
