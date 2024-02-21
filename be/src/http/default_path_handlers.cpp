@@ -160,7 +160,7 @@ void mem_tracker_handler(MemTracker* mem_tracker, const WebPageHandler::Argument
             start_mem_tracker = GlobalEnv::GetInstance()->consistency_mem_tracker();
             cur_level = 2;
         } else if (iter->second == "datacache") {
-            start_mem_tracker = ExecEnv::GetInstance()->datacache_mem_tracker();
+            start_mem_tracker = GlobalEnv::GetInstance()->datacache_mem_tracker();
             cur_level = 2;
         } else {
             start_mem_tracker = mem_tracker;
