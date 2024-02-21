@@ -312,6 +312,8 @@ public:
 
     lake::UpdateManager* lake_update_manager() const { return _lake_update_manager; }
 
+    lake::ReplicationTxnManager* lake_replication_txn_manager() const { return _lake_replication_txn_manager; }
+
     AgentServer* agent_server() const { return _agent_server; }
 
     query_cache::CacheManagerRawPtr cache_mgr() const { return _cache_mgr; }
