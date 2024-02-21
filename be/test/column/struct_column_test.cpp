@@ -11,15 +11,8 @@
 
 namespace starrocks::vectorized {
 
-<<<<<<< HEAD
-TEST(StructColumnTest, test_create) {
-    auto field_name = BinaryColumn::create();
-    field_name->append_string("id");
-    field_name->append_string("name");
-=======
 std::shared_ptr<StructColumn> create_test_column() {
     std::vector<std::string> field_name{"id", "name"};
->>>>>>> ff04bda779 ([Enhancement] Fix StructColumn::byte_size memory estimation error (#28283))
     auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
     auto name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     Columns fields{id, name};
@@ -44,18 +37,7 @@ TEST(StructColumnTest, test_create) {
 }
 
 TEST(StructColumnTest, test_update_if_overflow) {
-<<<<<<< HEAD
-    {
-        auto field_name = BinaryColumn::create();
-        field_name->append_string("id");
-        field_name->append_string("name");
-        auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
-        auto name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-        Columns fields{id, name};
-        auto column = StructColumn::create(fields, field_name);
-=======
     auto col = create_test_column();
->>>>>>> ff04bda779 ([Enhancement] Fix StructColumn::byte_size memory estimation error (#28283))
 
     // it does not upgrade because of not overflow
     auto ret = col->upgrade_if_overflow();
@@ -65,17 +47,7 @@ TEST(StructColumnTest, test_update_if_overflow) {
 
 TEST(StructColumnTest, test_column_downgrade) {
     {
-<<<<<<< HEAD
-        auto field_name = BinaryColumn::create();
-        field_name->append_string("id");
-        field_name->append_string("name");
-        auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
-        auto name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-        Columns fields{id, name};
-        auto column = StructColumn::create(fields, field_name);
-=======
         auto col = create_test_column();
->>>>>>> ff04bda779 ([Enhancement] Fix StructColumn::byte_size memory estimation error (#28283))
 
         ASSERT_FALSE(col->has_large_column());
         auto ret = col->downgrade();
@@ -173,60 +145,6 @@ TEST(StructColumnTest, test_append_defaults) {
     ASSERT_EQ("{id:NULL,name:NULL}", column->debug_item(2));
 }
 
-<<<<<<< HEAD
-TEST(StructColumnTest, test_resize) {
-    auto field_name = BinaryColumn::create();
-    field_name->append_string("id");
-    field_name->append_string("name");
-    auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
-    auto name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-    Columns fields{id, name};
-    auto column = StructColumn::create(fields, field_name);
-=======
-TEST(StructColumnTest, equals) {
-    // lhs: {1, 2}, {1, null}, {4, 5}, {2, 1}
-    // rhs: {1, 2}, {1, 2}, {6, 7}, {2, 1}
-    StructColumn::Ptr lhs;
-    {
-        auto field1 = NullableColumn::create(Int32Column::create(), NullColumn::create());
-        auto field2 = NullableColumn::create(Int32Column::create(), NullColumn::create());
-        Columns fields{field1, field2};
-        lhs = StructColumn::create(fields);
-    }
-    lhs->_fields[0]->append_datum(Datum(1));
-    lhs->_fields[0]->append_datum(Datum(1));
-    lhs->_fields[0]->append_datum(Datum(4));
-    lhs->_fields[0]->append_datum(Datum(2));
-
-    lhs->_fields[1]->append_datum(Datum(2));
-    lhs->_fields[1]->append_nulls(1);
-    lhs->_fields[1]->append_datum(Datum(5));
-    lhs->_fields[1]->append_datum(Datum(1));
-
-    StructColumn::Ptr rhs;
-    {
-        auto field1 = Int32Column::create();
-        auto field2 = Int32Column::create();
-        Columns fields{field1, field2};
-        rhs = StructColumn::create(fields);
-    }
-    rhs->_fields[0]->append_datum(Datum(1));
-    rhs->_fields[0]->append_datum(Datum(1));
-    rhs->_fields[0]->append_datum(Datum(6));
-    rhs->_fields[0]->append_datum(Datum(2));
-
-    rhs->_fields[1]->append_datum(Datum(2));
-    rhs->_fields[1]->append_datum(Datum(2));
-    rhs->_fields[1]->append_datum(Datum(7));
-    rhs->_fields[1]->append_datum(Datum(1));
-
-    ASSERT_TRUE(lhs->equals(0, *rhs, 0));
-    ASSERT_TRUE(lhs->equals(0, *rhs, 1));
-    ASSERT_FALSE(lhs->equals(1, *rhs, 1));
-    ASSERT_FALSE(lhs->equals(2, *rhs, 2));
-    ASSERT_TRUE(lhs->equals(3, *rhs, 3));
-}
-
 TEST(StructColumnTest, test_byte_size) {
     auto col = create_test_column();
 
@@ -237,7 +155,6 @@ TEST(StructColumnTest, test_byte_size) {
 
 TEST(StructColumnTest, test_resize) {
     auto col = create_test_column();
->>>>>>> ff04bda779 ([Enhancement] Fix StructColumn::byte_size memory estimation error (#28283))
 
     ASSERT_EQ(2, col->size());
 
@@ -248,17 +165,7 @@ TEST(StructColumnTest, test_resize) {
 }
 
 TEST(StructColumnTest, test_reset_column) {
-<<<<<<< HEAD
-    auto field_name = BinaryColumn::create();
-    field_name->append_string("id");
-    field_name->append_string("name");
-    auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
-    auto name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-    Columns fields{id, name};
-    auto column = StructColumn::create(fields, field_name);
-=======
     auto col = create_test_column();
->>>>>>> ff04bda779 ([Enhancement] Fix StructColumn::byte_size memory estimation error (#28283))
 
     col->reset_column();
 
@@ -312,25 +219,11 @@ TEST(StructColumnTest, test_swap_column) {
 }
 
 TEST(StructColumnTest, test_copy_construtor) {
-<<<<<<< HEAD
-    auto field_name = BinaryColumn::create();
-    field_name->append_string("id");
-    field_name->append_string("name");
-    auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
-    auto name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-    auto column = StructColumn::create(Columns{id, name}, field_name);
-
-    // delete reference
-    field_name = nullptr;
-    id = nullptr;
-    name = nullptr;
-=======
     auto col = create_test_column();
 
     ASSERT_EQ(col->size(), 2);
     ASSERT_EQ("{id:1,name:'smith'}", col->debug_item(0));
     ASSERT_EQ("{id:2,name:'cruise'}", col->debug_item(1));
->>>>>>> ff04bda779 ([Enhancement] Fix StructColumn::byte_size memory estimation error (#28283))
 
     StructColumn copy(*col);
     col->reset_column();
@@ -345,25 +238,11 @@ TEST(StructColumnTest, test_copy_construtor) {
 }
 
 TEST(StructColumnTest, test_move_construtor) {
-<<<<<<< HEAD
-    auto field_name = BinaryColumn::create();
-    field_name->append_string("id");
-    field_name->append_string("name");
-    auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
-    auto name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-    auto column = StructColumn::create(Columns{id, name}, field_name);
-
-    // delete reference
-    field_name = nullptr;
-    id = nullptr;
-    name = nullptr;
-=======
     auto col = create_test_column();
 
     ASSERT_EQ(col->size(), 2);
     ASSERT_EQ("{id:1,name:'smith'}", col->debug_item(0));
     ASSERT_EQ("{id:2,name:'cruise'}", col->debug_item(1));
->>>>>>> ff04bda779 ([Enhancement] Fix StructColumn::byte_size memory estimation error (#28283))
 
     StructColumn copy(std::move(*col));
     ASSERT_EQ(2, copy.size());
@@ -376,25 +255,11 @@ TEST(StructColumnTest, test_move_construtor) {
 }
 
 TEST(StructColumnTest, test_clone) {
-<<<<<<< HEAD
-    auto field_name = BinaryColumn::create();
-    field_name->append_string("id");
-    field_name->append_string("name");
-    auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
-    auto name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-    auto column = StructColumn::create(Columns{id, name}, field_name);
-
-    // delete reference
-    field_name = nullptr;
-    id = nullptr;
-    name = nullptr;
-=======
     auto col = create_test_column();
 
     ASSERT_EQ(col->size(), 2);
     ASSERT_EQ("{id:1,name:'smith'}", col->debug_item(0));
     ASSERT_EQ("{id:2,name:'cruise'}", col->debug_item(1));
->>>>>>> ff04bda779 ([Enhancement] Fix StructColumn::byte_size memory estimation error (#28283))
 
     auto copy = col->clone();
     col->reset_column();
@@ -408,25 +273,11 @@ TEST(StructColumnTest, test_clone) {
 }
 
 TEST(StructColumnTest, test_clone_shared) {
-<<<<<<< HEAD
-    auto field_name = BinaryColumn::create();
-    field_name->append_string("id");
-    field_name->append_string("name");
-    auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
-    auto name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-    auto column = StructColumn::create(Columns{id, name}, field_name);
-
-    // delete reference
-    field_name = nullptr;
-    id = nullptr;
-    name = nullptr;
-=======
     auto col = create_test_column();
 
     ASSERT_EQ(col->size(), 2);
     ASSERT_EQ("{id:1,name:'smith'}", col->debug_item(0));
     ASSERT_EQ("{id:2,name:'cruise'}", col->debug_item(1));
->>>>>>> ff04bda779 ([Enhancement] Fix StructColumn::byte_size memory estimation error (#28283))
 
     auto copy = col->clone_shared();
     col->reset_column();
@@ -440,25 +291,11 @@ TEST(StructColumnTest, test_clone_shared) {
 }
 
 TEST(StructColumnTest, test_clone_empty) {
-<<<<<<< HEAD
-    auto field_name = BinaryColumn::create();
-    field_name->append_string("id");
-    field_name->append_string("name");
-    auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
-    auto name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-    auto column = StructColumn::create(Columns{id, name}, field_name);
-
-    // delete reference
-    field_name = nullptr;
-    id = nullptr;
-    name = nullptr;
-=======
     auto col = create_test_column();
 
     ASSERT_EQ(2, col->size());
     ASSERT_EQ("{id:1,name:'smith'}", col->debug_item(0));
     ASSERT_EQ("{id:2,name:'cruise'}", col->debug_item(1));
->>>>>>> ff04bda779 ([Enhancement] Fix StructColumn::byte_size memory estimation error (#28283))
 
     auto copy = col->clone_empty();
     col->reset_column();
