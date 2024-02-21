@@ -206,14 +206,12 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(
     for (auto rowset_index : rowset_indexes) {
         input_rowsets.emplace_back(std::make_shared<Rowset>(_tablet_mgr, tablet_metadata, rowset_index));
     }
-    VLOG(2) << strings::Substitute("lake PrimaryCompactionPolicy pick_rowsets tabletid:$0 version:$1 inputs:$2",
-                                   tablet_metadata->id(), tablet_metadata->version(),
-                                   JoinMapped(
-                                           rowset_indexes,
-                                           [&](int64_t rowset_index) -> std::string {
-                                               return std::to_string(tablet_metadata->rowsets(rowset_index).id());
-                                           },
-                                           "|"));
+    VLOG(2) << strings::Substitute(
+            "lake PrimaryCompactionPolicy pick_rowsets tabletid:$0 version:$1 inputs:$2", tablet_metadata->id(),
+            tablet_metadata->version(),
+            JoinMapped(
+                    input_rowsets, [&](const RowsetPtr& rowset) -> std::string { return std::to_string(rowset->id()); },
+                    "|"));
     return input_rowsets;
 }
 
