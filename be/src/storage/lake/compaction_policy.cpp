@@ -202,16 +202,18 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(
         const std::shared_ptr<const TabletMetadataPB>& tablet_metadata, bool calc_score, std::vector<bool>* has_dels) {
     std::vector<RowsetPtr> input_rowsets;
     ASSIGN_OR_RETURN(auto rowset_indexes, pick_rowset_indexes(tablet_metadata, calc_score, has_dels));
-    std::string input_infos = JoinMapped(
-            rowset_indexes,
-            [&](int64_t rowset_index) -> std::string {
-                input_rowsets.emplace_back(std::make_shared<Rowset>(_tablet_mgr, tablet_metadata, rowset_index));
-                return std::to_string(tablet_metadata->rowsets(rowset_index).id());
-            },
-            "|");
+    input_rowsets.reserve(rowset_indexes.size());
+    for (auto rowset_index : rowset_indexes) {
+        input_rowsets.emplace_back(std::make_shared<Rowset>(_tablet_mgr, tablet_metadata, rowset_index));
+    }
     VLOG(2) << strings::Substitute("lake PrimaryCompactionPolicy pick_rowsets tabletid:$0 version:$1 inputs:$2",
-                                   tablet_metadata->id(), tablet_metadata->version(), input_infos);
-
+                                   tablet_metadata->id(), tablet_metadata->version(),
+                                   JoinMapped(
+                                           rowset_indexes,
+                                           [&](int64_t rowset_index) -> std::string {
+                                               return std::to_string(tablet_metadata->rowsets(rowset_index).id());
+                                           },
+                                           "|"));
     return input_rowsets;
 }
 
