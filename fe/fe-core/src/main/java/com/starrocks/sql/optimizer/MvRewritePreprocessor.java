@@ -45,6 +45,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -498,10 +499,14 @@ public class MvRewritePreprocessor {
         return true;
     }
 
-    private boolean isMVValidToRewriteQuery(MaterializedView mv,
-                                            Set<Table> queryTables) {
+    private boolean isMVValidToRewriteQuery(MaterializedView mv, Set<Table> queryTables) {
         if (!mv.isActive())  {
             logMVPrepare(connectContext, mv, "MV is not active: {}", mv.getName());
+            return false;
+        }
+        if (!mv.getTableProperty().getMvQueryRewriteSwitch().isEnable()) {
+            logMVPrepare(connectContext, mv, PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE + "=" +
+                    mv.getTableProperty().getMvQueryRewriteSwitch());
             return false;
         }
         // if mv is a subset of query tables, it can be used for rewrite.

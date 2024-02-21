@@ -121,6 +121,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         FALSE,      // disabled
         ;
 
+        public boolean isEnable() {
+            return TRUE == this || DEFAULT == this;
+        }
+
         public static MVQueryRewriteSwitch defaultValue() {
             return DEFAULT;
         }

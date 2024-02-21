@@ -85,7 +85,6 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvJoinFilter;
-import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -188,7 +187,6 @@ import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
@@ -238,7 +236,6 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.common.SyncPartitionUtils;
-import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.Backend;
@@ -3260,7 +3257,6 @@ public class LocalMetastore implements ConnectorMetadata {
 
         boolean isNonPartitioned = partitionInfo.getType() == PartitionType.UNPARTITIONED;
         DataProperty dataProperty = analyzeMVDataProperties(db, materializedView, properties, isNonPartitioned);
-        analyzeMvEligibleForQueryRewrite(materializedView);
 
         try {
             Set<Long> tabletIdSet = new HashSet<>();
@@ -3324,15 +3320,6 @@ public class LocalMetastore implements ConnectorMetadata {
         long intervalSeconds = TimeUtils.convertTimeUnitValueToSecond(period, timeUnit);
         long randomInterval = randomizeStart == 0 ? Math.min(300, intervalSeconds / 2) : randomizeStart;
         return ThreadLocalRandom.current().nextLong(randomInterval);
-    }
-
-    private void analyzeMvEligibleForQueryRewrite(MaterializedView mv) {
-        if (mv.getTableProperty().getMvQueryRewriteSwitch() == TableProperty.MVQueryRewriteSwitch.TRUE) {
-            MvPlanContext ctx = new MaterializedViewOptimizer().optimize(mv, ConnectContext.get());
-            if (!ctx.isValidMvPlan()) {
-                throw new SemanticException("The MV is not eligible for query rewrite: " + ctx.getInvalidReason());
-            }
-        }
     }
 
     private DataProperty analyzeMVDataProperties(Database db,
