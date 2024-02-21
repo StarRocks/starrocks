@@ -1241,6 +1241,37 @@ class StarrocksSQLApiLib(object):
                     res["Status"] = "Failed"
         return res
 
+    # should prepare data in src_db, then call this function to create table in external catalog
+    # and load data from src_db into external catalog tables
+    def prepare_external_data(self, data_name, catalog, db, src_db):
+        """ load data """
+        tools.assert_in(data_name, ["ssb"], "Unsupported data!")
+        # set catalog
+        set_catalog = "set catalog %s" % (catalog)
+        res = self.execute_sql(set_catalog, True)
+        tools.assert_true(res["status"], "set catalog %s error, %s" % (catalog, res["msg"]))
+
+        # use database
+        use_database = "use %s" % (db)
+        res = self.execute_sql(set_catalog, True)
+        tools.assert_true(res["status"], "use database %s error, %s" % (db, res["msg"]))
+
+        # create tables
+        dir_name = "%s-external" % (data_name)
+        create_table_sqls = self.get_sql_from_file("create.sql", dir_path=os.path.join(common_sql_path, dir_name))
+        res = self.execute_sql(create_table_sqls, True)
+        tools.assert_true(res["status"], "create %s table error, %s" % (data_name, res["msg"]))
+
+        # ingest data from src default_catalog.db
+        sql = "show tables from " + catalog + "." + db
+        res = self.execute_sql(sql, "dml")
+        tools.assert_true(res["status"], res["msg"])
+        tables = res["result"]
+        for table in tables:
+            insert_sql = 'insert into %s.%s.%s select * from default_catalog.%s.%s' % (catalog, db, table, src_db, table)
+            res = self.execute_sql(insert_sql, True)
+            tools.assert_true(res["status"], "insert table %s error, %s" % (table, res["msg"]))
+
     def prepare_data(self, data_name, db):
         """ load data """
         tools.assert_in(data_name, ["ssb", "tpch", "tpcds"], "Unsupported data!")
