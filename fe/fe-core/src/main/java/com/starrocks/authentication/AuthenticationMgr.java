@@ -34,6 +34,7 @@ import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.UserPrivilegeCollectionV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.UserIdentity;
@@ -171,11 +172,19 @@ public class AuthenticationMgr {
         }
     }
 
+    public long getMaxConn(UserIdentity currUserIdentity) {
+        if (currUserIdentity.isEphemeral()) {
+            return DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER;
+        } else {
+            String userName = currUserIdentity.getUser();
+            return getMaxConn(userName);
+        }
+    }
+
     public long getMaxConn(String userName) {
         UserProperty userProperty = userNameToProperty.get(userName);
         if (userProperty == null) {
-            // TODO(yiming): find a better way to specify max connections for external user, like ldap, kerberos etc.
-            return DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER;
+            throw new SemanticException("Can not find user " + userName);
         } else {
             return userNameToProperty.get(userName).getMaxConn();
         }
