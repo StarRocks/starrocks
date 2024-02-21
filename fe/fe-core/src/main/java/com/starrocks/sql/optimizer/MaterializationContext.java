@@ -45,6 +45,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator.getMVPrunedPartitionPredicates;
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator.isNeedCompensatePartitionPredicate;
 
 public class MaterializationContext {
     private final MaterializedView mv;
@@ -429,7 +431,7 @@ public class MaterializationContext {
             SessionVariable sessionVariable = optimizerContext.getSessionVariable();
             // only set this when `queryExpression` contains ref table, otherwise the cached value maybe dirty.
             isCompensatePartitionPredicateOpt = sessionVariable.isEnableMaterializedViewRewritePartitionCompensate() ?
-                    MvUtils.isNeedCompensatePartitionPredicate(queryExpression, this) : Optional.of(false);
+                    isNeedCompensatePartitionPredicate(queryExpression, this) : Optional.of(false);
         }
         return isCompensatePartitionPredicateOpt.orElse(true);
     }
@@ -440,7 +442,7 @@ public class MaterializationContext {
 
     public ScalarOperator getMVPrunedPartitionPredicate() {
         if (!mvPrunedPartitionPredicateOpt.isPresent()) {
-            List<ScalarOperator> mvPrunedPartitionPredicates = MvUtils.getMVPrunedPartitionPredicates(mv, mvExpression);
+            List<ScalarOperator> mvPrunedPartitionPredicates = getMVPrunedPartitionPredicates(mv, mvExpression);
             if (mvPrunedPartitionPredicates == null || mvPrunedPartitionPredicates.isEmpty()) {
                 mvPrunedPartitionPredicateOpt = Optional.of(ConstantOperator.TRUE);
             } else {

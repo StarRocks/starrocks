@@ -42,6 +42,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.BestMvSel
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVColumnPruner;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVPartitionPruner;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
 import org.apache.commons.collections4.CollectionUtils;
@@ -218,7 +219,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
                                                   ReplaceColumnRefRewriter queryColumnRefRewriter) {
         // Cache partition predicate predicates because it's expensive time costing if there are too many materialized views or
         // query expressions are too complex.
-        final ScalarOperator queryPartitionPredicate = MvUtils.compensatePartitionPredicate(mvContext,
+        final ScalarOperator queryPartitionPredicate = MvPartitionCompensator.compensatePartitionPredicate(mvContext,
                 queryColumnRefFactory, queryExpression);
         if (queryPartitionPredicate == null) {
             logMVRewrite(mvContext.getOptimizerContext(), this, "Compensate query expression's partition " +

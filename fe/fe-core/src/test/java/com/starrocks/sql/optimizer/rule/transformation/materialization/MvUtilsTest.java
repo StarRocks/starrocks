@@ -45,6 +45,8 @@ import org.junit.Test;
 
 import java.util.Set;
 
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator.convertToDateRange;
+
 public class MvUtilsTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
@@ -156,7 +158,7 @@ public class MvUtilsTest {
         {
             PartitionKey upper = PartitionKey.ofString("20231010");
             Range<PartitionKey> upRange = Range.atMost(upper);
-            Range<PartitionKey> upResult = MvUtils.convertToDateRange(upRange);
+            Range<PartitionKey> upResult = convertToDateRange(upRange);
             Assert.assertTrue(upResult.hasUpperBound());
             Assert.assertTrue(upResult.upperEndpoint().getTypes().get(0).isDateType());
             Assert.assertTrue(upResult.upperEndpoint().getKeys().get(0) instanceof DateLiteral);
@@ -169,7 +171,7 @@ public class MvUtilsTest {
         {
             PartitionKey lower = PartitionKey.ofString("20231010");
             Range<PartitionKey> lowRange = Range.atLeast(lower);
-            Range<PartitionKey> lowResult = MvUtils.convertToDateRange(lowRange);
+            Range<PartitionKey> lowResult = convertToDateRange(lowRange);
             Assert.assertTrue(lowResult.hasLowerBound());
             Assert.assertTrue(lowResult.lowerEndpoint().getTypes().get(0).isDateType());
             Assert.assertTrue(lowResult.lowerEndpoint().getKeys().get(0) instanceof DateLiteral);
@@ -183,7 +185,7 @@ public class MvUtilsTest {
             PartitionKey lower = PartitionKey.ofString("20231010");
             Range<PartitionKey> range = Range.atLeast(lower);
             range = range.intersection(Range.atMost(PartitionKey.ofString("20231020")));
-            Range<PartitionKey> result = MvUtils.convertToDateRange(range);
+            Range<PartitionKey> result = convertToDateRange(range);
             Assert.assertTrue(result.hasLowerBound());
             Assert.assertTrue(result.lowerEndpoint().getTypes().get(0).isDateType());
             Assert.assertTrue(result.lowerEndpoint().getKeys().get(0) instanceof DateLiteral);
