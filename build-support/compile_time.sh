@@ -16,7 +16,8 @@
 #
 # Modified from hyrise project
 
-PARENT_DIR=$(cd $(dirname "$0")/..; pwd)
+CURR_DIR=$(dirname "$0")
+PARENT_DIR=$(cd "$CURR_DIR/.."; pwd)
 output="$PARENT_DIR"/compile_times.txt
 
 start=$(date +%s)
