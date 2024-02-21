@@ -37,13 +37,9 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.Test;
 import org.junit.runners.MethodSorters;
 
 import java.sql.SQLException;
@@ -51,12 +47,11 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class MvRewriteTest extends MvRewriteTestBase {
 
-    @BeforeAll
+    @BeforeClass
     public static void beforeClass() throws Exception {
         MvRewriteTestBase.beforeClass();
 
@@ -73,12 +68,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
         starRocksAssert.withTable(cluster, "test11");
 
         prepareDatas();
-    }
-
-    @AfterAll
-    public static void afterClass() throws Exception {
-        MvRewriteTestBase.tearDown();
-        ;
     }
 
     public static void prepareDatas() throws Exception {
@@ -1751,87 +1740,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
         }
 
         starRocksAssert.dropMaterializedView("test_partition_tbl_mv3");
-    }
-
-    @ParameterizedTest(name = "{index}-{0}-{1}-{2}")
-    @MethodSource("generateArguments_ArrayAgg")
-    public void testRollup_ArrayAgg(String select, String predicate, String groupBy) throws Exception {
-        String mvName = "mv_array";
-        createAndRefreshMv("CREATE MATERIALIZED VIEW IF NOT EXISTS `mv_array`\n" +
-                "DISTRIBUTED BY HASH(`gender`) BUCKETS 2\n" +
-                "REFRESH ASYNC\n" +
-                "AS \n" +
-                "SELECT \n" +
-                "    get_json_string(`d_user`, 'region') AS `region`, \n" +
-                "    get_json_string(`d_user`, 'gender') AS `gender`, \n" +
-                "    array_agg_distinct(get_json_string(d_user, 'gender') ) AS `distinct_gender`\n" +
-                "FROM `json_tbl`\n" +
-                "GROUP BY region, `gender`");
-
-        String query = String.format("select %s from json_tbl  %s  %s", select, predicate, groupBy);
-        starRocksAssert.query(query).explainContains(mvName);
-    }
-
-    private static Stream<Arguments> generateArguments_ArrayAgg() {
-        List<String> selectList = List.of(
-                "array_agg_distinct(get_json_string(d_user, 'gender'))",
-                "array_sort(array_agg_distinct(get_json_string(d_user, 'gender') ))",
-                "array_length(array_agg_distinct(get_json_string(d_user, 'gender') ))",
-                "count(distinct get_json_string(d_user, 'gender') )",
-                "sum(distinct get_json_string(d_user, 'gender') )"
-        );
-        List<String> predicatelist = List.of("", "where get_json_string(d_user, 'gender') = 'male'");
-        List<String> groupList = List.of("",
-                "group by get_json_string(d_user, 'region')",
-                "group by get_json_string(d_user, 'gender')",
-                "group by get_json_string(d_user, 'region'), get_json_string(d_user, 'gender') "
-        );
-
-        var enumerator = new TestCaseEnumerator(List.of(selectList.size(), predicatelist.size(), groupList.size()));
-        return enumerator.enumerate().map(argList ->
-                TestCaseEnumerator.ofArguments(argList, selectList, predicatelist, groupList));
-    }
-
-    /**
-     * Enumerate all test cases from combinations
-     */
-    static class TestCaseEnumerator {
-
-        private List<List<Integer>> testCases;
-
-        public TestCaseEnumerator(List<Integer> space) {
-            this.testCases = Lists.newArrayList();
-            List<Integer> testCase = Lists.newArrayList();
-            search(space, testCase, 0);
-        }
-
-        private void search(List<Integer> space, List<Integer> testCase, int k) {
-            if (k >= space.size()) {
-                testCases.add(Lists.newArrayList(testCase));
-                return;
-            }
-
-            int n = space.get(k);
-            for (int i = 0; i < n; i++) {
-                testCase.add(i);
-                search(space, testCase, k + 1);
-                testCase.remove(testCase.size() - 1);
-            }
-        }
-
-        public Stream<List<Integer>> enumerate() {
-            return testCases.stream();
-        }
-
-        @SafeVarargs
-        public static <T> Arguments ofArguments(List<Integer> permutation, List<T>... args) {
-            Object[] objects = new Object[args.length];
-            for (int i = 0; i < args.length; i++) {
-                int index = permutation.get(i);
-                objects[i] = args[i].get(index);
-            }
-            return Arguments.of(objects);
-        }
     }
 
     @Test

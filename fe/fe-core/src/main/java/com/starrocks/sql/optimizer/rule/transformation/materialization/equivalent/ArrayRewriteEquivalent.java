@@ -51,11 +51,16 @@ public class ArrayRewriteEquivalent extends IAggregateRewriteEquivalent {
             return null;
         }
         CallOperator call = (CallOperator) input;
-        if (!call.getFnName().equalsIgnoreCase(FunctionSet.ARRAY_AGG_DISTINCT)) {
+        if (!isArrayAggDistinct(call)) {
             return null;
         }
 
         return new RewriteEquivalentContext(call, input);
+    }
+
+    private static boolean isArrayAggDistinct(CallOperator call) {
+        return call.getFnName().equalsIgnoreCase(FunctionSet.ARRAY_AGG_DISTINCT) ||
+                (call.getFnName().equalsIgnoreCase(FunctionSet.ARRAY_AGG) && call.isDistinct());
     }
 
     @Override
