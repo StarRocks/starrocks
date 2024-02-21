@@ -49,6 +49,7 @@ SchemaScanner::ColumnDesc SchemaMaterializedViewsScanner::_s_tbls_columns[] = {
         {"TABLE_ROWS", TYPE_VARCHAR, sizeof(StringValue), false},
         {"MATERIALIZED_VIEW_DEFINITION", TYPE_VARCHAR, sizeof(StringValue), false},
         {"EXTRA_MESSAGE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"QUERY_REWRITE_STATUS", TYPE_VARCHAR, sizeof(StringValue), false},
 };
 
 SchemaMaterializedViewsScanner::SchemaMaterializedViewsScanner()
@@ -112,6 +113,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             Slice(info.rows),
             Slice(info.text),
             Slice(info.extra_message),
+            Slice(info.query_rewrite_status)
     };
 
     for (const auto& [slot_id, index] : slot_id_map) {

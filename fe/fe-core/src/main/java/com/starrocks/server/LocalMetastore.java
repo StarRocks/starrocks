@@ -3496,7 +3496,6 @@ public class LocalMetastore implements ConnectorMetadata {
                 String str = properties.get(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE);
                 TableProperty.MVQueryRewriteSwitch value = TableProperty.analyzeQueryRewriteSwitch(str);
                 materializedView.getTableProperty().setMvQueryRewriteSwitch(value);
-                properties.remove(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE);
             }
 
             // lake storage info
