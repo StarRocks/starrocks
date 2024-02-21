@@ -16,8 +16,8 @@
 #
 # Modified from hyrise project
 
-# The root directory that contains .git, i.e, the root directory of the project
-output=$(git rev-parse --show-toplevel)/compile_times.txt
+PARENT_DIR=$(cd $(dirname "$0")/..; pwd)
+output="$PARENT_DIR"/compile_times.txt
 
 start=$(date +%s)
 "$@"
