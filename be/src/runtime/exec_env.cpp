@@ -226,6 +226,8 @@ Status GlobalEnv::_init_mem_tracker() {
     _clone_mem_tracker = regist_tracker(-1, "clone", _process_mem_tracker.get());
     int64_t consistency_mem_limit = calc_max_consistency_memory(_process_mem_tracker->limit());
     _consistency_mem_tracker = regist_tracker(consistency_mem_limit, "consistency", _process_mem_tracker.get());
+    _datacache_mem_tracker = regist_tracker(-1, "datacache", _process_mem_tracker.get());
+    _replication_mem_tracker = regist_tracker(-1, "replication", _process_mem_tracker.get());
 
     MemChunkAllocator::init_instance(_chunk_allocator_mem_tracker.get(), config::chunk_reserved_bytes_limit);
 
@@ -529,127 +531,6 @@ void ExecEnv::add_rf_event(const RfTracePoint& pt) {
     _runtime_filter_cache->add_rf_event(pt.query_id, pt.filter_id, std::move(msg));
 }
 
-<<<<<<< HEAD
-class SetMemTrackerForColumnPool {
-public:
-    SetMemTrackerForColumnPool(std::shared_ptr<MemTracker> mem_tracker) : _mem_tracker(std::move(mem_tracker)) {}
-
-    template <typename Pool>
-    void operator()() {
-        Pool::singleton()->set_mem_tracker(_mem_tracker);
-    }
-
-private:
-    std::shared_ptr<MemTracker> _mem_tracker = nullptr;
-};
-
-Status ExecEnv::init_mem_tracker() {
-    int64_t bytes_limit = 0;
-    std::stringstream ss;
-    // --mem_limit="" means no memory limit
-    bytes_limit = ParseUtil::parse_mem_spec(config::mem_limit, MemInfo::physical_mem());
-    // use 90% of mem_limit as the soft mem limit of BE
-    bytes_limit = bytes_limit * 0.9;
-    if (bytes_limit <= 0) {
-        ss << "Failed to parse mem limit from '" + config::mem_limit + "'.";
-        return Status::InternalError(ss.str());
-    }
-
-    if (bytes_limit > MemInfo::physical_mem()) {
-        LOG(WARNING) << "Memory limit " << PrettyPrinter::print(bytes_limit, TUnit::BYTES)
-                     << " exceeds physical memory of " << PrettyPrinter::print(MemInfo::physical_mem(), TUnit::BYTES)
-                     << ". Using physical memory instead";
-        bytes_limit = MemInfo::physical_mem();
-    }
-
-    if (bytes_limit <= 0) {
-        ss << "Invalid mem limit: " << bytes_limit;
-        return Status::InternalError(ss.str());
-    }
-
-    _process_mem_tracker = regist_tracker(MemTracker::PROCESS, bytes_limit, "process");
-    int64_t query_pool_mem_limit =
-            calc_max_query_memory(_process_mem_tracker->limit(), config::query_max_memory_limit_percent);
-    _query_pool_mem_tracker =
-            regist_tracker(MemTracker::QUERY_POOL, query_pool_mem_limit, "query_pool", this->process_mem_tracker());
-
-    int64_t load_mem_limit = calc_max_load_memory(_process_mem_tracker->limit());
-    _load_mem_tracker = regist_tracker(MemTracker::LOAD, load_mem_limit, "load", process_mem_tracker());
-
-    // Metadata statistics memory statistics do not use new mem statistics framework with hook
-    _metadata_mem_tracker = regist_tracker(-1, "metadata", nullptr);
-
-    _tablet_metadata_mem_tracker = regist_tracker(-1, "tablet_metadata", metadata_mem_tracker());
-    _rowset_metadata_mem_tracker = regist_tracker(-1, "rowset_metadata", metadata_mem_tracker());
-    _segment_metadata_mem_tracker = regist_tracker(-1, "segment_metadata", metadata_mem_tracker());
-    _column_metadata_mem_tracker = regist_tracker(-1, "column_metadata", metadata_mem_tracker());
-
-    _tablet_schema_mem_tracker = regist_tracker(-1, "tablet_schema", tablet_metadata_mem_tracker());
-    _segment_zonemap_mem_tracker = regist_tracker(-1, "segment_zonemap", segment_metadata_mem_tracker());
-    _short_key_index_mem_tracker = regist_tracker(-1, "short_key_index", segment_metadata_mem_tracker());
-    _column_zonemap_index_mem_tracker = regist_tracker(-1, "column_zonemap_index", column_metadata_mem_tracker());
-    _ordinal_index_mem_tracker = regist_tracker(-1, "ordinal_index", column_metadata_mem_tracker());
-    _bitmap_index_mem_tracker = regist_tracker(-1, "bitmap_index", column_metadata_mem_tracker());
-    _bloom_filter_index_mem_tracker = regist_tracker(-1, "bloom_filter_index", column_metadata_mem_tracker());
-
-    int64_t compaction_mem_limit = calc_max_compaction_memory(_process_mem_tracker->limit());
-    _compaction_mem_tracker = regist_tracker(compaction_mem_limit, "compaction", process_mem_tracker());
-    _schema_change_mem_tracker = regist_tracker(-1, "schema_change", process_mem_tracker());
-    _column_pool_mem_tracker = regist_tracker(-1, "column_pool", process_mem_tracker());
-    _page_cache_mem_tracker = regist_tracker(-1, "page_cache", process_mem_tracker());
-    int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
-    _update_mem_tracker = regist_tracker(bytes_limit * update_mem_percent / 100, "update", nullptr);
-    _chunk_allocator_mem_tracker = regist_tracker(-1, "chunk_allocator", process_mem_tracker());
-    _clone_mem_tracker = regist_tracker(-1, "clone", process_mem_tracker());
-    int64_t consistency_mem_limit = calc_max_consistency_memory(process_mem_tracker()->limit());
-    _consistency_mem_tracker = regist_tracker(consistency_mem_limit, "consistency", process_mem_tracker());
-    _datacache_mem_tracker = regist_tracker(-1, "datacache", _process_mem_tracker.get());
-    _replication_mem_tracker = regist_tracker(-1, "replication", _process_mem_tracker.get());
-
-    MemChunkAllocator::init_instance(_chunk_allocator_mem_tracker.get(), config::chunk_reserved_bytes_limit);
-
-    SetMemTrackerForColumnPool op(_column_pool_mem_tracker);
-    ForEach<ColumnPoolList>(op);
-    _init_storage_page_cache();
-    return Status::OK();
-}
-
-int64_t ExecEnv::get_storage_page_cache_size() {
-    std::lock_guard<std::mutex> l(*config::get_mstring_conf_lock());
-    int64_t mem_limit = MemInfo::physical_mem();
-    if (process_mem_tracker()->has_limit()) {
-        mem_limit = process_mem_tracker()->limit();
-    }
-    return ParseUtil::parse_mem_spec(config::storage_page_cache_limit, mem_limit);
-}
-
-int64_t ExecEnv::check_storage_page_cache_size(int64_t storage_cache_limit) {
-    if (storage_cache_limit > MemInfo::physical_mem()) {
-        LOG(WARNING) << "Config storage_page_cache_limit is greater than memory size, config="
-                     << config::storage_page_cache_limit << ", memory=" << MemInfo::physical_mem();
-    }
-    if (!config::disable_storage_page_cache) {
-        if (storage_cache_limit < kcacheMinSize) {
-            LOG(WARNING) << "Storage cache limit is too small, use default size.";
-            storage_cache_limit = kcacheMinSize;
-        }
-        LOG(INFO) << "Set storage page cache size " << storage_cache_limit;
-    }
-    return storage_cache_limit;
-}
-
-Status ExecEnv::_init_storage_page_cache() {
-    int64_t storage_cache_limit = get_storage_page_cache_size();
-    storage_cache_limit = check_storage_page_cache_size(storage_cache_limit);
-    StoragePageCache::create_global_cache(page_cache_mem_tracker(), storage_cache_limit);
-
-    // TODO(zc): The current memory usage configuration is a bit confusing,
-    // we need to sort out the use of memory
-    return Status::OK();
-}
-
-=======
->>>>>>> df80f49f8d ([Refactor] Move mem_tracker to GlobalEnv (#27640))
 void ExecEnv::stop() {
     // Clear load channel should be executed before stopping the storage engine,
     // otherwise some writing tasks will still be in the MemTableFlushThreadPool of the storage engine,

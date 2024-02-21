@@ -53,24 +53,15 @@ BitmapIndexReader::BitmapIndexReader() {
 }
 
 BitmapIndexReader::~BitmapIndexReader() {
-<<<<<<< HEAD
-    MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->bitmap_index_mem_tracker(), mem_usage());
-=======
-    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(), _mem_usage());
->>>>>>> df80f49f8d ([Refactor] Move mem_tracker to GlobalEnv (#27640))
+    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(), mem_usage());
 }
 
 StatusOr<bool> BitmapIndexReader::load(const IndexReadOptions& opts, const BitmapIndexPB& meta) {
     return success_once(_load_once, [&]() {
         Status st = _do_load(opts, meta);
         if (st.ok()) {
-<<<<<<< HEAD
-            MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->bitmap_index_mem_tracker(),
-                                     mem_usage() - sizeof(BitmapIndexReader));
-=======
             MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(),
-                                     _mem_usage() - sizeof(BitmapIndexReader));
->>>>>>> df80f49f8d ([Refactor] Move mem_tracker to GlobalEnv (#27640))
+                                     mem_usage() - sizeof(BitmapIndexReader));
         } else {
             _reset();
         }

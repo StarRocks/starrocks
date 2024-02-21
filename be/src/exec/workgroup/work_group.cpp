@@ -167,19 +167,12 @@ TWorkGroup WorkGroup::to_thrift_verbose() const {
 
 void WorkGroup::init() {
     _memory_limit_bytes = _memory_limit == ABSENT_MEMORY_LIMIT
-<<<<<<< HEAD
-                                  ? ExecEnv::GetInstance()->query_pool_mem_tracker()->limit()
-                                  : ExecEnv::GetInstance()->query_pool_mem_tracker()->limit() * _memory_limit;
-    _spill_mem_limit_bytes = _spill_mem_limit_threshold * _memory_limit_bytes;
-    _mem_tracker = std::make_shared<MemTracker>(MemTracker::RESOURCE_GROUP, _memory_limit_bytes, _name,
-                                                ExecEnv::GetInstance()->query_pool_mem_tracker());
-    _mem_tracker->set_reserve_limit(_spill_mem_limit_bytes);
-=======
                                   ? GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit()
                                   : GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit() * _memory_limit;
-    _mem_tracker = std::make_shared<starrocks::MemTracker>(MemTracker::RESOURCE_GROUP, _memory_limit_bytes, _name,
-                                                           GlobalEnv::GetInstance()->query_pool_mem_tracker());
->>>>>>> df80f49f8d ([Refactor] Move mem_tracker to GlobalEnv (#27640))
+    _spill_mem_limit_bytes = _spill_mem_limit_threshold * _memory_limit_bytes;
+    _mem_tracker = std::make_shared<MemTracker>(MemTracker::RESOURCE_GROUP, _memory_limit_bytes, _name,
+                                                GlobalEnv::GetInstance()->query_pool_mem_tracker());
+    _mem_tracker->set_reserve_limit(_spill_mem_limit_bytes);
     _driver_sched_entity.set_queue(std::make_unique<pipeline::QuerySharedDriverQueue>());
     _scan_sched_entity.set_queue(workgroup::create_scan_task_queue());
     _connector_scan_sched_entity.set_queue(workgroup::create_scan_task_queue());

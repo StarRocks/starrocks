@@ -70,13 +70,8 @@ StatusOr<std::unique_ptr<ColumnReader>> ColumnReader::create(ColumnMetaPB* meta,
     return std::move(r);
 }
 
-<<<<<<< HEAD
 ColumnReader::ColumnReader(const private_type&, Segment* segment) : _segment(segment) {
-    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->column_metadata_mem_tracker(), sizeof(ColumnReader));
-=======
-ColumnReader::ColumnReader(const private_type&, const Segment* segment) : _segment(segment) {
     MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->column_metadata_mem_tracker(), sizeof(ColumnReader));
->>>>>>> df80f49f8d ([Refactor] Move mem_tracker to GlobalEnv (#27640))
 }
 
 ColumnReader::~ColumnReader() {
@@ -139,7 +134,6 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
             case ZONE_MAP_INDEX:
                 _zonemap_index_meta.reset(index_meta->release_zone_map_index());
                 _segment_zone_map.reset(_zonemap_index_meta->release_segment_zone_map());
-<<<<<<< HEAD
                 // Currently if the column type is varchar(length) and the values is all null,
                 // a string of length will be written to the Segment file,
                 // causing the loaded metadata to occupy a large amount of memory.
@@ -150,10 +144,7 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
                     delete _segment_zone_map->release_min();
                     delete _segment_zone_map->release_max();
                 }
-                MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->column_zonemap_index_mem_tracker(),
-=======
                 MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(),
->>>>>>> df80f49f8d ([Refactor] Move mem_tracker to GlobalEnv (#27640))
                                          _zonemap_index_meta->SpaceUsedLong())
                 _meta_mem_usage.fetch_add(_zonemap_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
                 // the segment zone map will release from zonemap_index_map,

@@ -205,16 +205,11 @@ Status Segment::write_segment_footer(WritableFile* write_file, const SegmentFoot
 
 Segment::Segment(std::shared_ptr<FileSystem> fs, FileInfo segment_file_info, uint32_t segment_id,
                  const TabletSchema* tablet_schema)
-<<<<<<< HEAD
         : _fs(std::move(fs)),
           _segment_file_info(std::move(segment_file_info)),
           _tablet_schema(tablet_schema),
           _segment_id(segment_id) {
-    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->segment_metadata_mem_tracker(), _basic_info_mem_usage());
-=======
-        : _fs(std::move(fs)), _fname(std::move(path)), _tablet_schema(tablet_schema), _segment_id(segment_id) {
     MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->segment_metadata_mem_tracker(), _basic_info_mem_usage());
->>>>>>> df80f49f8d ([Refactor] Move mem_tracker to GlobalEnv (#27640))
 }
 
 Segment::Segment(std::shared_ptr<FileSystem> fs, FileInfo segment_file_info, uint32_t segment_id,
@@ -222,14 +217,9 @@ Segment::Segment(std::shared_ptr<FileSystem> fs, FileInfo segment_file_info, uin
         : _fs(std::move(fs)),
           _segment_file_info(std::move(segment_file_info)),
           _tablet_schema(std::move(tablet_schema)),
-<<<<<<< HEAD
           _segment_id(segment_id),
           _tablet_manager(tablet_manager) {
-    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->segment_metadata_mem_tracker(), _basic_info_mem_usage());
-=======
-          _segment_id(segment_id) {
     MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->segment_metadata_mem_tracker(), _basic_info_mem_usage());
->>>>>>> df80f49f8d ([Refactor] Move mem_tracker to GlobalEnv (#27640))
 }
 
 Segment::~Segment() {

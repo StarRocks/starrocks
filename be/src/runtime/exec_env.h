@@ -147,85 +147,9 @@ public:
     MemTracker* datacache_mem_tracker() { return _datacache_mem_tracker.get(); }
     std::vector<std::shared_ptr<MemTracker>>& mem_trackers() { return _mem_trackers; }
 
-<<<<<<< HEAD
-    PriorityThreadPool* thread_pool() { return _thread_pool; }
-    ThreadPool* streaming_load_thread_pool() { return _streaming_load_thread_pool; }
-    workgroup::ScanExecutor* scan_executor() { return _scan_executor; }
-    workgroup::ScanExecutor* connector_scan_executor() { return _connector_scan_executor; }
-
-    PriorityThreadPool* udf_call_pool() { return _udf_call_pool; }
-    PriorityThreadPool* pipeline_prepare_pool() { return _pipeline_prepare_pool; }
-    PriorityThreadPool* pipeline_sink_io_pool() { return _pipeline_sink_io_pool; }
-    PriorityThreadPool* query_rpc_pool() { return _query_rpc_pool; }
-    ThreadPool* load_rpc_pool() { return _load_rpc_pool.get(); }
-    FragmentMgr* fragment_mgr() { return _fragment_mgr; }
-    starrocks::pipeline::DriverExecutor* wg_driver_executor() { return _wg_driver_executor; }
-    BaseLoadPathMgr* load_path_mgr() { return _load_path_mgr; }
-    BfdParser* bfd_parser() const { return _bfd_parser; }
-    BrokerMgr* broker_mgr() const { return _broker_mgr; }
-    BrpcStubCache* brpc_stub_cache() const { return _brpc_stub_cache; }
-    LoadChannelMgr* load_channel_mgr() { return _load_channel_mgr; }
-    LoadStreamMgr* load_stream_mgr() { return _load_stream_mgr; }
-    SmallFileMgr* small_file_mgr() { return _small_file_mgr; }
-    StreamContextMgr* stream_context_mgr() { return _stream_context_mgr; }
-    TransactionMgr* transaction_mgr() { return _transaction_mgr; }
-
-    const std::vector<StorePath>& store_paths() const { return _store_paths; }
-    void set_store_paths(const std::vector<StorePath>& paths) { _store_paths = paths; }
-
-    StreamLoadExecutor* stream_load_executor() { return _stream_load_executor; }
-    RoutineLoadTaskExecutor* routine_load_task_executor() { return _routine_load_task_executor; }
-    HeartbeatFlags* heartbeat_flags() { return _heartbeat_flags; }
-
-    ThreadPool* automatic_partition_pool() { return _automatic_partition_pool.get(); }
-
-    RuntimeFilterWorker* runtime_filter_worker() { return _runtime_filter_worker; }
-    Status init_mem_tracker();
-
-    RuntimeFilterCache* runtime_filter_cache() { return _runtime_filter_cache; }
-
-    ProfileReportWorker* profile_report_worker() { return _profile_report_worker; }
-
-    void add_rf_event(const RfTracePoint& pt);
-
-    pipeline::QueryContextManager* query_context_mgr() { return _query_context_mgr; }
-
-    pipeline::DriverLimiter* driver_limiter() { return _driver_limiter; }
-
-    int64_t max_executor_threads() const { return _max_executor_threads; }
-
-    int32_t calc_pipeline_dop(int32_t pipeline_dop) const;
-
-    lake::TabletManager* lake_tablet_manager() const { return _lake_tablet_manager; }
-
-    lake::LocationProvider* lake_location_provider() const { return _lake_location_provider; }
-
-    lake::UpdateManager* lake_update_manager() const { return _lake_update_manager; }
-
-    lake::ReplicationTxnManager* lake_replication_txn_manager() const { return _lake_replication_txn_manager; }
-
-    AgentServer* agent_server() const { return _agent_server; }
-
-    int64_t get_storage_page_cache_size();
-    int64_t check_storage_page_cache_size(int64_t storage_cache_limit);
-
-    query_cache::CacheManagerRawPtr cache_mgr() const { return _cache_mgr; }
-
-    spill::DirManager* spill_dir_mgr() const { return _spill_dir_mgr.get(); }
-
-    ThreadPool* delete_file_thread_pool();
-
-private:
-    void _reset_tracker();
-    template <class... Args>
-    std::shared_ptr<MemTracker> regist_tracker(Args&&... args);
-
-    Status _init_storage_page_cache();
-=======
     int64_t get_storage_page_cache_size();
     int64_t check_storage_page_cache_size(int64_t storage_cache_limit);
     static int64_t calc_max_query_memory(int64_t process_mem_limit, int64_t percent);
->>>>>>> df80f49f8d ([Refactor] Move mem_tracker to GlobalEnv (#27640))
 
 private:
     static bool _is_init;
@@ -393,6 +317,8 @@ public:
     query_cache::CacheManagerRawPtr cache_mgr() const { return _cache_mgr; }
 
     spill::DirManager* spill_dir_mgr() const { return _spill_dir_mgr.get(); }
+
+    ThreadPool* delete_file_thread_pool();
 
 private:
     std::vector<StorePath> _store_paths;
