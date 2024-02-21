@@ -48,6 +48,7 @@ struct TabletPublishVersionTask {
     // max continuous version after publish is done
     // or 0 which means tablet not found or publish task cannot be submitted
     int64_t max_continuous_version{0};
+    bool is_double_write{false};
 };
 
 void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionRequest& publish_version_req,
@@ -67,6 +68,8 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
     size_t num_active_tablet = 0;
     bool is_replication_txn =
             publish_version_req.__isset.txn_type && publish_version_req.txn_type == TTxnType::TXN_REPLICATION;
+    bool is_version_overwrite =
+            publish_version_req.__isset.is_version_overwrite && publish_version_req.is_version_overwrite;
     if (is_replication_txn) {
         std::vector<std::vector<TTabletId>> partitions(num_partition);
         for (size_t i = 0; i < publish_version_req.partition_version_infos.size(); i++) {
@@ -106,6 +109,9 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                 task.tablet_id = itr.first.tablet_id;
                 task.version = publish_version_req.partition_version_infos[i].version;
                 task.rowset = std::move(itr.second);
+                task.rowset->rowset_meta()->set_gtid(publish_version_req.gtid);
+                task.is_double_write = publish_version_req.partition_version_infos[i].__isset.is_double_write &&
+                                       publish_version_req.partition_version_infos[i].is_double_write;
             }
         }
     }
@@ -156,9 +162,26 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
                                 << " tablet_max_version:" << tablet->max_continuous_version()
                                 << " partition:" << task.partition_id << " txn_id: " << task.txn_id;
                     }
+                } else if (is_version_overwrite) {
+                    task.st = StorageEngine::instance()->txn_manager()->publish_overwrite_txn(
+                            task.partition_id, tablet, task.txn_id, task.version, task.rowset, wait_time);
+                    if (!task.st.ok()) {
+                        LOG(WARNING) << "Publish overwrite txn failed tablet:" << tablet->tablet_id()
+                                     << " version:" << task.version << " partition:" << task.partition_id
+                                     << " txn_id: " << task.txn_id << " rowset:" << task.rowset->rowset_id();
+                        std::string_view msg = task.st.message();
+                        tablet_span->SetStatus(trace::StatusCode::kError, {msg.data(), msg.size()});
+                    } else {
+                        LOG(INFO) << "Publish overwrite txn success tablet:" << tablet->tablet_id()
+                                  << " version:" << task.version
+                                  << " tablet_max_version:" << tablet->max_continuous_version()
+                                  << " partition:" << task.partition_id << " txn_id: " << task.txn_id
+                                  << " rowset:" << task.rowset->rowset_id();
+                    }
                 } else {
                     task.st = StorageEngine::instance()->txn_manager()->publish_txn(
-                            task.partition_id, tablet, task.txn_id, task.version, task.rowset, wait_time);
+                            task.partition_id, tablet, task.txn_id, task.version, task.rowset, wait_time,
+                            task.is_double_write);
                     if (!task.st.ok()) {
                         LOG(WARNING) << "Publish txn failed tablet:" << tablet->tablet_id()
                                      << " version:" << task.version << " partition:" << task.partition_id

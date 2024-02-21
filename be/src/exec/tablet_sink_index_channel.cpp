@@ -34,7 +34,7 @@
 #include "util/thrift_rpc_helper.h"
 #include "util/thrift_util.h"
 
-namespace starrocks::stream_load {
+namespace starrocks {
 
 class OlapTableSink; // forward declaration
 NodeChannel::NodeChannel(OlapTableSink* parent, int64_t node_id, bool is_incremental, ExprContext* where_clause)
@@ -103,6 +103,7 @@ Status NodeChannel::init(RuntimeState* state) {
         request->set_sender_id(_parent->_sender_id);
         request->set_eos(false);
         request->set_timeout_ms(_rpc_timeout_ms);
+        request->set_sink_id(_parent->_sink_id);
     }
     _rpc_request.set_allocated_id(&_parent->_load_id);
 
@@ -179,6 +180,7 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     request.set_is_incremental(incremental_open);
     request.set_sender_id(_parent->_sender_id);
     request.set_immutable_tablet_size(_parent->_automatic_bucket_size);
+    request.set_sink_id(_parent->_sink_id);
     for (auto& tablet : tablets) {
         auto ptablet = request.add_tablets();
         ptablet->CopyFrom(tablet);
@@ -965,6 +967,7 @@ void NodeChannel::_cancel(int64_t index_id, const Status& err_st) {
     request.set_index_id(index_id);
     request.set_sender_id(_parent->_sender_id);
     request.set_txn_id(_parent->_txn_id);
+    request.set_sink_id(_parent->_sink_id);
 
     auto closure = new RefCountClosure<PTabletWriterCancelResult>();
 
@@ -1042,4 +1045,4 @@ bool IndexChannel::has_intolerable_failure() {
     }
 }
 
-} // namespace starrocks::stream_load
+} // namespace starrocks

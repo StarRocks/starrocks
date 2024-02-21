@@ -16,7 +16,8 @@
 
 #include "exec/tablet_sink_index_channel.h"
 
-namespace starrocks::stream_load {
+namespace starrocks {
+
 // TabletSinkSender will control one index/table's send chunks.
 class TabletSinkSender {
 public:
@@ -102,4 +103,4 @@ protected:
     std::set<int64_t> _failed_channels;
 };
 
-} // namespace starrocks::stream_load
+} // namespace starrocks
