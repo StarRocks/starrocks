@@ -38,7 +38,7 @@ PROPERTIES (
 );
 -- result:
 -- !result
-shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_dict_mapping_case_1.csv -XPUT -H partial_update:false -H label:stream_load_dict_mapping_case_1 -H column_separator:, -H columns:"xx, id1=xx, id2=dict_mapping('test_expression_cast_db.t_expression_cast', cast(xx as BIGINT))" ${url}/api/test_expression_cast_db/test_table/_stream_load
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_dict_mapping_case_1.csv -XPUT -H partial_update:false -H label:stream_load_dict_mapping_case_1 -H column_separator:, -H columns:"id1, id2=dict_mapping('test_expression_cast_db.t_expression_cast', CAST(id1 AS BIGINT))" ${url}/api/test_expression_cast_db/test_table/_stream_load
 -- result:
 0
 {
