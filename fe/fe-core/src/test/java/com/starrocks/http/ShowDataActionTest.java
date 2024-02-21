@@ -86,6 +86,7 @@ public class ShowDataActionTest extends StarRocksHttpTestCase {
                 .addHeader("Authorization", rootAuth)
                 .url(BASE_URL + "/api" + SHOW_DATA_URI + "?db=" + SHOW_DATA_DB_NAME + "&table=" + SHOW_DATA_TABLE_NAME_SECOND)
                 .build();
+
         try (Response response = networkClient.newCall(request).execute()) {
             assertTrue(response.isSuccessful());
             Assert.assertNotNull(response.body());
