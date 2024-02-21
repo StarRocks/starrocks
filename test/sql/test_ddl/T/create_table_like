@@ -33,3 +33,7 @@ PROPERTIES (
 CREATE TABLE test_pk_tbl2 LIKE test_pk_tbl1;
 insert into test_pk_tbl2 values ('2023-09-07', '2023-09-07 13:35:00', 'a', 'a', true, 1, 1, 1, 10),  ('2023-09-06', '2023-09-07 13:35:00', 'a', 'a', true, 1, 1, 1, 10);
 select count(1) from test_pk_tbl2;
+drop table t1;
+drop table t2;
+drop table test_pk_tbl1;
+drop table test_pk_tbl2;
