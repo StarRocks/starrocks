@@ -766,6 +766,10 @@ std::string Expr::jit_func_name_impl(RuntimeState* state) const {
 // This method searches from top to bottom for compilable expressions.
 // Once a compilable expression is found, it skips over its compilable subexpressions and continues the search downwards.
 Status Expr::replace_compilable_exprs(Expr** expr, ObjectPool* pool, RuntimeState* state) {
+    if (_node_type == TExprNodeType::DICT_EXPR || _node_type == TExprNodeType::DICT_QUERY_EXPR ||
+        _node_type == TExprNodeType::DICTIONARY_GET_EXPR || _node_type == TExprNodeType::PLACEHOLDER_EXPR) {
+        return Status::OK();
+    }
     if ((*expr)->should_compile(state)) {
         // If the current expression is compilable, we will replace it with a JITExpr.
         // This expression and its compilable subexpressions will be compiled into a single function.
