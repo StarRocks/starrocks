@@ -33,7 +33,7 @@ class LakePrimaryIndex : public PrimaryIndex {
 public:
     LakePrimaryIndex() : PrimaryIndex() {}
     LakePrimaryIndex(const Schema& pk_schema) : PrimaryIndex(pk_schema) {}
-    ~LakePrimaryIndex();
+    ~LakePrimaryIndex() override;
 
     // Fetch all primary keys from the tablet associated with this index into memory
     // to build a hash index.

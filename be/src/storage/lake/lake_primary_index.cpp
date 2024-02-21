@@ -32,9 +32,7 @@ static bvar::LatencyRecorder g_load_pk_index_latency("lake_load_pk_index");
 LakePrimaryIndex::~LakePrimaryIndex() {
     if (!_enable_persistent_index && _persistent_index != nullptr) {
         auto st = LocalPkIndexManager::clear_persistent_index(_tablet_id);
-        if (!st.ok()) {
-            LOG(WARNING) << "bad LakeLocalPersistentIndex released: " << st.to_string();
-        }
+        LOG_IF(WARNING, !st.ok()) << "Fail to clear pk index from local disk: " << st.to_string();
     }
 }
 
