@@ -44,7 +44,8 @@ StatusOr<ColumnPtr> DictQueryExpr::evaluate_checked(ExprContext* context, Chunk*
         }
     }
 
-    Columns key_columns(columns.begin() + 1, columns.end());
+    // key_columns should be columns[1] ~ columns[1 + _dict_query_expr.key_fields.size()]
+    Columns key_columns(columns.begin() + 1, columns.begin() + 1 + _dict_query_expr.key_fields.size());
     DCHECK(_key_schema.num_fields() == key_columns.size());
     auto key_chunk = std::make_unique<Chunk>(std::move(key_columns), std::make_shared<Schema>(_key_schema));
     key_chunk->check_or_die();
