@@ -972,10 +972,10 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht(RuntimeState* state, 
                         _probe_state->cur_row_match_count++;
                         _probe_state->probe_match_filter[i] = 1;
                     }
-                    RETURN_IF_CHUNK_FULL()
                     if (_probe_state->use_one_match_probe) {
                         break;
                     }
+                    RETURN_IF_CHUNK_FULL()
                 }
                 build_index = _table_items->next[build_index];
             } while (build_index != 0);
@@ -1119,10 +1119,10 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_outer_join(R
                     match_count++;
                     _probe_state->cur_row_match_count++;
 
-                    RETURN_IF_CHUNK_FULL()
                     if (_probe_state->use_one_match_probe) {
                         break;
                     }
+                    RETURN_IF_CHUNK_FULL()
                 }
                 build_index = _table_items->next[build_index];
             }
