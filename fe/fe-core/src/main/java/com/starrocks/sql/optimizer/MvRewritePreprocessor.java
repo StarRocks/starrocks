@@ -475,8 +475,9 @@ public class MvRewritePreprocessor {
         return mvWithPlanContexts;
     }
 
-    private boolean canMVRewriteIfMVHasExtraTables(MaterializedView mv,
-                                                   Set<Table> queryTables) {
+    private static boolean canMVRewriteIfMVHasExtraTables(ConnectContext connectContext,
+                                                          MaterializedView mv,
+                                                          Set<Table> queryTables) {
         // 1. when mv has foreign key constraints, it's ok whether query has extra tables or mv has extra tables.
         if (mv.hasForeignKeyConstraints()) {
             return true;
@@ -499,32 +500,49 @@ public class MvRewritePreprocessor {
         return true;
     }
 
-    private boolean isMVValidToRewriteQuery(MaterializedView mv, Set<Table> queryTables) {
+    /**
+     * Check if the MV is eligible for query rewrite
+     *
+     * @param force build the MV plan even if it's not in the plan cache
+     */
+    public static Pair<Boolean, String> isMVValidToRewriteQuery(ConnectContext connectContext,
+                                                                MaterializedView mv,
+                                                                boolean force,
+                                                                Set<Table> queryTables) {
         if (!mv.isActive())  {
             logMVPrepare(connectContext, mv, "MV is not active: {}", mv.getName());
-            return false;
+            return Pair.create(false, "MV is not active");
         }
         if (!mv.getTableProperty().getMvQueryRewriteSwitch().isEnable()) {
-            logMVPrepare(connectContext, mv, PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE + "=" +
-                    mv.getTableProperty().getMvQueryRewriteSwitch());
-            return false;
+            String message = PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE + "=" +
+                    mv.getTableProperty().getMvQueryRewriteSwitch();
+            logMVPrepare(connectContext, mv, message);
+            return Pair.create(false, message);
         }
         // if mv is a subset of query tables, it can be used for rewrite.
-        if (!canMVRewriteIfMVHasExtraTables(mv, queryTables)) {
-            return false;
+        if (!queryTables.isEmpty() && !canMVRewriteIfMVHasExtraTables(connectContext, mv, queryTables)) {
+            return Pair.create(false, "MV contains extra tables besides FK-PK");
         }
         // if mv is in plan cache(avoid building plan), check whether it's valid
-        if (connectContext.getSessionVariable().isEnableMaterializedViewPlanCache()) {
-            List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance()
-                    .getPlanContextFromCacheIfPresent(mv);
-            if (planContexts != null && !planContexts.isEmpty() &&
-                    planContexts.stream().noneMatch(mvPlanContext -> mvPlanContext.isValidMvPlan())) {
-                logMVPrepare(connectContext, "MV {} has not a valid plan from {} plan contexts",
+        if (connectContext == null || connectContext.getSessionVariable().isEnableMaterializedViewPlanCache()) {
+            List<MvPlanContext> planContexts =
+                    force ?
+                            CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, false) :
+                            CachingMvPlanContextBuilder.getInstance().getPlanContextFromCacheIfPresent(mv);
+            if (CollectionUtils.isEmpty(planContexts)) {
+                logMVPrepare(connectContext, "MV has no plan", mv.getName());
+                return Pair.create(false, "MV has no plan");
+            }
+            if (planContexts.stream().noneMatch(MvPlanContext::isValidMvPlan)) {
+                logMVPrepare(connectContext, "MV {} has no valid plan from {} plan contexts",
                         mv.getName(), planContexts.size());
-                return false;
+                String message = planContexts.stream()
+                        .map(MvPlanContext::getInvalidReason)
+                        .collect(Collectors.joining(";"));
+                return Pair.create(false, "no valid plan: " + message);
             }
         }
-        return true;
+        return Pair.create(true, null);
     }
 
     private Set<MaterializedView> chooseBestRelatedMVsByCorrelations(Set<Table> queryTables,
@@ -566,7 +584,7 @@ public class MvRewritePreprocessor {
 
         // 2. choose all valid mvs and filter mvs that cannot be rewritten for the query
         validMVs = validMVs.stream()
-                .filter(mv -> isMVValidToRewriteQuery(mv, queryTables))
+                .filter(mv -> isMVValidToRewriteQuery(connectContext, mv, false, queryTables).first)
                 .collect(Collectors.toSet());
         logMVPrepare(connectContext, "Choose {}/{} valid mvs after checking valid",
                 validMVs.size(), relatedMVs.size());
