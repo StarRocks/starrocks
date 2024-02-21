@@ -275,7 +275,6 @@ Status Expr::create_tree_from_thrift_with_jit(ObjectPool* pool, const std::vecto
         return status;
     }
 
-    const auto* prev_e = *root_expr;
     bool replaced = false;
     status = (*root_expr)->replace_compilable_exprs(root_expr, pool, replaced);
     if (!status.ok()) {
