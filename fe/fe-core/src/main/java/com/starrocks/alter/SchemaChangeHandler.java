@@ -2258,6 +2258,10 @@ public class SchemaChangeHandler extends AlterHandler {
 
     @Override
     public void cancel(CancelStmt stmt) throws DdlException {
+        cancel(stmt, "user cancelled");
+    }
+
+    public void cancel(CancelStmt stmt, String reason) throws DdlException {
         CancelAlterTableStmt cancelAlterTableStmt = (CancelAlterTableStmt) stmt;
 
         String dbName = cancelAlterTableStmt.getDbName();
@@ -2301,7 +2305,7 @@ public class SchemaChangeHandler extends AlterHandler {
         }
 
         // alter job v2's cancel must be called outside the database lock
-        if (!schemaChangeJobV2.cancel("user cancelled")) {
+        if (!schemaChangeJobV2.cancel(reason)) {
             throw new DdlException("Job can not be cancelled. State: " + schemaChangeJobV2.getJobState());
         }
     }
