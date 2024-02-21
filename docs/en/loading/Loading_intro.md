@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "English"
+keywords: ['broker load', 'stream load', 'routine load', 'spark load']
 ---
 
 # Overview of data loading
@@ -107,15 +108,6 @@ The workflow of a Routine job is described as follows:
 
 StarRocks provides five loading methods to help you load data in various business scenarios: [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md), [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md), [Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md), [Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md), and [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md).
 
-| Loading method     | Data source                                        | Business scenario                                            | Data volume per load job                                     | Data file format                                | Loading mode | Protocol |
-| ------------------ | -------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ | ----------------------------------------------- | ------------ | -------- |
-| Stream Load        |  <ul><li>Local files</li><li>Data streams</li></ul>| Load data files from local file systems or load data streams by using programs. | 10 GB or less                             |<ul><li>CSV</li><li>JSON</li></ul>               | Synchronous  | HTTP     |
-| Broker Load        | <ul><li>HDFS</li><li>Amazon S3</li><li>Google GCS</li><li>Microsoft Azure Storage</li><li>Alibaba Cloud OSS</li><li>Tencent Cloud COS</li><li>Huawei Cloud OBS</li><li>Other S3-compatible storage system (such as MinIO)</li></ul>| Load data from HDFS or cloud storage.                        | Dozens of GB to hundreds of GB                               | <ul><li>CSV</li><li>Parquet</li><li>ORC</li></ul>| Asynchronous | MySQL    |
-| Routine Load       | Apache Kafka®                                       | Load data in real time from Kafka.                   | MBs to GBs of data as mini-batches                           |<ul><li>CSV</li><li>JSON</li><li>Avro (supported since v3.0.1)</li></ul>          | Asynchronous | MySQL    |
-| Spark Load         | <ul><li>HDFS</li><li>Hive</li></ul>     |<ul><li>Migrate large amounts of data from HDFS or Hive by using Apache Spark™ clusters.</li><li>Load data while using a global data dictionary for deduplication.</li></ul>| Dozens of GB to TBs                                         |<ul><li>CSV</li><li>ORC (supported since v2.0)</li><li>Parquet (supported since v2.0)</li></ul>       | Asynchronous | MySQL    |
-| INSERT INTO SELECT | <ul><li>StarRocks tables</li><li>External tables</li><li>AWS S3</li></ul>**NOTICE**<br />When you load data from AWS S3, only Parquet-formatted or ORC-formatted files are supported.     |<ul><li>Load data from external tables.</li><li>Load data between StarRocks tables.</li></ul>| Not fixed (The data volume varies based on the memory size.) | StarRocks tables      | Synchronous  | MySQL    |
-| INSERT INTO VALUES | <ul><li>Programs</li><li>ETL tools</li></ul>    |<ul><li>Insert small amounts of data as individual records.</li><li>Load data by using APIs such as JDBC.</li></ul>| In small quantities                                          | SQL                   | Synchronous  | MySQL    |
-
 You can determine the loading method of your choice based on your business scenario, data volume, data source, data file format, and loading frequency. Additionally, take note of the following points when you select a loading method:
 
 - When you load data from Kafka, we recommend that you use [Routine Load](../loading/RoutineLoad.md). However, if the data requires multi-table joins and extract, transform and load (ETL) operations, you can use Apache Flink® to read and pre-process the data from Kafka and then use [flink-connector-starrocks](../loading/Flink-connector-starrocks.md) to load the data into StarRocks.
@@ -124,9 +116,9 @@ You can determine the loading method of your choice based on your business scena
 
 - When you load data from another StarRocks cluster or from an Elasticsearch cluster, we recommend that you create a [StarRocks external table](../data_source/External_table.md#starrocks-external-table) or an [Elasticsearch external table](../data_source/External_table.md#deprecated-elasticsearch-external-table) and then use [INSERT](../loading/InsertInto.md) to load the data.
 
-  > **NOTICE**
-  >
-  > StarRocks external tables only support data writes. They do not support data reads.
+:::note
+StarRocks external tables only support data writes. They do not support data reads.
+:::
 
 - When you load data from MySQL databases, we recommend that you create a [MySQL external table](../data_source/External_table.md#deprecated-mysql-external-table) and then use [INSERT](../loading/InsertInto.md) to load the data. If you want to load data in real time, we recommend that you load the data by following the instructions provided in [Realtime synchronization from MySQL](../loading/Flink_cdc_load.md).
 
@@ -135,6 +127,167 @@ You can determine the loading method of your choice based on your business scena
 The following figure provides an overview of various data sources supported by StarRocks and the loading methods that you can use to load data from these data sources.
 
 ![Data loading sources](../assets/4.1-3.png)
+
+###  Stream Load
+
+:::info Quick Start
+The Basic Quick Start uses stream load. [Try it](../quick_start/shared-nothing.md)!
+:::
+
+#### Business scenario
+
+Load data files from local file systems or load data streams by using programs.
+
+#### Data source
+
+- Local files
+- Data streams
+
+#### Data file format
+- CSV
+- JSON
+
+| Mode        | Protocol | Data volume per load job |
+|-------------|----------|--------------------------|
+| Synchronous | HTTP    | 10 GB or less             |
+
+---
+
+###  Broker Load
+
+:::tip Tutorial
+Broker load is used in several tutorials. If you want to try it out, pick your data source:
+
+- [S3](../loading/s3.md/#use-broker-load)
+- [GCS](../loading/gcs.md/#use-broker-load)
+- [Azure Blob Storage](../loading/azure.md/#use-broker-load)
+- [HDFS](../loading/hdfs_load.md/#use-broker-load)
+- [MinIO](../loading/minio.md/#use-broker-load)
+
+:::
+
+#### Business scenario
+
+Load data from HDFS or cloud storage.
+
+#### Data source
+
+- HDFS
+- Amazon S3
+- Google GCS
+- Microsoft Azure Storage
+- Alibaba Cloud OSS
+- Tencent Cloud COS
+- Huawei Cloud OBS
+- Other S3-compatible storage system (such as MinIO)
+
+#### Data file format
+
+- CSV
+- Parquet
+- ORC
+ 
+| Mode        | Protocol | Data volume per load job |
+|-------------|----------|--------------------------|
+| Asynchronous | MySQL    | Dozens of GB to hundreds of GB |
+
+---
+
+###  Routine Load       
+
+#### Business scenario
+
+Load data in real time from Kafka.
+
+#### Data source
+
+Apache Kafka®
+
+#### Data file format
+
+- CSV
+- JSON
+- Avro (supported since v3.0.1)
+
+
+| Mode        | Protocol | Data volume per load job |
+|-------------|----------|--------------------------|
+| Asynchronous | MySQL    | MBs to GBs of data as mini-batches |
+
+---
+
+###  Spark Load
+
+#### Business scenario
+
+- Migrate large amounts of data from HDFS or Hive by using Apache Spark™ clusters.
+- Load data while using a global data dictionary for deduplication.
+
+#### Data source
+- HDFS
+- Hive
+
+#### Data file format
+
+- CSV
+- ORC
+- Parquet
+
+| Mode        | Protocol | Data volume per load job |
+|-------------|----------|--------------------------|
+| Asynchronous | MySQL    | Dozens of GB to TBs |
+
+---
+
+###  INSERT INTO SELECT
+
+#### Business scenario
+
+- Load data from external tables.
+- Load data between StarRocks tables.
+
+#### Data source
+
+- StarRocks tables
+- External tables
+- AWS S3
+
+:::note
+When you load data from AWS S3, only Parquet-formatted or ORC-formatted files are supported.
+:::
+
+#### Data file format
+
+StarRocks tables
+
+
+| Mode        | Protocol | Data volume per load job |
+|-------------|----------|--------------------------|
+| Synchronous | MySQL    | Not fixed (The data volume varies based on the memory size.) |
+
+---
+
+###  INSERT INTO VALUES 
+
+#### Business scenario
+
+- Insert small amounts of data as individual records.
+- Load data by using APIs such as JDBC.
+
+#### Data source
+
+- Programs
+- ETL tools
+                                         
+#### Data file format
+
+SQL                   
+   
+| Mode        | Protocol | Data volume per load job |
+|-------------|----------|--------------------------|
+| Synchronous | MySQL    | Small quantities |
+
+---
 
 ## Memory limits
 
