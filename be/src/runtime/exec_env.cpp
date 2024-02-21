@@ -161,12 +161,6 @@ bool GlobalEnv::is_init() {
     return _is_init;
 }
 
-Status GlobalEnv::init() {
-    RETURN_IF_ERROR(_init_mem_tracker());
-    _is_init = true;
-    return Status::OK();
-}
-
 Status GlobalEnv::_init_mem_tracker() {
     int64_t bytes_limit = 0;
     std::stringstream ss;
