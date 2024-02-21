@@ -144,3 +144,46 @@ insert into crc01 values ('hello world', 'com.mysql.com', "镜舟科技");
 select crc32(c0) from crc01;
 select crc32(c1) from crc01;
 select crc32(c2) from crc01;
+
+-- function: ngram_search
+-- case1: const/const  normal case
+select ngram_search("chinese","china");
+
+select ngram_search("chinese","CHINESE");
+select ngram_search_case_insensitive("chinese","CHINESE");
+select ngram_search_case_insensitive("CHINESE","chinese");
+
+-- case 2:const/const corner case
+select ngram_search("chinese","");
+select ngram_search("","chinese");
+select ngram_search("","");
+-- this is because length("chi") < 4
+select ngram_search("chi","chi");
+
+-- case3: column/const
+CREATE TABLE `string_table` (
+  `rowkey` varchar(300) NOT NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`rowkey`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`rowkey`) BUCKETS 64
+PROPERTIES (
+    "replication_num" = "1",
+    "bucket_size" = "4294967296",
+    "storage_volume" = "builtin_storage_volume",
+    "enable_persistent_index" = "false",
+    "compression" = "LZ4"
+);
+insert into string_table values
+("000073a7-274f-46bf-bfaf-678868cc26cd"),
+("e6249ba1-5b54-46bf-bfaf-89d69094b757"),
+("93da4b36-5401-46bf-bfa7-2bde65779623"),
+("2548c7aa-d94f-46bf-b0a4-d769f248cbb2"),
+("1bd32347-274f-4a30-93f3-9087594de9cd");
+
+select ngram_search(rowkey,"000073a7-274f-46bf-bfaf-678868cc26cd") as a from string_table order by a;
+select ngram_search(rowkey, "e6249ba1-5b54-46bf-bfaf-89d69094b757") as a from string_table order by a;
+
+-- case4: only support (column,const) and (const,const)
+select ngram_search("000073a7-274f-46bf-bfaf-678868cc26cd",rowkey) from string_table;
+

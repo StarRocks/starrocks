@@ -120,8 +120,8 @@ public:
 
     void clear_cached_delta_column_group(const std::vector<TabletSegmentId>& tsids);
 
-    StatusOr<size_t> clear_delta_column_group_before_version(KVStore* meta, int64_t tablet_id,
-                                                             int64_t min_readable_version);
+    StatusOr<size_t> clear_delta_column_group_before_version(KVStore* meta, const std::string& tablet_path,
+                                                             int64_t tablet_id, int64_t min_readable_version);
 
     void expire_cache();
 

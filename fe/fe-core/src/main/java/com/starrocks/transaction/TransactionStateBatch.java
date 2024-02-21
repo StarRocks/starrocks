@@ -100,7 +100,7 @@ public class TransactionStateBatch implements Writable {
     public void afterVisible(TransactionStatus transactionStatus, boolean txnOperated) {
         for (TransactionState transactionState : transactionStates) {
             // after status changed
-            TxnStateChangeCallback callback = GlobalStateMgr.getCurrentGlobalTransactionMgr()
+            TxnStateChangeCallback callback = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                     .getCallbackFactory().getCallback(transactionState.getCallbackId());
             if (callback != null) {
                 if (Objects.requireNonNull(transactionStatus) == TransactionStatus.VISIBLE) {
@@ -145,6 +145,18 @@ public class TransactionStateBatch implements Writable {
 
     public List<TransactionState> getTransactionStates() {
         return transactionStates;
+    }
+
+    public void writeLock() {
+        for (TransactionState transactionState : transactionStates) {
+            transactionState.writeLock();
+        }
+    }
+
+    public void writeUnlock() {
+        for (TransactionState transactionState : transactionStates) {
+            transactionState.writeUnlock();
+        }
     }
 
     @Override

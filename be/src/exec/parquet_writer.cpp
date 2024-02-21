@@ -63,13 +63,13 @@ std::string RollingAsyncParquetWriter::_new_file_location() {
     return _outfile_location;
 }
 
-Status RollingAsyncParquetWriter::_new_file_writer() {
+Status RollingAsyncParquetWriter::_new_file_writer(RuntimeState* state) {
     std::string new_file_location = _new_file_location();
     WritableFileOptions options{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     ASSIGN_OR_RETURN(auto writable_file, _fs->new_writable_file(options, new_file_location))
     _writer = std::make_shared<starrocks::parquet::AsyncFileWriter>(
             std::move(writable_file), new_file_location, _partition_location, _properties, _schema, _output_expr_ctxs,
-            ExecEnv::GetInstance()->pipeline_sink_io_pool(), _parent_profile, _max_file_size);
+            ExecEnv::GetInstance()->pipeline_sink_io_pool(), _parent_profile, _max_file_size, state);
     auto st = _writer->init();
     return st;
 }
@@ -78,12 +78,12 @@ Status RollingAsyncParquetWriter::append_chunk(Chunk* chunk, RuntimeState* state
     RETURN_IF_ERROR(get_io_status());
 
     if (_writer == nullptr) {
-        RETURN_IF_ERROR(_new_file_writer());
+        RETURN_IF_ERROR(_new_file_writer(state));
     }
     // exceed file size
     if (_max_file_size != -1 && _writer->file_size() > _max_file_size) {
         RETURN_IF_ERROR(close_current_writer(state));
-        RETURN_IF_ERROR(_new_file_writer());
+        RETURN_IF_ERROR(_new_file_writer(state));
     }
     return _writer->write(chunk);
 }

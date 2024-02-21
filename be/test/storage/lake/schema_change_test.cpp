@@ -21,7 +21,6 @@
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "fs/fs_util.h"
-#include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/fixed_location_provider.h"
@@ -32,6 +31,7 @@
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/test_util.h"
 #include "storage/lake/update_manager.h"
+#include "storage/lake/versioned_tablet.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
 
@@ -62,17 +62,17 @@ std::string to_string_param_name(const testing::TestParamInfo<SchemaChangeParam>
 class SchemaChangeTest : public testing::Test, public testing::WithParamInterface<SchemaChangeParam> {
 public:
     SchemaChangeTest(const std::string& test_dir) {
-        _mem_tracker = std::make_unique<MemTracker>(-1);
+        _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _location_provider = std::make_unique<FixedLocationProvider>(test_dir);
-        _update_manager = std::make_unique<UpdateManager>(_location_provider.get());
+        _update_manager = std::make_unique<UpdateManager>(_location_provider.get(), _mem_tracker.get());
         _tablet_manager = std::make_unique<TabletManager>(_location_provider.get(), _update_manager.get(), 1024 * 1024);
     }
 
 protected:
-    static std::shared_ptr<Chunk> read(Tablet tablet, int64_t version, bool sorted = false) {
-        ASSIGN_OR_ABORT(auto schema, tablet.get_schema());
-        ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(version));
-        auto reader = std::make_shared<TabletReader>(tablet.tablet_mgr(), metadata, *(schema->schema()));
+    static std::shared_ptr<Chunk> read(const VersionedTablet& tablet, bool sorted = false) {
+        auto metadata = tablet.metadata();
+        auto schema = tablet.get_schema();
+        auto reader = std::make_shared<TabletReader>(tablet.tablet_manager(), metadata, *(schema->schema()));
         CHECK_OK(reader->prepare());
         TabletReaderParams params;
         params.sorted_by_keys_per_tablet = sorted;
@@ -324,9 +324,9 @@ TEST_P(SchemaChangeAddColumnTest, test_add_column) {
     txn_id++;
 
     // check new tablet data
-    ASSIGN_OR_ABORT(auto new_tablet, _tablet_manager->get_tablet(new_tablet_id));
+    ASSIGN_OR_ABORT(auto new_tablet, _tablet_manager->get_tablet(new_tablet_id, version));
 
-    auto chunk = read(new_tablet, version, /*sorted=*/GetParam().keys_type != DUP_KEYS);
+    auto chunk = read(new_tablet, /*sorted=*/GetParam().keys_type != DUP_KEYS);
 
     if (GetParam().keys_type == DUP_KEYS) {
         int expect_num_rows = GetParam().writes_before + GetParam().writes_after;
@@ -578,8 +578,8 @@ TEST_P(SchemaChangeModifyColumnTypeTest, test_alter_column_type) {
     txn_id++;
 
     // check new tablet data
-    ASSIGN_OR_ABORT(auto new_tablet, _tablet_manager->get_tablet(new_tablet_id));
-    auto chunk = read(new_tablet, version, /*sorted=*/GetParam().keys_type != DUP_KEYS);
+    ASSIGN_OR_ABORT(auto new_tablet, _tablet_manager->get_tablet(new_tablet_id, version));
+    auto chunk = read(new_tablet, /*sorted=*/GetParam().keys_type != DUP_KEYS);
 
     if (GetParam().keys_type == DUP_KEYS) {
         int expect_num_rows = GetParam().writes_before + GetParam().writes_after;

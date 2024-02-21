@@ -30,7 +30,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
  * - Aggregate
  * - Scan
  */
-public class AggregateScanRule extends SingleTableRewriteBaseRule {
+public class AggregateScanRule extends BaseMaterializedViewRewriteRule {
     private static final AggregateScanRule INSTANCE = new AggregateScanRule();
 
     public AggregateScanRule() {

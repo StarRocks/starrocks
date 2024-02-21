@@ -29,7 +29,8 @@ namespace starrocks {
  */
 class MultiUnnest final : public TableFunction {
 public:
-    std::pair<Columns, UInt32Column::Ptr> process(TableFunctionState* state) const override {
+    std::pair<Columns, UInt32Column::Ptr> process(RuntimeState* runtime_state,
+                                                  TableFunctionState* state) const override {
         if (state->get_columns().empty()) {
             return {};
         }

@@ -47,6 +47,8 @@ public:
     }
     bool is_passthrough() const { return (_owner_id & PASSTHROUGH_BIT) == PASSTHROUGH_BIT; }
 
+    bool operator!=(const owner_info& other) const { return _owner_id != other._owner_id; }
+
 private:
     int64_t _owner_id = 0;
 };

@@ -423,6 +423,9 @@ TEST_F(LakeCompactionPolicyTest, test_size_tiered_multi_descending_order_level_s
     ASSERT_EQ(4, input_rowsets.size());
     for (int i = 0; i < input_rowsets.size(); ++i) {
         EXPECT_EQ(i + 5, input_rowsets[i]->id());
+    }
+    input_rowsets.clear();
+    for (int i = 0; i < 4; i++) {
         _tablet_metadata->mutable_rowsets()->RemoveLast();
     }
 
@@ -447,6 +450,9 @@ TEST_F(LakeCompactionPolicyTest, test_size_tiered_multi_descending_order_level_s
         } else {
             EXPECT_EQ(i + 2, input_rowsets[i]->id());
         }
+    }
+    input_rowsets.clear();
+    for (int i = 0, size = 4; i < size; ++i) {
         _tablet_metadata->mutable_rowsets()->RemoveLast();
     }
 

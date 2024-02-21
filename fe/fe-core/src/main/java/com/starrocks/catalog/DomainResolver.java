@@ -39,7 +39,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.common.util.FrontendDaemon;
-import com.starrocks.mysql.privilege.Auth;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -62,19 +61,11 @@ public class DomainResolver extends FrontendDaemon {
     // this is only available in BAIDU, for resolving BNS
     private static final String BNS_RESOLVER_TOOLS_PATH = "/usr/bin/get_instance_by_service";
 
-    private Auth auth;
     private AuthenticationMgr authenticationManager;
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
-    public DomainResolver(Auth auth) {
-        super("domain resolver", 10L * 1000);
-        this.auth = auth;
-        this.authenticationManager = null;
-    }
-
     public DomainResolver(AuthenticationMgr authenticationManager) {
         super("domain resolver", 10L * 1000);
-        this.auth = null;
         this.authenticationManager = authenticationManager;
     }
 
@@ -85,7 +76,6 @@ public class DomainResolver extends FrontendDaemon {
     public void setAuthenticationManager(AuthenticationMgr manager) {
         lock.writeLock().lock();
         try {
-            this.auth = null;
             this.authenticationManager = manager;
         } finally {
             lock.writeLock().unlock();
@@ -99,12 +89,7 @@ public class DomainResolver extends FrontendDaemon {
         try {
             // domain names
             Set<String> allDomains;
-            if (auth != null) {
-                allDomains = Sets.newHashSet();
-                auth.getAllDomains(allDomains);
-            } else {
-                allDomains = authenticationManager.getAllHostnames();
-            }
+            allDomains = authenticationManager.getAllHostnames();
 
             // resolve domain name
             Map<String, Set<String>> resolvedIPsMap = Maps.newHashMap();
@@ -120,11 +105,7 @@ public class DomainResolver extends FrontendDaemon {
             }
 
             // refresh user priv table by resolved IPs
-            if (auth != null) {
-                auth.refreshUserPrivEntriesByResolvedIPs(resolvedIPsMap);
-            } else {
-                authenticationManager.setHostnameToIpSet(resolvedIPsMap);
-            }
+            authenticationManager.setHostnameToIpSet(resolvedIPsMap);
         } finally {
             lock.readLock().unlock();
         }

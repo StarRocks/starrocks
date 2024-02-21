@@ -149,8 +149,6 @@ public class MSchema {
             )
     ).withValues("('value1', 1, 2, 3, 4.0, 5.0, 6, '2022-11-11 10:00:01', '2022-11-11', 10.12)");
 
-
-
     public static final MTable TABLE_WITH_PARTITION = new MTable("table_with_partition", "t1a",
             List.of(
                     "  `t1a` varchar(20) NULL",
@@ -186,6 +184,27 @@ public class MSchema {
                     "PARTITION p19910402 VALUES [('1991-04-02'), ('1991-04-03'))"
             ),
             "`t1a`,`id_date`"
+    ).withValues("('varchar1', '1991-03-30', 1, 1, 1)," +
+            "('varchar2', '1991-03-31', 2, 1, 1), " +
+            "('varchar3', '1991-04-01', 3, 1, 1)," +
+            "('varchar3', '1991-04-02', 4, 1, 1)");
+
+    public static final MTable TABLE_WITH_DATETIME_PARTITION = new MTable("table_with_datetime_partition", "t1a",
+            List.of(
+                    "  `t1a` varchar(20) NULL",
+                    "  `id_datetime` datetime NULL",
+                    "  `t1b` smallint(6) NULL",
+                    "  `t1c` int(11) NULL",
+                    "  `t1d` bigint(20) NULL"
+            ),
+            "id_datetime",
+            List.of(
+                    "PARTITION p19910330 VALUES [('1991-03-30'), ('1991-03-31'))",
+                    "PARTITION p19910331 VALUES [('1991-03-31'), ('1991-04-01'))",
+                    "PARTITION p19910401 VALUES [('1991-04-01'), ('1991-04-02'))",
+                    "PARTITION p19910402 VALUES [('1991-04-02'), ('1991-04-03'))"
+            ),
+            "`t1a`,`id_datetime`"
     ).withValues("('varchar1', '1991-03-30', 1, 1, 1)," +
             "('varchar2', '1991-03-31', 2, 1, 1), " +
             "('varchar3', '1991-04-01', 3, 1, 1)," +
@@ -235,12 +254,64 @@ public class MSchema {
             " ,(2,1,1),(2,1,2),(2,1,3),(2,2,1),(2,2,2),(2,2,3),(2,3,1),(2,3,2),(2,3,3)" +
             " ,(3,1,1),(3,1,2),(3,1,3),(3,2,1),(3,2,2),(3,2,3),(3,3,1),(3,3,2),(3,3,3)");
 
+    public static final MTable T2 = new MTable("t2", "v1",
+            List.of(
+                    "  `v1` bigint NULL",
+                    "  `v2` bigint NULL",
+                    "  `v3` bigint NULL"
+            )
+    ).withValues("(1, 2, 3)");
+
+    public static final MTable T_METRICS = new MTable("t_metrics", "c1",
+            List.of(
+                    " c1 int",
+                    " c2 int",
+                    " c3 int",
+                    " c4 int",
+                    " c5 int",
+                    " c6 int",
+                    " c7 int",
+                    " c8 int"
+            )
+    );
+
     public static final MTable JSON_TBL = new MTable("json_tbl", "p_dt",
             List.of(
                     "  `p_dt` date NULL",
                     "  `d_user` json NULL "
             )
     ).withValues("('2020-01-01', '{'a': 1, 'gender': 'man'}')");
+
+    public static final MTable TABLE_WITH_DAY_PARTITION1 = TABLE_WITH_DAY_PARTITION.copyWithName("table_with_day_partition1");
+    public static final MTable TABLE_WITH_DAY_PARTITION2 = TABLE_WITH_DAY_PARTITION.copyWithName("table_with_day_partition2");
+
+    public static final MTable TEST10 = new MTable("test10", "event_id",
+            List.of(
+                    "  `event_id` int NULL",
+                    "  `event_type` varchar(65533) NULL ",
+                    "  `event_time` datetime NULL "
+            ),
+            "event_time",
+            List.of(
+                    "PARTITION p20230105 VALUES [(\"2023-01-05 00:00:00\"), (\"2023-01-06 00:00:00\"))",
+                    "PARTITION p20230106 VALUES [(\"2023-01-06 00:00:00\"), (\"2023-01-07 00:00:00\"))"
+            )
+    ).withValues("(1, 'a', '2023-01-05 10:20:22'),(2, 'b', '2023-01-05 10:20:22')," +
+            "(11, 'aa', '2023-01-06 10:20:22'),(22, 'bb', '2023-01-06 10:20:22')");
+
+    public static final MTable TEST11 = new MTable("test11", "event_id1",
+            List.of(
+                    "  `event_id1` int NULL",
+                    "  `event_type1` varchar(65533) NULL ",
+                    "  `event_time1` datetime NULL "
+            ),
+            "event_time1",
+            List.of(
+                    "PARTITION p20230105 VALUES [(\"2023-01-05 00:00:00\"), (\"2023-01-06 00:00:00\"))",
+                    "PARTITION p20230106 VALUES [(\"2023-01-06 00:00:00\"), (\"2023-01-07 00:00:00\"))"
+            )
+    ).withValues("(1, 'a', '2023-01-05 10:20:22'),(2, 'b', '2023-01-05 10:20:23')," +
+            "(11, 'aa', '2023-01-06 10:20:22'),(22, 'bbx', '2023-01-06 10:20:22')");
 
     public static final List<MTable>  TABLE_MARKETING = List.of(
             EMPS,
@@ -256,9 +327,16 @@ public class MSchema {
             T0,
             TABLE_WITH_PARTITION,
             TABLE_WITH_DAY_PARTITION,
+            TABLE_WITH_DAY_PARTITION1,
+            TABLE_WITH_DAY_PARTITION2,
+            TABLE_WITH_DATETIME_PARTITION,
             TEST_BASE_PART,
             T1,
-            JSON_TBL
+            JSON_TBL,
+            T_METRICS,
+            TEST10,
+            TEST11,
+            T2
     );
     public static final Map<String, MTable> TABLE_MAP = Maps.newHashMap();
 
@@ -268,7 +346,8 @@ public class MSchema {
 
     public static MTable getTable(String tableName) {
         if (!TABLE_MAP.containsKey(tableName)) {
-            throw new RuntimeException(String.format("%s is not in metadata marketing, please add it in the marketing"));
+            throw new RuntimeException(String.format("%s is not in metadata marketing, please add it in the marketing",
+                    tableName));
         }
         return TABLE_MAP.get(tableName);
     }

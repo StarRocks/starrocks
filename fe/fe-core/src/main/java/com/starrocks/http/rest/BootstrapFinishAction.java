@@ -45,6 +45,8 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.server.GlobalStateMgr;
 import io.netty.handler.codec.http.HttpMethod;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 /*
  * fe_host:fe_http_port/api/bootstrap
@@ -53,6 +55,8 @@ import io.netty.handler.codec.http.HttpMethod;
  * {"status":"FAILED","msg":"err info..."}
  */
 public class BootstrapFinishAction extends RestBaseAction {
+    private static final Logger LOG = LogManager.getLogger(BootstrapFinishAction.class);
+
     private static final String CLUSTER_ID = "cluster_id";
     private static final String TOKEN = "token";
 
@@ -75,7 +79,7 @@ public class BootstrapFinishAction extends RestBaseAction {
         boolean isReady = GlobalStateMgr.getCurrentState().isReady();
 
         // to json response
-        BootstrapResult result = null;
+        BootstrapResult result;
         if (isReady) {
             result = new BootstrapResult();
             String clusterIdStr = request.getSingleParameter(CLUSTER_ID);
@@ -87,20 +91,23 @@ public class BootstrapFinishAction extends RestBaseAction {
                     clusterId = Integer.parseInt(clusterIdStr);
                 } catch (NumberFormatException e) {
                     result.status = ActionStatus.FAILED;
-                    result.msg = "invalid cluster id format: " + clusterIdStr;
+                    LOG.info("invalid cluster id format: {}", clusterIdStr);
+                    result.msg = "invalid parameter";
                 }
 
                 if (result.status == ActionStatus.OK) {
-                    if (clusterId != GlobalStateMgr.getCurrentState().getClusterId()) {
+                    if (clusterId != GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId()) {
                         result.status = ActionStatus.FAILED;
-                        result.msg = "invalid cluster id: " + GlobalStateMgr.getCurrentState().getClusterId();
+                        LOG.info("invalid cluster id: {}", clusterIdStr);
+                        result.msg = "invalid parameter";
                     }
                 }
 
                 if (result.status == ActionStatus.OK) {
-                    if (!token.equals(GlobalStateMgr.getCurrentState().getToken())) {
+                    if (!token.equals(GlobalStateMgr.getCurrentState().getNodeMgr().getToken())) {
                         result.status = ActionStatus.FAILED;
-                        result.msg = "invalid token: " + GlobalStateMgr.getCurrentState().getToken();
+                        LOG.info("invalid token: {}", token);
+                        result.msg = "invalid parameter";
                     }
                 }
 

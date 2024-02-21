@@ -36,8 +36,10 @@
 
 #include "common/status.h"
 #include "storage/olap_common.h"
+#include "storage/options.h"
 #include "storage/range.h"
 #include "storage/rowset/common.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -55,7 +57,7 @@ struct ColumnIteratorOptions {
     // reader statistics
     OlapReaderStatistics* stats = nullptr;
     bool use_page_cache = false;
-    bool fill_data_cache = true;
+    LakeIOOptions lake_io_opts{.fill_data_cache = true};
 
     // check whether column pages are all dictionary encoding.
     bool check_dict_encoding = false;
@@ -122,6 +124,10 @@ public:
         return Status::NotSupported("Not Support dict.");
     }
 
+    // only work when all_page_dict_encoded was true.
+    // used to acquire load local dict
+    virtual int dict_size() { return 0; }
+
     // return a non-negative dictionary code of |word| if it exist in this segment file,
     // otherwise -1 is returned.
     // NOTE: this method can be invoked only if `all_page_dict_encoded` returns true.
@@ -176,7 +182,7 @@ public:
 
     [[nodiscard]] Status fetch_dict_codes_by_rowid(const Column& rowids, Column* values);
 
-    // for complex collection type (Array/Struct/Map)
+    // for Struct type (Struct)
     [[nodiscard]] virtual Status next_batch(size_t* n, Column* dst, ColumnAccessPath* path) {
         return next_batch(n, dst);
     }

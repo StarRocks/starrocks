@@ -69,6 +69,9 @@ CacheInputStream::~CacheInputStream() {
 }
 
 Status CacheInputStream::_read_block(int64_t offset, int64_t size, char* out, bool can_zero_copy) {
+    if (UNLIKELY(size == 0)) {
+        return Status::OK();
+    }
     DCHECK(size <= _block_size);
     int64_t block_id = offset / _block_size;
 
@@ -94,8 +97,10 @@ Status CacheInputStream::_read_block(int64_t offset, int64_t size, char* out, bo
             sb = ret.value();
             if (sb->buffer.capacity() > 0) {
                 strings::memcpy_inlined(out, sb->buffer.data() + offset - sb->offset, size);
-                _populate_cache_from_zero_copy_buffer((const char*)sb->buffer.data() + block_offset - sb->offset,
-                                                      block_offset, load_size);
+                if (_enable_populate_cache) {
+                    _populate_cache_from_zero_copy_buffer((const char*)sb->buffer.data() + block_offset - sb->offset,
+                                                          block_offset, load_size);
+                }
                 return Status::OK();
             }
         }

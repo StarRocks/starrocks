@@ -16,6 +16,10 @@ StarRocks 支持在以下外部存储系统中备份数据：
 - 阿里云 OSS
 - 腾讯云 COS
 
+> **说明**
+>
+> StarRocks 存算分离集群不支持数据备份和恢复。
+
 ## 备份数据
 
 StarRocks 支持以数据库、表、或分区为粒度全量备份数据。
@@ -207,7 +211,7 @@ PROPERTIES (
 
 在备份或还原表（Table）数据期间，StarRocks 会自动备份或还原其中的 [同步物化视图](../using_starrocks/Materialized_view-single_table.md)。
 
-从 v3.2.0 开始，StarRocks 支持在备份和还原数据库（Database）时备份和还原数据库中的 [异步物化视图](../using_starrocks/Materialized_view.md)。
+从 v3.2.3 开始，StarRocks 支持在备份和还原数据库（Database）时备份和还原数据库中的 [异步物化视图](../using_starrocks/Materialized_view.md)。
 
 在备份和还原数据库期间，StarRocks 执行以下操作：
 

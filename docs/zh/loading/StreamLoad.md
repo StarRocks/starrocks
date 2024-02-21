@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+keywords: ['Stream Load']
 ---
 
 # 从本地文件系统导入
@@ -14,7 +15,7 @@ StarRocks 提供两种导入方式帮助您从本地文件系统导入数据：
 两种导入方式各有优势：
 
 - Stream Load 支持 CSV 和 JSON 两种数据文件格式，适用于数据文件数量较少且单个文件的大小不超过 10 GB 的场景。
-- Broker Load 支持 Parquet、ORC、及 CSV 三种文件格式，适用于数据文件数量较多且单个文件的大小超过 10 GB 的场景、以及文件存储在 NAS 的场景。**但是该功能自 v2.5 起支持，而且这种导入方式需要您在数据所在的机器上[部署 Broker](../deployment/deploy_broker.md)。**
+- Broker Load 支持 Parquet、ORC、CSV、及 JSON 四种文件格式（JSON 文件格式自 3.2.3 版本起支持），适用于数据文件数量较多且单个文件的大小超过 10 GB 的场景、以及文件存储在 NAS 的场景。**StarRocks 自 2.5 版本起支持使用 Broker Load 从本地文件系统导入数据。需要注意的是，使用 Broker Load 从本地文件系统导入数据前，您需要在数据所在的机器上[部署 Broker](../deployment/deploy_broker.md)。**
 
 对于 CSV 格式的数据，需要注意以下两点：
 
@@ -61,7 +62,7 @@ Stream Load 当前不支持导入某一列为 JSON 的 CSV 文件的数据。
 
 本文以 curl 工具为例，介绍如何使用 Stream Load 从本地文件系统导入 CSV 或 JSON 格式的数据。有关创建导入作业的详细语法和参数说明，请参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。
 
-注意在 StarRocks 中，部分文字是 SQL 语言的保留关键字，不能直接用于 SQL 语句。如果想在 SQL 语句中使用这些保留关键字，必须用反引号 (`) 包含起来。参见[关键字](../sql-reference/sql-statements/keywords.md)。
+注意在 StarRocks 中，部分文字是 SQL 语言的保留关键字，不能直接用于 SQL 语句。如果想在 SQL 语句中使用这些保留关键字，必须用反引号 (`) 包裹起来。参见[关键字](../sql-reference/sql-statements/keywords.md)。
 
 #### 导入 CSV 格式的数据
 
@@ -85,7 +86,7 @@ CREATE DATABASE IF NOT EXISTS mydatabase;
 USE mydatabase;
 ```
 
-通过如下语句手动创建主键模型表 `table1`，包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户姓名和用户得分，主键为 `id` 列，如下所示：
+通过如下语句手动创建主键表 `table1`，包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户姓名和用户得分，主键为 `id` 列，如下所示：
 
 ```SQL
 CREATE TABLE `table1`
@@ -101,7 +102,7 @@ DISTRIBUTED BY HASH(`id`);
 
 :::note
 
-自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../table_design/Data_distribution.md#确定分桶数量)。
+自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../table_design/Data_distribution.md#设置分桶数量)。
 
 :::
 
@@ -163,7 +164,7 @@ CREATE DATABASE IF NOT EXISTS mydatabase;
 USE mydatabase;
 ```
 
-通过如下语句手动创建主键模型表 `table2`，包含 `id` 和 `city` 两列，分别代表城市 ID 和城市名称，主键为 `id` 列，如下所示：
+通过如下语句手动创建主键表 `table2`，包含 `id` 和 `city` 两列，分别代表城市 ID 和城市名称，主键为 `id` 列，如下所示：
 
 ```SQL
 CREATE TABLE `table2`
@@ -178,7 +179,7 @@ DISTRIBUTED BY HASH(`id`);
 
 :::note
 
-自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](../table_design/Data_distribution.md#确定分桶数量)。
+自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../table_design/Data_distribution.md#设置分桶数量)。
 
 :::
 
@@ -314,7 +315,7 @@ Broker Load 是一种异步导入方式。提交导入作业以后，StarRocks �
 
 Broker Load 支持导入单个数据文件到单张表、导入多个数据文件到单张表、以及导入多个数据文件分别到多张表。这里以导入多个数据文件到单张表为例。
 
-注意在 StarRocks 中，部分文字是 SQL 语言的保留关键字，不能直接用于 SQL 语句。如果想在 SQL 语句中使用这些保留关键字，必须用反引号 (`) 包含起来。参见[关键字](../sql-reference/sql-statements/keywords.md)。
+注意在 StarRocks 中，部分文字是 SQL 语言的保留关键字，不能直接用于 SQL 语句。如果想在 SQL 语句中使用这些保留关键字，必须用反引号 (`) 包裹起来。参见[关键字](../sql-reference/sql-statements/keywords.md)。
 
 #### 数据样例
 
@@ -347,7 +348,7 @@ CREATE DATABASE IF NOT EXISTS mydatabase;
 USE mydatabase;
 ```
 
-通过如下语句手动创建主键模型表 `mytable`，包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户姓名和用户得分，主键为 `id` 列，如下所示：
+通过如下语句手动创建主键表 `mytable`，包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户姓名和用户得分，主键为 `id` 列，如下所示：
 
 ```SQL
 DROP TABLE IF EXISTS `mytable`

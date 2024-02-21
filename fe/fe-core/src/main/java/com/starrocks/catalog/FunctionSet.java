@@ -81,6 +81,7 @@ public class FunctionSet {
     public static final String DAYOFYEAR = "dayofyear";
     public static final String FROM_DAYS = "from_days";
     public static final String FROM_UNIXTIME = "from_unixtime";
+    public static final String FROM_UNIXTIME_MS = "from_unixtime_ms";
     public static final String HOUR = "hour";
     public static final String MINUTE = "minute";
     public static final String MONTH = "month";
@@ -212,11 +213,13 @@ public class FunctionSet {
     public static final String JSON_OBJECT = "json_object";
     public static final String PARSE_JSON = "parse_json";
     public static final String JSON_QUERY = "json_query";
-    public static final String JSON_EXIST = "json_exists";
+    public static final String JSON_EXISTS = "json_exists";
     public static final String JSON_EACH = "json_each";
     public static final String GET_JSON_DOUBLE = "get_json_double";
     public static final String GET_JSON_INT = "get_json_int";
     public static final String GET_JSON_STRING = "get_json_string";
+    public static final String GET_JSON_OBJECT = "get_json_object";
+    public static final String JSON_LENGTH = "json_length";
 
     // Matching functions:
     public static final String ILIKE = "ilike";
@@ -537,6 +540,10 @@ public class FunctionSet {
                     .addAll(Type.FLOAT_TYPES)
                     .build();
 
+    public static final Set<Type> BITMAP_AGG_TYPE =
+            ImmutableSet.<Type>builder()
+                    .addAll(Type.INTEGER_TYPES)
+                    .build();
     /**
      * Use for vectorized engine, but we can't use vectorized function directly, because we
      * need to check whether the expression tree can use vectorized function from bottom to
@@ -659,6 +666,14 @@ public class FunctionSet {
             .add(FunctionSet.COVAR_SAMP)
             .add(FunctionSet.CORR)
             .build();
+
+    public static final Set<String> IGNORE_NULL_WINDOW_FUNCTION =
+            ImmutableSet.<String>builder().add(FunctionSet.FIRST_VALUE)
+                    .add(FunctionSet.LAST_VALUE)
+                    .add(FunctionSet.FIRST_VALUE_REWRITE)
+                    .add(FunctionSet.LEAD)
+                    .add(FunctionSet.LAG)
+                    .build();
 
     public static final List<String> ARRAY_DECIMAL_FUNCTIONS = ImmutableList.<String>builder()
             .add(ARRAY_SUM)

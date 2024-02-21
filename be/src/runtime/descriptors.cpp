@@ -176,6 +176,8 @@ HdfsTableDescriptor::HdfsTableDescriptor(const TTableDescriptor& tdesc, ObjectPo
     _hive_column_types = tdesc.hdfsTable.hive_column_types;
     _input_format = tdesc.hdfsTable.input_format;
     _serde_lib = tdesc.hdfsTable.serde_lib;
+    _serde_properties = tdesc.hdfsTable.serde_properties;
+    _time_zone = tdesc.hdfsTable.time_zone;
 }
 
 const std::string& HdfsTableDescriptor::get_hive_column_names() const {
@@ -194,6 +196,14 @@ const std::string& HdfsTableDescriptor::get_serde_lib() const {
     return _serde_lib;
 }
 
+const std::map<std::string, std::string> HdfsTableDescriptor::get_serde_properties() const {
+    return _serde_properties;
+}
+
+const std::string& HdfsTableDescriptor::get_time_zone() const {
+    return _time_zone;
+}
+
 FileTableDescriptor::FileTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
         : HiveTableDescriptor(tdesc, pool) {
     _table_location = tdesc.fileTable.location;
@@ -202,6 +212,7 @@ FileTableDescriptor::FileTableDescriptor(const TTableDescriptor& tdesc, ObjectPo
     _hive_column_types = tdesc.fileTable.hive_column_types;
     _input_format = tdesc.fileTable.input_format;
     _serde_lib = tdesc.fileTable.serde_lib;
+    _time_zone = tdesc.fileTable.time_zone;
 }
 
 const std::string& FileTableDescriptor::get_hive_column_names() const {
@@ -218,6 +229,10 @@ const std::string& FileTableDescriptor::get_input_format() const {
 
 const std::string& FileTableDescriptor::get_serde_lib() const {
     return _serde_lib;
+}
+
+const std::string& FileTableDescriptor::get_time_zone() const {
+    return _time_zone;
 }
 
 IcebergTableDescriptor::IcebergTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
@@ -296,6 +311,7 @@ HudiTableDescriptor::HudiTableDescriptor(const TTableDescriptor& tdesc, ObjectPo
     _hive_column_types = tdesc.hudiTable.hive_column_types;
     _input_format = tdesc.hudiTable.input_format;
     _serde_lib = tdesc.hudiTable.serde_lib;
+    _time_zone = tdesc.hudiTable.time_zone;
 }
 
 const std::string& HudiTableDescriptor::get_instant_time() const {
@@ -318,13 +334,43 @@ const std::string& HudiTableDescriptor::get_serde_lib() const {
     return _serde_lib;
 }
 
+const std::string& HudiTableDescriptor::get_time_zone() const {
+    return _time_zone;
+}
+
 PaimonTableDescriptor::PaimonTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
         : HiveTableDescriptor(tdesc, pool) {
     _paimon_native_table = tdesc.paimonTable.paimon_native_table;
+    _time_zone = tdesc.paimonTable.time_zone;
 }
 
 const std::string& PaimonTableDescriptor::get_paimon_native_table() const {
     return _paimon_native_table;
+}
+
+const std::string& PaimonTableDescriptor::get_time_zone() const {
+    return _time_zone;
+}
+
+OdpsTableDescriptor::OdpsTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
+        : HiveTableDescriptor(tdesc, pool) {
+    _columns = tdesc.hdfsTable.columns;
+    _partition_columns = tdesc.hdfsTable.partition_columns;
+    _database_name = tdesc.dbName;
+    _table_name = tdesc.tableName;
+    _time_zone = tdesc.hdfsTable.time_zone;
+}
+
+const std::string& OdpsTableDescriptor::get_database_name() const {
+    return _database_name;
+}
+
+const std::string& OdpsTableDescriptor::get_table_name() const {
+    return _table_name;
+}
+
+const std::string& OdpsTableDescriptor::get_time_zone() const {
+    return _time_zone;
 }
 
 HiveTableDescriptor::HiveTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool) : TableDescriptor(tdesc) {}
@@ -671,6 +717,10 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
         }
         case TTableType::JDBC_TABLE: {
             desc = pool->add(new JDBCTableDescriptor(tdesc));
+            break;
+        }
+        case TTableType::ODPS_TABLE: {
+            desc = pool->add(new OdpsTableDescriptor(tdesc, pool));
             break;
         }
         default:

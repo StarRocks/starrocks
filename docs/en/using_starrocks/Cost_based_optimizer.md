@@ -329,7 +329,7 @@ CREATE ANALYZE SAMPLE DATABASE db_name;
 
 -- Automatically collect stats of all tables in a database, excluding specified table 'db_name.tbl_name'.
 CREATE ANALYZE SAMPLE DATABASE db_name PROPERTIES (
-   "statistic_exclude_pattern" = "db_name\.tbl_name"
+   "statistic_exclude_pattern" = "db_name.tbl_name"
 );
 
 -- Automatically collect stats of specified columns in a table, with statistics health and the number of rows to collect specified.

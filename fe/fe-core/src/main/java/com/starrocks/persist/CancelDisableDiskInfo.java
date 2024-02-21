@@ -17,18 +17,26 @@ package com.starrocks.persist;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.JsonWriter;
 
-import java.util.Map;
+import java.util.List;
 
 public class CancelDisableDiskInfo extends JsonWriter {
-    // beId -> rootPath
-    @SerializedName("disks")
-    private final Map<Long, String> diskList;
+    @SerializedName("beId")
+    private final long beId;
 
-    public CancelDisableDiskInfo(Map<Long, String> diskList) {
+    @SerializedName("disks")
+    private final List<String> diskList;
+
+
+    public CancelDisableDiskInfo(long beId, List<String> diskList) {
+        this.beId = beId;
         this.diskList = diskList;
     }
 
-    public Map<Long, String> getDiskList() {
+    public List<String> getDiskList() {
         return diskList;
+    }
+
+    public long getBeId() {
+        return beId;
     }
 }

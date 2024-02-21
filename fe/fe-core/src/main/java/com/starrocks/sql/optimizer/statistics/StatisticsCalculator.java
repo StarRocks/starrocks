@@ -36,13 +36,16 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.JoinHelper;
+import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.UKFKConstraintsCollector;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -50,6 +53,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
+import com.starrocks.sql.optimizer.operator.UKFKConstraints;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
@@ -69,6 +73,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMysqlScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOdpsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
@@ -81,6 +86,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionTableSca
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
@@ -104,6 +110,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNestLoopJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNoCTEOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOdpsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalPaimonScanOperator;
@@ -147,6 +154,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.statistics.ColumnStatistic.buildFrom;
 import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.PREDICATE_UNKNOWN_FILTER_COEFFICIENT;
+import static java.lang.Double.POSITIVE_INFINITY;
 import static java.lang.Math.max;
 import static java.lang.Math.min;
 import static java.lang.Math.pow;
@@ -233,6 +241,20 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     public Void visitLogicalBinlogScan(LogicalBinlogScanOperator node, ExpressionContext context) {
         return computeOlapScanNode(node, context, node.getTable(), new ArrayList<>(),
                 node.getColRefToColumnMetaMap());
+    }
+
+    @Override
+    public Void visitLogicalViewScan(LogicalViewScanOperator node, ExpressionContext context) {
+        Statistics.Builder builder = Statistics.builder();
+        List<ColumnRefOperator> requiredColumnRefs = Lists.newArrayList(node.getColRefToColumnMetaMap().keySet());
+        for (int i = 0; i < requiredColumnRefs.size(); ++i) {
+            builder.addColumnStatistic(requiredColumnRefs.get(i), ColumnStatistic.unknown());
+        }
+        // set output row count to max to make optimizer skip this plan
+        builder.setOutputRowCount(POSITIVE_INFINITY);
+        builder.setTableRowCountMayInaccurate(true);
+        context.setStatistics(builder.build());
+        return visitOperator(node, context);
     }
 
     @Override
@@ -356,6 +378,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         return computePaimonScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
     }
 
+
     @Override
     public Void visitPhysicalPaimonScan(PhysicalPaimonScanOperator node, ExpressionContext context) {
         return computePaimonScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
@@ -370,6 +393,26 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             context.setStatistics(stats);
         }
 
+        return visitOperator(node, context);
+    }
+    @Override
+    public Void visitLogicalOdpsScan(LogicalOdpsScanOperator node, ExpressionContext context) {
+        return computeOdpsScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+    }
+
+    @Override
+    public Void visitPhysicalOdpsScan(PhysicalOdpsScanOperator node, ExpressionContext context) {
+        return computeOdpsScanNode(node, context, node.getTable(), node.getColRefToColumnMetaMap());
+    }
+
+    private Void computeOdpsScanNode(Operator node, ExpressionContext context, Table table,
+                                       Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
+        if (context.getStatistics() == null) {
+            String catalogName = table.getCatalogName();
+            Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
+                    optimizerContext, catalogName, table, columnRefOperatorColumnMap, null, node.getPredicate(), -1);
+            context.setStatistics(stats);
+        }
         return visitOperator(node, context);
     }
 
@@ -529,7 +572,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             }
             String partitionColumn = olapTable.getPartitionColumnNames().get(0);
             ColumnStatistic partitionColumnStatistic =
-                    GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistic(olapTable, partitionColumn);
+                    GlobalStateMgr.getCurrentState().getStatisticStorage().getColumnStatistic(olapTable, partitionColumn);
 
             if (optimizerContext.getDumpInfo() != null) {
                 optimizerContext.getDumpInfo().addTableStatistics(olapTable, partitionColumn, partitionColumnStatistic);
@@ -762,6 +805,19 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         Statistics innerJoinStats;
         if (innerRowCount == -1) {
             innerJoinStats = estimateInnerJoinStatistics(crossJoinStats, eqOnPredicates);
+
+            OptExpression optExpression = context.getOptExpression();
+            SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
+
+            if (optExpression != null && sessionVariable.isEnableUKFKOpt()) {
+                UKFKConstraintsCollector.collectColumnConstraints(optExpression);
+                UKFKConstraints constraints = optExpression.getConstraints();
+                Statistics ukfkJoinStat = buildStatisticsForUKFKJoin(joinType, constraints,
+                        leftRowCount, rightRowCount, crossBuilder);
+                if (ukfkJoinStat.getOutputRowCount() < innerJoinStats.getOutputRowCount()) {
+                    innerJoinStats = ukfkJoinStat;
+                }
+            }
             innerRowCount = innerJoinStats.getOutputRowCount();
         } else {
             innerJoinStats = Statistics.buildFrom(crossJoinStats).setOutputRowCount(innerRowCount).build();
@@ -842,6 +898,40 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         context.setStatistics(estimateStatistics);
         return visitOperator(context.getOp(), context);
+    }
+
+    private Statistics buildStatisticsForUKFKJoin(JoinOperator joinType, UKFKConstraints constraints,
+                                                  double leftRowCount, double rightRowCount,
+                                                  Statistics.Builder builder) {
+        UKFKConstraints.JoinProperty joinProperty = constraints.getJoinProperty();
+        if (joinProperty == null) {
+            return builder.build();
+        }
+        if (joinType.isInnerJoin()) {
+            if (joinProperty.isLeftUK) {
+                builder.setOutputRowCount(rightRowCount);
+            } else {
+                builder.setOutputRowCount(leftRowCount);
+            }
+        } else if (joinType.isLeftOuterJoin()) {
+            if (!joinProperty.isLeftUK) {
+                builder.setOutputRowCount(leftRowCount);
+            }
+        } else if (joinType.isRightOuterJoin()) {
+            if (joinProperty.isLeftUK) {
+                builder.setOutputRowCount(rightRowCount);
+            }
+        } else if (joinType.isLeftSemiJoin()) {
+            if (joinProperty.isLeftUK) {
+                builder.setOutputRowCount(leftRowCount);
+            }
+        } else if (joinType.isRightSemiJoin()) {
+            if (!joinProperty.isLeftUK) {
+                builder.setOutputRowCount(rightRowCount);
+            }
+        }
+
+        return builder.build();
     }
 
     private void computeNullFractionForOuterJoin(double outerTableRowCount, double innerJoinRowCount,

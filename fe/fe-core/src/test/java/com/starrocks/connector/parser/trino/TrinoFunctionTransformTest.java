@@ -100,6 +100,9 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         String sql = "select to_unixtime(TIMESTAMP '2023-04-22 00:00:00');";
         assertPlanContains(sql, "1682092800");
 
+        sql = "select to_unixtime(cast('2023-12-05 23:28:46' as timestamp) at time zone 'Asia/Shanghai')";
+        analyzeFail(sql, "Time zone is not supported");
+
         sql = "select date_parse('2022/10/20/05', '%Y/%m/%d/%H');";
         assertPlanContains(sql, "2022-10-20 05:00:00");
 
@@ -154,6 +157,9 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         sql = "select format_datetime(date '2023-06-25', 'yyyyMMdd HH:mm:ss');";
         assertPlanContains(sql, "jodatime_format('2023-06-25', 'yyyyMMdd HH:mm:ss')");
 
+        sql = "select to_char(TIMESTAMP '2023-06-25 11:10:20', 'yyyyMMdd HH:mm:ss');";
+        assertPlanContains(sql, "jodatime_format('2023-06-25 11:10:20', 'yyyyMMdd HH:mm:ss')");
+
         sql = "select parse_datetime('2023-08-02 14:37:02', 'yyyy-MM-dd HH:mm:ss')";
         assertPlanContains(sql, "str_to_jodatime('2023-08-02 14:37:02', 'yyyy-MM-dd HH:mm:ss')");
 
@@ -171,6 +177,12 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "select date_diff('month', timestamp '2023-07-31')";
         analyzeFail(sql, "date_diff function must have 3 arguments");
+
+        sql = "select to_date('2022-02-02', 'yyyy-mm-dd')";
+        assertPlanContains(sql, "to_tera_date('2022-02-02', 'yyyy-mm-dd')");
+
+        sql = "select to_timestamp('2022-02-02', 'yyyy-mm-dd')";
+        assertPlanContains(sql, " to_tera_timestamp('2022-02-02', 'yyyy-mm-dd')");
     }
 
     @Test
@@ -188,7 +200,7 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "2014-03-08 10:00:00");
 
         sql = "select date_add('week', 1, TIMESTAMP '2014-03-08 09:00:00');";
-        assertPlanContains(sql, "weeks_add('2014-03-08 09:00:00', 1)");
+        assertPlanContains(sql, "2014-03-15 09:00:00");
 
         sql = "select date_add('month', 1, TIMESTAMP '2014-03-08 09:00:00');";
         assertPlanContains(sql, "'2014-04-08 09:00:00'");
@@ -218,16 +230,16 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "years_add(8: th, 2)");
 
         sql = "select date_add('quarter', 2, TIMESTAMP '2014-03-08 09:00:00');";
-        assertPlanContains(sql, "quarters_add('2014-03-08 09:00:00', 2)");
+        assertPlanContains(sql, "2014-09-08 09:00:00");
 
         sql = "select date_add('quarter', -1, TIMESTAMP '2014-03-08 09:00:00');";
-        assertPlanContains(sql, "quarters_add('2014-03-08 09:00:00', -1)");
+        assertPlanContains(sql, "2013-12-08 09:00:00");
 
         sql = "select date_add('millisecond', 20, TIMESTAMP '2014-03-08 09:00:00');";
-        assertPlanContains(sql, "milliseconds_add('2014-03-08 09:00:00', 20)");
+        assertPlanContains(sql, "2014-03-08 09:00:00.020000");
 
         sql = "select date_add('millisecond', -100, TIMESTAMP '2014-03-08 09:00:00');";
-        assertPlanContains(sql, "milliseconds_add('2014-03-08 09:00:00', -100)");
+        assertPlanContains(sql, "2014-03-08 08:59:59.900000");
     }
 
     @Test
@@ -264,6 +276,9 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "SELECT replace('hello-world', '-', '$');";
         assertPlanContains(sql, "replace('hello-world', '-', '$')");
+
+        sql = "select index('hello', 'l')";
+        assertPlanContains(sql, "instr('hello', 'l')");
     }
 
     @Test
@@ -355,6 +370,9 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         sql = "select sha256(tk) from tall";
         assertPlanContains(sql, "sha2(from_binary(11: tk, 'utf8'), 256)");
         System.out.println(getFragmentPlan(sql));
+
+        sql = "select from_hex(hex('starrocks'))";
+        assertPlanContains(sql, "hex_decode_binary(hex('starrocks'))");
     }
 
     @Test

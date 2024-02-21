@@ -25,6 +25,7 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.clone.DynamicPartitionScheduler;
+import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
@@ -35,6 +36,7 @@ import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
@@ -52,6 +54,9 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class RefreshMaterializedViewTest  extends MvRewriteTestBase {
+    // 1hour: set it to 1 hour to avoid FE's async update too late.
+    private static final long MV_STALENESS = 60 * 60;
+
     @BeforeClass
     public static void beforeClass() throws Exception {
         MvRewriteTestBase.beforeClass();
@@ -122,7 +127,6 @@ public class RefreshMaterializedViewTest  extends MvRewriteTestBase {
         }
     }
 
-
     @Test
     public void testRefreshExecution() throws Exception {
         executeInsertSql(connectContext, "insert into tbl_with_mv values(\"2022-02-20\", 1, 10)");
@@ -155,7 +159,8 @@ public class RefreshMaterializedViewTest  extends MvRewriteTestBase {
     }
 
     @Test
-    public void testMaxMVRewriteStaleness1() throws Exception {
+    public void testMaxMVRewriteStaleness1() {
+
         starRocksAssert.withTable(new MTable("tbl_staleness1", "k2",
                         List.of(
                                 "k1 date",
@@ -187,11 +192,11 @@ public class RefreshMaterializedViewTest  extends MvRewriteTestBase {
 
                     // alter mv_rewrite_staleness
                     {
-                        String alterMvSql = "alter materialized view mv_with_mv_rewrite_staleness " +
-                                "set (\"mv_rewrite_staleness_second\" = \"60\")";
+                        String alterMvSql = String.format("alter materialized view mv_with_mv_rewrite_staleness " +
+                                "set (\"mv_rewrite_staleness_second\" = \"%s\")", MV_STALENESS);
                         AlterMaterializedViewStmt stmt =
                                 (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-                        GlobalStateMgr.getCurrentState().alterMaterializedView(stmt);
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().alterMaterializedView(stmt);
                     }
                     // no refresh partitions if mv_rewrite_staleness is set.
                     executeInsertSql(connectContext, "insert into tbl_staleness1 values(\"2022-02-20\", 1, 10)");
@@ -243,7 +248,7 @@ public class RefreshMaterializedViewTest  extends MvRewriteTestBase {
                             "distributed by hash(k2) buckets 3\n" +
                             "PROPERTIES (\n" +
                             "\"replication_num\" = \"1\"," +
-                            "\"mv_rewrite_staleness_second\" = \"60\"" +
+                            "\"mv_rewrite_staleness_second\" = \"" + MV_STALENESS + "\"" +
                             ")" +
                             "refresh manual\n" +
                             "as select k1, k2, v1  from tbl_staleness2;");
@@ -285,7 +290,7 @@ public class RefreshMaterializedViewTest  extends MvRewriteTestBase {
 
                         long mvRefreshTimeStamp = mv1.getLastRefreshTime();
                         Assert.assertTrue(mvRefreshTimeStamp < tblMaxPartitionRefreshTimestamp);
-                        Assert.assertTrue((tblMaxPartitionRefreshTimestamp - mvRefreshTimeStamp) / 1000 < 60);
+                        Assert.assertTrue((tblMaxPartitionRefreshTimestamp - mvRefreshTimeStamp) / 1000 < MV_STALENESS);
                         Assert.assertTrue(mv1.isStalenessSatisfied());
 
                         Set<String> partitionsToRefresh = getPartitionNamesToRefreshForMv(mv1);
@@ -316,7 +321,7 @@ public class RefreshMaterializedViewTest  extends MvRewriteTestBase {
                             "distributed by hash(k2) buckets 3\n" +
                             "PROPERTIES (\n" +
                             "\"replication_num\" = \"1\"," +
-                            "\"mv_rewrite_staleness_second\" = \"60\"" +
+                            "\"mv_rewrite_staleness_second\" = \"" + MV_STALENESS + "\"" +
                             ")" +
                             "refresh manual\n" +
                             "as select k1, k2, v1  from tbl_staleness3;");
@@ -325,7 +330,7 @@ public class RefreshMaterializedViewTest  extends MvRewriteTestBase {
                             "distributed by hash(k2) buckets 3\n" +
                             "PROPERTIES (\n" +
                             "\"replication_num\" = \"1\"," +
-                            "\"mv_rewrite_staleness_second\" = \"60\"" +
+                            "\"mv_rewrite_staleness_second\" = \"" + MV_STALENESS + "\"" +
                             ")" +
                             "refresh manual\n" +
                             "as select k1, k2, count(1)  from mv_with_mv_rewrite_staleness21 group by k1, k2;");
@@ -382,7 +387,7 @@ public class RefreshMaterializedViewTest  extends MvRewriteTestBase {
 
                             long mvRefreshTimeStamp = mv1.getLastRefreshTime();
                             Assert.assertTrue(mvRefreshTimeStamp < tblMaxPartitionRefreshTimestamp);
-                            Assert.assertTrue((tblMaxPartitionRefreshTimestamp - mvRefreshTimeStamp) / 1000 < 60);
+                            Assert.assertTrue((tblMaxPartitionRefreshTimestamp - mvRefreshTimeStamp) / 1000 < MV_STALENESS);
                             Assert.assertTrue(mv1.isStalenessSatisfied());
 
                             Set<String> partitionsToRefresh = getPartitionNamesToRefreshForMv(mv1);
@@ -403,7 +408,7 @@ public class RefreshMaterializedViewTest  extends MvRewriteTestBase {
 
                             long mvRefreshTimeStamp = mv2.getLastRefreshTime();
                             Assert.assertTrue(mvRefreshTimeStamp <= tblMaxPartitionRefreshTimestamp);
-                            Assert.assertTrue((tblMaxPartitionRefreshTimestamp - mvRefreshTimeStamp) / 1000 < 60);
+                            Assert.assertTrue((tblMaxPartitionRefreshTimestamp - mvRefreshTimeStamp) / 1000 < MV_STALENESS);
                             Assert.assertTrue(mv2.isStalenessSatisfied());
 
                             Set<String> partitionsToRefresh = getPartitionNamesToRefreshForMv(mv2);
@@ -420,7 +425,7 @@ public class RefreshMaterializedViewTest  extends MvRewriteTestBase {
                                         "set (\"mv_rewrite_staleness_second\" = \"0\")";
                                 AlterMaterializedViewStmt stmt =
                                         (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
-                                GlobalStateMgr.getCurrentState().alterMaterializedView(stmt);
+                                GlobalStateMgr.getCurrentState().getLocalMetastore().alterMaterializedView(stmt);
                             }
 
                             MaterializedView mv1 = getMv("test", "mv_with_mv_rewrite_staleness21");

@@ -70,11 +70,11 @@ import com.starrocks.persist.AddPartitionsInfoV2;
 import com.starrocks.persist.AddSubPartitionsInfoV2;
 import com.starrocks.persist.AlterCatalogLog;
 import com.starrocks.persist.AlterLoadJobOperationLog;
+import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.AlterUserInfo;
 import com.starrocks.persist.AlterViewInfo;
-import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.AutoIncrementInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
@@ -95,6 +95,7 @@ import com.starrocks.persist.DatabaseInfo;
 import com.starrocks.persist.DecommissionDiskInfo;
 import com.starrocks.persist.DictionaryMgrInfo;
 import com.starrocks.persist.DisableDiskInfo;
+import com.starrocks.persist.DisableTableRecoveryInfo;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.DropComputeNodeLog;
 import com.starrocks.persist.DropDbInfo;
@@ -115,12 +116,12 @@ import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.PipeOpEntry;
-import com.starrocks.persist.PrivInfo;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.RemoveAlterJobV2OperationLog;
 import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.ReplicaPersistInfo;
+import com.starrocks.persist.ReplicationJobLog;
 import com.starrocks.persist.ResourceGroupOpEntry;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.RoutineLoadOperation;
@@ -172,7 +173,7 @@ import java.io.IOException;
 public class JournalEntity implements Writable {
     public static final Logger LOG = LogManager.getLogger(Checkpoint.class);
 
-    private short opCode;
+    private short opCode = OperationType.OP_INVALID;
     private Writable data;
 
     public short getOpCode() {
@@ -205,11 +206,10 @@ public class JournalEntity implements Writable {
         opCode = in.readShort();
         // set it to true after the entity is truly read,
         // to avoid someone forget to call read method.
-        boolean isRead = false;
+        boolean isRead;
         LOG.debug("get opcode: {}", opCode);
         switch (opCode) {
             case OperationType.OP_SAVE_NEXTID:
-            case OperationType.OP_SAVE_TRANSACTION_ID:
             case OperationType.OP_ERASE_DB:
             case OperationType.OP_ERASE_TABLE:
             case OperationType.OP_ERASE_PARTITION:
@@ -289,6 +289,11 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_ERASE_MULTI_TABLES: {
                 data = MultiEraseTableInfo.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_DISABLE_TABLE_RECOVERY: {
+                data = DisableTableRecoveryInfo.read(in);
                 isRead = true;
                 break;
             }
@@ -400,6 +405,10 @@ public class JournalEntity implements Writable {
                 data = AlterMaterializedViewStatusLog.read(in);
                 isRead = true;
                 break;
+            case OperationType.OP_ALTER_MATERIALIZED_VIEW_BASE_TABLE_INFOS:
+                data = AlterMaterializedViewBaseTableInfosLog.read(in);
+                isRead = true;
+                break;
             case OperationType.OP_BACKUP_JOB: {
                 data = AbstractJob.read(in);
                 isRead = true;
@@ -472,7 +481,7 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_BATCH_DELETE_REPLICA_BATCH: {
+            case OperationType.OP_BATCH_DELETE_REPLICA: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), BatchDeleteReplicaInfo.class);
                 isRead = true;
                 break;
@@ -537,18 +546,6 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_CREATE_USER:
-            case OperationType.OP_GRANT_PRIV:
-            case OperationType.OP_REVOKE_PRIV:
-            case OperationType.OP_SET_PASSWORD:
-            case OperationType.OP_CREATE_ROLE:
-            case OperationType.OP_DROP_ROLE:
-            case OperationType.OP_GRANT_ROLE:
-            case OperationType.OP_REVOKE_ROLE: {
-                data = PrivInfo.read(in);
-                isRead = true;
-                break;
-            }
             case OperationType.OP_UPDATE_USER_PROPERTY: {
                 data = UserPropertyInfo.read(in);
                 isRead = true;
@@ -608,13 +605,6 @@ public class JournalEntity implements Writable {
             case OperationType.OP_UPDATE_CLUSTER_AND_BACKENDS: {
                 data = new BackendIdsUpdateInfo();
                 ((BackendIdsUpdateInfo) data).readFields(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_UPSERT_TRANSACTION_STATE:
-            case OperationType.OP_DELETE_TRANSACTION_STATE: {
-                data = new TransactionState();
-                ((TransactionState) data).readFields(in);
                 isRead = true;
                 break;
             }
@@ -853,7 +843,7 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_DYNAMIC_PARTITION:
             case OperationType.OP_MODIFY_IN_MEMORY:
-            case OperationType.OP_SET_FORBIT_GLOBAL_DICT:
+            case OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT:
             case OperationType.OP_MODIFY_REPLICATION_NUM:
             case OperationType.OP_MODIFY_WRITE_QUORUM:
             case OperationType.OP_MODIFY_REPLICATED_STORAGE:
@@ -1079,11 +1069,6 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_AUTH_UPGRADE_V2: {
-                data = AuthUpgradeInfo.read(in);
-                isRead = true;
-                break;
-            }
             case OperationType.OP_MV_JOB_STATE:
                 data = MVMaintenanceJob.read(in);
                 isRead = true;
@@ -1139,6 +1124,10 @@ public class JournalEntity implements Writable {
                 break;
             case OperationType.OP_CANCEL_DISABLE_DISK:
                 data = GsonUtils.GSON.fromJson(Text.readString(in), CancelDisableDiskInfo.class);
+                isRead = true;
+                break;
+            case OperationType.OP_REPLICATION_JOB:
+                data = ReplicationJobLog.read(in);
                 isRead = true;
                 break;
             default: {

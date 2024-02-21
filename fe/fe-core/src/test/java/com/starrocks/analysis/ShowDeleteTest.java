@@ -19,7 +19,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlCommand;
-import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.server.GlobalStateMgr;
@@ -46,19 +45,10 @@ public class ShowDeleteTest {
         Database db = new Database();
         new Expectations(db) {
             {
-                db.readLock();
-                minTimes = 0;
-
-                db.readUnlock();
-                minTimes = 0;
-
                 db.getTable(anyString);
                 minTimes = 0;
             }
         };
-
-        // mock auth
-        Auth auth = AccessTestUtil.fetchAdminAccess();
 
         // mock globalStateMgr.
         globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
@@ -71,10 +61,6 @@ public class ShowDeleteTest {
                 globalStateMgr.getDb("testCluster:emptyDb");
                 minTimes = 0;
                 result = null;
-
-                globalStateMgr.getAuth();
-                minTimes = 0;
-                result = auth;
 
                 GlobalStateMgr.getCurrentState();
                 minTimes = 0;

@@ -1,0 +1,61 @@
+StarRocks 的 Stream Load 导入方式需要使用 curl 命令，涉及许多参数。以下仅列出此教程中需要使用的参数，其余参数请参考更多信息部分。
+
+#### `--location-trusted`
+
+此参数用于允许 curl 将认证凭据传输给任何重定向的 URL。
+
+#### `-u root`
+
+用于登录 StarRocks 的用户名。
+
+#### `-T filename`
+
+T 代表传输（Transfer），用于指定需要传输的文件名。
+
+#### `label:name-num`
+
+与此 Stream Load 作业关联的标签。标签必须唯一，因此如果多次运行作业，您可以添加一个数字保持递增。
+
+#### `column_separator:,`
+
+如果导入的文件使用单个 `,` 作为列分隔符，则设置如上所示。如果使用其他分隔符，则在此处设置该分隔符。常见分隔符包括 `\t`、`,` 和 `|`。
+
+#### `skip_header:1`
+
+某些 CSV 文件会在首行（Header）记录所有的列名，还有些会在第二行记录所有列的数据类型信息。如果 CSV 文件有一或两个 Header 行，需要将 `skip_header` 设置为 `1` 或 `2`。如果您使用的 CSV 没有 Header 行，请将其设置为 `0`。
+
+#### `enclose:\"`
+
+如果某些字段包含带有逗号的字符串，则需要用双引号括起该字段。本教程使用的示例数据集中，地理位置信息包含逗号，因此需将 `enclose` 设置为 `\"`，其中 `\` 用于转义 `"`。
+
+#### `max_filter_ratio:1`
+
+导入数据中允许出现错误行的比例。理想情况下，应将其设置为 `0`，即当导入的数据中有任意一行出现错误时，导入作业会失败。本教程中需要将其设置为 `1`，即在调试过程中，允许所有数据行出现错误。
+
+#### `columns:`
+
+此参数用于将 CSV 文件中的列映射到 StarRocks 表中的列。当前教程中使用的 CSV 文件中有大量的列，而 StarRocks 表中的列经过裁剪，仅保留部分列。未包含在表中的列在导入过程中都将被跳过。
+
+本教程中的 `columns:` 参数中还包含数据转换逻辑。在 CSV 文件中经常会有不符合标准的日期和时间。以下是将日期和时间数据转换为 DATETIME 类型的逻辑：
+
+##### 数据转换
+
+如下所示，数据集中的日期以 `MM/DD/YYYY` 为格式，时间以 `HH:MI` 为格式。
+
+```plaintext
+08/05/2014,9:10,BRONX,10469,40.8733019,-73.8536375,"(40.8733019, -73.8536375)",
+```
+
+由于 StarRocks 中的 DATETIME 格式为 `YYYY-MM-DD HH:MI:SS`，因此需要转换数据集中的数据，将两列数据合并，并以空格分隔。则此处 `columns:` 参数应为：
+
+```bash
+-H "columns:tmp_CRASH_DATE, tmp_CRASH_TIME, CRASH_DATE=str_to_date(concat_ws(' ', tmp_CRASH_DATE, tmp_CRASH_TIME), '%m/%d/%Y %H:%i')
+```
+
+通过设置以上参数可实现以下目标：
+
+1. 将 CSV 文件的第一列内容分配给 `tmp_CRASH_DATE` 列；
+2. 将 CSV 文件的第二列内容分配给 `tmp_CRASH_TIME` 列；
+3. 通过 `concat_ws()` 函数，使用空格将 `tmp_CRASH_DATE` 列和 `tmp_CRASH_TIME` 列连接在一起；
+4. 通过 `str_to_date()` 函数使用连接后的字符串生成 DATETIME 数据；
+5. 将生成的 DATETIME 数据存储在列 `CRASH_DATE` 中。

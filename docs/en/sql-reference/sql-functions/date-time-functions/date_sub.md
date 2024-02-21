@@ -2,7 +2,7 @@
 displayed_sidebar: "English"
 ---
 
-# date_sub
+# date_sub,subdate
 
 ## Description
 
@@ -18,7 +18,7 @@ DATETIME DATE_SUB(DATETIME|DATE date,INTERVAL expr type)
 
 - `date`: It must be a valid DATE or DATETIME expression.
 - `expr`: the time interval you want to subtract. It must be of the INT type.
-- `type`: the unit of the time interval. It can only be set to any of the following values: YEAR, MONTH, DAY, HOUR, MINUTE, SECOND.
+- `type`: the unit of the time interval. It can only be set to any of the following values: YEAR, QUARTER, MONTH, DAY, HOUR, MINUTE, SECOND, MILLISECOND (since 3.1.7), and MICROSECOND (since 3.1.7).
 
 ## Return value
 
@@ -47,4 +47,25 @@ select date_sub('2010-02-30', INTERVAL 2 DAY);
 +----------------------------------------+
 | NULL                                   |
 +----------------------------------------+
+
+select date_sub('2010-11-30 23:59:59', INTERVAL 2 QUARTER);
++-----------------------------------------------------+
+| date_sub('2010-11-30 23:59:59', INTERVAL 2 QUARTER) |
++-----------------------------------------------------+
+| 2010-05-30 23:59:59                                 |
++-----------------------------------------------------+
+
+select subdate('2010-11-30 23:59:59', INTERVAL 2 millisecond);
++--------------------------------------------------------+
+| subdate('2010-11-30 23:59:59', INTERVAL 2 MILLISECOND) |
++--------------------------------------------------------+
+| 2010-11-30 23:59:58.998000                             |
++--------------------------------------------------------+
+
+select date_sub('2010-11-30 23:59:59', INTERVAL 2 microsecond);
++---------------------------------------------------------+
+| date_sub('2010-11-30 23:59:59', INTERVAL 2 MICROSECOND) |
++---------------------------------------------------------+
+| 2010-11-30 23:59:58.999998                              |
++---------------------------------------------------------+
 ```

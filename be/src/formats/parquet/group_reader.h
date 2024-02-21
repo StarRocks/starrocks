@@ -23,6 +23,7 @@
 #include "formats/parquet/column_read_order_ctx.h"
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/metadata.h"
+#include "formats/parquet/utils.h"
 #include "gen_cpp/parquet_types.h"
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptors.h"
@@ -79,9 +80,16 @@ struct GroupReaderParam {
 
     // used to identify io coalesce
     std::atomic<int32_t>* lazy_column_coalesce_counter = nullptr;
+
+    // used for pageIndex
+    std::vector<ExprContext*> min_max_conjunct_ctxs;
 };
 
+class PageIndexReader;
+
 class GroupReader {
+    friend class PageIndexReader;
+
 public:
     GroupReader(GroupReaderParam& param, int row_group_number, const std::set<int64_t>* need_skip_rowids,
                 int64_t row_group_first_row);
@@ -100,7 +108,8 @@ public:
         }
     }
     void close();
-    void collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset);
+    void collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+                           ColumnIOType type = ColumnIOType::PAGES);
     void set_end_offset(int64_t value) { _end_offset = value; }
 
     void _use_as_dict_filter_column(int col_idx, SlotId slot_id, std::vector<std::string>& sub_field_path);
@@ -130,11 +139,6 @@ public:
 
     Status _read(const std::vector<int>& read_columns, size_t* row_count, ChunkPtr* chunk);
     Status _lazy_skip_rows(const std::vector<int>& read_columns, const ChunkPtr& chunk, size_t chunk_size);
-    void _collect_field_io_range(const ParquetField& field, const TypeDescriptor& col_type, bool active,
-                                 std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset);
-    void _collect_field_io_range(const ParquetField& field, const TypeDescriptor& col_type,
-                                 const TIcebergSchemaField* iceberg_schema_field, bool active,
-                                 std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset);
 
     // row group meta
     const tparquet::RowGroup* _row_group_metadata = nullptr;

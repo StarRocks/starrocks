@@ -637,7 +637,7 @@ public class ExpressionAnalyzer {
             predicateBaseAndCheck(node);
 
             List<Type> list = node.getChildren().stream().map(Expr::getType).collect(Collectors.toList());
-            Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list);
+            Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list, true);
 
             for (Type type : list) {
                 if (!Type.canCastTo(type, compatibleType)) {
@@ -840,13 +840,13 @@ public class ExpressionAnalyzer {
 
             List<Expr> queryExpressions = Lists.newArrayList();
             node.collect(arg -> arg instanceof Subquery, queryExpressions);
-            if (queryExpressions.size() > 0 && node.getChildren().size() > 2) {
+            if (!queryExpressions.isEmpty() && node.getChildren().size() > 2) {
                 throw new SemanticException("In Predicate only support literal expression list", node.getPos());
             }
 
             // check compatible type
             List<Type> list = node.getChildren().stream().map(Expr::getType).collect(Collectors.toList());
-            Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list);
+            Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list, false);
 
             if (compatibleType == Type.INVALID) {
                 throw new SemanticException("The input types (" + list.stream().map(Type::toSql).collect(
@@ -855,7 +855,7 @@ public class ExpressionAnalyzer {
 
             for (Expr child : node.getChildren()) {
                 Type type = child.getType();
-                if (type.isJsonType() && queryExpressions.size() > 0) { // TODO: enable it after support join on JSON
+                if (type.isJsonType() && !queryExpressions.isEmpty()) { // TODO: enable it after support join on JSON
                     throw new SemanticException("In predicate of JSON does not support subquery", child.getPos());
                 }
                 if (!Type.canCastTo(type, compatibleType)) {
@@ -1131,6 +1131,23 @@ public class ExpressionAnalyzer {
                 argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
             } else if (DecimalV3FunctionAnalyzer.argumentTypeContainDecimalV2(fnName, argumentTypes)) {
                 fn = DecimalV3FunctionAnalyzer.getDecimalV2Function(node, argumentTypes);
+            } else if (FunctionSet.BITMAP_UNION.equals(fnName)) {
+                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
+                if (session.getSessionVariable().isEnableRewriteBitmapUnionToBitmapAgg() &&
+                        node.getChild(0) instanceof FunctionCallExpr) {
+                    FunctionCallExpr arg0Func = (FunctionCallExpr) node.getChild(0);
+                    // Convert bitmap_union(to_bitmap(v1)) to bitmap_agg(v1) when v1's type
+                    // is a numeric type.
+                    if (FunctionSet.TO_BITMAP.equals(arg0Func.getFnName().getFunction())) {
+                        Expr toBitmapArg0 = arg0Func.getChild(0);
+                        Type toBitmapArg0Type = toBitmapArg0.getType();
+                        if (toBitmapArg0Type.isIntegerType() || toBitmapArg0Type.isBoolean()
+                                || toBitmapArg0Type.isLargeIntType()) {
+                            node.setChild(0, toBitmapArg0);
+                            node.resetFnName("", FunctionSet.BITMAP_AGG);
+                        }
+                    }
+                }
             } else {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             }
@@ -1293,9 +1310,15 @@ public class ExpressionAnalyzer {
                         throw new SemanticException(fnName + " should have at least one input", node.getPos());
                     }
                     int start = argumentTypes.length - node.getParams().getOrderByElemNum();
-                    if (fnName.equals(FunctionSet.GROUP_CONCAT) && start < 2) {
-                        throw new SemanticException(fnName + " should have output expressions before [ORDER BY]",
-                                node.getPos());
+                    if (fnName.equals(FunctionSet.GROUP_CONCAT)) {
+                        if (start < 2) {
+                            throw new SemanticException(fnName + " should have output expressions before [ORDER BY]",
+                                    node.getPos());
+                        }
+                        if (node.getParams().isDistinct() && !node.getChild(start - 1).isConstant()) {
+                            throw new SemanticException(fnName + " distinct should use constant separator", node.getPos());
+                        }
+
                     } else if (fnName.equals(FunctionSet.ARRAY_AGG) && start != 1) {
                         throw new SemanticException(fnName + " should have exact one output expressions before" +
                                 " [ORDER BY]", node.getPos());
@@ -1653,7 +1676,7 @@ public class ExpressionAnalyzer {
         public Void visitVariableExpr(VariableExpr node, Scope context) {
             try {
                 if (node.getSetType() != null && node.getSetType().equals(SetType.USER)) {
-                    UserVariable userVariable = session.getUserVariables(node.getName());
+                    UserVariable userVariable = session.getUserVariable(node.getName());
                     // If referring to an uninitialized variable, its value is NULL and a string type.
                     if (userVariable == null) {
                         node.setType(Type.STRING);
@@ -1893,7 +1916,7 @@ public class ExpressionAnalyzer {
                                             " but param give: " + Integer.toString(paramDictionaryKeysSize));
             }
 
-            Database db = GlobalStateMgr.getCurrentState().getFullNameToDb().get(dictionary.getDbName());
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getFullNameToDb().get(dictionary.getDbName());
             Table table = db.getTable(dictionary.getQueryableObject());
             if (table == null) {
                 throw new SemanticException("dict table %s is not found", table.getName());

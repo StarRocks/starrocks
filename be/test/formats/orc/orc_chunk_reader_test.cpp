@@ -2276,4 +2276,85 @@ TEST_F(OrcChunkReaderTest, get_file_schema) {
     }
 }
 
+/**
+ *
+File Version: 0.12 with TRINO_ORIGINAL by Trino
+Rows: 1
+Compression: ZSTD
+Compression size: 262144
+Type: struct<c1:int,c2:bigint>
+Attributes on root.c1
+  iceberg.id: 1
+  iceberg.required: false
+Attributes on root.c2
+  iceberg.id: 2
+  iceberg.long-type: TIME
+  iceberg.required: false
+
+Stripe Statistics:
+  Stripe 1:
+    Column 0: count: 1 hasNull: true
+    Column 1: count: 1 hasNull: true min: 1 max: 1 sum: 1
+    Column 2: count: 1 hasNull: true min: 3723456000 max: 3723456000 sum: 3723456000
+
+File Statistics:
+  Column 0: count: 1 hasNull: true
+  Column 1: count: 1 hasNull: true min: 1 max: 1 sum: 1
+  Column 2: count: 1 hasNull: true min: 3723456000 max: 3723456000 sum: 3723456000
+
+Stripes:
+  Stripe: offset: 3 data: 16 rows: 1 tail: 58 index: 56
+    Stream: column 1 section ROW_INDEX start: 3 length 22
+    Stream: column 2 section ROW_INDEX start: 25 length 34
+    Stream: column 1 section DATA start: 59 length 6
+    Stream: column 2 section DATA start: 65 length 10
+    Encoding column 0: DIRECT
+    Encoding column 1: DIRECT_V2
+    Encoding column 2: DIRECT_V2
+
+File length: 455 bytes
+Padding length: 0 bytes
+Padding ratio: 0%
+
+{"c1":1,"c2":3723456000}
+{"c1":4,"c2":null}
+{"c1":2,"c2":7384000000}
+{"c1":3,"c2":11045000000}
+ */
+TEST_F(OrcChunkReaderTest, TestReadTimeColumn) {
+    SlotDesc slot_descs[] = {
+            {"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+            {"c2", TypeDescriptor::from_logical_type(LogicalType::TYPE_TIME)},
+            {""},
+    };
+    static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_test_time_column.orc";
+    std::vector<SlotDescriptor*> src_slot_descriptors;
+    ObjectPool pool;
+    create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
+
+    {
+        OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
+        auto input_stream = orc::readLocalFile(input_orc_file);
+        Status st = reader.init(std::move(input_stream));
+        EXPECT_TRUE(st.ok());
+
+        st = reader.read_next();
+        EXPECT_TRUE(st.ok());
+        ChunkPtr ckptr = reader.create_chunk();
+        EXPECT_TRUE(ckptr != nullptr);
+        st = reader.fill_chunk(&ckptr);
+        EXPECT_TRUE(st.ok());
+        ChunkPtr result = reader.cast_chunk(&ckptr);
+        EXPECT_TRUE(result != nullptr);
+
+        EXPECT_EQ(result->num_rows(), 4);
+        EXPECT_EQ(result->num_columns(), 2);
+        ColumnPtr col = result->get_column_by_slot_id(1);
+        EXPECT_EQ("[1, 3723]", result->debug_row(0));
+        EXPECT_EQ("[4, NULL]", result->debug_row(1));
+        EXPECT_EQ("[2, 7384]", result->debug_row(2));
+        EXPECT_EQ("[3, 11045]", result->debug_row(3));
+    }
+}
+
 } // namespace starrocks

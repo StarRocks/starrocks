@@ -20,6 +20,7 @@ import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.persist.TaskSchedule;
 
@@ -150,6 +151,10 @@ public class Task implements Writable {
 
     public Map<String, String> getProperties() {
         return properties;
+    }
+
+    public String getPropertiesString() {
+        return PropertyAnalyzer.stringifyProperties(properties);
     }
 
     public void setProperties(Map<String, String> properties) {

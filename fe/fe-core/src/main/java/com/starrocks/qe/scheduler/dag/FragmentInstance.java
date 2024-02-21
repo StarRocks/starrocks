@@ -307,11 +307,7 @@ public class FragmentInstance {
                 || dataSink instanceof TableFunctionTableSink)) {
             return dop;
         } else {
-            int sessionVarSinkDop = ConnectContext.get().getSessionVariable().getPipelineSinkDop();
-            if (sessionVarSinkDop > 0) {
-                return sessionVarSinkDop;
-            }
-            return dop;
+            return ConnectContext.get().getSessionVariable().getPipelineSinkDop();
         }
     }
 

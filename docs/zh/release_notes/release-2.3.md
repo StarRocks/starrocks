@@ -54,8 +54,8 @@ displayed_sidebar: "Chinese"
 - FE 中表级别 scan 统计信息错误，导致表查询和导入的 metrics 信息不正确。[#28022](https://github.com/StarRocks/starrocks/pull/28022)
 - 当 Join 列是 BINARY 类型且过大时 BE 会 crash。[#25084](https://github.com/StarRocks/starrocks/pull/25084)
 - Aggregate 算子在某些情况下会触发线程安全问题，导致 BE crash。[#26092](https://github.com/StarRocks/starrocks/pull/26092)
-- [RESTORE](../sql-reference/sql-statements/data-definition/RESTORE.md) 后同一个 Tablet 在 BE 和 FE 上的 version 不一致。[#26518](https://github.com/StarRocks/starrocks/pull/26518/files)
-- [RECOVER](../sql-reference/sql-statements/data-definition/RECOVER.md) 的表自动创建分区失败。[#26813](https://github.com/StarRocks/starrocks/pull/26813)
+- [RESTORE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-definition/RESTORE/) 后同一个 Tablet 在 BE 和 FE 上的 version 不一致。[#26518](https://github.com/StarRocks/starrocks/pull/26518/files)
+- [RECOVER](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-definition/RECOVER/) 的表自动创建分区失败。[#26813](https://github.com/StarRocks/starrocks/pull/26813)
 - 严格模式下，INSERT INTO 的数据存在质量问题，导入事务会一直处于 pending 状态，导致 DDL 语句卡住。[#27140](https://github.com/StarRocks/starrocks/pull/27140)
 - 低基数优化开启时，某些情况下 INSERT INTO 导入任务报错 `[42000][1064] Dict Decode failed, Dict can't take cover all key :0`。[#27395](https://github.com/StarRocks/starrocks/pull/27395)
 - 某些情况下 INSERT INTO SELECT 在 Pipeline 未开启时执行超时。[#26594](https://github.com/StarRocks/starrocks/pull/26594)
@@ -68,7 +68,7 @@ displayed_sidebar: "Chinese"
 ### 功能优化
 
 - 优化 CREATE TABLE 超时报错信息，增加参数调整建议。[#24510](https://github.com/StarRocks/starrocks/pull/24510)
-- 主键模型表积累大量 Tablet 版本后内存占用的优化。[#20760](https://github.com/StarRocks/starrocks/pull/20760)
+- 主键表积累大量 Tablet 版本后内存占用的优化。[#20760](https://github.com/StarRocks/starrocks/pull/20760)
 - StarRocks 外表元数据的同步改为数据加载时进行。[#24739](https://github.com/StarRocks/starrocks/pull/24739)
 - 解除 NetworkTime 对系统时钟的依赖，以解决系统时钟误差导致 Exchange 网络耗时估算异常的问题。[#24858](https://github.com/StarRocks/starrocks/pull/24858)
 
@@ -129,7 +129,7 @@ displayed_sidebar: "Chinese"
 - `INSERT INTO XXX SELECT` 返回结果显示的数据行数和 `SELECT COUNT(*) FROM XXX` 返回结果显示的数据行数不一致。[# 20084](https://github.com/StarRocks/starrocks/issues/20084)
 - 如果子查询使用窗口函数，父查询使用 GROUP BY 子句，则查询结果无法聚合。[# 19725](https://github.com/StarRocks/starrocks/issues/19725)
 - 启动 BE 后，BE 进程存在但是 BE 所有端口无法开启。[# 19347](https://github.com/StarRocks/starrocks/pull/19347)
-- 如果磁盘 IO 利用率过高，导致主键模型表的事务提交过慢，则查询该表时可能会返回报错 `backend not found`。[# 18835](https://github.com/StarRocks/starrocks/issues/18835)
+- 如果磁盘 IO 利用率过高，导致主键表的事务提交过慢，则查询该表时可能会返回报错 `backend not found`。[# 18835](https://github.com/StarRocks/starrocks/issues/18835)
 
 ## 2.3.11
 
@@ -195,7 +195,7 @@ displayed_sidebar: "Chinese"
 修复了如下问题：
 
 - 在大查询完成后释放资源时，小概率导致其他查询变慢，特别是在开启资源组或大查询异常结束时。[#16454](https://github.com/StarRocks/starrocks/pull/16454) [#16602](https://github.com/StarRocks/starrocks/pull/16602)
-- 针对主键模型的表，如果一个副本的元数据版本比较落后，增量克隆会触发大量版本的元数据积压没有及时 GC，可能会导致 BE 上发生 OOM。 [#15935](https://github.com/StarRocks/starrocks/pull/15935)
+- 针对主键表，如果一个副本的元数据版本比较落后，增量克隆会触发大量版本的元数据积压没有及时 GC，可能会导致 BE 上发生 OOM。 [#15935](https://github.com/StarRocks/starrocks/pull/15935)
 - 如果 FE 向 BE 发送单次偶发的心跳，心跳连接超时，FE 会认为该 BE 不可用，最终导致该 BE 上的事务运行失败。[# 16386](https://github.com/StarRocks/starrocks/pull/16386)
 - 通过 StarRocks 外表功能导入数据时，如果源 StarRocks 集群为低版本，目标 StarRocks 集群为高版本（并且高版本为 2.2.8 ~ 2.2.11，2.3.4 ~ 2.3.7，2.4.1 或 2.4.2)，则数据导入失败。[#16173](https://github.com/StarRocks/starrocks/pull/16173)
 - 当查询高并发并且内存使用率比较高时 BE 崩溃。 [#16047](https://github.com/StarRocks/starrocks/pull/16047)
@@ -221,7 +221,7 @@ displayed_sidebar: "Chinese"
 ### 功能优化
 
 - Pipeline 执行引擎支持 INSERT INTO 语句。如果需要启用，则需要设置 FE 配置项 `enable_pipeline_load_for_insert` 为 `true`。 [#14723](https://github.com/StarRocks/starrocks/pull/14723)
-- 优化主键模型 Compaction 阶段所占内存。[#13861](https://github.com/StarRocks/starrocks/pull/13861) 、[#13862](https://github.com/StarRocks/starrocks/pull/13862)
+- 优化主键表 Compaction 阶段所占内存。[#13861](https://github.com/StarRocks/starrocks/pull/13861) 、[#13862](https://github.com/StarRocks/starrocks/pull/13862)
 
 ### 问题修复
 
@@ -229,7 +229,7 @@ displayed_sidebar: "Chinese"
 
 - 修复开启资源隔离后，多个资源组同时执行查询，可能会导致 BE 挂死的问题。[#14905](https://github.com/StarRocks/starrocks/pull/14905)
 - 创建物化视图 `CREATE MATERIALIZED VIEW AS SELECT`，如果 `SELECT` 查询中未使用聚合函数，使用 GROUP BY，例如`CREATE MATERIALIZED VIEW test_view AS` `select a,b from test group by b,a order by a;`，则 BE 节点全部崩溃。[#13743](https://github.com/StarRocks/starrocks/pull/13743)
-- 执行 INSERT INTO 高频导入至主键模型的表，进行数据变更后，立即重启 BE，重启缓慢。[#15128](https://github.com/StarRocks/starrocks/pull/15128)
+- 执行 INSERT INTO 高频导入至主键表，进行数据变更后，立即重启 BE，重启缓慢。[#15128](https://github.com/StarRocks/starrocks/pull/15128)
 - 如果环境中只安装 JRE 未安装 JDK，则重启 FE 后查询失败。修复后，在该环境无法成功重启 FE，会直接报错 `Error: JAVA_HOME can not be jre`，您需要在环境中安装 JDK。[#14332](https://github.com/StarRocks/starrocks/pull/14332)
 - 查询导致 BE 崩溃。[#14221](https://github.com/StarRocks/starrocks/pull/14221)
 - 设置 exec_mem_limit 时不支持使用表达式。[#13647](https://github.com/StarRocks/starrocks/pull/13647)
@@ -241,7 +241,7 @@ displayed_sidebar: "Chinese"
 - BE 负载很高时，资源组的监控指标 starrocks_be_resource_group_running_queries 统计错误。[#14043](https://github.com/StarRocks/starrocks/pull/14043)
 - 如果查询语句使用 OUTER JOIN，可能会导致 BE 节点崩溃。[#14840](https://github.com/StarRocks/starrocks/pull/14840)
 - 2.4 版本使用了异步物化视图后回滚到 2.3 版本，导致 FE 无法启动。[#14400](https://github.com/StarRocks/starrocks/pull/14400)
-- 主键模型的表部分地方使用了delete_range，如果性能不佳可能会导致后续从 RocksDB 读取数据过慢，导致 CPU 资源占用率过高。[#15130](https://github.com/StarRocks/starrocks/pull/15130)
+- 主键表部分地方使用了delete_range，如果性能不佳可能会导致后续从 RocksDB 读取数据过慢，导致 CPU 资源占用率过高。[#15130](https://github.com/StarRocks/starrocks/pull/15130)
 
 ### 行为变更
 
@@ -343,7 +343,7 @@ displayed_sidebar: "Chinese"
 - 修复导入大批量数据时报错的问题。 [#10370](https://github.com/StarRocks/starrocks/issues/10370) [#10380](https://github.com/StarRocks/starrocks/issues/10380)
 - 修复多个 Catalog 配置为相同 Thrift 服务地址时，删除其中一个 Catalog 会导致其他 Catalog 的增量元数据同步失效的问题。 [#10511](https://github.com/StarRocks/starrocks/pull/10511)
 - 修复 BE 内存占用统计不准确的问题。 [#9837](https://github.com/StarRocks/starrocks/pull/9837)
-- 修复完整克隆 (Full Clone) 后，查询主键模型表时报错的问题。[#10811](https://github.com/StarRocks/starrocks/pull/10811)
+- 修复完整克隆 (Full Clone) 后，查询主键表时报错的问题。[#10811](https://github.com/StarRocks/starrocks/pull/10811)
 - 修复拥有逻辑视图的 SELECT 权限但无法查询的问题。[#10563](https://github.com/StarRocks/starrocks/pull/10563)
 - 修复逻辑视图命名无限制的问题。逻辑视图的命名规范同数据库表的命名规范。[#10558](https://github.com/StarRocks/starrocks/pull/10558)
 
@@ -380,20 +380,20 @@ displayed_sidebar: "Chinese"
 
 ### 新增特性
 
-- 主键模型支持完整的 DELETE WHERE 语法。相关文档，请参见 [DELETE](../sql-reference/sql-statements/data-manipulation/DELETE.md#delete-与主键类型表)。
-- 主键模型支持持久化主键索引，基于磁盘而不是内存维护索引，大幅降低内存使用。相关文档，请参见[主键模型](../table_design/table_types/primary_key_table.md#使用说明)。
+- 主键表支持完整的 DELETE WHERE 语法。相关文档，请参见 [DELETE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/DELETE#delete-与主键类型表)。
+- 主键表支持持久化主键索引，基于磁盘而不是内存维护索引，大幅降低内存使用。相关文档，请参见[主键表](https://docs.starrocks.io/zh/docs/table_design/table_types/primary_key_table#使用说明)。
 - 全局低基数字典优化支持实时数据导入，实时场景下字符串数据的查询性能提升一倍。
-- 支持以异步的方式执行 CTAS，并将结果写入新表。相关文档，请参见 [CREATE TABLE AS SELECT](../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md)。
+- 支持以异步的方式执行 CTAS，并将结果写入新表。相关文档，请参见 [CREATE TABLE AS SELECT](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT/)。
 - 资源组相关功能：
-  - 支持监控资源组：可在审计日志中查看查询所属的资源组，并通过相关 API 获取资源组的监控信息。相关文档，请参见[监控指标](../administration/Monitor_and_Alert.md#监控指标)。
-  - 支持限制大查询的 CPU、内存、或 I/O 资源；可通过匹配分类器将查询路由至资源组，或者设置会话变量直接为查询指定资源组。相关文档，请参见[资源隔离](../administration/resource_group.md)。
-- 支持 JDBC 外表，可以轻松访问Oracle、PostgreSQL、MySQL、SQLServer、ClickHouse 等数据库，并且查询时支持谓词下推，提高查询性能。相关文档，请参见 [更多数据库（JDBC）的外部表](../data_source/External_table.md#更多数据库jdbc的外部表)。
-- 【Preview】发布全新数据源 Connector 框架，支持创建外部数据目录（External Catalog），从而无需创建外部表，即可直接查询 Apache Hive™。相关文档，请参见[查询外部数据](../data_source/catalog/query_external_data.md)。
+  - 支持监控资源组：可在审计日志中查看查询所属的资源组，并通过相关 API 获取资源组的监控信息。相关文档，请参见[监控指标](https://docs.starrocks.io/zh/docs/administration/Monitor_and_Alert#监控指标)。
+  - 支持限制大查询的 CPU、内存、或 I/O 资源；可通过匹配分类器将查询路由至资源组，或者设置会话变量直接为查询指定资源组。相关文档，请参见[资源隔离](https://docs.starrocks.io/zh/docs/administration/resource_group/)。
+- 支持 JDBC 外表，可以轻松访问Oracle、PostgreSQL、MySQL、SQLServer、ClickHouse 等数据库，并且查询时支持谓词下推，提高查询性能。相关文档，请参见 [更多数据库（JDBC）的外部表](https://docs.starrocks.io/zh/docs/data_source/External_table#更多数据库jdbc的外部表)。
+- 【Preview】发布全新数据源 Connector 框架，支持创建外部数据目录（External Catalog），从而无需创建外部表，即可直接查询 Apache Hive™。相关文档，请参见[查询外部数据](https://docs.starrocks.io/zh/docs/data_source/catalog/query_external_data/)。
 - 新增如下函数：
-  - [window_funnel](../sql-reference/sql-functions/aggregate-functions/window_funnel.md)
-  - [ntile](../sql-reference/sql-functions/Window_function.md)
-  - [bitmap_union_count](../sql-reference/sql-functions/bitmap-functions/bitmap_union_count.md)、[base64_to_bitmap](../sql-reference/sql-functions/bitmap-functions/base64_to_bitmap.md)、[array_to_bitmap](../sql-reference/sql-functions/array-functions/array_to_bitmap.md)
-  - [week](../sql-reference/sql-functions/date-time-functions/week.md)、[time_slice](../sql-reference/sql-functions/date-time-functions/time_slice.md)
+  - [window_funnel](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/aggregate-functions/window_funnel/)
+  - [ntile](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/Window_function/)
+  - [bitmap_union_count](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/bitmap-functions/bitmap_union_count/)、[base64_to_bitmap](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/bitmap-functions/base64_to_bitmap/)、[array_to_bitmap](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/array-functions/array_to_bitmap/)
+  - [week](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/date-time-functions/week/)、[time_slice](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/date-time-functions/time_slice/)
 
 ### 功能优化
 
@@ -404,10 +404,10 @@ displayed_sidebar: "Chinese"
   - TopN，sort 算子。
   - 包含函数的等值比较运算符下推至 scan 算子时，支持使用 Zone Map 索引。
 - 优化 Apache Hive™ 外表功能。
-  - 当 Apache Hive™ 的数据存储采用 Parquet、ORC、CSV 格式时，支持 Hive 表执行 ADD COLUMN、REPLACE COLUMN 等表结构变更（Schema Change）。相关文档，请参见 [Hive 外部表](../data_source/External_table.md#deprecated-hive-外部表)。
-  - 支持 Hive 资源修改 `hive.metastore.uris`。相关文档，请参见 [ALTER RESOURCE](../sql-reference/sql-statements/data-definition/ALTER_RESOURCE.md)。
-- 优化 Apache Iceberg 外表功能，创建 Iceberg 资源时支持使用自定义目录（Catalog）。相关文档，请参见 [Apache Iceberg 外表](../data_source/External_table.md#deprecated-iceberg-外部表)。
-- 优化 Elasticsearch 外表功能，支持取消探测 Elasticsearch 集群数据节点的地址。相关文档，请参见 [Elasticsearch 外部表](../data_source/External_table.md#deprecated-elasticsearch-外部表)。
+  - 当 Apache Hive™ 的数据存储采用 Parquet、ORC、CSV 格式时，支持 Hive 表执行 ADD COLUMN、REPLACE COLUMN 等表结构变更（Schema Change）。相关文档，请参见 [Hive 外部表](https://docs.starrocks.io/zh/docs/2.3/data_source/External_table/#hive-%E5%A4%96%E8%A1%A8)。
+  - 支持 Hive 资源修改 `hive.metastore.uris`。相关文档，请参见 [ALTER RESOURCE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-definition/ALTER_RESOURCE/)。
+- 优化 Apache Iceberg 外表功能，创建 Iceberg 资源时支持使用自定义目录（Catalog）。相关文档，请参见 [Apache Iceberg 外表](https://docs.starrocks.io/zh/docs/2.3/data_source/External_table/#iceberg-%E5%A4%96%E9%83%A8%E8%A1%A8)。
+- 优化 Elasticsearch 外表功能，支持取消探测 Elasticsearch 集群数据节点的地址。相关文档，请参见 [Elasticsearch 外部表](https://docs.starrocks.io/zh/docs/2.3/data_source/External_table/#elasticsearch-%E5%A4%96%E9%83%A8%E8%A1%A8)。
 - 当 sum() 中输入的值为 STRING 类型且为数字时，则自动进行隐式转换。
 - year、month、day 函数支持 DATE 数据类型。
 
@@ -422,9 +422,9 @@ displayed_sidebar: "Chinese"
 
 ### 其他
 
-- 【Preview】提供集群管理工具 StarGo，提供集群部署、启停、升级、回滚、多集群管理等多种能力。相关文档，请参见[通过 StarGo 部署 StarRocks 集群](../administration/stargo.md)。
+- 【Preview】提供集群管理工具 StarGo，提供集群部署、启停、升级、回滚、多集群管理等多种能力。相关文档，请参见[通过 StarGo 部署 StarRocks 集群](https://docs.starrocks.io/zh/docs/administration/stargo/)。
 - 部署或者升级至 2.3 版本，默认开启 Pipeline 执行引擎，预期在高并发小查询、复杂大查询场景下获得明显的性能优势。如果使用 2.3 版本时遇到明显的性能回退，则可以通过设置 `SET GLOBAL enable_pipeline_engine = false;`，关闭 Pipeline 执行引擎。
-- [SHOW GRANTS](../sql-reference/sql-statements/account-management/SHOW_GRANTS.md) 语句兼容 MySQL语法，显示授权 GRANT 语句。
+- [SHOW GRANTS](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/account-management/SHOW_GRANTS/) 语句兼容 MySQL语法，显示授权 GRANT 语句。
 - 建议单个 Schema Change 任务数据占用内存上限 `memory_limitation_per_thread_for_schema_change`(BE 配置项)保持为默认值 2 GB，数据超过上限后写入磁盘。因此如果您之前调大该参数，则建议恢复为 2 GB，否则可能会出现单个 Schema Change 任务数据占用大量内存的问题。
 
 ### 升级注意事项

@@ -48,8 +48,6 @@ import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.mysql.privilege.Auth;
-import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -109,8 +107,7 @@ public class RoutineLoadManagerTest {
     }
 
     @Test
-    public void testAddJobByStmt(@Injectable Auth auth,
-                                 @Injectable TResourceInfo tResourceInfo,
+    public void testAddJobByStmt(@Injectable TResourceInfo tResourceInfo,
                                  @Mocked ConnectContext connectContext,
                                  @Mocked GlobalStateMgr globalStateMgr) throws UserException {
         String jobName = "job1";
@@ -144,16 +141,6 @@ public class RoutineLoadManagerTest {
             }
         };
 
-        new Expectations() {
-            {
-                globalStateMgr.getAuth();
-                minTimes = 0;
-                result = auth;
-                auth.checkTblPriv((ConnectContext) any, anyString, anyString, PrivPredicate.LOAD);
-                minTimes = 0;
-                result = true;
-            }
-        };
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         routineLoadManager.createRoutineLoadJob(createRoutineLoadStmt);
 
@@ -178,8 +165,7 @@ public class RoutineLoadManagerTest {
     }
 
     @Test
-    public void testCreateJobAuthDeny(@Injectable Auth auth,
-                                      @Injectable TResourceInfo tResourceInfo,
+    public void testCreateJobAuthDeny(@Injectable TResourceInfo tResourceInfo,
                                       @Mocked ConnectContext connectContext,
                                       @Mocked GlobalStateMgr globalStateMgr) {
         String jobName = "job1";
@@ -203,16 +189,6 @@ public class RoutineLoadManagerTest {
                 typeName, customProperties);
         createRoutineLoadStmt.setOrigStmt(new OriginStatement("dummy", 0));
 
-        new Expectations() {
-            {
-                globalStateMgr.getAuth();
-                minTimes = 0;
-                result = auth;
-                auth.checkTblPriv((ConnectContext) any, anyString, anyString, PrivPredicate.LOAD);
-                minTimes = 0;
-                result = false;
-            }
-        };
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         try {
             routineLoadManager.createRoutineLoadJob(createRoutineLoadStmt);
@@ -313,12 +289,6 @@ public class RoutineLoadManagerTest {
             }
         };
 
-        new MockUp<GlobalStateMgr>() {
-            public SystemInfoService getCurrentSystemInfo() {
-                return systemInfoService;
-            }
-        };
-
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         routineLoadManager.updateBeTaskSlot();
         routineLoadManager.takeBeTaskSlot();
@@ -336,12 +306,6 @@ public class RoutineLoadManagerTest {
                 systemInfoService.getBackendIds(true);
                 minTimes = 0;
                 result = beIds;
-            }
-        };
-
-        new MockUp<GlobalStateMgr>() {
-            public SystemInfoService getCurrentSystemInfo() {
-                return systemInfoService;
             }
         };
 
@@ -545,7 +509,6 @@ public class RoutineLoadManagerTest {
     public void testPauseRoutineLoadJob(@Injectable PauseRoutineLoadStmt pauseRoutineLoadStmt,
                                         @Mocked GlobalStateMgr globalStateMgr,
                                         @Mocked Database database,
-                                        @Mocked Auth auth,
                                         @Mocked ConnectContext connectContext) throws UserException {
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newHashMap();
@@ -575,12 +538,6 @@ public class RoutineLoadManagerTest {
                 database.getId();
                 minTimes = 0;
                 result = 1L;
-                globalStateMgr.getAuth();
-                minTimes = 0;
-                result = auth;
-                auth.checkTblPriv((ConnectContext) any, anyString, anyString, (PrivPredicate) any);
-                minTimes = 0;
-                result = true;
             }
         };
 
@@ -607,7 +564,6 @@ public class RoutineLoadManagerTest {
     public void testResumeRoutineLoadJob(@Injectable ResumeRoutineLoadStmt resumeRoutineLoadStmt,
                                          @Mocked GlobalStateMgr globalStateMgr,
                                          @Mocked Database database,
-                                         @Mocked Auth auth,
                                          @Mocked ConnectContext connectContext) throws UserException {
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newHashMap();
@@ -633,12 +589,6 @@ public class RoutineLoadManagerTest {
                 database.getId();
                 minTimes = 0;
                 result = 1L;
-                globalStateMgr.getAuth();
-                minTimes = 0;
-                result = auth;
-                auth.checkTblPriv((ConnectContext) any, anyString, anyString, (PrivPredicate) any);
-                minTimes = 0;
-                result = true;
             }
         };
 
@@ -651,7 +601,6 @@ public class RoutineLoadManagerTest {
     public void testStopRoutineLoadJob(@Injectable StopRoutineLoadStmt stopRoutineLoadStmt,
                                        @Mocked GlobalStateMgr globalStateMgr,
                                        @Mocked Database database,
-                                       @Mocked Auth auth,
                                        @Mocked ConnectContext connectContext) throws UserException {
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newHashMap();
@@ -677,12 +626,6 @@ public class RoutineLoadManagerTest {
                 database.getId();
                 minTimes = 0;
                 result = 1L;
-                globalStateMgr.getAuth();
-                minTimes = 0;
-                result = auth;
-                auth.checkTblPriv((ConnectContext) any, anyString, anyString, (PrivPredicate) any);
-                minTimes = 0;
-                result = true;
             }
         };
 
@@ -798,7 +741,6 @@ public class RoutineLoadManagerTest {
     public void testAlterRoutineLoadJob(@Injectable StopRoutineLoadStmt stopRoutineLoadStmt,
                                         @Mocked GlobalStateMgr globalStateMgr,
                                         @Mocked Database database,
-                                        @Mocked Auth auth,
                                         @Mocked ConnectContext connectContext) throws UserException {
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
         Map<Long, Map<String, List<RoutineLoadJob>>> dbToNameToRoutineLoadJob = Maps.newHashMap();
@@ -824,12 +766,6 @@ public class RoutineLoadManagerTest {
                 database.getId();
                 minTimes = 0;
                 result = 1L;
-                globalStateMgr.getAuth();
-                minTimes = 0;
-                result = auth;
-                auth.checkTblPriv((ConnectContext) any, anyString, anyString, (PrivPredicate) any);
-                minTimes = 0;
-                result = true;
             }
         };
 

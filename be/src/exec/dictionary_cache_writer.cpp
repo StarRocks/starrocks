@@ -64,6 +64,10 @@ Status DictionaryCacheWriter::append_chunk(ChunkPtr chunk, std::atomic_bool* ter
         RETURN_IF_ERROR(DictionaryCacheWriter::ChunkUtil::check_chunk_has_null(*chunk.get()));
 
         if (_buffer_chunk == nullptr) {
+            chunk->reset_slot_id_to_index();
+            for (size_t i = 0; i < chunk->num_columns(); i++) {
+                chunk->set_slot_id_to_index(i + 1, i);
+            }
             _buffer_chunk = chunk->clone_empty_with_slot();
         }
         DCHECK(_buffer_chunk != nullptr);
@@ -170,7 +174,7 @@ Status DictionaryCacheWriter::_send_request(ChunkPB* pchunk, POlapTableSchemaPar
 
         auto& closure = closures[i];
         closure->ref();
-        closure->cntl.set_timeout_ms(60000);
+        closure->cntl.set_timeout_ms(config::dictionary_cache_refresh_timeout_ms);
         closure->cntl.ignore_eovercrowded();
 
         auto res = HttpBrpcStubCache::getInstance()->get_http_stub(nodes[i]);

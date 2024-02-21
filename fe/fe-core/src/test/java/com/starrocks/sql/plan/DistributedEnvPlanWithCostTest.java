@@ -1561,4 +1561,26 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "4: v4 + 6: v6 >= CAST('test_min_v2' AS BIGINT)\n" +
                 "     partitions=1/1");
     }
+
+    @Test
+    public void testNotAlwaysNullProjection() throws Exception {
+        String sql = "select * from (select c.*, ifnull(p_name, 0) from customer c left join part n on C_ADDRESS = P_NAME) " +
+                "t join nation on C_CUSTKEY = n_nationkey;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "|  <slot 20> : ifnull(11: P_NAME, '0')\n" +
+                "  |  \n" +
+                "  4:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 3: C_ADDRESS = 11: P_NAME");
+
+    }
+
+    @Test
+    public void testNdvInOrPredicate() throws Exception {
+        String sql = "select count(*) from customer where C_NAME = 'b' or C_NATIONKEY = 1";
+        String plan = getCostExplain(sql);
+        assertCContains(plan, "C_NAME-->[-Infinity, Infinity, 0.0, 25.0, 600000.0] ESTIMATE",
+                "C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE");
+    }
 }

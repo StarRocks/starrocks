@@ -18,15 +18,15 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.proto.VacuumRequest;
 import com.starrocks.proto.VacuumResponse;
 import com.starrocks.rpc.BrpcProxy;
@@ -66,7 +66,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
-        List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
         for (Long dbId : dbIds) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db == null) {
@@ -91,14 +91,14 @@ public class AutovacuumDaemon extends FrontendDaemon {
 
     private void vacuumTable(Database db, Table baseTable) {
         OlapTable table = (OlapTable) baseTable;
-        List<Partition> partitions;
+        List<PhysicalPartition> partitions;
         long current = System.currentTimeMillis();
         long staleTime = current - Config.lake_autovacuum_stale_partition_threshold * MILLISECONDS_PER_HOUR;
 
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         try {
-            partitions = table.getPartitions().stream()
+            partitions = table.getPhysicalPartitions().stream()
                     .filter(p -> p.getVisibleVersionTime() > staleTime)
                     .filter(p -> p.getVisibleVersion() > 1) // filter out empty partition
                     .filter(p -> current >=
@@ -108,14 +108,14 @@ public class AutovacuumDaemon extends FrontendDaemon {
             locker.unLockDatabase(db, LockType.READ);
         }
 
-        for (Partition partition : partitions) {
+        for (PhysicalPartition partition : partitions) {
             if (vacuumingPartitions.add(partition.getId())) {
                 executorService.execute(() -> vacuumPartition(db, table, partition));
             }
         }
     }
 
-    private void vacuumPartition(Database db, OlapTable table, Partition partition) {
+    private void vacuumPartition(Database db, OlapTable table, PhysicalPartition partition) {
         try {
             vacuumPartitionImpl(db, table, partition);
         } finally {
@@ -123,7 +123,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
         }
     }
 
-    private void vacuumPartitionImpl(Database db, OlapTable table, Partition partition) {
+    private void vacuumPartitionImpl(Database db, OlapTable table, PhysicalPartition partition) {
         List<Tablet> tablets;
         long visibleVersion;
         long minRetainVersion;
@@ -174,7 +174,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
                 responseFutures.add(service.vacuum(vacuumRequest));
             } catch (RpcException e) {
                 LOG.error("failed to send vacuum request for partition {}.{}.{}", db.getFullName(), table.getName(),
-                        partition.getName(), e);
+                        partition.getId(), e);
                 hasError = true;
                 break;
             }
@@ -185,7 +185,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
                 VacuumResponse response = responseFuture.get();
                 if (response.status.statusCode != 0) {
                     hasError = true;
-                    LOG.warn("Vacuumed {}.{}.{} with error: {}", db.getFullName(), table.getName(), partition.getName(),
+                    LOG.warn("Vacuumed {}.{}.{} with error: {}", db.getFullName(), table.getName(), partition.getId(),
                             response.status.errorMsgs.get(0));
                 } else {
                     vacuumedFiles += response.vacuumedFiles;
@@ -196,7 +196,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
                 Thread.currentThread().interrupt();
                 hasError = true;
             } catch (ExecutionException e) {
-                LOG.error("failed to vacuum {}.{}.{}: {}", db.getFullName(), table.getName(), partition.getName(),
+                LOG.error("failed to vacuum {}.{}.{}: {}", db.getFullName(), table.getName(), partition.getId(),
                         e.getMessage());
                 hasError = true;
             }
@@ -205,12 +205,12 @@ public class AutovacuumDaemon extends FrontendDaemon {
         partition.setLastVacuumTime(startTime);
         LOG.info("Vacuumed {}.{}.{} hasError={} vacuumedFiles={} vacuumedFileSize={} " +
                         "visibleVersion={} minRetainVersion={} minActiveTxnId={} cost={}ms",
-                db.getFullName(), table.getName(), partition.getName(), hasError, vacuumedFiles, vacuumedFileSize,
+                db.getFullName(), table.getName(), partition.getId(), hasError, vacuumedFiles, vacuumedFileSize,
                 visibleVersion, minRetainVersion, minActiveTxnId, System.currentTimeMillis() - startTime);
     }
 
     private static long computeMinActiveTxnId(Database db, Table table) {
-        long a = GlobalStateMgr.getCurrentGlobalTransactionMgr().getMinActiveTxnIdOfDatabase(db.getId());
+        long a = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getMinActiveTxnIdOfDatabase(db.getId());
         Optional<Long> b =
                 GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getActiveTxnIdOfTable(table.getId());
         return Math.min(a, b.orElse(Long.MAX_VALUE));

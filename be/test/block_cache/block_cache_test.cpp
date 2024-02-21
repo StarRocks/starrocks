@@ -27,9 +27,9 @@ namespace starrocks {
 
 class BlockCacheTest : public ::testing::Test {
 protected:
-    static void SetUpTestCase() { ASSERT_TRUE(fs::create_directories("./ut_dir/block_disk_cache").ok()); }
+    static void SetUpTestCase() { ASSERT_TRUE(fs::create_directories("./block_disk_cache").ok()); }
 
-    static void TearDownTestCase() { ASSERT_TRUE(fs::remove_all("./ut_dir").ok()); }
+    static void TearDownTestCase() { ASSERT_TRUE(fs::remove_all("./block_disk_cache").ok()); }
 
     void SetUp() override {}
     void TearDown() override {}
@@ -42,7 +42,7 @@ TEST_F(BlockCacheTest, auto_create_disk_cache_path) {
     CacheOptions options;
     options.mem_space_size = 20 * 1024 * 1024;
     size_t quota = 500 * 1024 * 1024;
-    options.disk_spaces.push_back({.path = "./ut_dir/final_entry_not_exist", .size = quota});
+    options.disk_spaces.push_back({.path = "./final_entry_not_exist", .size = quota});
     options.block_size = block_size;
     options.max_concurrent_inserts = 100000;
     options.enable_checksum = false;
@@ -120,7 +120,7 @@ TEST_F(BlockCacheTest, parse_cache_space_str) {
     ASSERT_EQ(parse_mem_size("10T"), mem_size);
     ASSERT_EQ(parse_mem_size("10%", 10 * 1024), 1024);
 
-    std::string disk_path = "./ut_dir/block_disk_cache";
+    std::string disk_path = "./block_disk_cache";
     uint64_t disk_size = 10;
     ASSERT_EQ(parse_disk_size(disk_path, "10"), disk_size);
     disk_size *= 1024;
@@ -146,7 +146,7 @@ TEST_F(BlockCacheTest, hybrid_cache) {
     CacheOptions options;
     options.mem_space_size = 10 * 1024 * 1024;
     size_t quota = 500 * 1024 * 1024;
-    options.disk_spaces.push_back({.path = "./ut_dir/block_disk_cache", .size = quota});
+    options.disk_spaces.push_back({.path = "./block_disk_cache", .size = quota});
     options.block_size = block_size;
     options.max_concurrent_inserts = 100000;
     options.engine = "starcache";
@@ -235,7 +235,7 @@ TEST_F(BlockCacheTest, read_cache_with_adaptor) {
     CacheOptions options;
     options.mem_space_size = 1024;
     size_t quota = 500 * 1024 * 1024;
-    options.disk_spaces.push_back({.path = "./ut_dir/block_disk_cache", .size = quota});
+    options.disk_spaces.push_back({.path = "./block_disk_cache", .size = quota});
     options.block_size = block_size;
     options.max_concurrent_inserts = 100000;
     options.engine = "starcache";

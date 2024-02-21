@@ -29,7 +29,7 @@ BITMAP base64_to_bitmap(VARCHAR bitmap)
 
 创建库表 `bitmapdb.bitmap_table`，使用 Stream Load 将 JSON 格式数据导入到 `bitmap_table` 中，过程中使用base64_to_bitmap 函数进行数据转换。
 
-1. 在 StarRocks 中创建库和表，以创建主键模型 (PRIMARY KEY) 的表为例。
+1. 在 StarRocks 中创建库和表，以创建主键表为例。
 
     ```SQL
     CREATE database bitmapdb;

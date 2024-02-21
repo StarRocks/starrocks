@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -27,6 +28,7 @@ public class MvRewriteNestedMVTest extends MvRewriteTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         MvRewriteTestBase.beforeClass();
+        ConnectorPlanTestBase.mockHiveCatalog(connectContext);
 
         starRocksAssert.withTable(cluster, "depts");
         starRocksAssert.withTable(cluster, "emps");

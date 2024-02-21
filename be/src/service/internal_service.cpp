@@ -50,8 +50,7 @@
 #include "common/closure_guard.h"
 #include "common/config.h"
 #include "common/status.h"
-#include "exec/orc_scanner.h"
-#include "exec/parquet_scanner.h"
+#include "exec/file_scanner.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_executor.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
@@ -406,6 +405,16 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl,
         uint32_t len = ser_request.size();
         RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, request->attachment_protocol(), &t_request));
     }
+    if (UNLIKELY(!t_request.query_options.__isset.batch_size)) {
+        return Status::InvalidArgument("batch_size is not set");
+    }
+    auto batch_size = t_request.query_options.batch_size;
+    if (UNLIKELY(batch_size <= 0 || batch_size > MAX_CHUNK_SIZE)) {
+        return Status::InvalidArgument(
+                fmt::format("batch_size is out of range, it must be in the range (0, {}], current value is [{}]",
+                            MAX_CHUNK_SIZE, batch_size));
+    }
+
     bool is_pipeline = t_request.__isset.is_pipeline && t_request.is_pipeline;
     LOG(INFO) << "exec plan fragment, fragment_instance_id=" << print_id(t_request.params.fragment_instance_id)
               << ", coord=" << t_request.coord << ", backend=" << t_request.backend_num
@@ -862,39 +871,9 @@ void PInternalServiceImplBase<T>::_get_file_schema(google::protobuf::RpcControll
     }
 
     RuntimeState state(_exec_env);
-    RuntimeProfile profile{"dummy_profile", false};
-    ScannerCounter counter{};
-    std::unique_ptr<FileScanner> p_scanner;
-
-    auto tp = scan_range.ranges[0].format_type;
-    {
-        switch (tp) {
-        case TFileFormatType::FORMAT_PARQUET:
-            p_scanner = std::make_unique<ParquetScanner>(&state, &profile, scan_range, &counter, true);
-            break;
-
-        case TFileFormatType::FORMAT_ORC:
-            p_scanner = std::make_unique<ORCScanner>(&state, &profile, scan_range, &counter, true);
-            break;
-
-        default:
-            auto err_msg = fmt::format("get file schema failed, format: {} not supported", to_string(tp));
-            LOG(WARNING) << err_msg;
-            st = Status::InvalidArgument(err_msg);
-            return;
-        }
-    }
-
-    st = p_scanner->open();
-    if (!st.ok()) {
-        LOG(WARNING) << "open file scanner failed: " << st;
-        return;
-    }
-
-    DeferOp defer2([&p_scanner] { p_scanner->close(); });
 
     std::vector<SlotDescriptor> schema;
-    st = p_scanner->get_schema(&schema);
+    st = FileScanner::sample_schema(&state, scan_range, &schema);
     if (!st.ok()) {
         LOG(WARNING) << "get schema failed: " << st;
         return;

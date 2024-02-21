@@ -43,7 +43,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.DiskInfo.DiskState;
 import com.starrocks.catalog.TabletInvertedIndex;
-import com.starrocks.clone.BalanceStatus.ErrCode;
+import com.starrocks.clone.BackendsFitStatus.ErrCode;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
@@ -403,9 +403,9 @@ public class BackendLoadStatistic {
         return loadScore;
     }
 
-    public BalanceStatus isFit(long tabletSize, TStorageMedium medium,
-                               List<RootPathLoadStatistic> result, boolean isSupplement) {
-        BalanceStatus status = new BalanceStatus(ErrCode.COMMON_ERROR);
+    public BackendsFitStatus isFit(long tabletSize, TStorageMedium medium,
+                                   List<RootPathLoadStatistic> result, boolean isSupplement) {
+        BackendsFitStatus status = new BackendsFitStatus(ErrCode.COMMON_ERROR);
         // try choosing path from first to end (low usage to high usage)
         List<RootPathLoadStatistic> mediumNotMatchedPath = Lists.newArrayList();
         for (RootPathLoadStatistic pathStatistic : pathStatistics) {
@@ -414,27 +414,27 @@ public class BackendLoadStatistic {
                 continue;
             }
 
-            BalanceStatus bStatus = pathStatistic.isFit(tabletSize);
+            BackendsFitStatus bStatus = pathStatistic.isFit(tabletSize);
             if (!bStatus.ok()) {
                 status.addErrMsgs(bStatus.getErrMsgs());
                 continue;
             }
 
             result.add(pathStatistic);
-            return BalanceStatus.OK;
+            return BackendsFitStatus.OK;
         }
 
         // if this is a supplement task, ignore the storage medium
         if (isSupplement || !Config.enable_strict_storage_medium_check) {
             for (RootPathLoadStatistic filteredPathStatistic : mediumNotMatchedPath) {
-                BalanceStatus bStatus = filteredPathStatistic.isFit(tabletSize);
+                BackendsFitStatus bStatus = filteredPathStatistic.isFit(tabletSize);
                 if (!bStatus.ok()) {
                     status.addErrMsgs(bStatus.getErrMsgs());
                     continue;
                 }
 
                 result.add(filteredPathStatistic);
-                return BalanceStatus.OK;
+                return BackendsFitStatus.OK;
             }
         }
         return status;

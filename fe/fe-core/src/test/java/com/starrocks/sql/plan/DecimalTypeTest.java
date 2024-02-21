@@ -192,10 +192,10 @@ public class DecimalTypeTest extends PlanTestBase {
         try {
             String sql = "select array_agg(c_0_0) from tab0";
             String plan = getVerboseExplain(sql);
-            assertContains(plan, "array_agg[([16: array_agg, struct<col1 array<decimal128(26, 2)>>, true]); " +
+            assertContains(plan, "array_agg[([16: array_agg, struct<col1 array<DECIMAL128(26,2)>>, true]); " +
                     "args: DECIMAL128; result: ARRAY<DECIMAL128(26,2)>;");
             assertContains(plan, "array_agg[([1: c_0_0, DECIMAL128(26,2), false]); " +
-                    "args: DECIMAL128; result: struct<col1 array<decimal128(26, 2)>>;");
+                    "args: DECIMAL128; result: struct<col1 array<DECIMAL128(26,2)>>;");
         } finally {
             connectContext.getSessionVariable().setNewPlanerAggStage(stage);
         }
@@ -220,7 +220,7 @@ public class DecimalTypeTest extends PlanTestBase {
         try {
             String sql = "select array_agg(distinct c_1_6) from tab1 group by c_1_0,c_1_1;";
             String plan = getVerboseExplain(sql);
-            assertContains(plan, "array_agg_distinct");
+            assertNotContains(plan, "array_agg_distinct");
         } finally {
             connectContext.getSessionVariable().setNewPlanerAggStage(stage);
         }

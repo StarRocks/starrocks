@@ -2,7 +2,7 @@
 displayed_sidebar: "English"
 ---
 
-# Data loading
+# Data loading common questions
 
 ## 1. What do I do if the "close index channel failed" or "too many tablet versions" error occurs?
 

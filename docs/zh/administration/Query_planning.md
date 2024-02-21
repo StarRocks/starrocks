@@ -8,7 +8,7 @@ displayed_sidebar: "Chinese"
 
 为优化 StarRocks 集群性能，管理员需要定期针对慢查询进行分析并优化，以免慢查询影响整个集群的服务能力，进而影响用户体验。
 
-您可以在 **fe/log/fe.audit.log** 中看到所有查询和慢查询信息，每个查询对应一个 QueryID。您可以在日志或者页面中查找到查询对应的 Query Plan 和 Profile。Query Plan 是 FE 通过解析 SQL 生成的执行计划，而 Profile 是 BE 执行查询后的结果，包含了每一步的耗时和数据处理量等数据。如果您是企业版用户，您可以通过 StarRocksManager 的图形界面看到可视化的 Profile 执行树。
+您可以在 **fe/log/fe.audit.log** 中看到所有查询和慢查询信息，每个查询对应一个 QueryID。您可以在日志或者页面中查找到查询对应的 Query Plan 和 Profile。Query Plan 是 FE 通过解析 SQL 生成的执行计划，而 Profile 是 BE 执行查询后的结果，包含了每一步的耗时和数据处理量等数据。
 
 同时，StarRocks 还支持对慢查询中的 SQL 语句进行归类，并为各类 SQL 语句计算出 SQL 指纹。
 
@@ -219,7 +219,7 @@ order by count(*) limit 100;
 
 query96.sql 的 Query Plan 分为 5 个 Plan Fragment，编号从 0 至 4。您可以通过从下至上的方式查看 Query Plan。
 
-以上示例中，最底部的 Plan Fragment 为 Fragment 4，它负责扫描 `time_dim` 表，并提前执行相关查询条件 `time_dim.t_hour = 8 and time_dim.t_minute >= 30`，即谓词下推。对于聚合表（Aggregate Key），StarRocks 会根据不同查询选择是否开启预聚合 PREAGGREGATION。以上示例中 `time_dim` 表的预聚合为关闭状态，此状态之下 StarRocks 会读取 `time_dim` 的全部维度列，如果当前表包含大量维度列，这可能会成为影响性能的一个关键因素。如果 `time_dim` 表被设置为根据 Range Partition 进行数据划分，Query Plan 中的 `partitions` 会表征查询命中的分区，无关分区被自动过滤，从而有效减少扫描数据量。如果当前表有物化视图，StarRocks 会根据查询去自动选择物化视图，如果没有物化视图，那么查询自动命中 base table，也就是以上示例中展示的 `rollup: time_dim`。您暂时无需关注其他字段。
+以上示例中，最底部的 Plan Fragment 为 Fragment 4，它负责扫描 `time_dim` 表，并提前执行相关查询条件 `time_dim.t_hour = 8 and time_dim.t_minute >= 30`，即谓词下推。对于聚合表，StarRocks 会根据不同查询选择是否开启预聚合 PREAGGREGATION。以上示例中 `time_dim` 表的预聚合为关闭状态，此状态之下 StarRocks 会读取 `time_dim` 的全部维度列，如果当前表包含大量维度列，这可能会成为影响性能的一个关键因素。如果 `time_dim` 表被设置为根据 Range Partition 进行数据划分，Query Plan 中的 `partitions` 会表征查询命中的分区，无关分区被自动过滤，从而有效减少扫描数据量。如果当前表有物化视图，StarRocks 会根据查询去自动选择物化视图，如果没有物化视图，那么查询自动命中 base table，也就是以上示例中展示的 `rollup: time_dim`。您暂时无需关注其他字段。
 
 当 `time_dim` 表数据扫描完成之后，Fragment 4 的执行过程也就随之结束，此时它将扫描得到的数据传递给其他 Fragment。以上示例中的 `EXCHANGE ID : 09` 表征了数据传递给了标号为 `9` 的接收节点。
 

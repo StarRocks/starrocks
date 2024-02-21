@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -36,10 +37,18 @@ class RuntimeState;
  */
 class ColumnAccessPath {
 public:
-    Status init(const TColumnAccessPath& column_path, RuntimeState* state, ObjectPool* pool);
+    static StatusOr<std::unique_ptr<ColumnAccessPath>> create(const TColumnAccessPath& column_path, RuntimeState* state,
+                                                              ObjectPool* pool);
 
     // for test
-    Status init(const TAccessPathType::type& type, const std::string& path, uint32_t index);
+    static StatusOr<std::unique_ptr<ColumnAccessPath>> create(const TAccessPathType::type& type,
+                                                              const std::string& path, uint32_t index);
+
+    Status init(const std::string& parent_path, const TColumnAccessPath& column_path, RuntimeState* state,
+                ObjectPool* pool);
+
+    // for test
+    Status init(TAccessPathType::type type, const std::string& path, uint32_t index);
 
     const std::string& path() const { return _path; }
 
@@ -61,16 +70,24 @@ public:
 
     bool is_from_predicate() const { return _from_predicate; }
 
+    const std::string& absolute_path() const { return _absolute_path; }
+
     // segement may have different column schema(because schema change),
     // we need copy one and set the offset of schema, to help column reader find column access path
     StatusOr<std::unique_ptr<ColumnAccessPath>> convert_by_index(const Field* field, uint32_t index);
 
+    ColumnAccessPath* get_child(const std::string& path);
+
     const std::string to_string() const;
+
+    size_t leaf_size() const;
 
 private:
     TAccessPathType::type _type;
 
     std::string _path;
+
+    std::string _absolute_path;
 
     // column index in storage
     // the root index is the offset of table schema

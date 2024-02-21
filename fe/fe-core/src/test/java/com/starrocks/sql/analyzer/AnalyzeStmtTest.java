@@ -149,7 +149,7 @@ public class AnalyzeStmtTest {
                 return new HiveTable(1, "customer", Lists.newArrayList(), "resource_name",
                         CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName("resource_name", "hive"),
                         "hive", "tpch", "", 0, Lists.newArrayList(), Lists.newArrayList(), Maps.newHashMap(),
-                        null, null);
+                        Maps.newHashMap(), null, null);
             }
         };
         String sql = "analyze table tpch.customer";
@@ -339,12 +339,12 @@ public class AnalyzeStmtTest {
         String sql = "kill analyze 1";
         KillAnalyzeStmt killAnalyzeStmt = (KillAnalyzeStmt) analyzeSuccess(sql);
 
-        GlobalStateMgr.getCurrentAnalyzeMgr().registerConnection(1, getConnectContext());
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().registerConnection(1, getConnectContext());
         Assert.assertThrows(SemanticException.class,
-                () -> GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(2, true));
-        GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(1, true);
+                () -> GlobalStateMgr.getCurrentState().getAnalyzeMgr().unregisterConnection(2, true));
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().unregisterConnection(1, true);
         Assert.assertThrows(SemanticException.class,
-                () -> GlobalStateMgr.getCurrentAnalyzeMgr().unregisterConnection(1, true));
+                () -> GlobalStateMgr.getCurrentState().getAnalyzeMgr().unregisterConnection(1, true));
     }
 
     @Test

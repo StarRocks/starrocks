@@ -121,6 +121,9 @@ select count(*) from (select array_agg(c0) from t3 group by c0) tb;
 -- result:
 40961
 -- !result
+select c0, sum(c1) as sc1 from (select c0, c1 from t3 where c0 < -1 limit 100) tb group by c0;
+-- result:
+-- !result
 with agged as ( select c0 as lk, c1 from t3 group by 1,2 ) select count(*),count(l.lk),count(l.c1),count(r.lk),count(r.c1) from agged l join agged r on l.lk = r.lk;
 -- result:
 40960	40960	40960	40960	40960

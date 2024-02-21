@@ -41,12 +41,12 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -63,9 +63,9 @@ public class IndicesProcDir implements ProcDirInterface {
 
     private Database db;
     private OlapTable olapTable;
-    private Partition partition;
+    private PhysicalPartition partition;
 
-    public IndicesProcDir(Database db, OlapTable olapTable, Partition partition) {
+    public IndicesProcDir(Database db, OlapTable olapTable, PhysicalPartition partition) {
         this.db = db;
         this.olapTable = olapTable;
         this.partition = partition;

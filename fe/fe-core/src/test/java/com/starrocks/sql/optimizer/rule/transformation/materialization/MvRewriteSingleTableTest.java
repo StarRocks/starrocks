@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -30,6 +31,7 @@ public class MvRewriteSingleTableTest extends MvRewriteTestBase {
         MvRewriteTestBase.beforeClass();
         starRocksAssert.withTable(cluster, "depts");
         starRocksAssert.withTable(cluster, "emps");
+        ConnectorPlanTestBase.mockHiveCatalog(connectContext);
     }
 
     @Test

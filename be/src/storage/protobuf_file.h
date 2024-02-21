@@ -51,6 +51,8 @@ public:
 
     Status load(::google::protobuf::Message* message, bool fill_cache = true);
 
+    static Status load(::google::protobuf::Message* message, std::string_view data);
+
 private:
     std::string _path;
 };

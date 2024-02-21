@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+unlisted: true
 ---
 
 # 查看分析 Query Profile
@@ -36,11 +36,7 @@ Runtime Profile 与普通 Query Profile 显示的信息相同。您可以像分�
 
 ## 获取 Query Profile
 
-> **说明**
->
-> 如果您使用 StarRocks 企业版，则可以使用 StarRocks Manager 获取并可视化 Query Profile。
-
-如果您是 StarRocks 社区版用户，请按照以下步骤获取 Query Profile：
+请按照以下步骤获取 Query Profile：
 
 1. 在浏览器中访问 `http://<fe_ip>:<fe_http_port>`。
 2. 在显示的页面上，单击顶部导航中的 **queries**。

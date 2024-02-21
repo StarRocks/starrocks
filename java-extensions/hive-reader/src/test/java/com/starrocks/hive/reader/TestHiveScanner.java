@@ -2,6 +2,7 @@ package com.starrocks.hive.reader;
 
 import com.starrocks.jni.connector.OffHeapTable;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -39,12 +40,14 @@ public class TestHiveScanner {
         params.put("input_format", "org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat");
         params.put("serde", "org.apache.hadoop.hive.serde2.avro.AvroSerDe");
         params.put("required_fields", "col_tinyint,col_smallint,col_int,col_bigint,col_float,col_double,col_decimal");
+        params.put("SerDe.mongo.columns.mapping", "{\n\"id\":\"_id\",\n\"status\":\"status\"}");
         return params;
     }
 
     String runScanOnParams(Map<String, String> params) throws IOException {
         HiveScanner scanner = new HiveScanner(4096, params);
         System.out.println(scanner.toString());
+        Assert.assertTrue(scanner.toString().contains("mongo.columns.mapping"));
         scanner.open();
         StringBuilder sb = new StringBuilder();
         while (true) {

@@ -86,6 +86,6 @@ public class PrepareStmt extends StatementBase {
 
     @Override
     public RedirectStatus getRedirectStatus() {
-        return innerStmt.getRedirectStatus();
+        return RedirectStatus.NO_FORWARD;
     }
 }

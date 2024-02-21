@@ -46,6 +46,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.transaction.AbstractTxnStateChangeCallback;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionAlreadyCommitException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
@@ -120,14 +122,14 @@ public abstract class DeleteJob extends AbstractTxnStateChangeCallback {
         }
         setState(DeleteState.FINISHED);
         GlobalStateMgr.getCurrentState().getDeleteMgr().recordFinishedJob(this);
-        GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().removeCallback(getId());
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(getId());
         GlobalStateMgr.getCurrentState().getEditLog().logFinishMultiDelete(deleteInfo);
     }
 
     @Override
     public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason) {
         // just to clean the callback
-        GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().removeCallback(getId());
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(getId());
     }
 
     public abstract void run(DeleteStmt stmt, Database db, Table table, List<Partition> partitions)
@@ -141,9 +143,10 @@ public abstract class DeleteJob extends AbstractTxnStateChangeCallback {
         LOG.info("start to cancel delete job, transactionId: {}, cancelType: {}", getTransactionId(),
                 cancelType.name());
 
-        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         try {
-            globalTransactionMgr.abortTransaction(getDeleteInfo().getDbId(), getTransactionId(), reason);
+            globalTransactionMgr.abortTransaction(getDeleteInfo().getDbId(), getTransactionId(), reason,
+                    getTabletCommitInfos(), getTabletFailInfos(), null);
         } catch (TransactionAlreadyCommitException e) {
             return false;
         } catch (Exception e) {
@@ -160,6 +163,10 @@ public abstract class DeleteJob extends AbstractTxnStateChangeCallback {
      */
     public abstract boolean commitImpl(Database db, long timeoutMs) throws UserException;
 
+    protected abstract List<TabletCommitInfo> getTabletCommitInfos();
+
+    protected abstract List<TabletFailInfo> getTabletFailInfos();
+
     public void commit(Database db, long timeoutMs) throws DdlException, QueryStateException {
         TransactionStatus status = TransactionStatus.UNKNOWN;
         try {
@@ -168,7 +175,7 @@ public abstract class DeleteJob extends AbstractTxnStateChangeCallback {
                         .updateTableDeleteInfo(GlobalStateMgr.getCurrentState(), db.getId(),
                                 getDeleteInfo().getTableId());
             }
-            status = GlobalStateMgr.getCurrentGlobalTransactionMgr().
+            status = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().
                     getTransactionState(db.getId(), getTransactionId()).getTransactionStatus();
         } catch (UserException e) {
             if (cancel(DeleteMgr.CancelType.COMMIT_FAIL, e.getMessage())) {

@@ -20,7 +20,6 @@
 #include "io/shared_buffered_input_stream.h"
 #include "util/compression/stream_compression.h"
 
-static constexpr int64_t ROW_FORMAT_ESTIMATED_MEMORY_USAGE = 32LL * 1024 * 1024;
 namespace starrocks {
 
 class CountedSeekableInputStream : public io::SeekableInputStreamWrapper {
@@ -81,7 +80,11 @@ bool HdfsScannerParams::is_lazy_materialization_slot(SlotId slot_id) const {
 Status HdfsScanner::init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
     _runtime_state = runtime_state;
     _scanner_params = scanner_params;
+
+    RETURN_IF_ERROR(_init_mor_processor(runtime_state, scanner_params.mor_params));
     Status status = do_init(runtime_state, scanner_params);
+    RETURN_IF_ERROR(_mor_processor->build_hash_table(runtime_state));
+
     return status;
 }
 
@@ -129,7 +132,7 @@ Status HdfsScanner::_build_scanner_context() {
 
     ctx.tuple_desc = _scanner_params.tuple_desc;
     ctx.conjunct_ctxs_by_slot = _scanner_params.conjunct_ctxs_by_slot;
-    ctx.scan_ranges = _scanner_params.scan_ranges;
+    ctx.scan_range = _scanner_params.scan_range;
     ctx.runtime_filter_collector = _scanner_params.runtime_filter_collector;
     ctx.min_max_conjunct_ctxs = _scanner_params.min_max_conjunct_ctxs;
     ctx.min_max_tuple_desc = _scanner_params.min_max_tuple_desc;
@@ -146,16 +149,28 @@ Status HdfsScanner::_build_scanner_context() {
     return Status::OK();
 }
 
+Status HdfsScanner::_init_mor_processor(RuntimeState* runtime_state, const MORParams& params) {
+    if (params.equality_slots.empty()) {
+        _mor_processor = std::make_shared<DefaultMORProcessor>();
+        return Status::OK();
+    }
+
+    _mor_processor = std::make_shared<IcebergMORProcessor>(params.runtime_profile);
+    RETURN_IF_ERROR(_mor_processor->init(runtime_state, params));
+    return Status::OK();
+}
+
 Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     SCOPED_RAW_TIMER(&_total_running_time);
     RETURN_IF_CANCELLED(_runtime_state);
     RETURN_IF_ERROR(_runtime_state->check_mem_limit("get chunk from scanner"));
     Status status = do_get_next(runtime_state, chunk);
     if (status.ok()) {
-        if (!_scanner_params.conjunct_ctxs.empty() && _scanner_params.eval_conjunct_ctxs) {
+        if (!_scanner_params.conjunct_ctxs.empty()) {
             SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
             RETURN_IF_ERROR(ExecNode::eval_conjuncts(_scanner_params.conjunct_ctxs, (*chunk).get()));
         }
+        RETURN_IF_ERROR(_mor_processor->get_next(runtime_state, chunk));
     } else if (status.is_end_of_file()) {
         // do nothing.
     } else {
@@ -171,39 +186,22 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
         return Status::OK();
     }
     RETURN_IF_ERROR(_build_scanner_context());
-    auto status = do_open(runtime_state);
-    if (status.ok()) {
-        _opened = true;
-        if (_scanner_params.open_limit != nullptr) {
-            _scanner_params.open_limit->fetch_add(1, std::memory_order_relaxed);
-        }
-        VLOG_FILE << "open file success: " << _scanner_params.path;
-    }
-    return status;
+    RETURN_IF_ERROR(do_open(runtime_state));
+    _opened = true;
+    VLOG_FILE << "open file success: " << _scanner_params.path;
+    return Status::OK();
 }
 
 void HdfsScanner::close() noexcept {
     if (!_runtime_state) {
         return;
     }
-
-    DCHECK(!has_pending_token());
     bool expect = false;
     if (!_closed.compare_exchange_strong(expect, true)) return;
     update_counter();
     do_close(_runtime_state);
     _file.reset(nullptr);
-    if (_opened && _scanner_params.open_limit != nullptr) {
-        _scanner_params.open_limit->fetch_sub(1, std::memory_order_relaxed);
-    }
-}
-
-void HdfsScanner::enter_pending_queue() {
-    _pending_queue_sw.start();
-}
-
-uint64_t HdfsScanner::exit_pending_queue() {
-    return _pending_queue_sw.reset();
+    _mor_processor->close(_runtime_state);
 }
 
 Status HdfsScanner::open_random_access_file() {
@@ -273,11 +271,11 @@ void HdfsScanner::do_update_iceberg_v2_counter(RuntimeProfile* parent_profile, c
 }
 
 int64_t HdfsScanner::estimated_mem_usage() const {
-    if (_shared_buffered_input_stream == nullptr) {
-        // don't read data in columnar format(such as CSV format), usually in a fixed size.
-        return ROW_FORMAT_ESTIMATED_MEMORY_USAGE;
+    if (_shared_buffered_input_stream != nullptr) {
+        return _shared_buffered_input_stream->estimated_mem_usage();
     }
-    return _shared_buffered_input_stream->estimated_mem_usage();
+    // return 0 if we don't know estimated memory usage with high confidence.
+    return 0;
 }
 
 void HdfsScanner::update_hdfs_counter(HdfsScanProfile* profile) {
@@ -335,6 +333,8 @@ void HdfsScanner::update_counter() {
     if (_shared_buffered_input_stream) {
         COUNTER_UPDATE(profile->shared_buffered_shared_io_count, _shared_buffered_input_stream->shared_io_count());
         COUNTER_UPDATE(profile->shared_buffered_shared_io_bytes, _shared_buffered_input_stream->shared_io_bytes());
+        COUNTER_UPDATE(profile->shared_buffered_shared_align_io_bytes,
+                       _shared_buffered_input_stream->shared_align_io_bytes());
         COUNTER_UPDATE(profile->shared_buffered_shared_io_timer, _shared_buffered_input_stream->shared_io_timer());
         COUNTER_UPDATE(profile->shared_buffered_direct_io_count, _shared_buffered_input_stream->direct_io_count());
         COUNTER_UPDATE(profile->shared_buffered_direct_io_bytes, _shared_buffered_input_stream->direct_io_bytes());

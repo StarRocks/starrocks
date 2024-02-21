@@ -41,6 +41,7 @@ import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -61,11 +62,12 @@ public class BatchRollupJobTest {
     private static StarRocksAssert starRocksAssert;
 
     @BeforeClass
-    public static void setup() throws Exception {
+    public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         ctx = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(ctx);
         starRocksAssert.withDatabase("db1").useDatabase("db1");
+        Config.alter_scheduler_interval_millisecond = 10;
     }
 
     @Before
@@ -94,7 +96,7 @@ public class BatchRollupJobTest {
         OlapTable tbl = (OlapTable) db.getTable("tbl1");
         Assert.assertNotNull(tbl);
 
-        int finishedNum = 0;
+        // 3 rollup jobs may be finished in the loop, so only check the final state at last.
         for (AlterJobV2 alterJobV2 : alterJobs.values()) {
             if (alterJobV2.getType() != AlterJobV2.JobType.ROLLUP) {
                 continue;
@@ -102,24 +104,19 @@ public class BatchRollupJobTest {
             while (!alterJobV2.getJobState().isFinalState()) {
                 System.out.println(
                         "rollup job " + alterJobV2.getJobId() + " is running. state: " + alterJobV2.getJobState());
-                Thread.sleep(5000);
+                Thread.sleep(500);
             }
             System.out.println("rollup job " + alterJobV2.getJobId() + " is done. state: " + alterJobV2.getJobState());
             Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
-            ++finishedNum;
-            if (finishedNum == 3) {
-                // waiting table state to normal
-                int retryTimes = 5;
-                while (tbl.getState() != OlapTable.OlapTableState.NORMAL && retryTimes > 0) {
-                    Thread.sleep(5000);
-                    retryTimes--;
-                }
-                Assert.assertEquals(OlapTableState.NORMAL, tbl.getState());
-            } else {
-                Assert.assertEquals(OlapTableState.ROLLUP, tbl.getState());
-            }
         }
 
+        // waiting table state to normal
+        int retryTimes = 25;
+        while (tbl.getState() != OlapTable.OlapTableState.NORMAL && retryTimes > 0) {
+            Thread.sleep(1000);
+            retryTimes--;
+        }
+        Assert.assertEquals(OlapTableState.NORMAL, tbl.getState());
         for (Partition partition : tbl.getPartitions()) {
             Assert.assertEquals(4, partition.getMaterializedIndices(IndexExtState.VISIBLE).size());
         }
@@ -144,31 +141,19 @@ public class BatchRollupJobTest {
         Assert.assertNotNull(db);
         OlapTable tbl = (OlapTable) db.getTable("tbl2");
         Assert.assertNotNull(tbl);
+        Assert.assertEquals(OlapTableState.ROLLUP, tbl.getState());
 
-        for (AlterJobV2 alterJobV2 : alterJobs.values()) {
-            if (alterJobV2.getType() != AlterJobV2.JobType.ROLLUP) {
-                continue;
-            }
-            while (!alterJobV2.getJobState().isFinalState()) {
-                System.out.println(
-                        "rollup job " + alterJobV2.getJobId() + " is running. state: " + alterJobV2.getJobState());
-                Thread.sleep(5000);
-            }
-            System.out.println("rollup job " + alterJobV2.getJobId() + " is done. state: " + alterJobV2.getJobState());
-            Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
+        // cancel rollup jobs
+        stmtStr = "cancel alter table rollup from db1.tbl2 (" + Joiner.on(",").join(jobIds) + ")";
+        CancelAlterTableStmt cancelStmt = (CancelAlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmtStr, ctx);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().cancelAlter(cancelStmt);
 
-            Assert.assertEquals(OlapTableState.ROLLUP, tbl.getState());
-            // cancel rest of rollup jobs
-            stmtStr = "cancel alter table rollup from db1.tbl2 (" + Joiner.on(",").join(jobIds) + ")";
-            CancelAlterTableStmt cancelStmt = (CancelAlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmtStr, ctx);
-            GlobalStateMgr.getCurrentState().cancelAlter(cancelStmt);
-
-            Assert.assertEquals(OlapTableState.NORMAL, tbl.getState());
-            break;
+        for (AlterJobV2 alterJob : alterJobs.values()) {
+            Assert.assertEquals(AlterJobV2.JobState.CANCELLED, alterJob.getJobState());
         }
-
+        Assert.assertEquals(OlapTableState.NORMAL, tbl.getState());
         for (Partition partition : tbl.getPartitions()) {
-            Assert.assertEquals(2, partition.getMaterializedIndices(IndexExtState.VISIBLE).size());
+            Assert.assertEquals(1, partition.getMaterializedIndices(IndexExtState.VISIBLE).size());
         }
     }
 }

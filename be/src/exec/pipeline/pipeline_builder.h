@@ -36,6 +36,10 @@ public:
 
     void add_pipeline(const OpFactories& operators) {
         _pipelines.emplace_back(std::make_shared<Pipeline>(next_pipe_id(), operators));
+        bool enable_wait_event = _fragment_context->runtime_state()->enable_wait_dependent_event();
+        if (enable_wait_event && !_dependent_pipelines.empty()) {
+            subscribe_pipeline_event(_pipelines.back().get(), _dependent_pipelines.back()->pipeline_event());
+        }
     }
 
     OpFactories maybe_interpolate_local_broadcast_exchange(RuntimeState* state, int32_t plan_node_id,
@@ -117,9 +121,9 @@ public:
     size_t dop_of_source_operator(int source_node_id);
     MorselQueueFactory* morsel_queue_factory_of_source_operator(int source_node_id);
     MorselQueueFactory* morsel_queue_factory_of_source_operator(const SourceOperatorFactory* source_op);
-    SourceOperatorFactory* source_operator(OpFactories ops);
+    SourceOperatorFactory* source_operator(const OpFactories& ops);
     // Whether the building pipeline `ops` need local shuffle for the next operator.
-    bool could_local_shuffle(OpFactories ops) const;
+    bool could_local_shuffle(const OpFactories& ops) const;
 
     bool should_interpolate_cache_operator(int32_t plan_node_id, OpFactoryPtr& source_op);
     OpFactories interpolate_cache_operator(
@@ -138,8 +142,7 @@ public:
     void push_dependent_pipeline(const Pipeline* pipeline);
     void pop_dependent_pipeline();
 
-    bool force_disable_adaptive_dop() const { return _force_disable_adaptive_dop; }
-    void set_force_disable_adaptive_dop(bool val) { _force_disable_adaptive_dop = val; }
+    void subscribe_pipeline_event(Pipeline* pipeline, Event* event);
 
 private:
     OpFactories _maybe_interpolate_local_passthrough_exchange(RuntimeState* state, int32_t plan_node_id,
@@ -165,13 +168,11 @@ private:
     const size_t _degree_of_parallelism;
 
     const bool _is_stream_pipeline;
-
-    bool _force_disable_adaptive_dop = false;
 };
 
 class PipelineBuilder {
 public:
-    PipelineBuilder(PipelineBuilderContext& context) : _context(context) {}
+    explicit PipelineBuilder(PipelineBuilderContext& context) : _context(context) {}
 
     // Build pipeline from exec node tree
     Pipelines build(const FragmentContext& fragment, ExecNode* exec_node);

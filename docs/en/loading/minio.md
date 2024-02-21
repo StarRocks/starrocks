@@ -1,33 +1,37 @@
 ---
 displayed_sidebar: "English"
+toc_max_heading_level: 4
 ---
 
 # Load data from MinIO
-
-
-import LoadMethodIntro from '../assets/commonMarkdown/loadMethodIntro.md'
 
 import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
 
 StarRocks provides the following options for loading data from MinIO:
 
-<LoadMethodIntro />
+- Synchronous loading using [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md)+[`FILES()`](../sql-reference/sql-functions/table-functions/files.md)
+- Asynchronous loading using [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)
+
+Each of these options has its own advantages, which are detailed in the following sections.
+
+In most cases, we recommend that you use the INSERT+`FILES()` method, which is much easier to use.
+
+However, the INSERT+`FILES()` method currently supports only the Parquet and ORC file formats. Therefore, if you need to load data of other file formats such as CSV, or [perform data changes such as DELETE during data loading](../loading/Load_to_Primary_Key_tables.md), you can resort to Broker Load.
 
 ## Before you begin
 
 ### Make source data ready
 
-Make sure the source data you want to load into StarRocks is properly stored in an MinIO bucket. You may also consider where the data and the database are located, because data transfer costs are much lower when your bucket and your StarRocks cluster are located in the same region.
+Make sure the source data you want to load into StarRocks is properly stored in a MinIO bucket. You may also consider where the data and the database are located, because data transfer costs are much lower when your bucket and your StarRocks cluster are located in the same region.
 
 In this topic, we provide you with a sample dataset. You can download this with `curl`:
 
 ```bash
-curl -O https://starrocks-datasets.s3.amazonaws.com/user_behavior_ten_million_rows.parquet
+curl -O https://starrocks-examples.s3.amazonaws.com/user_behavior_ten_million_rows.parquet
 ```
 
 Load the Parquet file into your MinIO system and note the bucket name. The examples in this guide
 use a bucket name of `/starrocks`.
-
 
 ### Check privileges
 
@@ -74,8 +78,8 @@ The following example queries the sample dataset previously added to your MinIO 
 
 The highlighted section of the command includes the settings that you may need to change:
 
-- Set the `endpoint` and `path` to match your MinIO system
-- If your MinIO system uses SSL set `enable_ssl` to `true`
+- Set the `endpoint` and `path` to match your MinIO system.
+- If your MinIO system uses SSL set `enable_ssl` to `true`.
 - Substitute your MinIO access key and secret for `AAA` and `BBB`.
 
 :::
@@ -99,6 +103,7 @@ LIMIT 3;
 ```
 
 The system returns the following query result:
+
 ```plaintext
 +--------+---------+------------+--------------+---------------------+
 | UserID | ItemID  | CategoryID | BehaviorType | Timestamp           |
@@ -331,7 +336,7 @@ The following query result is returned, indicating that the data has been succes
 
 #### Check load progress
 
-You can query the progress of INSERT jobs from the [`information_schema.loads`](../reference/information_schema/loads.md) view. This feature is supported from v3.1 onwards. Example:
+You can query the progress of INSERT jobs from the [`loads`](../reference/information_schema/loads.md) view in the StarRocks Information Schema. This feature is supported from v3.1 onwards. Example:
 
 ```SQL
 SELECT * FROM information_schema.loads ORDER BY JOB_ID DESC;
@@ -367,7 +372,7 @@ SELECT * FROM information_schema.loads WHERE LABEL = 'insert_e3b882f5-7eb3-11ee-
 REJECTED_RECORD_PATH: NULL
 ```
 
-For information about the fields provided in the `loads` view, see [Information Schema](../reference/information_schema/loads.md).
+For information about the fields provided in the `loads` view, see [loads](../reference/information_schema/loads.md).
 
 :::tip
 
@@ -408,14 +413,18 @@ AVG_ROW_LENGTH: 17
 
 An asynchronous Broker Load process handles making the connection to MinIO, pulling the data, and storing the data in StarRocks.
 
-This method supports the Parquet, ORC, and CSV file formats.
+This method supports the following file formats:
+
+- Parquet
+- ORC
+- CSV
+- JSON (supported from v3.2.3 onwards)
 
 ### Advantages of Broker Load
 
-- Broker Load supports [data transformation](../loading/Etl_in_loading.md) and [data changes such as UPSERT and DELETE operations](../loading/Load_to_Primary_Key_tables.md) during loading.
 - Broker Load runs in the background and clients do not need to stay connected for the job to continue.
 - Broker Load is preferred for long-running jobs, with the default timeout spanning 4 hours.
-- In addition to Parquet and ORC file formats, Broker Load supports CSV files.
+- In addition to Parquet and ORC file format, Broker Load supports CSV file format and JSON file format (JSON file format is supported from v3.2.3 onwards).
 
 ### Data flow
 
@@ -462,6 +471,16 @@ PROPERTIES
 
 Run the following command to start a Broker Load job that loads data from the sample dataset `user_behavior_ten_million_rows.parquet` to the `user_behavior` table:
 
+:::tip
+
+The highlighted section of the command includes the settings that you may need to change:
+
+- Set the `endpoint` and `DATA INFILE` to match your MinIO system.
+- If your MinIO system uses SSL set `enable_ssl` to `true`.
+- Substitute your MinIO access key and secret for `AAA` and `BBB`.
+
+:::
+
 ```sql
 LOAD LABEL UserBehavior
 (
@@ -487,6 +506,7 @@ PROPERTIES
     "timeout" = "72000"
 );
 ```
+
 This job has four main sections:
 
 - `LABEL`: A string used when querying the state of the load job.
@@ -498,14 +518,11 @@ For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-referen
 
 #### Check load progress
 
-You can query the progress of Broker Load jobs from the [`information_schema.loads`](../reference/information_schema/loads.md) view. This feature is supported from v3.1 onwards.
-
+You can query the progress of Broker Load jobs from the [`loads`](../reference/information_schema/loads.md) view in the StarRocks Information Schema. This feature is supported from v3.1 onwards.
 
 ```SQL
 SELECT * FROM information_schema.loads;
 ```
-
-For information about the fields provided in the `loads` view, see [Information Schema](../reference/information_schema/loads.md).
 
 If you have submitted multiple load jobs, you can filter on the `LABEL` associated with the job. Example:
 
@@ -542,6 +559,8 @@ REJECTED_RECORD_PATH: NULL
 1 row in set (0.02 sec)
 ```
 
+For information about the fields provided in the `loads` view, see [loads](../reference/information_schema/loads.md).
+
 After you confirm that the load job has finished, you can check a subset of the destination table to see if the data has been successfully loaded. Example:
 
 ```SQL
@@ -560,7 +579,7 @@ The following query result is returned, indicating that the data has been succes
 +--------+---------+------------+--------------+---------------------+
 ```
 
-## Use Pipe
+<!-- ## Use Pipe
 
 Starting from v3.2, StarRocks provides the Pipe loading method, which currently supports only the Parquet and ORC file formats.
 
@@ -595,6 +614,7 @@ For each Pipe job, StarRocks maintains a file queue, from which it fetches and l
 ### Typical example
 
 Note that Pipe is typically used with:
+
 - large datasets
 - datasets that are in multiple files
 - datasets that grow over time
@@ -690,3 +710,4 @@ DATABASE_NAME: mydatabase
 #### Manage Pipe jobs
 
 You can alter, suspend or resume, drop, or query the pipes you have created and retry to load specific data files. For more information, see [ALTER PIPE](../sql-reference/sql-statements/data-manipulation/ALTER_PIPE.md), [SUSPEND or RESUME PIPE](../sql-reference/sql-statements/data-manipulation/SUSPEND_or_RESUME_PIPE.md), [DROP PIPE](../sql-reference/sql-statements/data-manipulation/DROP_PIPE.md), [SHOW PIPES](../sql-reference/sql-statements/data-manipulation/SHOW_PIPES.md), and [RETRY FILE](../sql-reference/sql-statements/data-manipulation/RETRY_FILE.md).
+-->

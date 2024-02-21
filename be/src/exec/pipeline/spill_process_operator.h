@@ -63,7 +63,7 @@ public:
 
     void close(RuntimeState* state) override { SourceOperatorFactory::close(state); }
 
-    SourceOperatorFactory::AdaptiveState adaptive_state() const override { return AdaptiveState::ACTIVE; }
+    SourceOperatorFactory::AdaptiveState adaptive_initial_state() const override { return AdaptiveState::ACTIVE; }
 
 private:
     SpillProcessChannelFactoryPtr _process_ctx;

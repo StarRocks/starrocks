@@ -45,6 +45,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.statistic.StatisticUtils;
+import com.starrocks.thrift.THiveFileInfo;
 import com.starrocks.thrift.TSinkCommitInfo;
 import org.apache.hadoop.fs.Path;
 import org.apache.logging.log4j.LogManager;
@@ -56,6 +57,7 @@ import java.util.Optional;
 import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.Table.TableType.HIVE;
 import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
 import static com.starrocks.connector.PartitionUtil.toPartitionValues;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
@@ -88,6 +90,11 @@ public class HiveMetadata implements ConnectorMetadata {
         this.cacheUpdateProcessor = cacheUpdateProcessor;
         this.updateExecutor = updateExecutor;
         this.refreshOthersFeExecutor = refreshOthersFeExecutor;
+    }
+
+    @Override
+    public Table.TableType getTableType() {
+        return HIVE;
     }
 
     @Override
@@ -335,6 +342,24 @@ public class HiveMetadata implements ConnectorMetadata {
         HiveCommitter committer = new HiveCommitter(
                 hmsOps, fileOps, updateExecutor, refreshOthersFeExecutor, table, new Path(stagingDir));
         committer.commit(partitionUpdates);
+    }
+
+    @Override
+    public void abortSink(String dbName, String tableName, List<TSinkCommitInfo> commitInfos) {
+        if (commitInfos == null || commitInfos.isEmpty()) {
+            return;
+        }
+        boolean hasHiveSinkInfo = commitInfos.stream().anyMatch(TSinkCommitInfo::isSetHive_file_info);
+        if (!hasHiveSinkInfo) {
+            return;
+        }
+
+        for (TSinkCommitInfo sinkCommitInfo : commitInfos) {
+            if (sinkCommitInfo.isSetHive_file_info()) {
+                THiveFileInfo hiveFileInfo = sinkCommitInfo.getHive_file_info();
+                fileOps.deleteIfExists(new Path(hiveFileInfo.getPartition_path(), hiveFileInfo.getFile_name()), false);
+            }
+        }
     }
 
     @Override

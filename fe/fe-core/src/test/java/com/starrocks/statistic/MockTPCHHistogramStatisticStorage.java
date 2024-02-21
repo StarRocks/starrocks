@@ -291,7 +291,7 @@ public class MockTPCHHistogramStatisticStorage implements StatisticStorage {
             List<Bucket> buckets = convertBuckets(histogramString.toString(), type, scala);
             Map<String, Long> mcv = convertMCV(histogramString.toString(), scala);
             histogramStatistics.put(fileName, new Histogram(buckets, mcv));
-            GlobalStateMgr.getCurrentAnalyzeMgr().addHistogramStatsMeta(new HistogramStatsMeta(
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().addHistogramStatsMeta(new HistogramStatsMeta(
                     0, 0, fileName, StatsConstants.AnalyzeType.HISTOGRAM, LocalDateTime.MIN, Maps.newHashMap()));
         } catch (Exception e) {
             e.printStackTrace();

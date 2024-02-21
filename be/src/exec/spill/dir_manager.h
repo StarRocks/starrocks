@@ -22,6 +22,7 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "fs/fs.h"
+#include "util/random.h"
 
 namespace starrocks::spill {
 
@@ -32,6 +33,8 @@ public:
     Dir(std::string dir, std::shared_ptr<FileSystem> fs, int64_t max_dir_size)
             : _dir(std::move(dir)), _fs(fs), _max_size(max_dir_size) {}
 
+    virtual ~Dir() = default;
+
     FileSystem* fs() const { return _fs.get(); }
     std::string dir() const { return _dir; }
 
@@ -41,7 +44,7 @@ public:
         int64_t old_size = 0;
         do {
             old_size = _current_size.load();
-            if (old_size + value >= _max_size) {
+            if (old_size + value > _max_size) {
                 return false;
             }
         } while (!_current_size.compare_exchange_strong(old_size, old_size + value));
@@ -52,7 +55,9 @@ public:
 
     int64_t get_max_size() const { return _max_size; }
 
-private:
+    virtual bool is_remote() const { return false; }
+
+protected:
     std::string _dir;
     std::shared_ptr<FileSystem> _fs;
     int64_t _max_size;
@@ -60,8 +65,22 @@ private:
 };
 using DirPtr = std::shared_ptr<Dir>;
 
+class RemoteDir : public Dir {
+public:
+    RemoteDir(std::string dir, std::shared_ptr<FileSystem> fs, std::shared_ptr<TCloudConfiguration> cloud_conf,
+              int64_t max_dir_size)
+            : Dir(std::move(dir), std::move(fs), max_dir_size), _cloud_conf(std::move(cloud_conf)) {}
+    ~RemoteDir() override = default;
+
+    bool is_remote() const override { return true; }
+
+private:
+    std::shared_ptr<TCloudConfiguration> _cloud_conf;
+};
+
 struct AcquireDirOptions {
     // @TOOD(silverbullet233): support more properties when acquiring dir, such as the preference of dir selection
+    size_t data_size = 0;
 };
 
 // DirManager is used to manage all spill-available directories,
@@ -70,11 +89,12 @@ struct AcquireDirOptions {
 class DirManager {
 public:
     DirManager() = default;
+    DirManager(const std::vector<DirPtr>& dirs) : _dirs(dirs) {}
     ~DirManager() = default;
 
     Status init(const std::string& spill_dirs);
 
-    StatusOr<Dir*> acquire_writable_dir(const AcquireDirOptions& opts);
+    StatusOr<DirPtr> acquire_writable_dir(const AcquireDirOptions& opts);
 
 private:
     bool is_same_disk(const std::string& path1, const std::string& path2) {
@@ -84,8 +104,13 @@ private:
         return stat1.f_fsid.__val[0] == stat2.f_fsid.__val[0] && stat1.f_fsid.__val[1] == stat2.f_fsid.__val[1];
     }
 
-    std::atomic<size_t> _idx = 0;
     std::vector<DirPtr> _dirs;
+    std::mutex _mutex;
+#ifndef BE_TEST
+    Random _rand{(uint32_t)time(nullptr)};
+#else
+    Random _rand{0};
+#endif
 };
 
 } // namespace starrocks::spill

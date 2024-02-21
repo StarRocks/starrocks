@@ -21,6 +21,7 @@ import com.google.gson.JsonSerializer;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.persist.gson.GsonUtils;
 
+import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -34,6 +35,7 @@ import java.time.format.ResolverStyle;
 import java.time.format.SignStyle;
 import java.time.temporal.ChronoField;
 import java.time.temporal.TemporalAccessor;
+import java.time.temporal.WeekFields;
 
 public class DateUtils {
     // These are marked as deprecated because they don't support year 0000 parsing
@@ -89,19 +91,23 @@ public class DateUtils {
     private static final DateTimeFormatter STRICT_DATE_NO_SPLIT_FORMATTER =
             unixDatetimeStrictFormatter("%Y%m%e", true);
 
-    // isTwoDigit, withMs, withSplitT -> formatter
-    private static final DateTimeFormatter[][][] DATETIME_FORMATTERS = new DateTimeFormatter[2][2][2];
+    // isTwoDigit, withMs, withSplitT, withSec -> formatter
+    private static final DateTimeFormatter[][][][] DATETIME_FORMATTERS = new DateTimeFormatter[2][2][2][2];
 
     static {
-        // isTwoDigit, withMs, withSplitT -> formatter
-        DATETIME_FORMATTERS[0][0][0] = unixDatetimeStrictFormatter("%Y-%m-%e %H:%i:%s", false);
-        DATETIME_FORMATTERS[0][0][1] = unixDatetimeStrictFormatter("%Y-%m-%eT%H:%i:%s", false);
-        DATETIME_FORMATTERS[0][1][0] = unixDatetimeStrictFormatter("%Y-%m-%e %H:%i:%s.%f", false);
-        DATETIME_FORMATTERS[0][1][1] = unixDatetimeStrictFormatter("%Y-%m-%eT%H:%i:%s.%f", false);
-        DATETIME_FORMATTERS[1][0][0] = unixDatetimeStrictFormatter("%y-%m-%e %H:%i:%s", false);
-        DATETIME_FORMATTERS[1][0][1] = unixDatetimeStrictFormatter("%y-%m-%eT%H:%i:%s", false);
-        DATETIME_FORMATTERS[1][1][0] = unixDatetimeStrictFormatter("%y-%m-%e %H:%i:%s.%f", false);
-        DATETIME_FORMATTERS[1][1][1] = unixDatetimeStrictFormatter("%y-%m-%eT%H:%i:%s.%f", false);
+        // isTwoDigit, withMs, withSplitT, withSec -> formatter
+        DATETIME_FORMATTERS[0][0][0][0] = unixDatetimeStrictFormatter("%Y-%m-%e %H:%i", false);
+        DATETIME_FORMATTERS[0][0][0][1] = unixDatetimeStrictFormatter("%Y-%m-%e %H:%i:%s", false);
+        DATETIME_FORMATTERS[0][0][1][0] = unixDatetimeStrictFormatter("%Y-%m-%eT%H:%i", false);
+        DATETIME_FORMATTERS[0][0][1][1] = unixDatetimeStrictFormatter("%Y-%m-%eT%H:%i:%s", false);
+        DATETIME_FORMATTERS[0][1][0][1] = unixDatetimeStrictFormatter("%Y-%m-%e %H:%i:%s.%f", false);
+        DATETIME_FORMATTERS[0][1][1][1] = unixDatetimeStrictFormatter("%Y-%m-%eT%H:%i:%s.%f", false);
+        DATETIME_FORMATTERS[1][0][0][0] = unixDatetimeStrictFormatter("%y-%m-%e %H:%i", false);
+        DATETIME_FORMATTERS[1][0][0][1] = unixDatetimeStrictFormatter("%y-%m-%e %H:%i:%s", false);
+        DATETIME_FORMATTERS[1][0][1][0] = unixDatetimeStrictFormatter("%y-%m-%eT%H:%i", false);
+        DATETIME_FORMATTERS[1][0][1][1] = unixDatetimeStrictFormatter("%y-%m-%eT%H:%i:%s", false);
+        DATETIME_FORMATTERS[1][1][0][1] = unixDatetimeStrictFormatter("%y-%m-%e %H:%i:%s.%f", false);
+        DATETIME_FORMATTERS[1][1][1][1] = unixDatetimeStrictFormatter("%y-%m-%eT%H:%i:%s.%f", false);
     }
 
     public static String formatDateTimeUnix(LocalDateTime dateTime) {
@@ -126,9 +132,10 @@ public class DateUtils {
         if (str.contains(":")) {
             // datetime
             int isTwoDigit = str.split("-")[0].length() == 2 ? 1 : 0;
+            int withSec = str.split(":").length > 2 ? 1 : 0;
             int withMs = str.contains(".") ? 1 : 0;
             int withSplitT = str.contains("T") ? 1 : 0;
-            DateTimeFormatter formatter = DATETIME_FORMATTERS[isTwoDigit][withMs][withSplitT];
+            DateTimeFormatter formatter = DATETIME_FORMATTERS[isTwoDigit][withMs][withSplitT][withSec];
             return parseStringWithDefaultHSM(str, formatter);
         } else {
             // date
@@ -272,7 +279,8 @@ public class DateUtils {
                                 .appendValue(ChronoField.SECOND_OF_MINUTE, 2);
                         break;
                     case 'v': // %v Week (01..53), where Monday is the first day of the week; used with %x
-                        builder.appendValue(ChronoField.ALIGNED_WEEK_OF_YEAR, 2);
+                        final WeekFields weekFields = WeekFields.of(DayOfWeek.MONDAY, 4);
+                        builder.appendValue(weekFields.weekOfWeekBasedYear(), 2);
                         break;
                     case 'Y': // %Y Year, numeric, four digits
                         builder.appendValue(ChronoField.YEAR, 4);

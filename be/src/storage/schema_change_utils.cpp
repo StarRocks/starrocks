@@ -550,10 +550,7 @@ Status SchemaChangeUtils::parse_request(const TabletSchemaCSPtr& base_schema, co
     RETURN_IF_ERROR(parse_request_normal(base_schema, new_schema, chunk_changer, materialized_view_param_map,
                                          where_expr, has_delete_predicates, sc_sorting, sc_directly,
                                          generated_column_idxs));
-    if (base_schema->keys_type() == KeysType::PRIMARY_KEYS) {
-        return parse_request_for_pk(base_schema, new_schema, sc_sorting, sc_directly);
-    }
-    return Status::OK();
+    return parse_request_for_sort_key(base_schema, new_schema, sc_sorting, sc_directly);
 }
 
 Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_schema,
@@ -705,6 +702,10 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_sch
             } else if (new_column.has_bitmap_index() != ref_column.has_bitmap_index()) {
                 *sc_directly = true;
                 return Status::OK();
+            } else if (new_schema->has_index(new_column.unique_id(), GIN) !=
+                       base_schema->has_index(ref_column.unique_id(), GIN)) {
+                *sc_directly = true;
+                return Status::OK();
             }
         }
     }
@@ -720,9 +721,9 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_sch
     return Status::OK();
 }
 
-Status SchemaChangeUtils::parse_request_for_pk(const TabletSchemaCSPtr& base_schema,
-                                               const TabletSchemaCSPtr& new_schema, bool* sc_sorting,
-                                               bool* sc_directly) {
+Status SchemaChangeUtils::parse_request_for_sort_key(const TabletSchemaCSPtr& base_schema,
+                                                     const TabletSchemaCSPtr& new_schema, bool* sc_sorting,
+                                                     bool* sc_directly) {
     const auto& base_sort_key_idxes = base_schema->sort_key_idxes();
     const auto& new_sort_key_idxes = new_schema->sort_key_idxes();
     std::vector<int32_t> base_sort_key_unique_ids;

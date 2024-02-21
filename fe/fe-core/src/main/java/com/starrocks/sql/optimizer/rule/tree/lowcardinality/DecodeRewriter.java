@@ -187,8 +187,11 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         Projection projection = rewriteProjection(aggregate.getProjection(), inputStringRefs);
         PhysicalHashAggregateOperator op =
                 new PhysicalHashAggregateOperator(aggregate.getType(), groupBys, partitions, aggregations,
-                        aggregate.getSingleDistinctFunctionPos(), aggregate.isSplit(), aggregate.getLimit(), predicate,
+                        aggregate.isSplit(), aggregate.getLimit(), predicate,
                         projection);
+        op.setMergedLocalAgg(aggregate.isMergedLocalAgg());
+        op.setUseSortAgg(aggregate.isUseSortAgg());
+        op.setUsePerBucketOptmize(aggregate.isUsePerBucketOptmize());
         return rewriteOptExpression(optExpression, op, info.outputStringColumns);
     }
 
@@ -213,6 +216,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
             } else {
                 // compute expressions depend-on dict
                 for (ColumnRefOperator useRefs : context.globalDictsExpr.get(dictRef.getId()).getColumnRefs()) {
+
                     if (context.stringRefToDicts.containsKey(useRefs.getId())) {
                         dictMap.put(context.stringRefToDictRefMap.get(useRefs).getId(),
                                 context.stringRefToDicts.get(useRefs.getId()));
@@ -231,6 +235,10 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         HashDistributionSpec spec = (HashDistributionSpec) exchange.getDistributionSpec();
         List<DistributionCol> shuffledColumns = Lists.newArrayList();
         for (DistributionCol column : spec.getHashDistributionDesc().getDistributionCols()) {
+            if (!info.outputStringColumns.contains(column.getColId())) {
+                shuffledColumns.add(column);
+                continue;
+            }
             ColumnRefOperator stringRef = factory.getColumnRef(column.getColId());
             ColumnRefOperator dictRef = context.stringRefToDictRefMap.getOrDefault(stringRef, stringRef);
             shuffledColumns.add(new DistributionCol(dictRef.getId(), column.isNullStrict()));

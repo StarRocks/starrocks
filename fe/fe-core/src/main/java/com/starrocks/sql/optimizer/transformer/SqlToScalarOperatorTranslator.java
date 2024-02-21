@@ -291,6 +291,7 @@ public final class SqlToScalarOperatorTranslator {
             return super.visit(node, context);
 
         }
+
         @Override
         public ScalarOperator visitParameterExpr(Parameter node, Context context) {
             if (node.getExpr() == null) {
@@ -359,7 +360,8 @@ public final class SqlToScalarOperatorTranslator {
             Preconditions.checkState(node.getChildren().size() == 2);
             ScalarOperator collectionOperator = visit(node.getChild(0), context.clone(node));
             ScalarOperator subscriptOperator = visit(node.getChild(1), context.clone(node));
-            return new CollectionElementOperator(node.getType(), collectionOperator, subscriptOperator);
+            return new CollectionElementOperator(node.getType(), collectionOperator, subscriptOperator,
+                    node.isCheckIsOutOfBounds());
         }
 
         @Override
@@ -839,7 +841,7 @@ public final class SqlToScalarOperatorTranslator {
                     .stream()
                     .map(child -> visit(child, context.clone(node)))
                     .collect(Collectors.toList());
-            return new DictQueryOperator(arguments, node.getDictQueryExpr(), node.getFn());
+            return new DictQueryOperator(arguments, node.getDictQueryExpr(), node.getFn(), node.getType());
         }
 
         @Override
@@ -848,9 +850,9 @@ public final class SqlToScalarOperatorTranslator {
                     .stream()
                     .map(child -> visit(child, context.clone(node)))
                     .collect(Collectors.toList());
-            
+
             DictionaryGetOperator op = new DictionaryGetOperator(arguments, node.getType(), node.getDictionaryId(),
-                                                                 node.getDictionaryTxnId(), node.getKeySize());
+                    node.getDictionaryTxnId(), node.getKeySize());
             return op;
         }
     }
@@ -872,8 +874,9 @@ public final class SqlToScalarOperatorTranslator {
                 LOG.warn("Can't use IgnoreSlotVisitor with not analyzed slot ref: " + node.toSql());
                 throw unsupportedException("Can't use IgnoreSlotVisitor with not analyzed slot ref");
             }
+            String columnName = node.getColumnName() == null ? node.getLabel() : node.getColumnName();
             return new ColumnRefOperator(node.getSlotId().asInt(),
-                    node.getType(), node.getColumnName(), node.isNullable());
+                    node.getType(), columnName, node.isNullable());
         }
     }
 }

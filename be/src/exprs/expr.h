@@ -61,6 +61,9 @@ struct UserFunctionCacheEntry;
 class Chunk;
 class ColumnRef;
 class ColumnPredicateRewriter;
+class JITContext;
+class JITExpr;
+struct LLVMDatum;
 
 // This is the superclass of all expr evaluation nodes.
 class Expr {
@@ -98,6 +101,15 @@ public:
     void clear_children() { _children.clear(); }
     Expr* get_child(int i) const { return _children[i]; }
     int get_num_children() const { return _children.size(); }
+    int get_num_jit_children() const {
+        int num = 0;
+        if (is_compilable()) {
+            for (auto& child : _children) {
+                num += child->get_num_jit_children();
+            }
+        }
+        return num + 1;
+    };
 
     const TypeDescriptor& type() const { return _type; }
     const std::vector<Expr*>& children() const { return _children; }
@@ -169,6 +181,10 @@ public:
                                                         Expr* parent, int* node_idx, Expr** root_expr,
                                                         ExprContext** ctx, RuntimeState* state);
 
+    static Status create_tree_from_thrift_with_jit(ObjectPool* pool, const std::vector<TExprNode>& nodes, Expr* parent,
+                                                   int* node_idx, Expr** root_expr, ExprContext** ctx,
+                                                   RuntimeState* state);
+
     /// Convenience function for preparing multiple expr trees.
     [[nodiscard]] static Status prepare(const std::vector<ExprContext*>& ctxs, RuntimeState* state);
 
@@ -205,8 +221,32 @@ public:
     // TODO:(murphy) remove this unchecked evaluate
     ColumnPtr evaluate(ExprContext* context, Chunk* ptr) { return evaluate_checked(context, ptr).value(); }
 
-    // get the first column ref in expr
+    // Get the first column ref in expr.
     ColumnRef* get_column_ref();
+
+    StatusOr<LLVMDatum> generate_ir(ExprContext* context, JITContext* jit_ctx);
+
+    virtual StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx);
+
+    // Return true if this expression supports JIT compilation.
+    virtual bool is_compilable() const { return false; }
+
+    std::string jit_func_name() const;
+
+    virtual std::string jit_func_name_impl() const;
+
+    // This function will collect all uncompiled expressions in this expression tree.
+    // The uncompiled expressions are those expressions which are not supported by JIT, it will become the input of JIT function.
+    void get_uncompilable_exprs(std::vector<Expr*>& exprs);
+
+    // This method attempts to traverse the entire expression tree from the current expression downwards, seeking to replace expressions with JITExprs.
+    // This method searches from top to bottom for compilable expressions.
+    // Once a compilable expression is found, it skips over its compilable subexpressions and continues the search downwards.
+    // TODO(Yueyang): The algorithm is imperfect and may further be optimized in the future.
+    Status replace_compilable_exprs(Expr** expr, ObjectPool* pool);
+
+    // Establishes whether the current expression should undergo compilation.
+    bool should_compile() const;
 
 #if BE_TEST
     void set_type(TypeDescriptor t) { _type = t; }

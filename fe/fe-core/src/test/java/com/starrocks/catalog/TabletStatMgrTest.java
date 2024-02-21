@@ -106,7 +106,7 @@ public class TabletStatMgrTest {
         tabletsStats.put(tablet2Id, tablet2Stat);
 
         new Expectations() {{
-                GlobalStateMgr.getCurrentInvertedIndex();
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
                 result = invertedIndex;
             }};
 

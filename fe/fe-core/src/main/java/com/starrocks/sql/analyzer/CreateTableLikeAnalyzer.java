@@ -21,7 +21,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -44,7 +43,7 @@ public class CreateTableLikeAnalyzer {
         Table table = MetaUtils.getTable(existedDbTbl);
 
         List<String> createTableStmt = Lists.newArrayList();
-        GlobalStateMgr.getDdlStmt(stmt.getDbName(), table, createTableStmt, null, null, false, false);
+        AstToStringBuilder.getDdlStmt(stmt.getDbName(), table, createTableStmt, null, null, false, false);
         if (createTableStmt.isEmpty()) {
             ErrorReport.reportSemanticException(ErrorCode.ERROR_CREATE_TABLE_LIKE_EMPTY, "CREATE");
         }

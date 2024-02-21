@@ -32,7 +32,7 @@ public class LowCardinalityRewriteRule implements TreeRewriteRule {
         ColumnRefFactory factory = taskContext.getOptimizerContext().getColumnRefFactory();
         DecodeContext context = new DecodeContext(factory);
         {
-            DecodeCollector collector = new DecodeCollector();
+            DecodeCollector collector = new DecodeCollector(session);
             collector.collect(root, context);
         }
         DecodeRewriter rewriter = new DecodeRewriter(factory, context);

@@ -17,7 +17,6 @@ package com.starrocks.sql.plan;
 import com.starrocks.common.DdlException;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.ScanNode;
-import com.starrocks.server.GlobalStateMgr;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -29,7 +28,7 @@ public class HivePartitionPruneTest extends ConnectorPlanTestBase {
     public void setUp() {
         super.setUp();
         try {
-            GlobalStateMgr.getCurrentState().changeCatalogDb(connectContext, "hive0.partitioned_db");
+            connectContext.changeCatalogDb("hive0.partitioned_db");
         } catch (DdlException e) {
             throw new RuntimeException(e);
         }

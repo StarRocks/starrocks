@@ -24,6 +24,7 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/test_util.h"
+#include "storage/lake/versioned_tablet.h"
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
@@ -34,7 +35,7 @@ namespace starrocks::lake {
 class LocalPkIndexManagerTest : public TestBase {
 public:
     LocalPkIndexManagerTest() : TestBase(kTestGroupPath) {
-        _tablet_metadata = std::make_unique<TabletMetadata>();
+        _tablet_metadata = std::make_shared<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
         _tablet_metadata->set_next_rowset_id(1);
@@ -85,7 +86,7 @@ public:
 protected:
     constexpr static const char* const kTestGroupPath = "test_local_pk_index_gc";
 
-    std::unique_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
     int64_t _partition_id = next_id();
@@ -106,8 +107,8 @@ TEST_F(LocalPkIndexManagerTest, test_gc) {
     auto rowset_txn_meta = std::make_unique<RowsetTxnMetaPB>();
 
     int64_t txn_id = next_id();
-    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
     std::shared_ptr<const TabletSchema> const_schema = _tablet_schema;
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
     ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
     ASSERT_OK(writer->open());
 
@@ -121,7 +122,7 @@ TEST_F(LocalPkIndexManagerTest, test_gc) {
     txn_log->set_txn_id(txn_id);
     auto op_write = txn_log->mutable_op_write();
     for (auto& f : writer->files()) {
-        op_write->mutable_rowset()->add_segments(std::move(f));
+        op_write->mutable_rowset()->add_segments(std::move(f.path));
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -161,7 +162,7 @@ TEST_F(LocalPkIndexManagerTest, test_gc) {
     txn_log->set_txn_id(txn_id);
     op_write = txn_log->mutable_op_write();
     for (auto& f : writer->files()) {
-        op_write->mutable_rowset()->add_segments(std::move(f));
+        op_write->mutable_rowset()->add_segments(std::move(f.path));
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -189,8 +190,8 @@ TEST_F(LocalPkIndexManagerTest, test_evict) {
     auto rowset_txn_meta = std::make_unique<RowsetTxnMetaPB>();
 
     int64_t txn_id = next_id();
-    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
     std::shared_ptr<const TabletSchema> const_schema = _tablet_schema;
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
     ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
     ASSERT_OK(writer->open());
 
@@ -204,7 +205,7 @@ TEST_F(LocalPkIndexManagerTest, test_evict) {
     txn_log->set_txn_id(txn_id);
     auto op_write = txn_log->mutable_op_write();
     for (auto& f : writer->files()) {
-        op_write->mutable_rowset()->add_segments(std::move(f));
+        op_write->mutable_rowset()->add_segments(std::move(f.path));
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -246,7 +247,7 @@ TEST_F(LocalPkIndexManagerTest, test_evict) {
     txn_log->set_txn_id(txn_id);
     op_write = txn_log->mutable_op_write();
     for (auto& f : writer->files()) {
-        op_write->mutable_rowset()->add_segments(std::move(f));
+        op_write->mutable_rowset()->add_segments(std::move(f.path));
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());

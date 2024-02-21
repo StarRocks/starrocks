@@ -40,6 +40,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import org.apache.avro.Schema;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
@@ -56,6 +57,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -145,6 +147,7 @@ public class HiveMetastoreApiConverter {
                 .setTableLocation(toTableLocation(table.getSd(), table.getParameters()))
                 .setProperties(toHiveProperties(table,
                         HiveStorageFormat.get(fromHdfsInputFormatClass(table.getSd().getInputFormat()).name())))
+                .setSerdeProperties(toSerDeProperties(table))
                 .setStorageFormat(
                         HiveStorageFormat.get(fromHdfsInputFormatClass(table.getSd().getInputFormat()).name()))
                 .setCreateTime(table.getCreateTime())
@@ -207,7 +210,8 @@ public class HiveMetastoreApiConverter {
     }
 
     public static FieldSchema toMetastoreApiFieldSchema(Column column) {
-        return new FieldSchema(column.getName(), ColumnTypeConverter.toHiveType(column.getType()), column.getComment());
+        String colComment = StringUtils.defaultIfBlank(column.getComment(), null);
+        return new FieldSchema(column.getName(), ColumnTypeConverter.toHiveType(column.getType()), colComment);
     }
 
     public static Map<String, String> toApiTableProperties(HiveTable table) {
@@ -215,7 +219,9 @@ public class HiveMetastoreApiConverter {
 
         tableProperties.put(ROW_COUNT, "0");
         tableProperties.put(TOTAL_SIZE, "0");
-        tableProperties.put("comment", table.getComment());
+        if (!Strings.isNullOrEmpty(table.getComment())) {
+            tableProperties.put("comment", table.getComment());
+        }
         tableProperties.put("starrocks_version", Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH);
         if (ConnectContext.get() != null && ConnectContext.get().getQueryId() != null) {
             tableProperties.put(STARROCKS_QUERY_ID, ConnectContext.get().getQueryId().toString());
@@ -237,12 +243,12 @@ public class HiveMetastoreApiConverter {
                     TrinoViewDefinition.class);
             hiveViewText = trinoViewDefinition.getOriginalSql();
             hiveView = new HiveView(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName,
-                    table.getTableName(), toFullSchemasForTrinoView(table, trinoViewDefinition), hiveViewText,
-                    HiveView.Type.Trino);
+                    table.getDbName(), table.getTableName(), toFullSchemasForTrinoView(table, trinoViewDefinition),
+                    hiveViewText, HiveView.Type.Trino);
         } else {
             hiveView = new HiveView(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName,
-                    table.getTableName(), toFullSchemasForHiveTable(table), table.getViewExpandedText(),
-                    HiveView.Type.Hive);
+                    table.getDbName(), table.getTableName(), toFullSchemasForHiveTable(table),
+                    table.getViewExpandedText(), HiveView.Type.Hive);
         }
 
         try {
@@ -363,18 +369,29 @@ public class HiveMetastoreApiConverter {
         return hiveProperties;
     }
 
+    public static Map<String, String> toSerDeProperties(Table table) {
+        Map<String, String> serdeProperties = new HashMap<>();
+        if (table.getSd() != null && table.getSd().getSerdeInfo() != null &&
+                table.getSd().getSerdeInfo().getParameters() != null) {
+            serdeProperties = table.getSd().getSerdeInfo().getParameters();
+        }
+        return serdeProperties;
+    }
+
     public static List<Column> toFullSchemasForHiveTable(Table table) {
         List<FieldSchema> fieldSchemas = getAllFieldSchemas(table);
         List<Column> fullSchema = Lists.newArrayList();
         for (FieldSchema fieldSchema : fieldSchemas) {
             Type type;
+            String comment = "";
             try {
+                comment = fieldSchema.getComment();
                 type = ColumnTypeConverter.fromHiveType(fieldSchema.getType());
             } catch (InternalError | Exception e) {
                 LOG.error("Failed to convert hive type {} on {}", fieldSchema.getType(), table.getTableName(), e);
                 type = Type.UNKNOWN_TYPE;
             }
-            Column column = new Column(fieldSchema.getName(), type, true);
+            Column column = new Column(fieldSchema.getName(), type, true, comment);
             fullSchema.add(column);
         }
         return fullSchema;

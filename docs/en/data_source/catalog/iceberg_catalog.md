@@ -33,7 +33,6 @@ To ensure successful SQL workloads on your Iceberg cluster, your StarRocks clust
   - Parquet files support the following compression formats: SNAPPY, LZ4, ZSTD, GZIP, and NO_COMPRESSION.
   - ORC files support the following compression formats: ZLIB, SNAPPY, LZO, LZ4, ZSTD, and NO_COMPRESSION.
 
-- Iceberg catalogs support v1 tables, and support ORC-formatted v2 tables from StarRocks v3.0 onwards.
 - Iceberg catalogs support v1 tables. Additionally, Iceberg catalogs support ORC-formatted v2 tables from StarRocks v3.0 onwards and support Parquet-formatted v2 tables from StarRocks v3.1 onwards.
 
 ## Integration preparation
@@ -423,16 +422,16 @@ If you choose Blob Storage as storage for your Iceberg cluster, take one of the 
 - To choose the Shared Key authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "azure.blob.storage_account" = "<blob_storage_account_name>",
-  "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
+  "azure.blob.storage_account" = "<storage_account_name>",
+  "azure.blob.shared_key" = "<storage_account_shared_key>"
   ```
 
 - To choose the SAS Token authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "azure.blob.storage_account" = "<blob_storage_account_name>",
-  "azure.blob.container" = "<blob_container_name>",
-  "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
+  "azure.blob.storage_account" = "<storage_account_name>",
+  "azure.blob.container" = "<container_name>",
+  "azure.blob.sas_token" = "<storage_account_SAS_token>"
   ```
 
 `StorageCredentialParams` for Microsoft Azure:
@@ -500,7 +499,7 @@ If you choose Data Lake Storage Gen2 as storage for your Iceberg cluster, take o
 
   ```SQL
   "azure.adls2.storage_account" = "<storage_account_name>",
-  "azure.adls2.shared_key" = "<shared_key>"
+  "azure.adls2.shared_key" = "<storage_account_shared_key>"
   ```
 
   Or:

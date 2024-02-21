@@ -95,7 +95,7 @@ public class BDBJEJournalSystem implements JournalSystem {
             bdbjeJournal.open();
 
             long replayStartTime = System.currentTimeMillis();
-            replayTo(JournalCursor.CUROSR_END_KEY);
+            replayTo(JournalCursor.CURSOR_END_KEY);
             long replayEndTime = System.currentTimeMillis();
             LOG.info("finish star manager replay in " + (replayEndTime - replayStartTime) + " msec.");
 

@@ -76,7 +76,7 @@ public class PluginMgrTest {
     public void testLoadPluginFail() {
         try {
 
-            PluginMgr pluginMgr = GlobalStateMgr.getCurrentPluginMgr();
+            PluginMgr pluginMgr = GlobalStateMgr.getCurrentState().getPluginMgr();
             PluginInfo info = new PluginInfo();
             info.name = "plugin-name";
             info.type = PluginType.AUDIT;

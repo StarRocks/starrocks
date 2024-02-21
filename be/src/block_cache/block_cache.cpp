@@ -80,7 +80,9 @@ Status BlockCache::init(const CacheOptions& options) {
         LOG(ERROR) << "unsupported block cache engine: " << options.engine;
         return Status::NotSupported("unsupported block cache engine");
     }
-    return _kv_cache->init(options);
+    RETURN_IF_ERROR(_kv_cache->init(options));
+    _initialized.store(true, std::memory_order_relaxed);
+    return Status::OK();
 }
 
 Status BlockCache::write_buffer(const CacheKey& cache_key, off_t offset, const IOBuffer& buffer,
@@ -166,13 +168,14 @@ void BlockCache::record_read_cache(size_t size, int64_t lateny_us) {
     _kv_cache->record_read_cache(size, lateny_us);
 }
 
-const DataCacheMetrics BlockCache::cache_metrics() const {
-    return _kv_cache->cache_metrics();
+const DataCacheMetrics BlockCache::cache_metrics(int level) const {
+    return _kv_cache->cache_metrics(level);
 }
 
 Status BlockCache::shutdown() {
     Status st = _kv_cache->shutdown();
     _kv_cache = nullptr;
+    _initialized.store(false, std::memory_order_relaxed);
     return st;
 }
 

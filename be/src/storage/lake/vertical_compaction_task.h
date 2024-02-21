@@ -39,7 +39,7 @@ public:
 
     ~VerticalCompactionTask() override = default;
 
-    Status execute(Progress* progress, CancelFunc cancel_func) override;
+    Status execute(Progress* progress, CancelFunc cancel_func, ThreadPool* flush_pool = nullptr) override;
 
 private:
     StatusOr<int32_t> calculate_chunk_size_for_column_group(const std::vector<uint32_t>& column_group);

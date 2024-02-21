@@ -372,6 +372,8 @@ public:
 
     Status delete_file(const std::string& path) override;
 
+    Status delete_files(const std::vector<std::string>& paths) override;
+
     Status create_dir(const std::string& dirname) override;
 
     Status create_dir_if_missing(const std::string& dirname, bool* created) override;
@@ -532,7 +534,12 @@ Status S3FileSystem::iterate_dir(const std::string& dir, const std::function<boo
     Aws::S3::Model::ListObjectsV2Result result;
     request.WithBucket(uri.bucket()).WithPrefix(uri.key()).WithDelimiter("/");
 #ifdef BE_TEST
-    request.SetMaxKeys(1);
+    // NOTE: set max-keys to a small number in BE_TEST mode to force the following list/delete operations
+    // iterating more than one loop, and hence resulting a better code coverage.
+    //
+    // Don't set max-keys to 1, to avoid hitting minio so-called optimization/feature or whatever.
+    // Refer https://github.com/minio/minio/pull/13000 for details.
+    request.SetMaxKeys(2);
 #endif
     do {
         auto outcome = client->ListObjectsV2(request);
@@ -735,6 +742,66 @@ Status S3FileSystem::delete_file(const std::string& path) {
     }
 }
 
+Status S3FileSystem::delete_files(const std::vector<std::string>& paths) {
+    if (paths.empty()) {
+        return Status::OK();
+    }
+
+    std::vector<std::string> keys;
+    keys.reserve(paths.size());
+
+    for (const auto& path : paths) {
+        S3URI uri;
+        if (!uri.parse(path)) {
+            return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", path));
+        }
+        if (UNLIKELY(!uri.key().empty() && uri.key().back() == '/')) {
+            return Status::InvalidArgument(fmt::format("object key ended with slash: {}", path));
+        }
+        keys.emplace_back(std::move(uri.key()));
+    }
+
+    S3URI uri;
+    (void)uri.parse(paths[0]);
+
+    int max_delete_keys = 1000;
+    size_t keys_size = keys.size();
+    size_t total_deleted = 0;
+    Aws::Vector<Aws::S3::Model::ObjectIdentifier> objects;
+    objects.reserve(std::min<size_t>(keys_size, max_delete_keys));
+
+    Aws::S3::Model::DeleteObjectsRequest delete_request;
+    delete_request.SetBucket(uri.bucket());
+    auto client = new_s3client(uri, _options);
+    while (total_deleted < keys_size) {
+        int count = 0;
+        for (size_t i = total_deleted; i < keys_size && i < total_deleted + max_delete_keys; i++) {
+            objects.emplace_back().SetKey(std::move(keys[i]));
+            count++;
+        }
+        Aws::S3::Model::Delete d;
+        d.WithObjects(std::move(objects)).WithQuiet(true);
+
+        delete_request.SetDelete(std::move(d));
+
+        auto delete_outcome = client->DeleteObjects(delete_request);
+        if (!delete_outcome.IsSuccess()) {
+            return to_status(delete_outcome.GetError().GetErrorType(), delete_outcome.GetError().GetMessage());
+        }
+        if (!delete_outcome.GetResult().GetErrors().empty()) {
+            for (const auto& error : delete_outcome.GetResult().GetErrors()) {
+                LOG(WARNING) << "Delete objects " << error.GetKey() << " error: " << error.GetMessage();
+            }
+            // Return the first error message to caller
+            const auto& e = delete_outcome.GetResult().GetErrors()[0];
+            return Status::InternalError(fmt::format("Delete objects error: {}", e.GetMessage()));
+        }
+        total_deleted += count;
+        objects.clear();
+    }
+    return Status::OK();
+}
+
 Status S3FileSystem::delete_dir(const std::string& dirname) {
     S3URI uri;
     if (!uri.parse(dirname)) {
@@ -803,7 +870,12 @@ Status S3FileSystem::delete_dir_recursive(const std::string& dirname) {
     Aws::S3::Model::ListObjectsV2Result result;
     request.WithBucket(uri.bucket()).WithPrefix(uri.key());
 #ifdef BE_TEST
-    request.SetMaxKeys(1);
+    // NOTE: set max-keys to a small number in BE_TEST mode to force the following list/delete operations
+    // iterating more than one loop, and hence resulting a better code coverage.
+    //
+    // Don't set max-keys to 1, to avoid hitting minio so-called optimization/feature or whatever.
+    // Refer https://github.com/minio/minio/pull/13000 for details.
+    request.SetMaxKeys(2);
 #endif
 
     Aws::S3::Model::DeleteObjectsRequest delete_request;

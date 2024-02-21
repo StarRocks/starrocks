@@ -1877,10 +1877,10 @@ TEST_F(AggregateTest, test_array_aggV2) {
         array_agg_func->update_batch_single_state(local_ctx.get(), int_column->size(), raw_columns.data(),
                                                   state->state());
         auto agg_state = (ArrayAggAggregateStateV2*)(state->state());
-        ASSERT_EQ(agg_state->data_columns->size(), 2);
+        ASSERT_EQ(agg_state->data_columns.size(), 2);
         // data_columns in state are nullable
-        ASSERT_EQ((*agg_state->data_columns)[0]->debug_string(), char_column->debug_string());
-        ASSERT_EQ((*agg_state->data_columns)[1]->debug_string(), int_column->debug_string());
+        ASSERT_EQ((agg_state->data_columns)[0]->debug_string(), char_column->debug_string());
+        ASSERT_EQ((agg_state->data_columns)[1]->debug_string(), int_column->debug_string());
 
         TypeDescriptor type_array_char;
         type_array_char.type = LogicalType::TYPE_ARRAY;
@@ -1901,6 +1901,10 @@ TEST_F(AggregateTest, test_array_aggV2) {
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
                          "[{vchar:[NULL,'bcd','cdrdfe',NULL,'esfg'],int:[NULL,9,NULL,7,6]}]"),
                   0);
+
+        state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
+        array_agg_func->merge_batch_single_state(local_ctx.get(), state->state(), res_struct_col.get(), 0,
+                                                 res_struct_col->size());
 
         res_struct_col->resize(0);
         array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
@@ -1944,10 +1948,10 @@ TEST_F(AggregateTest, test_array_aggV2) {
         array_agg_func->update_batch_single_state(local_ctx.get(), int_column->size(), raw_columns.data(),
                                                   state->state());
         auto agg_state = (ArrayAggAggregateStateV2*)(state->state());
-        ASSERT_EQ(agg_state->data_columns->size(), 2);
+        ASSERT_EQ(agg_state->data_columns.size(), 2);
         // data_columns in state are nullable
-        ASSERT_EQ((*agg_state->data_columns)[0]->debug_string(), char_column->debug_string());
-        ASSERT_EQ((*agg_state->data_columns)[1]->debug_string(), int_column->debug_string());
+        ASSERT_EQ((agg_state->data_columns)[0]->debug_string(), char_column->debug_string());
+        ASSERT_EQ((agg_state->data_columns)[1]->debug_string(), int_column->debug_string());
 
         TypeDescriptor type_array_char;
         type_array_char.type = LogicalType::TYPE_ARRAY;
@@ -1968,6 +1972,10 @@ TEST_F(AggregateTest, test_array_aggV2) {
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
                          "[{vchar:['','bcd','cdrdfe','Datum()','esfg'],int:[2,9,5,7,6]}]"),
                   0);
+
+        state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
+        array_agg_func->merge_batch_single_state(local_ctx.get(), state->state(), res_struct_col.get(), 0,
+                                                 res_struct_col->size());
 
         res_struct_col->resize(0);
         array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
@@ -1995,12 +2003,12 @@ TEST_F(AggregateTest, test_array_aggV2) {
         array_agg_func->update_batch_single_state(local_ctx.get(), int_column->size(), raw_columns.data(),
                                                   state->state());
         auto agg_state = (ArrayAggAggregateStateV2*)(state->state());
-        ASSERT_EQ(agg_state->data_columns->size(), 2);
+        ASSERT_EQ(agg_state->data_columns.size(), 2);
         // data_columns in state are nullable
-        ASSERT_EQ(strcmp((*agg_state->data_columns)[0]->debug_string().c_str(),
+        ASSERT_EQ(strcmp((agg_state->data_columns)[0]->debug_string().c_str(),
                          "['', 'bcd', 'cdrdfe', 'Datum()', 'esfg', NULL, NULL]"),
                   0);
-        ASSERT_EQ(strcmp((*agg_state->data_columns)[1]->debug_string().c_str(), "[2, 9, 5, 7, 6, 3, 3]"), 0);
+        ASSERT_EQ(strcmp((agg_state->data_columns)[1]->debug_string().c_str(), "[2, 9, 5, 7, 6, 3, 3]"), 0);
 
         TypeDescriptor type_array_char;
         type_array_char.type = LogicalType::TYPE_ARRAY;
@@ -2021,6 +2029,10 @@ TEST_F(AggregateTest, test_array_aggV2) {
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
                          "[{vchar:['','bcd','cdrdfe','Datum()','esfg',NULL,NULL],int:[2,9,5,7,6,3,3]}]"),
                   0);
+
+        state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
+        array_agg_func->merge_batch_single_state(local_ctx.get(), state->state(), res_struct_col.get(), 0,
+                                                 res_struct_col->size());
 
         res_struct_col->resize(0);
         array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
@@ -2050,10 +2062,10 @@ TEST_F(AggregateTest, test_array_aggV2) {
         array_agg_func->update_batch_single_state(local_ctx.get(), int_column->size(), raw_columns.data(),
                                                   state->state());
         auto agg_state = (ArrayAggAggregateStateV2*)(state->state());
-        ASSERT_EQ(agg_state->data_columns->size(), 2);
+        ASSERT_EQ(agg_state->data_columns.size(), 2);
         // data_columns in state are nullable
-        ASSERT_EQ(strcmp((*agg_state->data_columns)[0]->debug_string().c_str(), "[NULL, NULL]"), 0);
-        ASSERT_EQ(strcmp((*agg_state->data_columns)[1]->debug_string().c_str(), "[3, 3]"), 0);
+        ASSERT_EQ(strcmp((agg_state->data_columns)[0]->debug_string().c_str(), "[NULL, NULL]"), 0);
+        ASSERT_EQ(strcmp((agg_state->data_columns)[1]->debug_string().c_str(), "[3, 3]"), 0);
 
         TypeDescriptor type_array_char;
         type_array_char.type = LogicalType::TYPE_ARRAY;
@@ -2072,6 +2084,10 @@ TEST_F(AggregateTest, test_array_aggV2) {
         auto res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
         array_agg_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(), "[{vchar:[NULL,NULL],int:[3,3]}]"), 0);
+
+        state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
+        array_agg_func->merge_batch_single_state(local_ctx.get(), state->state(), res_struct_col.get(), 0,
+                                                 res_struct_col->size());
 
         res_struct_col->resize(0);
         array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
@@ -2109,12 +2125,12 @@ TEST_F(AggregateTest, test_array_aggV2) {
         array_agg_func->update_batch_single_state(local_ctx.get(), int_column->size(), raw_columns.data(),
                                                   state->state());
         auto agg_state = (ArrayAggAggregateStateV2*)(state->state());
-        ASSERT_EQ(agg_state->data_columns->size(), 2);
+        ASSERT_EQ(agg_state->data_columns.size(), 2);
         // data_columns in state are nullable
-        ASSERT_EQ(strcmp((*agg_state->data_columns)[0]->debug_string().c_str(),
+        ASSERT_EQ(strcmp((agg_state->data_columns)[0]->debug_string().c_str(),
                          "[NULL, NULL, NULL, 'bcd', 'cdrdfe', NULL, 'esfg']"),
                   0);
-        ASSERT_EQ(strcmp((*agg_state->data_columns)[1]->debug_string().c_str(), "[3, 3, NULL, 9, NULL, 7, 6]"), 0);
+        ASSERT_EQ(strcmp((agg_state->data_columns)[1]->debug_string().c_str(), "[3, 3, NULL, 9, NULL, 7, 6]"), 0);
 
         TypeDescriptor type_array_char;
         type_array_char.type = LogicalType::TYPE_ARRAY;
@@ -2135,6 +2151,10 @@ TEST_F(AggregateTest, test_array_aggV2) {
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
                          "[{vchar:[NULL,NULL,NULL,'bcd','cdrdfe',NULL,'esfg'],int:[3,3,NULL,9,NULL,7,6]}]"),
                   0);
+
+        state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
+        array_agg_func->merge_batch_single_state(local_ctx.get(), state->state(), res_struct_col.get(), 0,
+                                                 res_struct_col->size());
 
         res_struct_col->resize(0);
         array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
@@ -2178,10 +2198,10 @@ TEST_F(AggregateTest, test_array_aggV2) {
         array_agg_func->update_batch_single_state(local_ctx.get(), int_column->size(), raw_columns.data(),
                                                   state->state());
         auto agg_state = (ArrayAggAggregateStateV2*)(state->state());
-        ASSERT_EQ(agg_state->data_columns->size(), 2);
+        ASSERT_EQ(agg_state->data_columns.size(), 2);
         // data_columns in state are nullable
-        ASSERT_EQ((*agg_state->data_columns)[0]->debug_string(), char_column->debug_string());
-        ASSERT_EQ((*agg_state->data_columns)[1]->debug_string(), int_column->debug_string());
+        ASSERT_EQ((agg_state->data_columns)[0]->debug_string(), char_column->debug_string());
+        ASSERT_EQ((agg_state->data_columns)[1]->debug_string(), int_column->debug_string());
 
         TypeDescriptor type_array_char;
         type_array_char.type = LogicalType::TYPE_ARRAY;
@@ -2203,6 +2223,9 @@ TEST_F(AggregateTest, test_array_aggV2) {
                          "[{vchar:[NULL,'bcd','cdrdfe',NULL,'esfg'],int:[NULL,9,NULL,7,6]}]"),
                   0);
 
+        state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
+        array_agg_func->merge_batch_single_state(local_ctx.get(), state->state(), res_struct_col.get(), 0,
+                                                 res_struct_col->size());
         res_struct_col->resize(0);
         array_agg_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
         ASSERT_EQ(strcmp(res_struct_col->debug_string().c_str(),
@@ -2294,6 +2317,10 @@ TEST_F(AggregateTest, test_group_concatV2) {
         gc_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
         ASSERT_EQ(res_struct_col->debug_string(), "[{vchar:['bcd','cdrdfe','esfg'],sep:[',',',',','],int:[9,NULL,6]}]");
 
+        state = ManagedAggrState::create(local_ctx.get(), gc_func);
+        gc_func->merge_batch_single_state(local_ctx.get(), state->state(), res_struct_col.get(), 0,
+                                          res_struct_col->size());
+
         res_struct_col->resize(0);
         gc_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
         ASSERT_EQ(res_struct_col->debug_string(),
@@ -2365,6 +2392,10 @@ TEST_F(AggregateTest, test_group_concatV2) {
         ASSERT_EQ(res_struct_col->debug_string(),
                   "[{vchar:['','bcd','cdrdfe','Datum()','esfg'],sep:[',',',',',',',',','],int:[2,9,5,7,6]}]");
 
+        state = ManagedAggrState::create(local_ctx.get(), gc_func);
+        gc_func->merge_batch_single_state(local_ctx.get(), state->state(), res_struct_col.get(), 0,
+                                          res_struct_col->size());
+
         res_struct_col->resize(0);
         gc_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
         ASSERT_EQ(res_struct_col->debug_string(),
@@ -2419,6 +2450,10 @@ TEST_F(AggregateTest, test_group_concatV2) {
         auto res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
         gc_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
         ASSERT_EQ(res_struct_col->size(), 1); // empty also need output
+
+        state = ManagedAggrState::create(local_ctx.get(), gc_func);
+        gc_func->merge_batch_single_state(local_ctx.get(), state->state(), res_struct_col.get(), 0,
+                                          res_struct_col->size());
 
         res_struct_col->resize(0);
         gc_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);
@@ -2490,6 +2525,10 @@ TEST_F(AggregateTest, test_group_concatV2) {
         auto res_struct_col = ColumnHelper::create_column(type_struct_char_int, true);
         gc_func->serialize_to_column(local_ctx.get(), state->state(), res_struct_col.get());
         ASSERT_EQ(res_struct_col->debug_string(), "[{vchar:['bcd','cdrdfe','esfg'],sep:[',',',',','],int:[9,NULL,6]}]");
+
+        state = ManagedAggrState::create(local_ctx.get(), gc_func);
+        gc_func->merge_batch_single_state(local_ctx.get(), state->state(), res_struct_col.get(), 0,
+                                          res_struct_col->size());
 
         res_struct_col->resize(0);
         gc_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), &res_struct_col);

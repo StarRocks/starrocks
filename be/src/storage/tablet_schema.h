@@ -41,6 +41,7 @@
 
 #include "column/chunk.h"
 #include "gen_cpp/Descriptors_types.h"
+#include "gen_cpp/descriptors.pb.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/aggregate_type.h"
 #include "storage/olap_define.h"
@@ -261,6 +262,7 @@ public:
 
     // Caller should always check the returned value with `invalid_id()`.
     SchemaId id() const { return _id; }
+    void set_id(SchemaId id) { _id = id; }
     size_t estimate_row_size(size_t variable_len) const;
     int32_t field_index(int32_t col_unique_id) const;
     size_t field_index(std::string_view field_name) const;
@@ -316,7 +318,7 @@ public:
 
     Schema* schema() const;
 
-    Status build_current_tablet_schema(int64_t index_id, int32_t version, const POlapTableIndexSchema& index,
+    Status build_current_tablet_schema(int64_t schema_id, int32_t version, const POlapTableColumnParam& column_param,
                                        const std::shared_ptr<const TabletSchema>& ori_tablet_schema);
 
     const std::vector<TabletIndex>* indexes() const { return &_indexes; }

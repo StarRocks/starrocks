@@ -32,7 +32,7 @@ The [storage-compute separation architecture](./Architecture.md) was introduced 
 
 ![shared-data](../assets/share_data_arch.png)
 
-In storage-compute separation mode, computing and storage are decoupled and can be scaled independently, which elimates the cost that long exists in the storage-compute coupled mode where storage has to be scaled anytime users want to add computing nodes. In addition, computing can dynamically scale whithin seconds, improving resource utilizatio, especially when there are noticeable traffic peaks and valleys.
+In storage-compute separation mode, computing and storage are decoupled and can be scaled independently, which eliminates the cost that long exists in the storage-compute coupled mode where storage has to be scaled anytime users want to add computing nodes. In addition, computing can dynamically scale within seconds, improving resource utilization, especially when there are noticeable traffic peaks and valleys.
 
 The storage layer leverages the nearly unlimited capacity and high reliability of object storage to achieve massive data storage and data persistence. StarRocks can work with various object storage systems such as AWS S3, Google Cloud Storage, Azure Blob Storage, HDFS, and other S3-compatible storage like MinIO.
 

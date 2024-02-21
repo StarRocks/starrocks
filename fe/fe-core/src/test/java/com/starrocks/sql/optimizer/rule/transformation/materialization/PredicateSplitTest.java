@@ -104,26 +104,9 @@ public class PredicateSplitTest {
                                         BinaryPredicateOperator.eq(b, ConstantOperator.createInt(7))
                                 )
                         ));
-                ScalarOperator result = CompoundPredicateOperator.and(
-                        CompoundPredicateOperator.or(
-                                CompoundPredicateOperator.or(
-                                        BinaryPredicateOperator.lt(a, ConstantOperator.createInt(0)),
-                                        BinaryPredicateOperator.gt(a, ConstantOperator.createInt(0))),
-                                CompoundPredicateOperator.or(
-                                        BinaryPredicateOperator.lt(b, ConstantOperator.createInt(3)),
-                                        BinaryPredicateOperator.gt(b, ConstantOperator.createInt(3)))
-                        ),
-                        CompoundPredicateOperator.or(
-                                CompoundPredicateOperator.or(
-                                        BinaryPredicateOperator.lt(a, ConstantOperator.createInt(4)),
-                                        BinaryPredicateOperator.gt(a, ConstantOperator.createInt(4))),
-                                CompoundPredicateOperator.or(
-                                        BinaryPredicateOperator.lt(b, ConstantOperator.createInt(7)),
-                                        BinaryPredicateOperator.gt(b, ConstantOperator.createInt(7)))
-                        )
-                );
                 PredicateSplit predicateSplit = PredicateSplit.splitPredicate(predicate);
-                Assert.assertEquals(result, predicateSplit.getRangePredicates());
+                Assert.assertEquals("0: a != 0 OR 1: b != 3 AND 0: a != 4 OR 1: b != 7",
+                        predicateSplit.getRangePredicates().toString());
             }
         }
 
@@ -140,26 +123,9 @@ public class PredicateSplitTest {
                                         BinaryPredicateOperator.eq(b, ConstantOperator.createInt(7))
                                 )
                         ));
-                ScalarOperator result = CompoundPredicateOperator.or(
-                        CompoundPredicateOperator.and(
-                                CompoundPredicateOperator.or(
-                                        BinaryPredicateOperator.lt(a, ConstantOperator.createInt(0)),
-                                        BinaryPredicateOperator.gt(a, ConstantOperator.createInt(0))),
-                                CompoundPredicateOperator.or(
-                                        BinaryPredicateOperator.lt(b, ConstantOperator.createInt(3)),
-                                        BinaryPredicateOperator.gt(b, ConstantOperator.createInt(3)))
-                        ),
-                        CompoundPredicateOperator.and(
-                                CompoundPredicateOperator.or(
-                                        BinaryPredicateOperator.lt(a, ConstantOperator.createInt(4)),
-                                        BinaryPredicateOperator.gt(a, ConstantOperator.createInt(4))),
-                                CompoundPredicateOperator.or(
-                                        BinaryPredicateOperator.lt(b, ConstantOperator.createInt(7)),
-                                        BinaryPredicateOperator.gt(b, ConstantOperator.createInt(7)))
-                        )
-                );
                 PredicateSplit predicateSplit = PredicateSplit.splitPredicate(predicate);
-                Assert.assertEquals(result, predicateSplit.getRangePredicates());
+                Assert.assertEquals("0: a != 0 AND 1: b != 3 OR 0: a != 4 AND 1: b != 7",
+                        predicateSplit.getRangePredicates().toString());
             }
         }
 
@@ -168,13 +134,8 @@ public class PredicateSplitTest {
 
             PredicateSplit predicateSplit = PredicateSplit.splitPredicate(predicate);
             Assert.assertEquals(equalPredicate, predicateSplit.getEqualPredicates());
-            ScalarOperator expectRange = CompoundPredicateOperator.and(
-                    rangePredicate,
-                    CompoundPredicateOperator.or(
-                        BinaryPredicateOperator.lt(b, ConstantOperator.createInt(1)),
-                        BinaryPredicateOperator.gt(b, ConstantOperator.createInt(1)))
-            );
-            Assert.assertEquals(expectRange, predicateSplit.getRangePredicates());
+            Assert.assertEquals("0: a >= 0 AND 0: a < 3 OR 0: a >= 4 AND 0: a < 7 AND 1: b != 1",
+                    predicateSplit.getRangePredicates().toString());
             Assert.assertEquals(inPredicate, predicateSplit.getResidualPredicates());
         }
         {

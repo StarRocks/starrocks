@@ -46,6 +46,9 @@ public abstract class SingleTableRewriteBaseRule extends BaseMaterializedViewRew
         if (expressions == null || expressions.isEmpty()) {
             return Lists.newArrayList();
         } else {
+            if (context.isInMemoPhase()) {
+                return expressions;
+            }
             if (expressions.size() == 1) {
                 return expressions;
             }
@@ -165,11 +168,13 @@ public abstract class SingleTableRewriteBaseRule extends BaseMaterializedViewRew
                         new CandidateContext(expression.getStatistics(), scanOperator.getTable().getBaseSchema().size());
                 if (isAggregate) {
                     MaterializedView mv = (MaterializedView) scanOperator.getTable();
-                    MvPlanContext planContext = CachingMvPlanContextBuilder.getInstance().getPlanContext(
+                    List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(
                             mv, optimizerContext.getSessionVariable().isEnableMaterializedViewPlanCache());
-                    if (planContext.getLogicalPlan().getOp() instanceof LogicalAggregationOperator) {
-                        LogicalAggregationOperator aggregationOperator = planContext.getLogicalPlan().getOp().cast();
-                        candidateContext.setGroupbyColumnNum(aggregationOperator.getGroupingKeys().size());
+                    for (MvPlanContext planContext : planContexts) {
+                        if (planContext.getLogicalPlan().getOp() instanceof LogicalAggregationOperator) {
+                            LogicalAggregationOperator aggregationOperator = planContext.getLogicalPlan().getOp().cast();
+                            candidateContext.setGroupbyColumnNum(aggregationOperator.getGroupingKeys().size());
+                        }
                     }
                 }
                 return candidateContext;

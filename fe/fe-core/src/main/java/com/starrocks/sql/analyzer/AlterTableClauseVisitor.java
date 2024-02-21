@@ -141,6 +141,10 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Properties is not set");
         }
 
+        if (table.isExternalTableWithFileSystem()) {
+            return null;
+        }
+
         if (properties.size() != 1
                 && !(TableProperty.isSamePrefixProperties(properties, TableProperty.DYNAMIC_PARTITION_PROPERTY_PREFIX)
                 || TableProperty.isSamePrefixProperties(properties, TableProperty.BINLOG_PROPERTY_PREFIX))) {
@@ -150,9 +154,7 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
             clause.setNeedTableStable(false);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE)) {
-            if (!properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE).equalsIgnoreCase("column")) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Can only change storage type to COLUMN");
-            }
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Can't change storage type");
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DISTRIBUTION_TYPE)) {
             if (!properties.get(PropertyAnalyzer.PROPERTIES_DISTRIBUTION_TYPE).equalsIgnoreCase("hash")) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Can only change distribution type to HASH");
@@ -174,6 +176,14 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             }
             clause.setNeedTableStable(false);
             clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
+            try {
+                PropertyAnalyzer.analyzeLocation(properties, false);
+            } catch (SemanticException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Property " + PropertyAnalyzer.PROPERTIES_LABELS_LOCATION + " not valid");
+            }
+            clause.setNeedTableStable(false);
         } else if (DynamicPartitionUtil.checkDynamicPartitionPropertiesExist(properties)) {
             // do nothing, dynamic properties will be analyzed in SchemaChangeHandler.process
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
@@ -429,6 +439,7 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             clause.setSourcePartitionIds(partitionIds);
         } else {
             clause.setSourcePartitionIds(olapTable.getPartitions().stream().map(Partition::getId).collect(Collectors.toList()));
+            clause.setTableOptimize(true);
         }
 
 

@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.TpchSQL;
+import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.server.GlobalStateMgr;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -35,6 +36,8 @@ public class TPCHPlanTest extends PlanTestBase {
         PlanTestBase.beforeClass();
         FeConstants.runningUnitTest = true;
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        connectContext.getSessionVariable().setEnableViewBasedMvRewrite(false);
+        connectContext.getSessionVariable().setCboEqBaseType(SessionVariableConstants.DOUBLE);
     }
 
     @Test

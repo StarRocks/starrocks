@@ -21,6 +21,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.UKFKConstraints;
 import com.starrocks.sql.optimizer.rule.mv.KeyInference;
 import com.starrocks.sql.optimizer.rule.mv.MVOperatorProperty;
 import com.starrocks.sql.optimizer.rule.mv.ModifyInference;
@@ -56,6 +57,7 @@ public class OptExpression {
     // MV Operator property, inferred from best plan
     private MVOperatorProperty mvOperatorProperty;
     private PhysicalPropertySet outputProperty;
+    private UKFKConstraints constraints;
 
     private Boolean isShortCircuit = false;
 
@@ -166,6 +168,14 @@ public class OptExpression {
         return this.outputProperty;
     }
 
+    public UKFKConstraints getConstraints() {
+        return constraints;
+    }
+
+    public void setConstraints(UKFKConstraints constraints) {
+        this.constraints = constraints;
+    }
+
     // This function assume the child expr logical property has been derived
     public void deriveLogicalPropertyItself() {
         ExpressionContext context = new ExpressionContext(this);
@@ -240,7 +250,7 @@ public class OptExpression {
         String childHeadlinePrefix = detailPrefix + "->  ";
         String childDetailPrefix = detailPrefix + "    ";
         for (OptExpression input : inputs) {
-            sb.append(input.debugString(childHeadlinePrefix, childDetailPrefix, limitLine)).append("\n");
+            sb.append(input.debugString(childHeadlinePrefix, childDetailPrefix, limitLine));
         }
         return sb.toString();
     }

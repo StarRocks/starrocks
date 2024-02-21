@@ -14,11 +14,16 @@
 
 #include "exprs/binary_predicate.h"
 
+#include <llvm/IR/Constants.h>
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/Value.h>
+
 #include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/column_viewer.h"
 #include "column/type_traits.h"
 #include "exprs/binary_function.h"
+#include "exprs/jit/ir_helper.h"
 #include "exprs/unary_function.h"
 #include "storage/column_predicate.h"
 #include "types/logical_type.h"
@@ -94,6 +99,25 @@ struct BinaryPredFunc {
 };
 
 template <LogicalType Type, typename OP>
+std::string get_cmp_op_name() {
+    if constexpr (std::is_same_v<OP, BinaryPredFunc<EvalEq<Type>>>) {
+        return "=";
+    } else if constexpr (std::is_same_v<OP, BinaryPredFunc<EvalNe<Type>>>) {
+        return "!=";
+    } else if constexpr (std::is_same_v<OP, BinaryPredFunc<EvalLt<Type>>>) {
+        return "<";
+    } else if constexpr (std::is_same_v<OP, BinaryPredFunc<EvalLe<Type>>>) {
+        return "<=";
+    } else if constexpr (std::is_same_v<OP, BinaryPredFunc<EvalGt<Type>>>) {
+        return ">";
+    } else if constexpr (std::is_same_v<OP, BinaryPredFunc<EvalGe<Type>>>) {
+        return ">=";
+    } else {
+        return "unknown";
+    }
+}
+
+template <LogicalType Type, typename OP>
 class VectorizedBinaryPredicate final : public Predicate {
 public:
     explicit VectorizedBinaryPredicate(const TExprNode& node) : Predicate(node) {}
@@ -105,6 +129,83 @@ public:
         ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
         ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
         return VectorizedStrictBinaryFunction<OP>::template evaluate<Type, TYPE_BOOLEAN>(l, r);
+    }
+
+    // disable it temporarily as no perf benefit, and have to handle pushing down to storage
+    // bool is_compilable() const override { return IRHelper::support_jit(Type); }
+
+    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
+        if constexpr (lt_is_decimal<Type>) {
+            // TODO(yueyang): Implement decimal cmp in LLVM IR.
+            return Status::NotSupported("JIT of decimal cmp not support");
+        } else {
+            std::vector<LLVMDatum> datums(2);
+            ASSIGN_OR_RETURN(datums[0], _children[0]->generate_ir(context, jit_ctx))
+            ASSIGN_OR_RETURN(datums[1], _children[1]->generate_ir(context, jit_ctx))
+
+            auto* l = datums[0].value;
+            auto* r = datums[1].value;
+            auto& b = jit_ctx->builder;
+            LLVMDatum result(b);
+            if constexpr (std::is_same_v<OP, BinaryPredFunc<EvalEq<Type>>>) {
+                if constexpr (lt_is_float<Type>) {
+                    result.value = b.CreateFCmpOEQ(l, r);
+                } else {
+                    result.value = b.CreateICmpEQ(l, r);
+                }
+            } else if constexpr (std::is_same_v<OP, BinaryPredFunc<EvalNe<Type>>>) {
+                if constexpr (lt_is_float<Type>) {
+                    result.value = b.CreateFCmpUNE(l, r);
+                } else {
+                    result.value = b.CreateICmpNE(l, r);
+                }
+            } else if constexpr (std::is_same_v<OP, BinaryPredFunc<EvalLt<Type>>>) {
+                if constexpr (lt_is_float<Type>) {
+                    result.value = b.CreateFCmpOLT(l, r);
+                } else {
+                    result.value = b.CreateICmpSLT(l, r);
+                }
+            } else if constexpr (std::is_same_v<OP, BinaryPredFunc<EvalLe<Type>>>) {
+                if constexpr (lt_is_float<Type>) {
+                    result.value = b.CreateFCmpOLE(l, r);
+                } else {
+                    result.value = b.CreateICmpSLE(l, r);
+                }
+            } else if constexpr (std::is_same_v<OP, BinaryPredFunc<EvalGt<Type>>>) {
+                if constexpr (lt_is_float<Type>) {
+                    result.value = b.CreateFCmpOGT(l, r);
+                } else {
+                    result.value = b.CreateICmpSGT(l, r);
+                }
+            } else if constexpr (std::is_same_v<OP, BinaryPredFunc<EvalGe<Type>>>) {
+                if constexpr (lt_is_float<Type>) {
+                    result.value = b.CreateFCmpOGE(l, r);
+                } else {
+                    result.value = b.CreateICmpSGE(l, r);
+                }
+            } else {
+                LOG(WARNING) << "unsupported cmp op";
+                return Status::InternalError("unsupported cmp op");
+            }
+            result.value = b.CreateIntCast(result.value, b.getInt8Ty(), false);
+            result.null_flag = b.CreateOr(datums[0].null_flag, datums[1].null_flag);
+            return result;
+        }
+    }
+
+    std::string jit_func_name_impl() const override {
+        return "{" + _children[0]->jit_func_name() + get_cmp_op_name<Type, OP>() + _children[1]->jit_func_name() + "}" +
+               (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
+    }
+
+    std::string debug_string() const override {
+        std::stringstream out;
+        auto expr_debug_string = Expr::debug_string();
+        out << "VectorizedBinaryPredicate ("
+            << "lhs=" << _children[0]->type().debug_string() << ", rhs=" << _children[1]->type().debug_string()
+            << ", result=" << this->type().debug_string() << ", lhs_is_constant=" << _children[0]->is_constant()
+            << ", rhs_is_constant=" << _children[1]->is_constant() << ", expr (" << expr_debug_string << ") )";
+        return out.str();
     }
 };
 
@@ -306,6 +407,55 @@ public:
         }
 
         return builder.build(ColumnHelper::is_all_const(list));
+    }
+
+    // disable it temporarily as no perf benefit, and have to handle pushing down to storage
+    // bool is_compilable() const override { return IRHelper::support_jit(Type); }
+
+    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
+        std::vector<LLVMDatum> datums(2);
+        ASSIGN_OR_RETURN(datums[0], _children[0]->generate_ir(context, jit_ctx))
+        ASSIGN_OR_RETURN(datums[1], _children[1]->generate_ir(context, jit_ctx))
+        auto& b = jit_ctx->builder;
+        if constexpr (lt_is_decimal<Type>) {
+            // TODO(yueyang): Implement decimal cmp in LLVM IR.
+            return Status::NotSupported("JIT of decimal null eq not support");
+        } else {
+            LLVMDatum result(b);
+            auto* l = datums[0].value;
+            auto* r = datums[1].value;
+            auto* l_null = datums[0].null_flag;
+            auto* r_null = datums[1].null_flag;
+            auto* if_value = b.CreateAnd(IRHelper::bool_to_cond(b, l_null), IRHelper::bool_to_cond(b, r_null));
+            auto* elseif_value = b.CreateXor(IRHelper::bool_to_cond(b, l_null), IRHelper::bool_to_cond(b, r_null));
+            auto* llvm_true = llvm::ConstantInt::get(b.getInt1Ty(), 1);
+            auto* llvm_false = llvm::ConstantInt::get(b.getInt1Ty(), 0);
+            if constexpr (lt_is_float<Type>) {
+                auto* cmp = b.CreateFCmpOEQ(l, r);
+                result.value = b.CreateSelect(if_value, llvm_true, b.CreateSelect(elseif_value, llvm_false, cmp));
+            } else {
+                auto* cmp = b.CreateICmpEQ(l, r);
+                result.value = b.CreateSelect(if_value, llvm_true, b.CreateSelect(elseif_value, llvm_false, cmp));
+            }
+            result.value = b.CreateIntCast(result.value, b.getInt8Ty(), false);
+            // always not null
+            return result;
+        }
+    }
+
+    std::string jit_func_name_impl() const override {
+        return "{" + _children[0]->jit_func_name() + "<=>" + _children[1]->jit_func_name() + "}" +
+               (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string();
+    }
+
+    std::string debug_string() const override {
+        std::stringstream out;
+        auto expr_debug_string = Expr::debug_string();
+        out << "VectorizedNullSafeEqPredicate ("
+            << "lhs=" << _children[0]->type().debug_string() << ", rhs=" << _children[1]->type().debug_string()
+            << ", result=" << this->type().debug_string() << ", lhs_is_constant=" << _children[0]->is_constant()
+            << ", rhs_is_constant=" << _children[1]->is_constant() << ", expr (" << expr_debug_string << ") )";
+        return out.str();
     }
 };
 

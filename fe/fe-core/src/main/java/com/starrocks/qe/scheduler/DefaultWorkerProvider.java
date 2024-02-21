@@ -247,7 +247,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
         StringBuilder out = new StringBuilder("compute node: ");
         id2ComputeNode.forEach((backendID, backend) -> out.append(
                 String.format("[%s alive: %b inBlacklist: %b] ", backend.getHost(),
-                        backend.isAlive(), SimpleScheduler.isInBlacklist(backendID))));
+                        backend.isAlive(), SimpleScheduler.isInBlocklist(backendID))));
         return out.toString();
     }
 
@@ -255,7 +255,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
         StringBuilder out = new StringBuilder("backend: ");
         id2Backend.forEach((backendID, backend) -> out.append(
                 String.format("[%s alive: %b inBlacklist: %b] ", backend.getHost(),
-                        backend.isAlive(), SimpleScheduler.isInBlacklist(backendID))));
+                        backend.isAlive(), SimpleScheduler.isInBlocklist(backendID))));
         return out.toString();
     }
 
@@ -272,7 +272,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
     private static ImmutableMap<Long, ComputeNode> buildComputeNodeInfo(SystemInfoService systemInfoService,
                                                                         int numUsedComputeNodes) {
         if (RunMode.isSharedDataMode()) {
-            return GlobalStateMgr.getCurrentWarehouseMgr().getComputeNodesFromWarehouse();
+            return GlobalStateMgr.getCurrentState().getWarehouseMgr().getComputeNodesFromWarehouse();
         }
 
         ImmutableMap<Long, ComputeNode> idToComputeNode
@@ -304,7 +304,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
     }
 
     private static boolean isWorkerAvailable(ComputeNode worker) {
-        return worker.isAlive() && !SimpleScheduler.isInBlacklist(worker.getId());
+        return worker.isAlive() && !SimpleScheduler.isInBlocklist(worker.getId());
     }
 
     private static <C extends ComputeNode> ImmutableMap<Long, C> filterAvailableWorkers(ImmutableMap<Long, C> workers) {

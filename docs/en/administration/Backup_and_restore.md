@@ -14,6 +14,10 @@ StarRocks supports the following remote storage systems:
 - AWS S3
 - Google GCS
 
+> **NOTE**
+>
+> Shared-data StarRocks clusters do not support data BACKUP and RESTORE.
+
 ## Back up data
 
 StarRocks supports FULL backup on the granularity level of database, table, or partition.
@@ -175,7 +179,7 @@ You can optimize the performance of BACKUP or RESTORE jobs by modifying the foll
 
 During a BACKUP or a RESTORE job of a table, StarRocks automatically backs up or restores its [Synchronous materialized view](../using_starrocks/Materialized_view-single_table.md).
 
-From v3.2.0, StarRocks supports backing up and restoring [asynchronous materialized views](../using_starrocks/Materialized_view.md) when you back up and restore the database they reside in.
+From v3.2.3, StarRocks supports backing up and restoring [asynchronous materialized views](../using_starrocks/Materialized_view.md) when you back up and restore the database they reside in.
 
 During BACKUP and RESTORE a database, StarRocks does as follows:
 

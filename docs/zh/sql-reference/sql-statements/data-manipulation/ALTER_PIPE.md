@@ -6,7 +6,7 @@ displayed_sidebar: "Chinese"
 
 ## 功能
 
-修改 Pipe 的执行参数。
+修改 Pipe 的执行参数。该命令自 3.2 版本起支持。
 
 ## 语法
 
@@ -44,3 +44,11 @@ SET
     "AUTO_INGEST" = "FALSE"
 );
 ```
+
+## 相关文档
+
+- [CREATE PIPE](../data-manipulation/CREATE_PIPE.md)
+- [DROP PIPE](../data-manipulation/DROP_PIPE.md)
+- [SHOW PIPES](../data-manipulation/SHOW_PIPES.md)
+- [SUSPEND or RESUME PIPE](../data-manipulation/SUSPEND_or_RESUME_PIPE.md)
+- [RETRY FILE](../data-manipulation/RETRY_FILE.md)

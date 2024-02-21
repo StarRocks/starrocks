@@ -18,7 +18,6 @@ package com.starrocks.sql.plan;
 import com.google.common.collect.Lists;
 import com.starrocks.common.DdlException;
 import com.starrocks.planner.TpchSQL;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -41,7 +40,7 @@ public class HiveTPCHPlanTest extends ConnectorPlanTestBase {
         ConnectorPlanTestBase.doInit(temp.toURI().toString());
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
-        GlobalStateMgr.getCurrentState().changeCatalogDb(connectContext, "hive0.tpch");
+        connectContext.changeCatalogDb("hive0.tpch");
     }
 
     @AfterAll

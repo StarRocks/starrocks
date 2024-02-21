@@ -25,6 +25,7 @@ import java.util.Map;
 
 public class CreatePipeStmt extends DdlStmt {
 
+    private final boolean orReplace;
     private final boolean ifNotExists;
     private final PipeName pipeName;
     private final int insertSqlStartIndex;
@@ -34,14 +35,20 @@ public class CreatePipeStmt extends DdlStmt {
     private TableName targetTable;
     private FilePipeSource pipeSource;
 
-    public CreatePipeStmt(boolean ifNotExists, PipeName pipeName, int insertSqlStartIndex, InsertStmt insertStmt,
+    public CreatePipeStmt(boolean ifNotExists, boolean orReplace,
+                          PipeName pipeName, int insertSqlStartIndex, InsertStmt insertStmt,
                           Map<String, String> properties, NodePosition pos) {
         super(pos);
+        this.orReplace = orReplace;
         this.ifNotExists = ifNotExists;
         this.pipeName = pipeName;
         this.insertSqlStartIndex = insertSqlStartIndex;
         this.insertStmt = insertStmt;
         this.properties = properties;
+    }
+
+    public boolean isReplace() {
+        return orReplace;
     }
 
     public boolean isIfNotExists() {

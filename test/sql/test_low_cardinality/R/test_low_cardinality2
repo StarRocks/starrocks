@@ -309,11 +309,11 @@ insert into s2 select * from s2;
 -- !result
 [UC] analyze full table s1;
 -- result:
-test_db_88316d7a90c411ee91e100163e04d4c2.s1	analyze	status	OK
+test_db_d0be16369d5011eeb01500163e04d4c2.s1	analyze	status	OK
 -- !result
 [UC] analyze full table s2;
 -- result:
-test_db_88316d7a90c411ee91e100163e04d4c2.s2	analyze	status	OK
+test_db_d0be16369d5011eeb01500163e04d4c2.s2	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('v3', 's1')
 -- result:

@@ -169,7 +169,7 @@ private:
     // We make the same behavior as Trino & Presto.
     // https://trino.io/docs/current/connector/hive.html?highlight=hive#orc-format-configuration-properties
     bool _use_orc_column_names = false;
-    OrcMappingOptions _orc_mapping_options;
+    OrcMappingOptions _orc_mapping_options{};
     std::unique_ptr<OrcMapping> _root_selected_mapping;
     std::vector<TypeDescriptor> _src_types;
     // slot id to position in orc.

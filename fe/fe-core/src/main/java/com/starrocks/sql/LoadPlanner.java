@@ -42,6 +42,7 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.Load;
+import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataSink;
@@ -130,6 +131,8 @@ public class LoadPlanner {
     // Routine load related structs
     TRoutineLoadTask routineLoadTask;
     private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.ROW_MODE;
+
+    private LoadJob.JSONOptions jsonOptions = new LoadJob.JSONOptions();
 
     private Boolean missAutoIncrementColumn = Boolean.FALSE;
 
@@ -232,11 +235,19 @@ public class LoadPlanner {
         this.mergeConditionStr = mergeConditionStr;
     }
 
+    public void setJsonOptions(LoadJob.JSONOptions options) {
+        this.jsonOptions = options;
+    }
+
     public void plan() throws UserException {
         // 1. Generate tuple descriptor
         OlapTable olapDestTable = (OlapTable) destTable;
         List<Column> destColumns = Lists.newArrayList();
         if (isPrimaryKey && partialUpdate) {
+            if (((OlapTable) destTable).hasRowStorageType() && partialUpdate &&
+                    partialUpdateMode != TPartialUpdateMode.ROW_MODE) {
+                throw new DdlException("column with row table only support row mode partial update");
+            }
             if (this.etlJobType == EtlJobType.BROKER) {
                 if (fileGroups.size() != 1) {
                     throw new DdlException("partial update only support single filegroup.");
@@ -378,6 +389,7 @@ public class LoadPlanner {
             fileScanNode.setLoadInfo(loadJobId, txnId, destTable, brokerDesc, fileGroups, strictMode,
                     parallelInstanceNum);
             fileScanNode.setUseVectorizedLoad(true);
+            fileScanNode.setJSONOptions(jsonOptions);
             fileScanNode.init(analyzer);
             fileScanNode.finalizeStats(analyzer);
             scanNode = fileScanNode;
@@ -429,7 +441,8 @@ public class LoadPlanner {
             }
             Preconditions.checkState(!CollectionUtils.isEmpty(partitionIds));
             dataSink = new OlapTableSink(olapTable, tupleDesc, partitionIds,
-                    olapTable.writeQuorum(), forceReplicatedStorage ? true : ((OlapTable) destTable).enableReplicatedStorage(),
+                    olapTable.writeQuorum(),
+                    forceReplicatedStorage ? true : ((OlapTable) destTable).enableReplicatedStorage(),
                     checkNullExprInAutoIncrement(), enableAutomaticPartition);
             if (this.missAutoIncrementColumn == Boolean.TRUE) {
                 ((OlapTableSink) dataSink).setMissAutoIncrementColumn();

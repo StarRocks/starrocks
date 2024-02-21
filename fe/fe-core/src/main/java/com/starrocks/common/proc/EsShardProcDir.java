@@ -23,10 +23,10 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.ListComparator;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.elasticsearch.EsShardPartitions;
 import com.starrocks.connector.elasticsearch.EsShardRouting;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 
 import java.util.ArrayList;
 import java.util.Collections;

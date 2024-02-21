@@ -17,7 +17,7 @@ displayed_sidebar: "Chinese"
 
 修复了如下问题：
 
-- 在查询聚合模型表中 ARRAY 类型的列时，如该列使用 REPLACE_IF_NOT_NULL 聚合函数，那么查询可能会报错，并导致 BE 停止服务。[#10144](https://github.com/StarRocks/starrocks/issues/10144)
+- 在查询聚合表中 ARRAY 类型的列时，如该列使用 REPLACE_IF_NOT_NULL 聚合函数，那么查询可能会报错，并导致 BE 停止服务。[#10144](https://github.com/StarRocks/starrocks/issues/10144)
 - 查询中嵌套 1 个以上的 IFNULL 函数时，查询结果不正确。[#5028](https://github.com/StarRocks/starrocks/issues/5028) [#10486](https://github.com/StarRocks/starrocks/pull/10486)
 - Truncate 动态创建的分区后，其分桶数会从动态分区设置的分桶数变成默认分桶数。[#10435](https://github.com/StarRocks/starrocks/issues/10435)
 - 在使用 Routine Load 导入的过程中，如出现 Kafka 服务下线的情况， StarRocks 集群可能会出现暂时性死锁，影响查询。[#8947](https://github.com/StarRocks/starrocks/issues/8947)
@@ -48,7 +48,7 @@ displayed_sidebar: "Chinese"
 
 修复了如下问题：
 
-- 主键模型 (Primary Key) 表在高频导入时，会卡住无法继续进行。[#7763](https://github.com/StarRocks/starrocks/issues/7763)
+- 主键表在高频导入时，会卡住无法继续进行。[#7763](https://github.com/StarRocks/starrocks/issues/7763)
 - 在低基数优化中，对聚合表达式的顺序处理有误，导致 `count distinct` 函数返回的一些结果错误。[#7659](https://github.com/StarRocks/starrocks/issues/7659)
 - LIMIT 子句中的裁剪规则处理错误，导致 LIMIT 子句执行以后没有结果。[#7894](https://github.com/StarRocks/starrocks/pull/7894)
 - 如果一个查询的 Join 条件列中有进行全局低基数字典优化，会导致查询结果错误。[#8302](https://github.com/StarRocks/starrocks/issues/8302)
@@ -99,7 +99,7 @@ displayed_sidebar: "Chinese"
 
 修复了如下问题：
 
-- 往主键模型表导入数据时，系统内部保存的每个数据版本对应的创建时间如果不能保持严格增长（比如因为系统时间被往前调整过、或因为相关的未知 Bug），会导致处理出错，从而导致 BE 停止服务。[#6046](https://github.com/StarRocks/starrocks/issues/6046)
+- 往主键表导入数据时，系统内部保存的每个数据版本对应的创建时间如果不能保持严格增长（比如因为系统时间被往前调整过、或因为相关的未知 Bug），会导致处理出错，从而导致 BE 停止服务。[#6046](https://github.com/StarRocks/starrocks/issues/6046)
 
 - 某些图形化界面工具会自动设置 `set_sql_limit` 变量，导致 SQL 语句 ORDER BY LIMIT 被忽略，从而导致返回的数据行数不正确。[#5966](https://github.com/StarRocks/starrocks/issues/5966)
 
@@ -110,7 +110,7 @@ displayed_sidebar: "Chinese"
 - 在高并发导入场景下，BE 写磁盘的任务数量积压，可能导致 BE 停止服务。[#3877](https://github.com/StarRocks/starrocks/issues/3877)
 
 - 在做表结构变更之前，系统会先进行内存预估。如果该表中 STRING 类型的字段比较多，则内存预估结果会不准确。在这种情况下，如果预估的内存超过了单个表结构更改操作所允许的内存上限，会导致原本能正常执行的表结构更改操作报错。[#6322](https://github.com/StarRocks/starrocks/issues/6322)
-- 主键模型的表经过表结构变更以后，在数据导入时，可能会报 "duplicate key xxx" 错误。[#5878](https://github.com/StarRocks/starrocks/issues/5878)
+- 主键表经过表结构变更以后，在数据导入时，可能会报 "duplicate key xxx" 错误。[#5878](https://github.com/StarRocks/starrocks/issues/5878)
 - 在 Shuffle Join 时，如果使用了低基数优化，可能导致分区错误。[#4890](https://github.com/StarRocks/starrocks/issues/4890)
 - 当一个 Colocation Group 中包含的表比较多、导入频率又比较高时，可能会导致该 Colocation Group 无法保持 `stable` 状态，从而导致 JOIN 语句无法使用 Colocate Join。现优化为导入数据时稍微多等一会，这样可以尽量保证导入的 Tablet 副本的完整性。
 
@@ -156,7 +156,7 @@ displayed_sidebar: "Chinese"
 - 在删列、新增分区、并克隆 Tablet 后，新旧 Tablet 的列 Unique ID 可能会不对应，由于系统使用共享的 Tablet Schema，可能导致 BE 停止服务。[#4514](https://github.com/StarRocks/starrocks/issues/4514)
 - 向 StarRocks 外表导入数据时，如果设定的目标 StarRocks 集群的 FE 不是 Leader，则会导致 FE 停止服务。[#4573](https://github.com/StarRocks/starrocks/issues/4573)
 - `CAST`函数在 StarRocks 1.19 和 2.1 版本中的执行结果不一致。[#4701](https://github.com/StarRocks/starrocks/pull/4701)
-- 明细模型的表同时执行表结构变更、创建物化视图时，可能导致数据查询错误。[#4839](https://github.com/StarRocks/starrocks/issues/4839)
+- 明细表同时执行表结构变更、创建物化视图时，可能导致数据查询错误。[#4839](https://github.com/StarRocks/starrocks/issues/4839)
 
 ## 2.1.3
 
@@ -188,23 +188,23 @@ displayed_sidebar: "Chinese"
 
 ### 新功能
 
-- 【公测中】支持通过外表的方式查询 Apache Iceberg 数据湖中的数据，帮助您实现对数据湖的极速分析。TPC-H 测试集的结果显示，查询 Apache Iceberg 数据时，StarRocks 的查询速度是 Presto 的 **3 - 5** 倍。相关文档，请参见 [Apache Iceberg 外表](../data_source/External_table.md#deprecated-hive-外部表)。
+- 【公测中】支持通过外表的方式查询 Apache Iceberg 数据湖中的数据，帮助您实现对数据湖的极速分析。TPC-H 测试集的结果显示，查询 Apache Iceberg 数据时，StarRocks 的查询速度是 Presto 的 **3 - 5** 倍。相关文档，请参见 [Apache Iceberg 外表](https://docs.starrocks.io/zh/docs/data_source/External_table#deprecated-hive-外部表)。
 - 【公测中】发布 Pipeline 执行引擎，可以自适应调节查询的并行度。您无需手动设置 session 级别的变量 parallel_fragment_exec_instance_num。并且，在部分高并发场景中，相较于历史版本，新版本性能提升两倍。
-- 支持 CTAS（CREATE TABLE AS SELECT），基于查询结果创建表并且导入数据，从而简化建表和 ETL 操作。相关文档，请参见 [CREATE TABLE AS SELECT](../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md)。
-- 支持 SQL 指纹，针对慢查询中各类 SQL 语句计算出 SQL 指纹，方便您快速定位慢查询。相关文档，请参见 [SQL 指纹](../administration/Query_planning.md#查看-sql-指纹)。
-- 新增函数 [ANY_VALUE](../sql-reference/sql-functions/aggregate-functions/any_value.md)，[ARRAY_REMOVE](../sql-reference/sql-functions/array-functions/array_remove.md)，哈希函数 [SHA2](../sql-reference/sql-functions/crytographic-functions/sha2.md)。
+- 支持 CTAS（CREATE TABLE AS SELECT），基于查询结果创建表并且导入数据，从而简化建表和 ETL 操作。相关文档，请参见 [CREATE TABLE AS SELECT](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT/)。
+- 支持 SQL 指纹，针对慢查询中各类 SQL 语句计算出 SQL 指纹，方便您快速定位慢查询。相关文档，请参见 [SQL 指纹](https://docs.starrocks.io/zh/docs/administration/Query_planning#查看-sql-指纹)。
+- 新增函数 [ANY_VALUE](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/aggregate-functions/any_value/)，[ARRAY_REMOVE](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/array-functions/array_remove/)，哈希函数 [SHA2](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/crytographic-functions/sha2/)。
 
 ### 功能优化
 
 - 优化 Compaction 的性能，支持导入 10000 列的数据。
 - 优化 StarRocks 首次 Scan 和 Page Cache 的性能。通过降低随机 I/O ，提升 StarRocks 首次 Scan 的性能，如果首次 Scan 的磁盘为 SATA 盘，则性能提升尤为明显。另外，StarRocks 的 Page Cache 支持直接存放原始数据，无需经过 Bitshuffle 编码。因此读取 StarRocks 的 Page Cache 时无需额外解码，提高缓存命中率，进而大大提升查询效率。
-- 支持主键模型（Primary Key Model）变更表结构（Schema Change），您可以执行 `ALTER TABLE` 增删和修改索引。
+- 支持主键表变更表结构（Schema Change），您可以执行 `ALTER TABLE` 增删和修改索引。
 - 优化 JSON 导入性能，并去除了 JSON 导入中单个 JSON 文件不超过 100MB 大小的限制。
 - 优化 Bitmap Index 性能。
 - 优化通过外表方式读取 Hive 数据的性能，支持 Hive 的存储格式为 CSV。
 - 支持建表语句的时间戳字段定义为 DEFAULT CURRENT_TIMESTAMP。
 - 支持导入带有多个分隔符的 CSV 文件。
-- flink-source-connector 支持 Flink 批量读取 StarRocks 数据，实现了直连并行读取 BE 节点、自动谓词下推等特性。相关文档，请参见 [Flink Connector](../unloading/Flink_connector.md)。
+- flink-source-connector 支持 Flink 批量读取 StarRocks 数据，实现了直连并行读取 BE 节点、自动谓词下推等特性。相关文档，请参见 [Flink Connector](https://docs.starrocks.io/zh/docs/unloading/Flink_connector/)。
 
 ### 问题修复
 

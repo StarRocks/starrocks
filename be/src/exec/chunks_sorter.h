@@ -117,8 +117,6 @@ public:
 
     void set_spill_channel(SpillProcessChannelPtr channel) { _spill_channel = std::move(channel); }
     const SpillProcessChannelPtr& spill_channel() { return _spill_channel; }
-    auto& io_executor() { return *spill_channel()->io_executor(); }
-
     // Append a Chunk for sort.
     [[nodiscard]] virtual Status update(RuntimeState* state, const ChunkPtr& chunk) = 0;
     // Finish seeding Chunk, and get sorted data with top OFFSET rows have been skipped.

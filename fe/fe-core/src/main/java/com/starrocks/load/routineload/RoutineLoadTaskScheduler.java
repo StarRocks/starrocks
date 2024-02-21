@@ -79,12 +79,11 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
 
     private static final long BACKEND_SLOT_UPDATE_INTERVAL_MS = 10000; // 10s
     private static final long SLOT_FULL_SLEEP_MS = 10000; // 10s
-    private static final int THREAD_POOL_SIZE = 10;
 
     private final RoutineLoadMgr routineLoadManager;
     private final LinkedBlockingQueue<RoutineLoadTaskInfo> needScheduleTasksQueue = Queues.newLinkedBlockingQueue();
     private final ScheduledExecutorService scheduledExecutorService = Executors.newSingleThreadScheduledExecutor();
-    private final ExecutorService threadPool = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
+    private final ExecutorService threadPool = Executors.newCachedThreadPool();
 
     private long lastBackendSlotUpdateTime = -1;
 
@@ -326,7 +325,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
 
     private void submitTask(long beId, TRoutineLoadTask tTask) throws LoadException {
         // TODO: need to refactor after be split into cn + dn
-        ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(beId);
+        ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(beId);
         if (node == null) {
             throw new LoadException("failed to send tasks to backend " + beId + " because not exist");
         }

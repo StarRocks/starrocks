@@ -22,6 +22,8 @@
   {%- set keys = config.get('keys') -%}
   {%- set partition_by = config.get('partition_by') -%}
   {%- set partition_by_init = config.get('partition_by_init') -%}
+  {%- set order_by = config.get('order_by') -%}
+  {%- set partition_type = config.get('partition_type', 'RANGE') -%}
   {%- set buckets = config.get('buckets', 10) -%}
   {%- set distributed_by = config.get('distributed_by') -%}
   {%- set properties = config.get('properties') -%}
@@ -79,7 +81,7 @@
 
   {# 3. SET PARTITION #}
   {%- if partition_by is not none -%}
-    {{ starrocks__partition_by(partition_by, partition_by_init) }}
+    {{ starrocks__partition_by(partition_type, partition_by, partition_by_init) }}
   {%- endif -%}
 
   {# 4. SET DISTRIBUTED #}
@@ -96,7 +98,16 @@
     {{ exceptions.raise_compiler_error(msg) }}
   {% endif -%}
 
-  {# 4. SET PROPERTIES #}
+  {# 5. SET ORDER BY #}
+  {%- if order_by is not none %}
+    ORDER BY (
+      {%- for item in order_by -%}
+        {{ item }} {%- if not loop.last -%}, {%- endif -%}
+      {%- endfor -%}
+    )
+  {% endif -%}
+
+  {# 6. SET PROPERTIES #}
   {%- if properties is not none %}
     PROPERTIES (
       {% for key, value in properties.items() -%}
@@ -122,18 +133,29 @@
   {% endif %}
 {%- endmacro %}
 
-{%- macro starrocks__partition_by(cols, init) -%}
-  {%- if cols is not none %}
-    PARTITION BY RANGE (
-      {%- for col in cols -%}
-        {{ col }} {%- if not loop.last -%}, {%- endif -%}
-      {%- endfor -%}
-    )(
-      {%- if init is not none -%}
-        {%- for row in init -%}
-          {{ row }} {%- if not loop.last -%}, {%- endif -%}
-        {%- endfor -%}
-      {%- endif -%}
-    )
+{%- macro starrocks__partition_by(p_type, cols, init) -%}
+
+  {%- if p_type == 'Expr' %}
+    {%- if cols | length != 1 -%}
+        {%- set msg -%}
+          The number of partition_by parameters for expression partition should be 1
+        {%- endset -%}
+    {{ exceptions.raise_compiler_error(msg) }}
+    {%- endif -%}
+    PARTITION BY {{ cols[0] }}
+  {%- else -%}
+      {%- if cols is not none %}
+        PARTITION BY {{ p_type }} (
+          {%- for col in cols -%}
+            {{ col }} {%- if not loop.last -%}, {%- endif -%}
+          {%- endfor -%}
+        )(
+          {%- if init is not none -%}
+            {%- for row in init -%}
+              {{ row }} {%- if not loop.last -%}, {%- endif -%}
+            {%- endfor -%}
+          {%- endif -%}
+        )
+      {% endif -%}
   {% endif -%}
 {%- endmacro -%}

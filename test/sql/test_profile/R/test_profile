@@ -1,11 +1,37 @@
 -- name: test_explain_analyze
-function: prepare_data("tpcds", "${db[0]}")
+CREATE TABLE `t0` (
+  `v1` int(11) NOT NULL,
+  `v2` int(11) NOT NULL,
+  `v3` int(11) NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 10
+PROPERTIES (
+ "replication_num" = "1"
+);
 -- result:
-None
+-- !result
+INSERT INTO `t0` (v1, v2, v3) values
+    (1, 1, 1),
+    (1, 1, 2),
+    (1, 1, 3),
+    (1, 2, 4),
+    (1, 2, 5),
+    (1, 2, 6),
+    (2, 3, 7),
+    (2, 3, 8),
+    (2, 3, 9),
+    (2, 4, 10),
+    (2, 4, 11),
+    (2, 4, 12);
+-- result:
 -- !result
 shell: env mysql_cmd="${mysql_cmd} -D${db[0]}" bash ${root_path}/sql/test_profile/T/test_profile_analysis.sh
 -- result:
 0
+Analyze profile succeeded
+Analyze profile succeeded
+Analyze profile succeeded
 Analyze profile succeeded
 Analyze profile succeeded
 Analyze profile succeeded

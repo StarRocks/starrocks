@@ -20,7 +20,9 @@ STDDEV_SAMP(expr)
 
 ## Return value
 
-Returns a DOUBLE value.
+Returns a DOUBLE value. The formula is as follows, where `n` represents the row count of the table:
+
+![image](../../../assets/stddevsamp_formula.png)
 
 ## Examples
 
@@ -34,6 +36,10 @@ group by datetime;
 |        2.372044195280762 |
 +--------------------------+
 ```
+
+## See also
+
+[stddev](./stddev.md)
 
 ## keyword
 

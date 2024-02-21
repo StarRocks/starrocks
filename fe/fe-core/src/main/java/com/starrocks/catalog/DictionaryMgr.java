@@ -258,7 +258,7 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         request.type = PProcessDictionaryCacheRequestType.CLEAR;
 
         List<TNetworkAddress> beNodes = Lists.newArrayList();
-        final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentSystemInfo();
+        final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         List<Backend> backends = currentSystemInfo.getBackends();
         for (Backend backend : backends) {
             beNodes.add(backend.getBrpcAddress());
@@ -381,7 +381,7 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         request.type = PProcessDictionaryCacheRequestType.STATISTIC;
 
         List<TNetworkAddress> beNodes = Lists.newArrayList();
-        final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentSystemInfo();
+        final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         List<Backend> backends = currentSystemInfo.getBackends();
         for (Backend backend : backends) {
             beNodes.add(backend.getBrpcAddress());
@@ -518,7 +518,7 @@ public class DictionaryMgr implements Writable, GsonPostProcessable {
         }
 
         private void initializeBeNodesAddress() {
-            final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentSystemInfo();
+            final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
             List<Backend> backends = currentSystemInfo.getBackends();
             for (Backend backend : backends) {
                 this.beNodes.add(backend.getBrpcAddress());

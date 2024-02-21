@@ -55,6 +55,9 @@ public class TabletCommitInfo implements Writable {
     private List<String> validDictCacheColumns = Lists.newArrayList();
     private List<Long> validDictCollectedVersions = Lists.newArrayList();
 
+    public TabletCommitInfo() {
+    }
+
     public TabletCommitInfo(long tabletId, long backendId) {
         super();
         this.tabletId = tabletId;
@@ -90,9 +93,20 @@ public class TabletCommitInfo implements Writable {
         return validDictCollectedVersions;
     }
 
+    public void setTabletId(long tabletId) {
+        this.tabletId = tabletId;
+    }
+
+    public void setBackendId(long backendId) {
+        this.backendId = backendId;
+    }
+
     @NotNull
     public static List<TabletCommitInfo> fromThrift(List<TTabletCommitInfo> tTabletCommitInfos) {
         List<TabletCommitInfo> commitInfos = Lists.newArrayList();
+        if (tTabletCommitInfos == null) {
+            return commitInfos;
+        }
         for (TTabletCommitInfo tTabletCommitInfo : tTabletCommitInfos) {
             if (tTabletCommitInfo.isSetInvalid_dict_cache_columns()) {
                 commitInfos.add(new TabletCommitInfo(tTabletCommitInfo.getTabletId(),

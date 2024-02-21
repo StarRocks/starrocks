@@ -158,7 +158,7 @@ public class Frontend implements Writable {
             if (!isAlive && !isReplay) {
                 if (GlobalStateMgr.getCurrentState().getHaProtocol() instanceof BDBHA) {
                     BDBHA ha = (BDBHA) GlobalStateMgr.getCurrentState().getHaProtocol();
-                    ha.removeUnstableNode(host, GlobalStateMgr.getCurrentState().getFollowerCnt());
+                    ha.removeUnstableNode(host, GlobalStateMgr.getCurrentState().getNodeMgr().getFollowerCnt());
                 }
             }
             isAlive = true;

@@ -74,7 +74,7 @@ public class SyncCloudTableMetaAction extends RestBaseAction {
                     "both database and table should be provided.");
         }
 
-        GlobalStateMgr.getCurrentStarMgrMetaSyncer().syncTableMeta(dbName, tableName, force);
+        GlobalStateMgr.getCurrentState().getStarMgrMetaSyncer().syncTableMeta(dbName, tableName, force);
         response.appendContent("OK");
         sendResult(request, response);
     }

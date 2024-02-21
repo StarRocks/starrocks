@@ -29,8 +29,8 @@ public class JDBCConnectorTest {
     public void testProperties() {
         FeConstants.runningUnitTest = true;
         Map<String, String> properties = new HashMap<>();
-        properties.put(JDBCResource.DRIVER_CLASS, "com.mysql.cj.jdbc.Driver");
-        properties.put(JDBCResource.URI, "jdbc:mysql://127.0.0.1:3306");
+        properties.put(JDBCResource.DRIVER_CLASS, "org.mariadb.jdbc.Driver");
+        properties.put(JDBCResource.URI, "jdbc:mariadb://127.0.0.1:3306");
         properties.put(JDBCResource.USER, "root");
         properties.put(JDBCResource.PASSWORD, "123456");
         ConnectorContext context = new ConnectorContext("jdbcmysql", "jdbc", properties);

@@ -26,6 +26,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.ParseUtil;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.load.pipe.FilePipeSource;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.VariableMgr;
@@ -62,20 +63,25 @@ public class PipeAnalyzer {
                     .add(PROPERTY_POLL_INTERVAL)
                     .add(PROPERTY_BATCH_SIZE)
                     .add(PROPERTY_BATCH_FILES)
+                    .add(PropertyAnalyzer.PROPERTIES_WAREHOUSE)
                     .build();
 
-    public static void analyzePipeName(PipeName pipeName, ConnectContext context) {
+    public static void analyzePipeName(PipeName pipeName, String defaultDbName) {
         if (Strings.isNullOrEmpty(pipeName.getDbName())) {
-            if (Strings.isNullOrEmpty(context.getDatabase())) {
+            if (Strings.isNullOrEmpty(defaultDbName)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
             }
-            pipeName.setDbName(context.getDatabase());
+            pipeName.setDbName(defaultDbName);
         }
         if (Strings.isNullOrEmpty(pipeName.getPipeName())) {
             throw new SemanticException("empty pipe name");
         }
-        FeNameFormat.checkCommonName("db", pipeName.getDbName());
+        FeNameFormat.checkDbName(pipeName.getDbName());
         FeNameFormat.checkCommonName("pipe", pipeName.getPipeName());
+    }
+
+    public static void analyzePipeName(PipeName pipeName, ConnectContext context) {
+        analyzePipeName(pipeName, context.getDatabase());
     }
 
     private static void analyzeProperties(Map<String, String> properties) {
@@ -136,6 +142,10 @@ public class PipeAnalyzer {
                     VariableMgr.parseBooleanVariable(valueStr);
                     break;
                 }
+                case PropertyAnalyzer.PROPERTIES_WAREHOUSE: {
+                    analyzeWarehouseProperty(valueStr);
+                    break;
+                }
                 default: {
                     break;
                 }
@@ -143,8 +153,11 @@ public class PipeAnalyzer {
         }
     }
 
+    public static void analyzeWarehouseProperty(String warehouseName) {
+        ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, warehouseName);
+    }
+
     public static void analyze(CreatePipeStmt stmt, ConnectContext context) {
-        analyzePipeName(stmt.getPipeName(), context);
         analyzeProperties(stmt.getProperties());
         Map<String, String> properties = stmt.getProperties();
 
@@ -153,6 +166,14 @@ public class PipeAnalyzer {
         String insertSql = stmt.getOrigStmt().originStmt.substring(stmt.getInsertSqlStartIndex());
         stmt.setInsertSql(insertSql);
         InsertAnalyzer.analyze(insertStmt, context);
+
+        analyzePipeName(stmt.getPipeName(), insertStmt.getTableName().getDb());
+
+        if (!stmt.getPipeName().getDbName().equalsIgnoreCase(insertStmt.getTableName().getDb())) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_PIPE_STATEMENT,
+                    String.format("pipe's database [%s] and target table's database [%s] should be the same",
+                            stmt.getPipeName().getDbName(), insertStmt.getTableName().getDb()));
+        }
 
         // Must be the form: insert into <target_table> select <projection> from <source_table> [where_clause]
         if (!Strings.isNullOrEmpty(insertStmt.getLabel())) {
@@ -167,7 +188,8 @@ public class PipeAnalyzer {
         }
         SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
         if (selectRelation.hasAggregation() || selectRelation.hasOrderByClause() || selectRelation.hasLimit()) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_PIPE_STATEMENT, "must be a vanilla select statement");
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_PIPE_STATEMENT, "must be a vanilla select statement." +
+                    " Aggregation, order by clause, limit clause are not supported yet.");
         }
         if (!(selectRelation.getRelation() instanceof FileTableFunctionRelation)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_PIPE_STATEMENT, "only support FileTableFunction");

@@ -173,7 +173,7 @@ class StarrocksSQLApiLib(object):
                 env_value = os.environ.get(env_key, "")
             else:
                 # save secrets info
-                if 'aws' in env_key:
+                if 'aws' in env_key or 'oss_' in env_key:
                     SECRET_INFOS[env_key] = env_value
 
             self.__setattr__(env_key, env_value)
@@ -960,15 +960,15 @@ class StarrocksSQLApiLib(object):
             count += 1
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
 
-    def wait_async_materialized_view_finish(self, mv_name, min_success_num = 1, check_count=60):
+    def wait_async_materialized_view_finish(self, mv_name, check_count=60):
         """
         wait async materialized view job finish and return status
         """
         status = ""
         show_sql = "SHOW MATERIALIZED VIEWS WHERE name='" + mv_name + "'"
         count = 0
-        success_num = 0
-        while count < check_count and success_num < min_success_num:
+        num = 0
+        while count < check_count:
             res = self.execute_sql(show_sql, True)
             status = res["result"][-1][12]
             if status != "SUCCESS":
@@ -976,7 +976,7 @@ class StarrocksSQLApiLib(object):
             else:
                 # sleep another 5s to avoid FE's async action.
                 time.sleep(1)
-                success_num += 1
+                break
             count += 1
         tools.assert_equal("SUCCESS", status, "wait aysnc materialized view finish error")
 
@@ -984,23 +984,21 @@ class StarrocksSQLApiLib(object):
         """
         wait pipe load finish
         """
-        status = ""
-        show_sql = "select state from information_schema.pipes where database_name='{}' and pipe_name='{}'".format(db_name, pipe_name)
+        state = ""
+        show_sql = "select state, load_status, last_error  from information_schema.pipes where database_name='{}' and pipe_name='{}'".format(db_name, pipe_name)
         count = 0
         print("waiting for pipe {}.{} finish".format(db_name, pipe_name))
         while count < check_count:
             res = self.execute_sql(show_sql, True)
             print(res)
-            status = res["result"][0][0]
-            if status != "FINISHED":
-                print("pipe status is " + status)
+            state = res["result"][0][0]
+            if state == 'RUNNING':
+                print("pipe state is " + state)
                 time.sleep(1)
             else:
-                # sleep another 5s to avoid FE's async action.
-                time.sleep(1)
                 break
             count += 1
-        tools.assert_equal("FINISHED", status, "didn't wait pipe finish")
+        tools.assert_equal("FINISHED", state, "didn't wait for the pipe to finish")
 
 
     def check_hit_materialized_view_plan(self, res, mv_name):
@@ -1009,24 +1007,25 @@ class StarrocksSQLApiLib(object):
         """
         tools.assert_true(str(res).find(mv_name) > 0, "assert mv %s is not found" % (mv_name))
 
-    def check_hit_materialized_view(self, query, mv_name):
+    def check_hit_materialized_view(self, query, *expects):
         """
         assert mv_name is hit in query
         """
         time.sleep(1)
         sql = "explain %s" % (query)
         res = self.execute_sql(sql, True)
-        #print(res)
-        tools.assert_true(str(res["result"]).find(mv_name) > 0, "assert mv %s is not found" % (mv_name))
+        for expect in expects:
+            tools.assert_true(str(res["result"]).find(expect) > 0, "assert expect %s is not found in plan" % (expect))
 
-    def check_no_hit_materialized_view(self, query, mv_name):
+    def check_no_hit_materialized_view(self, query, *expects):
         """
         assert mv_name is hit in query
         """
         time.sleep(1)
         sql = "explain %s" % (query)
         res = self.execute_sql(sql, True)
-        tools.assert_false(str(res["result"]).find(mv_name) > 0, "assert mv %s is found" % (mv_name))
+        for expect in expects:
+            tools.assert_false(str(res["result"]).find(expect) > 0, "assert expect %s should not be found" % (expect))
 
     def wait_alter_table_finish(self, alter_type="COLUMN", off=9):
         """

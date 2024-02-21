@@ -204,7 +204,7 @@ public class DecimalLiteral extends LiteralExpr {
         return value;
     }
 
-    public void checkPrecisionAndScale(int precision, int scale) throws AnalysisException {
+    public void checkPrecisionAndScale(Type columnType, int precision, int scale) throws AnalysisException {
         Preconditions.checkNotNull(this.value);
         boolean valid = true;
         int realPrecision = getRealPrecision(this.value);
@@ -220,7 +220,7 @@ public class DecimalLiteral extends LiteralExpr {
         if (!valid) {
             String errMsg = String.format(
                     "Type %s is too narrow to hold the DecimalLiteral '%s' (precision=%d, scale=%d)",
-                    type.toString(), value.toPlainString(), realPrecision, realScale);
+                    columnType.toString(), value.toPlainString(), realPrecision, realScale);
             throw new AnalysisException(errMsg);
         }
     }
@@ -254,7 +254,7 @@ public class DecimalLiteral extends LiteralExpr {
         int precision = scalarType.getScalarPrecision();
         int scale = scalarType.getScalarScale();
         try {
-            checkPrecisionAndScale(precision, scale);
+            checkPrecisionAndScale(type, precision, scale);
         } catch (AnalysisException e) {
             throw new InternalError(e.getMessage());
         }

@@ -46,6 +46,9 @@ public class ExternalScanPartitionPruneRule extends TransformationRule {
     public static final ExternalScanPartitionPruneRule PAIMON_SCAN =
             new ExternalScanPartitionPruneRule(OperatorType.LOGICAL_PAIMON_SCAN);
 
+    public static final ExternalScanPartitionPruneRule ODPS_SCAN =
+            new ExternalScanPartitionPruneRule(OperatorType.LOGICAL_ODPS_SCAN);
+
     public ExternalScanPartitionPruneRule(OperatorType logicalOperatorType) {
         super(RuleType.TF_PARTITION_PRUNE, Pattern.create(logicalOperatorType));
     }

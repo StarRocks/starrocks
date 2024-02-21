@@ -44,6 +44,7 @@ import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.catalog.TableFunctionTable;
+import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.NullLiteral;
@@ -158,6 +159,9 @@ public class FileScanNode extends LoadScanNode {
     // 3. use vectorized engine
     private boolean useVectorizedLoad;
 
+    private LoadJob.JSONOptions jsonOptions = new LoadJob.JSONOptions();
+    private boolean flexibleColumnMapping = false;
+
     private boolean nullExprInAutoIncrement;
     private static class ParamCreateContext {
         public BrokerFileGroup fileGroup;
@@ -219,7 +223,7 @@ public class FileScanNode extends LoadScanNode {
             // csv/json/parquet load is controlled by Config::enable_vectorized_file_load
             // if Config::enable_vectorized_file_load is set true,
             // vectorized load will been enabled
-            TFileFormatType format = formatType(context.fileGroup.getFileFormat(), "");
+            TFileFormatType format = Load.getFormatType(context.fileGroup.getFileFormat(), "");
             initParams(context);
             paramCreateContexts.add(context);
         }
@@ -254,8 +258,16 @@ public class FileScanNode extends LoadScanNode {
         this.parallelInstanceNum = parallelInstanceNum;
     }
 
+    public void setFlexibleColumnMapping(boolean enable) {
+        this.flexibleColumnMapping = enable;
+    }
+
     public void setUseVectorizedLoad(boolean useVectorizedLoad) {
         this.useVectorizedLoad = useVectorizedLoad;
+    }
+
+    public void setJSONOptions(LoadJob.JSONOptions options) {
+        this.jsonOptions = options;
     }
 
     public boolean nullExprInAutoIncrement() {
@@ -304,6 +316,7 @@ public class FileScanNode extends LoadScanNode {
         params.setEnclose(fileGroup.getEnclose());
         params.setEscape(fileGroup.getEscape());
         params.setJson_file_size_limit(Config.json_file_size_limit);
+        params.setFlexible_column_mapping(flexibleColumnMapping);
         initColumns(context);
         initWhereExpr(fileGroup.getWhereExpr(), analyzer);
     }
@@ -515,15 +528,15 @@ public class FileScanNode extends LoadScanNode {
 
         // TODO: need to refactor after be split into cn + dn
         if (RunMode.isSharedDataMode()) {
-            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
             for (long cnId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
-                ComputeNode cn = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(cnId);
+                ComputeNode cn = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(cnId);
                 if (cn != null && cn.isAvailable()) {
                     nodes.add(cn);
                 }
             }
         } else {
-            for (ComputeNode be : GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().values()) {
+            for (ComputeNode be : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend().values()) {
                 if (be.isAvailable()) {
                     nodes.add(be);
                 }
@@ -536,37 +549,6 @@ public class FileScanNode extends LoadScanNode {
         Collections.shuffle(nodes, random);
     }
 
-    private TFileFormatType formatType(String fileFormat, String path) {
-        if (fileFormat != null) {
-            if (fileFormat.toLowerCase().equals("parquet")) {
-                return TFileFormatType.FORMAT_PARQUET;
-            } else if (fileFormat.toLowerCase().equals("orc")) {
-                return TFileFormatType.FORMAT_ORC;
-            } else if (fileFormat.toLowerCase().equals("json")) {
-                return TFileFormatType.FORMAT_JSON;
-            }
-            // Attention: The compression type of csv format is from the suffix of filename.
-        }
-
-        String lowerCasePath = path.toLowerCase();
-        if (lowerCasePath.endsWith(".parquet") || lowerCasePath.endsWith(".parq")) {
-            return TFileFormatType.FORMAT_PARQUET;
-        } else if (lowerCasePath.endsWith(".orc")) {
-            return TFileFormatType.FORMAT_ORC;
-        } else if (lowerCasePath.endsWith(".gz")) {
-            return TFileFormatType.FORMAT_CSV_GZ;
-        } else if (lowerCasePath.endsWith(".bz2")) {
-            return TFileFormatType.FORMAT_CSV_BZ2;
-        } else if (lowerCasePath.endsWith(".lz4")) {
-            return TFileFormatType.FORMAT_CSV_LZ4_FRAME;
-        } else if (lowerCasePath.endsWith(".deflate")) {
-            return TFileFormatType.FORMAT_CSV_DEFLATE;
-        } else if (lowerCasePath.endsWith(".zst")) {
-            return TFileFormatType.FORMAT_CSV_ZSTD;
-        } else {
-            return TFileFormatType.FORMAT_CSV_PLAIN;
-        }
-    }
 
     // If fileFormat is not null, we use fileFormat instead of check file's suffix
     private void processFileGroup(
@@ -585,7 +567,7 @@ public class FileScanNode extends LoadScanNode {
         long curFileOffset = 0;
         for (int i = 0; i < fileStatuses.size(); ) {
             TBrokerFileStatus fileStatus = fileStatuses.get(i);
-            TFileFormatType formatType = formatType(context.fileGroup.getFileFormat(), fileStatus.path);
+            TFileFormatType formatType = Load.getFormatType(context.fileGroup.getFileFormat(), fileStatus.path);
             List<String> columnsFromPath = HdfsUtil.parseColumnsFromPath(fileStatus.path,
                     context.fileGroup.getColumnsFromPath());
             int numberOfColumnsFromFile = context.slotDescByName.size() - columnsFromPath.size();
@@ -608,6 +590,11 @@ public class FileScanNode extends LoadScanNode {
             TBrokerRangeDesc rangeDesc =
                     createBrokerRangeDesc(curFileOffset, fileStatus, formatType, rangeBytes, columnsFromPath,
                             numberOfColumnsFromFile);
+
+            rangeDesc.setStrip_outer_array(jsonOptions.stripOuterArray);
+            rangeDesc.setJsonpaths(jsonOptions.jsonPaths);
+            rangeDesc.setJson_root(jsonOptions.jsonRoot);
+
             brokerScanRange(smallestLocations.first).addToRanges(rangeDesc);
             smallestLocations.second += rangeBytes;
             locationsHeap.add(smallestLocations);

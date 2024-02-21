@@ -84,6 +84,11 @@ public:
 
     void get_levels(int16_t** def_levels, int16_t** rep_levels, size_t* num_levels) override {}
 
+    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+                                 ColumnIOType type, bool active) override {}
+
+    void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {}
+
 private:
     static void _append_int32_column(Column* column, size_t start, size_t num_rows) {
         for (int i = 0; i < num_rows; i++) {

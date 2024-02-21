@@ -34,6 +34,7 @@
 
 package com.starrocks.transaction;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
@@ -41,7 +42,6 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
@@ -51,10 +51,10 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.Quantiles;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.proto.DeleteTxnLogRequest;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
@@ -98,7 +98,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
     private ThreadPoolExecutor deleteTxnLogExecutor;
     private Set<Long> publishingLakeTransactions;
 
-    private Set<Long> publishingLakeTransactionsBatchTableId;
+    @VisibleForTesting
+    protected Set<Long> publishingLakeTransactionsBatchTableId;
 
 
     public PublishVersionDaemon() {
@@ -108,7 +109,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
     @Override
     protected void runAfterCatalogReady() {
         try {
-            GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+            GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
             if (Config.lake_enable_batch_publish_version && RunMode.isSharedDataMode()) {
                 // batch publish
                 List<TransactionStateBatch> readyTransactionStatesBatch = globalTransactionMgr.
@@ -127,9 +128,9 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
 
             // TODO: need to refactor after be split into cn + dn
-            List<Long> allBackends = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false);
+            List<Long> allBackends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(false);
             if (RunMode.isSharedDataMode()) {
-                allBackends.addAll(GlobalStateMgr.getCurrentSystemInfo().getComputeNodeIds(false));
+                allBackends.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodeIds(false));
             }
 
             if (allBackends.isEmpty()) {
@@ -280,7 +281,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
     }
 
     private void publishVersionForOlapTable(List<TransactionState> readyTransactionStates) throws UserException {
-        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
 
         // every backend-transaction identified a single task
         AgentBatchTask batchTask = new AgentBatchTask();
@@ -412,7 +413,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         Set<Long> publishingTransactions = getPublishingLakeTransactions();
         for (TransactionState txnState : readyTransactionStates) {
             long txnId = txnState.getTransactionId();
-            if (publishingTransactions.add(txnId)) { // the set did not already contain the specified element
+            if (!publishingTransactions.contains(txnId)) { // the set did not already contain the specified element
                 Set<Long> publishingLakeTransactionsBatchTableId = getPublishingLakeTransactionsBatchTableId();
                 // When the `enable_lake_batch_publish_version` switch is just set to false,
                 // it is possible that the result of publish task has not been returned,
@@ -422,6 +423,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                             txnState.getTransactionId());
                     continue;
                 }
+                publishingTransactions.add(txnId);
                 CompletableFuture<Void> future = publishLakeTransactionAsync(txnState);
                 future.thenRun(() -> publishingTransactions.remove(txnId));
             }
@@ -452,7 +454,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
     }
 
     private CompletableFuture<Void> publishLakeTransactionAsync(TransactionState txnState) {
-        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         long txnId = txnState.getTransactionId();
         long dbId = txnState.getDbId();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
@@ -512,7 +514,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 return true;
             }
 
-            Partition partition = table.getPartition(partitionId);
+            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             if (partition == null) {
                 LOG.info("partition is null in publish partition batch");
                 return true;
@@ -579,9 +581,9 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 stateBatch.setCompactionScore(tableId, partitionId, quantiles);
                 stateBatch.putBeTablets(partitionId, nodeToTablets);
             }
-        } catch (Throwable e) {
-            LOG.error("Fail to publish partition {} of txnIds {}: {}", partitionId,
-                    txnIds, e.getMessage());
+        } catch (Exception e) {
+            LOG.error("Fail to publish partition {} of txnIds {}:", partitionId,
+                    txnIds, e);
             return false;
         }
 
@@ -627,7 +629,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
     }
 
     private CompletableFuture<Void> publishLakeTransactionBatchAsync(TransactionStateBatch txnStateBatch) {
-        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         assert txnStateBatch.size() > 1;
         // pick up all tableCommitInfo
         // only one table,if batch has multi transactionState for now,
@@ -636,7 +638,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
         long tableId = txnStateBatch.getTableId();
         List<TransactionState> states = txnStateBatch.getTransactionStates();
         // partitionId -> txnIdList
-        Map<Long, List<Long>> dirtyPartitons = new HashMap<>();
+        Map<Long, List<Long>> dirtyPartitions = new HashMap<>();
         // partitionId -> versionList
         Map<Long, List<Long>> partitionVersions = new HashMap<>();
         // partitionId -> transactionState
@@ -648,10 +650,10 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     .getIdToPartitionCommitInfo();
             for (Map.Entry<Long, PartitionCommitInfo> item : partitionCommitInfoMap.entrySet()) {
 
-                if (!dirtyPartitons.containsKey(item.getKey())) {
-                    dirtyPartitons.put(item.getKey(), new ArrayList<>());
+                if (!dirtyPartitions.containsKey(item.getKey())) {
+                    dirtyPartitions.put(item.getKey(), new ArrayList<>());
                 }
-                List<Long> partitionCommitInfo = dirtyPartitons.get(item.getKey());
+                List<Long> partitionCommitInfo = dirtyPartitions.get(item.getKey());
                 partitionCommitInfo.add(state.getTransactionId());
 
                 if (!partitionVersions.containsKey(item.getKey())) {
@@ -686,7 +688,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
         List<CompletableFuture<Boolean>> futureList = new ArrayList<>();
 
-        for (Map.Entry<Long, List<Long>> item : dirtyPartitons.entrySet()) {
+        for (Map.Entry<Long, List<Long>> item : dirtyPartitions.entrySet()) {
             Long partitionId = item.getKey();
 
             CompletableFuture<Boolean> future = CompletableFuture.supplyAsync(() -> {
@@ -719,7 +721,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     }
 
                     // here create the job to drop txnLog, for the visibleVersion has been updated
-                    submitDeleteTxnLogJob(txnStateBatch, dirtyPartitons);
+                    submitDeleteTxnLogJob(txnStateBatch, dirtyPartitions);
                 } catch (UserException e) {
                     throw new RuntimeException(e);
                 }
@@ -775,6 +777,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                                      @NotNull PartitionCommitInfo partitionCommitInfo,
                                      @NotNull TransactionState txnState) {
         long tableId = tableCommitInfo.getTableId();
+        long baseVersion = 0;
         long txnVersion = partitionCommitInfo.getVersion();
         long txnId = txnState.getTransactionId();
         long commitTime = txnState.getCommitTime();
@@ -797,9 +800,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 LOG.info("Ignore non-exist partition {} of table {} in txn {}", partitionId, table.getName(), txnLabel);
                 return true;
             }
-            if (partition.getVisibleVersion() + 1 != txnVersion) {
+            if (txnState.getSourceType() != TransactionState.LoadJobSourceType.REPLICATION &&
+                    partition.getVisibleVersion() + 1 != txnVersion) {
                 return false;
             }
+            baseVersion = partition.getVisibleVersion();
             List<MaterializedIndex> indexes = txnState.getPartitionLoadedTblIndexes(table.getId(), partition);
             for (MaterializedIndex index : indexes) {
                 if (!index.visibleForTransaction(txnId)) {
@@ -824,7 +829,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
             if (CollectionUtils.isNotEmpty(normalTablets)) {
                 Map<Long, Double> compactionScores = new HashMap<>();
-                Utils.publishVersion(normalTablets, txnId, txnVersion - 1, txnVersion, commitTime / 1000,
+                Utils.publishVersion(normalTablets, txnId, baseVersion, txnVersion, commitTime / 1000,
                         compactionScores);
 
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
@@ -878,7 +883,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     }
                     if (materializedView.shouldTriggeredRefreshBy(db.getFullName(), table.getName())) {
                         LOG.info("Trigger auto materialized view refresh because of base table {} has changed, " +
-                                        "db:{}, mv:{}", table.getName(), mvDb.getFullName(), materializedView.getName());
+                                "db:{}, mv:{}", table.getName(), mvDb.getFullName(), materializedView.getName());
                         GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
                                 mvDb.getFullName(), mvDb.getTable(mvId.getId()).getName(), false, null,
                                 Constants.TaskRunPriority.NORMAL.value(), true, false);

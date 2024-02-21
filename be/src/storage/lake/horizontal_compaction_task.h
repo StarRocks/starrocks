@@ -36,7 +36,7 @@ public:
 
     ~HorizontalCompactionTask() override = default;
 
-    Status execute(Progress* progress, CancelFunc cancel_func) override;
+    Status execute(Progress* progress, CancelFunc cancel_func, ThreadPool* flush_pool = nullptr) override;
 
 private:
     StatusOr<int32_t> calculate_chunk_size();

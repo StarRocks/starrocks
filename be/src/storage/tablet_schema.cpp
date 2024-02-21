@@ -101,7 +101,7 @@ uint32_t TabletColumn::get_field_length_by_type(LogicalType type, uint32_t strin
     case TYPE_PERCENTILE:
     case TYPE_JSON:
     case TYPE_VARBINARY:
-        return string_length + sizeof(OLAP_STRING_MAX_LENGTH);
+        return string_length + sizeof(get_olap_string_max_length());
     case TYPE_ARRAY:
         return string_length;
     }
@@ -486,11 +486,12 @@ void TabletSchema::_init_from_pb(const TabletSchemaPB& schema) {
     _schema_version = schema.schema_version();
 }
 
-Status TabletSchema::build_current_tablet_schema(int64_t index_id, int32_t version, const POlapTableIndexSchema& index,
+Status TabletSchema::build_current_tablet_schema(int64_t schema_id, int32_t version,
+                                                 const POlapTableColumnParam& column_param,
                                                  const TabletSchemaCSPtr& ori_tablet_schema) {
     // copy from ori_tablet_schema
     _keys_type = ori_tablet_schema->keys_type();
-    _num_short_key_columns = index.column_param().short_key_column_count();
+    _num_short_key_columns = column_param.short_key_column_count();
     _num_rows_per_row_block = ori_tablet_schema->num_rows_per_row_block();
     _compression_type = ori_tablet_schema->compression_type();
 
@@ -506,28 +507,27 @@ Status TabletSchema::build_current_tablet_schema(int64_t index_id, int32_t versi
     _sort_key_uids.clear();
 
     _schema_version = version;
-    if (index.id() == index_id) {
-        for (auto& pcolumn : index.column_param().columns_desc()) {
-            TabletColumn column;
-            column.init_from_pb(pcolumn);
-            if (column.is_key()) {
-                _num_key_columns++;
-            }
-            if (column.is_bf_column()) {
-                has_bf_columns = true;
-            }
-            _unique_id_to_index[column.unique_id()] = _num_columns;
-            _cols.emplace_back(std::move(column));
-            _num_columns++;
+    _id = schema_id;
+    for (auto& pcolumn : column_param.columns_desc()) {
+        TabletColumn column;
+        column.init_from_pb(pcolumn);
+        if (column.is_key()) {
+            _num_key_columns++;
         }
-        if (ori_tablet_schema->columns().back().name() == "__row") {
-            _cols.emplace_back(ori_tablet_schema->columns().back());
+        if (column.is_bf_column()) {
+            has_bf_columns = true;
         }
+        _unique_id_to_index[column.unique_id()] = _num_columns;
+        _cols.emplace_back(std::move(column));
+        _num_columns++;
+    }
+    if (ori_tablet_schema->columns().back().name() == Schema::FULL_ROW_COLUMN) {
+        _cols.emplace_back(ori_tablet_schema->columns().back());
     }
 
-    if (!index.column_param().sort_key_uid().empty()) {
+    if (!column_param.sort_key_uid().empty()) {
         _sort_key_idxes.clear();
-        for (auto uid : index.column_param().sort_key_uid()) {
+        for (auto uid : column_param.sort_key_uid()) {
             auto it = _unique_id_to_index.find(uid);
             if (it == _unique_id_to_index.end()) {
                 std::string msg = strings::Substitute("sort key column uid: $0 is not exist in columns", uid);
@@ -712,7 +712,7 @@ std::string TabletColumn::debug_string() const {
        << ",default_value=" << (has_default_value() ? default_value() : "N/A")
        << ",precision=" << (has_precision() ? std::to_string(_precision) : "N/A")
        << ",frac=" << (has_scale() ? std::to_string(_scale) : "N/A") << ",length=" << _length
-       << ",index_length=" << _index_length << ",is_bf_column=" << is_bf_column()
+       << ",index_length=" << static_cast<int>(_index_length) << ",is_bf_column=" << is_bf_column()
        << ",has_bitmap_index=" << has_bitmap_index() << ")";
     return ss.str();
 }
@@ -730,9 +730,10 @@ std::string TabletSchema::debug_string() const {
         }
         ss << _cols[i].debug_string();
     }
-    ss << "],keys_type=" << _keys_type << ",num_columns=" << num_columns() << ",num_key_columns=" << _num_key_columns
-       << ",num_short_key_columns=" << _num_short_key_columns << ",num_rows_per_row_block=" << _num_rows_per_row_block
-       << ",next_column_unique_id=" << _next_column_unique_id << ",has_bf_fpp=" << _has_bf_fpp << ",bf_fpp=" << _bf_fpp;
+    ss << "],keys_type=" << static_cast<int32_t>(_keys_type) << ",num_columns=" << num_columns()
+       << ",num_key_columns=" << _num_key_columns << ",num_short_key_columns=" << _num_short_key_columns
+       << ",num_rows_per_row_block=" << _num_rows_per_row_block << ",next_column_unique_id=" << _next_column_unique_id
+       << ",has_bf_fpp=" << _has_bf_fpp << ",bf_fpp=" << _bf_fpp;
     return ss.str();
 }
 

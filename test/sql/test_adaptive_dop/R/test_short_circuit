@@ -1,0 +1,283 @@
+-- name: test_adaptive_dop_short_circuit @sequential
+create table t1 (
+    k1 int,
+    k2 int,
+    c1 string
+)
+duplicate key(k1, k2)
+distributed by hash(k1) buckets 3
+properties("replication_num" = "1");
+-- result:
+-- !result
+insert into t1
+select generate_series, generate_series + 10000, concat('a', generate_series) from TABLE(generate_series(0, 10000 - 1));
+-- result:
+-- !result
+insert into t1 select * from t1;
+-- result:
+-- !result
+insert into t1 select * from t1;
+-- result:
+-- !result
+insert into t1 select * from t1;
+-- result:
+-- !result
+insert into t1 select * from t1;
+-- result:
+-- !result
+with 
+    w_empty as (select * from t1 where c1 = 'not-exist'),
+    w1 as (select k1, k2, count(1) as cnt from t1 group by k1, k2),
+    w2 as (select k1, k2, c1, count(1) as cnt from t1 group by k1, k2, c1)
+select /*+SET_VAR(enable_runtime_adaptive_dop=true)*/
+    count(1) 
+from 
+    w_empty tt1 
+    join t1 tt2
+    join t1 tt3
+    join w1 tt4
+    join w2 tt5;
+-- result:
+0
+-- !result
+with 
+    w_empty as (select * from t1 where c1 = 'not-exist'),
+    w1 as (select k1, k2, count(1) as cnt from t1 group by k1, k2),
+    w2 as (select k1, k2, c1, count(1) as cnt from t1 group by k1, k2, c1)
+select /*+SET_VAR(enable_runtime_adaptive_dop=true)*/
+    count(1) 
+from 
+    t1 tt1 
+    join w_empty tt2
+    join t1 tt3
+    join w1 tt4
+    join w2 tt5;
+-- result:
+0
+-- !result
+with 
+    w_empty as (select * from t1 where c1 = 'not-exist'),
+    w1 as (select k1, k2, count(1) as cnt from t1 group by k1, k2),
+    w2 as (select k1, k2, c1, count(1) as cnt from t1 group by k1, k2, c1)
+select /*+SET_VAR(enable_runtime_adaptive_dop=true)*/
+    count(1) 
+from 
+    t1 tt1 
+    join t1 tt2
+    join w_empty tt3
+    join w1 tt4
+    join w2 tt5;
+-- result:
+0
+-- !result
+with 
+    w_empty as (select * from t1 where c1 = 'not-exist'),
+    w1 as (select k1, k2, count(1) as cnt from t1 group by k1, k2),
+    w2 as (select k1, k2, c1, count(1) as cnt from t1 group by k1, k2, c1)
+select /*+SET_VAR(enable_runtime_adaptive_dop=true)*/
+    count(1) 
+from 
+    t1 tt1 
+    join t1 tt2
+    join t1 tt3
+    join w1 tt4
+    join w2 tt5
+    join w_empty tt6;
+-- result:
+0
+-- !result
+ADMIN ENABLE FAILPOINT 'collect_stats_source_initialize_prepare_failed';
+-- result:
+-- !result
+with 
+    w_empty as (select * from t1 where c1 = 'not-exist'),
+    w1 as (select k1, k2, count(1) as cnt from t1 group by k1, k2),
+    w2 as (select k1, k2, c1, count(1) as cnt from t1 group by k1, k2, c1)
+select /*+SET_VAR(enable_runtime_adaptive_dop=true)*/
+    count(1) 
+from 
+    w_empty tt1 
+    join t1 tt2
+    join t1 tt3
+    join w1 tt4
+    join w2 tt5;
+-- result:
+E: (1064, 'injected collect_stats_source_initialize_prepare_failed')
+-- !result
+with 
+    w_empty as (select * from t1 where c1 = 'not-exist'),
+    w1 as (select k1, k2, count(1) as cnt from t1 group by k1, k2),
+    w2 as (select k1, k2, c1, count(1) as cnt from t1 group by k1, k2, c1)
+select /*+SET_VAR(enable_runtime_adaptive_dop=true)*/
+    count(1) 
+from 
+    t1 tt1 
+    join w_empty tt2
+    join t1 tt3
+    join w1 tt4
+    join w2 tt5;
+-- result:
+E: (1064, 'injected collect_stats_source_initialize_prepare_failed')
+-- !result
+with 
+    w_empty as (select * from t1 where c1 = 'not-exist'),
+    w1 as (select k1, k2, count(1) as cnt from t1 group by k1, k2),
+    w2 as (select k1, k2, c1, count(1) as cnt from t1 group by k1, k2, c1)
+select /*+SET_VAR(enable_runtime_adaptive_dop=true)*/
+    count(1) 
+from 
+    t1 tt1 
+    join t1 tt2
+    join w_empty tt3
+    join w1 tt4
+    join w2 tt5;
+-- result:
+E: (1064, 'injected collect_stats_source_initialize_prepare_failed')
+-- !result
+with 
+    w_empty as (select * from t1 where c1 = 'not-exist'),
+    w1 as (select k1, k2, count(1) as cnt from t1 group by k1, k2),
+    w2 as (select k1, k2, c1, count(1) as cnt from t1 group by k1, k2, c1)
+select /*+SET_VAR(enable_runtime_adaptive_dop=true)*/
+    count(1) 
+from 
+    t1 tt1 
+    join t1 tt2
+    join t1 tt3
+    join w1 tt4
+    join w2 tt5
+    join w_empty tt6;
+-- result:
+E: (1064, 'injected collect_stats_source_initialize_prepare_failed')
+-- !result
+ADMIN DISABLE FAILPOINT 'collect_stats_source_initialize_prepare_failed';
+-- result:
+-- !result
+with 
+    w_empty as (select * from t1 where c1 = 'not-exist'),
+    w1 as (select k1, k2, count(1) as cnt from t1 group by k1, k2),
+    w2 as (select k1, k2, c1, count(1) as cnt from t1 group by k1, k2, c1)
+select /*+SET_VAR(enable_runtime_adaptive_dop=true)*/
+    count(1) 
+from 
+    t1 tt1
+    join t1 tt2 on tt1.k1=tt2.k1
+    join t1 tt3 on tt1.k1=tt3.k1
+    join w1 tt4 on tt1.k1=tt4.k1
+    join w2 tt5 on tt1.k1=tt5.k1;
+-- result:
+40960000
+-- !result
+with 
+    w_empty as (select * from t1 where c1 = 'not-exist'),
+    w1 as (select k1, k2, count(1) as cnt from t1 group by k1, k2),
+    w2 as (select k1, k2, c1, count(1) as cnt from t1 group by k1, k2, c1)
+select /*+SET_VAR(enable_runtime_adaptive_dop=true)*/
+    count(1) 
+from 
+    w_empty tt1
+    join t1 tt2 on tt1.k1=tt2.k1
+    join t1 tt3 on tt1.k1=tt3.k1
+    join w1 tt4 on tt1.k1=tt4.k1
+    join w2 tt5 on tt1.k1=tt5.k1;
+-- result:
+0
+-- !result
+with 
+    w_empty as (select * from t1 where c1 = 'not-exist'),
+    w1 as (select k1, k2, count(1) as cnt from t1 group by k1, k2),
+    w2 as (select k1, k2, c1, count(1) as cnt from t1 group by k1, k2, c1)
+select /*+SET_VAR(enable_runtime_adaptive_dop=true)*/
+    count(1) 
+from 
+    t1 tt1
+    join w_empty tt2 on tt1.k1=tt2.k1
+    join t1 tt3 on tt1.k1=tt3.k1
+    join w1 tt4 on tt1.k1=tt4.k1
+    join w2 tt5 on tt1.k1=tt5.k1;
+-- result:
+0
+-- !result
+with 
+    w_empty as (select * from t1 where c1 = 'not-exist'),
+    w1 as (select k1, k2, count(1) as cnt from t1 group by k1, k2),
+    w2 as (select k1, k2, c1, count(1) as cnt from t1 group by k1, k2, c1)
+select /*+SET_VAR(enable_runtime_adaptive_dop=true)*/
+    count(1) 
+from 
+    t1 tt1
+    join t1 tt2 on tt1.k1=tt2.k1
+    join t1 tt3 on tt1.k1=tt3.k1
+    join w1 tt4 on tt1.k1=tt4.k1
+    join w2 tt5 on tt1.k1=tt5.k1
+    join w_empty tt6 on tt1.k1=tt6.k1;
+-- result:
+0
+-- !result
+ADMIN ENABLE FAILPOINT 'collect_stats_source_initialize_prepare_failed';
+-- result:
+-- !result
+with 
+    w_empty as (select * from t1 where c1 = 'not-exist'),
+    w1 as (select k1, k2, count(1) as cnt from t1 group by k1, k2),
+    w2 as (select k1, k2, c1, count(1) as cnt from t1 group by k1, k2, c1)
+select /*+SET_VAR(enable_runtime_adaptive_dop=true)*/
+    count(1) 
+from 
+    t1 tt1
+    join t1 tt2 on tt1.k1=tt2.k1
+    join t1 tt3 on tt1.k1=tt3.k1
+    join w1 tt4 on tt1.k1=tt4.k1
+    join w2 tt5 on tt1.k1=tt5.k1;
+-- result:
+E: (1064, 'injected collect_stats_source_initialize_prepare_failed')
+-- !result
+with 
+    w_empty as (select * from t1 where c1 = 'not-exist'),
+    w1 as (select k1, k2, count(1) as cnt from t1 group by k1, k2),
+    w2 as (select k1, k2, c1, count(1) as cnt from t1 group by k1, k2, c1)
+select /*+SET_VAR(enable_runtime_adaptive_dop=true)*/
+    count(1) 
+from 
+    w_empty tt1
+    join t1 tt2 on tt1.k1=tt2.k1
+    join t1 tt3 on tt1.k1=tt3.k1
+    join w1 tt4 on tt1.k1=tt4.k1
+    join w2 tt5 on tt1.k1=tt5.k1;
+-- result:
+E: (1064, 'injected collect_stats_source_initialize_prepare_failed')
+-- !result
+with 
+    w_empty as (select * from t1 where c1 = 'not-exist'),
+    w1 as (select k1, k2, count(1) as cnt from t1 group by k1, k2),
+    w2 as (select k1, k2, c1, count(1) as cnt from t1 group by k1, k2, c1)
+select /*+SET_VAR(enable_runtime_adaptive_dop=true)*/
+    count(1) 
+from 
+    t1 tt1
+    join w_empty tt2 on tt1.k1=tt2.k1
+    join t1 tt3 on tt1.k1=tt3.k1
+    join w1 tt4 on tt1.k1=tt4.k1
+    join w2 tt5 on tt1.k1=tt5.k1;
+-- result:
+E: (1064, 'injected collect_stats_source_initialize_prepare_failed')
+-- !result
+with 
+    w_empty as (select * from t1 where c1 = 'not-exist'),
+    w1 as (select k1, k2, count(1) as cnt from t1 group by k1, k2),
+    w2 as (select k1, k2, c1, count(1) as cnt from t1 group by k1, k2, c1)
+select /*+SET_VAR(enable_runtime_adaptive_dop=true)*/
+    count(1) 
+from 
+    t1 tt1
+    join t1 tt2 on tt1.k1=tt2.k1
+    join t1 tt3 on tt1.k1=tt3.k1
+    join w1 tt4 on tt1.k1=tt4.k1
+    join w2 tt5 on tt1.k1=tt5.k1
+    join w_empty tt6 on tt1.k1=tt6.k1;
+-- result:
+E: (1064, 'injected collect_stats_source_initialize_prepare_failed')
+-- !result
+ADMIN DISABLE FAILPOINT 'collect_stats_source_initialize_prepare_failed';
+-- result:
+-- !result

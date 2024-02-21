@@ -103,6 +103,9 @@ public:
 
     int64_t write_buffer_size() const { return _writer->write_buffer_size(); }
 
+    // Just for testing
+    DeltaWriter* writer() { return _writer.get(); }
+
 private:
     struct private_type {
         explicit private_type(int) {}
@@ -128,7 +131,6 @@ private:
     std::shared_ptr<DeltaWriter> _writer;
     bthread::ExecutionQueueId<Task> _queue_id;
     std::atomic<bool> _closed;
-    std::unique_ptr<starrocks::SegmentFlushToken> _segment_flush_executor = nullptr;
 };
 
 class CommittedRowsetInfo {

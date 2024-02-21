@@ -12,7 +12,7 @@ StarRocks 提供了开箱即用的数据湖查询功能，非常适用于对湖�
 
 ## 概述
 
-StarRocks 支持基于 External Catalog，如 Hive Catalog、Iceberg Catalog、Hudi Catalog 和 Paimon Catalog 构建异步物化视图。基于 External Catalog 的物化视图在以下情况下特别有用：
+StarRocks 支持基于 External Catalog，如 Hive Catalog、Iceberg Catalog、Hudi Catalog、JDBC Catalog 和 Paimon Catalog 构建异步物化视图。基于 External Catalog 的物化视图在以下情况下特别有用：
 
 - **数据湖报表的透明加速**
 
@@ -92,9 +92,9 @@ StarRocks 支持基于 External Catalog，如 Hive Catalog、Iceberg Catalog、H
 
 ### 选择合适的刷新策略
 
-目前，StarRocks 无法检测 Hudi Catalog 和 JDBC Catalog 中的分区级别数据更改。因此，一旦触发刷新任务，将执行全量刷新。
+目前，StarRocks 无法检测 Hudi Catalog 中的分区级别数据更改。因此，一旦触发刷新任务，将执行全量刷新。
 
-对于 Hive Catalog、Iceberg Catalog (从 v3.1.4 版本起) 和 Paimon Catalog (从 v3.2.1 版本起), StarRocks 支持检测分区级别数据更改。从而，StarRocks 可以: 
+对于 Hive Catalog、Iceberg Catalog (从 v3.1.4 版本起)、JDBC Catalog (从 v3.1.4 版本起，且仅支持 MySQL Range 分区) 和 Paimon Catalog (从 v3.2.1 版本起), StarRocks 支持检测分区级别数据更改。从而，StarRocks 可以: 
 
 - 仅刷新数据有更改的分区，避免全量刷新，减少刷新导致的资源消耗。
 - 在查询改写期间在一定程度上确保数据一致性。如果数据湖中的基表发生数据更改，查询将不会被改写至使用物化视图。
@@ -109,17 +109,29 @@ StarRocks 支持基于 External Catalog，如 Hive Catalog、Iceberg Catalog、H
 
 要启用 Hive 元数据缓存刷新功能，您可以使用 [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 设置以下 FE 动态配置项：
 
-| **配置名称**                                                 | **默认值**                      | **说明**                                                     |
-| ------------------------------------------------------------ | ------------------------------- | ------------------------------------------------------------ |
-| enable_background_refresh_connector_metadata                 | v3.0 为 `true`，v2.5 为 `false` | 是否开启 Hive 元数据缓存周期性刷新。开启后，StarRocks 会轮询 Hive 集群的元数据服务（HMS 或 AWS Glue），并刷新经常访问的 Hive 外部数据目录的元数据缓存，以感知数据更新。`true` 代表开启，`false` 代表关闭。 |
-| background_refresh_metadata_interval_millis                  | 600000（10 分钟）               | 接连两次 Hive 元数据缓存刷新之间的间隔。单位：毫秒。         |
-| background_refresh_metadata_time_secs_since_last_access_secs | 86400（24 小时）                | Hive 元数据缓存刷新任务过期时间。对于已被访问过的 Hive Catalog，如果超过该时间没有被访问，则停止刷新其元数据缓存。对于未被访问过的 Hive Catalog，StarRocks 不会刷新其元数据缓存。单位：秒。 |
+### 配置名称                                           
+
+####  enable_background_refresh_connector_metadata                 
+
+**Default**:  v3.0 为 `true`，v2.5 为 `false` <br/>
+**Description**:  是否开启 Hive 元数据缓存周期性刷新。开启后，StarRocks 会轮询 Hive 集群的元数据服务（HMS 或 AWS Glue），并刷新经常访问的 Hive 外部数据目录的元数据缓存，以感知数据更新。`true` 代表开启，`false` 代表关闭。 <br/>
+
+####  background_refresh_metadata_interval_millis                  
+
+**Default**:  600000（10 分钟）               <br/>
+**Description**:  接连两次 Hive 元数据缓存刷新之间的间隔。单位：毫秒。         <br/>
+
+####  background_refresh_metadata_time_secs_since_last_access_secs 
+
+**Default**:  86400（24 小时）                <br/>
+**Description**:  Hive 元数据缓存刷新任务过期时间。对于已被访问过的 Hive Catalog，如果超过该时间没有被访问，则停止刷新其元数据缓存。对于未被访问过的 Hive Catalog，StarRocks 不会刷新其元数据缓存。单位：秒。 <br/>
+
 
 对于 Iceberg Catalog, 从 v3.1.4 版本开始，StarRocks 支持检测分区级别的数据更改，当前只支持 Iceberg V1 表。
 
 ### 启用 External Catalog 物化视图的查询改写
 
-由于不保证数据的强一致性，StarRocks 默认禁用 Hudi、Iceberg 和 JDBC Catalog 物化视图的查询改写功能。您可以通过在创建物化视图时将 Property `force_external_table_query_rewrite` 设置为 `true` 来启用此功能。对于基于 Hive Catalog 中的表创建的物化视图，查询改写功能默认开启。在涉及查询改写的情况下，如果您使用非常复杂的查询语句来构建物化视图，我们建议您拆分查询语句并以嵌套方式构建多个简单的物化视图。嵌套的物化视图更加灵活，可以适应更广泛的查询模式。
+由于不保证数据的强一致性，StarRocks 默认禁用 Hudi 和 JDBC Catalog 物化视图的查询改写功能。您可以通过在创建物化视图时将 Property `force_external_table_query_rewrite` 设置为 `true` 来启用此功能。对于基于 Hive Catalog 中的表创建的物化视图，查询改写功能默认开启。在涉及查询改写的情况下，如果您使用非常复杂的查询语句来构建物化视图，我们建议您拆分查询语句并以嵌套方式构建多个简单的物化视图。嵌套的物化视图更加灵活，可以适应更广泛的查询模式。
 
 示例：
 

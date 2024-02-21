@@ -16,6 +16,7 @@ This topic lists all the SQL statements supported by StarRocks and categorizes t
     - [File, index, variable](#file-index-variable)
     - [SQL Blacklist](#sql-blacklist)
     - [Plugin](#plugin)
+    - [Query plan and query profile](#query-plan-and-query-profile)
   - [Loading, unloading](#loading-unloading)
     - [Routine load](#routine-load)
     - [Other load](#other-load)
@@ -127,6 +128,14 @@ Manages clusters, including FEs, BEs, compute nodes, brokers, resource groups, s
 - [SHOW PLUGINS](./Administration/SHOW_PLUGINS.md)
 - [UNINSTALL PLUGIN](./Administration/UNINSTALL_PLUGIN.md)
 
+### Query plan and query profile
+
+- [ANALYZE PROFILE](./Administration/ANALYZE_PROFILE.md)
+- [EXPLAIN](./Administration/EXPLAIN.md)
+- [EXPLAIN ANALYZE](./Administration/EXPLAIN_ANALYZE.md)
+- [SHOW PROFILELIST](./Administration/SHOW_PROFILELIST.md)
+
+
 ## Loading, unloading
 
 ### Routine load
@@ -142,13 +151,19 @@ Manages clusters, including FEs, BEs, compute nodes, brokers, resource groups, s
 ### Other load
 
 - [ALTER LOAD](./data-manipulation/ALTER_LOAD.md)
+- [ALTER PIPE](./data-manipulation/ALTER_PIPE.md)
 - [BROKER LOAD](./data-manipulation/BROKER_LOAD.md)
 - [CANCEL LOAD](./data-manipulation/CANCEL_LOAD.md)
+- [CREATE PIPE](./data-manipulation/CREATE_PIPE.md)
+- [DROP PIPE](./data-manipulation/DROP_PIPE.md)
 - [INSERT](./data-manipulation/INSERT.md)
+- [RETRY FILE](./data-manipulation/RETRY_FILE.md)
 - [SHOW LOAD](./data-manipulation/SHOW_LOAD.md)
+- [SHOW PIPES](./data-manipulation/SHOW_PIPES.md)
 - [SHOW TRANSACTION](./data-manipulation/SHOW_TRANSACTION.md)
 - [SPARK LOAD](./data-manipulation/SPARK_LOAD.md)
 - [STREAM LOAD](./data-manipulation/STREAM_LOAD.md)
+- [SUSPEND or RESUME PIPE](./data-manipulation/SUSPEND_or_RESUME_PIPE.md)
 
 ### Unloading
 
@@ -262,5 +277,4 @@ Manages clusters, including FEs, BEs, compute nodes, brokers, resource groups, s
 ## Utility commands
 
 - [DESC](./Utility/DESCRIBE.md)
-- [EXPLAIN](./Administration/EXPLAIN.md)
 - [USE](./data-definition/USE.md)

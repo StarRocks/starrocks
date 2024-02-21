@@ -40,10 +40,10 @@ import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.proto.TabletStatRequest;
 import com.starrocks.proto.TabletStatRequest.TabletInfo;
 import com.starrocks.proto.TabletStatResponse;
@@ -98,7 +98,7 @@ public class TabletStatMgr extends FrontendDaemon {
 
         // after update replica in all backends, update index row num
         long start = System.currentTimeMillis();
-        List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
         for (Long dbId : dbIds) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db == null) {
@@ -147,7 +147,7 @@ public class TabletStatMgr extends FrontendDaemon {
         if (!RunMode.isSharedNothingMode()) {
             return;
         }
-        ImmutableMap<Long, Backend> backends = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
+        ImmutableMap<Long, Backend> backends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
 
         long start = System.currentTimeMillis();
         for (Backend backend : backends.values()) {
@@ -178,7 +178,7 @@ public class TabletStatMgr extends FrontendDaemon {
     }
 
     private void updateLocalTabletStat(Long beId, TTabletStatResult result) {
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (Map.Entry<Long, TTabletStat> entry : result.getTablets_stats().entrySet()) {
             if (invertedIndex.getTabletMeta(entry.getKey()) == null) {
                 // the replica is obsolete, ignore it.
@@ -205,7 +205,7 @@ public class TabletStatMgr extends FrontendDaemon {
             return;
         }
 
-        List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
+        List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
         for (Long dbId : dbIds) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db == null) {
@@ -222,7 +222,7 @@ public class TabletStatMgr extends FrontendDaemon {
     }
 
     private void adjustStatUpdateRows(long tableId, long totalRowCount) {
-        BasicStatsMeta meta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(tableId);
+        BasicStatsMeta meta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().get(tableId);
         if (meta != null) {
             meta.setUpdateRows(totalRowCount);
         }
@@ -360,7 +360,7 @@ public class TabletStatMgr extends FrontendDaemon {
                     Future<TabletStatResponse> responseFuture = lakeService.getTabletStats(request);
                     responseList.add(responseFuture);
                     LOG.debug("Sent tablet stat collection task to node {} for partition {} of version {}. tablet count={}",
-                                node.getHost(), debugName(), version, entry.getValue().size());
+                            node.getHost(), debugName(), version, entry.getValue().size());
                 } catch (Throwable e) {
                     LOG.warn("Fail to send tablet stat task to host {} for partition {}: {}", node.getHost(), debugName(),
                             e.getMessage());

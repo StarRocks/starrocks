@@ -39,13 +39,14 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.TraceManager;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TPublishVersionRequest;
 import com.starrocks.thrift.TTabletVersionPair;
 import com.starrocks.thrift.TTaskType;
+import com.starrocks.thrift.TTxnType;
 import com.starrocks.transaction.TransactionState;
 import io.opentelemetry.api.trace.Span;
 import org.apache.logging.log4j.LogManager;
@@ -67,10 +68,11 @@ public class PublishVersionTask extends AgentTask {
     private final TransactionState txnState;
     private Span span;
     private boolean enableSyncPublish;
+    private TTxnType txnType;
 
     public PublishVersionTask(long backendId, long transactionId, long dbId, long commitTimestamp,
                               List<TPartitionVersionInfo> partitionVersionInfos, String traceParent, Span txnSpan,
-                              long createTime, TransactionState state, boolean enableSyncPublish) {
+                              long createTime, TransactionState state, boolean enableSyncPublish, TTxnType txnType) {
         super(null, backendId, TTaskType.PUBLISH_VERSION, dbId, -1L, -1L, -1L, -1L, transactionId, createTime, traceParent);
         this.transactionId = transactionId;
         this.partitionVersionInfos = partitionVersionInfos;
@@ -79,6 +81,7 @@ public class PublishVersionTask extends AgentTask {
         this.commitTimestamp = commitTimestamp;
         this.txnState = state;
         this.enableSyncPublish = enableSyncPublish;
+        this.txnType = txnType;
         if (txnSpan != null) {
             span = TraceManager.startSpan("publish_version_task", txnSpan);
             span.setAttribute("backend_id", backendId);
@@ -94,6 +97,7 @@ public class PublishVersionTask extends AgentTask {
         publishVersionRequest.setCommit_timestamp(commitTimestamp);
         publishVersionRequest.setTxn_trace_parent(traceParent);
         publishVersionRequest.setEnable_sync_publish(enableSyncPublish);
+        publishVersionRequest.setTxn_type(txnType);
         return publishVersionRequest;
     }
 
@@ -131,7 +135,7 @@ public class PublishVersionTask extends AgentTask {
     }
 
     private Set<Long> collectErrorReplicas() {
-        TabletInvertedIndex tablets = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex tablets = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         Set<Long> errorReplicas = Sets.newHashSet();
         List<Long> errorTablets = this.getErrorTablets();
         if (errorTablets != null && !errorTablets.isEmpty()) {
@@ -157,7 +161,7 @@ public class PublishVersionTask extends AgentTask {
             span.addEvent("update_replica_version_start");
             span.setAttribute("num_replicas", tabletVersions.size());
         }
-        TabletInvertedIndex tablets = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex tablets = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         List<Long> tabletIds = tabletVersions.stream().map(tv -> tv.tablet_id).collect(Collectors.toList());
         List<Replica> replicas = tablets.getReplicasOnBackendByTabletIds(tabletIds, backendId);
         if (replicas == null) {

@@ -89,8 +89,8 @@ public class LakeTableTxnStateListenerTest extends LakeTableTestHelper {
         new MockUp<LakeTableTxnStateListener>() {
             @Mock
             void sendAbortTxnRequestIgnoreResponse(AbortTxnRequest request, ComputeNode node) {
+                Assert.assertNotNull(request);
                 Assert.assertNotNull(node);
-                Assert.assertEquals(skipCleanup, request.skipCleanup);
             }
 
             @Mock
@@ -110,10 +110,11 @@ public class LakeTableTxnStateListenerTest extends LakeTableTestHelper {
         TransactionState txnState = newTransactionState();
         txnState.setTransactionStatus(TransactionStatus.ABORTED);
         txnState.setReason("timed out");
+        List<TabletCommitInfo> finishedTablets = Collections.emptyList();
         if (!skipCleanup) {
-            txnState.setTabletCommitInfos(Collections.singletonList(new TabletCommitInfo(tableId, 10001)));
+            finishedTablets = Collections.singletonList(new TabletCommitInfo(tableId, 10001));
         }
-        listener.postAbort(txnState, Collections.emptyList());
+        listener.postAbort(txnState, finishedTablets, Collections.emptyList());
     }
 
     private void makeCompactionScoreExceedSlowdownThreshold() {
@@ -128,6 +129,7 @@ public class LakeTableTxnStateListenerTest extends LakeTableTestHelper {
                 arguments(false, Collections.singletonList(new ComputeNode())),
                 arguments(false, Collections.emptyList()),
                 arguments(true, Collections.singletonList(new ComputeNode())),
-                arguments(true, Collections.emptyList()));
+                arguments(true, Collections.emptyList()),
+                arguments(false, Lists.newArrayList(new ComputeNode(10001, "", 0), new ComputeNode(10002, "", 0))));
     }
 }

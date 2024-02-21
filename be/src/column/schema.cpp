@@ -209,7 +209,7 @@ std::vector<std::string> Schema::field_names() const {
 std::vector<std::string> Schema::value_field_names() const {
     std::vector<std::string> names;
     for (const auto& field : _fields) {
-        if (!field->is_key() && "__row" != field->name()) {
+        if (!field->is_key() && Schema::FULL_ROW_COLUMN != field->name()) {
             names.emplace_back(field->name());
         }
     }
@@ -219,7 +219,7 @@ std::vector<std::string> Schema::value_field_names() const {
 std::vector<ColumnId> Schema::value_field_column_ids() const {
     std::vector<ColumnId> column_ids;
     for (const auto& field : _fields) {
-        if (!field->is_key() && "__row" != field->name()) {
+        if (!field->is_key() && Schema::FULL_ROW_COLUMN != field->name()) {
             column_ids.emplace_back(field->id());
         }
     }
@@ -229,7 +229,7 @@ std::vector<ColumnId> Schema::value_field_column_ids() const {
 std::vector<ColumnId> Schema::field_column_ids(bool use_rowstore) const {
     std::vector<ColumnId> column_ids;
     for (const auto& field : _fields) {
-        if (use_rowstore || "__row" != field->name()) {
+        if (use_rowstore || Schema::FULL_ROW_COLUMN != field->name()) {
             column_ids.emplace_back(field->id());
         }
     }

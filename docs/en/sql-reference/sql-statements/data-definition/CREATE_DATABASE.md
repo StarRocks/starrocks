@@ -20,6 +20,8 @@ This operation requires the CREATE DATABASE privilege on the target catalog. You
 CREATE DATABASE [IF NOT EXISTS] <db_name>
 ```
 
+`db_name`: the name of the database to create. For the naming conventions, see [System limits](../../../reference/System_limit.md).
+
 ## Examples
 
 1. Create database `db_test`.

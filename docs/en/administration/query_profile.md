@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+unlisted: true
 ---
 
 # Analyze query profile
@@ -36,11 +36,7 @@ However, a runtime profile can be incomplete because some operators of the execu
 
 ## Access query profiles
 
-> **NOTE**
->
-> If you are using the Enterprise Edition of StarRocks, you can use StarRocks Manager to access and visualize your query profiles.
-
-If you are using the Community Edition of StarRocks, follow these steps to access your query profiles:
+Follow these steps to access your query profiles:
 
 1. Enter `http://<fe_ip>:<fe_http_port>` in your browser.
 2. On the page this is displayed, click **queries** on the top navigation pane.
@@ -366,7 +362,7 @@ The **Profile Overview** page displays some summary metrics, including the total
 
 By clicking the card of an operator (a node), you can view its detailed information in the right pane of the page. There are three tabs:
 
-- **Node**:  core metrics of this operator.
+- **Node**: core metrics of this operator.
 - **Node Detail**: all metrics of this operator.
 - **Pipeline**: metrics of the pipeline to which the operator belongs. You do not need to pay much attention to this tab because it is related only to scheduling.
 

@@ -414,7 +414,7 @@ public class DatabaseTransactionMgrTest {
                 () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK));
         ExceptionChecker.expectThrowsNoException(
                 () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.LAKE_COMPACTION));
-        ExceptionChecker.expectThrows(BeginTransactionException.class,
+        ExceptionChecker.expectThrows(RunningTxnExceedException.class,
                 () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.BACKEND_STREAMING));
     }
 

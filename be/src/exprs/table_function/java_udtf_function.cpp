@@ -123,7 +123,8 @@ Status JavaUDTFFunction::close(RuntimeState* runtime_state, TableFunctionState* 
     return Status::OK();
 }
 
-std::pair<Columns, UInt32Column::Ptr> JavaUDTFFunction::process(TableFunctionState* state) const {
+std::pair<Columns, UInt32Column::Ptr> JavaUDTFFunction::process(RuntimeState* runtime_state,
+                                                                TableFunctionState* state) const {
     Columns res;
     const Columns& cols = state->get_columns();
     auto* stateUDTF = down_cast<JavaUDTFState*>(state);

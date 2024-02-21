@@ -72,7 +72,7 @@ public class ColocationGroupProcDir implements ProcDirInterface {
         }
 
         GroupId groupId = new GroupId(dbId, grpId);
-        ColocateTableIndex index = GlobalStateMgr.getCurrentColocateIndex();
+        ColocateTableIndex index = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         List<List<Long>> beSeqs = index.getBackendsPerBucketSeq(groupId);
         return new ColocationGroupBackendSeqsProcNode(beSeqs);
     }
@@ -82,7 +82,7 @@ public class ColocationGroupProcDir implements ProcDirInterface {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
 
-        ColocateTableIndex index = GlobalStateMgr.getCurrentColocateIndex();
+        ColocateTableIndex index = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         List<List<String>> infos = index.getInfos();
         result.setRows(infos);
         return result;

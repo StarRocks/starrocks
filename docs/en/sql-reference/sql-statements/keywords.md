@@ -17,14 +17,14 @@ Keywords in SQL statements, such as `CREATE` and `DROP`, have special meanings w
     Query OK, 0 rows affected (0.00 sec)
     ```
 
-- **Reserved keywords** can be used as identifiers only after special treatment. For example, `LIKE` is a reserved keyword. If you want to use it to identify a database, enclose it in a pair of backticks (`\`).
+- **Reserved keywords** can be used as identifiers only after special treatment. For example, `LIKE` is a reserved keyword. If you want to use it to identify a database, enclose it in a pair of backticks (`).
 
     ```SQL
     CREATE DATABASE `LIKE`;
     Query OK, 0 rows affected (0.01 sec)
     ```
 
-  If it is not enclosed in backticks (`\`), an error is returned:
+  If it is not enclosed in backticks, an error is returned:
 
     ```SQL
     CREATE DATABASE LIKE;
@@ -33,7 +33,7 @@ Keywords in SQL statements, such as `CREATE` and `DROP`, have special meanings w
 
 ## Reserved keywords
 
-Following are StarRocks reserved keywords arranged in alphabetical order. You must enclose them in backticks (`\`) if you want to use them as identifiers. The reserved keywords may vary with StarRocks versions.
+Following are StarRocks reserved keywords arranged in alphabetical order. You must enclose them in a pair of backticks (`) if you want to use them as identifiers. The reserved keywords may vary with StarRocks versions.
 
 ### A
 

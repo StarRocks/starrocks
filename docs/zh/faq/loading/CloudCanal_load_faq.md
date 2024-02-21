@@ -2,7 +2,7 @@
 displayed_sidebar: "Chinese"
 ---
 
-# CloudCanal数据导入常见问题
+# CloudCanal 导入常见问题
 
 ## 导入时任务异常，报错 close index failed/too many tablet versions
 
@@ -24,5 +24,5 @@ displayed_sidebar: "Chinese"
 cumulative_compaction_num_threads_per_disk = 4
 base_compaction_num_threads_per_disk = 2
 cumulative_compaction_check_interval_seconds = 2
-update_compaction_num_threads_per_disk = 2 （该参数属于主键模型单独的compaction参数）
+update_compaction_num_threads_per_disk = 2 （该参数属于主键表单独的compaction参数）
 ```

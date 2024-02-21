@@ -105,6 +105,16 @@ enum TStatusCode {
     SR_EAGAIN = 54,
 
     REMOTE_FILE_NOT_FOUND = 55, // for hive external table
-    YIELD = 56 
+    YIELD = 56,
+    
+    JIT_COMPILE_ERROR = 57,
+
+    CAPACITY_LIMIT_EXCEED = 58,
+    
+    // for gin
+    INVERTED_INDEX_NOT_SUPPORTED = 61,
+    INVERTED_INDEX_FILE_NOT_FOUND = 62,
+    INVERTED_INDEX_INVALID_PARAMETERS = 63,
+    INVERTED_INDEX_CLUCENE_ERROR = 64
 }
 
