@@ -20,7 +20,7 @@ INT WEEK(DATETIME|DATE date, INT mode)
 
 - `Date`: The supported data types are DATETIME and DATE.
 
-- `Mode`: optional. The supported data type is INT. This parameter is used to specify the logic for calculating the week number, that is, whether the week starts on Sunday or Monday, and whether the return value is in the range of 0~53 or 1~53. Value range: 0~7. Default value: `0`. If this parameter is not specified, mode `0` is used by default. The following table describes how this parameter works.
+- `Mode`: optional. The supported data type is INT. This parameter is used to specify the logic for calculating the week number, that is, whether the week starts on Sunday or Monday, and whether the return value is in the range of 0 to 53 or 1 to 53. Value range: 0~7. Default value: `0`. If this parameter is not specified, mode `0` is used by default. The following table describes how this parameter works.
 
 | Mode | First day of week | Range | Week 1 is the first week …    |
 | :--- | :---------------- | :---- | :---------------------------- |
