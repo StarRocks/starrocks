@@ -199,7 +199,7 @@ By removing the specific expressions (only keep the operators), the query plan c
 
 ## Query hint
 
-Query hints are directives or comments that explicitly suggest the query optimizer on how to execute a query. Currently, StarRocks supports two types of hints: variable-setting hint and join hint. Hints only take effect within a single query.
+Query hints are directives or comments that explicitly suggest the query optimizer on how to execute a query. Currently, StarRocks supports three types of hints: variable-setting hint, user variable hint and join hint. Hints only take effect within a single query.
 
 ### Variable-Setting hint
 
@@ -235,6 +235,24 @@ DISTRIBUTED BY HASH(`key`)
 BUCKETS 10 
 REFRESH ASYNC 
 AS SELECT /*+ SET_VAR(query_timeout=500) */ * from dual;
+~~~
+
+### User variable hint
+
+You can set one or more [user variables](../reference/user_defined_variables.md) by using the `SET_USER_VARIABLE` hint in the form of the syntax `/*+ SET_USER_VARIABLE(...) */` in SELECT statements, or in the SELECT clause.
+
+#### Syntax
+
+~~~SQL
+[...] SELECT [/*+ SET_USER_VARIABLE(@var_name = expr [, @var_name = expr]*) */] ...
+~~~
+
+#### Examples
+
+Setting a statement-level variable in a query reduces the redundant calculation of a scalar subquery's result, without affecting the entire query connection.
+
+~~~SQL
+SELECT /*+ SET_USER_VARIABLE (@a = (select max(age) from users), @b = (select min(name) from users)) */ *  FROM sales_orders where sales_orders.age = @a and sales_orders.name = @b;
 ~~~
 
 ### Join hint
