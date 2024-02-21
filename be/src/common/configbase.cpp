@@ -41,14 +41,6 @@ std::map<std::string, std::string>* full_conf_map = nullptr;
 
 Properties props;
 
-// Because changes to the std::string type are not atomic,
-// we introduce a lock to protect mutable string type config item.
-std::mutex mstring_conf_lock;
-
-std::mutex* get_mstring_conf_lock() {
-    return &mstring_conf_lock;
-}
-
 // trim string
 std::string& trim(std::string& s) {
     // rtrim
@@ -173,6 +165,11 @@ bool strtox(const std::string& valstr, double& retval) {
 }
 
 bool strtox(const std::string& valstr, std::string& retval) {
+    retval = valstr;
+    return true;
+}
+
+bool strtox(const std::string& valstr, MutableString& retval) {
     retval = valstr;
     return true;
 }
@@ -302,6 +299,7 @@ bool init(const char* filename, bool fillconfmap) {
         SET_FIELD(it.second, int64_t, fillconfmap);
         SET_FIELD(it.second, double, fillconfmap);
         SET_FIELD(it.second, std::string, fillconfmap);
+        SET_FIELD(it.second, MutableString, fillconfmap);
         SET_FIELD(it.second, std::vector<bool>, fillconfmap);
         SET_FIELD(it.second, std::vector<int16_t>, fillconfmap);
         SET_FIELD(it.second, std::vector<int32_t>, fillconfmap);
@@ -341,10 +339,7 @@ Status set_config(const std::string& field, const std::string& value) {
     UPDATE_FIELD(it->second, value, int32_t);
     UPDATE_FIELD(it->second, value, int64_t);
     UPDATE_FIELD(it->second, value, double);
-    {
-        std::lock_guard lock(mstring_conf_lock);
-        UPDATE_FIELD(it->second, value, std::string);
-    }
+    UPDATE_FIELD(it->second, value, MutableString);
 
     // The other types are not thread safe to change dynamically.
     return Status::NotSupported(
@@ -368,12 +363,12 @@ std::string Register::Field::value() const {
         return std::to_string(*reinterpret_cast<double*>(storage));
     }
     if (strcmp(type, "std::string") == 0) {
-        if (valmutable) {
-            std::lock_guard lock(mstring_conf_lock);
-            return *reinterpret_cast<std::string*>(storage);
-        } else {
-            return *reinterpret_cast<std::string*>(storage);
-        }
+        DCHECK(!valmutable);
+        return *reinterpret_cast<std::string*>(storage);
+    }
+    if (strcmp(type, "MutableString") == 0) {
+        DCHECK(valmutable);
+        return *reinterpret_cast<MutableString*>(storage);
     }
     if (strcmp(type, "std::vector<std::string>") == 0) {
         std::stringstream ss;
