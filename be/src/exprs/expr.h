@@ -179,9 +179,8 @@ public:
     /// return
     ///   [[nodiscard]] Status.ok() if successful
     ///   ![[nodiscard]] Status.ok() if tree is inconsistent or corrupt
-     static Status create_tree_from_thrift(ObjectPool* pool, const std::vector<TExprNode>& nodes,
-                                                        Expr* parent, int* node_idx, Expr** root_expr,
-                                                        ExprContext** ctx, RuntimeState* state);
+    static Status create_tree_from_thrift(ObjectPool* pool, const std::vector<TExprNode>& nodes, Expr* parent,
+                                          int* node_idx, Expr** root_expr, ExprContext** ctx, RuntimeState* state);
 
     static Status create_tree_from_thrift_with_jit(ObjectPool* pool, const std::vector<TExprNode>& nodes, Expr* parent,
                                                    int* node_idx, Expr** root_expr, ExprContext** ctx,
