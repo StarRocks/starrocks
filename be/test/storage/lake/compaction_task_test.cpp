@@ -779,7 +779,7 @@ int main(int argc, char** argv) {
     // for managing it.
     starrocks::config::disable_storage_page_cache = true;
     exec_env->init_mem_tracker();
-    starrocks::ExecEnv::init(exec_env, paths);
+    exec_env->init(paths);
 
     int r = RUN_ALL_TESTS();
 
@@ -791,7 +791,7 @@ int main(int argc, char** argv) {
     starrocks::StorageEngine::instance()->stop();
     // destroy exec env
     starrocks::tls_thread_status.set_mem_tracker(nullptr);
-    starrocks::ExecEnv::destroy(exec_env);
+    exec_env->destroy();
 
     starrocks::shutdown_logging();
 
