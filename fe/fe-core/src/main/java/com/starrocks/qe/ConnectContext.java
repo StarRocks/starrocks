@@ -672,11 +672,11 @@ public class ConnectContext {
     }
 
     public String getCurrentCatalog() {
-        return currentCatalog;
+        return this.sessionVariable.getCatalog();
     }
 
     public void setCurrentCatalog(String currentCatalog) {
-        this.currentCatalog = currentCatalog;
+        this.sessionVariable.setCatalog(currentCatalog);
     }
 
     public String getCurrentWarehouse() {
