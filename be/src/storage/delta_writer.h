@@ -51,6 +51,7 @@ struct DeltaWriterOptions {
     int32_t schema_hash;
     int64_t txn_id;
     int64_t partition_id;
+    int64_t sink_id;
     PUniqueId load_id;
     // slots are in order of tablet's schema
     const std::vector<SlotDescriptor*>* slots;
