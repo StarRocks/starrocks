@@ -173,6 +173,10 @@ struct HashTableProbeState {
     // 1: all match one
     JoinMatchFlag match_flag = JoinMatchFlag::NORMAL; // all match one
 
+    // For uk fk join, we already know that for each fk in the left table, there's only one match from
+    // the right table. So we can use this flag to avoid unnecessary probing.
+    bool use_one_match_probe = false;
+
     bool has_remain = false;
     // When one-to-many, one probe may not be able to probe all the data,
     // cur_probe_index records the position of the last probe
@@ -254,6 +258,7 @@ struct HashTableProbeState {
 
 struct HashTableParam {
     bool with_other_conjunct = false;
+    bool use_one_match_probe = false;
     TJoinOp::type join_type = TJoinOp::INNER_JOIN;
     const RowDescriptor* row_desc = nullptr;
     const RowDescriptor* build_row_desc = nullptr;
