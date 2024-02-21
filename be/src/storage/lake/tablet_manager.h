@@ -68,8 +68,7 @@ public:
 
     StatusOr<VersionedTablet> get_tablet(int64_t tablet_id, int64_t version);
 
-    StatusOr<CompactionTaskPtr> compact(int64_t tablet_id, int64_t version, int64_t txn_id,
-                                        CompactionTaskContext& context);
+    StatusOr<CompactionTaskPtr> compact(CompactionTaskContext* context);
 
     [[nodiscard]] Status put_tablet_metadata(const TabletMetadata& metadata);
 

@@ -30,10 +30,9 @@ class TabletWriter;
 
 class HorizontalCompactionTask : public CompactionTask {
 public:
-    explicit HorizontalCompactionTask(int64_t txn_id, VersionedTablet tablet,
-                                      std::vector<std::shared_ptr<Rowset>> input_rowsets,
-                                      CompactionTaskContext& context)
-            : CompactionTask(txn_id, std::move(tablet), std::move(input_rowsets), context) {}
+    explicit HorizontalCompactionTask(VersionedTablet tablet, std::vector<std::shared_ptr<Rowset>> input_rowsets,
+                                      CompactionTaskContext* context)
+            : CompactionTask(std::move(tablet), std::move(input_rowsets), context) {}
 
     ~HorizontalCompactionTask() override = default;
 

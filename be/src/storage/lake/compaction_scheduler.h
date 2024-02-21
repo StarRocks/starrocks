@@ -97,7 +97,6 @@ struct CompactionTaskInfo {
     int64_t start_time;
     int64_t finish_time;
     Status status;
-    std::string statistic;
     int runs;     // How many times the compaction task has been executed
     int progress; // 0-100
     bool skipped;

@@ -146,7 +146,6 @@ void CompactionScheduler::list_tasks(std::vector<CompactionTaskInfo>* infos) {
         if (info.finish_time > 0) {
             info.status = context->status;
         }
-        info.statistic = context->to_json_stats();
     }
 }
 
@@ -236,7 +235,7 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
     context->runs.fetch_add(1, std::memory_order_relaxed);
 
     auto status = Status::OK();
-    auto task_or = _tablet_mgr->compact(tablet_id, version, txn_id, *context);
+    auto task_or = _tablet_mgr->compact(context.get());
     if (task_or.ok()) {
         auto should_cancel = [&]() { return context->callback->has_error() || context->callback->timeout_exceeded(); };
         TEST_SYNC_POINT("CompactionScheduler::do_compaction:before_execute_task");

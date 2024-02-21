@@ -77,12 +77,12 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
     // 1. For primary key, due to the existence of the delete vector, the number of rows read may be less than the
     //    number of rows counted in the metadata.
     // 2. If the number of rows is 0, the progress will not be updated
-    _context.progress.update(100);
+    _context->progress.update(100);
 
     RETURN_IF_ERROR(writer->finish());
 
     // update writer stats
-    _context.stats->segment_write_ns = writer->stats().segment_write_ns;
+    _context->stats->segment_write_ns += writer->stats().segment_write_ns;
 
     auto txn_log = std::make_shared<TxnLog>();
     auto op_compaction = txn_log->mutable_op_compaction();
@@ -106,8 +106,8 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
         _tablet.tablet_manager()->update_mgr()->preload_compaction_state(*txn_log, t, _tablet_schema);
     }
 
-    VLOG(3) << "Vertical compaction finished. tablet: " << _tablet.id() << ", txn_id: " << _txn_id
-            << ", statistics: " << _context.to_json_stats();
+    LOG(INFO) << "Vertical compaction finished. tablet: " << _tablet.id() << ", txn_id: " << _txn_id
+              << ", statistics: " << _context->to_json_stats();
 
     return Status::OK();
 }
@@ -200,23 +200,21 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
             source_masks->clear();
         }
 
-        _context.progress.update((100 * column_group_index + 100 * reader.stats().raw_rows_read / _total_num_rows) /
-                                 column_group_size);
-        VLOG_EVERY_N(3, 1000) << "Tablet: " << _tablet.id() << ", compaction progress: " << _context.progress.value();
+        _context->progress.update((100 * column_group_index + 100 * reader.stats().raw_rows_read / _total_num_rows) /
+                                  column_group_size);
+        VLOG_EVERY_N(3, 1000) << "Tablet: " << _tablet.id() << ", compaction progress: " << _context->progress.value();
     }
     RETURN_IF_ERROR(writer->flush_columns());
 
     // add reader stats
     auto stats = reader.stats();
-    _context.stats->reader_time_ns += reader_time_ns;
-    _context.stats->io_ns += stats.io_ns;
-    _context.stats->segment_init_ns += stats.segment_init_ns;
-    _context.stats->column_iterator_init_ns += stats.column_iterator_init_ns;
-    _context.stats->io_count_local_disk += stats.io_count_local_disk;
-    _context.stats->io_count_remote += stats.io_count_remote;
-    _context.stats->compressed_bytes_read += stats.compressed_bytes_read;
-    // add writer stats
-    _context.stats->segment_write_ns = writer->stats().segment_write_ns;
+    _context->stats->reader_time_ns += reader_time_ns;
+    _context->stats->io_ns += stats.io_ns;
+    _context->stats->segment_init_ns += stats.segment_init_ns;
+    _context->stats->column_iterator_init_ns += stats.column_iterator_init_ns;
+    _context->stats->io_count_local_disk += stats.io_count_local_disk;
+    _context->stats->io_count_remote += stats.io_count_remote;
+    _context->stats->compressed_bytes_read += stats.compressed_bytes_read;
 
     if (is_key) {
         RETURN_IF_ERROR(mask_buffer->flush());

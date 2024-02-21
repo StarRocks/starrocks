@@ -38,7 +38,6 @@ public class BeCloudNativeCompactionsSystemTable {
                         .column("FINISH_TIME", ScalarType.createType(PrimitiveType.DATETIME))
                         .column("PROGRESS", ScalarType.createType(PrimitiveType.INT))
                         .column("STATUS", ScalarType.createType(PrimitiveType.VARCHAR))
-                        .column("STATISTICS", ScalarType.createType(PrimitiveType.VARCHAR))
                         .build(), TSchemaTableType.SCH_BE_CLOUD_NATIVE_COMPACTIONS);
     }
 }
