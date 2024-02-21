@@ -690,26 +690,18 @@ public class PlanTestNoneDBBase {
 
     private static int extractInstancesFromSchedulerPlan(String[] lines, int startIndex, Map<Long, String> instances) {
         int i = startIndex;
-        StringBuilder builder = new StringBuilder();
         long beId = -1;
-        boolean isZeroFragment = false;
         for (; i < lines.length; i++) {
             String line = lines[i];
             String trimLine = line.trim();
             if (trimLine.isEmpty()) { // The profile Fragment is coming to the end.
                 break;
-            } else if (trimLine.startsWith("INSTANCE(0-")) {
-                isZeroFragment = true;
             } else if (trimLine.startsWith("INSTANCE(")) { // Start a new instance.
-                isZeroFragment = false;
                 if (beId != -1) {
-                    instances.put(beId, builder.toString());
+                    instances.put(beId / 10, beId / 10 + "");
                     beId = -1;
-                    builder = new StringBuilder();
                 }
             } else { // Still in this instance.
-                builder.append(line).append("\n");
-
                 Pattern beIdPattern = Pattern.compile("^\\s*BE: (\\d+)$");
                 Matcher matcher = beIdPattern.matcher(line);
 
