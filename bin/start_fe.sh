@@ -150,6 +150,11 @@ if [ ${ENABLE_DEBUGGER} -eq 1 ]; then
     echo "Start debugger with: $final_java_opt"
 fi
 
+# add datadog profile settings when enabled
+if [ "${ENABLE_DATADOG_PROFILE}" == "true" ] && [ -f "${STARROCKS_HOME}/datadog/dd-java-agent.jar" ]; then
+    final_java_opt="-javaagent:${STARROCKS_HOME}/datadog/dd-java-agent.jar ${final_java_opt}"
+fi
+
 if [ ! -d $LOG_DIR ]; then
     mkdir -p $LOG_DIR
 fi

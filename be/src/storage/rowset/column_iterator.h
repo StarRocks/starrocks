@@ -36,8 +36,10 @@
 
 #include "common/status.h"
 #include "storage/olap_common.h"
+#include "storage/options.h"
 #include "storage/range.h"
 #include "storage/rowset/common.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -55,7 +57,7 @@ struct ColumnIteratorOptions {
     // reader statistics
     OlapReaderStatistics* stats = nullptr;
     bool use_page_cache = false;
-    bool fill_data_cache = true;
+    LakeIOOptions lake_io_opts{.fill_data_cache = true};
 
     // check whether column pages are all dictionary encoding.
     bool check_dict_encoding = false;
@@ -180,7 +182,7 @@ public:
 
     [[nodiscard]] Status fetch_dict_codes_by_rowid(const Column& rowids, Column* values);
 
-    // for complex collection type (Array/Struct/Map)
+    // for Struct type (Struct)
     [[nodiscard]] virtual Status next_batch(size_t* n, Column* dst, ColumnAccessPath* path) {
         return next_batch(n, dst);
     }

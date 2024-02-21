@@ -575,7 +575,7 @@ public class ExternalOlapTable extends OlapTable {
         }
         long endOfTabletMetaBuild = System.currentTimeMillis();
 
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getOrCreateSystemInfo(clusterId);
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getOrCreateSystemInfo(clusterId);
         for (TBackendMeta backendMeta : backendMetas) {
             Backend backend = systemInfoService.getBackend(backendMeta.getBackend_id());
             if (backend == null) {

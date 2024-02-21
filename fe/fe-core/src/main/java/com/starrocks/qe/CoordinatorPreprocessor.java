@@ -87,8 +87,9 @@ public class CoordinatorPreprocessor {
         this.executionDAG = ExecutionDAG.build(jobSpec);
 
         SessionVariable sessionVariable = connectContext.getSessionVariable();
-        this.workerProvider = workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(),
-                sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes());
+        this.workerProvider =
+                workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                        sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes());
 
         this.fragmentAssignmentStrategyFactory = new FragmentAssignmentStrategyFactory(connectContext, jobSpec, executionDAG);
 
@@ -103,8 +104,9 @@ public class CoordinatorPreprocessor {
         this.executionDAG = ExecutionDAG.build(jobSpec);
 
         SessionVariable sessionVariable = connectContext.getSessionVariable();
-        this.workerProvider = workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(),
-                sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes());
+        this.workerProvider =
+                workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                        sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes());
 
         Map<PlanFragmentId, PlanFragment> fragmentMap =
                 fragments.stream().collect(Collectors.toMap(PlanFragment::getFragmentId, Function.identity()));
@@ -191,8 +193,9 @@ public class CoordinatorPreprocessor {
      */
     private void resetExec() {
         SessionVariable sessionVariable = connectContext.getSessionVariable();
-        workerProvider = workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentSystemInfo(),
-                sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes());
+        workerProvider =
+                workerProviderFactory.captureAvailableWorkers(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                        sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes());
 
         jobSpec.getFragments().forEach(PlanFragment::reset);
     }

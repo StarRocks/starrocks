@@ -67,12 +67,12 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.PartitionStatistics;
 import com.starrocks.lake.compaction.Quantiles;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.server.GlobalStateMgr;
 
@@ -316,7 +316,7 @@ public class PartitionsProcDir implements ProcDirInterface {
         return partitionInfos;
     }
 
-    private String distributionKeyAsString(DistributionInfo distributionInfo) {
+    public static String distributionKeyAsString(DistributionInfo distributionInfo) {
         if (distributionInfo.getType() == DistributionInfoType.HASH) {
             HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
             List<Column> distributionColumns = hashDistributionInfo.getDistributionColumns();
@@ -344,8 +344,8 @@ public class PartitionsProcDir implements ProcDirInterface {
         partitionInfo.add(partition.getState()); // State
 
         // partition key , range or list value
-        partitionInfo.add(Joiner.on(", ").join(this.findPartitionColNames(tblPartitionInfo)));
-        partitionInfo.add(this.findRangeOrListValues(tblPartitionInfo, partition.getId()));
+        partitionInfo.add(Joiner.on(", ").join(findPartitionColNames(tblPartitionInfo)));
+        partitionInfo.add(findRangeOrListValues(tblPartitionInfo, partition.getId()));
         DistributionInfo distributionInfo = partition.getDistributionInfo();
         partitionInfo.add(distributionKeyAsString(distributionInfo));
         partitionInfo.add(distributionInfo.getBucketNum());
@@ -380,8 +380,8 @@ public class PartitionsProcDir implements ProcDirInterface {
         partitionInfo.add(physicalPartition.getVisibleVersion()); // VisibleVersion
         partitionInfo.add(physicalPartition.getNextVersion()); // NextVersion
         partitionInfo.add(partition.getState()); // State
-        partitionInfo.add(Joiner.on(", ").join(this.findPartitionColNames(tblPartitionInfo))); // PartitionKey
-        partitionInfo.add(this.findRangeOrListValues(tblPartitionInfo, partition.getId())); // List or Range
+        partitionInfo.add(Joiner.on(", ").join(findPartitionColNames(tblPartitionInfo))); // PartitionKey
+        partitionInfo.add(findRangeOrListValues(tblPartitionInfo, partition.getId())); // List or Range
         partitionInfo.add(distributionKeyAsString(partition.getDistributionInfo())); // DistributionKey
         partitionInfo.add(partition.getDistributionInfo().getBucketNum()); // Buckets
         partitionInfo.add(new ByteSizeValue(physicalPartition.storageDataSize())); // DataSize
@@ -394,9 +394,9 @@ public class PartitionsProcDir implements ProcDirInterface {
         return partitionInfo;
     }
 
-    private List<String> findPartitionColNames(PartitionInfo partitionInfo) {
+    public static List<String> findPartitionColNames(PartitionInfo partitionInfo) {
         List<Column> partitionColumns;
-        if (this.partitionType == PartitionType.LIST) {
+        if (partitionInfo.getType() == PartitionType.LIST) {
             partitionColumns = ((ListPartitionInfo) partitionInfo).getPartitionColumns();
         } else if (partitionInfo.isRangePartition()) {
             partitionColumns = ((RangePartitionInfo) partitionInfo).getPartitionColumns();
@@ -406,8 +406,8 @@ public class PartitionsProcDir implements ProcDirInterface {
         return partitionColumns.stream().map(Column::getName).collect(Collectors.toList());
     }
 
-    private String findRangeOrListValues(PartitionInfo partitionInfo, long partitionId) {
-        if (this.partitionType == PartitionType.LIST) {
+    public static String findRangeOrListValues(PartitionInfo partitionInfo, long partitionId) {
+        if (partitionInfo.getType() == PartitionType.LIST) {
             return ((ListPartitionInfo) partitionInfo).getValuesFormat(partitionId);
         }
         if (partitionInfo.isRangePartition()) {
@@ -430,7 +430,6 @@ public class PartitionsProcDir implements ProcDirInterface {
     @Override
     public ProcNodeInterface lookup(String partitionIdOrName) throws AnalysisException {
         long partitionId = -1L;
-
 
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);

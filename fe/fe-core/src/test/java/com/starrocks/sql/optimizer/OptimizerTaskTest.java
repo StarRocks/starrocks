@@ -1299,7 +1299,8 @@ public class OptimizerTaskTest {
         };
 
         CallOperator call =
-                new CallOperator(FunctionSet.SUM, Type.BIGINT, Lists.newArrayList(ConstantOperator.createInt(1)));
+                new CallOperator(FunctionSet.SUM, Type.BIGINT, Lists.newArrayList(ConstantOperator.createInt(1)),
+                        null, true);
 
         new Expectations(call) {
             {
@@ -1307,9 +1308,6 @@ public class OptimizerTaskTest {
                 result = new ColumnRefSet(1);
                 minTimes = 0;
 
-                call.isDistinct();
-                result = true;
-                minTimes = 0;
 
                 call.getFunction();
                 result = AggregateFunction.createBuiltin(FunctionSet.SUM,
@@ -1363,16 +1361,13 @@ public class OptimizerTaskTest {
         };
 
         CallOperator call =
-                new CallOperator(FunctionSet.COUNT, Type.BIGINT, Lists.newArrayList(ConstantOperator.createInt(1)));
+                new CallOperator(FunctionSet.COUNT, Type.BIGINT, Lists.newArrayList(ConstantOperator.createInt(1)),
+                        null, true);
 
         new Expectations(call) {
             {
                 call.getUsedColumns();
                 result = new ColumnRefSet(1);
-                minTimes = 0;
-
-                call.isDistinct();
-                result = true;
                 minTimes = 0;
 
                 call.getFunction();

@@ -360,7 +360,8 @@ public final class SqlToScalarOperatorTranslator {
             Preconditions.checkState(node.getChildren().size() == 2);
             ScalarOperator collectionOperator = visit(node.getChild(0), context.clone(node));
             ScalarOperator subscriptOperator = visit(node.getChild(1), context.clone(node));
-            return new CollectionElementOperator(node.getType(), collectionOperator, subscriptOperator);
+            return new CollectionElementOperator(node.getType(), collectionOperator, subscriptOperator,
+                    node.isCheckIsOutOfBounds());
         }
 
         @Override
@@ -840,7 +841,7 @@ public final class SqlToScalarOperatorTranslator {
                     .stream()
                     .map(child -> visit(child, context.clone(node)))
                     .collect(Collectors.toList());
-            return new DictQueryOperator(arguments, node.getDictQueryExpr(), node.getFn());
+            return new DictQueryOperator(arguments, node.getDictQueryExpr(), node.getFn(), node.getType());
         }
 
         @Override

@@ -74,7 +74,7 @@ Once the DataSource has been added successfully, you can follow these steps to c
 
 ![image.png](../../assets/3.11-4.png)
 
-- Select the source tables you want to subscribe to. Please note that the target StarRocks tables automatically after Schema Migration are primary key tables, so source tables without a primary key are not currently supported**
+- Select the source tables you want to subscribe to. Please note that the target StarRocks tables automatically after Schema Migration are Primary Key tables, so source tables without a primary key are not currently supported**
 
 - Click Next Step
 

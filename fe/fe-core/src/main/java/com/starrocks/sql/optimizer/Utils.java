@@ -52,8 +52,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
-import org.apache.commons.collections.CollectionUtils;
-import org.apache.commons.collections.MapUtils;
+import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.SetUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.roaringbitmap.RoaringBitmap;
@@ -398,12 +398,12 @@ public class Utils {
                                         .map(Column::getName)
                                         .collect(Collectors.toList());
                         List<ColumnStatistic> keyColumnStatisticList =
-                                GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table, keyColumnNames);
+                                GlobalStateMgr.getCurrentState().getStatisticStorage().getColumnStatistics(table, keyColumnNames);
                         return keyColumnStatisticList.stream().anyMatch(ColumnStatistic::isUnknown);
                     }
                 }
                 List<ColumnStatistic> columnStatisticList =
-                        GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table, colNames);
+                        GlobalStateMgr.getCurrentState().getStatisticStorage().getColumnStatistics(table, colNames);
                 return columnStatisticList.stream().anyMatch(ColumnStatistic::isUnknown);
             } else if (operator instanceof LogicalHiveScanOperator || operator instanceof LogicalHudiScanOperator) {
                 if (ConnectContext.get().getSessionVariable().enableHiveColumnStats()) {
@@ -681,19 +681,12 @@ public class Utils {
 
     public static boolean couldGenerateMultiStageAggregate(LogicalProperty inputLogicalProperty,
                                                            Operator inputOp, Operator childOp) {
-        // 1. Must do one stage aggregate If the child contains limit,
-        //    the aggregation must be a single node to ensure correctness.
-        //    eg. select count(*) from (select * table limit 2) t
-        if (childOp.hasLimit()) {
-            return false;
-        }
-
-        // 2. check if must generate multi stage aggregate.
+        // 1. check if must generate multi stage aggregate.
         if (mustGenerateMultiStageAggregate(inputOp, childOp)) {
             return true;
         }
 
-        // 3. Respect user hint
+        // 2. Respect user hint
         int aggStage = ConnectContext.get().getSessionVariable().getNewPlannerAggStage();
         if (aggStage == ONE_STAGE.ordinal() ||
                 (aggStage == AUTO.ordinal() && inputLogicalProperty.oneTabletProperty().supportOneTabletOpt)) {
@@ -721,15 +714,41 @@ public class Utils {
             aggs = ((PhysicalHashAggregateOperator) inputOp).getAggregations();
         }
 
-        if (MapUtils.isEmpty(aggs)) {
-            return false;
-        } else {
-            // Must do multiple stage aggregate when aggregate distinct function has array type
-            // Must generate three, four phase aggregate for distinct aggregate with multi columns
-            return aggs.values().stream().anyMatch(callOperator -> callOperator.isDistinct()
-                    && (callOperator.getChildren().size() > 1 ||
-                    callOperator.getChildren().stream().anyMatch(c -> c.getType().isComplexType())));
+        for (CallOperator callOperator : aggs.values()) {
+            if (callOperator.isDistinct()) {
+                String fnName = callOperator.getFnName();
+                List<ScalarOperator> children = callOperator.getChildren();
+                if (children.size() > 1 || children.stream().anyMatch(c -> c.getType().isComplexType())) {
+                    return true;
+                }
+                if (FunctionSet.GROUP_CONCAT.equalsIgnoreCase(fnName) || FunctionSet.AVG.equalsIgnoreCase(fnName)) {
+                    return true;
+                } else if (FunctionSet.ARRAY_AGG.equalsIgnoreCase(fnName))  {
+                    if (children.size() > 1 || children.get(0).getType().isDecimalOfAnyVersion()) {
+                        return true;
+                    }
+                }
+            }
         }
+        return false;
+    }
+
+    // without distinct function, the common distinctCols is an empty list.
+    public static Optional<List<ColumnRefOperator>> extractCommonDistinctCols(Collection<CallOperator> aggCallOperators) {
+        Set<ColumnRefOperator> distinctChildren = Sets.newHashSet();
+        for (CallOperator callOperator : aggCallOperators) {
+            if (callOperator.isDistinct()) {
+                if (distinctChildren.isEmpty()) {
+                    distinctChildren = Sets.newHashSet(callOperator.getColumnRefs());
+                } else {
+                    Set<ColumnRefOperator> nextDistinctChildren = Sets.newHashSet(callOperator.getColumnRefs());
+                    if (!SetUtils.isEqualSet(distinctChildren, nextDistinctChildren)) {
+                        return Optional.empty();
+                    }
+                }
+            }
+        }
+        return Optional.of(Lists.newArrayList(distinctChildren));
     }
 
     public static boolean hasNonDeterministicFunc(ScalarOperator operator) {

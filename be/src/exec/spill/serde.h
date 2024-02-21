@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <butil/macros.h>
+
 #include <cstring>
 
 #include "column/vectorized_fwd.h"
@@ -21,6 +23,7 @@
 #include "common/statusor.h"
 #include "exec/spill/block_manager.h"
 #include "gen_cpp/types.pb.h"
+#include "gutil/macros.h"
 #include "util/raw_container.h"
 
 namespace starrocks::spill {
@@ -38,6 +41,19 @@ struct AlignedBuffer {
             free(_data);
             _data = nullptr;
         }
+    }
+
+    DISALLOW_COPY(AlignedBuffer);
+    AlignedBuffer(AlignedBuffer&& other) noexcept : _data(other._data), _capacity(other._capacity), _size(other._size) {
+        other._data = nullptr;
+    }
+    AlignedBuffer& operator=(AlignedBuffer&& other) noexcept {
+        if (this != &other) {
+            std::swap(_data, other._data);
+            std::swap(_capacity, other._capacity);
+            std::swap(_size, other._size);
+        }
+        return *this;
     }
 
     uint8_t* data() const { return (uint8_t*)_data; }

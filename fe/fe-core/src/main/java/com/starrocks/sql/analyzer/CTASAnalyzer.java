@@ -142,7 +142,7 @@ public class CTASAnalyzer {
                 // if we don't, we pick the first column
                 String defaultColumnName = finalColumnNames.get(0);
                 double candidateDistinctCountCount = 1.0;
-                StatisticStorage currentStatisticStorage = GlobalStateMgr.getCurrentStatisticStorage();
+                StatisticStorage currentStatisticStorage = GlobalStateMgr.getCurrentState().getStatisticStorage();
 
                 for (Map.Entry<Pair<String, Pair<String, String>>, Table> columnEntry : columnNameToTable.entrySet()) {
                     Pair<String, String> columnName = columnEntry.getKey().second;

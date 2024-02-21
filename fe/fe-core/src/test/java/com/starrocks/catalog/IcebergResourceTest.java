@@ -18,13 +18,11 @@ package com.starrocks.catalog;
 import com.google.common.collect.Maps;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
-import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Injectable;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
@@ -42,7 +40,7 @@ public class IcebergResourceTest {
     }
 
     @Test
-    public void testFromStmt(@Mocked GlobalStateMgr globalStateMgr, @Injectable Auth auth) throws UserException {
+    public void testFromStmt(@Mocked GlobalStateMgr globalStateMgr) throws UserException {
         String name = "iceberg0";
         String type = "iceberg";
         String catalogType = "HIVE";
@@ -65,7 +63,7 @@ public class IcebergResourceTest {
     }
 
     @Test
-    public void testCustomStmt(@Mocked GlobalStateMgr globalStateMgr, @Injectable Auth auth) throws UserException {
+    public void testCustomStmt(@Mocked GlobalStateMgr globalStateMgr) throws UserException {
         String name = "iceberg1";
         String type = "iceberg";
         String catalogType = "CUSTOM";

@@ -39,7 +39,7 @@ public class SchemaScanNodeTest {
                 GlobalStateMgr.getCurrentState();
                 minTimes = 0;
                 result = globalStateMgr;
-                globalStateMgr.getFrontends(null);
+                globalStateMgr.getNodeMgr().getFrontends(null);
                 minTimes = 0;
                 result = frontends;
             }

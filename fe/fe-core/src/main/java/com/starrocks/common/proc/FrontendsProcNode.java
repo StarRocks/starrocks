@@ -87,7 +87,7 @@ public class FrontendsProcNode implements ProcNodeInterface {
     }
 
     public static void getFrontendsInfo(GlobalStateMgr globalStateMgr, List<List<String>> infos) {
-        String leaderIp = GlobalStateMgr.getCurrentState().getLeaderIp();
+        String leaderIp = GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIp();
         if (leaderIp == null) {
             leaderIp = "";
         }
@@ -95,9 +95,9 @@ public class FrontendsProcNode implements ProcNodeInterface {
         // get all node which are joined in bdb group
         List<InetSocketAddress> allFe = globalStateMgr.getHaProtocol().getElectableNodes(true /* include leader */);
         allFe.addAll(globalStateMgr.getHaProtocol().getObserverNodes());
-        List<Pair<String, Integer>> helperNodes = globalStateMgr.getHelperNodes();
+        List<Pair<String, Integer>> helperNodes = globalStateMgr.getNodeMgr().getHelperNodes();
 
-        for (Frontend fe : globalStateMgr.getFrontends(null /* all */)) {
+        for (Frontend fe : globalStateMgr.getNodeMgr().getFrontends(null /* all */)) {
 
             List<String> info = new ArrayList<String>();
             info.add(fe.getNodeName());
@@ -106,7 +106,7 @@ public class FrontendsProcNode implements ProcNodeInterface {
             info.add(Integer.toString(fe.getEditLogPort()));
             info.add(Integer.toString(Config.http_port));
 
-            if (fe.getHost().equals(globalStateMgr.getSelfNode().first)) {
+            if (fe.getHost().equals(globalStateMgr.getNodeMgr().getSelfNode().first)) {
                 info.add(Integer.toString(Config.query_port));
                 info.add(Integer.toString(Config.rpc_port));
             } else {
@@ -121,10 +121,10 @@ public class FrontendsProcNode implements ProcNodeInterface {
                 info.add(fe.getRole().name());
             }
 
-            info.add(Integer.toString(globalStateMgr.getClusterId()));
+            info.add(Integer.toString(globalStateMgr.getNodeMgr().getClusterId()));
             info.add(String.valueOf(isJoin(allFe, fe)));
 
-            if (fe.getHost().equals(globalStateMgr.getSelfNode().first)) {
+            if (fe.getHost().equals(globalStateMgr.getNodeMgr().getSelfNode().first)) {
                 info.add("true");
                 info.add(Long.toString(globalStateMgr.getMaxJournalId()));
             } else {

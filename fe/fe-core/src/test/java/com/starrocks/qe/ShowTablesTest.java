@@ -100,15 +100,15 @@ public class ShowTablesTest {
         Assert.assertFalse(resultSet.next());
 
         Assert.assertThrows(ErrorReportException.class,
-                () -> GlobalStateMgr.getCurrentState().changeCatalog(ctx, "hive_catalog"));
+                () -> ctx.changeCatalog("hive_catalog"));
         Assert.assertThrows(ErrorReportException.class,
-                () -> GlobalStateMgr.getCurrentState().changeCatalogDb(ctx, "hive_catalog.hive_db"));
+                () -> ctx.changeCatalogDb("hive_catalog.hive_db"));
 
         String sql = "grant usage on catalog hive_catalog to test_user";
         GrantPrivilegeStmt grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         DDLStmtExecutor.execute(grantPrivilegeStmt, ctx);
         Assert.assertThrows(ErrorReportException.class,
-                () -> GlobalStateMgr.getCurrentState().changeCatalogDb(ctx, "hive_catalog.hive_db"));
+                () -> ctx.changeCatalogDb("hive_catalog.hive_db"));
 
         ctx.setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
     }

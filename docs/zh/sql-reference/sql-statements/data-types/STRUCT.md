@@ -59,7 +59,7 @@ STRUCT 列有如下使用限制：
 - 不支持作为表的 Key 列，只能作为 Value 列。
 - 不支持作为表的分区列（PARTITION BY 中定义的列）。
 - 不支持作为表的分桶列 （DISTRIBUTED BY 中定义的列）。
-- STRUCT 作为[聚合模型表](../../../table_design/table_types/aggregate_table.md)的 Value 列时，仅支持 replace() 作为聚合函数。
+- STRUCT 作为[聚合表](../../../table_design/table_types/aggregate_table.md)的 Value 列时，仅支持 replace() 作为聚合函数。
 
 ## 使用 SQL 构建 STRUCT
 

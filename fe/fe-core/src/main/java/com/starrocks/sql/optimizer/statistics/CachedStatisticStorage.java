@@ -368,7 +368,7 @@ public class CachedStatisticStorage implements StatisticStorage {
 
         List<String> columnHasHistogram = new ArrayList<>();
         for (String columnName : columns) {
-            if (GlobalStateMgr.getCurrentAnalyzeMgr().getHistogramStatsMetaMap()
+            if (GlobalStateMgr.getCurrentState().getAnalyzeMgr().getHistogramStatsMetaMap()
                     .get(new Pair<>(table.getId(), columnName)) != null) {
                 columnHasHistogram.add(columnName);
             }

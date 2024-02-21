@@ -51,7 +51,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
-import java.io.IOException;
 import java.util.List;
 
 public class BDBJournalCursor implements JournalCursor {
@@ -247,13 +246,13 @@ public class BDBJournalCursor implements JournalCursor {
         JournalEntity ret = new JournalEntity();
         try {
             ret.readFields(in);
-        } catch (IOException e) {
+        } catch (Throwable t) {
             // bad data, will not retry
             String errMsg = String.format("fail to read journal entity key=%s, data=%s",
                     nextKey, data);
-            LOG.error(errMsg, e);
-            JournalException exception = new JournalException(errMsg);
-            exception.initCause(e);
+            LOG.error(errMsg, t);
+            JournalException exception = new JournalException(ret.getOpCode(), errMsg);
+            exception.initCause(t);
             throw exception;
         }
         return ret;

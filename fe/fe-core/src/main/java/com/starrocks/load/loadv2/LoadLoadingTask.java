@@ -56,6 +56,7 @@ import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.Coordinator;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TLoadJobType;
@@ -68,7 +69,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 public class LoadLoadingTask extends LoadTask {
     private static final Logger LOG = LogManager.getLogger(LoadLoadingTask.class);
@@ -125,7 +125,6 @@ public class LoadLoadingTask extends LoadTask {
         this.loadJobType = builder.loadJobType;
         this.originStmt = builder.originStmt;
         this.partialUpdateMode = builder.partialUpdateMode;
-        this.retryTime = 1; // load task retry does not satisfy transaction's atomic
         this.failMsg = new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL);
         this.loadId = builder.loadId;
         this.fileStatusList = builder.fileStatusList;
@@ -153,9 +152,6 @@ public class LoadLoadingTask extends LoadTask {
 
     @Override
     protected void executeTask() throws Exception {
-        LOG.info("begin to execute loading task. load id: {} job: {}. db: {}, tbl: {}. left retry: {}",
-                DebugUtil.printId(loadId), callback.getCallbackId(), db.getOriginName(), table.getName(), retryTime);
-        retryTime--;
         executeOnce();
     }
 
@@ -164,6 +160,8 @@ public class LoadLoadingTask extends LoadTask {
     }
 
     private void executeOnce() throws Exception {
+        checkMeta();
+
         // New one query id,
         Coordinator curCoordinator;
         curCoordinator = getCoordinatorFactory().createBrokerLoadScheduler(loadPlanner);
@@ -273,13 +271,16 @@ public class LoadLoadingTask extends LoadTask {
         return jobDeadlineMs - System.currentTimeMillis();
     }
 
-    @Override
-    public void updateRetryInfo() {
-        super.updateRetryInfo();
-        UUID uuid = UUID.randomUUID();
-        this.loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
+    private void checkMeta() throws LoadException {
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(db.getId());
+        if (database == null) {
+            throw new LoadException(String.format("db: %s-%d has been dropped", db.getFullName(), db.getId()));
+        }
 
-        loadPlanner.updateLoadInfo(this.loadId);
+        if (database.getTable(table.getId()) == null) {
+            throw new LoadException(String.format("table: %s-%d has been dropped from db: %s-%d",
+                    table.getName(), table.getId(), db.getFullName(), db.getId()));
+        }
     }
 
     public static class Builder {

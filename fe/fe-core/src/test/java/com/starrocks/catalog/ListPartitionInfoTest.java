@@ -106,7 +106,7 @@ public class ListPartitionInfoTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String truncateSql = "truncate table t_recharge_detail partition(p1)";
         TruncateTableStmt truncateTableStmt = (TruncateTableStmt) UtFrameUtils.parseStmtWithNewParser(truncateSql, ctx);
-        GlobalStateMgr.getCurrentState().truncateTable(truncateTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(truncateTableStmt);
         String showSql = "show partitions from t_recharge_detail;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(showSql, ctx);
         StmtExecutor executor = new StmtExecutor(ctx, statementBase);

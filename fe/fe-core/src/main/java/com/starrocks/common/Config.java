@@ -146,6 +146,21 @@ public class Config extends ConfigBase {
     @ConfField
     public static String custom_config_dir = "/conf";
 
+    /*
+     * internal log:
+     * This specifies FE MV/Statistics log dir.
+     */
+    @ConfField
+    public static String internal_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
+    @ConfField
+    public static int internal_log_roll_num = 90;
+    @ConfField
+    public static String[] internal_log_modules = {"base", "statistic"};
+    @ConfField
+    public static String internal_log_roll_interval = "DAY";
+    @ConfField
+    public static String internal_log_delete_age = "7d";
+
     /**
      * dump_log_dir:
      * This specifies FE dump log dir.
@@ -553,12 +568,13 @@ public class Config extends ConfigBase {
 
     /**
      * If true, FE will reset bdbje replication group(that is, to remove all electable nodes' info)
-     * and is supposed to start as Leader.
-     * If all the electable nodes can not start, we can copy the metadata
-     * to another node and set this config to true to try to restart the FE.
+     * and is supposed to start as Leader. After reset, this node will be the only member in the cluster,
+     * and the others node should be rejoin to this cluster by `Alter system add/drop follower/observer 'xxx'`;
+     * Use this configuration only when the leader cannot be successfully elected
+     * (Because most of the follower data has been damaged).
      */
     @ConfField
-    public static String metadata_failure_recovery = "false";
+    public static String bdbje_reset_election_group = "false";
 
     /**
      * If the bdb data is corrupted, and you want to start the cluster only with image, set this param to true
@@ -1170,10 +1186,10 @@ public class Config extends ConfigBase {
     /**
      * To avoid too many related materialized view causing too much fe memory and decreasing performance, set N
      * to determine which strategy you choose:
-     *  N <0      : always use non lock optimization and no copy related materialized views which
-     *      may cause metadata concurrency problem but can reduce many lock conflict time and metadata memory-copy consume.
-     *  N = 0    : always not use non lock optimization
-     *  N > 0    : use non lock optimization when related mvs's num <= N, otherwise don't use non lock optimization
+     * N <0      : always use non lock optimization and no copy related materialized views which
+     * may cause metadata concurrency problem but can reduce many lock conflict time and metadata memory-copy consume.
+     * N = 0    : always not use non lock optimization
+     * N > 0    : use non lock optimization when related mvs's num <= N, otherwise don't use non lock optimization
      */
     @ConfField(mutable = true)
     public static int skip_whole_phase_lock_mv_limit = 5;
@@ -1198,6 +1214,18 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long dynamic_partition_check_interval_seconds = 600;
+
+    /**
+     * If set to true, memory tracker feature will open
+     */
+    @ConfField(mutable = true)
+    public static boolean memory_tracker_enable = true;
+
+    /**
+     * Decide how often to track the memory usage of the FE process
+     */
+    @ConfField(mutable = true)
+    public static long memory_tracker_interval_seconds = 60;
 
     /**
      * If batch creation of partitions is allowed to create half of the partitions, it is easy to generate holes.
@@ -1349,18 +1377,18 @@ public class Config extends ConfigBase {
      * k8s control place will schedule a new pod and attach the pvc to it which will
      * restore the replica to a {@link Replica.ReplicaState#NORMAL} state immediately. But normally
      * the {@link com.starrocks.clone.TabletScheduler} of Starrocks will start to schedule
-     * {@link LocalTablet.TabletStatus#REPLICA_MISSING} tasks and create new replicas in a short time.
+     * {@link LocalTablet.TabletHealthStatus#REPLICA_MISSING} tasks and create new replicas in a short time.
      * After new pod scheduling is completed, {@link com.starrocks.clone.TabletScheduler} has
      * to delete the redundant healthy replica which cause resource waste and may also affect
      * the loading process.
      *
      * <p>When a backend is considered to be dead, this configuration specifies how long the
      * {@link com.starrocks.clone.TabletScheduler} should wait before starting to schedule
-     * {@link LocalTablet.TabletStatus#REPLICA_MISSING} tasks. It is intended to leave some time for
+     * {@link LocalTablet.TabletHealthStatus#REPLICA_MISSING} tasks. It is intended to leave some time for
      * the external scheduler like k8s to handle the repair process before internal scheduler kicks in
      * or for the system administrator to restart and put the backend online in time.
      * To be noticed, it only affects the dead backend situation, the scheduler
-     * may still schedule {@link LocalTablet.TabletStatus#REPLICA_MISSING} tasks because of
+     * may still schedule {@link LocalTablet.TabletHealthStatus#REPLICA_MISSING} tasks because of
      * other reasons, like manually setting a replica as bad, actively decommission a backend etc.
      *
      * <p>Currently this configuration only works for non-colocate tables, for colocate tables,
@@ -1575,6 +1603,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_starrocks_external_table_auth_check = true;
+
+    /**
+     * If set to true, the granularity of auth check extends to the column level
+     */
+    @ConfField(mutable = true)
+    public static boolean authorization_enable_column_level_privilege = false;
 
     /**
      * The authentication_chain configuration specifies the sequence of security integrations
@@ -2175,9 +2209,9 @@ public class Config extends ConfigBase {
     public static boolean enable_collect_query_detail_info = false;
 
     /**
-     *  StarRocks-manager pull queries every 1 second
-     *  metrics calculate query latency every 15 second
-     *  do not set cacheTime lower than these time
+     * StarRocks-manager pull queries every 1 second
+     * metrics calculate query latency every 15 second
+     * do not set cacheTime lower than these time
      */
     @ConfField(mutable = true)
     public static long query_detail_cache_time_nanosecond = 30000000000L;
@@ -2291,6 +2325,9 @@ public class Config extends ConfigBase {
     // ***********************************************************
     // * END: of Cloud native meta server related configurations
     // ***********************************************************
+
+    @ConfField(mutable = true)
+    public static boolean enable_experimental_rowstore = false;
 
     @ConfField(mutable = true)
     public static boolean enable_experimental_mv = true;
@@ -2411,7 +2448,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int lake_compaction_default_timeout_second = 86400; // 1 day
 
-
     @ConfField(mutable = true, comment = "the max number of previous version files to keep")
     public static int lake_autovacuum_max_previous_versions = 0;
 
@@ -2423,42 +2459,42 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment =
             "History versions within this time range will not be deleted by auto vacuum.\n" +
-            "REMINDER: Set this to a value longer than the maximum possible execution time of queries, to avoid deletion of " +
-            "versions still being accessed.\n" +
-            "NOTE: Increasing this value may increase the space usage of the remote storage system.")
+                    "REMINDER: Set this to a value longer than the maximum possible execution time of queries," +
+                    " to avoid deletion of versions still being accessed.\n" +
+                    "NOTE: Increasing this value may increase the space usage of the remote storage system.")
     public static long lake_autovacuum_grace_period_minutes = 5;
 
     @ConfField(mutable = true, comment =
             "time threshold in hours, if a partition has not been updated for longer than this " +
-            "threshold, auto vacuum operations will no longer be triggered for that partition.\n" +
-            "Only takes effect for tables in clusters with run_mode=shared_data.\n")
+                    "threshold, auto vacuum operations will no longer be triggered for that partition.\n" +
+                    "Only takes effect for tables in clusters with run_mode=shared_data.\n")
     public static long lake_autovacuum_stale_partition_threshold = 12;
 
     @ConfField(mutable = true, comment =
             "Whether enable throttling ingestion speed when compaction score exceeds the threshold.\n" +
-            "Only takes effect for tables in clusters with run_mode=shared_data.")
+                    "Only takes effect for tables in clusters with run_mode=shared_data.")
     public static boolean lake_enable_ingest_slowdown = false;
 
     @ConfField(mutable = true, comment =
             "Compaction score threshold above which ingestion speed slowdown is applied.\n" +
-            "NOTE: The actual effective value is the max of the configured value and " +
-            "'lake_compaction_score_selector_min_score'.")
+                    "NOTE: The actual effective value is the max of the configured value and " +
+                    "'lake_compaction_score_selector_min_score'.")
     public static long lake_ingest_slowdown_threshold = 100;
 
     @ConfField(mutable = true, comment =
             "Ratio to reduce ingestion speed for each point of compaction score over the threshold.\n" +
-            "E.g. 0.05 ratio, 10min normal ingestion, exceed threshold by:\n" +
-            " - 1 point -> Delay by 0.05 (30secs)\n" +
-            " - 5 points -> Delay by 0.25 (2.5mins)")
+                    "E.g. 0.05 ratio, 10min normal ingestion, exceed threshold by:\n" +
+                    " - 1 point -> Delay by 0.05 (30secs)\n" +
+                    " - 5 points -> Delay by 0.25 (2.5mins)")
     public static double lake_ingest_slowdown_ratio = 0.1;
 
     @ConfField(mutable = true, comment =
             "The upper limit for compaction score, only takes effect when lake_enable_ingest_slowdown=true.\n" +
-            "When the compaction score exceeds this value, data ingestion transactions will be prevented from\n" +
-            "committing. This is a soft limit, the actual compaction score may exceed the configured bound.\n" +
-            "The effective value will be set to the higher of the configured value here and " +
-            "lake_compaction_score_selector_min_score.\n" +
-            "A value of 0 represents no limit.")
+                    "When the compaction score exceeds this value, data ingestion transactions will be prevented from\n" +
+                    "committing. This is a soft limit, the actual compaction score may exceed the configured bound.\n" +
+                    "The effective value will be set to the higher of the configured value here and " +
+                    "lake_compaction_score_selector_min_score.\n" +
+                    "A value of 0 represents no limit.")
     public static long lake_compaction_score_upper_bound = 0;
 
     @ConfField(mutable = true)
@@ -2466,6 +2502,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean enable_sync_publish = true;
+
     /**
      * Normally FE will quit when replaying a bad journal. This configuration provides a bypass mechanism.
      * If this was set to a positive value, FE will skip the corresponding bad journals before it quits.
@@ -2473,6 +2510,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static String metadata_journal_skip_bad_journal_ids = "";
+
+    /**
+     * Set this configuration to true to ignore specific operation (with IgnorableOnReplayFailed annotation) replay failures.
+     */
+    @ConfField
+    public static boolean metadata_journal_ignore_replay_failure = false;
 
     /**
      * Number of profile infos reserved by `ProfileManager` for recently executed query.
@@ -2641,6 +2684,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_fast_schema_evolution = true;
 
+    // This configuration will be removed after the shared data mode supports fast schema evolution
+    @ConfField(mutable = true)
+    public static boolean experimental_enable_fast_schema_evolution_in_shared_data = false;
+
     @ConfField(mutable = false)
     public static int pipe_listener_interval_millis = 1000;
     @ConfField(mutable = false)
@@ -2690,24 +2737,6 @@ public class Config extends ConfigBase {
     public static String access_control = "native";
 
     /**
-     *  Kerberos principal used for mutual authentication with ranger
-     */
-    @ConfField(mutable = true)
-    public static String ranger_spnego_kerberos_principal = "";
-
-    /**
-     *  Kerberos keytab file used for mutual authentication with ranger
-     */
-    @ConfField(mutable = true)
-    public static String ranger_spnego_kerberos_keytab = "";
-
-    /**
-     *  Kerberos krb5.conf configure path, default /etc/krb5.conf
-     */
-    @ConfField(mutable = true)
-    public static String ranger_kerberos_krb5_conf = "";
-
-    /**
      * Whether to use the unix group as the ranger authentication group
      */
     @ConfField(mutable = true)
@@ -2754,8 +2783,42 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean allow_system_reserved_names = false;
 
+    /**
+     * Whether to use LockManager to manage lock usage
+     */
+    @ConfField
+    public static boolean lock_manager_enabled = false;
+
+    /**
+     * Number of Hash of Lock Table
+     */
+    @ConfField
+    public static int lock_manager_lock_table_num = 32;
+
+    /**
+     * Whether to enable deadlock unlocking operation.
+     * It is turned off by default and only deadlock detection is performed.
+     * If turned on, LockManager will try to relieve the deadlock by killing the victim.
+     */
     @ConfField(mutable = true)
-    public static boolean use_lock_manager = false;
+    public static boolean lock_manager_enable_resolve_deadlock = false;
+
+    /**
+     * Whether to use table level lock
+     */
+    @ConfField
+    public static boolean lock_manager_enable_loading_using_fine_granularity_lock = false;
+
+    /**
+     * when a lock cannot be obtained, we cannot determine whether it is because the required
+     * lock is being used normally or if a deadlock has occurred.
+     * Therefore, based on the configuration parameter `dead_lock_detection_delay_time_ms`
+     * is used to control the waiting time before deadlock detection.
+     * If a lock is obtained during this period, there is no need to perform deadlock detection.
+     * Avoid frequent and unnecessary deadlock detection due to lock contention
+     */
+    @ConfField(mutable = true)
+    public static long lock_manager_dead_lock_detection_delay_time_ms = 3000; // 3s
 
     @ConfField(mutable = true)
     public static long routine_load_unstable_threshold_second = 3600;
@@ -2766,22 +2829,41 @@ public class Config extends ConfigBase {
     public static int refresh_dictionary_cache_thread_num = 2;
 
     /*
-     * replication transaction config
+     * Replication config
      */
+    @ConfField
+    public static int replication_interval_ms = 10;
     @ConfField(mutable = true)
-    public static int replication_transaction_max_parallel_job_count = 100; // 100
+    public static int replication_max_parallel_table_count = 100; // 100
     @ConfField(mutable = true)
-    public static int replication_transaction_max_parallel_replication_data_size_mb = 10240; // 10g
+    public static int replication_max_parallel_data_size_mb = 10240; // 10g
     @ConfField(mutable = true)
     public static int replication_transaction_timeout_sec = 1 * 60 * 60; // 1hour
-    @ConfField(mutable = true)
-    public static int replication_transaction_remote_snapshot_timeout_sec = 30 * 60; // 30minute
-    @ConfField(mutable = true)
-    public static int replication_transaction_replicate_snapshot_timeout_sec = 30 * 60; // 30minute
 
     @ConfField(mutable = true)
     public static boolean jdbc_meta_default_cache_enable = false;
 
     @ConfField(mutable = true)
     public static long jdbc_meta_default_cache_expire_sec = 600L;
+
+    // the retention time for host disconnection events
+    @ConfField(mutable = true)
+    public static long black_host_history_sec = 2 * 60; // 2min
+
+    // limit for the number of host disconnections in the last {black_host_history_sec} seconds
+    @ConfField(mutable = true)
+    public static long black_host_connect_failures_within_time = 5;
+
+    @ConfField(mutable = false)
+    public static int jdbc_connection_pool_size = 8;
+
+    @ConfField(mutable = false)
+    public static int jdbc_minimum_idle_connections = 1;
+
+    @ConfField(mutable = false)
+    public static int jdbc_connection_idle_timeout_ms = 600000;
+
+    // The longest supported VARCHAR length.
+    @ConfField(mutable = true)
+    public static int max_varchar_length = 1048576;
 }

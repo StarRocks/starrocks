@@ -45,9 +45,9 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.ha.FrontendNodeType;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
@@ -67,7 +67,7 @@ import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.ast.DropComputeNodeClause;
 import com.starrocks.sql.ast.DropFollowerClause;
 import com.starrocks.sql.ast.DropObserverClause;
-import com.starrocks.sql.ast.ModifyBackendAddressClause;
+import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.system.Backend;
@@ -114,8 +114,8 @@ public class SystemHandler extends AlterHandler {
 
     // check all decommissioned backends, if there is no tablet on that backend, drop it.
     private void runAlterJobV2() {
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         // check if decommission is finished
         for (Long beId : systemInfoService.getBackendIds(false)) {
             Backend backend = systemInfoService.getBackend(beId);
@@ -150,15 +150,15 @@ public class SystemHandler extends AlterHandler {
         if (alterClause instanceof AddBackendClause) {
             // add backend
             AddBackendClause addBackendClause = (AddBackendClause) alterClause;
-            GlobalStateMgr.getCurrentSystemInfo().addBackends(addBackendClause.getHostPortPairs());
-        } else if (alterClause instanceof ModifyBackendAddressClause) {
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackends(addBackendClause.getHostPortPairs());
+        } else if (alterClause instanceof ModifyBackendClause) {
             // update Backend Address
-            ModifyBackendAddressClause modifyBackendAddressClause = (ModifyBackendAddressClause) alterClause;
-            return GlobalStateMgr.getCurrentSystemInfo().modifyBackendHost(modifyBackendAddressClause);
+            ModifyBackendClause modifyBackendClause = (ModifyBackendClause) alterClause;
+            return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().modifyBackend(modifyBackendClause);
         } else if (alterClause instanceof DropBackendClause) {
             // drop backend
             DropBackendClause dropBackendClause = (DropBackendClause) alterClause;
-            GlobalStateMgr.getCurrentSystemInfo().dropBackends(dropBackendClause);
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropBackends(dropBackendClause);
         } else if (alterClause instanceof DecommissionBackendClause) {
             // decommission
             DecommissionBackendClause decommissionBackendClause = (DecommissionBackendClause) alterClause;
@@ -176,21 +176,23 @@ public class SystemHandler extends AlterHandler {
 
         } else if (alterClause instanceof AddObserverClause) {
             AddObserverClause clause = (AddObserverClause) alterClause;
-            GlobalStateMgr.getCurrentState().addFrontend(FrontendNodeType.OBSERVER, clause.getHost(), clause.getPort());
+            GlobalStateMgr.getCurrentState().getNodeMgr()
+                    .addFrontend(FrontendNodeType.OBSERVER, clause.getHost(), clause.getPort());
         } else if (alterClause instanceof DropObserverClause) {
             DropObserverClause clause = (DropObserverClause) alterClause;
-            GlobalStateMgr.getCurrentState()
+            GlobalStateMgr.getCurrentState().getNodeMgr()
                     .dropFrontend(FrontendNodeType.OBSERVER, clause.getHost(), clause.getPort());
         } else if (alterClause instanceof AddFollowerClause) {
             AddFollowerClause clause = (AddFollowerClause) alterClause;
-            GlobalStateMgr.getCurrentState().addFrontend(FrontendNodeType.FOLLOWER, clause.getHost(), clause.getPort());
+            GlobalStateMgr.getCurrentState().getNodeMgr()
+                    .addFrontend(FrontendNodeType.FOLLOWER, clause.getHost(), clause.getPort());
         } else if (alterClause instanceof ModifyFrontendAddressClause) {
             // update Frontend Address
             ModifyFrontendAddressClause modifyFrontendAddressClause = (ModifyFrontendAddressClause) alterClause;
-            GlobalStateMgr.getCurrentState().modifyFrontendHost(modifyFrontendAddressClause);
+            GlobalStateMgr.getCurrentState().getNodeMgr().modifyFrontendHost(modifyFrontendAddressClause);
         } else if (alterClause instanceof DropFollowerClause) {
             DropFollowerClause clause = (DropFollowerClause) alterClause;
-            GlobalStateMgr.getCurrentState()
+            GlobalStateMgr.getCurrentState().getNodeMgr()
                     .dropFrontend(FrontendNodeType.FOLLOWER, clause.getHost(), clause.getPort());
         } else if (alterClause instanceof ModifyBrokerClause) {
             ModifyBrokerClause clause = (ModifyBrokerClause) alterClause;
@@ -200,10 +202,12 @@ public class SystemHandler extends AlterHandler {
             GlobalStateMgr.getCurrentState().getLoadInstance().setLoadErrorHubInfo(clause.getProperties());
         } else if (alterClause instanceof AddComputeNodeClause) {
             AddComputeNodeClause addComputeNodeClause = (AddComputeNodeClause) alterClause;
-            GlobalStateMgr.getCurrentSystemInfo().addComputeNodes(addComputeNodeClause.getHostPortPairs());
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                    .addComputeNodes(addComputeNodeClause.getHostPortPairs());
         } else if (alterClause instanceof DropComputeNodeClause) {
             DropComputeNodeClause dropComputeNodeClause = (DropComputeNodeClause) alterClause;
-            GlobalStateMgr.getCurrentSystemInfo().dropComputeNodes(dropComputeNodeClause.getHostPortPairs());
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                    .dropComputeNodes(dropComputeNodeClause.getHostPortPairs());
         } else if (alterClause instanceof CreateImageClause) {
             GlobalStateMgr.getCurrentState().triggerNewImage();
         } else if (alterClause instanceof CleanTabletSchedQClause) {
@@ -227,7 +231,7 @@ public class SystemHandler extends AlterHandler {
      */
     public static List<Backend> checkDecommission(List<Pair<String, Integer>> hostPortPairs)
             throws DdlException {
-        SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         List<Backend> decommissionBackends = Lists.newArrayList();
         Set<Long> decommissionIds = new HashSet<>();
 
@@ -311,7 +315,7 @@ public class SystemHandler extends AlterHandler {
     public synchronized void cancel(CancelStmt stmt) throws DdlException {
         CancelAlterSystemStmt cancelAlterSystemStmt = (CancelAlterSystemStmt) stmt;
 
-        SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         // check if backends is under decommission
         List<Backend> backends = Lists.newArrayList();
         List<Pair<String, Integer>> hostPortPairs = cancelAlterSystemStmt.getHostPortPairs();

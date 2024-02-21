@@ -80,7 +80,7 @@ public class ComputeNodeProcDir implements ProcDirInterface {
      * @return
      */
     public static List<List<String>> getClusterComputeNodesInfos() {
-        final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
+        final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         List<List<String>> computeNodesInfos = new LinkedList<>();
         List<Long> computeNodeIds;
         computeNodeIds = clusterInfoService.getComputeNodeIds(false);
@@ -136,7 +136,7 @@ public class ComputeNodeProcDir implements ProcDirInterface {
 
             if (RunMode.isSharedDataMode()) {
                 computeNodeInfo.add(String.valueOf(computeNode.getStarletPort()));
-                long workerId = GlobalStateMgr.getCurrentStarOSAgent().getWorkerIdByBackendId(computeNodeId);
+                long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerIdByBackendId(computeNodeId);
                 computeNodeInfo.add(String.valueOf(workerId));
             }
 

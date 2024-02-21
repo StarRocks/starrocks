@@ -113,7 +113,7 @@ public:
     // a file to local_path
     StatusOr<uint64_t> download(const std::string& local_path);
 
-    StatusOr<std::string> download();
+    Status download(const std::function<Status(const void* data, size_t length)>& callback);
 
     Status execute_post_request(const std::string& payload, std::string* response);
 

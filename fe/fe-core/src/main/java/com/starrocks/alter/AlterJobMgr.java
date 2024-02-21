@@ -75,8 +75,8 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AlterViewInfo;
@@ -142,7 +142,6 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -179,7 +178,7 @@ public class AlterJobMgr {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
         // check cluster capacity
-        GlobalStateMgr.getCurrentSystemInfo().checkClusterCapacity();
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkClusterCapacity();
         // check db quota
         db.checkQuota();
 
@@ -290,7 +289,7 @@ public class AlterJobMgr {
             context.setCurrentUserIdentity(UserIdentity.ROOT);
             context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
 
-            String createMvSql = materializedView.getMaterializedViewDdlStmt(false);
+            String createMvSql = materializedView.getMaterializedViewDdlStmt(false, isReplay);
             QueryStatement mvQueryStatement = null;
             try {
                 mvQueryStatement = recreateMVQuery(materializedView, context, createMvSql);
@@ -339,11 +338,18 @@ public class AlterJobMgr {
         List<Column> existedColumns = materializedView.getColumns().stream()
                 .sorted(Comparator.comparing(Column::getName))
                 .collect(Collectors.toList());
-        if (!Objects.equals(newColumns, existedColumns)) {
-            String msg = String.format("mv schema changed: [%s] does not match [%s]",
-                    existedColumns, newColumns);
-            materializedView.setInactiveAndReason(msg);
-            throw new SemanticException(msg);
+        if (newColumns.size() != existedColumns.size()) {
+            throw new SemanticException(String.format("number of columns changed: %d != %d",
+                    existedColumns.size(), newColumns.size()));
+        }
+        for (int i = 0; i < existedColumns.size(); i++) {
+            Column existed = existedColumns.get(i);
+            Column created = newColumns.get(i);
+            if (!existed.isSchemaCompatible(created)) {
+                String message = String.format("Column schema not compatible: (%s) and (%s)", existed, created);
+                materializedView.setInactiveAndReason(message);
+                throw new SemanticException(message);
+            }
         }
 
         return createStmt.getQueryStatement();
@@ -519,7 +525,7 @@ public class AlterJobMgr {
 
         // check cluster capacity and db quota, only need to check once.
         if (currentAlterOps.needCheckCapacity()) {
-            GlobalStateMgr.getCurrentSystemInfo().checkClusterCapacity();
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkClusterCapacity();
             db.checkQuota();
         }
 
@@ -569,7 +575,7 @@ public class AlterJobMgr {
                             .startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
                         throw new DdlException("Deletion of shadow partitions is not allowed");
                     }
-                    GlobalStateMgr.getCurrentState().dropPartition(db, olapTable, dropPartitionClause);
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, olapTable, dropPartitionClause);
                 } else if (alterClause instanceof ReplacePartitionClause) {
                     ReplacePartitionClause replacePartitionClause = (ReplacePartitionClause) alterClause;
                     List<String> partitionNames = replacePartitionClause.getPartitionNames();
@@ -578,7 +584,7 @@ public class AlterJobMgr {
                             throw new DdlException("Replace shadow partitions is not allowed");
                         }
                     }
-                    GlobalStateMgr.getCurrentState()
+                    GlobalStateMgr.getCurrentState().getLocalMetastore()
                             .replaceTempPartition(db, tableName, replacePartitionClause);
                 } else if (alterClause instanceof ModifyPartitionClause) {
                     ModifyPartitionClause clause = ((ModifyPartitionClause) alterClause);
@@ -621,7 +627,7 @@ public class AlterJobMgr {
             locker.unLockDatabase(db, LockType.WRITE);
         }
 
-        // the following ops should done outside db lock. because it contain synchronized create operation
+        // the following ops should be done outside db lock. because it contains synchronized create operation
         if (needProcessOutsideDatabaseLock) {
             Preconditions.checkState(alterClauses.size() == 1);
             AlterClause alterClause = alterClauses.get(0);
@@ -629,14 +635,15 @@ public class AlterJobMgr {
                 if (!((AddPartitionClause) alterClause).isTempPartition()) {
                     DynamicPartitionUtil.checkAlterAllowed((OlapTable) db.getTable(tableName));
                 }
-                GlobalStateMgr.getCurrentState().addPartitions(db, tableName, (AddPartitionClause) alterClause);
+                GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .addPartitions(db, tableName, (AddPartitionClause) alterClause);
             } else if (alterClause instanceof TruncatePartitionClause) {
                 // This logic is used to adapt mysql syntax.
                 // ALTER TABLE test TRUNCATE PARTITION p1;
                 TruncatePartitionClause clause = (TruncatePartitionClause) alterClause;
                 TableRef tableRef = new TableRef(stmt.getTbl(), null, clause.getPartitionNames());
                 TruncateTableStmt tStmt = new TruncateTableStmt(tableRef);
-                GlobalStateMgr.getCurrentState().truncateTable(tStmt);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(tStmt);
             } else if (alterClause instanceof ModifyPartitionClause) {
                 ModifyPartitionClause clause = ((ModifyPartitionClause) alterClause);
                 Map<String, String> properties = clause.getProperties();
@@ -808,7 +815,8 @@ public class AlterJobMgr {
     private void processAlterComment(Database db, OlapTable table, List<AlterClause> alterClauses) throws DdlException {
         for (AlterClause alterClause : alterClauses) {
             if (alterClause instanceof AlterTableCommentClause) {
-                GlobalStateMgr.getCurrentState().alterTableComment(db, table, (AlterTableCommentClause) alterClause);
+                GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .alterTableComment(db, table, (AlterTableCommentClause) alterClause);
                 break;
             } else {
                 throw new DdlException("Unsupported alter table clause " + alterClause);
@@ -819,10 +827,10 @@ public class AlterJobMgr {
     private void processRename(Database db, OlapTable table, List<AlterClause> alterClauses) throws DdlException {
         for (AlterClause alterClause : alterClauses) {
             if (alterClause instanceof TableRenameClause) {
-                GlobalStateMgr.getCurrentState().renameTable(db, table, (TableRenameClause) alterClause);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().renameTable(db, table, (TableRenameClause) alterClause);
                 break;
             } else if (alterClause instanceof RollupRenameClause) {
-                GlobalStateMgr.getCurrentState().renameRollup(db, table, (RollupRenameClause) alterClause);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().renameRollup(db, table, (RollupRenameClause) alterClause);
                 break;
             } else if (alterClause instanceof PartitionRenameClause) {
                 PartitionRenameClause partitionRenameClause = (PartitionRenameClause) alterClause;
@@ -830,10 +838,10 @@ public class AlterJobMgr {
                         .startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
                     throw new DdlException("Rename of shadow partitions is not allowed");
                 }
-                GlobalStateMgr.getCurrentState().renamePartition(db, table, partitionRenameClause);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().renamePartition(db, table, partitionRenameClause);
                 break;
             } else if (alterClause instanceof ColumnRenameClause) {
-                GlobalStateMgr.getCurrentState().renameColumn(db, table, (ColumnRenameClause) alterClause);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().renameColumn(db, table, (ColumnRenameClause) alterClause);
                 break;
             } else {
                 Preconditions.checkState(false);
@@ -852,7 +860,7 @@ public class AlterJobMgr {
             throws DdlException, AnalysisException {
         Locker locker = new Locker();
         Preconditions.checkArgument(locker.isWriteLockHeldByCurrentThread(db));
-        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         List<ModifyPartitionInfo> modifyPartitionInfos = Lists.newArrayList();
         if (olapTable.getState() != OlapTableState.NORMAL) {
             throw InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName());

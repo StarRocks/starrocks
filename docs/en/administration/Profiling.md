@@ -8,9 +8,9 @@ displayed_sidebar: "English"
 
 StarRocks supports four table types: Duplicate Key table, Aggregate table, Unique Key table, and Primary Key table. All of them are sorted by KEY.
 
-- `AGGREGATE KEY`: When records with the same AGGREGATE KEY is loaded into StarRocks, the old and new records are aggregated. Currently, aggregate tables supports the following aggregate functions: SUM, MIN, MAX, and REPLACE. Aggregate tables support aggregating data in advance, facilitating business statements and multi-dimensional analyses.
+- `AGGREGATE KEY`: When records with the same AGGREGATE KEY is loaded into StarRocks, the old and new records are aggregated. Currently, Aggregate tables supports the following aggregate functions: SUM, MIN, MAX, and REPLACE. Aggregate tables support aggregating data in advance, facilitating business statements and multi-dimensional analyses.
 - `DUPLICATE KEY`: You only need to specify the sort key for a DUPLICATE KEY table. Records with the same DUPLICATE KEY exist at the same time. It is suitable for analyses that do not involve aggregating data in advance.
-- `UNIQUE KEY`: When records with the same UNIQUE KEY is loaded into StarRocks, the new record overwrites the old one. A UNIQUE KEY tables is similar to an aggregate table with REPLACE function. Both are suitable for analyses involving constant updates.
+- `UNIQUE KEY`: When records with the same UNIQUE KEY is loaded into StarRocks, the new record overwrites the old one. A UNIQUE KEY tables is similar to an Aggregate table with REPLACE function. Both are suitable for analyses involving constant updates.
 - `PRIMARY KEY`: Primary Key tables guarantee the uniqueness of records, and allow you to perform realtime updating.
 
 ~~~sql
@@ -93,7 +93,7 @@ Flat tables have the following drawbacks:
 
 - Costly dimension updates because a flat table usually contains a massive number of dimensions. Each time a dimension is updated, the entire table must be updated. The situation exacerbates as the update frequency increases.
 - High maintenance cost because flat tables require additional development workloads, storage space, and data backfilling operations.
-- High data ingestion cost because a flat table has many fields and an aggregate table may contain even more key fields. During data loading, more fields need to be sorted, which prolongs data loading.
+- High data ingestion cost because a flat table has many fields and an Aggregate table may contain even more key fields. During data loading, more fields need to be sorted, which prolongs data loading.
 
 If you have high requirements on query concurrency or low latency, you can still use flat tables.
 

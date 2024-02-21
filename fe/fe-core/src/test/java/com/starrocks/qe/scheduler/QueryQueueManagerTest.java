@@ -1088,11 +1088,11 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                 ImmutableList.of(new ComputeNode(3L, "cn3-host", 8030), new ComputeNode(4L, "cn4-host", 8030),
                         new ComputeNode(5L, "cn5-host", 8030));
         Stream.concat(backends.stream(), computeNodes.stream()).forEach(cn -> cn.setAlive(true));
-        backends.forEach(GlobalStateMgr.getCurrentSystemInfo()::addBackend);
-        computeNodes.forEach(GlobalStateMgr.getCurrentSystemInfo()::addComputeNode);
+        backends.forEach(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()::addBackend);
+        computeNodes.forEach(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()::addComputeNode);
 
         // 1. Queries are queued, due to CPU usage exceeds cpuUsagePermilleLimit.
-        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 0, 10, null);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateResourceUsage(0L, 0, 100, 0, 10, null);
 
         List<DefaultCoordinator> coords = new ArrayList<>(concurrencyLimit);
         List<Thread> threads = new ArrayList<>(concurrencyLimit);
@@ -1112,7 +1112,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                 .until(() -> coords.stream().allMatch(coord -> LogicalSlot.State.REQUIRING == coord.getSlot().getState()));
 
         // 2. Queries are not queued anymore, after CPU usage doesn't exceed cpuUsagePermilleLimit.
-        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 0, 1, null);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateResourceUsage(0L, 0, 100, 0, 1, null);
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
                 .until(() -> coords.stream().allMatch(coord -> LogicalSlot.State.ALLOCATED == coord.getSlot().getState()));
         coords.forEach(DefaultCoordinator::onFinished);
@@ -1135,11 +1135,11 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                 ImmutableList.of(new ComputeNode(3L, "cn3-host", 8030), new ComputeNode(4L, "cn4-host", 8030),
                         new ComputeNode(5L, "cn5-host", 8030));
         Stream.concat(backends.stream(), computeNodes.stream()).forEach(cn -> cn.setAlive(true));
-        backends.forEach(GlobalStateMgr.getCurrentSystemInfo()::addBackend);
-        computeNodes.forEach(GlobalStateMgr.getCurrentSystemInfo()::addComputeNode);
+        backends.forEach(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()::addBackend);
+        computeNodes.forEach(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()::addComputeNode);
 
         // 1. Queries are queued, due to mem usage exceeds memUsagePctLimit.
-        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 30, 0, null);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateResourceUsage(0L, 0, 100, 30, 0, null);
 
         List<DefaultCoordinator> coords = new ArrayList<>(concurrencyLimit);
         List<Thread> threads = new ArrayList<>(concurrencyLimit);
@@ -1159,7 +1159,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                 .until(() -> coords.stream().allMatch(coord -> LogicalSlot.State.REQUIRING == coord.getSlot().getState()));
 
         // 2. Queries are not queued anymore, after mem usage doesn't exceed cpuUsagePermilleLimit.
-        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 0, 0, null);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateResourceUsage(0L, 0, 100, 0, 0, null);
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
                 .until(() -> coords.stream().allMatch(coord -> LogicalSlot.State.ALLOCATED == coord.getSlot().getState()));
         coords.forEach(DefaultCoordinator::onFinished);
@@ -1189,8 +1189,8 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                 new ComputeNode(4L, "cn4-host", 8030),
                 new ComputeNode(5L, "cn5-host", 8030));
         Stream.concat(backends.stream(), computeNodes.stream()).forEach(cn -> cn.setAlive(true));
-        backends.forEach(GlobalStateMgr.getCurrentSystemInfo()::addBackend);
-        computeNodes.forEach(GlobalStateMgr.getCurrentSystemInfo()::addComputeNode);
+        backends.forEach(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()::addBackend);
+        computeNodes.forEach(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()::addComputeNode);
 
         // 1. Queries of group #0 and #3 will be pending.
         List<TResourceGroupUsage> groupUsages = ImmutableList.of(
@@ -1199,7 +1199,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                 new TResourceGroupUsage().setGroup_id(2L).setCpu_core_used_permille(10000),
                 new TResourceGroupUsage().setGroup_id(3L).setCpu_core_used_permille(3000)
         );
-        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 30, 0, groupUsages);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateResourceUsage(0L, 0, 100, 30, 0, groupUsages);
 
         List<Thread> threads = new ArrayList<>();
         List<DefaultCoordinator> coords = new ArrayList<>();
@@ -1229,7 +1229,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                 new TResourceGroupUsage().setGroup_id(0L).setCpu_core_used_permille(900),
                 new TResourceGroupUsage().setGroup_id(3L).setCpu_core_used_permille(3500)
         );
-        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 30, 0, groupUsages);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateResourceUsage(0L, 0, 100, 30, 0, groupUsages);
         Awaitility.await().atMost(5, TimeUnit.SECONDS).until(
                 () -> numQueriesPerGroup == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
 
@@ -1237,7 +1237,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         groupUsages = ImmutableList.of(
                 new TResourceGroupUsage().setGroup_id(0L).setCpu_core_used_permille(900)
         );
-        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 30, 0, groupUsages);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateResourceUsage(0L, 0, 100, 30, 0, groupUsages);
         Awaitility.await().atMost(5, TimeUnit.SECONDS).until(
                 () -> 0 == MetricRepo.COUNTER_QUERY_QUEUE_PENDING.getValue());
 
@@ -1261,11 +1261,11 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                 ImmutableList.of(new ComputeNode(3L, "cn3-host", 8030), new ComputeNode(4L, "cn4-host", 8030),
                         new ComputeNode(5L, "cn5-host", 8030));
         Stream.concat(backends.stream(), computeNodes.stream()).forEach(cn -> cn.setAlive(true));
-        backends.forEach(GlobalStateMgr.getCurrentSystemInfo()::addBackend);
-        computeNodes.forEach(GlobalStateMgr.getCurrentSystemInfo()::addComputeNode);
+        backends.forEach(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()::addBackend);
+        computeNodes.forEach(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()::addComputeNode);
 
         // 1. Queries are queued, due to mem usage exceeds memUsagePctLimit.
-        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 30, 0, null);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateResourceUsage(0L, 0, 100, 30, 0, null);
 
         List<DefaultCoordinator> coords = new ArrayList<>(concurrencyLimit);
         List<Thread> threads = new ArrayList<>(concurrencyLimit);
@@ -1287,7 +1287,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         // 2. Queries are not queued anymore, because the overloaded BE doesn't report in resourceUsageIntervalMs.
         GlobalVariable.setQueryQueueResourceUsageIntervalMs(1000);
         Thread.sleep(2000);
-        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(1L, 0, 100, 0, 0, null);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateResourceUsage(1L, 0, 100, 0, 0, null);
         Awaitility.await().atMost(5, TimeUnit.SECONDS)
                 .until(() -> coords.stream().allMatch(coord -> LogicalSlot.State.ALLOCATED == coord.getSlot().getState()));
         coords.forEach(DefaultCoordinator::onFinished);
@@ -1310,11 +1310,11 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                 ImmutableList.of(new ComputeNode(3L, "cn3-host", 8030), new ComputeNode(4L, "cn4-host", 8030),
                         new ComputeNode(5L, "cn5-host", 8030));
         Stream.concat(backends.stream(), computeNodes.stream()).forEach(cn -> cn.setAlive(true));
-        backends.forEach(GlobalStateMgr.getCurrentSystemInfo()::addBackend);
-        computeNodes.forEach(GlobalStateMgr.getCurrentSystemInfo()::addComputeNode);
+        backends.forEach(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()::addBackend);
+        computeNodes.forEach(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()::addComputeNode);
 
         // 1. Queries are queued, due to mem usage exceeds memUsagePctLimit.
-        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 30, 0, null);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateResourceUsage(0L, 0, 100, 30, 0, null);
 
         List<DefaultCoordinator> coords = new ArrayList<>(concurrencyLimit);
         List<Thread> threads = new ArrayList<>(concurrencyLimit);
@@ -1461,7 +1461,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                 new Backend(0L, "be0-host", 8030),
                 new Backend(1L, "be1-host", 8030));
         backends.forEach(cn -> cn.setAlive(true));
-        backends.forEach(GlobalStateMgr.getCurrentSystemInfo()::addBackend);
+        backends.forEach(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()::addBackend);
 
         {
             String res = starRocksAssert.executeShowResourceUsageSql("SHOW USAGE RESOURCE GROUPS;");
@@ -1478,7 +1478,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                         .setNum_running_queries(6),
                 new TResourceGroupUsage().setGroup_id(13L).setCpu_core_used_permille(30)
         );
-        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 30, 0, groupUsages);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateResourceUsage(0L, 0, 100, 30, 0, groupUsages);
         groupUsages = ImmutableList.of(
                 new TResourceGroupUsage().setGroup_id(ResourceGroup.DEFAULT_MV_WG_ID).setCpu_core_used_permille(4110)
                         .setMem_used_bytes(49).setNum_running_queries(48),
@@ -1489,7 +1489,7 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                         .setNum_running_queries(16),
                 new TResourceGroupUsage().setGroup_id(13L).setCpu_core_used_permille(130)
         );
-        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(1L, 0, 100, 30, 0, groupUsages);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateResourceUsage(1L, 0, 100, 30, 0, groupUsages);
 
         {
             String res = starRocksAssert.executeShowResourceUsageSql("SHOW USAGE RESOURCE GROUPS;");
@@ -1511,13 +1511,13 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
                         .setNum_running_queries(28),
                 new TResourceGroupUsage().setGroup_id(11L).setCpu_core_used_permille(200)
         );
-        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(0L, 0, 100, 30, 0, groupUsages);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateResourceUsage(0L, 0, 100, 30, 0, groupUsages);
         groupUsages = ImmutableList.of(
                 new TResourceGroupUsage().setGroup_id(12L).setCpu_core_used_permille(1220).setMem_used_bytes(27)
                         .setNum_running_queries(26),
                 new TResourceGroupUsage().setGroup_id(13L).setCpu_core_used_permille(230)
         );
-        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(1L, 0, 100, 30, 0, groupUsages);
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateResourceUsage(1L, 0, 100, 30, 0, groupUsages);
 
         {
             String res = starRocksAssert.executeShowResourceUsageSql("SHOW USAGE RESOURCE GROUPS;");

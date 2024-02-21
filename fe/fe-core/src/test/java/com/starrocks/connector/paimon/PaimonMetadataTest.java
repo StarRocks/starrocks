@@ -54,6 +54,7 @@ import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.ReadBuilder;
 import org.apache.paimon.table.source.Split;
 import org.apache.paimon.table.system.SchemasTable;
+import org.apache.paimon.table.system.SnapshotsTable;
 import org.apache.paimon.types.BigIntType;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
@@ -294,5 +295,24 @@ public class PaimonMetadataTest {
         rule0.transform(scan, new OptimizerContext(new Memo(), new ColumnRefFactory()));
         assertEquals(1, ((LogicalPaimonScanOperator) scan.getOp()).getScanOperatorPredicates()
                 .getSelectedPartitionIds().size());
+    }
+
+    @Test
+    public void testGetSnapshotsTable(@Mocked SnapshotsTable snapshotsTable) throws Catalog.TableNotExistException {
+        List<DataField> fields = new ArrayList<>();
+        fields.add(new DataField(1, "col2", new IntType(true)));
+        fields.add(new DataField(2, "col3", new DoubleType(false)));
+        new Expectations() {
+            {
+                paimonNativeCatalog.getTable((Identifier) any);
+                result = snapshotsTable;
+                snapshotsTable.name();
+                result = "snapshotsTable";
+            }
+        };
+
+        com.starrocks.catalog.Table stable = metadata.getTable("db1", "tbl1$snapshots");
+        PaimonTable spaimonTable = (PaimonTable) stable;
+        Assert.assertEquals("snapshotsTable", spaimonTable.getTableLocation());
     }
 }

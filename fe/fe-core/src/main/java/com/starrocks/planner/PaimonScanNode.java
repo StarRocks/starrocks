@@ -19,6 +19,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.CatalogConnector;
@@ -108,6 +109,14 @@ public class PaimonScanNode extends ScanNode {
         return scanRangeLocationsList;
     }
 
+    public long getEstimatedLength(long rowCount, TupleDescriptor tupleDescriptor) {
+        List<Column> dataColumns = tupleDescriptor.getSlots().stream().map(s -> s.getColumn())
+                .collect(Collectors.toList());
+        long rowSize = dataColumns.stream().mapToInt(column -> column.getType().getTypeSize()).sum();
+
+        return rowCount * rowSize;
+    }
+
     public void setupScanRangeLocations(TupleDescriptor tupleDescriptor, ScalarOperator predicate) {
         List<String> fieldNames =
                 tupleDescriptor.getSlots().stream().map(s -> s.getColumn().getName()).collect(Collectors.toList());
@@ -125,28 +134,36 @@ public class PaimonScanNode extends ScanNode {
         }
 
         boolean forceJNIReader = ConnectContext.get().getSessionVariable().getPaimonForceJNIReader();
-
         Map<BinaryRow, Long> selectedPartitions = Maps.newHashMap();
         for (Split split : splits) {
-            DataSplit dataSplit = (DataSplit) split;
-            Optional<List<RawFile>> optionalRawFiles = dataSplit.convertToRawFiles();
-            if (!forceJNIReader && optionalRawFiles.isPresent()) {
-                List<RawFile> rawFiles = optionalRawFiles.get();
-                boolean validFormat = rawFiles.stream().allMatch(p -> fromType(p.format()) != THdfsFileFormat.UNKNOWN);
-                if (validFormat) {
-                    for (RawFile rawFile : rawFiles) {
-                        addRowfileScanRangeLocations(rawFile);
+            if (split instanceof DataSplit) {
+                DataSplit dataSplit = (DataSplit) split;
+                Optional<List<RawFile>> optionalRawFiles = dataSplit.convertToRawFiles();
+                if (!forceJNIReader && optionalRawFiles.isPresent()) {
+                    List<RawFile> rawFiles = optionalRawFiles.get();
+                    boolean validFormat = rawFiles.stream().allMatch(p -> fromType(p.format()) != THdfsFileFormat.UNKNOWN);
+                    if (validFormat) {
+                        for (RawFile rawFile : rawFiles) {
+                            addRowfileScanRangeLocations(rawFile);
+                        }
+                    } else {
+                        long totalFileLength = getTotalFileLength(dataSplit);
+                        addSplitScanRangeLocations(dataSplit, predicateInfo, totalFileLength);
                     }
                 } else {
-                    addSplitScanRangeLocations(dataSplit, predicateInfo);
+                    long totalFileLength = getTotalFileLength(dataSplit);
+                    addSplitScanRangeLocations(dataSplit, predicateInfo, totalFileLength);
+                }
+                BinaryRow partitionValue = dataSplit.partition();
+                if (!selectedPartitions.containsKey(partitionValue)) {
+                    selectedPartitions.put(partitionValue, nextPartitionId());
                 }
             } else {
-                addSplitScanRangeLocations(dataSplit, predicateInfo);
+                // paimon system table
+                long length = getEstimatedLength(split.rowCount(), tupleDescriptor);
+                addSplitScanRangeLocations(split, predicateInfo, length);
             }
-            BinaryRow partitionValue = dataSplit.partition();
-            if (!selectedPartitions.containsKey(partitionValue)) {
-                selectedPartitions.put(partitionValue, nextPartitionId());
-            }
+
         }
         scanNodePredicates.setSelectedPartitionIds(selectedPartitions.values());
     }
@@ -187,17 +204,15 @@ public class PaimonScanNode extends ScanNode {
         scanRangeLocationsList.add(scanRangeLocations);
     }
 
-    private void addSplitScanRangeLocations(DataSplit split, String predicateInfo) {
+    private void addSplitScanRangeLocations(Split split, String predicateInfo, long totalFileLength) {
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
         hdfsScanRange.setUse_paimon_jni_reader(true);
         hdfsScanRange.setPaimon_split_info(encodeObjectToString(split));
         hdfsScanRange.setPaimon_predicate_info(predicateInfo);
-        long totalFileLength = getTotalFileLength(split);
         hdfsScanRange.setFile_length(totalFileLength);
         hdfsScanRange.setLength(totalFileLength);
-
         TScanRange scanRange = new TScanRange();
         scanRange.setHdfs_scan_range(hdfsScanRange);
         scanRangeLocations.setScan_range(scanRange);

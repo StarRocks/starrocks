@@ -410,7 +410,7 @@ public class IcebergMetadataTest extends TableTestBase {
             }
         };
 
-        GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeJob(new ExternalAnalyzeJob("iceberg_catalog",
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeJob(new ExternalAnalyzeJob("iceberg_catalog",
                 "iceberg_db", "table1", Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), StatsConstants.ScheduleStatus.PENDING,
                 LocalDateTime.MIN));
@@ -897,7 +897,8 @@ public class IcebergMetadataTest extends TableTestBase {
         Snapshot snapshotBeforeRefresh = table.getSnapshot().get();
 
         mockedNativeTableA.newAppend().appendFile(FILE_A).commit();
-        Assert.assertEquals(snapshotBeforeRefresh.snapshotId() + 1,
+        // test use query level table cache
+        Assert.assertEquals(snapshotBeforeRefresh.snapshotId(),
                 ((IcebergTable) metadata.getTable("db", "table")).getSnapshot().get().snapshotId());
 
         metadata.refreshTable("db", icebergTable, new ArrayList<>(), true);

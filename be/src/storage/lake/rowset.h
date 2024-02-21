@@ -19,6 +19,7 @@
 #include "storage/lake/tablet.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/olap_common.h"
+#include "storage/options.h"
 
 namespace starrocks::lake {
 
@@ -89,11 +90,13 @@ public:
 
     [[nodiscard]] StatusOr<std::vector<SegmentPtr>> segments(bool fill_cache);
 
-    [[nodiscard]] StatusOr<std::vector<SegmentPtr>> segments(bool fill_data_cache, bool fill_metadata_cache);
+    [[nodiscard]] StatusOr<std::vector<SegmentPtr>> segments(const LakeIOOptions& lake_io_opts,
+                                                             bool fill_metadata_cache);
 
-    [[nodiscard]] Status load_segments(std::vector<SegmentPtr>* segments, bool fill_cache);
+    // `fill_cache` controls `fill_data_cache` and `fill_meta_cache`
+    [[nodiscard]] Status load_segments(std::vector<SegmentPtr>* segments, bool fill_cache, int64_t buffer_size = -1);
 
-    [[nodiscard]] Status load_segments(std::vector<SegmentPtr>* segments, bool fill_data_cache,
+    [[nodiscard]] Status load_segments(std::vector<SegmentPtr>* segments, const LakeIOOptions& lake_io_opts,
                                        bool fill_metadata_cache);
 
     int64_t tablet_id() const { return _tablet_id; }

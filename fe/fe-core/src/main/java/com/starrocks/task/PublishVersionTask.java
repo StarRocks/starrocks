@@ -39,8 +39,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.TraceManager;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TPublishVersionRequest;
@@ -135,7 +135,7 @@ public class PublishVersionTask extends AgentTask {
     }
 
     private Set<Long> collectErrorReplicas() {
-        TabletInvertedIndex tablets = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex tablets = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         Set<Long> errorReplicas = Sets.newHashSet();
         List<Long> errorTablets = this.getErrorTablets();
         if (errorTablets != null && !errorTablets.isEmpty()) {
@@ -161,7 +161,7 @@ public class PublishVersionTask extends AgentTask {
             span.addEvent("update_replica_version_start");
             span.setAttribute("num_replicas", tabletVersions.size());
         }
-        TabletInvertedIndex tablets = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex tablets = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         List<Long> tabletIds = tabletVersions.stream().map(tv -> tv.tablet_id).collect(Collectors.toList());
         List<Replica> replicas = tablets.getReplicasOnBackendByTabletIds(tabletIds, backendId);
         if (replicas == null) {

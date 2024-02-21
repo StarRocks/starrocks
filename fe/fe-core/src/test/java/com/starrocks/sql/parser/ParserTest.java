@@ -70,6 +70,15 @@ class ParserTest {
     }
 
     @Test
+    void test() {
+        String sql = "@`a` = 1";
+        SessionVariable sessionVariable = new SessionVariable();
+        List<Expr> exprs = SqlParser.parseSqlToExprs(sql, sessionVariable);
+        System.out.println();
+
+    }
+
+    @Test
     void sqlParseErrorInfoTest() {
         String sql = "select 1 form tbl";
         SessionVariable sessionVariable = new SessionVariable();
@@ -397,7 +406,7 @@ class ParserTest {
         assertContains(res, "{'disable_colocate_join', 'disable_join_reorder', 'disable_function_fold_constants'}");
 
         res = VariableMgr.findSimilarVarNames("SQL_AUTO_NULL");
-        assertContains(res, "{'SQL_AUTO_IS_NULL', 'sql_dialect', 'sql_mode_v2'}");
+        assertContains(res, "{'SQL_AUTO_IS_NULL', 'sql_dialect', 'spill_storage_volume'}");
 
         res = VariableMgr.findSimilarVarNames("pipeline");
         assertContains(res, "{'pipeline_dop', 'pipeline_sink_dop', 'pipeline_profile_level'}");

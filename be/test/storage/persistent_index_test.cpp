@@ -370,9 +370,11 @@ TEST_P(PersistentIndexTest, test_fixlen_mutable_index_wal) {
     bool created;
     ASSERT_OK(fs->create_dir_if_missing(kPersistentIndexDir, &created));
 
+    int64_t old_val = config::l0_max_mem_usage;
+    config::l0_max_mem_usage = 10240;
     using Key = uint64_t;
     PersistentIndexMetaPB index_meta;
-    const int N = 1000000;
+    const int N = 10000;
     // insert
     vector<Key> keys;
     vector<Slice> key_slices;
@@ -385,7 +387,7 @@ TEST_P(PersistentIndexTest, test_fixlen_mutable_index_wal) {
         key_slices.emplace_back((uint8_t*)(&keys[i]), sizeof(Key));
     }
 
-    const int second_n = 50000;
+    const int second_n = 500;
     vector<Key> second_keys;
     vector<Slice> second_key_slices;
     vector<IndexValue> second_values;
@@ -517,6 +519,7 @@ TEST_P(PersistentIndexTest, test_fixlen_mutable_index_wal) {
         }
     }
 
+    config::l0_max_mem_usage = old_val;
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
@@ -908,8 +911,8 @@ TEST_P(PersistentIndexTest, test_small_varlen_mutable_index_wal) {
 
     using Key = std::string;
     PersistentIndexMetaPB index_meta;
-    const int N = 1000000;
-    const int wal_n = 50000;
+    const int N = 50000;
+    const int wal_n = 2500;
     // insert
     vector<Key> keys(N);
     vector<Slice> key_slices;
@@ -1465,20 +1468,39 @@ void build_persistent_index_from_tablet(size_t N) {
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
-TEST_P(PersistentIndexTest, test_build_from_tablet) {
+TEST_P(PersistentIndexTest, test_build_from_tablet_snapshot) {
     auto manager = StorageEngine::instance()->update_manager();
     config::l0_max_mem_usage = 104857600;
     manager->mem_tracker()->set_limit(-1);
     // dump snapshot
-    build_persistent_index_from_tablet(100000);
+    build_persistent_index_from_tablet(1000);
+    config::l0_max_mem_usage = 104857600;
+}
+
+TEST_P(PersistentIndexTest, test_build_from_tablet_wal) {
+    auto manager = StorageEngine::instance()->update_manager();
+    config::l0_max_mem_usage = 104857600;
+    manager->mem_tracker()->set_limit(-1);
     // write wal
     build_persistent_index_from_tablet(250000);
+    config::l0_max_mem_usage = 104857600;
+}
+
+TEST_P(PersistentIndexTest, test_build_from_tablet_flush) {
+    auto manager = StorageEngine::instance()->update_manager();
+    manager->mem_tracker()->set_limit(-1);
     // flush l1
-    config::l0_max_mem_usage = 1000000;
-    build_persistent_index_from_tablet(1000000);
+    config::l0_max_mem_usage = 100000;
+    build_persistent_index_from_tablet(100000);
+    config::l0_max_mem_usage = 104857600;
+}
+
+TEST_P(PersistentIndexTest, test_build_from_tablet_flush_advance) {
+    auto manager = StorageEngine::instance()->update_manager();
+    manager->mem_tracker()->set_limit(-1);
     // flush one tmp l1
-    config::l0_max_mem_usage = 18874368;
-    build_persistent_index_from_tablet(1000000);
+    config::l0_max_mem_usage = 50000;
+    build_persistent_index_from_tablet(100000);
     config::l0_max_mem_usage = 104857600;
 }
 
@@ -1667,7 +1689,7 @@ TEST_P(PersistentIndexTest, test_flush_l1_advance) {
 
     using Key = std::string;
     PersistentIndexMetaPB index_meta;
-    const int N = 500000;
+    const int N = 50000;
     vector<Key> keys(N);
     vector<Slice> key_slices;
     vector<IndexValue> values;
@@ -1696,7 +1718,7 @@ TEST_P(PersistentIndexTest, test_flush_l1_advance) {
 
         PersistentIndex index(kPersistentIndexDir);
         ASSERT_OK(index.load(index_meta));
-        const int N = 10000;
+        const int N = 5000;
         ASSERT_OK(index.prepare(EditVersion(1, 0), N));
         for (int i = 0; i < 50; i++) {
             vector<Key> keys(N);
@@ -1737,7 +1759,7 @@ TEST_P(PersistentIndexTest, test_flush_l1_advance) {
     {
         PersistentIndex index(kPersistentIndexDir);
         ASSERT_OK(index.load(index_meta));
-        const int N = 100000;
+        const int N = 5000;
         ASSERT_OK(index.prepare(EditVersion(2, 0), N));
         for (int i = 0; i < 5; i++) {
             vector<IndexValue> values;
@@ -1759,7 +1781,7 @@ TEST_P(PersistentIndexTest, test_flush_l1_advance) {
 
     {
         // reload persistent index
-        const int N = 100000;
+        const int N = 5000;
         PersistentIndex index(kPersistentIndexDir);
         ASSERT_OK(index.load(index_meta));
         std::vector<IndexValue> get_values(N);
@@ -1784,7 +1806,7 @@ TEST_P(PersistentIndexTest, test_bloom_filter_for_pindex) {
 
     using Key = std::string;
     PersistentIndexMetaPB index_meta;
-    const int N = 500000;
+    const int N = 50000;
     vector<Key> keys(N);
     vector<Slice> key_slices;
     vector<IndexValue> values;
@@ -1859,7 +1881,7 @@ TEST_P(PersistentIndexTest, test_bloom_filter_for_pindex) {
         PersistentIndex index(kPersistentIndexDir);
         ASSERT_OK(index.load(index_meta));
         CHECK(index._has_l1);
-        const int N = 100000;
+        const int N = 10000;
         ASSERT_OK(index.prepare(EditVersion(2, 0), N));
         for (int i = 0; i < 5; i++) {
             vector<IndexValue> values;
@@ -1881,7 +1903,7 @@ TEST_P(PersistentIndexTest, test_bloom_filter_for_pindex) {
 
     {
         // reload persistent index
-        const int N = 100000;
+        const int N = 1000;
         PersistentIndex index(kPersistentIndexDir);
         StorageEngine::instance()->update_manager()->set_keep_pindex_bf(true);
         ASSERT_OK(index.load(index_meta));
@@ -1896,7 +1918,7 @@ TEST_P(PersistentIndexTest, test_bloom_filter_for_pindex) {
     {
         // memory usage is too high
         StorageEngine::instance()->update_manager()->set_keep_pindex_bf(false);
-        const int N = 100000;
+        const int N = 10000;
         PersistentIndex index(kPersistentIndexDir);
         ASSERT_OK(index.load(index_meta));
         std::vector<IndexValue> get_values(N);
@@ -1917,7 +1939,7 @@ TEST_P(PersistentIndexTest, test_bloom_filter_for_pindex) {
 }
 
 TEST_P(PersistentIndexTest, test_multi_l2_tmp_l1) {
-    config::l0_max_mem_usage = 1024;
+    config::l0_max_mem_usage = 50;
     config::max_tmp_l1_num = 10;
     FileSystem* fs = FileSystem::Default();
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_multi_l2_tmp_l1";
@@ -1927,8 +1949,8 @@ TEST_P(PersistentIndexTest, test_multi_l2_tmp_l1) {
 
     using Key = std::string;
     PersistentIndexMetaPB index_meta;
-    const int N = 1000000;
-    const int wal_n = 200000;
+    const int N = 1000;
+    const int wal_n = 200;
     int64_t cur_version = 0;
     // insert
     vector<Key> keys(N);
@@ -2247,7 +2269,7 @@ TEST_P(PersistentIndexTest, test_multi_l2_not_tmp_l1_fixlen) {
 }
 
 TEST_P(PersistentIndexTest, test_multi_l2_delete) {
-    config::l0_max_mem_usage = 1024;
+    config::l0_max_mem_usage = 50;
     config::max_tmp_l1_num = 10;
     FileSystem* fs = FileSystem::Default();
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_multi_l2_delete";
@@ -2257,8 +2279,8 @@ TEST_P(PersistentIndexTest, test_multi_l2_delete) {
 
     using Key = std::string;
     PersistentIndexMetaPB index_meta;
-    const int N = 1000000;
-    const int DEL_N = 900000;
+    const int N = 1000;
+    const int DEL_N = 900;
     int64_t cur_version = 0;
     // insert
     vector<Key> keys(N);

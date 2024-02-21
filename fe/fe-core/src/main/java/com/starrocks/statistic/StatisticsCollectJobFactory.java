@@ -20,14 +20,13 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.ConnectorTableColumnStats;
 import com.starrocks.connector.PartitionInfo;
-import com.starrocks.connector.iceberg.IcebergPartitionUtils;
 import com.starrocks.monitor.unit.ByteSizeUnit;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
@@ -39,7 +38,6 @@ import org.apache.logging.log4j.Logger;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -57,7 +55,7 @@ public class StatisticsCollectJobFactory {
         List<StatisticsCollectJob> statsJobs = Lists.newArrayList();
         if (StatsConstants.DEFAULT_ALL_ID == nativeAnalyzeJob.getDbId()) {
             // all database
-            List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
+            List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
 
             for (Long dbId : dbIds) {
                 Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
@@ -86,7 +84,8 @@ public class StatisticsCollectJobFactory {
             if (db == null) {
                 return Collections.emptyList();
             }
-            createJob(statsJobs, nativeAnalyzeJob, db, db.getTable(nativeAnalyzeJob.getTableId()), nativeAnalyzeJob.getColumns());
+            createJob(statsJobs, nativeAnalyzeJob, db, db.getTable(nativeAnalyzeJob.getTableId()),
+                    nativeAnalyzeJob.getColumns());
         }
 
         return statsJobs;
@@ -205,7 +204,7 @@ public class StatisticsCollectJobFactory {
     }
 
     private static void createExternalAnalyzeJob(List<StatisticsCollectJob> allTableJobMap, ExternalAnalyzeJob job,
-                                                 Database db, Table table, List<String> columns)  {
+                                                 Database db, Table table, List<String> columns) {
         if (table == null) {
             return;
         }
@@ -220,7 +219,7 @@ public class StatisticsCollectJobFactory {
             }
         }
 
-        ExternalBasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getExternalBasicStatsMetaMap()
+        ExternalBasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalBasicStatsMetaMap()
                 .get(new AnalyzeMgr.StatsMetaKey(job.getCatalogName(), db.getFullName(), table.getName()));
         if (basicStatsMeta != null) {
             // check table last update time, if last collect time is after last update time, skip this table
@@ -240,7 +239,7 @@ public class StatisticsCollectJobFactory {
                 columns = StatisticUtils.getCollectibleColumns(table);
             }
             List<ConnectorTableColumnStats> columnStatisticList =
-                    GlobalStateMgr.getCurrentStatisticStorage().getConnectorTableStatisticsSync(table, columns);
+                    GlobalStateMgr.getCurrentState().getStatisticStorage().getConnectorTableStatisticsSync(table, columns);
             List<ConnectorTableColumnStats> validColumnStatistics = columnStatisticList.stream().
                     filter(columnStatistic -> !columnStatistic.isUnknown()).collect(Collectors.toList());
 
@@ -304,12 +303,19 @@ public class StatisticsCollectJobFactory {
                 }
             }
         } else if (table.isIcebergTable()) {
-            IcebergTable icebergTable = (IcebergTable) table;
-            if (statisticsUpdateTime != LocalDateTime.MIN && !icebergTable.isUnPartitioned()) {
-                updatedPartitions.addAll(IcebergPartitionUtils.getChangedPartitionNames(icebergTable.getNativeTable(),
-                        statisticsUpdateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-                                - 60 * 1000L,
-                        icebergTable.getNativeTable().currentSnapshot()));
+            if (statisticsUpdateTime != LocalDateTime.MIN) {
+                ConnectorPartitionTraits.build(table).getPartitionNameWithPartitionInfo().
+                        forEach((partitionName, partitionInfo) -> {
+                            // for external table, we get last modified time from other system, there may be a time
+                            // inconsistency between the two systems, so we add 60 seconds to make sure table update
+                            // time is later than statistics update time
+                            LocalDateTime partitionUpdateTime = LocalDateTime.ofInstant(
+                                    Instant.ofEpochMilli(partitionInfo.getModifiedTime() / 1000).plusSeconds(60),
+                                    Clock.systemDefaultZone().getZone());
+                            if (partitionUpdateTime.isAfter(statisticsUpdateTime)) {
+                                updatedPartitions.add(partitionName);
+                            }
+                        });
             }
         }
         LOG.info("create external full statistics job for table: {}, partitions: {}",
@@ -346,7 +352,8 @@ public class StatisticsCollectJobFactory {
             }
         }
 
-        BasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(table.getId());
+        BasicStatsMeta basicStatsMeta =
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().get(table.getId());
         double healthy = 0;
         LocalDateTime tableUpdateTime = StatisticUtils.getTableLastUpdateTime(table);
         if (basicStatsMeta != null) {
@@ -421,7 +428,8 @@ public class StatisticsCollectJobFactory {
         }
     }
 
-    private static void createSampleStatsJob(List<StatisticsCollectJob> allTableJobMap, NativeAnalyzeJob job, Database db,
+    private static void createSampleStatsJob(List<StatisticsCollectJob> allTableJobMap, NativeAnalyzeJob job,
+                                             Database db,
                                              Table table, List<String> columns) {
         StatisticsCollectJob sample = buildStatisticsCollectJob(db, table, null, columns,
                 StatsConstants.AnalyzeType.SAMPLE, job.getScheduleType(), job.getProperties());

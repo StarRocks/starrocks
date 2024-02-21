@@ -1,17 +1,23 @@
 ---
 displayed_sidebar: "Chinese"
 toc_max_heading_level: 4
+keywords: ['Broker Load']
 ---
 
 # 从 Microsoft Azure Storage 导入
 
-import LoadMethodIntro from '../assets/commonMarkdown/loadMethodIntro.md'
-
 import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
 
-StarRocks 支持通过以下方式从 AWS S3 导入数据：
+StarRocks 支持通过以下方式从 Azure 导入数据：
 
-<LoadMethodIntro />
+- 使用 [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md)+[`FILES()`](../sql-reference/sql-functions/table-functions/files.md) 进行同步导入。
+- 使用 [Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 进行异步导入。
+
+两种导入方式各有优势，具体将在下面分章节详细阐述。
+
+一般情况下，建议您使用 INSERT+`FILES()`，更为方便易用。
+
+但是，INSERT+`FILES()` 当前只支持 Parquet 和 ORC 文件格式。因此，如果您需要导入其他格式（如 CSV）的数据、或者需要[在导入过程中执行 DELETE 等数据变更操作](../loading/Load_to_Primary_Key_tables.md)，可以使用 Broker Load。
 
 ## 准备工作
 
@@ -46,7 +52,7 @@ StarRocks 支持通过以下方式从 AWS S3 导入数据：
 
 通过 `FILES()`，您可以：
 
-- 使用 [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) 语句直接从 AWS S3 查询数据。
+- 使用 [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) 语句直接从 Azure 查询数据。
 - 通过 [CREATE TABLE AS SELECT](../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md)（简称 CTAS）语句实现自动建表和导入数据。
 - 手动建表，然后通过 [INSERT](../sql-reference/sql-statements/data-manipulation/SELECT.md) 导入数据。
 
@@ -183,7 +189,7 @@ SELECT * from user_behavior_inferred LIMIT 3;
 
 - 源文件中包含一个数据类型为 VARBINARY 的 `Timestamp` 列，因此建表语句中也应该定义这样一个数据类型为 VARBINARY 的 `Timestamp` 列。
 - 源文件中的数据中没有 `NULL` 值，因此建表语句中也不需要定义任何列为允许 `NULL` 值。
-- 根据查询到的数据类型，可以在建表语句中定义 `UserID` 列为排序键和分桶键。根据实际业务场景需要，您还可以定义其他列比如 `ItemID` 或者定义 `UserID` 与其他列的组合作为排序键。
+- 根据未来的查询类型，可以在建表语句中定义 `UserID` 列为排序键和分桶键。根据实际业务场景需要，您还可以定义其他列比如 `ItemID` 或者定义 `UserID` 与其他列的组合作为排序键。
 
 通过如下语句创建数据库、并切换至该数据库：
 

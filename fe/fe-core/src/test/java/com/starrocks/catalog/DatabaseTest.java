@@ -37,11 +37,10 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.thrift.TStorageType;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -57,7 +56,6 @@ import java.io.FileOutputStream;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 public class DatabaseTest {
 
@@ -68,6 +66,9 @@ public class DatabaseTest {
     private GlobalStateMgr globalStateMgr;
     @Mocked
     private EditLog editLog;
+
+    @Mocked
+    NodeMgr nodeMgr;
 
     @Before
     public void setup() {
@@ -89,29 +90,11 @@ public class DatabaseTest {
                 minTimes = 0;
                 result = globalStateMgr;
 
-                globalStateMgr.getClusterId();
+                globalStateMgr.getNodeMgr();
                 minTimes = 0;
-                result = 1;
+                result = nodeMgr;
             }
         };
-    }
-
-    @Test
-    public void lockTest() {
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
-        try {
-            Assert.assertFalse(db.tryWriteLock(0, TimeUnit.SECONDS));
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
-        }
-
-        locker.lockDatabase(db, LockType.WRITE);
-        try {
-            Assert.assertTrue(db.tryWriteLock(0, TimeUnit.SECONDS));
-        } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
-        }
     }
 
     @Test
@@ -146,12 +129,6 @@ public class DatabaseTest {
         // drop not exist tableFamily
         db.dropTable("invalid");
         Assert.assertEquals(1, db.getTables().size());
-        db.dropTableWithLock("invalid");
-        Assert.assertEquals(1, db.getTables().size());
-
-        // drop normal
-        db.dropTableWithLock(table.getName());
-        Assert.assertEquals(0, db.getTables().size());
 
         db.registerTableUnlocked(table);
         db.dropTable(table.getName());

@@ -122,11 +122,10 @@ private:
     template <typename ParseFunc>
     Status _fetch_by_rowid(const rowid_t* rowids, size_t size, Column* values, ParseFunc&& page_parse);
 
+    template <LogicalType Type>
     Status _load_dict_page();
 
     bool _contains_deleted_row(uint32_t page_index) const;
-
-    bool _skip_fill_data_cache() const { return !_opts.fill_data_cache; }
 
     ColumnReader* _reader;
 

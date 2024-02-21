@@ -109,6 +109,9 @@ public class AuthorizationMgrTest {
         metadataMgr.init();
         globalStateMgr.setMetadataMgr(metadataMgr);
 
+        globalStateMgr.setAuthenticationMgr(new AuthenticationMgr());
+        globalStateMgr.setAuthorizationMgr(new AuthorizationMgr(globalStateMgr, null));
+
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create user test_user", ctx);
         globalStateMgr.getAuthenticationMgr().createUser(createUserStmt);
@@ -120,7 +123,7 @@ public class AuthorizationMgrTest {
     private static void createMaterializedView(String sql, ConnectContext connectContext) throws Exception {
         CreateMaterializedViewStatement createMaterializedViewStatement =
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStatement);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createMaterializedViewStatement);
     }
 
     @After
@@ -1779,7 +1782,7 @@ public class AuthorizationMgrTest {
             }
         };
 
-        connectCtx.getGlobalStateMgr().changeCatalog(connectCtx, "hive_catalog_1");
+        connectCtx.changeCatalog("hive_catalog_1");
 
         MetaContext.get().setStarRocksMetaVersion(3);
 

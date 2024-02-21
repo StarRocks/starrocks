@@ -93,4 +93,5 @@ ColumnPredicate* new_column_dict_conjuct_predicate(const TypeInfoPtr& type_info,
 
     return nullptr;
 }
+
 } // namespace starrocks

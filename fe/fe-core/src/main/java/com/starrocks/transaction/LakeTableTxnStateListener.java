@@ -75,7 +75,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
 
     @Override
     public void preCommit(TransactionState txnState, List<TabletCommitInfo> finishedTablets,
-                          List<TabletFailInfo> failedTablets) throws TransactionException {
+                            List<TabletFailInfo> failedTablets) throws TransactionException {
         Preconditions.checkState(txnState.getTransactionStatus() != TransactionStatus.COMMITTED);
         txnState.clearAutomaticPartitionSnapshot();
         if (!finishedTablets.isEmpty()) {
@@ -170,12 +170,8 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
         TableCommitInfo tableCommitInfo = new TableCommitInfo(table.getId());
         boolean isFirstPartition = true;
         for (long partitionId : dirtyPartitionSet) {
-            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             PartitionCommitInfo partitionCommitInfo;
             long version = -1;
-            if (txnState.getTransactionStatus() == TransactionStatus.COMMITTED) {
-                version = partition.getNextVersion();
-            }
             if (isFirstPartition) {
                 List<String> validDictCacheColumnNames = Lists.newArrayList();
                 List<Long> validDictCacheColumnVersions = Lists.newArrayList();
@@ -210,12 +206,12 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
     }
 
     @Override
-    public void postWriteCommitLog(TransactionState txnState) {
-        // nothing to do
-    }
-
-    @Override
-    public void postAbort(TransactionState txnState, List<TabletFailInfo> failedTablets) {
+    public void postAbort(TransactionState txnState, List<TabletCommitInfo> finishedTablets,
+            List<TabletFailInfo> failedTablets) {
+        // If a transaction is prepared then aborted, the commit infos in txn state may be already assigned
+        if (!finishedTablets.isEmpty()) {
+            txnState.setTabletCommitInfos(finishedTablets);
+        }
         if (CollectionUtils.isEmpty(txnState.getTabletCommitInfos())) {
             abortTxnSkipCleanup(txnState);
         } else {
@@ -226,10 +222,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
 
     private void abortTxnSkipCleanup(TransactionState txnState) {
         List<Long> txnIds = Collections.singletonList(txnState.getTransactionId());
-        List<TxnTypePB> txnTypes = Collections.singletonList(
-                txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
-                        ? TxnTypePB.TXN_REPLICATION
-                        : TxnTypePB.TXN_NORMAL);
+        List<TxnTypePB> txnTypes = Collections.singletonList(txnState.getTxnTypePB());
         List<ComputeNode> nodes = getAllAliveNodes();
         for (ComputeNode node : nodes) { // Send abortTxn() request to all nodes
             AbortTxnRequest request = new AbortTxnRequest();
@@ -244,13 +237,14 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
 
     private void abortTxnWithCleanup(TransactionState txnState) {
         List<Long> txnIds = Collections.singletonList(txnState.getTransactionId());
-        List<TxnTypePB> txnTypes = Collections.singletonList(
-                txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
-                        ? TxnTypePB.TXN_REPLICATION
-                        : TxnTypePB.TXN_NORMAL);
+        List<TxnTypePB> txnTypes = Collections.singletonList(txnState.getTxnTypePB());
         Map<Long, List<Long>> tabletGroup = new HashMap<>();
         for (TabletCommitInfo info : txnState.getTabletCommitInfos()) {
             tabletGroup.computeIfAbsent(info.getBackendId(), k -> Lists.newArrayList()).add(info.getTabletId());
+        }
+        Map<Long, ComputeNode> allNodes = new HashMap<>();
+        for (ComputeNode node : getAllAliveNodes()) {
+            allNodes.put(node.getId(), node);
         }
         for (Map.Entry<Long, List<Long>> entry : tabletGroup.entrySet()) {
             ComputeNode node = getAliveNode(entry.getKey());
@@ -262,6 +256,17 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             request.txnTypes = txnTypes;
             request.tabletIds = entry.getValue();
             request.skipCleanup = false;
+
+            sendAbortTxnRequestIgnoreResponse(request, node);
+            allNodes.remove(node.getId());
+        }
+        // Send abortTxn() request to rest nodes
+        for (ComputeNode node : allNodes.values()) {
+            AbortTxnRequest request = new AbortTxnRequest();
+            request.txnIds = txnIds;
+            request.txnTypes = txnTypes;
+            request.skipCleanup = true;
+            request.tabletIds = null; // unused when skipCleanup is true
 
             sendAbortTxnRequestIgnoreResponse(request, node);
         }
@@ -277,14 +282,14 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
 
     static List<ComputeNode> getAllAliveNodes() {
         List<ComputeNode> nodes = new ArrayList<>();
-        nodes.addAll(GlobalStateMgr.getCurrentSystemInfo().getAvailableComputeNodes());
-        nodes.addAll(GlobalStateMgr.getCurrentSystemInfo().getAvailableBackends());
+        nodes.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAvailableComputeNodes());
+        nodes.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAvailableBackends());
         return nodes;
     }
 
     @Nullable
     static ComputeNode getAliveNode(Long nodeId) {
-        return GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
+        return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
     }
 
     static boolean enableIngestSlowdown() {

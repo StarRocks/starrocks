@@ -4,9 +4,13 @@ displayed_sidebar: "English"
 
 # CREATE USER
 
+import UserManagementPriv from '../../../assets/commonMarkdown/userManagementPriv.md'
+
 ## Description
 
 Creates a StarRocks user. In StarRocks, a "user_identity" uniquely identifies a user.
+
+<UserManagementPriv />
 
 ### Syntax
 
@@ -17,6 +21,8 @@ CREATE USER <user_identity> [auth_option] [DEFAULT ROLE <role_name>[, <role_name
 ## Parameters
 
 - `user_identity` consists of two parts, "user_name" and "host", in the format of `username@'userhost'`.  For the "host" part, you can use `%` for fuzzy match. If "host" is not specified, "%" is used by default, meaning that the user can connect to StarRocks from any host.
+
+  For the naming conventions of usernames, see [System limits](../../../reference/System_limit.md).
 
 - `auth_option` specifies the authentication method. Currently, three authentication methods are supported: StarRocks native password, mysql_native_password, and "authentication_ldap_simple". StarRocks native password is the same as mysql_native_password in logic but slightly differs in syntax. One user identity can use only one authentication method.
 

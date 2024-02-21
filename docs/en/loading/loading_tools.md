@@ -6,6 +6,17 @@ displayed_sidebar: English
 
 StarRocks and its ecosystem partners offer the following tools to help you seamlessly integrate StarRocks with external databases.
 
+## [SMT](../integrations/loading_tools/SMT.md)
+
+SMT (StarRocks Migration Tool) is a data migration tool provided by StarRocks, designed to optimize complex data loading pipelines: source databases (such as MySQL, Oracle, PostgreSQL) ---> Flink ---> destination StarRocks clusters. Its main functions are as follows:
+
+- Simplifies table creation in StarRocks: Generates statements to create tables in StarRocks based on information from external databases and the target StarRocks cluster.
+- Simplifies the full or incremental data synchronization process in the data pipeline: Generates SQL statements that can be run in Flink's SQL client to submit Flink jobs for synchronizing data.
+
+The following flowchart illustrates the process of loading data from the source database MySQL through Flink into StarRocks.
+
+![img](../assets/load_tools.png)
+
 ## [DataX](../integrations/loading_tools/DataX-starrocks-writer.md)
 
 DataX is a tool for offline data synchronization, and is open-sourced by Alibaba. DataX can synchronize data between various heterogeneous data sources, including relational databases (MySQL, Oracle, etc.), HDFS, and Hive. DataX provides the StarRocks Writer plugin to synchronize data from data sources supported by DataX to StarRocks.

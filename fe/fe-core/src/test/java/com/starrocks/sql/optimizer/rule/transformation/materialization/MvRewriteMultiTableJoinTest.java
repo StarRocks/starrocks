@@ -167,7 +167,7 @@ public class MvRewriteMultiTableJoinTest extends MvRewriteTestBase {
                     " order by p1.p1_col2\n" +
                     " limit 0, 100";
 
-            String plan = getFragmentPlan(query);
+            String plan = getFragmentPlan(query, "MV");
             PlanTestBase.assertContains(plan, "AGGREGATE");
             PlanTestBase.assertContains(plan, "test_mv2");
             PlanTestBase.assertContains(plan, "sum_p1_col4 >= 500000");

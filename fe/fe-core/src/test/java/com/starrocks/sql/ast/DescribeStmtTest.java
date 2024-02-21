@@ -75,7 +75,7 @@ public class DescribeStmtTest {
         String dropSQL = "drop table sales_records";
         try {
             DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-            GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
         } catch (Exception ex) {
 
         }

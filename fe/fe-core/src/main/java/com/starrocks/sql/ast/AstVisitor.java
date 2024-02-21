@@ -48,6 +48,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.analysis.UserVariableHint;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.connector.parser.trino.PlaceholderExpr;
 import com.starrocks.sql.ast.pipe.AlterPipeClause;
@@ -728,6 +729,19 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    // --------------------------------------- Backend BlackList -------------------------------------
+    public R visitAddBackendBlackListStatement(AddBackendBlackListStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitDelBackendBlackListStatement(DelBackendBlackListStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowBackendBlackListStatement(ShowBackendBlackListStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     public R visitExecuteAsStatement(ExecuteAsStmt statement, C context) {
         return visitStatement(statement, context);
     }
@@ -924,7 +938,7 @@ public abstract class AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
-    public R visitModifyBackendHostClause(ModifyBackendAddressClause clause, C context) {
+    public R visitModifyBackendClause(ModifyBackendClause clause, C context) {
         return visitNode(clause, context);
     }
 
@@ -1281,6 +1295,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitSetVarHint(SetVarHint node, C context) {
+        return visitNode(node, context);
+    }
+
+    public R visitUserVariableHint(UserVariableHint node, C context) {
         return visitNode(node, context);
     }
 }

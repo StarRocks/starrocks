@@ -159,7 +159,7 @@ public class StorageCoolDownTest {
 
         String dropSQL = "drop table site_access_datetime_with_1_day_ttl_less_than";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
 
     }
 
@@ -217,7 +217,7 @@ public class StorageCoolDownTest {
 
         String dropSQL = "drop table site_access_date_upper_lower_ttl";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
 
     }
 
@@ -267,7 +267,7 @@ public class StorageCoolDownTest {
 
         String dropSQL = "drop table site_access_date_with_1_day_ttl_start_end";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
 
     }
 
@@ -320,7 +320,7 @@ public class StorageCoolDownTest {
 
         String dropSQL = "drop table site_access_date_with_1_day_ttl_less_than";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
 
     }
 
@@ -373,7 +373,7 @@ public class StorageCoolDownTest {
 
         String dropSQL = "drop table site_access_with_max_partition";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
 
     }
 }

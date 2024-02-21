@@ -147,51 +147,52 @@ public class StarOSAgentTest {
 
     @Test
     public void testAllocateFilePath() throws StarClientException {
+        long dbId = 1000;
         long tableId = 123;
 
         new Expectations() {
             {
-                client.allocateFilePath("1", FileStoreType.S3, Long.toString(tableId));
+                client.allocateFilePath("1", FileStoreType.S3, anyString);
                 result = FilePathInfo.newBuilder().build();
                 minTimes = 0;
 
-                client.allocateFilePath("2", FileStoreType.S3, Long.toString(tableId));
+                client.allocateFilePath("2", FileStoreType.S3, anyString);
                 result = new StarClientException(StatusCode.INVALID_ARGUMENT, "mocked exception");
             }
         };
 
         Deencapsulation.setField(starosAgent, "serviceId", "1");
         Config.cloud_native_storage_type = "s3";
-        ExceptionChecker.expectThrowsNoException(() -> starosAgent.allocateFilePath(tableId));
+        ExceptionChecker.expectThrowsNoException(() -> starosAgent.allocateFilePath(dbId, tableId));
 
         Config.cloud_native_storage_type = "ss";
         ExceptionChecker.expectThrowsWithMsg(DdlException.class, "Invalid cloud native storage type: ss",
-                () -> starosAgent.allocateFilePath(tableId));
+                () -> starosAgent.allocateFilePath(dbId, tableId));
 
         Config.cloud_native_storage_type = "s3";
         Deencapsulation.setField(starosAgent, "serviceId", "2");
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "Failed to allocate file path from StarMgr, error: INVALID_ARGUMENT:mocked exception",
-                () -> starosAgent.allocateFilePath(tableId));
+                () -> starosAgent.allocateFilePath(dbId, tableId));
 
         new Expectations() {
             {
-                client.allocateFilePath("1", "test-fskey", Long.toString(tableId));
+                client.allocateFilePath("1", "test-fskey", anyString);
                 result = FilePathInfo.newBuilder().build();
                 minTimes = 0;
 
-                client.allocateFilePath("2", "test-fskey", Long.toString(tableId));
+                client.allocateFilePath("2", "test-fskey", anyString);
                 result = new StarClientException(StatusCode.INVALID_ARGUMENT, "mocked exception");
             }
         };
         Config.cloud_native_storage_type = "s3";
         Deencapsulation.setField(starosAgent, "serviceId", "1");
-        ExceptionChecker.expectThrowsNoException(() -> starosAgent.allocateFilePath("test-fskey", tableId));
+        ExceptionChecker.expectThrowsNoException(() -> starosAgent.allocateFilePath("test-fskey", dbId, tableId));
 
         Deencapsulation.setField(starosAgent, "serviceId", "2");
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "Failed to allocate file path from StarMgr, error: INVALID_ARGUMENT:mocked exception",
-                () -> starosAgent.allocateFilePath("test-fskey", tableId));
+                () -> starosAgent.allocateFilePath("test-fskey", dbId, tableId));
     }
 
     @Test
@@ -400,12 +401,15 @@ public class StarOSAgentTest {
         ShardInfo shard = ShardInfo.newBuilder().setShardId(10L).addAllReplicaInfo(replicas).build();
         List<ShardInfo> shards = Lists.newArrayList(shard);
 
+        /*
         new MockUp<GlobalStateMgr>() {
             @Mock
-            public SystemInfoService getCurrentSystemInfo() {
+            public SystemInfoService getCurrentState().getNodeMgr().getClusterInfo() {
                 return service;
             }
         };
+
+         */
 
         new MockUp<SystemInfoService>() {
             @Mock

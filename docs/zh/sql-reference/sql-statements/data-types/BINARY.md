@@ -18,8 +18,8 @@ BINARY 是 VARBINARY 的别名，用法与 VARBINARY 相同。
 
 ## 限制和注意事项
 
-- 支持在明细模型、主键模型、更新模型表中创建 VARBINARY 类型的列，但不支持在聚合模型表中创建 VARBINARY 类型的列。
-- 暂不支持 BINARY/VARBINARY 类型的列作为明细模型、主键模型、更新模型表的分区键、分桶键、维度列，并且不支持用于 JOIN、GROUP BY、ORDER BY 子句。
+- 支持在明细表、主键表、更新表中创建 VARBINARY 类型的列，但不支持在聚合表中创建 VARBINARY 类型的列。
+- 暂不支持 BINARY/VARBINARY 类型的列作为明细表、主键表、更新表的分区键、分桶键、维度列，并且不支持用于 JOIN、GROUP BY、ORDER BY 子句。
 - BINARY(M)/VARBINARY(M) 不会对没有对齐的长度做补齐操作。
 
 ## 示例

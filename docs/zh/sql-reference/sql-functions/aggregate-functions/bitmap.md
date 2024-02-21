@@ -8,7 +8,7 @@ displayed_sidebar: "Chinese"
 
 ## 建表
 
-建表时需要使用聚合模型，数据类型是 bitmap，聚合函数为 bitmap_union。
+建表时需要使用聚合表，数据类型是 bitmap，聚合函数为 bitmap_union。
 
 ```SQL
 CREATE TABLE `pv_bitmap` (

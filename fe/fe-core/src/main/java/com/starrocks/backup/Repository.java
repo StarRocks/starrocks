@@ -549,7 +549,7 @@ public class Repository implements Writable, GsonPostProcessable {
 
     public Status getBrokerAddress(Long beId, GlobalStateMgr globalStateMgr, List<FsBroker> brokerAddrs) {
         // get backend
-        Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
+        Backend be = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(beId);
         if (be == null) {
             return new Status(ErrCode.COMMON_ERROR, "backend " + beId + " is missing. "
                     + "failed to send upload snapshot task");

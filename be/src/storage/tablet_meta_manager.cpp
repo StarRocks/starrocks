@@ -1293,6 +1293,29 @@ Status TabletMetaManager::scan_tablet_delta_column_group(KVStore* meta, TTabletI
     return Status::OK();
 }
 
+Status TabletMetaManager::scan_tablet_delta_column_group_by_segment(KVStore* meta, TTabletId tablet_id,
+                                                                    std::map<uint32_t, DeltaColumnGroupList>* dcgs) {
+    std::string lower = encode_delta_column_group_key(tablet_id, 0, INT64_MAX);
+    std::string upper = encode_delta_column_group_key(tablet_id, UINT32_MAX, INT64_MAX);
+    auto st = meta->iterate_range(META_COLUMN_FAMILY_INDEX, lower, upper,
+                                  [&](std::string_view key, std::string_view value) -> bool {
+                                      TTabletId dummy;
+                                      uint32_t segment_id;
+                                      int64_t decode_version;
+                                      decode_delta_column_group_key(key, &dummy, &segment_id, &decode_version);
+                                      DeltaColumnGroupPtr dcg_ptr = std::make_shared<DeltaColumnGroup>();
+                                      CHECK(dcg_ptr->load(decode_version, value.data(), value.size()).ok());
+                                      CHECK(dcgs != nullptr);
+                                      (*dcgs)[segment_id].push_back(std::move(dcg_ptr));
+                                      return true;
+                                  });
+    if (!st.ok()) {
+        LOG(WARNING) << "fail to iterate rocksdb delvecs. tablet_id=" << tablet_id;
+        return st;
+    }
+    return Status::OK();
+}
+
 Status TabletMetaManager::delete_delta_column_group(KVStore* meta, TTabletId tablet_id, uint32_t rowset_id,
                                                     uint32_t segments) {
     std::string lower = encode_delta_column_group_key(tablet_id, rowset_id, INT64_MAX);
@@ -1340,6 +1363,21 @@ Status TabletMetaManager::put_del_vector(DataDir* store, WriteBatch* batch, TTab
     auto v = delvec.save();
     auto h = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
     return to_status(batch->Put(h, k, v));
+}
+
+Status TabletMetaManager::put_del_vectors(DataDir* store, WriteBatch* batch, TTabletId tablet_id,
+                                          const EditVersion& version,
+                                          const vector<std::pair<uint32_t, DelVectorPtr>>& delvecs) {
+    auto handle = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
+    TabletSegmentId tsid;
+    tsid.tablet_id = tablet_id;
+    for (auto& rssid_delvec : delvecs) {
+        tsid.segment_id = rssid_delvec.first;
+        auto dv_key = encode_del_vector_key(tsid.tablet_id, tsid.segment_id, version.major_number());
+        auto dv_value = rssid_delvec.second->save();
+        RETURN_IF_ERROR(batch->Put(handle, dv_key, dv_value));
+    }
+    return Status::OK();
 }
 
 Status TabletMetaManager::put_delta_column_group(DataDir* store, WriteBatch* batch, TTabletId tablet_id,

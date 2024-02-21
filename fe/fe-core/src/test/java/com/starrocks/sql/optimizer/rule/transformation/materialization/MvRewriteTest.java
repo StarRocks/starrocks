@@ -248,6 +248,37 @@ public class MvRewriteTest extends MvRewriteTestBase {
     }
 
     @Test
+    public void testJoinMvRewriteByForceRuleRewrite() throws Exception {
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
+        {
+            createAndRefreshMv("create materialized view join_mv_1" +
+                    " distributed by hash(v1)" +
+                    " as " +
+                    " SELECT t0.v1 as v1, test_all_type.t1d, test_all_type.t1c" +
+                    " from t0 join test_all_type" +
+                    " on t0.v1 = test_all_type.t1d" +
+                    " where t0.v1 < 100");
+            createAndRefreshMv("create materialized view join_mv_2" +
+                    " distributed by hash(v1)" +
+                    " as " +
+                    " SELECT t0.v1 as v1, test_all_type.t1d, test_all_type.t1c" +
+                    " from t0 join test_all_type" +
+                    " on t0.v1 = test_all_type.t1d" +
+                    " where t0.v1 < 100");
+
+            connectContext.getSessionVariable().setEnableForceRuleBasedMvRewrite(true);
+            String query1 = "SELECT (test_all_type.t1d + 1) * 2, test_all_type.t1c" +
+                    " from t0 join test_all_type on t0.v1 = test_all_type.t1d where t0.v1 < 100";
+            String plan1 = getFragmentPlan(query1);
+            PlanTestBase.assertContains(plan1, "join_mv_");
+
+            connectContext.getSessionVariable().setEnableForceRuleBasedMvRewrite(false);
+            starRocksAssert.dropMaterializedView("join_mv_1");
+            starRocksAssert.dropMaterializedView("join_mv_2");
+        }
+    }
+
+    @Test
     public void testJoinMvRewrite() throws Exception {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
         createAndRefreshMv("create materialized view join_mv_1" +
@@ -993,7 +1024,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
                     cluster.runSql("test", "alter table parent_table1 set(\"unique_constraints\"=\"k1, k2\")");
 
-                    ;
                     OlapTable baseTable = (OlapTable) getTable("test", "base_table1");
                     Assert.assertNotNull(baseTable.getForeignKeyConstraints());
                     List<ForeignKeyConstraint> foreignKeyConstraints = baseTable.getForeignKeyConstraints();
@@ -2108,6 +2138,67 @@ public class MvRewriteTest extends MvRewriteTestBase {
             String plan = getFragmentPlan(query);
             PlanTestBase.assertContains(plan, "mv1");
             PlanTestBase.assertNotContains(plan, "event_time1 >= '2023-01-05 00:00:00'");
+        }
+    }
+
+    @Test
+    public void test() throws Exception {
+        connectContext.executeSql("drop table if exists t11");
+        starRocksAssert.withTable("create table t11(\n" +
+                "shop_id int,\n" +
+                "region int,\n" +
+                "shop_type string,\n" +
+                "shop_flag string,\n" +
+                "store_id String,\n" +
+                "store_qty Double\n" +
+                ") DUPLICATE key(shop_id) distributed by hash(shop_id) buckets 1 " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+        cluster.runSql("test", "insert into\n" +
+                "t11\n" +
+                "values\n" +
+                "(1, 1, 's', 'o', '1', null),\n" +
+                "(1, 1, 'm', 'o', '2', 2),\n" +
+                "(1, 1, 'b', 'c', '3', 1);");
+        connectContext.executeSql("drop materialized view if exists mv11");
+        starRocksAssert.withMaterializedView("create MATERIALIZED VIEW mv11 (region, ct) " +
+                "DISTRIBUTED BY RANDOM buckets 1 REFRESH MANUAL as\n" +
+                "select region,\n" +
+                "count(\n" +
+                "distinct (\n" +
+                "case\n" +
+                "when store_qty > 0 then store_id\n" +
+                "else null\n" +
+                "end\n" +
+                ")\n" +
+                ")\n" +
+                "from t11\n" +
+                "group by region;");
+        cluster.runSql("test", "refresh materialized view mv11 with sync mode");
+        {
+            String query = "select region,\n" +
+                    "count(\n" +
+                    "distinct (\n" +
+                    "case\n" +
+                    "when store_qty > 0.0 then store_id\n" +
+                    "else null\n" +
+                    "end\n" +
+                    ")\n" +
+                    ") as ct\n" +
+                    "from t11\n" +
+                    "group by region\n" +
+                    "having\n" +
+                    "count(\n" +
+                    "distinct (\n" +
+                    "case\n" +
+                    "when store_qty > 0.0 then store_id\n" +
+                    "else null\n" +
+                    "end\n" +
+                    ")\n" +
+                    ") > 0\n";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "mv11", "PREDICATES: 10: ct > 0");
         }
     }
 }

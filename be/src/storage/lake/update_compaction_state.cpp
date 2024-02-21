@@ -64,9 +64,8 @@ Status CompactionState::_load_segments(Rowset* rowset, const TabletSchemaCSPtr& 
     std::unique_ptr<Column> pk_column;
     CHECK(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, true).ok());
 
-    OlapReaderStatistics stats;
     if (_segment_iters.empty()) {
-        ASSIGN_OR_RETURN(_segment_iters, rowset->get_each_segment_iterator(pkey_schema, &stats));
+        ASSIGN_OR_RETURN(_segment_iters, rowset->get_each_segment_iterator(pkey_schema, &_stats));
     }
     CHECK_EQ(_segment_iters.size(), rowset->num_segments());
 

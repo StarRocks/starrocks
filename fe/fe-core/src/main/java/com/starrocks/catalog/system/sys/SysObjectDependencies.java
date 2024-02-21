@@ -75,7 +75,7 @@ public class SysObjectDependencies {
         }
 
         // list dependencies of mv
-        Collection<Database> dbs = GlobalStateMgr.getCurrentState().getFullNameToDb().values();
+        Collection<Database> dbs = GlobalStateMgr.getCurrentState().getLocalMetastore().getFullNameToDb().values();
         for (Database db : CollectionUtils.emptyIfNull(dbs)) {
             String catalog = Optional.ofNullable(db.getCatalogName())
                     .orElse(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);

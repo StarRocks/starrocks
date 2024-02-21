@@ -28,7 +28,6 @@
 #include "exec/pipeline/operator.h"
 #include "exec/spill/spiller.hpp"
 #include "exprs/anyval_util.h"
-#include "exprs/jit/jit_engine.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
@@ -562,7 +561,6 @@ Status Aggregator::_reset_state(RuntimeState* state, bool reset_sink_complete) {
 }
 
 Status Aggregator::spill_aggregate_data(RuntimeState* state, std::function<StatusOr<ChunkPtr>()> chunk_provider) {
-    auto io_executor = this->spill_channel()->io_executor();
     auto spiller = this->spiller();
     auto spill_channel = this->spill_channel();
 
@@ -570,8 +568,8 @@ Status Aggregator::spill_aggregate_data(RuntimeState* state, std::function<Statu
         auto chunk_with_st = chunk_provider();
         if (chunk_with_st.ok()) {
             if (!chunk_with_st.value()->is_empty()) {
-                RETURN_IF_ERROR(spiller->spill(state, chunk_with_st.value(), *io_executor,
-                                               TRACKER_WITH_SPILLER_GUARD(state, spiller)));
+                RETURN_IF_ERROR(
+                        spiller->spill(state, chunk_with_st.value(), TRACKER_WITH_SPILLER_GUARD(state, spiller)));
             }
         } else if (chunk_with_st.status().is_end_of_file()) {
             // chunk_provider return eos means provider has output all data from hash_map/hash_set.

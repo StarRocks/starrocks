@@ -161,7 +161,8 @@ TEST_F(LakeRowsetTest, test_load_segments) {
     }
 
     // fill data cache: false, fill metadata cache: true
-    ASSIGN_OR_ABORT(auto segments2, rowset->segments(false, true));
+    LakeIOOptions lake_io_opts{.fill_data_cache = false};
+    ASSIGN_OR_ABORT(auto segments2, rowset->segments(lake_io_opts, true));
     ASSERT_EQ(2, segments2.size());
     for (const auto& seg : segments2) {
         auto segment = cache->lookup_segment(seg->file_name());
@@ -198,7 +199,8 @@ TEST_F(LakeRowsetTest, test_segment_update_cache_size) {
 
         auto mirror_segment =
                 std::make_shared<Segment>(fs, FileInfo{path}, sample_segment->id(), schema, _tablet_mgr.get());
-        auto st = mirror_segment->open(nullptr, nullptr, true);
+        LakeIOOptions lake_io_opts{.fill_data_cache = true};
+        auto st = mirror_segment->open(nullptr, nullptr, lake_io_opts);
         EXPECT_TRUE(st.ok());
         auto sz2 = cache->memory_usage();
         // no memory_usage change, because the instance in metacache is different from this mirror_segment
@@ -216,7 +218,8 @@ TEST_F(LakeRowsetTest, test_segment_update_cache_size) {
         auto sz1 = cache->memory_usage();
         auto ssz1 = mirror_segment->mem_usage();
 
-        auto st = mirror_segment->open(nullptr, nullptr, true);
+        LakeIOOptions lake_io_opts{.fill_data_cache = true};
+        auto st = mirror_segment->open(nullptr, nullptr, lake_io_opts);
         EXPECT_TRUE(st.ok());
         auto sz2 = cache->memory_usage();
         auto ssz2 = mirror_segment->mem_usage();

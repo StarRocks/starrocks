@@ -15,6 +15,7 @@
 package com.starrocks.scheduler;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.analysis.TableName;
@@ -39,6 +40,7 @@ import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * A daemon thread that check the MV active status, try to activate the MV it's inactive.
@@ -52,6 +54,12 @@ public class MVActiveChecker extends FrontendDaemon {
     public MVActiveChecker() {
         super("MVActiveChecker", Config.mv_active_checker_interval_seconds * 1000);
     }
+
+    public static final String MV_BACKUP_INACTIVE_REASON = "it's in backup and will be activated after restore if possible";
+
+    // there are some reasons that we don't active mv automatically, eg: mv backup/restore which may cause to refresh all
+    // mv's data behind which is not expected.
+    private static final Set<String> MV_NO_AUTOMATIC_ACTIVE_REASONS = ImmutableSet.of(MV_BACKUP_INACTIVE_REASON);
 
     @Override
     protected void runAfterCatalogReady() {
@@ -83,7 +91,7 @@ public class MVActiveChecker extends FrontendDaemon {
     }
 
     private void process() {
-        Collection<Database> dbs = GlobalStateMgr.getCurrentState().getIdToDb().values();
+        Collection<Database> dbs = GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().values();
         for (Database db : CollectionUtils.emptyIfNull(dbs)) {
             for (Table table : CollectionUtils.emptyIfNull(db.getTables())) {
                 if (table.isMaterializedView()) {
@@ -109,6 +117,9 @@ public class MVActiveChecker extends FrontendDaemon {
         // if the mv is set to inactive manually, we don't activate it
         String reason = mv.getInactiveReason();
         if (mv.isActive() || AlterJobMgr.MANUAL_INACTIVE_MV_REASON.equalsIgnoreCase(reason)) {
+            return;
+        }
+        if (MV_NO_AUTOMATIC_ACTIVE_REASONS.stream().anyMatch(x -> x.contains(reason))) {
             return;
         }
 

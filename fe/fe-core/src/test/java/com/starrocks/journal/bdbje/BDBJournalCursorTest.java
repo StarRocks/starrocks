@@ -62,6 +62,7 @@ public class BDBJournalCursorTest {
         short op = OperationType.OP_SAVE_NEXTID;
         Text text = new Text(Long.toString(123));
         fakeJournalEntity.setData(text);
+        fakeJournalEntity.setOpCode(op);
         DataOutputBuffer buffer = new DataOutputBuffer();
         buffer.writeShort(op);
         text.write(buffer);
@@ -411,7 +412,7 @@ public class BDBJournalCursorTest {
                     public OperationStatus fakeGet(
                             final Transaction txn, final DatabaseEntry key, final DatabaseEntry data,
                             LockMode lockMode) {
-                        data.setData(new String("lalala").getBytes());
+                        data.setData("lalala".getBytes());
                         return OperationStatus.SUCCESS;
                     }
                 };
@@ -508,5 +509,22 @@ public class BDBJournalCursorTest {
         BDBJEJournal journal = new BDBJEJournal(environment);
         JournalCursor cursor = journal.read(10, 10);
         cursor.refresh();
+    }
+
+    @Test
+    public void testDeserializeDataException() throws Exception {
+        DataOutputBuffer buffer = new DataOutputBuffer(128);
+        buffer.writeShort(OperationType.OP_HEARTBEAT_V2);
+        // set an invalid json string, it will throw exception in deserializeData()
+        Text.writeString(buffer, "aaa");
+        DatabaseEntry entry = new DatabaseEntry();
+        entry.setData(buffer.getData(), 0, buffer.getLength());
+
+        try {
+            BDBJournalCursor cursor = new BDBJournalCursor(null, null, 0, 0);
+            JournalEntity entity = cursor.deserializeData(entry);
+        } catch (JournalException e) {
+            Assert.assertEquals(OperationType.OP_HEARTBEAT_V2, e.getOpCode());
+        }
     }
 }

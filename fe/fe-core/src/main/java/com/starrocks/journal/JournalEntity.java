@@ -75,7 +75,6 @@ import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.AlterUserInfo;
 import com.starrocks.persist.AlterViewInfo;
-import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.AutoIncrementInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
@@ -96,6 +95,7 @@ import com.starrocks.persist.DatabaseInfo;
 import com.starrocks.persist.DecommissionDiskInfo;
 import com.starrocks.persist.DictionaryMgrInfo;
 import com.starrocks.persist.DisableDiskInfo;
+import com.starrocks.persist.DisableTableRecoveryInfo;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.DropComputeNodeLog;
 import com.starrocks.persist.DropDbInfo;
@@ -116,7 +116,6 @@ import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.PipeOpEntry;
-import com.starrocks.persist.PrivInfo;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.RemoveAlterJobV2OperationLog;
 import com.starrocks.persist.RenameMaterializedViewLog;
@@ -174,7 +173,7 @@ import java.io.IOException;
 public class JournalEntity implements Writable {
     public static final Logger LOG = LogManager.getLogger(Checkpoint.class);
 
-    private short opCode;
+    private short opCode = OperationType.OP_INVALID;
     private Writable data;
 
     public short getOpCode() {
@@ -290,6 +289,11 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_ERASE_MULTI_TABLES: {
                 data = MultiEraseTableInfo.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_DISABLE_TABLE_RECOVERY: {
+                data = DisableTableRecoveryInfo.read(in);
                 isRead = true;
                 break;
             }
@@ -477,7 +481,7 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_BATCH_DELETE_REPLICA_BATCH: {
+            case OperationType.OP_BATCH_DELETE_REPLICA: {
                 data = GsonUtils.GSON.fromJson(Text.readString(in), BatchDeleteReplicaInfo.class);
                 isRead = true;
                 break;
@@ -539,18 +543,6 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_NEW_DROP_USER: {
                 data = UserIdentity.read(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_CREATE_USER:
-            case OperationType.OP_GRANT_PRIV:
-            case OperationType.OP_REVOKE_PRIV:
-            case OperationType.OP_SET_PASSWORD:
-            case OperationType.OP_CREATE_ROLE:
-            case OperationType.OP_DROP_ROLE:
-            case OperationType.OP_GRANT_ROLE:
-            case OperationType.OP_REVOKE_ROLE: {
-                data = PrivInfo.read(in);
                 isRead = true;
                 break;
             }
@@ -1074,11 +1066,6 @@ public class JournalEntity implements Writable {
             case OperationType.OP_DROP_ROLE_V2:
             case OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2: {
                 data = RolePrivilegeCollectionInfo.read(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_AUTH_UPGRADE_V2: {
-                data = AuthUpgradeInfo.read(in);
                 isRead = true;
                 break;
             }

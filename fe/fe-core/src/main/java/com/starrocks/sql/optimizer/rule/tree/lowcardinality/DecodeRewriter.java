@@ -187,7 +187,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
         Projection projection = rewriteProjection(aggregate.getProjection(), inputStringRefs);
         PhysicalHashAggregateOperator op =
                 new PhysicalHashAggregateOperator(aggregate.getType(), groupBys, partitions, aggregations,
-                        aggregate.getSingleDistinctFunctionPos(), aggregate.isSplit(), aggregate.getLimit(), predicate,
+                        aggregate.isSplit(), aggregate.getLimit(), predicate,
                         projection);
         op.setMergedLocalAgg(aggregate.isMergedLocalAgg());
         op.setUseSortAgg(aggregate.isUseSortAgg());

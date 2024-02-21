@@ -254,13 +254,13 @@ public class OlapTableSinkTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 result = systemInfoService;
                 systemInfoService.checkExceedDiskCapacityLimit((Multimap<Long, Long>) any, anyBoolean);
                 result = Status.OK;
                 GlobalStateMgr.getCurrentState();
                 result = globalStateMgr;
-                globalStateMgr.getOrCreateSystemInfo(anyInt);
+                globalStateMgr.getNodeMgr().getOrCreateSystemInfo(anyInt);
                 result = systemInfoService;
                 systemInfoService.checkBackendAlive(anyLong);
                 result = true;
@@ -341,13 +341,13 @@ public class OlapTableSinkTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 result = systemInfoService;
                 systemInfoService.checkExceedDiskCapacityLimit((Multimap<Long, Long>) any, anyBoolean);
                 result = Status.OK;
                 GlobalStateMgr.getCurrentState();
                 result = globalStateMgr;
-                globalStateMgr.getOrCreateSystemInfo(anyInt);
+                globalStateMgr.getNodeMgr().getOrCreateSystemInfo(anyInt);
                 result = systemInfoService;
                 systemInfoService.checkBackendAlive(anyLong);
                 result = true;

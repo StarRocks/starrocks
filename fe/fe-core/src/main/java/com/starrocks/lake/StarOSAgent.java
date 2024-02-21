@@ -46,6 +46,7 @@ import com.staros.proto.WorkerInfo;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.UserException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
@@ -190,13 +191,18 @@ public class StarOSAgent {
         return null;
     }
 
-    public FilePathInfo allocateFilePath(long tableId) throws DdlException {
+    private static String constructTablePath(long dbId, long tableId) {
+        return String.format("db%d/%d", dbId, tableId);
+    }
+
+    public FilePathInfo allocateFilePath(long dbId, long tableId) throws DdlException {
         try {
             FileStoreType fsType = getFileStoreType(Config.cloud_native_storage_type);
             if (fsType == null || fsType == FileStoreType.INVALID) {
                 throw new DdlException("Invalid cloud native storage type: " + Config.cloud_native_storage_type);
             }
-            FilePathInfo pathInfo = client.allocateFilePath(serviceId, fsType, Long.toString(tableId));
+            String suffix = constructTablePath(dbId, tableId);
+            FilePathInfo pathInfo = client.allocateFilePath(serviceId, fsType, suffix);
             LOG.debug("Allocate file path from starmgr: {}", pathInfo);
             return pathInfo;
         } catch (StarClientException e) {
@@ -204,10 +210,10 @@ public class StarOSAgent {
         }
     }
 
-    public FilePathInfo allocateFilePath(String storageVolumeId, long tableId) throws DdlException {
+    public FilePathInfo allocateFilePath(String storageVolumeId, long dbId, long tableId) throws DdlException {
         try {
-            FilePathInfo pathInfo = client.allocateFilePath(serviceId,
-                     storageVolumeId, Long.toString(tableId));
+            String suffix = constructTablePath(dbId, tableId);
+            FilePathInfo pathInfo = client.allocateFilePath(serviceId, storageVolumeId, suffix);
             LOG.debug("Allocate file path from starmgr: {}", pathInfo);
             return pathInfo;
         } catch (StarClientException e) {
@@ -514,20 +520,20 @@ public class StarOSAgent {
     }
 
     private Optional<Long> getBackendIdByHostStarletPort(String host, int starletPort) {
-        long backendId = GlobalStateMgr.getCurrentSystemInfo()
+        long backendId = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                 .getBackendIdWithStarletPort(host, starletPort);
         if (backendId == -1L) {
-            backendId = GlobalStateMgr.getCurrentSystemInfo().
+            backendId = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().
                     getComputeNodeIdWithStarletPort(host, starletPort);
         }
         return backendId == -1 ? Optional.empty() : Optional.of(backendId);
     }
 
     private Optional<Long> getBackendIdByHostHeartbeatPort(String host, int heartbeatPort) {
-        ComputeNode node = GlobalStateMgr.getCurrentSystemInfo()
+        ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                 .getBackendWithHeartbeatPort(host, heartbeatPort);
         if (node == null) {
-            node = GlobalStateMgr.getCurrentSystemInfo().
+            node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().
                     getComputeNodeWithHeartbeatPort(host, heartbeatPort);
         }
         return node == null ? Optional.empty() : Optional.of(node.getId());
@@ -585,7 +591,12 @@ public class StarOSAgent {
     public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws UserException {
         Set<Long> backendIds = getAllBackendIdsByShard(shardId, workerGroupId, true);
         if (backendIds.isEmpty()) {
-            throw new UserException("Failed to get primary backend. shard id: " + shardId);
+            // If BE stops, routine load task may catch UserException during load plan,
+            // and the job state will changed to PAUSED.
+            // The job will automatically recover from PAUSED to RUNNING if the error code is REPLICA_FEW_ERR
+            // when all BEs become alive.
+            throw new UserException(InternalErrorCode.REPLICA_FEW_ERR,
+                    "Failed to get primary backend. shard id: " + shardId);
         }
         return backendIds.iterator().next();
     }

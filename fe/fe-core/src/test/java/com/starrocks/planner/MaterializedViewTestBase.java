@@ -68,19 +68,17 @@ public class MaterializedViewTestBase extends PlanTestBase {
         // set default config for async mvs
         UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
 
-        connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
-        connectContext.getSessionVariable().setEnablePipelineEngine(true);
-        connectContext.getSessionVariable().setEnableQueryCache(false);
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
-        connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(3000000L);
-        connectContext.getSessionVariable().setEnableShortCircuit(false);
-        connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
-        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
-        connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
-
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
 
+        if (!starRocksAssert.databaseExist("_statistics_")) {
+            StatisticsMetaManager m = new StatisticsMetaManager();
+            m.createStatisticsTablesForTest();
+        }
+
         new MockUp<MaterializedView>() {
+            /**
+             * {@link MaterializedView#getPartitionNamesToRefreshForMv(Set, boolean)}
+             */
             @Mock
             public boolean getPartitionNamesToRefreshForMv(Set<String> toRefreshPartitions,
                                                            boolean isQueryRewrite) {
@@ -89,23 +87,14 @@ public class MaterializedViewTestBase extends PlanTestBase {
         };
 
         new MockUp<UtFrameUtils>() {
+            /**
+             * {@link UtFrameUtils#isPrintPlanTableNames()}
+             */
             @Mock
             boolean isPrintPlanTableNames() {
                 return true;
             }
         };
-
-        new MockUp<PlanTestBase>() {
-            @Mock
-            boolean isIgnoreExplicitColRefIds() {
-                return true;
-            }
-        };
-
-        if (!starRocksAssert.databaseExist("_statistics_")) {
-            StatisticsMetaManager m = new StatisticsMetaManager();
-            m.createStatisticsTablesForTest();
-        }
 
         starRocksAssert.withDatabase(MATERIALIZED_DB_NAME)
                 .useDatabase(MATERIALIZED_DB_NAME);
@@ -162,7 +151,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
                     String properties = this.properties != null ? "PROPERTIES (\n" +
                             this.properties + ")" : "";
                     String mvSQL = "CREATE MATERIALIZED VIEW mv0 \n" +
-                            "   DISTRIBUTED BY HASH(`"+ outputNames.get(0) +"`) BUCKETS 12\n" +
+                            " REFRESH MANUAL " +
                             properties + " AS " +
                             mv;
                     starRocksAssert.withMaterializedView(mvSQL);

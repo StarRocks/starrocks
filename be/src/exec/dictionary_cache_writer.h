@@ -76,9 +76,10 @@ private:
     ChunkUniquePtr _buffer_chunk = nullptr;
     ChunkUniquePtr _immutable_buffer_chunk = nullptr;
 
-    static const long kChunkBufferLimit = 256 * 1024 * 1024; // 256MB
+    // control max size of chunk whether we should begin a refresh task
+    static const long kChunkBufferLimit = 16 * 1024 * 1024; // 16MB
     // control max memory useage in current writer
-    static const long kMaxMemoryUsageLimit = 2147483648; // 2GB
+    static const long kMaxMemoryUsageLimit = 256 * 1024 * 1024; // 256MB
 
     RuntimeState* _state = nullptr;
     starrocks::pipeline::FragmentContext* _fragment_ctx;

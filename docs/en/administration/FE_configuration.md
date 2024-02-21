@@ -66,7 +66,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - **Unit**: -
 - **Default**: FALSE
-- **Description**: Whether to ignore an unknown log ID. When an FE is rolled back, the BEs of the earlier version may be unable to recognize some log IDs. If the value is `TRUE`, the FE ignores unknown log IDs. If the value is `FALSE`, the FE exits.
+- **Description**: Whether to ignore an unknown log ID. When an FE is rolled back, the FEs of the earlier version may be unable to recognize some log IDs. If the value is `TRUE`, the FE ignores unknown log IDs. If the value is `FALSE`, the FE exits.
 
 #### ignore_materialized_view_error
 
@@ -141,6 +141,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Unit: -
 - Default: TRUE
 - Description: Whether to support the DECIMAL V3 data type.
+
+#### expr_children_limit
+
+- Unit: -
+- Default: 10000
+- Description: The maximum number of child expressions allowed in an expression.
 
 #### enable_sql_blacklist
 
@@ -315,6 +321,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: Threshold to determine whether a table in an external data source (Hive, Iceberg, Hudi) is a small table during automatic collection. If the table has rows less than this value, the table is considered a small table.
 - Introduced in: v3.2
 
+#### enable_statistic_collect_on_first_load
+
+- Unit: -
+- Default: true
+- Description: Whether to automatically collect statistics when data is loaded into a table for the first time. If a table has multiple partitions, any data loading into an empty partition of this table will trigger automatic statistics collection on this partition. If new tables are frequently created and data is frequently loaded, the memory and CPU overhead will increase.
+- Introduced in: v3.1
+
 #### enable_local_replica_selection
 
 - Unit: -
@@ -368,8 +381,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 #### max_running_txn_num_per_db
 
 - **Unit**: -
-- **Default**: 100
-- **Description**: The maximum number of load transactions allowed to be running for each database within a StarRocks cluster. The default value is `100`. When the actual number of load transactions running for a database exceeds the value of this parameter, new load requests will not be processed. New requests for synchronous load jobs will be denied, and new requests for asynchronous load jobs will be placed in queue. We do not recommend you increase the value of this parameter because this will increase system load.
+- **Default**: 1000
+- **Description**: The maximum number of load transactions allowed to be running for each database within a StarRocks cluster. The default value is `1000`. From v3.1 onwards, the default value is changed to `1000` from `100`. When the actual number of load transactions running for a database exceeds the value of this parameter, new load requests will not be processed. New requests for synchronous load jobs will be denied, and new requests for asynchronous load jobs will be placed in queue. We do not recommend you increase the value of this parameter because this will increase system load.
 
 #### load_parallel_instance_num
 
@@ -381,7 +394,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - **Unit**: -
 - **Default**: FALSE
-- **Description**: Whether to disable loading when the cluster encounters an error. This prevents any loss caused by cluster errors. The default value is `FALSE`, indicating that loading is not disabled.
+- **Description**: Whether to disable loading when the cluster encounters an error. This prevents any loss caused by cluster errors. The default value is `FALSE`, indicating that loading is not disabled. TRUE indicates loading is disabled and the cluster is in read-only state.
 
 #### history_job_keep_max_second
 
@@ -440,7 +453,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 #### routine_load_unstable_threshold_second
 - **Unit**: s
 - **Default**: 3600
-- **Description**: Routine Load job is set in the UNSTABLE state if any task within the Routine Load job lags. To be specificboth:
+- **Description**: Routine Load job is set to the UNSTABLE state if any task within the Routine Load job lags. To be specific:
   - The difference between the timestamp of the message being consumed and the current time exceeds this threshold.
   - Unconsumed messages exist in the data source.
 
@@ -583,7 +596,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - **Unit**: s
 - **Default**: 86400
-- **Description**: The longest duration the metadata can be retained after a table or database is deleted. If this duration expires, the data will be deleted and cannot be recovered. Unit: seconds.
+- **Description**: The longest duration the metadata can be retained after a database, table, or partition is dropped. If this duration expires, the data will be deleted and cannot be recovered through the [RECOVER](../sql-reference/sql-statements/data-definition/RECOVER.md) command.
 
 #### alter_table_timeout_second
 
@@ -921,6 +934,13 @@ Data loading tasks consist of two phases: data writing and data committing (COMM
 - **Description**: Whether to refresh an asynchronous materialized view immediately after creation. When this item is set to `true`, newly created materialized view will be refreshed immediately.
 - **Introduced in**: v3.2.3
 
+##### default_mv_refresh_partition_num
+
+- **Unit**: -
+- **Default**: 1
+- **Description**: When multiple partitions need to be updated during a materialized view refresh, the task will be split in batches. This item specifies the number of paritions to be refreshed in each batch.
+- **Introduced in**: v3.2.3
+
 ## Configure FE static parameters
 
 This section provides an overview of the static parameters that you can configure in the FE configuration file **fe.conf**. After you reconfigure these parameters for an FE, you must restart the FE for the changes to take effect.
@@ -1146,10 +1166,15 @@ This section provides an overview of the static parameters that you can configur
 - **Default:** 1024
 - **Description:** The size of the blocking queue that stores heartbeat tasks run by the Heartbeat Manager.
 
-#### metadata_failure_recovery
+#### bdbje_reset_election_group
 
 - **Default:** FALSE
-- **Description:** Specifies whether to forcibly reset the metadata of the FE. Exercise caution when you set this parameter.
+- **Description:** Whether to reset the BDBJE replication group. If this parameter is set to `TRUE`, the FE will reset the BDBJE replication group (that is, remove the information of all electable FE nodes) and start as the leader FE. After the reset, this FE will be the only member in the cluster, and other FEs can rejoin this cluster by using `ALTER SYSTEM ADD/DROP FOLLOWER/OBSERVER 'xxx'`. Use this setting only when no leader FE can be elected because the data of most follower FEs have been damaged. `reset_election_group` is used to replace `metadata_failure_recovery`.
+
+#### metadata_journal_ignore_replay_failure
+
+- **Default:** FALSE
+- **Description:** Whether to ignore journal replay failures. `TRUE` indicates journal replay failures will be ignored. However, this configuration does not take effect for failures that will damage cluster data.
 
 #### edit_log_port
 
@@ -1456,3 +1481,19 @@ DO NOT change run_mode after the cluster is deployed. Otherwise, the cluster fai
 
 - **Default:** TRUE
 - **Description:** Specifies whether to enable the feature that is used to periodically collect metrics. Valid values: `TRUE` and `FALSE`. `TRUE` specifies to enable this feature, and `FALSE` specifies to disable this feature.
+
+#### jdbc_connection_pool_size
+
+- **Default:** 8
+- **Description:** The maximum capacity of the JDBC connection pool for accessing JDBC catalogs.
+
+#### jdbc_minimum_idle_connections
+
+- **Default:** 1
+- **Description:** The minimum number of idle connections in the JDBC connection pool for accessing JDBC catalogs.
+
+#### jdbc_connection_idle_timeout_ms
+
+- **Unit**: ms
+- **Default:** 600000
+- **Description:** The maximum amount of time after which a connection for accessing a JDBC catalog times out. Timed-out connections are considered idle.

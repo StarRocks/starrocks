@@ -85,6 +85,7 @@ size_t ColumnarSerde::_max_serialized_size(const ChunkPtr& chunk) const {
 }
 
 Status ColumnarSerde::serialize_to_block(SerdeContext& ctx, const ChunkPtr& chunk, BlockPtr block) {
+    DCHECK(block != nullptr) << "block should not be null";
     const auto& columns = chunk->columns();
     size_t max_serialized_size = _max_serialized_size(chunk);
     auto& serialize_buffer = ctx.aligned_buffer;
@@ -154,11 +155,7 @@ Status ColumnarSerde::serialize_to_block(SerdeContext& ctx, const ChunkPtr& chun
 
     std::vector<Slice> data;
     data.emplace_back(Slice(serialize_buffer.data(), serialize_buffer.size()));
-    {
-        SCOPED_TIMER(_parent->metrics().write_io_timer);
-        RETURN_IF_ERROR(block->append(data));
-    }
-    COUNTER_UPDATE(_parent->metrics().flush_bytes, meta_len + serialize_buffer.size());
+    RETURN_IF_ERROR(block->append(data));
     _parent->metrics().total_spill_bytes->fetch_add(meta_len + serialize_buffer.size());
     TRACE_SPILL_LOG << "serialize chunk to block: " << block->debug_string()
                     << ", original size: " << chunk->bytes_usage() << ", encoded size: " << serialize_buffer.size();
@@ -167,34 +164,42 @@ Status ColumnarSerde::serialize_to_block(SerdeContext& ctx, const ChunkPtr& chun
 
 StatusOr<ChunkUniquePtr> ColumnarSerde::deserialize(SerdeContext& ctx, BlockReader* reader) {
     size_t encoded_size;
+    bool is_read_from_remote = reader->block()->is_remote();
+    auto read_io_timer =
+            is_read_from_remote ? _parent->metrics().remote_read_io_timer : _parent->metrics().local_read_io_timer;
+    auto read_io_count =
+            is_read_from_remote ? _parent->metrics().remote_read_io_count : _parent->metrics().local_read_io_count;
     {
-        SCOPED_TIMER(_parent->metrics().read_io_timer);
+        SCOPED_TIMER(read_io_timer);
+        COUNTER_UPDATE(read_io_count, 1);
+        // @TODO(silverbullet233): if we can store each chunk's encoded size in memory, we can avoid this IO
         RETURN_IF_ERROR(reader->read_fully(&encoded_size, sizeof(size_t)));
     }
     size_t read_bytes = sizeof(size_t) + encoded_size;
-    std::vector<uint32_t> encode_levels;
     auto chunk = _chunk_builder();
     auto& columns = chunk->columns();
+
+    size_t total_size = encoded_size;
     if (_encode_context != nullptr) {
-        // decode encode levels for each column
-        SCOPED_TIMER(_parent->metrics().read_io_timer);
-        for (size_t i = 0; i < columns.size(); i++) {
-            uint32_t encode_level;
-            RETURN_IF_ERROR(reader->read_fully(&encode_level, sizeof(uint32_t)));
-            encode_levels.push_back(encode_level);
-        }
-        read_bytes += columns.size() * sizeof(uint32_t);
+        total_size += columns.size() * sizeof(uint32_t);
     }
     auto& serialize_buffer = ctx.serialize_buffer;
-    serialize_buffer.resize(encoded_size);
+    serialize_buffer.resize(total_size);
 
     auto buf = reinterpret_cast<uint8_t*>(serialize_buffer.data());
     {
-        SCOPED_TIMER(_parent->metrics().read_io_timer);
-        RETURN_IF_ERROR(reader->read_fully(buf, encoded_size));
+        SCOPED_TIMER(read_io_timer);
+        COUNTER_UPDATE(read_io_count, 1);
+        RETURN_IF_ERROR(reader->read_fully(buf, total_size));
     }
 
-    const uint8_t* read_cursor = reinterpret_cast<uint8_t*>(serialize_buffer.data());
+    [[maybe_unused]] const uint32_t* encode_levels = nullptr;
+    const uint8_t* read_cursor = buf;
+    if (_encode_context != nullptr) {
+        encode_levels = reinterpret_cast<uint32_t*>(serialize_buffer.data());
+        read_cursor += columns.size() * sizeof(uint32_t);
+    }
+
     if (_encode_context == nullptr) {
         SCOPED_TIMER(_parent->metrics().deserialize_timer);
         for (auto& column : columns) {
@@ -206,7 +211,9 @@ StatusOr<ChunkUniquePtr> ColumnarSerde::deserialize(SerdeContext& ctx, BlockRead
             read_cursor = serde::ColumnArraySerde::deserialize(read_cursor, columns[i].get(), false, encode_levels[i]);
         }
     }
-    COUNTER_UPDATE(_parent->metrics().restore_bytes, read_bytes);
+    auto restore_bytes =
+            is_read_from_remote ? _parent->metrics().remote_restore_bytes : _parent->metrics().local_restore_bytes;
+    COUNTER_UPDATE(restore_bytes, read_bytes);
     TRACE_SPILL_LOG << "deserialize chunk from block: " << reader->debug_string() << ", encoded size: " << encoded_size
                     << ", original size: " << chunk->bytes_usage();
     return chunk;

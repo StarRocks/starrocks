@@ -43,7 +43,7 @@ public class CompactionSchedulerTest {
 
     @Test
     public void testBeginTransactionSucceedWithSmallerStreamLoadTimeout() {
-        GlobalStateMgr.getCurrentGlobalTransactionMgr().addDatabaseTransactionMgr(dbId);
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().addDatabaseTransactionMgr(dbId);
         new Expectations() {
             {
                 try {
@@ -65,8 +65,8 @@ public class CompactionSchedulerTest {
         Config.max_stream_load_timeout_second = 64800;
         CompactionMgr compactionManager = new CompactionMgr();
         CompactionScheduler compactionScheduler =
-                new CompactionScheduler(compactionManager, GlobalStateMgr.getCurrentSystemInfo(),
-                        GlobalStateMgr.getCurrentGlobalTransactionMgr(), GlobalStateMgr.getCurrentState());
+                new CompactionScheduler(compactionManager, GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr(), GlobalStateMgr.getCurrentState());
         PartitionIdentifier partitionIdentifier = new PartitionIdentifier(dbId, 2, 3);
         try {
             assertEquals(transactionId, compactionScheduler.beginTransaction(partitionIdentifier));

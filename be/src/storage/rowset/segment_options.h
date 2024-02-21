@@ -24,6 +24,7 @@
 #include "storage/del_vector.h"
 #include "storage/disjunctive_predicates.h"
 #include "storage/olap_runtime_range_pruner.h"
+#include "storage/options.h"
 #include "storage/seek_range.h"
 #include "storage/tablet_schema.h"
 
@@ -65,6 +66,7 @@ public:
     int64_t version = 0;
     // used for primary key tablet to get delta column group
     std::shared_ptr<DeltaColumnGroupLoader> dcg_loader;
+    std::string rowset_path;
 
     // REQUIRED (null is not allowed)
     OlapReaderStatistics* stats = nullptr;
@@ -72,7 +74,7 @@ public:
     RuntimeProfile* profile = nullptr;
 
     bool use_page_cache = false;
-    bool fill_data_cache = true;
+    LakeIOOptions lake_io_opts{.fill_data_cache = true};
 
     ReaderType reader_type = READER_QUERY;
     int chunk_size = DEFAULT_CHUNK_SIZE;

@@ -63,6 +63,8 @@ public class RestBaseAction extends BaseAction {
     protected static final String LABEL_KEY = "label";
     private static final Logger LOG = LogManager.getLogger(RestBaseAction.class);
 
+    protected static ObjectMapper mapper = new ObjectMapper();
+
     public RestBaseAction(ActionController controller) {
         super(controller);
     }
@@ -96,7 +98,7 @@ public class RestBaseAction extends BaseAction {
         ActionAuthorizationInfo authInfo = getAuthorizationInfo(request);
         // check password
         UserIdentity currentUser = checkPassword(authInfo);
-        // ctx's lifetime is same as the channel
+        // ctx lifetime is the same as the channel
         HttpConnectContext ctx = request.getConnectContext();
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx.setNettyChannel(request.getContext());
@@ -131,7 +133,6 @@ public class RestBaseAction extends BaseAction {
 
     public void sendResultByJson(BaseRequest request, BaseResponse response, Object obj) {
         String result = "";
-        ObjectMapper mapper = new ObjectMapper();
         try {
             result = mapper.writeValueAsString(obj);
         } catch (Exception e) {
@@ -147,8 +148,8 @@ public class RestBaseAction extends BaseAction {
     public void redirectTo(BaseRequest request, BaseResponse response, TNetworkAddress addr)
             throws DdlException {
         String urlStr = request.getRequest().uri();
-        URI urlObj = null;
-        URI resultUriObj = null;
+        URI urlObj;
+        URI resultUriObj;
         try {
             urlObj = new URI(urlStr);
             resultUriObj = new URI("http", null, addr.getHostname(),
@@ -166,7 +167,7 @@ public class RestBaseAction extends BaseAction {
         if (globalStateMgr.isLeader()) {
             return false;
         }
-        Pair<String, Integer> leaderIpAndPort = globalStateMgr.getLeaderIpAndHttpPort();
+        Pair<String, Integer> leaderIpAndPort = globalStateMgr.getNodeMgr().getLeaderIpAndHttpPort();
         redirectTo(request, response,
                 new TNetworkAddress(leaderIpAndPort.first, leaderIpAndPort.second));
         return true;

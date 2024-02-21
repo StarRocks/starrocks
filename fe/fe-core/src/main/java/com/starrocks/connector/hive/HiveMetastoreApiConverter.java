@@ -40,6 +40,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import org.apache.avro.Schema;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
@@ -209,7 +210,8 @@ public class HiveMetastoreApiConverter {
     }
 
     public static FieldSchema toMetastoreApiFieldSchema(Column column) {
-        return new FieldSchema(column.getName(), ColumnTypeConverter.toHiveType(column.getType()), column.getComment());
+        String colComment = StringUtils.defaultIfBlank(column.getComment(), null);
+        return new FieldSchema(column.getName(), ColumnTypeConverter.toHiveType(column.getType()), colComment);
     }
 
     public static Map<String, String> toApiTableProperties(HiveTable table) {
@@ -217,7 +219,9 @@ public class HiveMetastoreApiConverter {
 
         tableProperties.put(ROW_COUNT, "0");
         tableProperties.put(TOTAL_SIZE, "0");
-        tableProperties.put("comment", table.getComment());
+        if (!Strings.isNullOrEmpty(table.getComment())) {
+            tableProperties.put("comment", table.getComment());
+        }
         tableProperties.put("starrocks_version", Version.STARROCKS_VERSION + "-" + Version.STARROCKS_COMMIT_HASH);
         if (ConnectContext.get() != null && ConnectContext.get().getQueryId() != null) {
             tableProperties.put(STARROCKS_QUERY_ID, ConnectContext.get().getQueryId().toString());
@@ -239,12 +243,12 @@ public class HiveMetastoreApiConverter {
                     TrinoViewDefinition.class);
             hiveViewText = trinoViewDefinition.getOriginalSql();
             hiveView = new HiveView(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName,
-                    table.getTableName(), toFullSchemasForTrinoView(table, trinoViewDefinition), hiveViewText,
-                    HiveView.Type.Trino);
+                    table.getDbName(), table.getTableName(), toFullSchemasForTrinoView(table, trinoViewDefinition),
+                    hiveViewText, HiveView.Type.Trino);
         } else {
             hiveView = new HiveView(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName,
-                    table.getTableName(), toFullSchemasForHiveTable(table), table.getViewExpandedText(),
-                    HiveView.Type.Hive);
+                    table.getDbName(), table.getTableName(), toFullSchemasForHiveTable(table),
+                    table.getViewExpandedText(), HiveView.Type.Hive);
         }
 
         try {

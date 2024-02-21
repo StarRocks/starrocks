@@ -17,6 +17,7 @@
 #include <utility>
 
 #include "exprs/function_helper.h"
+#include "gutil/casts.h"
 #include "velocypack/vpack.h"
 
 namespace starrocks {
@@ -46,6 +47,8 @@ struct ArraySelector {
     static bool match(const std::string& input) { return false; }
 
     virtual void iterate(vpack::Slice array_slice, std::function<void(vpack::Slice)> callback) = 0;
+
+    virtual bool match(const ArraySelector& other) const { return type == other.type; };
 };
 
 struct ArraySelectorNone final : public ArraySelector {
@@ -62,6 +65,13 @@ struct ArraySelectorSingle final : public ArraySelector {
     static bool match(const std::string& input);
 
     void iterate(vpack::Slice array_slice, std::function<void(vpack::Slice)> callback) override;
+
+    bool match(const ArraySelector& other) const override {
+        if (type != other.type) {
+            return false;
+        }
+        return index == down_cast<const ArraySelectorSingle*>(&other)->index;
+    };
 };
 
 struct ArraySelectorWildcard final : public ArraySelector {
@@ -80,6 +90,14 @@ struct ArraySelectorSlice final : public ArraySelector {
     static bool match(const std::string& input);
 
     void iterate(vpack::Slice array_slice, std::function<void(vpack::Slice)> callback) override;
+
+    bool match(const ArraySelector& other) const override {
+        if (type != other.type) {
+            return false;
+        }
+        auto* ass = down_cast<const ArraySelectorSlice*>(&other);
+        return left == ass->left && right == ass->right;
+    };
 };
 
 // JsonPath implement that support array building
@@ -110,6 +128,15 @@ struct JsonPath {
 
     void reset(const JsonPath& rhs);
     void reset(JsonPath&& rhs);
+
+    // Returns the end postition of input-puth in this path.
+    bool starts_with(const JsonPath* other) const;
+
+    // Constructs a relative path between this path and a given path.
+    // e.g: this: "$.a.b", other: "$.a", result: "$.b"
+    //      this: "$.a.b[1]", other: "$.a", result: "$.b[1]"
+    //      this: "$.a[*]", other: "$.a", result: "$.[*]"
+    StatusOr<JsonPath*> relativize(const JsonPath* other, JsonPath* output_root) const;
 
     static StatusOr<JsonPath> parse(Slice path_string);
     static vpack::Slice extract(const JsonValue* json, const JsonPath& jsonpath, vpack::Builder* b);

@@ -61,7 +61,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONObject;
 
-import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.lang.annotation.Retention;
@@ -348,26 +347,6 @@ public class VariableMgr {
         setValue(sessionVariable, ctx.getField(), value);
     }
 
-    // global variable persistence
-    public static void write(DataOutputStream out) throws IOException {
-        DEFAULT_SESSION_VARIABLE.write(out);
-        // get all global variables
-        List<String> varNames = GlobalVariable.getAllGlobalVarNames();
-        GlobalVarPersistInfo info = new GlobalVarPersistInfo(DEFAULT_SESSION_VARIABLE, varNames);
-        info.write(out);
-    }
-
-    public static void read(DataInputStream in) throws IOException, DdlException {
-        WLOCK.lock();
-        try {
-            DEFAULT_SESSION_VARIABLE.readFields(in);
-            GlobalVarPersistInfo info = GlobalVarPersistInfo.read(in);
-            replayGlobalVariableV2(info);
-        } finally {
-            WLOCK.unlock();
-        }
-    }
-
     public static void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
         Map<String, String> m = new HashMap<>();
         Map<String, String> g = new HashMap<>();
@@ -453,29 +432,6 @@ public class VariableMgr {
             }
         } catch (DdlException e) {
             throw new IOException(e);
-        }
-    }
-
-    @Deprecated
-    public static void replayGlobalVariable(SessionVariable variable) throws DdlException {
-        WLOCK.lock();
-        try {
-            for (Field field : SessionVariable.class.getDeclaredFields()) {
-                VarAttr attr = field.getAnnotation(VarAttr.class);
-                if (attr == null) {
-                    continue;
-                }
-
-                field.setAccessible(true);
-
-                VarContext ctx = getVarContext(attr.name());
-                if (ctx.getFlag() == SESSION) {
-                    String value = getValue(variable, ctx.getField());
-                    setValue(ctx.getObj(), ctx.getField(), value);
-                }
-            }
-        } finally {
-            WLOCK.unlock();
         }
     }
 
@@ -692,18 +648,6 @@ public class VariableMgr {
         rows.sort(Comparator.comparing(o -> o.get(0)));
 
         return rows;
-    }
-
-    // global variable persistence
-    public static long loadGlobalVariable(DataInputStream in, long checksum) throws IOException, DdlException {
-        read(in);
-        LOG.info("finished replay globalVariable from image");
-        return checksum;
-    }
-
-    public static long saveGlobalVariable(DataOutputStream out, long checksum) throws IOException {
-        VariableMgr.write(out);
-        return checksum;
     }
 
     public static boolean shouldForwardToLeader(String name) {

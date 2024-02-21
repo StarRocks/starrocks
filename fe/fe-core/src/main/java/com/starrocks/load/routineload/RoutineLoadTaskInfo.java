@@ -215,7 +215,7 @@ public abstract class RoutineLoadTaskInfo {
 
         //  label = job_name+job_id+task_id
         label = Joiner.on("-").join(routineLoadJob.getName(), routineLoadJob.getId(), DebugUtil.printId(id));
-        txnId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
+        txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
                 routineLoadJob.getDbId(), Lists.newArrayList(routineLoadJob.getTableId()), label, null,
                 new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                 TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK, routineLoadJob.getId(),

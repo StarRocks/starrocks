@@ -43,10 +43,9 @@ int32_t CompactionUtils::get_read_chunk_size(int64_t mem_limit, int32_t config_c
         int64_t avg_row_size = (total_mem_footprint + 1) / (total_num_rows + 1);
         // The result of the division operation be zero, so added one
         chunk_size = 1 + mem_limit / (source_num * avg_row_size + 1);
-    }
-
-    if (chunk_size > config_chunk_size) {
-        chunk_size = config_chunk_size;
+        if (chunk_size > config_chunk_size) {
+            chunk_size = config_chunk_size;
+        }
     }
     return (uint32_t)chunk_size;
 }

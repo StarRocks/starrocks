@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: "English"
 toc_max_heading_level: 4
+keywords: ['Broker Load']
 ---
 
 # Load data from HDFS
@@ -283,13 +284,18 @@ For information about the fields provided in the `loads` view, see [`loads`](../
 
 An asynchronous Broker Load process handles making the connection to HDFS, pulling the data, and storing the data in StarRocks.
 
-This method supports the Parquet, ORC, and CSV file formats.
+This method supports the following file formats:
+
+- Parquet
+- ORC
+- CSV
+- JSON (supported from v3.2.3 onwards)
 
 ### Advantages of Broker Load
 
 - Broker Load runs in the background and clients do not need to stay connected for the job to continue.
 - Broker Load is preferred for long-running jobs, with the default timeout spanning 4 hours.
-- In addition to Parquet and ORC file formats, Broker Load supports CSV files.
+- In addition to Parquet and ORC file format, Broker Load supports CSV file format and JSON file format (JSON file format is supported from v3.2.3 onwards).
 
 ### Data flow
 

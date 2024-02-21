@@ -1,0 +1,22 @@
+-- name: test_iceberg_parallel_prepare_metadata
+create external catalog ice_cat_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+
+create database ice_cat_${uuid0}.ice_db_${uuid0};
+
+create table ice_cat_${uuid0}.ice_db_${uuid0}.ice_tbl_${uuid0} (
+  col_str string,
+  col_int int
+) partition by (col_int);
+
+insert into ice_cat_${uuid0}.ice_db_${uuid0}.ice_tbl_${uuid0} values ("a", 1),("a", 2);
+set enable_parallel_prepare_metadata=true;
+select a.col_str from ice_cat_${uuid0}.ice_db_${uuid0}.ice_tbl_${uuid0} a join ice_cat_${uuid0}.ice_db_${uuid0}.ice_tbl_${uuid0} b on a.col_str = b.col_str where a.col_int = 1 and b.col_int = 2;
+drop table ice_cat_${uuid0}.ice_db_${uuid0}.ice_tbl_${uuid0} force;
+drop database ice_cat_${uuid0}.ice_db_${uuid0};
+drop catalog ice_cat_${uuid0};

@@ -77,6 +77,7 @@ class RuntimeFilterWorker;
 class RuntimeFilterCache;
 class ProfileReportWorker;
 class QuerySpillManager;
+class BlockCache;
 struct RfTracePoint;
 
 class BackendServiceClient;
@@ -140,11 +141,13 @@ public:
     MemTracker* schema_change_mem_tracker() { return _schema_change_mem_tracker.get(); }
     MemTracker* column_pool_mem_tracker() { return _column_pool_mem_tracker.get(); }
     MemTracker* page_cache_mem_tracker() { return _page_cache_mem_tracker.get(); }
+    MemTracker* jit_cache_mem_tracker() { return _jit_cache_mem_tracker.get(); }
     MemTracker* update_mem_tracker() { return _update_mem_tracker.get(); }
     MemTracker* chunk_allocator_mem_tracker() { return _chunk_allocator_mem_tracker.get(); }
     MemTracker* clone_mem_tracker() { return _clone_mem_tracker.get(); }
     MemTracker* consistency_mem_tracker() { return _consistency_mem_tracker.get(); }
     MemTracker* replication_mem_tracker() { return _replication_mem_tracker.get(); }
+    MemTracker* datacache_mem_tracker() { return _datacache_mem_tracker.get(); }
     std::vector<std::shared_ptr<MemTracker>>& mem_trackers() { return _mem_trackers; }
 
     int64_t get_storage_page_cache_size();
@@ -202,6 +205,9 @@ private:
     // The memory used for page cache
     std::shared_ptr<MemTracker> _page_cache_mem_tracker;
 
+    // The memory used for jit cache
+    std::shared_ptr<MemTracker> _jit_cache_mem_tracker;
+
     // The memory tracker for update manager
     std::shared_ptr<MemTracker> _update_mem_tracker;
 
@@ -212,6 +218,9 @@ private:
     std::shared_ptr<MemTracker> _consistency_mem_tracker;
 
     std::shared_ptr<MemTracker> _replication_mem_tracker;
+
+    // The memory used for datacache
+    std::shared_ptr<MemTracker> _datacache_mem_tracker;
 
     std::vector<std::shared_ptr<MemTracker>> _mem_trackers;
 };
@@ -318,6 +327,8 @@ public:
 
     query_cache::CacheManagerRawPtr cache_mgr() const { return _cache_mgr; }
 
+    BlockCache* block_cache() const { return _block_cache; }
+
     spill::DirManager* spill_dir_mgr() const { return _spill_dir_mgr.get(); }
 
     ThreadPool* delete_file_thread_pool();
@@ -385,6 +396,7 @@ private:
 
     AgentServer* _agent_server = nullptr;
     query_cache::CacheManagerRawPtr _cache_mgr;
+    BlockCache* _block_cache = nullptr;
     std::shared_ptr<spill::DirManager> _spill_dir_mgr;
 };
 

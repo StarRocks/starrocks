@@ -278,6 +278,10 @@ Status ColumnChunkReader::_try_load_dictionary() {
 }
 
 Status ColumnChunkReader::load_dictionary_page() {
+    if (_dict_page_parsed) {
+        return Status::OK();
+    }
+
     RETURN_IF_ERROR(_parse_page_header());
     if (UNLIKELY(!current_page_is_dict())) {
         return Status::InternalError("Not a dictionary page in dictionary page offset");

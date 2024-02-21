@@ -57,16 +57,25 @@ struct YieldContext {
     size_t yield_point{};
     size_t total_yield_point_cnt{};
     const workgroup::WorkGroup* wg = nullptr;
+    // used to record the runtime information of a single call in order to decide whether to trigger yield.
+    // It needs to be reset every time when the task is executed.
+    int64_t time_spent_ns = 0;
+    bool need_yield = false;
 };
 
 struct ScanTask {
 public:
     using WorkFunction = std::function<void(YieldContext&)>;
+    using YieldFunction = std::function<void(ScanTask&&)>;
 
     ScanTask() : ScanTask(nullptr, nullptr) {}
     explicit ScanTask(WorkFunction work_function) : workgroup(nullptr), work_function(std::move(work_function)) {}
     ScanTask(WorkGroup* workgroup, WorkFunction work_function)
             : workgroup(workgroup), work_function(std::move(work_function)) {}
+    ScanTask(WorkGroup* workgroup, WorkFunction work_function, YieldFunction yield_function)
+            : workgroup(workgroup),
+              work_function(std::move(work_function)),
+              yield_function(std::move(yield_function)) {}
     ~ScanTask() = default;
 
     DISALLOW_COPY(ScanTask);
@@ -84,10 +93,20 @@ public:
 
     bool is_finished() const { return work_context.is_finished(); }
 
+    bool has_yield_function() const { return yield_function != nullptr; }
+
+    void execute_yield_function() {
+        DCHECK(yield_function != nullptr) << "yield function must be set";
+        yield_function(std::move(*this));
+    }
+
+    const YieldContext& get_work_context() const { return work_context; }
+
 public:
     WorkGroup* workgroup;
     YieldContext work_context;
     WorkFunction work_function;
+    YieldFunction yield_function;
     int priority = 0;
     std::shared_ptr<ScanTaskGroup> task_group = nullptr;
     RuntimeProfile::HighWaterMarkCounter* peak_scan_task_queue_size_counter = nullptr;

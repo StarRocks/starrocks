@@ -79,7 +79,7 @@ public class BinlogManagerTest {
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable table = (OlapTable) db.getTable("binlog_test");
         table.setBinlogTxnId(2);
-        long totalNum = GlobalStateMgr.getCurrentInvertedIndex().getTabletIdsByBackendId(10001).size();
+        long totalNum = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendId(10001).size();
         binlogManager.checkAndSetBinlogAvailableVersion(db, table, 1, 10002);
         Assert.assertFalse(binlogManager.isBinlogAvailable(db.getId(), table.getId()));
 

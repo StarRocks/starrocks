@@ -136,6 +136,7 @@ StorageEngine::StorageEngine(const EngineOptions& options)
 StorageEngine::~StorageEngine() {
     // tablet manager need to destruct before set storage engine instance to nullptr because tablet may access storage
     // engine instance during their destruction.
+    _update_manager.reset();
     _tablet_manager.reset();
 #ifdef BE_TEST
     if (_s_instance == this) {
@@ -184,6 +185,7 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
         Thread::set_thread_name(threads.back(), "compact_data_dir");
     }
     for (auto& thread : threads) {
+        DCHECK(thread.joinable());
         thread.join();
     }
 }
@@ -242,6 +244,8 @@ Status StorageEngine::_open(const EngineOptions& options) {
         return _segment_replicate_executor->get_thread_pool()->num_queued_tasks();
     })
 
+    RETURN_IF_ERROR_WITH_WARN(_replication_txn_manager->init(dirs), "init ReplicationTxnManager failed");
+
     return Status::OK();
 }
 
@@ -275,6 +279,7 @@ Status StorageEngine::_init_store_map() {
         Thread::set_thread_name(threads.back(), "init_store_path");
     }
     for (auto& thread : threads) {
+        DCHECK(thread.joinable());
         thread.join();
     }
 
@@ -619,6 +624,8 @@ void StorageEngine::stop() {
     JOIN_THREADS(_tablet_checkpoint_threads)
 
     JOIN_THREAD(_pk_index_major_compaction_thread)
+
+    JOIN_THREAD(_pk_dump_thread);
 
 #ifdef USE_STAROS
     JOIN_THREAD(_local_pk_index_shared_data_gc_evict_thread)

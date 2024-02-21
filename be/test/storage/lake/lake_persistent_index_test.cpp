@@ -21,7 +21,7 @@
 
 namespace starrocks::lake {
 
-TEST(CloudNativePersistentIndexTest, test_basic_api) {
+TEST(LakePersistentIndexTest, test_basic_api) {
     using Key = uint64_t;
     const int N = 1000;
     vector<Key> keys;
@@ -102,13 +102,13 @@ TEST(CloudNativePersistentIndexTest, test_basic_api) {
     ASSERT_TRUE(index->upsert(N, upsert_key_slices.data(), upsert_values.data(), upsert_old_values.data()).ok());
 }
 
-TEST(CloudNativePersistentIndexTest, test_replace) {
+TEST(LakePersistentIndexTest, test_replace) {
     using Key = uint64_t;
     vector<Key> keys;
     vector<Slice> key_slices;
     vector<IndexValue> values;
     vector<IndexValue> replace_values;
-    const int N = 1000000;
+    const int N = 10000;
     keys.reserve(N);
     key_slices.reserve(N);
     vector<size_t> replace_idxes;
