@@ -58,29 +58,17 @@ private:
 };
 
 Status FileSinkIOBuffer::prepare(RuntimeState* state, RuntimeProfile* parent_profile) {
-    bool expected = false;
-    if (!_is_prepared.compare_exchange_strong(expected, true)) {
+    if (is_prepared()) {
         return Status::OK();
     }
-    auto dop = state->query_options().pipeline_dop;
 
+    auto dop = state->query_options().pipeline_dop;
     RETURN_IF_ERROR(state->exec_env()->result_mgr()->create_sender(state->fragment_instance_id(),
                                                                    std::min(dop << 1, 1024), &_sender));
-
-    _state = state;
     _writer = std::make_shared<FileResultWriter>(_file_opts.get(), _output_expr_ctxs, parent_profile);
     RETURN_IF_ERROR(_writer->init(state));
 
-    bthread::ExecutionQueueOptions options;
-    options.executor = SinkIOExecutor::instance();
-    _exec_queue_id = std::make_unique<bthread::ExecutionQueueId<ChunkPtr>>();
-    int ret = bthread::execution_queue_start<ChunkPtr>(_exec_queue_id.get(), &options,
-                                                       &FileSinkIOBuffer::execute_io_task, this);
-    if (ret != 0) {
-        _exec_queue_id.reset();
-        return Status::InternalError("start execution queue error");
-    }
-    return Status::OK();
+    return SinkIOBuffer::prepare(state, parent_profile);
 }
 
 void FileSinkIOBuffer::close(RuntimeState* state) {
