@@ -128,6 +128,7 @@ int main(int argc, char** argv) {
             as_cn = true;
         }
     }
+    google::ParseCommandLineFlags(&argc, &argv, true);
 
     if (getenv("STARROCKS_HOME") == nullptr) {
         fprintf(stderr, "you need set STARROCKS_HOME environment variable.\n");
@@ -261,7 +262,7 @@ int main(int argc, char** argv) {
     apache::thrift::GlobalOutput.setOutputFunction(starrocks::thrift_output);
 
     std::unique_ptr<starrocks::Daemon> daemon(new starrocks::Daemon());
-    daemon->init(argc, argv, paths);
+    daemon->init(as_cn, paths);
 
     // init jdbc driver manager
     EXIT_IF_ERROR(starrocks::JDBCDriverManager::getInstance()->init(std::string(getenv("STARROCKS_HOME")) +
@@ -290,8 +291,7 @@ int main(int argc, char** argv) {
     }
 
     // Init exec env.
-    EXIT_IF_ERROR(starrocks::ExecEnv::init(exec_env, paths, as_cn));
-    engine->set_heartbeat_flags(exec_env->heartbeat_flags());
+    EXIT_IF_ERROR(exec_env->init(paths, as_cn));
 
     // Start all background threads of storage engine.
     // SHOULD be called after exec env is initialized.
@@ -385,10 +385,10 @@ int main(int argc, char** argv) {
 
     exec_env->agent_server()->stop();
 
-    starrocks::ExecEnv::stop(exec_env);
+    exec_env->stop();
     engine->stop();
     delete engine;
-    starrocks::ExecEnv::destroy(exec_env);
+    exec_env->destroy();
 
     return 0;
 }

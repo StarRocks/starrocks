@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+keywords: ['Stream Load']
 ---
 
 # 使用 Stream Load 事务接口导入
@@ -15,6 +16,10 @@ displayed_sidebar: "Chinese"
 ## 接口说明
 
 Stream Load 事务接口支持通过兼容 HTTP 协议的工具或语言发起接口请求。本文以 curl 工具为例介绍如何使用该接口。该接口提供事务管理、数据写入、事务预提交、事务去重和超时管理等功能。
+
+:::note
+Stream Load 支持导入 CSV 和 JSON 格式的数据，并且建议在导入的数据文件数量较少、单个数据文件的大小不超过 10 GB 时使用。Stream Load 不支持 Parquet 文件格式。如果要导入 Parquet 格式的数据，请使用 [INSERT+files()](../loading/InsertInto.md#通过-insert-into-select-以及表函数-files-导入外部数据文件).
+:::
 
 ### 事务管理
 

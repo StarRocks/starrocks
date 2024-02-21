@@ -80,6 +80,7 @@ public:
 
     int64_t shared_io_count() const { return _shared_io_count; }
     int64_t shared_io_bytes() const { return _shared_io_bytes; }
+    int64_t shared_align_io_bytes() const { return _shared_align_io_bytes; }
     int64_t shared_io_timer() const { return _shared_io_timer; }
     int64_t direct_io_count() const { return _direct_io_count; }
     int64_t direct_io_bytes() const { return _direct_io_bytes; }
@@ -99,6 +100,7 @@ private:
     int64_t _file_size = 0;
     int64_t _shared_io_count = 0;
     int64_t _shared_io_bytes = 0;
+    int64_t _shared_align_io_bytes = 0;
     int64_t _shared_io_timer = 0;
     int64_t _direct_io_count = 0;
     int64_t _direct_io_bytes = 0;

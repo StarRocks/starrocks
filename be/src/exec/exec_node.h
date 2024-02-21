@@ -149,7 +149,7 @@ public:
     // get_next(). The default implementation updates runtime profile counters and calls
     // close() on the children. To ensure that close() is called on the entire plan tree,
     // each implementation should start out by calling the default implementation.
-    virtual Status close(RuntimeState* state);
+    virtual void close(RuntimeState* state);
 
     // Creates exec node tree from list of nodes contained in plan via depth-first
     // traversal. All nodes are placed in pool.

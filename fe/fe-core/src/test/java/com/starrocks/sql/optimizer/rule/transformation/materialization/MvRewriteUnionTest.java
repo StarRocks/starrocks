@@ -193,12 +193,12 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
         PlanTestBase.assertContains(plan2, "2:OlapScanNode\n" +
                 "     TABLE: emps2\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 15: deptno < 120, 15: deptno >= 100\n" +
+                "     PREDICATES: 15: deptno >= 100, 15: deptno < 120\n" +
                 "     partitions=1/1");
         PlanTestBase.assertContains(plan2, "1:OlapScanNode\n" +
                 "     TABLE: depts2\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 18: deptno < 120, 18: deptno >= 100");
+                "     PREDICATES: 18: deptno >= 100, 18: deptno < 120");
     }
 
     @Test
@@ -408,7 +408,7 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                                 Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1 != 3 and k2 like 'a%'",
                                         "TABLE: mt1\n" +
                                                 "     PREAGGREGATION: ON\n" +
-                                                "     PREDICATES: 9: k1 != 3, (9: k1 < 3) OR (9: k1 > 3), 10: k2 LIKE 'a%'\n" +
+                                                "     PREDICATES: 9: k1 != 3, 10: k2 LIKE 'a%'\n" +
                                                 "     partitions=2/3")
                         );
                         for (Pair<String, String> p : sqls) {

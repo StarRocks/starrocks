@@ -69,7 +69,6 @@
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/task/engine_task.h"
-#include "storage/tuple.h"
 #include "storage/update_manager.h"
 #include "util/bthreads/executor.h"
 #include "util/lru_cache.h"
@@ -127,11 +126,15 @@ StorageEngine::StorageEngine(const EngineOptions& options)
     REGISTER_GAUGE_STARROCKS_METRIC(unused_rowsets_count, [this]() {
         std::lock_guard lock(_gc_mutex);
         return _unused_rowsets.size();
-    });
+    })
     _delta_column_group_cache_mem_tracker = std::make_unique<MemTracker>(-1, "delta_column_group_non_pk_cache");
 }
 
 StorageEngine::~StorageEngine() {
+    // tablet manager need to destruct before set storage engine instance to nullptr because tablet may access storage
+    // engine instance during their destruction.
+    _update_manager.reset();
+    _tablet_manager.reset();
 #ifdef BE_TEST
     if (_s_instance == this) {
         _s_instance = _p_instance;
@@ -218,25 +221,24 @@ Status StorageEngine::_open(const EngineOptions& options) {
         return static_cast<bthreads::ThreadPoolExecutor*>(_async_delta_writer_executor.get())
                 ->get_thread_pool()
                 ->num_queued_tasks();
-    });
+    })
 
     _memtable_flush_executor = std::make_unique<MemTableFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_memtable_flush_executor->init(dirs), "init MemTableFlushExecutor failed");
     REGISTER_GAUGE_STARROCKS_METRIC(memtable_flush_queue_count, [this]() {
         return _memtable_flush_executor->get_thread_pool()->num_queued_tasks();
-    });
+    })
 
     _segment_flush_executor = std::make_unique<SegmentFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_segment_flush_executor->init(dirs), "init SegmentFlushExecutor failed");
-    REGISTER_GAUGE_STARROCKS_METRIC(segment_flush_queue_count, [this]() {
-        return _segment_flush_executor->get_thread_pool()->num_queued_tasks();
-    });
+    REGISTER_GAUGE_STARROCKS_METRIC(segment_flush_queue_count,
+                                    [this]() { return _segment_flush_executor->get_thread_pool()->num_queued_tasks(); })
 
     _segment_replicate_executor = std::make_unique<SegmentReplicateExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_segment_replicate_executor->init(dirs), "init SegmentReplicateExecutor failed");
     REGISTER_GAUGE_STARROCKS_METRIC(segment_replicate_queue_count, [this]() {
         return _segment_replicate_executor->get_thread_pool()->num_queued_tasks();
-    });
+    })
 
     RETURN_IF_ERROR_WITH_WARN(_replication_txn_manager->init(dirs), "init ReplicationTxnManager failed");
 
@@ -628,7 +630,7 @@ void StorageEngine::stop() {
 
     if (config::path_gc_check) {
         JOIN_THREADS(_path_scan_threads)
-        JOIN_THREADS(_path_gc_threads);
+        JOIN_THREADS(_path_gc_threads)
     }
 
     JOIN_THREAD(_clear_expired_replcation_snapshots_thread)
@@ -854,8 +856,8 @@ Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir,
         if (watch.elapsed_time() / 1000000000 > config::compaction_trace_threshold) {
             LOG(INFO) << "Trace:" << std::endl << trace->DumpToString(Trace::INCLUDE_ALL);
         }
-    });
-    ADOPT_TRACE(trace.get());
+    })
+    ADOPT_TRACE(trace.get())
     TRACE("start to perform cumulative compaction");
     TabletSharedPtr best_tablet = _tablet_manager->find_best_tablet_to_compaction(CompactionType::CUMULATIVE_COMPACTION,
                                                                                   data_dir, tablet_shards_range);
@@ -897,8 +899,8 @@ Status StorageEngine::_perform_base_compaction(DataDir* data_dir, std::pair<int3
         if (watch.elapsed_time() / 1000000000 > config::compaction_trace_threshold) {
             LOG(INFO) << "Trace:" << std::endl << trace->DumpToString(Trace::INCLUDE_ALL);
         }
-    });
-    ADOPT_TRACE(trace.get());
+    })
+    ADOPT_TRACE(trace.get())
     TRACE("start to perform base compaction");
     TabletSharedPtr best_tablet = _tablet_manager->find_best_tablet_to_compaction(CompactionType::BASE_COMPACTION,
                                                                                   data_dir, tablet_shards_range);
@@ -936,8 +938,8 @@ Status StorageEngine::_perform_update_compaction(DataDir* data_dir) {
         if (watch.elapsed_time() / 1000000000 > config::compaction_trace_threshold) {
             LOG(WARNING) << "Trace:" << std::endl << trace->DumpToString(Trace::INCLUDE_ALL);
         }
-    });
-    ADOPT_TRACE(trace.get());
+    })
+    ADOPT_TRACE(trace.get())
     TRACE("start to perform update compaction");
     TabletSharedPtr best_tablet = _tablet_manager->find_best_tablet_to_do_update_compaction(data_dir);
     if (best_tablet == nullptr) {

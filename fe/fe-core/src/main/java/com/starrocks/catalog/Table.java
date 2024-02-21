@@ -63,7 +63,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import javax.annotation.Nullable;
 
 /**
  * Internal representation of table-related metadata. A table contains several partitions.
@@ -288,12 +287,16 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return type == TableType.MATERIALIZED_VIEW;
     }
 
-    public boolean isView() {
+    public boolean isOlapView() {
         return type == TableType.VIEW;
     }
 
     public boolean isHiveView() {
         return type == TableType.HIVE_VIEW;
+    }
+
+    public boolean isView() {
+        return isOlapView() || isHiveView();
     }
 
     public boolean isOlapTableOrMaterializedView() {
@@ -532,6 +535,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     public Partition getPartition(String partitionName) {
         return null;
     }
+
     public Partition getPartition(String partitionName, boolean isTempPartition) {
         return null;
     }
@@ -673,12 +677,15 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     }
 
     /**
-     * This method is called right before the calling of {@link Database#dropTable(String)}, with the protection of the
-     * database's writer lock.
+     * This method is called right after the calling of {@link Database#dropTable(String)}, with the
+     * protection of the database's writer lock.
      * <p>
-     * If {@code force} is false, this table will be placed into the {@link CatalogRecycleBin} and may be
-     * recovered later, so the implementation should not delete any real data otherwise there will be
-     * data loss after the table been recovered.
+     * If {@code force} is false, this table can be recovered later, so the implementation should not
+     * delete any real data otherwise there will be data loss after the table been recovered.
+     * <p>
+     * To avoid holding the database lock for a long time, do NOT perform time-consuming operations in this
+     * method, such as deleting data, sending RPC requests, etc. Instead, you should put these operations
+     * into {@link Table#delete(boolean)}.
      *
      * @param db     the owner database of the table
      * @param force  is this a force drop
@@ -689,15 +696,32 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     }
 
     /**
-     * Delete this table. this method is called with the protection of the database's writer lock.
+     * Delete this table permanently. Implementations can perform necessary cleanup work.
      *
+     * @param dbId ID of the database to which the table belongs
      * @param replay is this a log replay operation.
-     * @return a {@link Runnable} object that will be invoked after the table has been deleted from
-     * catalog, or null if no action need to be performed.
+     * @return Returns true if the deletion task was performed successfully, false otherwise.
      */
-    @Nullable
-    public Runnable delete(boolean replay) {
-        return null;
+    public boolean delete(long dbId, boolean replay) {
+        return true;
+    }
+
+    /**
+     * Delete thie table from {@link CatalogRecycleBin}
+     * @param replay is this a log relay operation.
+     * @return Returns true if the deletion task was performed successfully, false otherwise.
+     */
+    public boolean deleteFromRecycleBin(long dbId, boolean replay) {
+        return delete(dbId, replay);
+    }
+
+    /**
+     * Whether the delete table operation supports retry on failure
+     *
+     * @return true if retry is supported on delete table failure, false if retry is not supported.
+     */
+    public boolean isDeleteRetryable() {
+        return false;
     }
 
     public boolean isSupported() {
@@ -781,6 +805,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     public boolean isTable() {
         return !type.equals(TableType.MATERIALIZED_VIEW) &&
                 !type.equals(TableType.CLOUD_NATIVE_MATERIALIZED_VIEW) &&
-                !type.equals(TableType.VIEW);
+                !type.equals(TableType.VIEW) &&
+                !type.equals(TableType.HIVE_VIEW);
     }
 }

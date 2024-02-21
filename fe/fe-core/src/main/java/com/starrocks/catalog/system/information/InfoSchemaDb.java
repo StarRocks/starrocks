@@ -67,16 +67,12 @@ public class InfoSchemaDb extends Database {
         super.registerTableUnlocked(BeLogsSystemTable.create());
         super.registerTableUnlocked(BeBvarsSystemTable.create());
         super.registerTableUnlocked(BeCloudNativeCompactionsSystemTable.create());
+        super.registerTableUnlocked(PartitionsMetaSystemTable.create());
     }
 
     @Override
-    public void dropTableWithLock(String name) {
-        // Do nothing.
-    }
-
-    @Override
-    public void dropTable(String name) {
-        // Do nothing.
+    public Table dropTable(String name) {
+        return null;
     }
 
     @Override

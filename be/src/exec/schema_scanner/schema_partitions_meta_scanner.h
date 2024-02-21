@@ -14,32 +14,30 @@
 
 #pragma once
 
-#include <memory>
+#include <cctz/time_zone.h>
 
-#include "common/status.h"
+#include "exec/schema_scanner.h"
+#include "gen_cpp/FrontendService_types.h"
 
 namespace starrocks {
 
-class ExecEnv;
-class EvHttpServer;
-class HttpHandler;
-class WebPageHandler;
-
-// HTTP service for StarRocks CN
-class HttpServiceCN {
+class SchemaPartitionsMetaScanner : public SchemaScanner {
 public:
-    HttpServiceCN(ExecEnv* env, int port, int num_threads);
-    ~HttpServiceCN();
+    SchemaPartitionsMetaScanner();
+    ~SchemaPartitionsMetaScanner() override;
 
-    Status start();
+    Status start(RuntimeState* state) override;
+    Status get_next(ChunkPtr* chunk, bool* eos) override;
 
 private:
-    ExecEnv* _env;
+    Status get_new_table();
+    Status fill_chunk(ChunkPtr* chunk);
 
-    std::unique_ptr<EvHttpServer> _ev_http_server;
-    std::unique_ptr<WebPageHandler> _web_page_handler;
+    cctz::time_zone _ctz;
+    int _partitions_meta_index;
+    TGetPartitionsMetaResponse _partitions_meta_response;
 
-    std::vector<HttpHandler*> _http_handlers;
+    static SchemaScanner::ColumnDesc _s_columns[];
 };
 
 } // namespace starrocks

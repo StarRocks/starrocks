@@ -126,9 +126,8 @@ UNION
 select v1,sum(v2) from t0 group by v1 union all select v4,v5 from t1;
 [result]
 UNION
-    AGGREGATE ([GLOBAL] aggregate [{4: sum=sum(4: sum)}] group by [[1: v1]] having [null]
-        AGGREGATE ([LOCAL] aggregate [{4: sum=sum(2: v2)}] group by [[1: v1]] having [null]
-            SCAN (columns[1: v1, 2: v2] predicate[null])
+    AGGREGATE ([GLOBAL] aggregate [{4: sum=sum(2: v2)}] group by [[1: v1]] having [null]
+        SCAN (columns[1: v1, 2: v2] predicate[null])
     SCAN (columns[5: v4, 6: v5] predicate[null])
 [end]
 
@@ -139,9 +138,8 @@ AGGREGATE ([GLOBAL] aggregate [{}] group by [[8: v1, 9: sum]] having [null]
     EXCHANGE SHUFFLE[8, 9]
         AGGREGATE ([LOCAL] aggregate [{}] group by [[8: v1, 9: sum]] having [null]
             UNION
-                AGGREGATE ([GLOBAL] aggregate [{4: sum=sum(4: sum)}] group by [[1: v1]] having [null]
-                    AGGREGATE ([LOCAL] aggregate [{4: sum=sum(2: v2)}] group by [[1: v1]] having [null]
-                        SCAN (columns[1: v1, 2: v2] predicate[null])
+                AGGREGATE ([GLOBAL] aggregate [{4: sum=sum(2: v2)}] group by [[1: v1]] having [null]
+                    SCAN (columns[1: v1, 2: v2] predicate[null])
                 SCAN (columns[5: v4, 6: v5] predicate[null])
 [end]
 
@@ -152,9 +150,8 @@ AGGREGATE ([GLOBAL] aggregate [{}] group by [[8: v1, 9: sum]] having [null]
     EXCHANGE SHUFFLE[8, 9]
         AGGREGATE ([LOCAL] aggregate [{}] group by [[8: v1, 9: sum]] having [null]
             UNION
-                AGGREGATE ([GLOBAL] aggregate [{4: sum=sum(4: sum)}] group by [[1: v1]] having [null]
-                    AGGREGATE ([LOCAL] aggregate [{4: sum=sum(2: v2)}] group by [[1: v1]] having [null]
-                        SCAN (columns[1: v1, 2: v2] predicate[null])
+                AGGREGATE ([GLOBAL] aggregate [{4: sum=sum(2: v2)}] group by [[1: v1]] having [null]
+                    SCAN (columns[1: v1, 2: v2] predicate[null])
                 SCAN (columns[5: v4, 6: v5] predicate[null])
 [end]
 
