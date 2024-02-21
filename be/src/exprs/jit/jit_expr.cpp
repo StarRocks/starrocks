@@ -64,7 +64,7 @@ Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
         auto expr_name = _expr->jit_func_name();
         _jit_obj_cache = std::make_unique<JitObjectCache>(expr_name, JITEngine::get_instance()->get_func_cache());
 
-        auto st = jit_engine->compile_scalar_function(context, _jit_obj_cache.get(), _expr);
+        auto st = jit_engine->compile_scalar_function(context, _jit_obj_cache.get(), _expr, _children);
 
         auto elapsed = MonotonicNanos() - start;
         if (!st.ok()) {

@@ -142,6 +142,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Default: TRUE
 - Description: Whether to support the DECIMAL V3 data type.
 
+#### expr_children_limit
+
+- Unit: -
+- Default: 10000
+- Description: The maximum number of child expressions allowed in an expression.
+
 #### enable_sql_blacklist
 
 - Unit: -
@@ -388,7 +394,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - **Unit**: -
 - **Default**: FALSE
-- **Description**: Whether to disable loading when the cluster encounters an error. This prevents any loss caused by cluster errors. The default value is `FALSE`, indicating that loading is not disabled.
+- **Description**: Whether to disable loading when the cluster encounters an error. This prevents any loss caused by cluster errors. The default value is `FALSE`, indicating that loading is not disabled. TRUE indicates loading is disabled and the cluster is in read-only state.
 
 #### history_job_keep_max_second
 
@@ -590,7 +596,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - **Unit**: s
 - **Default**: 86400
-- **Description**: The longest duration the metadata can be retained after a table or database is deleted. If this duration expires, the data will be deleted and cannot be recovered. Unit: seconds.
+- **Description**: The longest duration the metadata can be retained after a database, table, or partition is dropped. If this duration expires, the data will be deleted and cannot be recovered through the [RECOVER](../sql-reference/sql-statements/data-definition/RECOVER.md) command.
 
 #### alter_table_timeout_second
 

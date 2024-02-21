@@ -16,32 +16,18 @@
 package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
-import com.staros.proto.AwsCredentialInfo;
-import com.staros.proto.AwsDefaultCredentialInfo;
-import com.staros.proto.FilePathInfo;
-import com.staros.proto.FileStoreInfo;
-import com.staros.proto.FileStoreType;
-import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.lake.LakeTablet;
-import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
-import com.starrocks.pseudocluster.PseudoBackend;
-import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.server.SharedDataStorageVolumeMgr;
-import com.starrocks.server.SharedNothingStorageVolumeMgr;
-import com.starrocks.storagevolume.StorageVolume;
-import com.starrocks.system.ComputeNode;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -56,7 +42,6 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 public class LakePublishBatchTest {
-    private static PseudoCluster cluster;
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
 
@@ -82,75 +67,10 @@ public class LakePublishBatchTest {
             }
         };
 
-        new MockUp<StarOSAgent>() {
-            @Mock
-            public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) {
-                return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true).get(0);
-            }
-
-            @Mock
-            public FilePathInfo allocateFilePath(String storageVolumeId, long dbId, long tableId) {
-                FilePathInfo.Builder builder = FilePathInfo.newBuilder();
-                FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
-
-                S3FileStoreInfo.Builder s3FsBuilder = fsBuilder.getS3FsInfoBuilder();
-                s3FsBuilder.setBucket("test-bucket");
-                s3FsBuilder.setRegion("test-region");
-                s3FsBuilder.setCredential(AwsCredentialInfo.newBuilder()
-                        .setDefaultCredential(AwsDefaultCredentialInfo.newBuilder().build()));
-                S3FileStoreInfo s3FsInfo = s3FsBuilder.build();
-
-                fsBuilder.setFsType(FileStoreType.S3);
-                fsBuilder.setFsKey("test-bucket");
-                fsBuilder.setFsName("test-fsname");
-                fsBuilder.setS3FsInfo(s3FsInfo);
-                FileStoreInfo fsInfo = fsBuilder.build();
-
-                builder.setFsInfo(fsInfo);
-                builder.setFullPath("s3://test-bucket/1/");
-                FilePathInfo pathInfo = builder.build();
-                return pathInfo;
-            }
-        };
-
-        PseudoCluster.getOrCreateWithRandomPort(true, 3);
-
-        cluster = PseudoCluster.getInstance();
+        UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase(DB).useDatabase(DB);
-
-        new MockUp<RunMode>() {
-            @Mock
-            public RunMode getCurrentRunMode() {
-                return RunMode.SHARED_DATA;
-            }
-        };
-
-        new MockUp<SharedNothingStorageVolumeMgr>() {
-            S3FileStoreInfo s3FileStoreInfo = S3FileStoreInfo.newBuilder().setBucket("default-bucket")
-                    .setRegion(Config.aws_s3_region).setEndpoint(Config.aws_s3_endpoint)
-                    .setCredential(AwsCredentialInfo.newBuilder()
-                            .setDefaultCredential(AwsDefaultCredentialInfo.newBuilder().build()).build()).build();
-            FileStoreInfo fsInfo = FileStoreInfo.newBuilder().setFsName(SharedDataStorageVolumeMgr.BUILTIN_STORAGE_VOLUME)
-                    .setFsKey("1").setFsType(FileStoreType.S3)
-                    .setS3FsInfo(s3FileStoreInfo).build();
-
-            @Mock
-            public StorageVolume getStorageVolumeByName(String svName) throws AnalysisException {
-                return StorageVolume.fromFileStoreInfo(fsInfo);
-            }
-
-            @Mock
-            public StorageVolume getStorageVolume(String svKey) throws AnalysisException {
-                return StorageVolume.fromFileStoreInfo(fsInfo);
-            }
-
-            @Mock
-            public String getStorageVolumeIdOfTable(long tableId) {
-                return fsInfo.getFsKey();
-            }
-        };
 
         String sql = "create table " + TABLE +
                 " (dt date NOT NULL, pk bigint NOT NULL, v0 string not null) primary KEY (dt, pk) " +
@@ -388,14 +308,6 @@ public class LakePublishBatchTest {
 
     @Test
     public void testPublishLogVersion() throws Exception {
-        new MockUp<Utils>() {
-            @Mock
-            public ComputeNode chooseNode(LakeTablet tablet) {
-                PseudoBackend pseudoBackend = cluster.getBackends().stream().findAny().get();
-                return new ComputeNode(pseudoBackend.getId(), pseudoBackend.getHost(), 9055);
-            }
-        };
-
         List<Tablet> tablets = new ArrayList<>();
         tablets.add(new LakeTablet(1L));
         Utils.publishLogVersion(tablets, 1, 1);

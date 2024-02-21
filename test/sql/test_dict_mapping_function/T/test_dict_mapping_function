@@ -37,3 +37,84 @@ sync;
 SELECT * FROM test_table;
 DROP TABLE t_expression_cast;
 DROP DATABASE test_expression_cast_db;
+
+-- name: test_dictmapping_multiple_column
+CREATE DATABASE test_dictmapping_multiple_column;
+use test_dictmapping_multiple_column;
+create table dict(col_1 int, col_2 string, col_3 bigint not null auto_increment, col_4 int)
+primary key(col_1, col_2)
+distributed by hash(col_1, col_2)
+PROPERTIES (
+"replication_num" = "1"
+);
+
+INSERT INTO dict VALUES (1, "abc", default, 0);
+
+create table t(col_1 int, col_2 string)
+primary key(col_1)
+distributed by hash(col_1)
+PROPERTIES (
+"replication_num" = "1"
+);
+
+INSERT INTO t VALUES (1, "abc");
+
+SELECT dict_mapping("dict", col_1, col_2) FROM t;
+
+DROP DATABASE test_dictmapping_multiple_column;
+
+-- name: test_dictmapping_null_column
+CREATE DATABASE test_dictmapping_null_column;
+use test_dictmapping_null_column;
+create table dict(col_1 int, col_2 string, col_3 bigint not null auto_increment, col_4 int)
+primary key(col_1, col_2)
+distributed by hash(col_1, col_2)
+PROPERTIES (
+"replication_num" = "1"
+);
+
+INSERT INTO dict VALUES (1, "abc", default, 0);
+
+create table t(col_1 int, col_2 string)
+primary key(col_1)
+distributed by hash(col_1)
+PROPERTIES (
+"replication_num" = "1"
+);
+
+INSERT INTO t VALUES (1, NULL), (2, "abc");
+
+SELECT dict_mapping("dict", col_1, col_2) FROM t;
+
+DROP DATABASE test_dictmapping_null_column;
+
+-- name: test_dictmapping_DictQueryOperator_bug
+CREATE DATABASE test_dictmapping_DictQueryOperator_bug;
+USE test_dictmapping_DictQueryOperator_bug;
+create table dict(col_1 int, col_2 string, col_3 bigint not null auto_increment, col_4 int)
+                primary key(col_1)
+                distributed by hash(col_1)
+PROPERTIES (
+"replication_num" = "1"
+);
+insert into dict values(1, 'hello world 1', default, 1 * 10);
+insert into dict values(2, 'hello world 2', default, 2 * 10);
+insert into dict values(3, 'hello world 3', default, 3 * 10);
+insert into dict values(4, 'hello world 4', default, 4 * 10);
+insert into dict values(5, 'hello world 5', default, 5 * 10);
+insert into dict values(6, 'hello world 6', default, 6 * 10);
+insert into dict values(7, 'hello world 7', default, 7 * 10);
+insert into dict values(8, 'hello world 8', default, 8 * 10);
+insert into dict values(9, 'hello world 9', default, 9 * 10);
+insert into dict values(10, 'hello world 10', default, 10 * 10);
+create table fact_tbl_2(col_i int, col_2 varchar(20), col_mapvalue bigint)
+PROPERTIES (
+"replication_num" = "1"
+);
+insert into fact_tbl_2
+                values
+                (1, 'Beijing', DICT_mapping("dict", cast(1 as int))),
+                (2, 'Shenzhen', DICT_MAPping("dict", cast(2 as int), "col_3")),
+                (3, 'Shanghai', Dict_Mapping("dict", cast(3 as int), "col_4"));
+SELECT * FROM fact_tbl_2 ORDER BY col_i;
+DROP DATABASE test_dictmapping_DictQueryOperator_bug;

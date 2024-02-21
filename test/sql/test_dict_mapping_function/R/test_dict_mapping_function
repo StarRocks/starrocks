@@ -61,3 +61,142 @@ DROP TABLE t_expression_cast;
 DROP DATABASE test_expression_cast_db;
 -- result:
 -- !result
+-- name: test_dictmapping_multiple_column
+CREATE DATABASE test_dictmapping_multiple_column;
+-- result:
+-- !result
+use test_dictmapping_multiple_column;
+-- result:
+-- !result
+create table dict(col_1 int, col_2 string, col_3 bigint not null auto_increment, col_4 int)
+primary key(col_1, col_2)
+distributed by hash(col_1, col_2)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO dict VALUES (1, "abc", default, 0);
+-- result:
+-- !result
+create table t(col_1 int, col_2 string)
+primary key(col_1)
+distributed by hash(col_1)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t VALUES (1, "abc");
+-- result:
+-- !result
+SELECT dict_mapping("dict", col_1, col_2) FROM t;
+-- result:
+1
+-- !result
+DROP DATABASE test_dictmapping_multiple_column;
+-- result:
+-- !result
+-- name: test_dictmapping_null_column
+CREATE DATABASE test_dictmapping_null_column;
+-- result:
+-- !result
+use test_dictmapping_null_column;
+-- result:
+-- !result
+create table dict(col_1 int, col_2 string, col_3 bigint not null auto_increment, col_4 int)
+primary key(col_1, col_2)
+distributed by hash(col_1, col_2)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO dict VALUES (1, "abc", default, 0);
+-- result:
+-- !result
+create table t(col_1 int, col_2 string)
+primary key(col_1)
+distributed by hash(col_1)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t VALUES (1, NULL), (2, "abc");
+-- result:
+-- !result
+SELECT dict_mapping("dict", col_1, col_2) FROM t;
+-- result:
+E: (1064, 'invalid parameter : get NULL paramenter')
+-- !result
+DROP DATABASE test_dictmapping_null_column;
+-- result:
+-- !result
+-- name: test_dictmapping_DictQueryOperator_bug
+CREATE DATABASE test_dictmapping_DictQueryOperator_bug;
+-- result:
+-- !result
+USE test_dictmapping_DictQueryOperator_bug;
+-- result:
+-- !result
+create table dict(col_1 int, col_2 string, col_3 bigint not null auto_increment, col_4 int)
+                primary key(col_1)
+                distributed by hash(col_1)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into dict values(1, 'hello world 1', default, 1 * 10);
+-- result:
+-- !result
+insert into dict values(2, 'hello world 2', default, 2 * 10);
+-- result:
+-- !result
+insert into dict values(3, 'hello world 3', default, 3 * 10);
+-- result:
+-- !result
+insert into dict values(4, 'hello world 4', default, 4 * 10);
+-- result:
+-- !result
+insert into dict values(5, 'hello world 5', default, 5 * 10);
+-- result:
+-- !result
+insert into dict values(6, 'hello world 6', default, 6 * 10);
+-- result:
+-- !result
+insert into dict values(7, 'hello world 7', default, 7 * 10);
+-- result:
+-- !result
+insert into dict values(8, 'hello world 8', default, 8 * 10);
+-- result:
+-- !result
+insert into dict values(9, 'hello world 9', default, 9 * 10);
+-- result:
+-- !result
+insert into dict values(10, 'hello world 10', default, 10 * 10);
+-- result:
+-- !result
+create table fact_tbl_2(col_i int, col_2 varchar(20), col_mapvalue bigint)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into fact_tbl_2
+                values
+                (1, 'Beijing', DICT_mapping("dict", cast(1 as int))),
+                (2, 'Shenzhen', DICT_MAPping("dict", cast(2 as int), "col_3")),
+                (3, 'Shanghai', Dict_Mapping("dict", cast(3 as int), "col_4"));
+-- result:
+-- !result
+SELECT * FROM fact_tbl_2 ORDER BY col_i;
+-- result:
+1	Beijing	1
+2	Shenzhen	2
+3	Shanghai	30
+-- !result
+DROP DATABASE test_dictmapping_DictQueryOperator_bug;
+-- result:
+-- !result
