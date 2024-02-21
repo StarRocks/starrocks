@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Copyright 2021-present StarRocks, Inc. All rights reserved.
+#
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -18,7 +20,8 @@
 #
 # Modified from hyrise project
 
-output=`git rev-parse --show-toplevel`/compile_times.txt
+# The root directory that contains .git, i.e, the root directory of the project
+output=$(git rev-parse --show-toplevel)/compile_times.txt
 
 start=$(date +%s)
 "$@"

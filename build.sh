@@ -93,7 +93,7 @@ Usage: $0 <options>
      --with-clang-tidy  build Backend with clang-tidy(default without clang-tidy)
      --without-java-ext build Backend without java-extensions(default with java-extensions)
      -j                 build Backend parallel
-     --save-compile-time 
+     --output-compile-time 
                         save a list of the compile time for every C++ file in ${ROOT}/compile_times.txt.
                         Turning this option on automatically disables ccache.
 
@@ -125,7 +125,7 @@ OPTS=$(getopt \
   -l 'without-java-ext' \
   -l 'use-staros' \
   -l 'enable-shared-data' \
-  -l 'save-compile-time' \
+  -l 'output-compile-time' \
   -o 'j:' \
   -l 'help' \
   -- "$@")
@@ -147,7 +147,7 @@ WITH_BENCH=OFF
 WITH_CLANG_TIDY=OFF
 USE_STAROS=OFF
 BUILD_JAVA_EXT=ON
-SAVE_COMPILE_TIME=OFF
+OUTPUT_COMPILE_TIME=OFF
 MSG=""
 MSG_FE="Frontend"
 MSG_DPP="Spark Dpp application"
@@ -243,7 +243,7 @@ else
             --with-bench) WITH_BENCH=ON; shift ;;
             --with-clang-tidy) WITH_CLANG_TIDY=ON; shift ;;
             --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
-            --save-compile-time) SAVE_COMPILE_TIME=ON; shift ;;
+            --output-compile-time) OUTPUT_COMPILE_TIME=ON; shift ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             -j) PARALLEL=$2; shift 2 ;;
@@ -284,7 +284,7 @@ echo "Get params:
     WITH_CACHELIB       -- $WITH_CACHELIB
     ENABLE_FAULT_INJECTION -- $ENABLE_FAULT_INJECTION
     BUILD_JAVA_EXT      -- $BUILD_JAVA_EXT
-    SAVE_COMPILE_TIME   -- $SAVE_COMPILE_TIME
+    OUTPUT_COMPILE_TIME   -- $OUTPUT_COMPILE_TIME
 "
 
 check_tool()
@@ -356,7 +356,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
       export STARLET_INSTALL_DIR
     fi
     
-    if [ "${SAVE_COMPILE_TIME}" == "ON" ]; then
+    if [ "${OUTPUT_COMPILE_TIME}" == "ON" ]; then
         rm -f ${ROOT}/compile_times.txt
         CXX_COMPILER_LAUNCHER=${ROOT}/build-support/compile_time.sh
     else
