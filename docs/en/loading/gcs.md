@@ -291,6 +291,8 @@ You can query the progress of INSERT jobs from the [`loads`](../reference/inform
 SELECT * FROM information_schema.loads ORDER BY JOB_ID DESC;
 ```
 
+For information about the fields provided in the `loads` view, see [`loads`](../reference/information_schema/loads.md).
+
 If you have submitted multiple load jobs, you can filter on the `LABEL` associated with the job. Example:
 
 ```SQL
@@ -320,8 +322,6 @@ SELECT * FROM information_schema.loads WHERE LABEL = 'insert_f3fc2298-a553-11ee-
         TRACKING_SQL: NULL
 REJECTED_RECORD_PATH: NULL
 ```
-
-For information about the fields provided in the `loads` view, see [`loads`](../reference/information_schema/loads.md).
 
 > **NOTE**
 >

@@ -267,6 +267,8 @@ You can query the progress of INSERT jobs from the [`loads`](../reference/inform
 SELECT * FROM information_schema.loads ORDER BY JOB_ID DESC;
 ```
 
+For information about the fields provided in the `loads` view, see [`loads`](../reference/information_schema/loads.md).
+
 If you have submitted multiple load jobs, you can filter on the `LABEL` associated with the job. Example:
 
 ```SQL
@@ -296,8 +298,6 @@ SELECT * FROM information_schema.loads WHERE LABEL = 'insert_0d86c3f9-851f-11ee-
         TRACKING_SQL: NULL
 REJECTED_RECORD_PATH: NULL
 ```
-
-For information about the fields provided in the `loads` view, see [`loads`](../reference/information_schema/loads.md).
 
 > **NOTE**
 >
@@ -550,7 +550,7 @@ For detailed syntax and parameter descriptions, see [CREATE PIPE](../sql-referen
   1 row in set (0.00 sec)
   ```
 
-- Query the progress of Pipe jobs from the [`information_schema.pipes`](../reference/information_schema/pipes.md) view.
+- Query the progress of Pipe jobs from the [`pipes`](../reference/information_schema/pipes.md) view in the StarRocks Information Schema.
 
   ```SQL
   SELECT * FROM information_schema.pipes;
@@ -574,7 +574,7 @@ For detailed syntax and parameter descriptions, see [CREATE PIPE](../sql-referen
 
 #### Check file status
 
-You can query the load status of the files loaded from the [`information_schema.pipe_files`](../reference/information_schema/pipe_files.md) view.
+You can query the load status of the files loaded from the [`pipe_files`](../reference/information_schema/pipe_files.md) view in the StarRocks Information Schema.
 
 ```SQL
 SELECT * FROM information_schema.pipe_files;
