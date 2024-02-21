@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+keywords: ['fenqu']
 ---
 
 # SHOW DYNAMIC PARTITION TABLES
