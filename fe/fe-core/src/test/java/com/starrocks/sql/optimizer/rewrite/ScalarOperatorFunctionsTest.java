@@ -475,11 +475,15 @@ public class ScalarOperatorFunctionsTest {
 
     @Test
     public void toDate() {
-        ConstantOperator result = ScalarOperatorFunctions
+        ConstantOperator result1 = ScalarOperatorFunctions
                 .toDate(ConstantOperator.createDatetime(LocalDateTime.of(2001, 1, 9, 13, 4, 5)));
-        assertTrue(result.getType().isDate());
+        assertTrue(result1.getType().isDate());
         // when transfer constantOpeartor to DateLiteral, only y/m/d will keep
-        assertEquals("2001-01-09T13:04:05", result.getDate().toString());
+        assertEquals("2001-01-09T00:00", result1.getDate().toString());
+
+        ConstantOperator result2 = ScalarOperatorFunctions
+                .toDate(ConstantOperator.createDate(LocalDateTime.of(2001, 1, 9, 14, 5, 6)));
+        assertTrue(result1.compareTo(result2) == 0);
     }
 
     @Test
