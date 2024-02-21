@@ -18,7 +18,6 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicates;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
@@ -28,42 +27,34 @@ import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.ExpressionRangePartitionInfo;
-import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.RangePartitionInfo;
-import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.RangeUtils;
-import com.starrocks.connector.PartitionUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
-import com.starrocks.sql.analyzer.RelationFields;
-import com.starrocks.sql.analyzer.RelationId;
-import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.ExpressionContext;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.MaterializationContext;
+=======
+import com.starrocks.sql.optimizer.JoinHelper;
+>>>>>>> 9290cb3a7e ([BugFix] Support Iceberg partition compensation for mv rewrite (#41145))
 import com.starrocks.sql.optimizer.MvPlanContextBuilder;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -77,11 +68,8 @@ import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
-import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
@@ -94,12 +82,15 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
+=======
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+>>>>>>> 9290cb3a7e ([BugFix] Support Iceberg partition compensation for mv rewrite (#41145))
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
-import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
@@ -109,14 +100,12 @@ import org.apache.commons.collections4.SetUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Function;
@@ -462,27 +451,6 @@ public class MvUtils {
         return Pair.create(optimizedPlan, logicalPlan);
     }
 
-    public static List<OptExpression> collectScanExprs(OptExpression expression) {
-        List<OptExpression> scanExprs = Lists.newArrayList();
-        OptExpressionVisitor scanCollector = new OptExpressionVisitor<Void, Void>() {
-            @Override
-            public Void visit(OptExpression optExpression, Void context) {
-                for (OptExpression input : optExpression.getInputs()) {
-                    super.visit(input, context);
-                }
-                return null;
-            }
-
-            @Override
-            public Void visitLogicalTableScan(OptExpression optExpression, Void context) {
-                scanExprs.add(optExpression);
-                return null;
-            }
-        };
-        expression.getOp().accept(scanCollector, expression, null);
-        return scanExprs;
-    }
-
     public static List<OptExpression> collectJoinExpr(OptExpression expression) {
         List<OptExpression> joinExprs = Lists.newArrayList();
         OptExpressionVisitor joinCollector = new OptExpressionVisitor<Void, Void>() {
@@ -804,58 +772,6 @@ public class MvUtils {
         return columnRefOperators;
     }
 
-    public static ScalarOperator convertListPartitionKeys(ScalarOperator partitionColRef,
-                                                          List<Range<PartitionKey>> partitionRanges) {
-        List<ScalarOperator> inArgs = Lists.newArrayList();
-        inArgs.add(partitionColRef);
-        for (Range<PartitionKey> range : partitionRanges) {
-            if (range.isEmpty()) {
-                continue;
-            }
-
-            // see `convertToDateRange`
-            if (range.hasLowerBound() && range.hasUpperBound()) {
-                // partition range must have lower bound and upper bound
-                ConstantOperator lowerBound =
-                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.lowerEndpoint().getKeys().get(0));
-                ConstantOperator upperBound =
-                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.upperEndpoint().getKeys().get(0));
-                Preconditions.checkState(lowerBound.getType().isStringType());
-                Preconditions.checkState(upperBound.getType().isStringType());
-                inArgs.add(lowerBound);
-            } else if (range.hasUpperBound()) {
-                ConstantOperator upperBound =
-                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.upperEndpoint().getKeys().get(0));
-                Preconditions.checkState(upperBound.getType().isStringType());
-                inArgs.add(upperBound);
-            } else if (range.hasLowerBound()) {
-                ConstantOperator lowerBound =
-                        (ConstantOperator) SqlToScalarOperatorTranslator.translate(range.lowerEndpoint().getKeys().get(0));
-                Preconditions.checkState(lowerBound.getType().isStringType());
-                inArgs.add(lowerBound);
-            } else {
-                // continue
-            }
-        }
-        if (inArgs.size() == 1) {
-            return ConstantOperator.TRUE;
-        } else {
-            return new InPredicateOperator(false, inArgs);
-        }
-    }
-
-    public static ScalarOperator convertPartitionKeysToPredicate(ScalarOperator partitionColumn,
-                                                                 List<Range<PartitionKey>> partitionKeys) {
-        boolean isListPartition = partitionColumn.getType().isStringType();
-        // NOTE: For string type partition column, it should be list partition rather than range partition.
-        if (isListPartition) {
-            return convertListPartitionKeys(partitionColumn, partitionKeys);
-        } else {
-            List<ScalarOperator> rangePredicates = MvUtils.convertRanges(partitionColumn, partitionKeys);
-            return Utils.compoundOr(rangePredicates);
-        }
-    }
-
     public static List<ScalarOperator> convertRanges(ScalarOperator partitionScalar,
                                                      List<Range<PartitionKey>> partitionRanges) {
         List<ScalarOperator> rangeParts = Lists.newArrayList();
@@ -965,6 +881,7 @@ public class MvUtils {
         return mergedRanges;
     }
 
+<<<<<<< HEAD
     private static boolean supportCompensatePartitionPredicateForHiveScan(List<PartitionKey> partitionKeys) {
         for (PartitionKey partitionKey : partitionKeys) {
             // only support one partition column now.
@@ -1409,6 +1326,8 @@ public class MvUtils {
         return Range.all();
     }
 
+=======
+>>>>>>> 9290cb3a7e ([BugFix] Support Iceberg partition compensation for mv rewrite (#41145))
     public static boolean isDateRange(Range<PartitionKey> range) {
         if (range.hasUpperBound()) {
             PartitionKey partitionKey = range.upperEndpoint();
@@ -1447,6 +1366,7 @@ public class MvUtils {
         return Range.all();
     }
 
+<<<<<<< HEAD
     /**
      * Return the updated partition key ranges of the specific table.
      *
@@ -1480,57 +1400,15 @@ public class MvUtils {
             refBaseTableRanges = baseTableDateRanges;
         }
         List<Range<PartitionKey>> mvRanges = getLatestPartitionRangeForNativeTable(mv, mvPartitionNamesToRefresh);
-
-        List<Range<PartitionKey>> latestBaseTableRanges = Lists.newArrayList();
-        for (Range<PartitionKey> range : refBaseTableRanges) {
-            // if materialized view's partition range can enclose the ref base table range, we think that
-            // the materialized view's partition has been refreshed and should be compensated into the materialized
-            // view's partition predicate.
-            if (mvRanges.stream().anyMatch(mvRange -> mvRange.encloses(range))) {
-                latestBaseTableRanges.add(range);
-            }
-        }
-        if (isConvertToDate) {
-            // treat string type partition as list, so no need merge
-            List<Range<PartitionKey>> tmpRangeList = Lists.newArrayList();
-            for (Range<PartitionKey> range : latestBaseTableRanges) {
-                tmpRangeList.add(baseRangeMapping.get(range));
-            }
-            return tmpRangeList;
-        } else {
-            return MvUtils.mergeRanges(latestBaseTableRanges);
-        }
+=======
+    private static PartitionKey convertToVarcharPartitionKey(DateLiteral dateLiteral, DateTimeFormatter formatter) {
+        String lowerDateString = dateLiteral.toLocalDateTime().toLocalDate().format(formatter);
+        PartitionKey partitionKey = PartitionKey.ofString(lowerDateString);
+        return partitionKey;
     }
 
-    private static List<Range<PartitionKey>> getLatestPartitionRangeForNativeTable(OlapTable partitionTable,
-                                                                                   Set<String> modifiedPartitionNames) {
-        // partitions that will be excluded
-        Set<Long> filteredIds = Sets.newHashSet();
-        for (Partition p : partitionTable.getPartitions()) {
-            if (modifiedPartitionNames.contains(p.getName()) || !p.hasData()) {
-                filteredIds.add(p.getId());
-            }
-        }
-        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionTable.getPartitionInfo();
-        return rangePartitionInfo.getRangeList(filteredIds, false);
-    }
+>>>>>>> 9290cb3a7e ([BugFix] Support Iceberg partition compensation for mv rewrite (#41145))
 
-    private static List<Range<PartitionKey>> getLatestPartitionRange(
-            Table table, Column partitionColumn, Set<String> modifiedPartitionNames, Expr partitionExpr) {
-        if (table.isNativeTableOrMaterializedView()) {
-            return getLatestPartitionRangeForNativeTable((OlapTable) table, modifiedPartitionNames);
-        } else {
-            Map<String, Range<PartitionKey>> partitionMap;
-            try {
-                partitionMap = PartitionUtil.getPartitionKeyRange(table, partitionColumn, partitionExpr);
-            } catch (UserException e) {
-                LOG.warn("Materialized view Optimizer compute partition range failed.", e);
-                return Lists.newArrayList();
-            }
-            return partitionMap.entrySet().stream().filter(entry -> !modifiedPartitionNames.contains(entry.getKey())).
-                    map(Map.Entry::getValue).collect(Collectors.toList());
-        }
-    }
 
     public static String toString(Object o) {
         if (o == null) {
