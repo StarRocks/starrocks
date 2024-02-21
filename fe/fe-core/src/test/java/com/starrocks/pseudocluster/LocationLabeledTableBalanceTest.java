@@ -46,7 +46,7 @@ import java.util.Set;
  */
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class LocationLabeledTableBalanceTest {
-    private static final long WAIT_FOR_CLONE_TIMEOUT = 180000;
+    private static final long WAIT_FOR_CLONE_TIMEOUT = 30000;
     @BeforeClass
     public static void setUp() throws Exception {
         Config.tablet_sched_checker_interval_seconds = 1;
@@ -128,6 +128,7 @@ public class LocationLabeledTableBalanceTest {
         // Replicas will be moved from last added backend(with no location) to this backend.
         printTabletReplicaInfo(olapTable);
         newBackend = addPseudoBackendWithLocation("rack:r3");
+        start = System.currentTimeMillis();
         while (getBackendTabletsByTable(newBackend, olapTable.getId()).size() < 5) {
             System.out.println("new backend tablets(rack:r3): " +
                     getBackendTabletsByTable(newBackend, olapTable.getId()) +
@@ -140,9 +141,18 @@ public class LocationLabeledTableBalanceTest {
         Assert.assertEquals(5, getBackendTabletsByTable(newBackend, olapTable.getId()).size());
 
         // Wait for redundant replicas deleted.
-        Thread.sleep(10000);
-        Assert.assertEquals(0, getBackendTabletsByTable(cluster.getBackend(firstNewBackend),
-                olapTable.getId()).size());
+        start = System.currentTimeMillis();
+        long firstNewBackendTabletCnt = getBackendTabletsByTable(cluster.getBackend(firstNewBackend),
+                olapTable.getId()).size();
+        while (firstNewBackendTabletCnt > 0) {
+            printTabletReplicaInfo(olapTable);
+            Thread.sleep(500);
+            firstNewBackendTabletCnt = getBackendTabletsByTable(cluster.getBackend(firstNewBackend),
+                    olapTable.getId()).size();
+            if (System.currentTimeMillis() - start > WAIT_FOR_CLONE_TIMEOUT) {
+                Assert.fail("wait for replica decommission for location balance finished timeout");
+            }
+        }
     }
 
     private void printTabletReplicaInfo(OlapTable table) {
@@ -183,16 +193,26 @@ public class LocationLabeledTableBalanceTest {
         }
 
         // Wait for redundant replicas deleted.
-        Thread.sleep(10000);
-        System.out.println("new backend tablets(rack:r4): " +
-                getBackendTabletsByTable(newBackend, olapTable.getId()) +
-                ", clone tasks finished: " + stat.counterCloneTaskSucceeded.get());
-        Assert.assertTrue(getBackendTabletsByTable(newBackend, olapTable.getId()).size() >= 3);
-        Assert.assertTrue(getBackendTabletsByTable(newBackend, olapTable.getId()).size() <= 4);
+        start = System.currentTimeMillis();
+        long newBackendTabletCnt = getBackendTabletsByTable(newBackend, olapTable.getId()).size();
         Set<Long> backendIds = getBackendIdsWithLocProp("rack", "r3");
-        Assert.assertTrue(getBackendTabletsByTable(
-                PseudoCluster.getInstance().getBackend(backendIds.iterator().next()), olapTable.getId()).size() <= 4);
-        printTabletReplicaInfo(olapTable);
+        long oldBackendTabletCnt = getBackendTabletsByTable(
+                PseudoCluster.getInstance().getBackend(backendIds.iterator().next()), olapTable.getId()).size();
+        while (newBackendTabletCnt < 3 || newBackendTabletCnt > 4 || oldBackendTabletCnt > 4) {
+            System.out.println("new backend tablets(rack:r4): " +
+                    getBackendTabletsByTable(newBackend, olapTable.getId()) +
+                    ", old backend tablets(rack:r3): " + getBackendTabletsByTable(
+                            PseudoCluster.getInstance().getBackend(backendIds.iterator().next()), olapTable.getId()) +
+                    ", clone tasks finished: " + stat.counterCloneTaskSucceeded.get());
+            printTabletReplicaInfo(olapTable);
+            Thread.sleep(1000);
+            newBackendTabletCnt = getBackendTabletsByTable(newBackend, olapTable.getId()).size();
+            oldBackendTabletCnt = getBackendTabletsByTable(
+                    PseudoCluster.getInstance().getBackend(backendIds.iterator().next()), olapTable.getId()).size();
+            if (System.currentTimeMillis() - start > WAIT_FOR_CLONE_TIMEOUT) {
+                Assert.fail("wait for replica decommission for location balance finished timeout");
+            }
+        }
     }
 
     private PseudoBackend addPseudoBackendWithLocation(String location) throws SQLException {
