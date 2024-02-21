@@ -147,14 +147,6 @@ DESCRIBE user_behavior_inferred;
 +--------------+-----------+------+-------+---------+-------+
 ```
 
-将系统推断出来的表结构跟手动建表的表结构从以下几个方面进行对比：
-
-- 数据类型
-- 是否允许 `NULL` 值
-- 定义为键的字段
-
-在生产环境中，为更好地控制目标表的表结构、实现更高的查询性能，建议您手动创建表、指定表结构。
-
 您可以查询新建表中的数据，验证数据已成功导入。例如：
 
 ```SQL
@@ -214,6 +206,37 @@ DUPLICATE KEY(UserID)
 DISTRIBUTED BY HASH(UserID);
 ```
 
+通过 [DESCRIBE](../sql-reference/sql-statements/Utility/DESCRIBE.md) 查看新建表的表结构：
+
+```sql
+DESCRIBE user_behavior_declared;
+```
+
+```plaintext
++--------------+----------------+------+-------+---------+-------+
+| Field        | Type           | Null | Key   | Default | Extra |
++--------------+----------------+------+-------+---------+-------+
+| UserID       | int            | NO   | true  | NULL    |       |
+| ItemID       | int            | NO   | false | NULL    |       |
+| CategoryID   | int            | NO   | false | NULL    |       |
+| BehaviorType | varchar(65533) | NO   | false | NULL    |       |
+| Timestamp    | varbinary      | NO   | false | NULL    |       |
++--------------+----------------+------+-------+---------+-------+
+5 rows in set (0.00 sec)
+```
+
+:::tip
+
+您可以从以下几个方面来对比手动建表的表结构与 `FILES()` 函数自动推断出来的表结构之间具体有哪些不同:
+
+- 数据类型
+- 是否允许 `NULL` 值
+- 定义为键的字段
+
+在生产环境中，为更好地控制目标表的表结构、实现更高的查询性能，建议您手动创建表、指定表结构。
+
+:::
+
 建表完成后，您可以通过 INSERT INTO SELECT FROM FILES() 向表内导入数据：
 
 ```SQL
@@ -253,6 +276,8 @@ SELECT * from user_behavior_declared LIMIT 3;
 SELECT * FROM information_schema.loads ORDER BY JOB_ID DESC;
 ```
 
+有关 `loads` 视图提供的字段详情，参见 [`loads`](../reference/information_schema/loads.md)。
+
 如果您提交了多个导入作业，您可以通过 `LABEL` 过滤出想要查看的作业。例如：
 
 ```SQL
@@ -282,8 +307,6 @@ SELECT * FROM information_schema.loads WHERE LABEL = 'insert_f3fc2298-a553-11ee-
         TRACKING_SQL: NULL
 REJECTED_RECORD_PATH: NULL
 ```
-
-有关 `loads` 视图提供的字段详情，参见 [`loads`](../reference/information_schema/loads.md)。
 
 > **NOTE**
 >
@@ -382,6 +405,8 @@ PROPERTIES
 SELECT * FROM information_schema.loads \G
 ```
 
+有关 `loads` 视图提供的字段详情，参见 [`loads`](../reference/information_schema/loads.md)。
+
 如果您提交了多个导入作业，您可以通过 `LABEL` 过滤出想要查看的作业。例如：
 
 ```SQL
@@ -411,8 +436,6 @@ SELECT * FROM information_schema.loads WHERE LABEL = 'user_behavior' \G
         TRACKING_SQL: NULL
 REJECTED_RECORD_PATH: NULL
 ```
-
-有关 `loads` 视图提供的字段详情，参见 [`loads`](../reference/information_schema/loads.md)。
 
 导入作业完成后，您可以从表内查询数据，验证数据是否已成功导入。例如：
 

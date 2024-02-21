@@ -147,14 +147,6 @@ The system returns the following query result:
 +--------------+-----------+------+-------+---------+-------+
 ```
 
-Compare the inferred schema with the schema created by hand:
-
-- data types
-- nullable
-- key fields
-
-To better control the schema of the destination table and for better query performance, we recommend that you specify the table schema by hand in production environments.
-
 Query the table to verify that the data has been loaded into it. Example:
 
 ```SQL
@@ -214,6 +206,37 @@ DUPLICATE KEY(UserID)
 DISTRIBUTED BY HASH(UserID);
 ```
 
+Display the schema so that you can compare it with the inferred schema produced by the `FILES()` table function:
+
+```sql
+DESCRIBE user_behavior_declared;
+```
+
+```plaintext
++--------------+----------------+------+-------+---------+-------+
+| Field        | Type           | Null | Key   | Default | Extra |
++--------------+----------------+------+-------+---------+-------+
+| UserID       | int            | NO   | true  | NULL    |       |
+| ItemID       | int            | NO   | false | NULL    |       |
+| CategoryID   | int            | NO   | false | NULL    |       |
+| BehaviorType | varchar(65533) | NO   | false | NULL    |       |
+| Timestamp    | varbinary      | NO   | false | NULL    |       |
++--------------+----------------+------+-------+---------+-------+
+5 rows in set (0.00 sec)
+```
+
+:::tip
+
+Compare the schema you just created with the schema inferred earlier using the `FILES()` table function. Look at:
+
+- data types
+- nullable
+- key fields
+
+To better control the schema of the destination table and for better query performance, we recommend that you specify the table schema by hand in production environments.
+
+:::
+
 After creating the table, you can load it with INSERT INTO SELECT FROM FILES():
 
 ```SQL
@@ -253,6 +276,8 @@ You can query the progress of INSERT jobs from the [`loads`](../reference/inform
 SELECT * FROM information_schema.loads ORDER BY JOB_ID DESC;
 ```
 
+For information about the fields provided in the `loads` view, see [`loads`](../reference/information_schema/loads.md).
+
 If you have submitted multiple load jobs, you can filter on the `LABEL` associated with the job. Example:
 
 ```SQL
@@ -282,8 +307,6 @@ SELECT * FROM information_schema.loads WHERE LABEL = 'insert_f3fc2298-a553-11ee-
         TRACKING_SQL: NULL
 REJECTED_RECORD_PATH: NULL
 ```
-
-For information about the fields provided in the `loads` view, see [`loads`](../reference/information_schema/loads.md).
 
 > **NOTE**
 >
@@ -382,6 +405,8 @@ You can query the progress of Broker Load jobs from the [`loads`](../reference/i
 SELECT * FROM information_schema.loads \G
 ```
 
+For information about the fields provided in the `loads` view, see [`loads`](../reference/information_schema/loads.md).
+
 If you have submitted multiple load jobs, you can filter on the `LABEL` associated with the job:
 
 ```SQL
@@ -411,8 +436,6 @@ SELECT * FROM information_schema.loads WHERE LABEL = 'user_behavior' \G
         TRACKING_SQL: NULL
 REJECTED_RECORD_PATH: NULL
 ```
-
-For information about the fields provided in the `loads` view, see [`loads`](../reference/information_schema/loads.md).
 
 After you confirm that the load job has finished, you can check a subset of the destination table to see if the data has been successfully loaded. Example:
 
