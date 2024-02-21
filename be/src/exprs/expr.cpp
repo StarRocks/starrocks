@@ -79,6 +79,7 @@
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #include "util/failpoint/fail_point.h"
+#include "util/stack_util.h"
 
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "EndlessLoop"
@@ -231,7 +232,6 @@ Status Expr::create_expr_trees(ObjectPool* pool, const std::vector<TExpr>& texpr
 Status Expr::create_tree_from_thrift_with_jit(ObjectPool* pool, const std::vector<TExprNode>& nodes, Expr* parent,
                                               int* node_idx, Expr** root_expr, ExprContext** ctx, RuntimeState* state) {
     Status status = create_tree_from_thrift(pool, nodes, parent, node_idx, root_expr, ctx, state);
-
     // Enable JIT based on the "enable_jit" parameters.
     if (state == nullptr || !status.ok() || !state->is_jit_enabled()) {
         return status;
@@ -766,6 +766,10 @@ void Expr::get_uncompilable_exprs(std::vector<Expr*>& exprs) {
 // This method searches from top to bottom for compilable expressions.
 // Once a compilable expression is found, it skips over its compilable subexpressions and continues the search downwards.
 Status Expr::replace_compilable_exprs(Expr** expr, ObjectPool* pool) {
+    if (_node_type == TExprNodeType::DICT_EXPR || _node_type == TExprNodeType::DICT_QUERY_EXPR ||
+        _node_type == TExprNodeType::DICTIONARY_GET_EXPR || _node_type == TExprNodeType::PLACEHOLDER_EXPR) {
+        return Status::OK();
+    }
     if ((*expr)->should_compile()) {
         // If the current expression is compilable, we will replace it with a JITExpr.
         // This expression and its compilable subexpressions will be compiled into a single function.
