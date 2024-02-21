@@ -1,9 +1,8 @@
 ---
 displayed_sidebar: "English"
-keywords: ['broker load']
 ---
 
-# Load data from HDFS or cloud storage with Broker Load
+# Load data from HDFS or cloud storage
 
 import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
 
