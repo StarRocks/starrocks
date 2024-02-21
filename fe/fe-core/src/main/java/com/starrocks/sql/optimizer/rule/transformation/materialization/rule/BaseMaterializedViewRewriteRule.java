@@ -129,6 +129,8 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             mvCandidateContexts.addAll(context.getCandidateMvs());
         }
         mvCandidateContexts.removeIf(x -> !x.prune(context, queryExpression));
+
+        // Order all candidate mvs by priority so can be rewritten fast.
         MaterializationContext.RewriteOrdering ordering =
                 new MaterializationContext.RewriteOrdering(queryExpression, context.getColumnRefFactory());
         mvCandidateContexts.sort(ordering);
