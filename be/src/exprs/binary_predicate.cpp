@@ -132,7 +132,7 @@ public:
     }
 
     // disable it temporarily as no perf benefit, and have to handle pushing down to storage
-    // bool is_compilable() const override { return IRHelper::support_jit(Type); }
+    bool is_compilable() const override { return IRHelper::support_jit(Type); }
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
         if constexpr (lt_is_decimal<Type>) {
@@ -410,7 +410,7 @@ public:
     }
 
     // disable it temporarily as no perf benefit, and have to handle pushing down to storage
-    // bool is_compilable() const override { return IRHelper::support_jit(Type); }
+    bool is_compilable() const override { return IRHelper::support_jit(Type); }
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
         std::vector<LLVMDatum> datums(2);
@@ -426,18 +426,16 @@ public:
             auto* r = datums[1].value;
             auto* l_null = datums[0].null_flag;
             auto* r_null = datums[1].null_flag;
-            auto* if_value = b.CreateAnd(IRHelper::bool_to_cond(b, l_null), IRHelper::bool_to_cond(b, r_null));
-            auto* elseif_value = b.CreateXor(IRHelper::bool_to_cond(b, l_null), IRHelper::bool_to_cond(b, r_null));
-            auto* llvm_true = llvm::ConstantInt::get(b.getInt1Ty(), 1);
-            auto* llvm_false = llvm::ConstantInt::get(b.getInt1Ty(), 0);
+            auto* if_value = b.CreateAnd(l_null, r_null);
+            auto* elseif_value = b.CreateXor(l_null, r_null);
+            llvm::Value* cmp;
             if constexpr (lt_is_float<Type>) {
-                auto* cmp = b.CreateFCmpOEQ(l, r);
-                result.value = b.CreateSelect(if_value, llvm_true, b.CreateSelect(elseif_value, llvm_false, cmp));
+                cmp = b.CreateFCmpOEQ(l, r);
             } else {
-                auto* cmp = b.CreateICmpEQ(l, r);
-                result.value = b.CreateSelect(if_value, llvm_true, b.CreateSelect(elseif_value, llvm_false, cmp));
+                cmp = b.CreateICmpEQ(l, r);
             }
-            result.value = b.CreateIntCast(result.value, b.getInt8Ty(), false);
+            cmp = b.CreateIntCast(cmp, b.getInt8Ty(), false);
+            result.value = b.CreateSelect(if_value, b.getInt8(1), b.CreateSelect(elseif_value, b.getInt8(0), cmp));
             // always not null
             return result;
         }
