@@ -406,8 +406,13 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "to_date", argTypes = {DATETIME}, returnType = DATE, isMonotonic = true)
     public static ConstantOperator toDate(ConstantOperator dateTime) {
         LocalDateTime dt = dateTime.getDatetime();
+<<<<<<< HEAD
         dt.truncatedTo(ChronoUnit.DAYS);
         return ConstantOperator.createDate(dt);
+=======
+        LocalDateTime newDt = dt.truncatedTo(ChronoUnit.DAYS);
+        return ConstantOperator.createDateOrNull(newDt);
+>>>>>>> 3c1b264520 ([BugFix] fix to_date() in Fe (#41303))
     }
 
     @ConstantFunction(name = "years_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
