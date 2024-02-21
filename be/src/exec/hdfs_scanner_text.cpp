@@ -85,9 +85,8 @@ private:
 };
 
 size_t HdfsScannerCSVReader::get_offset() {
-     return _offset;
+    return _offset;
 }
-
 
 Status HdfsScannerCSVReader::reset(size_t offset, size_t remain_length) {
     RETURN_IF_ERROR(_file->seek(offset));
