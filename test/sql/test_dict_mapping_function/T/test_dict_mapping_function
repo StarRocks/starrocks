@@ -116,5 +116,5 @@ insert into fact_tbl_2
                 (1, 'Beijing', DICT_mapping("dict", cast(1 as int))),
                 (2, 'Shenzhen', DICT_MAPping("dict", cast(2 as int), "col_3")),
                 (3, 'Shanghai', Dict_Mapping("dict", cast(3 as int), "col_4"));
-
+SELECT * FROM fact_tbl_2;
 DROP DATABASE test_dictmapping_DictQueryOperator_bug;
