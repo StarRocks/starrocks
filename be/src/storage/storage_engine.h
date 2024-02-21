@@ -470,13 +470,8 @@ private:
 
     std::unique_ptr<CompactionManager> _compaction_manager;
 
-<<<<<<< HEAD
     std::unique_ptr<PublishVersionManager> _publish_version_manager;
 
-    HeartbeatFlags* _heartbeat_flags = nullptr;
-
-=======
->>>>>>> 1788827de7 ([Refactor] Remove heartbeat flags from StorageEngine (#27448))
     std::unordered_map<int64_t, std::shared_ptr<AutoIncrementMeta>> _auto_increment_meta_map;
 
     std::mutex _auto_increment_mutex;
