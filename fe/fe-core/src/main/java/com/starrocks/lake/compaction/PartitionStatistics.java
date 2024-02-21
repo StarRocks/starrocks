@@ -108,11 +108,11 @@ public class PartitionStatistics {
         return priority == null ? CompactionPriority.DEFAULT : priority;
     }
 
-    public synchronized void setPriority(CompactionPriority priority) {
+    public void setPriority(CompactionPriority priority) {
         this.priority = priority;
     }
 
-    public synchronized void resetPriority() {
+    public void resetPriority() {
         this.setPriority(CompactionPriority.DEFAULT);
     }
 
