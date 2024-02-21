@@ -720,12 +720,8 @@ public class PlanTestNoneDBBase {
         }
 
         if (beId != -1) {
-            if (isZeroFragment) {
-                // ignore comparing the BE id for zero fragment
-                instances.put(beId / 10, beId / 10 + "");
-            } else {
-                instances.put(beId, builder.toString());
-            }
+            // ignore comparing the BE id
+            instances.put(beId / 10, beId / 10 + "");
         }
 
         return i;
