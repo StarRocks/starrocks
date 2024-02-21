@@ -191,7 +191,7 @@ insert into fact_tbl_2
                 (3, 'Shanghai', Dict_Mapping("dict", cast(3 as int), "col_4"));
 -- result:
 -- !result
-SELECT * FROM fact_tbl_2;
+SELECT * FROM fact_tbl_2 ORDER BY col_i;
 -- result:
 1	Beijing	1
 2	Shenzhen	2
