@@ -79,7 +79,6 @@
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #include "util/failpoint/fail_point.h"
-#include "util/stack_util.h"
 
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "EndlessLoop"
