@@ -1740,6 +1740,11 @@ public class OlapTable extends Table {
         return partitionInfo != null && partitionInfo.isPartitioned();
     }
 
+    @Override
+    public boolean isUnPartitioned() {
+        return !isPartitionedTable();
+    }
+
     // NOTE: It's different from `isPartitionedTable` which `isPartitioned` means table has many buckets rather than
     // partitions.
     @Override
