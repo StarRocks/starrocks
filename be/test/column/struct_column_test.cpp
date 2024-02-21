@@ -12,7 +12,9 @@
 namespace starrocks::vectorized {
 
 std::shared_ptr<StructColumn> create_test_column() {
-    std::vector<std::string> field_name{"id", "name"};
+    auto field_name = BinaryColumn::create();
+    field_name->append_string("id");
+    field_name->append_string("name");
     auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
     auto name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     Columns fields{id, name};
