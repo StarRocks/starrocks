@@ -262,6 +262,7 @@ public:
 
     PriorityThreadPool* thread_pool() { return _thread_pool; }
     workgroup::ScanExecutor* scan_executor() { return _scan_executor; }
+    ThreadPool* streaming_load_thread_pool() { return _streaming_load_thread_pool; }
     workgroup::ScanExecutor* connector_scan_executor() { return _connector_scan_executor; }
 
     PriorityThreadPool* udf_call_pool() { return _udf_call_pool; }
