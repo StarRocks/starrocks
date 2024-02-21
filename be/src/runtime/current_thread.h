@@ -338,6 +338,7 @@ inline thread_local CurrentThread tls_thread_status;
 class CurrentThreadMemTrackerSetter {
 public:
     explicit CurrentThreadMemTrackerSetter(MemTracker* new_mem_tracker) {
+        new_mem_tracker = nullptr;
         _old_mem_tracker = tls_thread_status.mem_tracker();
         _is_same = (_old_mem_tracker == new_mem_tracker);
         if (!_is_same) {
