@@ -692,12 +692,16 @@ public class PlanTestNoneDBBase {
         int i = startIndex;
         StringBuilder builder = new StringBuilder();
         long beId = -1;
+        boolean isZeroFragment = false;
         for (; i < lines.length; i++) {
             String line = lines[i];
             String trimLine = line.trim();
             if (trimLine.isEmpty()) { // The profile Fragment is coming to the end.
                 break;
+            } else if (trimLine.startsWith("INSTANCE(0-")) {
+                isZeroFragment = true;
             } else if (trimLine.startsWith("INSTANCE(")) { // Start a new instance.
+                isZeroFragment = false;
                 if (beId != -1) {
                     instances.put(beId, builder.toString());
                     beId = -1;
@@ -716,7 +720,12 @@ public class PlanTestNoneDBBase {
         }
 
         if (beId != -1) {
-            instances.put(beId, builder.toString());
+            if (isZeroFragment) {
+                // ignore comparing the BE id for zero fragment
+                instances.put(beId / 10, beId / 10 + "");
+            } else {
+                instances.put(beId, builder.toString());
+            }
         }
 
         return i;
