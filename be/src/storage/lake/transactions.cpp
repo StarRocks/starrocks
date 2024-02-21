@@ -137,6 +137,42 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
             alter_version = txn_log->op_schema_change().alter_version();
         }
 
+<<<<<<< HEAD
+=======
+        if (log_applier == nullptr) {
+            // init log_applier
+            new_metadata = std::make_shared<TabletMetadataPB>(*base_metadata);
+            log_applier = new_txn_log_applier(Tablet(tablet_mgr, tablet_id), new_metadata, new_version);
+
+            if (new_metadata->compaction_inputs_size() > 0) {
+                new_metadata->mutable_compaction_inputs()->Clear();
+            }
+
+            if (new_metadata->orphan_files_size() > 0) {
+                new_metadata->mutable_orphan_files()->Clear();
+            }
+
+            // force update prev_garbage_version at most config::lake_max_garbage_version_distance,
+            // prevent prev_garbage_version from not being updated for a long time and affecting tablet meta vacuum
+            if (base_metadata->compaction_inputs_size() > 0 || base_metadata->orphan_files_size() > 0 ||
+                base_metadata->version() - base_metadata->prev_garbage_version() >=
+                        config::lake_max_garbage_version_distance) {
+                new_metadata->set_prev_garbage_version(base_metadata->version());
+            }
+
+            new_metadata->set_commit_time(commit_time);
+
+            auto init_st = log_applier->init();
+            if (!init_st.ok()) {
+                if (init_st.is_already_exist()) {
+                    return new_version_metadata_or_error(init_st);
+                } else {
+                    return init_st;
+                }
+            }
+        }
+
+>>>>>>> 20013a6935 ([BugFix] Fix tablet metadata gc when tablet that has no data ingestion for a long time (#41128))
         auto st = log_applier->apply(*txn_log);
         if (!st.ok()) {
             LOG(WARNING) << "Fail to apply " << log_path << ": " << st;
