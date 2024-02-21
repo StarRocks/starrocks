@@ -1311,7 +1311,7 @@ TEST(LakeVacuumTest2, test_delete_files_retry2) {
     ASSERT_OK(f1->append("111"));
     ASSERT_OK(f1->close());
 
-    auto backup = config::lake_vacuum_retry_pattern;
+    auto backup = config::lake_vacuum_retry_pattern.value();
     config::lake_vacuum_retry_pattern = ""; // Disable retry
     DeferOp defer0([&]() { config::lake_vacuum_retry_pattern = backup; });
 

@@ -88,7 +88,7 @@ bool should_retry(const Status& st, int64_t attempted_retries) {
         return true;
     }
     auto message = st.message();
-    return MatchPattern(message, config::lake_vacuum_retry_pattern);
+    return MatchPattern(message, config::lake_vacuum_retry_pattern.value());
 }
 
 int64_t calculate_retry_delay(int64_t attempted_retries) {

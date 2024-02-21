@@ -257,18 +257,17 @@ void GlobalEnv::_init_storage_page_cache() {
 }
 
 int64_t GlobalEnv::get_storage_page_cache_size() {
-    std::lock_guard<std::mutex> l(*config::get_mstring_conf_lock());
     int64_t mem_limit = MemInfo::physical_mem();
     if (process_mem_tracker()->has_limit()) {
         mem_limit = process_mem_tracker()->limit();
     }
-    return ParseUtil::parse_mem_spec(config::storage_page_cache_limit, mem_limit);
+    return ParseUtil::parse_mem_spec(config::storage_page_cache_limit.value(), mem_limit);
 }
 
 int64_t GlobalEnv::check_storage_page_cache_size(int64_t storage_cache_limit) {
     if (storage_cache_limit > MemInfo::physical_mem()) {
         LOG(WARNING) << "Config storage_page_cache_limit is greater than memory size, config="
-                     << config::storage_page_cache_limit << ", memory=" << MemInfo::physical_mem();
+                     << config::storage_page_cache_limit.value() << ", memory=" << MemInfo::physical_mem();
     }
     if (!config::disable_storage_page_cache) {
         if (storage_cache_limit < kcacheMinSize) {
