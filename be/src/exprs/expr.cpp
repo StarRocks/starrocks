@@ -223,7 +223,7 @@ Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext*
     return status;
 }
 
-Status rewrite_jit_exprs(std::vector<ExprContext*>& expr_ctxs, ObjectPool* pool, RuntimeState* state) {
+Status Expr::rewrite_jit_exprs(std::vector<ExprContext*>& expr_ctxs, ObjectPool* pool, RuntimeState* state) {
     std::vector<ExprContext*> tmp;
     for (auto ctx : expr_ctxs) {
         auto* prev_expr = ctx->root();
