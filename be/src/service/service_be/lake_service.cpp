@@ -213,9 +213,11 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
             auto txns = request->txn_ids().data();
             auto txns_size = request->txn_ids_size();
             auto commit_time = request->commit_time();
-            g_publish_tablet_version_queuing_latency << (run_ts - start_ts);
+            auto queuing_latency = run_ts - start_ts;
+            g_publish_tablet_version_queuing_latency << queuing_latency;
 
             TRACE_COUNTER_INCREMENT("tablet_id", tablet_id);
+            TRACE_COUNTER_INCREMENT("queuing_latency_us", queuing_latency);
 
             StatusOr<lake::TabletMetadataPtr> res;
             if (std::chrono::system_clock::now() < timeout_deadline) {
