@@ -1404,7 +1404,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_POPULATE_DATACACHE, alias = ENABLE_POPULATE_BLOCK_CACHE)
     private boolean enablePopulateDataCache = true;
 
-    @VariableMgr.VarAttr(name = CATALOG)
+    @VariableMgr.VarAttr(name = CATALOG, flag = VariableMgr.SESSION_ONLY)
     private String catalog = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
 
     public void setCatalog(String catalog) {
