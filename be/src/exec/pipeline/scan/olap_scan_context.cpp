@@ -127,6 +127,9 @@ Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<E
 
     // rewrite after push down scan predicate, scan predicate should rewrite by local-dict
     RETURN_IF_ERROR(state->mutable_dict_optimize_parser()->rewrite_conjuncts(&_not_push_down_conjuncts));
+
+    RETURN_IF_ERROR(Expr::rewrite_jit_exprs(_not_push_down_conjuncts, &_obj_pool, state));
+
     return Status::OK();
 }
 
