@@ -395,6 +395,7 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
         Assert.assertTrue(scanOperatorPredicates.getPrunedPartitionConjuncts().size() == 0);
         Assert.assertTrue(scanOperatorPredicates.getNonPartitionConjuncts().size() == 0);
         Assert.assertTrue(scanOperators.get(0).getPredicate() == null);
+        Assert.assertTrue(scanOperatorPredicates.toString().equals("selectedPartitionIds=[0, 1, 2, 3, 4, 5]"));
     }
 
     @Test
@@ -406,7 +407,13 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
                 "SELECT `l_suppkey`, `l_orderkey`, sum(l_orderkey)  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
                         "WHERE date_sub(l_shipdate, interval 1 day) = '1998-01-02' GROUP BY `l_orderkey`, `l_suppkey`;"
         );
-        for (String query : queries) {
+
+        List<String> expects = ImmutableList.of(
+                "selectedPartitionIds=[1], partitionConjuncts=[16: l_shipdate = 1998-01-01]",
+                "selectedPartitionIds=[3], partitionConjuncts=[16: l_shipdate = 1998-01-03]"
+        );
+        for (int i = 0; i < queries.size(); i++) {
+            String query = queries.get(i);
             List<LogicalScanOperator> scanOperators = getQueryOptExpression(query);
             Assert.assertTrue(scanOperators.size() == 1);
             ScanOperatorPredicates scanOperatorPredicates = getScanOperatorPredicates(scanOperators.get(0));
@@ -419,6 +426,7 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
             Assert.assertTrue(scanOperatorPredicates.getPrunedPartitionConjuncts().size() == 1);
             // TODO: fixme
             Assert.assertTrue(scanOperators.get(0).getPredicate() != null);
+            Assert.assertTrue(scanOperatorPredicates.toString().equals(expects.get(i)));
         }
     }
 
@@ -438,6 +446,9 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
         Assert.assertTrue(scanOperatorPredicates.getNoEvalPartitionConjuncts().size() == 1);
         Assert.assertTrue(scanOperatorPredicates.getPrunedPartitionConjuncts().size() == 0);
         Assert.assertTrue(scanOperators.get(0).getPredicate() != null);
+        Assert.assertTrue(scanOperatorPredicates.toString().equals("selectedPartitionIds=[0, 1, 2, 3, 4, 5], " +
+                "partitionConjuncts=[date_trunc(month, 16: l_shipdate) = 1998-01-01], " +
+                "noEvalPartitionConjuncts=[date_trunc(month, 16: l_shipdate) = 1998-01-01]"));
     }
 
     @Test
@@ -461,6 +472,10 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
         Assert.assertTrue(scanOperators.get(0).getPredicate() != null);
         List<ScalarOperator> predicates = Utils.extractConjuncts(scanOperators.get(0).getPredicate());
         Assert.assertTrue(predicates.size() == 3);
+        Assert.assertTrue(scanOperatorPredicates.toString().equals("selectedPartitionIds=[1, 2, 3, 4, 5], " +
+                "partitionConjuncts=[date_trunc(month, 16: l_shipdate) = 1998-01-01, 16: l_shipdate >= 1998-01-01], " +
+                "noEvalPartitionConjuncts=[date_trunc(month, 16: l_shipdate) = 1998-01-01], " +
+                "nonPartitionConjuncts=[1: l_orderkey > 1000], minMaxConjuncts=[1: l_orderkey > 1000]"));
     }
 
     @Test
@@ -545,6 +560,102 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
                 String query = "SELECT o_orderkey, l_suppkey, l_shipdate, sum(l_orderkey)  " +
                         " FROM hive0.partitioned_db.lineitem_par as a " +
                         " LEFT JOIN hive0.partitioned_db.orders as b ON b.o_orderkey=a.l_orderkey \n " +
+                        " WHERE b.o_orderdate is not null and a.l_suppkey > 1 and a.l_shipdate is not null \n " +
+                        " GROUP BY o_orderkey, l_suppkey, l_shipdate;";
+
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
+                        "     TABLE: mv1\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 28: l_suppkey > 1\n" +
+                        "     partitions=6/6\n" +
+                        "     rollup: mv1");
+            }
+        });
+    }
+
+    @Test
+    public void testHivePartitionPruneWithTwoTablesInnerJoin1() {
+        String mv1 = "CREATE MATERIALIZED VIEW mv1\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "PARTITION BY (l_shipdate)\n" +
+                "PROPERTIES (\"force_external_table_query_rewrite\" = \"true\") AS \n" +
+                " SELECT o_orderkey, l_suppkey, l_shipdate, sum(l_orderkey)  " +
+                " FROM hive0.partitioned_db.lineitem_par as a " +
+                " INNER JOIN hive0.partitioned_db.orders as b ON b.o_orderkey=a.l_orderkey \n " +
+                " WHERE b.o_orderdate >= '1991-01-01' and a.l_shipdate >= '1991-01-01' \n " +
+                " GROUP BY o_orderkey, l_suppkey, l_shipdate;";
+
+        starRocksAssert.withMaterializedView(mv1, (obj) -> {
+            String mvName = (String) obj;
+            refreshMaterializedView(DB_NAME, mvName);
+            {
+                String query = "SELECT o_orderkey, l_suppkey, l_shipdate, sum(l_orderkey)  " +
+                        " FROM hive0.partitioned_db.lineitem_par as a " +
+                        " INNER JOIN hive0.partitioned_db.orders as b ON b.o_orderkey=a.l_orderkey \n " +
+                        " WHERE b.o_orderdate >= '1991-01-01' and a.l_shipdate >= '1991-01-01' \n " +
+                        " GROUP BY o_orderkey, l_suppkey, l_shipdate;";
+
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
+                        "     TABLE: mv1\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     partitions=6/6\n" +
+                        "     rollup: mv1");
+            }
+
+            {
+                String query = "SELECT o_orderkey, l_suppkey, l_shipdate, sum(l_orderkey)  " +
+                        " FROM hive0.partitioned_db.lineitem_par as a " +
+                        " INNER JOIN hive0.partitioned_db.orders as b ON b.o_orderkey=a.l_orderkey \n " +
+                        " WHERE b.o_orderdate >= '1991-01-01' and a.l_suppkey > 1 and a.l_shipdate >= '1991-01-01' \n " +
+                        " GROUP BY o_orderkey, l_suppkey, l_shipdate;";
+
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
+                        "     TABLE: mv1\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 28: l_suppkey > 1\n" +
+                        "     partitions=6/6\n" +
+                        "     rollup: mv1");
+            }
+        });
+    }
+
+    @Test
+    public void testHivePartitionPruneWithTwoTablesInnerJoin2() {
+        String mv1 = "CREATE MATERIALIZED VIEW mv1\n" +
+                "DISTRIBUTED BY RANDOM\n" +
+                "PARTITION BY (l_shipdate)\n" +
+                "PROPERTIES (\"force_external_table_query_rewrite\" = \"true\") AS \n" +
+                " SELECT o_orderkey, l_suppkey, l_shipdate, sum(l_orderkey)  " +
+                " FROM hive0.partitioned_db.lineitem_par as a " +
+                " INNER JOIN hive0.partitioned_db.orders as b ON b.o_orderkey=a.l_orderkey \n " +
+                " WHERE b.o_orderdate is not null and a.l_shipdate is not null \n " +
+                " GROUP BY o_orderkey, l_suppkey, l_shipdate;";
+
+        starRocksAssert.withMaterializedView(mv1, (obj) -> {
+            String mvName = (String) obj;
+            refreshMaterializedView(DB_NAME, mvName);
+            {
+                String query = "SELECT o_orderkey, l_suppkey, l_shipdate, sum(l_orderkey)  " +
+                        " FROM hive0.partitioned_db.lineitem_par as a " +
+                        " INNER JOIN hive0.partitioned_db.orders as b ON b.o_orderkey=a.l_orderkey \n " +
+                        " WHERE b.o_orderdate is not null and a.l_shipdate is not null \n " +
+                        " GROUP BY o_orderkey, l_suppkey, l_shipdate;";
+
+                String plan = getFragmentPlan(query);
+                PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
+                        "     TABLE: mv1\n" +
+                        "     PREAGGREGATION: ON\n" +
+                        "     partitions=6/6\n" +
+                        "     rollup: mv1");
+            }
+
+            {
+                String query = "SELECT o_orderkey, l_suppkey, l_shipdate, sum(l_orderkey)  " +
+                        " FROM hive0.partitioned_db.lineitem_par as a " +
+                        " INNER JOIN hive0.partitioned_db.orders as b ON b.o_orderkey=a.l_orderkey \n " +
                         " WHERE b.o_orderdate is not null and a.l_suppkey > 1 and a.l_shipdate is not null \n " +
                         " GROUP BY o_orderkey, l_suppkey, l_shipdate;";
 

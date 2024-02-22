@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.operator;
 
+import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
@@ -144,22 +145,22 @@ public class ScanOperatorPredicates {
 
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder();
+        List<String> strings = Lists.newArrayList();
         if (!selectedPartitionIds.isEmpty()) {
-            sb.append(String.format("selectedPartitionIds=%s, ", selectedPartitionIds));
+            strings.add(String.format("selectedPartitionIds=%s", selectedPartitionIds));
         }
         if (!partitionConjuncts.isEmpty()) {
-            sb.append(String.format("partitionConjuncts=%s, ", partitionConjuncts));
+            strings.add(String.format("partitionConjuncts=%s", partitionConjuncts));
         }
         if (!noEvalPartitionConjuncts.isEmpty()) {
-            sb.append(String.format("noEvalPartitionConjuncts=%s, ", noEvalPartitionConjuncts));
+            strings.add(String.format("noEvalPartitionConjuncts=%s", noEvalPartitionConjuncts));
         }
         if (!nonPartitionConjuncts.isEmpty()) {
-            sb.append(String.format("nonPartitionConjuncts=%s, ", nonPartitionConjuncts));
+            strings.add(String.format("nonPartitionConjuncts=%s", nonPartitionConjuncts));
         }
         if (!minMaxConjuncts.isEmpty()) {
-            sb.append(String.format("minMaxConjuncts=%s, ", minMaxConjuncts));
+            strings.add(String.format("minMaxConjuncts=%s", minMaxConjuncts));
         }
-        return sb.toString();
+        return Joiner.on(", ").join(strings);
     }
 }
