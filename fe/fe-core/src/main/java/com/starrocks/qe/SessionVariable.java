@@ -474,7 +474,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_WAIT_DEPENDENT_EVENT = "enable_wait_dependent_event";
 
-
     // Flag to control whether to proxy follower's query statement to leader/follower.
     public enum FollowerQueryForwardMode {
         DEFAULT,    // proxy queries by the follower's replay progress (default)
@@ -3577,8 +3576,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         public final Object actualValue;
 
         public NonDefaultValue(Object defaultValue, Object actualValue) {
-          
-         
             this.defaultValue = defaultValue;
             this.actualValue = actualValue;
         }
