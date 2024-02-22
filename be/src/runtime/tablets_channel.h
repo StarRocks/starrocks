@@ -70,6 +70,9 @@ public:
 protected:
     // counter of remaining senders
     std::atomic<int> _num_remaining_senders = 0;
+
+    // counter of initial senders
+    std::atomic<int> _num_initial_senders = 0;
 };
 
 struct TabletsChannelKey {
