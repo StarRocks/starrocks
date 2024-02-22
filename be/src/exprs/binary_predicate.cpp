@@ -131,7 +131,6 @@ public:
         return VectorizedStrictBinaryFunction<OP>::template evaluate<Type, TYPE_BOOLEAN>(l, r);
     }
 
-    // disable it temporarily as no perf benefit, and have to handle pushing down to storage
     bool is_compilable() const override { return IRHelper::support_jit(Type); }
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
@@ -409,7 +408,6 @@ public:
         return builder.build(ColumnHelper::is_all_const(list));
     }
 
-    // disable it temporarily as no perf benefit, and have to handle pushing down to storage
     bool is_compilable() const override { return IRHelper::support_jit(Type); }
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
