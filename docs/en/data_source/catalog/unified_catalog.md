@@ -10,7 +10,7 @@ A unified catalog is a type of external catalog that is provided by StarRocks fr
 - Use [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) or asynchronous materialized views (which are supported from v2.5 onwards) to process data stored in Hive, Iceberg, Hudi, and Delta Lake and load the data into StarRocks.
 - Perform operations on StarRocks to create or drop Hive and Iceberg databases and tables.
 
-To ensure successful SQL workloads on your unified data source, your StarRocks cluster needs to integrate with two important components:
+To ensure successful SQL workloads on your unified data source, your StarRocks cluster must be able to access the storage system and metastore of your unified data source. StarRocks supports the following storage systems and metastores:
 
 - Distributed file system (HDFS) or object storage like AWS S3, Microsoft Azure Storage, Google GCS, or other S3-compatible storage system (for example, MinIO)
 
