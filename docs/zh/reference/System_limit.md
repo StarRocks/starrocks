@@ -16,12 +16,9 @@ displayed_sidebar: "Chinese"
   - 数据目录名、数据库名、表名、视图名、用户名、角色名**大小写敏感**，列名和分区名**大小写不敏感**。
   
 - 对标签（Label）名的要求：
-<<<<<<< HEAD
-  导入数据时可指定任务的标签（Label）。标签名可由数字 (0-9)、大小写字母（a-z或A-Z），以及下划线(\_)组成，且长度不能超过 128 个字符。标签名对起始字符无要求。
-=======
+
   导入数据时可指定任务的标签（Label）。标签名可由数字 (0-9)、字母（a-z或A-Z），以及下划线(\_)组成，且长度不能超过 128 个字符。标签名对起始字符无要求。
 
->>>>>>> 6b2ef16a51 ([Doc] add  more table type to show delete and add a note about changing table types (#41350))
 - 建表时，Key 列不能使用 FLOAT 或者 DOUBLE 类型，可用 DECIMAL 类型表示小数。
 
 - VARCHAR 最大长度：
