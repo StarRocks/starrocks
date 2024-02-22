@@ -80,10 +80,11 @@ void init_block_cache() {
         }
         cache_options.meta_path = config::block_cache_meta_path;
         cache_options.block_size = config::block_cache_block_size;
-        cache_options.checksum = config::block_cache_checksum_enable;
         cache_options.max_parcel_memory_mb = config::block_cache_max_parcel_memory_mb;
         cache_options.max_concurrent_inserts = config::block_cache_max_concurrent_inserts;
         cache_options.lru_insertion_point = config::block_cache_lru_insertion_point;
+        cache_options.enable_checksum = config::block_cache_checksum_enable;
+        cache_options.enable_direct_io = config::block_cache_direct_io_enable;
         cache_options.engine = config::block_cache_engine;
         EXIT_IF_ERROR(cache->init(cache_options));
     }
@@ -172,7 +173,6 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     if (config::brpc_num_threads != -1) {
         options.num_threads = config::brpc_num_threads;
     }
-<<<<<<< HEAD
     const auto lake_service_max_concurrency = starrocks::config::lake_service_max_concurrency;
     const auto service_name = "starrocks.lake.LakeService";
     const auto methods = {"abort_txn",           "abort_compaction", "compact",          "drop_table",
@@ -182,14 +182,9 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
         brpc_server->MaxConcurrencyOf(service_name, method) = lake_service_max_concurrency;
     }
 
-    if (auto ret = brpc_server->Start(starrocks::config::brpc_port, &options); ret != 0) {
-        LOG(ERROR) << "BRPC service did not start correctly, exiting errcoe: " << ret;
-        starrocks::shutdown_logging();
-=======
     if (auto ret = brpc_server->Start(config::brpc_port, &options); ret != 0) {
         LOG(ERROR) << "BRPC service did not start correctly, exiting errcoe: " << ret;
         shutdown_logging();
->>>>>>> 32397b235f ([Refactor] Adjust the startup and exit sequence of the BE module (#27930))
         exit(1);
     }
     LOG(INFO) << "BE start step " << start_step++ << ": start brpc server successfully";
