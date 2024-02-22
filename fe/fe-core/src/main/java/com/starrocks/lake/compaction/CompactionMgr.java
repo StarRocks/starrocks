@@ -210,4 +210,20 @@ public class CompactionMgr {
     public long getPartitionStatsCount() {
         return partitionStatisticsHashMap.size();
     }
+<<<<<<< HEAD
 }
+=======
+
+    public PartitionStatistics triggerManualCompaction(PartitionIdentifier partition) {
+        PartitionStatistics statistics = partitionStatisticsHashMap.compute(partition, (k, v) -> {
+            if (v == null) {
+                v = new PartitionStatistics(partition);
+            }
+            v.setPriority(PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
+            return v;
+        });
+        LOG.info("Trigger manual compaction, {}", statistics);
+        return statistics;
+    }
+}
+>>>>>>> da02385e16 ([Feature] Support manual compaction for cloud native table (#40566))
