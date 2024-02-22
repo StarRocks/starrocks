@@ -920,46 +920,6 @@ int meta_tool_main(int argc, char** argv) {
             return -1;
         }
         std::cout << json << '\n';
-<<<<<<< HEAD
-=======
-    } else if (FLAGS_operation == "print_lake_schema") {
-        starrocks::TabletSchemaPB schema;
-        if (!schema.ParseFromIstream(&std::cin)) {
-            std::cerr << "Fail to parse schema\n";
-            return -1;
-        }
-        json2pb::Pb2JsonOptions options;
-        options.pretty_json = true;
-        std::string json;
-        std::string error;
-        if (!json2pb::ProtoMessageToJson(schema, &json, options, &error)) {
-            std::cerr << "Fail to convert protobuf to json: " << error << '\n';
-            return -1;
-        }
-        std::cout << json << '\n';
-    } else if (FLAGS_operation == "lake_datafile_gc") {
-        if (!starrocks::config::init(FLAGS_conf_file.c_str())) {
-            std::cerr << "Init config failed, conf file: " << FLAGS_conf_file << std::endl;
-            return -1;
-        }
-        if (!starrocks::init_glog("lake_datafile_gc", true)) {
-            std::cerr << "Init glog failed" << std::endl;
-            return -1;
-        }
-        if (FLAGS_expired_sec < 600) {
-            std::cerr << "expired_sec is less than 10min" << std::endl;
-            return -1;
-        }
-        Aws::SDKOptions options;
-        Aws::InitAPI(options);
-        auto status =
-                starrocks::lake::datafile_gc(FLAGS_root_path, FLAGS_audit_file, FLAGS_expired_sec, FLAGS_do_delete);
-        if (!status.ok()) {
-            std::cout << status << std::endl;
-        }
-        starrocks::close_s3_clients();
-        Aws::ShutdownAPI(options);
->>>>>>> 7c2f5be397 ([BugFix] Fixed incorrect config value obtained by /varz (#41394))
     } else {
         // operations that need root path should be written here
         std::set<std::string> valid_operations = {"get_meta",
