@@ -492,6 +492,7 @@ Status LakeDataSource::build_scan_range(RuntimeState* state) {
     RETURN_IF_ERROR(_conjuncts_manager.get_key_ranges(&_key_ranges));
     _conjuncts_manager.get_not_push_down_conjuncts(&_not_push_down_conjuncts);
     RETURN_IF_ERROR(state->mutable_dict_optimize_parser()->rewrite_conjuncts(&_not_push_down_conjuncts));
+    RETURN_IF_ERROR(Expr::rewrite_jit_exprs(_not_push_down_conjuncts, &_obj_pool, state));
 
     int scanners_per_tablet = 64;
     int num_ranges = _key_ranges.size();

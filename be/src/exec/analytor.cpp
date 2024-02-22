@@ -151,7 +151,8 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             ++node_idx;
             Expr* expr = nullptr;
             ExprContext* ctx = nullptr;
-            RETURN_IF_ERROR(Expr::create_tree_from_thrift(_pool, desc.nodes, nullptr, &node_idx, &expr, &ctx, state));
+            RETURN_IF_ERROR(
+                    Expr::create_tree_from_thrift_with_jit(_pool, desc.nodes, nullptr, &node_idx, &expr, &ctx, state));
             _agg_expr_ctxs[i].emplace_back(ctx);
         }
 

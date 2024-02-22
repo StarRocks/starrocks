@@ -354,12 +354,12 @@ StatusOr<std::unique_ptr<llvm::orc::LLJIT>> build_JIT(llvm::orc::JITTargetMachin
 }
 
 JITEngine::Engine::Engine(std::unique_ptr<llvm::orc::LLJIT> lljit, std::unique_ptr<llvm::TargetMachine> target_machine)
-        : context_(std::make_unique<llvm::LLVMContext>()),
-          lljit_(std::move(lljit)),
-          ir_builder_(std::make_unique<llvm::IRBuilder<>>(*context_)),
-          target_machine_(std::move(target_machine)) {
+        : _context(std::make_unique<llvm::LLVMContext>()),
+          _lljit(std::move(lljit)),
+          _ir_builder(std::make_unique<llvm::IRBuilder<>>(*_context)),
+          _target_machine(std::move(target_machine)) {
     auto module_id = "sr_module_" + std::to_string(reinterpret_cast<uintptr_t>(this));
-    module_ = std::make_unique<llvm::Module>(module_id, *context_);
+    _module = std::make_unique<llvm::Module>(module_id, *_context);
 }
 
 // factory method to construct the engine.
@@ -374,75 +374,58 @@ StatusOr<std::unique_ptr<JITEngine::Engine>> JITEngine::Engine::create(
 }
 
 llvm::Module* JITEngine::Engine::module() const {
-    DCHECK(!module_finalized_) << "module cannot be accessed after finalized";
-    return module_.get();
+    DCHECK(!_module_finalized) << "module cannot be accessed after finalized";
+    return _module.get();
 }
 
-static void optimize_module(llvm::Module& module, llvm::TargetIRAnalysis target_analysis) {
-    // Setup an optimiser pipeline
-    llvm::PassBuilder pass_builder;
-    llvm::LoopAnalysisManager loop_am;
-    llvm::FunctionAnalysisManager function_am;
-    llvm::CGSCCAnalysisManager cgscc_am;
-    llvm::ModuleAnalysisManager module_am;
+static void optimize_module(llvm::Module& module) {
+    llvm::legacy::FunctionPassManager fpm(&module);
+    llvm::PassManagerBuilder pass_manager_builder;
+    llvm::legacy::PassManager pass_manager;
+    pass_manager_builder.OptLevel = 3;
+    pass_manager_builder.SLPVectorize = true;
+    pass_manager_builder.LoopVectorize = true;
+    pass_manager_builder.VerifyInput = true;
+    pass_manager_builder.VerifyOutput = true;
+    pass_manager_builder.populateModulePassManager(pass_manager);
+    pass_manager_builder.populateFunctionPassManager(fpm);
 
-    function_am.registerPass([&] { return target_analysis; });
-
-    // Register required analysis managers
-    pass_builder.registerModuleAnalyses(module_am);
-    pass_builder.registerCGSCCAnalyses(cgscc_am);
-    pass_builder.registerFunctionAnalyses(function_am);
-    pass_builder.registerLoopAnalyses(loop_am);
-    pass_builder.crossRegisterProxies(loop_am, function_am, cgscc_am, module_am);
-
-    pass_builder.registerPipelineStartEPCallback(
-            [&](llvm::ModulePassManager& module_pm, llvm::OptimizationLevel Level) {
-                module_pm.addPass(llvm::ModuleInlinerPass());
-
-                llvm::FunctionPassManager function_pm;
-                function_pm.addPass(llvm::InstCombinePass());
-                function_pm.addPass(llvm::PromotePass());
-                function_pm.addPass(llvm::GVNPass());
-                function_pm.addPass(llvm::NewGVNPass());
-                function_pm.addPass(llvm::SimplifyCFGPass());
-                function_pm.addPass(llvm::LoopVectorizePass());
-                function_pm.addPass(llvm::SLPVectorizerPass());
-                module_pm.addPass(llvm::createModuleToFunctionPassAdaptor(std::move(function_pm)));
-
-                module_pm.addPass(llvm::GlobalOptPass());
-            });
-
-    pass_builder.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O3).run(module, module_am);
+    fpm.doInitialization();
+    for (auto& function : module) {
+        fpm.run(function);
+    }
+    fpm.doFinalization();
 }
 
 // Optimise and compile the module.
 Status JITEngine::Engine::optimize_and_finalize_module() {
     std::string error;
     llvm::raw_string_ostream errs(error);
-    if (llvm::verifyModule(*module_, &errs)) {
+    if (llvm::verifyModule(*_module, &errs)) {
         return Status::JitCompileError(fmt::format("Failed to generate scalar function IR, errors: {}", errs.str()));
     }
+    optimize_module(*_module);
 
-    auto target_analysis = target_machine_->getTargetIRAnalysis();
-    optimize_module(*module_, std::move(target_analysis));
-
-    if (llvm::verifyModule(*module_, &errs)) {
+    if (llvm::verifyModule(*_module, &errs)) {
         return Status::JitCompileError(fmt::format("Failed to optimize scalar function IR, errors: {}", errs.str()));
     }
+    // LOG(INFO) <<"opt module = " << dump_module_ir(*_module);
 
-    llvm::orc::ThreadSafeModule tsm(std::move(module_), std::move(context_));
-    auto err = lljit_->addIRModule(std::move(tsm));
+    llvm::orc::ThreadSafeModule tsm(std::move(_module), std::move(_context));
+    auto err = _lljit->addIRModule(std::move(tsm));
     if (err) {
         return Status::JitCompileError("Failed to add IR module to LLJIT: " + llvm::toString(std::move(err)));
     }
 
-    module_finalized_ = true;
+    _module_finalized = true;
     return Status::OK();
 }
 
 StatusOr<JITScalarFunction> JITEngine::Engine::get_compiled_func(const std::string& function) {
-    DCHECK(module_finalized_) << "module must be finalized before getting compiled function";
-    auto sym = lljit_->lookup(function);
+    if (!_module_finalized) {
+        return Status::JitCompileError("module must be finalized before getting compiled function");
+    }
+    auto sym = _lljit->lookup(function);
     if (!sym) {
         return Status::JitCompileError("Failed to look up function: " + function +
                                        " error: " + llvm::toString(sym.takeError()));
