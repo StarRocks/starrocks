@@ -470,8 +470,6 @@ private:
 
     std::unique_ptr<CompactionManager> _compaction_manager;
 
-    std::unique_ptr<PublishVersionManager> _publish_version_manager;
-
     std::unordered_map<int64_t, std::shared_ptr<AutoIncrementMeta>> _auto_increment_meta_map;
 
     std::mutex _auto_increment_mutex;
