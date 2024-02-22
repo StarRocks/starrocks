@@ -2,6 +2,7 @@
 displayed_sidebar: "Chinese"
 sidebar_position: 2
 description: "存算分离"
+keywords: ['cunsuan']
 ---
 
 # 存算分离
