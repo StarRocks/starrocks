@@ -454,6 +454,10 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
     }
 
     private ScalarOperator simplifiedCoalesce(CallOperator call) {
+        return simplifiedCoalesce(call, false);
+    }
+
+    public static ScalarOperator simplifiedCoalesce(CallOperator call, boolean asFilter) {
         ScalarOperator first = call.getChild(0);
 
         // Find first not null arg.
@@ -472,10 +476,12 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
             return first;
         }
 
-        // coalesce(x, false)/coalesce(x, null, ..., false) equals to x.
-        ScalarOperator notNull = call.getChild(i);
-        if (ConstantOperator.FALSE.equals(notNull)) {
-            return first;
+        if (asFilter) {
+            // coalesce(x, false)/coalesce(x, null, ..., false) equals to x.
+            ScalarOperator notNull = call.getChild(i);
+            if (ConstantOperator.FALSE.equals(notNull)) {
+                return first;
+            }
         }
 
         return call;

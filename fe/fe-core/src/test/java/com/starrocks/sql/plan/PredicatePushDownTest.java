@@ -40,6 +40,21 @@ public class PredicatePushDownTest extends PlanTestBase {
             assertContains(plan, "PREDICATES: 1: v1 < 2");
         }
         {
+            String sql = "select * from t0 where coalesce(v1 < 2, null, false) and v3 > 2";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "PREDICATES: 1: v1 < 2, 3: v3 > 2");
+        }
+        {
+            String sql = "select * from t0 where coalesce(v1 < 2, null, false) or v3 > 2";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "(coalesce(1: v1 < 2, NULL, FALSE)) OR (3: v3 > 2)");
+        }
+        {
+            String sql = "select coalesce(v1 < 2, null, false) from t0";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "coalesce(1: v1 < 2, NULL, FALSE)");
+        }
+        {
             String sql = "select * from t0 where coalesce(v1 < 2, null, true)";
             String plan = getFragmentPlan(sql);
             assertContains(plan, "PREDICATES: coalesce(1: v1 < 2, NULL, TRUE)");
@@ -71,6 +86,25 @@ public class PredicatePushDownTest extends PlanTestBase {
                     "SELECT * FROM cte3;";
             String plan = getFragmentPlan(sql);
             assertContains(plan, "PREDICATES: 3: v3 >= 1, 3: v3 <= 3");
+        }
+        {
+            String sql = "WITH cte0 AS (\n" +
+                    "    SELECT v1, v2, (\n" +
+                    "        v3 BETWEEN 1 AND 3\n" +
+                    "    ) AS v3\n" +
+                    "    FROM t0\n" +
+                    "),\n" +
+                    "cte1 AS (\n" +
+                    "    SELECT cte0.v1 AS v1, cte0.v2 AS v2, cte0.v3 AS v3\n" +
+                    "    FROM cte0\n" +
+                    "),\n" +
+                    "cte2 AS (\n" +
+                    "    SELECT cte1.v1 AS v1, cte1.v2 AS v2, COALESCE(cte1.v3, false) AS v3\n" +
+                    "    FROM cte1\n" +
+                    ")\n" +
+                    "SELECT * FROM cte2;";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "<slot 5> : coalesce((3: v3 >= 1) AND (3: v3 <= 3), FALSE)");
         }
     }
 }

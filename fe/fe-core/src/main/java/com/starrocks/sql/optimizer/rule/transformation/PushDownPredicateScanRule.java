@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -26,12 +27,14 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarRangePredicateExtractor;
 import com.starrocks.sql.optimizer.rewrite.scalar.PruneTediousPredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedCaseWhenRule;
+import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedPredicateRule;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
@@ -97,6 +100,7 @@ public class PushDownPredicateScanRule extends TransformationRule {
 
         predicates = scalarOperatorRewriter.rewrite(predicates,
                 ScalarOperatorRewriter.DEFAULT_REWRITE_SCAN_PREDICATE_RULES);
+        predicates = simplifyCoalesce(predicates);
         predicates = Utils.transTrue2Null(predicates);
 
         // clone a new scan operator and rewrite predicate.
@@ -111,5 +115,31 @@ public class PushDownPredicateScanRule extends TransformationRule {
         LogicalProjectOperator logicalProjectOperator = new LogicalProjectOperator(projectMap);
         OptExpression project = OptExpression.create(logicalProjectOperator, OptExpression.create(newScanOperator));
         return Lists.newArrayList(project);
+    }
+
+    private ScalarOperator simplifyCoalesce(ScalarOperator predicate) {
+        List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
+
+        boolean changed = false;
+        for (int i = 0; i < conjuncts.size(); i++) {
+            ScalarOperator conjunct = conjuncts.get(i);
+            if (!(conjunct instanceof CallOperator)) {
+                continue;
+            }
+            CallOperator call = (CallOperator) conjunct;
+            if (FunctionSet.COALESCE.equalsIgnoreCase(call.getFnName())) {
+                ScalarOperator simplified = SimplifiedPredicateRule.simplifiedCoalesce(call, true);
+                if (simplified != call) {
+                    changed = true;
+                    conjuncts.set(i, simplified);
+                }
+            }
+        }
+
+        if (changed) {
+            return Utils.compoundAnd(conjuncts);
+        }
+
+        return predicate;
     }
 }
