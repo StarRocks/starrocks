@@ -111,7 +111,6 @@ void FragmentContext::count_down_pipeline(size_t val) {
     query_ctx->count_down_fragments();
 }
 
-<<<<<<< HEAD
 bool FragmentContext::need_report_exec_state() {
     auto* state = runtime_state();
     auto* query_ctx = state->query_ctx();
@@ -124,8 +123,6 @@ bool FragmentContext::need_report_exec_state() {
     return now - last_report_ns >= interval_ns;
 }
 
-=======
->>>>>>> 5fdc408d8d ([Refactor] Add join/stop interface for HttpServer (#27734))
 void FragmentContext::report_exec_state_if_necessary() {
     auto* state = runtime_state();
     auto* query_ctx = state->query_ctx();
