@@ -78,7 +78,6 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
@@ -88,7 +87,6 @@ import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SelectAnalyzer.RewriteAliasVisitor;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -599,14 +597,6 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                                                     new Field(col.getName(), col.getType(), tableName, null))
                                             .collect(Collectors.toList())));
 
-                            if (ConnectContext.get() == null) {
-                                ConnectContext context = new ConnectContext();
-                                context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-                                context.setCurrentUserIdentity(UserIdentity.ROOT);
-                                context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
-                                context.setQualifiedUser(UserIdentity.ROOT.getUser());
-                                context.setThreadLocalInfo();
-                            }
                             ConnectContext.get().setDatabase(db.getFullName());
 
                             RewriteAliasVisitor visitor =

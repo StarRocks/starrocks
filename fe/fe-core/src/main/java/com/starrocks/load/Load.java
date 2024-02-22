@@ -603,7 +603,7 @@ public class Load {
         }
 
 
-        if (dbName != "") {
+        if (dbName != null && !dbName.isEmpty()) {
             for (Entry<String, Expr> entry : exprsByName.entrySet()) {
                 if (entry.getValue() != null && checDictQueryExpr(entry.getValue())) {
                     if (ConnectContext.get() == null) {

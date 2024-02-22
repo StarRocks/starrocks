@@ -261,7 +261,7 @@ PROPERTIES (
 "replication_num" = "1"
 );
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: column:COL_1 does not existed.')
+E: (1064, 'Getting analyzing error. Detail message: column:COL_1 does not exist.')
 -- !result
 DROP DATABASE test_dictmapping_generated_column_in_create_table;
 -- result:
