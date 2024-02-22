@@ -89,6 +89,9 @@ public:
         bool valmutable = false;
         Field(const char* ftype, const char* fname, void* fstorage, const char* fdefval, bool fvalmutable)
                 : type(ftype), name(fname), storage(fstorage), defval(fdefval), valmutable(fvalmutable) {}
+
+        // Get the field value as string
+        std::string value() const;
     };
 
 public:
