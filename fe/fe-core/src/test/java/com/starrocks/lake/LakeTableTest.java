@@ -38,7 +38,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.FastByteArrayOutputStream;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import mockit.Mock;
@@ -152,8 +151,7 @@ public class LakeTableTest {
         Assert.assertEquals(-1, newLakeTable.lastVersionUpdateStartTime.longValue());
         Assert.assertEquals(0, newLakeTable.lastVersionUpdateEndTime.longValue());
 
-        Assert.assertNull(table.delete(true, WarehouseManager.DEFAULT_WAREHOUSE_ID));
-        Assert.assertNotNull(table.delete(false, WarehouseManager.DEFAULT_WAREHOUSE_ID));
+        Assert.assertTrue(newLakeTable.delete(dbId, false));
     }
 
     @Test

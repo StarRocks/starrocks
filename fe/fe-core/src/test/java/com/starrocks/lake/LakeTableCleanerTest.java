@@ -23,7 +23,6 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import mockit.Expectations;
@@ -34,10 +33,10 @@ import org.assertj.core.util.Lists;
 import org.junit.Test;
 
 
-public class DeleteLakeTableTaskTest {
+public class LakeTableCleanerTest {
     private final ShardInfo shardInfo;
 
-    public DeleteLakeTableTaskTest() {
+    public LakeTableCleanerTest() {
         shardInfo = ShardInfo.newBuilder().setFilePath(FilePathInfo.newBuilder().setFullPath("oss://1/2")).build();
     }
 
@@ -47,7 +46,7 @@ public class DeleteLakeTableTaskTest {
                      @Mocked MaterializedIndex index,
                      @Mocked LakeTablet tablet,
                      @Mocked LakeService lakeService) throws StarClientException {
-        DeleteLakeTableTask task = new DeleteLakeTableTask(table, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        LakeTableCleaner cleaner = new LakeTableCleaner(table);
 
         new MockUp<Utils>() {
             @Mock
@@ -93,7 +92,7 @@ public class DeleteLakeTableTaskTest {
             }
         };
 
-        task.run();
+        cleaner.cleanTable();
     }
 
     @Test
@@ -102,7 +101,7 @@ public class DeleteLakeTableTaskTest {
                      @Mocked MaterializedIndex index,
                      @Mocked LakeTablet tablet,
                      @Mocked LakeService lakeService) {
-        DeleteLakeTableTask task = new DeleteLakeTableTask(table, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        LakeTableCleaner cleaner = new LakeTableCleaner(table);
 
         new Expectations() {
             {
@@ -124,7 +123,7 @@ public class DeleteLakeTableTaskTest {
             }
         };
 
-        task.run();
+        cleaner.cleanTable();
     }
 
     @Test
@@ -133,7 +132,7 @@ public class DeleteLakeTableTaskTest {
                                @Mocked MaterializedIndex index,
                                @Mocked LakeTablet tablet,
                                @Mocked LakeService lakeService) throws StarClientException {
-        DeleteLakeTableTask task = new DeleteLakeTableTask(table, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        LakeTableCleaner cleaner = new LakeTableCleaner(table);
 
         new MockUp<Utils>() {
             @Mock
@@ -167,7 +166,7 @@ public class DeleteLakeTableTaskTest {
             }
         };
 
-        task.run();
+        cleaner.cleanTable();
     }
 
     @Test
@@ -176,7 +175,7 @@ public class DeleteLakeTableTaskTest {
                      @Mocked MaterializedIndex index,
                      @Mocked LakeTablet tablet,
                      @Mocked LakeService lakeService) throws StarClientException {
-        DeleteLakeTableTask task = new DeleteLakeTableTask(table, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        LakeTableCleaner cleaner = new LakeTableCleaner(table);
 
         new Expectations() {
             {
@@ -203,7 +202,7 @@ public class DeleteLakeTableTaskTest {
             }
         };
 
-        task.run();
+        cleaner.cleanTable();
     }
 
     @Test
@@ -212,7 +211,7 @@ public class DeleteLakeTableTaskTest {
                      @Mocked MaterializedIndex index,
                      @Mocked LakeTablet tablet,
                      @Mocked LakeService lakeService) throws StarClientException {
-        DeleteLakeTableTask task = new DeleteLakeTableTask(table, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        LakeTableCleaner cleaner = new LakeTableCleaner(table);
 
         new MockUp<Utils>() {
             @Mock
@@ -258,6 +257,6 @@ public class DeleteLakeTableTaskTest {
             }
         };
 
-        task.run();
+        cleaner.cleanTable();
     }
 }
