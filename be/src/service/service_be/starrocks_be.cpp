@@ -47,15 +47,9 @@ void start_be() {
     brpc::FLAGS_socket_max_unwritten_bytes = config::brpc_socket_max_unwritten_bytes;
     auto brpc_server = std::make_unique<brpc::Server>();
 
-<<<<<<< HEAD
-    starrocks::BackendInternalServiceImpl<starrocks::PInternalService> internal_service(exec_env);
-    starrocks::BackendInternalServiceImpl<doris::PBackendService> backend_service(exec_env);
-    starrocks::LakeServiceImpl lake_service(exec_env, exec_env->lake_tablet_manager());
-=======
     BackendInternalServiceImpl<PInternalService> internal_service(exec_env);
     BackendInternalServiceImpl<doris::PBackendService> backend_service(exec_env);
-    LakeServiceImpl lake_service(exec_env);
->>>>>>> 5fdc408d8d ([Refactor] Add join/stop interface for HttpServer (#27734))
+    LakeServiceImpl lake_service(exec_env, exec_env->lake_tablet_manager());
 
     brpc_server->AddService(&internal_service, brpc::SERVER_DOESNT_OWN_SERVICE);
     brpc_server->AddService(&backend_service, brpc::SERVER_DOESNT_OWN_SERVICE);
@@ -65,24 +59,18 @@ void start_be() {
     if (config::brpc_num_threads != -1) {
         options.num_threads = config::brpc_num_threads;
     }
-<<<<<<< HEAD
     const auto lake_service_max_concurrency = starrocks::config::lake_service_max_concurrency;
     const auto service_name = "starrocks.lake.LakeService";
     const auto methods = {"abort_txn",           "abort_compaction", "compact",          "drop_table",
                           "delete_data",         "delete_tablet",    "get_tablet_stats", "publish_version",
                           "publish_log_version", "vacuum",           "vacuum_full"};
     for (auto method : methods) {
-        brpc_server.MaxConcurrencyOf(service_name, method) = lake_service_max_concurrency;
+        brpc_server->MaxConcurrencyOf(service_name, method) = lake_service_max_concurrency;
     }
 
-    if (auto ret = brpc_server.Start(starrocks::config::brpc_port, &options); ret != 0) {
+    if (auto ret = brpc_server->Start(starrocks::config::brpc_port, &options); ret != 0) {
         LOG(ERROR) << "BRPC service did not start correctly, exiting errcoe: " << ret;
         starrocks::shutdown_logging();
-=======
-    if (brpc_server->Start(config::brpc_port, &options) != 0) {
-        LOG(ERROR) << "BRPC service did not start correctly, exiting";
-        shutdown_logging();
->>>>>>> 5fdc408d8d ([Refactor] Add join/stop interface for HttpServer (#27734))
         exit(1);
     }
 
@@ -98,13 +86,8 @@ void start_be() {
 
     LOG(INFO) << "BE started successfully";
 
-<<<<<<< HEAD
-    while (!(starrocks::k_starrocks_exit.load()) && !(starrocks::k_starrocks_exit_quick.load())) {
-        sleep(1);
-=======
     while (!(k_starrocks_exit.load()) && !(k_starrocks_exit_quick.load())) {
-        sleep(10);
->>>>>>> 5fdc408d8d ([Refactor] Add join/stop interface for HttpServer (#27734))
+        sleep(1);
     }
 
     wait_for_fragments_finish(exec_env, config::loop_count_wait_fragments_finish);
