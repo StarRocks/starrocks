@@ -358,3 +358,31 @@ select * from score_board;
 +------+------+-------+
 2 rows in set (0.00 sec)
 ```
+<<<<<<< HEAD
+=======
+
+**按多表关联或者 CTE 的结果集删除数据**
+
+删除制片人 foo 制作的所有电影，则可以执行以下语句：
+
+```SQL
+DELETE FROM films USING producers
+WHERE producer_id = producers.id
+    AND producers.name = 'foo';
+```
+
+您也可以使用 CTE 改写上述语句，增加易读性。
+
+```SQL
+WITH foo_producers as (
+    SELECT * from producers
+    where producers.name = 'foo'
+)
+DELETE FROM films USING foo_producers
+WHERE producer_id = foo_producers.id;
+```
+
+## 相关 SQL
+
+[SHOW DELETE](./SHOW_DELETE.md)：用于查询在指定数据库下，所有在明细表、聚合表、更新表上成功执行的历史删除 (DELETE) 任务。
+>>>>>>> 6b2ef16a51 ([Doc] add  more table type to show delete and add a note about changing table types (#41350))
