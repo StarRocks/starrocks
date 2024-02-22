@@ -35,6 +35,7 @@ public class KuduTable extends Table {
     private static final Logger LOG = LogManager.getLogger(KuduTable.class);
     public static final Set<String> KUDU_INPUT_FORMATS = Sets.newHashSet(
             "org.apache.hadoop.hive.kudu.KuduInputFormat", "org.apache.kudu.mapreduce.KuduTableInputFormat");
+    public static final String PARTITION_NULL_VALUE = "null";
     private final String masterAddresses;
     private final String catalogName;
     private final String databaseName;
