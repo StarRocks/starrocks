@@ -76,6 +76,7 @@ import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.warehouse.Warehouse;
+import org.apache.commons.collections4.MapUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -410,11 +411,15 @@ public class ConnectContext {
 
     public SetStmt getModifiedSessionVariables() {
         List<SetListItem> sessionVariables = new ArrayList<>();
-        if (!modifiedSessionVariables.isEmpty()) {
+        if (MapUtils.isNotEmpty(modifiedSessionVariables)) {
             sessionVariables.addAll(modifiedSessionVariables.values());
         }
-        if (!userVariables.isEmpty()) {
-            sessionVariables.addAll(userVariables.values());
+        if (MapUtils.isNotEmpty(userVariables)) {
+            for (UserVariable userVariable : userVariables.values()) {
+                if (!userVariable.isFromHint()) {
+                    sessionVariables.add(userVariable);
+                }
+            }
         }
 
         if (sessionVariables.isEmpty()) {
@@ -428,7 +433,10 @@ public class ConnectContext {
         return sessionVariable;
     }
 
-    public UserVariable getUserVariables(String variable) {
+    public Map<String, UserVariable> getUserVariables() {
+        return userVariables;
+    }
+    public UserVariable getUserVariable(String variable) {
         return userVariables.get(variable);
     }
 

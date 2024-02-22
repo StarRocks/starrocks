@@ -579,11 +579,11 @@ public class AnalyzeSingleTest {
         StatementBase statementBase = analyzeSuccess("SELECT /*+ SET_VAR(time_zone='Asia/Shanghai') */ " +
                 "current_timestamp() AS time");
         SelectRelation selectRelation = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
-        Assert.assertEquals("Asia/Shanghai", selectRelation.getSelectList().getOptHints().get("time_zone"));
+        Assert.assertEquals("Asia/Shanghai", statementBase.getAllQueryScopeHints().get(0).getValue().get("time_zone"));
 
         statementBase = analyzeSuccess("select /*+ SET_VAR(broadcast_row_limit=1) */ * from t0");
         selectRelation = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
-        Assert.assertEquals("1", selectRelation.getSelectList().getOptHints().get("broadcast_row_limit"));
+        Assert.assertEquals("1", statementBase.getAllQueryScopeHints().get(0).getValue().get("broadcast_row_limit"));
 
         SubmitTaskStmt stmt = (SubmitTaskStmt) analyzeSuccess("submit /*+ SET_VAR(broadcast_row_limit=1) */ task as " +
                 "create table temp as select count(*) as cnt from t0");
@@ -592,7 +592,7 @@ public class AnalyzeSingleTest {
         LoadStmt loadStmt = (LoadStmt) analyzeSuccess("LOAD /*+ SET_VAR(broadcast_row_limit=1) */  LABEL test.testLabel " +
                 "(DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") " +
                 "INTO TABLE `t0`) WITH BROKER hdfs_broker PROPERTIES (\"strict_mode\"=\"true\")");
-        Assert.assertEquals("1", loadStmt.getOptHints().get("broadcast_row_limit"));
+        Assert.assertEquals("1", loadStmt.getAllQueryScopeHints().get(0).getValue().get("broadcast_row_limit"));
 
     }
 

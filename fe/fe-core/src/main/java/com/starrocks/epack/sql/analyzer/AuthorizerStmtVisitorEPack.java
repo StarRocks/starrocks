@@ -2,6 +2,8 @@
 
 package com.starrocks.epack.sql.analyzer;
 
+import com.starrocks.analysis.HintNode;
+import com.starrocks.analysis.SetVarHint;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.epack.privilege.AuthorizerEPack;
@@ -67,6 +69,7 @@ import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RefreshRoleMappingStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -561,18 +564,23 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor {
     public Void visitQueryStatement(QueryStatement statement, ConnectContext context) {
         super.visitQueryStatement(statement, context);
 
-        Map<String, String> optHints = null;
+        List<HintNode> hintNodes = null;
         if (statement.getQueryRelation() instanceof SelectRelation) {
             SelectRelation selectRelation = (SelectRelation) statement.getQueryRelation();
-            optHints = selectRelation.getSelectList().getOptHints();
+            hintNodes = selectRelation.getSelectList().getHintNodes();
         }
 
-        if (optHints != null) {
-            if (optHints.containsKey(SessionVariable.WAREHOUSE_NAME)) {
-                // check warehouse privilege
-                String warehouseName = optHints.get(SessionVariable.WAREHOUSE_NAME);
-                if (!warehouseName.equalsIgnoreCase(WarehouseManager.DEFAULT_WAREHOUSE_NAME)) {
-                    checkWarehouseUsagePrivilege(warehouseName, context);
+        if (CollectionUtils.isNotEmpty(hintNodes)) {
+            for (HintNode hintNode : hintNodes) {
+                if (hintNode instanceof SetVarHint) {
+                    Map<String, String> optHints = hintNode.getValue();
+                    if (optHints.containsKey(SessionVariable.WAREHOUSE_NAME)) {
+                        // check warehouse privilege
+                        String warehouseName = optHints.get(SessionVariable.WAREHOUSE_NAME);
+                        if (!warehouseName.equalsIgnoreCase(WarehouseManager.DEFAULT_WAREHOUSE_NAME)) {
+                            checkWarehouseUsagePrivilege(warehouseName, context);
+                        }
+                    }
                 }
             }
         }
