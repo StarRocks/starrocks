@@ -391,7 +391,7 @@ CREATE MATERIALIZED VIEW mv
 
 #### 示例
 
-如下查询语句中引用了标量子查询 `select max(age) from users` 和 `select min(name) from users，则您可以用户自定义变量 Hint，将这两个子查询设置为用户自定义变量。
+如下查询语句中引用了标量子查询 `select max(age) from users` 和 `select min(name) from users`，则您可以用户自定义变量 Hint，将这两个子查询设置为用户自定义变量。
 
 ```SQL
 SELECT /*+ SET_USER_VARIABLE (@a = (select max(age) from users), @b = (select min(name) from users)) */ *  FROM sales_orders where sales_orders.age = @a and sales_orders.name = @b;
