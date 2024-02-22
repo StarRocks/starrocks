@@ -374,6 +374,7 @@ BE dynamic parameters are as follows.
 | min_compaction_failure_interval_sec | 120 | Second | The minimum time interval that a Tablet Compaction can be scheduled since the last compaction failure. |
 | max_compaction_concurrency | -1 | N/A | The maximum concurrency of compactions (both Base Compaction and Cumulative Compaction). The value -1 indicates that no limit is imposed on the concurrency. |
 | periodic_counter_update_period_ms | 500 | ms | The time interval at which to collect the Counter statistics. |
+|pindex_major_compaction_limit_per_disk|1|N/A | The maximum concurrency of compaction on a disk. This addresses the issue of uneven I/O across disks due to compaction. This issue can cause excessively high I/O for certain disks. Introduced in: 3.0.9|
 | load_error_log_reserve_hours | 48 | Hour | The time for which data loading logs are reserved. |
 | streaming_load_max_mb | 10240 | MB | The maximum size of a file that can be streamed into StarRocks. |
 | streaming_load_max_batch_size_mb | 100 | MB | The maximum size of a JSON file that can be streamed into StarRocks. |
