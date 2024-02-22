@@ -22,6 +22,7 @@ import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -239,7 +240,7 @@ public class PseudoClusterTest {
 
         new MockUp<SharedNothingStorageVolumeMgr>() {
             @Mock
-            public StorageVolume getStorageVolume(String svKey) throws AnalysisException {
+            public StorageVolume getStorageVolume(String svKey) throws AnalysisException, DdlException {
                 return StorageVolume.fromFileStoreInfo(fsInfo);
             }
 

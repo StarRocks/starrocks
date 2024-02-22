@@ -84,6 +84,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.DataCacheInfo;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.qe.OriginStatement;
@@ -3045,10 +3046,7 @@ public class OlapTable extends Table {
     public FilePathInfo getPartitionFilePathInfo(long partitionId) {
         FilePathInfo pathInfo = getDefaultFilePathInfo();
         if (pathInfo != null) {
-            FilePathInfo.Builder builder = FilePathInfo.newBuilder();
-            builder.mergeFrom(pathInfo);
-            builder.setFullPath(builder.getFullPath() + "/" + partitionId);
-            return builder.build();
+            return StarOSAgent.allocatePartitionFilePathInfo(pathInfo, partitionId);
         }
         return null;
     }
