@@ -593,7 +593,7 @@ std::vector<TWorkGroup> WorkGroupManager::list_workgroups() {
     std::vector<TWorkGroup> alive_workgroups;
     for (auto& [_, wg] : _workgroups) {
         if (wg->version() != WorkGroup::DEFAULT_VERSION) {
-            alive_workgroups.push_back(wg->to_thrift());
+            alive_workgroups.push_back(wg->to_thrift_verbose());
         }
     }
     return alive_workgroups;

@@ -505,8 +505,6 @@ public class ResourceGroupMgr implements Writable {
                         (active && twg.getVersion() > activeResourceGroup.get(twg.getId()).getVersion())) {
                     currentResourceGroupOps.add(op);
                 }
-
-                ResourceGroup.fillDefaultConfig(twg);
             }
             return currentResourceGroupOps;
         } finally {
@@ -524,6 +522,7 @@ public class ResourceGroupMgr implements Writable {
                 if (workgroup.getVersion() < minVersion) {
                     minVersion = workgroup.getVersion();
                 }
+                ResourceGroup.fillDefaultConfig(workgroup);
             }
             activeResourceGroupsPerBe.put(beId, workGroupOnBe);
             minVersionPerBe.put(beId, minVersion == Long.MAX_VALUE ? Long.MIN_VALUE : minVersion);
