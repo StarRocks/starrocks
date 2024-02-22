@@ -31,6 +31,31 @@ import org.junit.Ignore;
 import org.junit.Test;
 
 public class JoinTest extends PlanTestBase {
+    @Test
+    public void testIsNullPredicatePushdownClear() throws Exception {
+        {
+            String sql = "with cte_tbl as (\n" +
+                    "  select v1, count(distinct v2) as clickcnt from " +
+                    "(select * from t0) t0 join t1 on t0.v1= t1.v4 where 1 = 1 and t0.v2 in (select v7 from t2) group by v1\n" +
+                    ") select t3.* from (select * from t3 left join cte_tbl on v10 = v1 where v11 = 11) t3 where 1 = 1 ";
+            String plan = getFragmentPlan(sql);
+            // should be LEFT OUTER JOIN, not INNER JOIN
+            assertContains(plan, "13:HASH JOIN\n" +
+                    "  |  join op: LEFT OUTER JOIN");
+        }
+
+        {
+            // remove where 1 = 1
+            String sql = "with cte_tbl as (\n" +
+                    "  select v1, count(distinct v2) as clickcnt from " +
+                    "(select * from t0) t0 join t1 on t0.v1= t1.v4 where 1 = 1 and t0.v2 in (select v7 from t2) group by v1\n" +
+                    ") select t3.* from (select * from t3 left join cte_tbl on v10 = v1 where v11 = 11) t3";
+            String plan = getFragmentPlan(sql);
+            // should be LEFT OUTER JOIN, not INNER JOIN
+            assertContains(plan, "13:HASH JOIN\n" +
+                    "  |  join op: LEFT OUTER JOIN");
+        }
+    }
 
     @Test
     public void testColocateDistributeSatisfyShuffleColumns() throws Exception {
