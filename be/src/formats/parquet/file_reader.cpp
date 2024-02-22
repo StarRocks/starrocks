@@ -46,7 +46,11 @@ FileReader::FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
           _sb_stream(sb_stream),
           _need_skip_rowids(_need_skip_rowids) {}
 
-FileReader::~FileReader() {}
+FileReader::~FileReader() {
+    if (!_is_metadata_cached && _file_metadata) {
+        delete _file_metadata;
+    }
+}
 
 void FileReader::_build_metacache_key() {
     auto& filename = _file->filename();
@@ -80,9 +84,17 @@ Status FileReader::init(HdfsScannerContext* ctx) {
 #endif
     RETURN_IF_ERROR(_get_footer());
 
+    if (_scanner_ctx->iceberg_schema != nullptr && _file_metadata->schema().exist_filed_id()) {
+        // If we want read this parquet file with iceberg schema,
+        // we also need to make sure it contains parquet field id.
+        _meta_helper =
+                std::make_shared<IcebergMetaHelper>(_file_metadata, ctx->case_sensitive, _scanner_ctx->iceberg_schema);
+    } else {
+        _meta_helper = std::make_shared<ParquetMetaHelper>(_file_metadata, ctx->case_sensitive);
+    }
+
     // set existed SlotDescriptor in this parquet file
     std::unordered_set<std::string> names;
-    _meta_helper = _build_meta_helper();
     _meta_helper->set_existed_column_names(&names);
     _scanner_ctx->update_materialized_columns(names);
 
@@ -95,22 +107,11 @@ Status FileReader::init(HdfsScannerContext* ctx) {
     return Status::OK();
 }
 
-std::shared_ptr<MetaHelper> FileReader::_build_meta_helper() {
-    if (_scanner_ctx->iceberg_schema != nullptr && _file_metadata->schema().exist_filed_id()) {
-        // If we want read this parquet file with iceberg schema,
-        // we also need to make sure it contains parquet field id.
-        return std::make_shared<IcebergMetaHelper>(_file_metadata.get(), _scanner_ctx->case_sensitive,
-                                                   _scanner_ctx->iceberg_schema);
-    } else {
-        return std::make_shared<ParquetMetaHelper>(_file_metadata.get(), _scanner_ctx->case_sensitive);
-    }
-}
-
 FileMetaData* FileReader::get_file_metadata() {
-    return _file_metadata.get();
+    return _file_metadata;
 }
 
-Status FileReader::_parse_footer(FileMetaDataPtr* file_metadata_ptr, int64_t* file_metadata_size) {
+Status FileReader::_parse_footer(FileMetaData** file_metadata, int64_t* file_metadata_size) {
     std::vector<char> footer_buffer;
     ASSIGN_OR_RETURN(uint32_t footer_read_size, _get_footer_read_size());
     footer_buffer.resize(footer_read_size);
@@ -140,19 +141,19 @@ Status FileReader::_parse_footer(FileMetaDataPtr* file_metadata_ptr, int64_t* fi
     RETURN_IF_ERROR(deserialize_thrift_msg(reinterpret_cast<const uint8*>(footer_buffer.data()) + footer_buffer.size() -
                                                    PARQUET_FOOTER_SIZE - metadata_length,
                                            &metadata_length, TProtocolType::COMPACT, &t_metadata));
-
     int64_t before_bytes = CurrentThread::current().get_consumed_bytes();
-    *file_metadata_ptr = std::make_shared<FileMetaData>();
-    FileMetaData* file_metadata = file_metadata_ptr->get();
-    RETURN_IF_ERROR(file_metadata->init(t_metadata, _scanner_ctx->case_sensitive));
+    *file_metadata = new FileMetaData();
+    RETURN_IF_ERROR((*file_metadata)->init(t_metadata, _scanner_ctx->case_sensitive));
     *file_metadata_size = CurrentThread::current().get_consumed_bytes() - before_bytes;
 #ifdef BE_TEST
     *file_metadata_size = sizeof(FileMetaData);
 #endif
+
     return Status::OK();
 }
 
 Status FileReader::_get_footer() {
+    _is_metadata_cached = false;
     if (!_cache) {
         int64_t file_metadata_size = 0;
         return _parse_footer(&_file_metadata, &file_metadata_size);
@@ -162,25 +163,29 @@ Status FileReader::_get_footer() {
         SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_cache_read_ns);
         Status st = _cache->read_object(_metacache_key, &_cache_handle);
         if (st.ok()) {
-            _file_metadata = *(static_cast<const FileMetaDataPtr*>(_cache_handle.ptr()));
+            _file_metadata = (FileMetaData*)_cache_handle.ptr();
             _scanner_ctx->stats->footer_cache_read_count += 1;
+            _is_metadata_cached = true;
             return st;
         }
     }
 
     int64_t file_metadata_size = 0;
-    RETURN_IF_ERROR(_parse_footer(&_file_metadata, &file_metadata_size));
+    FileMetaData* file_metadata = nullptr;
+    RETURN_IF_ERROR(_parse_footer(&file_metadata, &file_metadata_size));
     if (file_metadata_size > 0) {
-        FileMetaDataPtr capture = _file_metadata;
-        auto deleter = [capture]() {};
-        Status st = _cache->write_object(_metacache_key, &_file_metadata, file_metadata_size, deleter, &_cache_handle);
+        auto deleter = [file_metadata]() { delete file_metadata; };
+        Status st = _cache->write_object(_metacache_key, file_metadata, file_metadata_size, deleter, &_cache_handle);
         if (st.ok()) {
             _scanner_ctx->stats->footer_cache_write_bytes += file_metadata_size;
             _scanner_ctx->stats->footer_cache_write_count += 1;
+            _is_metadata_cached = true;
         }
     } else {
         LOG(ERROR) << "Parsing unexpected parquet file metadata size";
     }
+
+    _file_metadata = file_metadata;
     return Status::OK();
 }
 
@@ -219,6 +224,7 @@ int64_t FileReader::_get_row_group_start_offset(const tparquet::RowGroup& row_gr
         return row_group.file_offset;
     }
     const tparquet::ColumnMetaData& first_column = row_group.columns[0].meta_data;
+
     return first_column.data_page_offset;
 }
 
@@ -504,7 +510,7 @@ Status FileReader::_init_group_readers() {
     _group_reader_param.sb_stream = nullptr;
     _group_reader_param.chunk_size = _chunk_size;
     _group_reader_param.file = _file;
-    _group_reader_param.file_metadata = _file_metadata.get();
+    _group_reader_param.file_metadata = _file_metadata;
     _group_reader_param.case_sensitive = fd_scanner_ctx.case_sensitive;
     _group_reader_param.lazy_column_coalesce_counter = fd_scanner_ctx.lazy_column_coalesce_counter;
     // for pageIndex
