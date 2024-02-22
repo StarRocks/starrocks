@@ -984,6 +984,11 @@ Status StoredColumnReaderImpl::load_specific_page(size_t cur_page_idx, uint64_t 
 Status RepeatedStoredColumnReader::load_specific_page(size_t cur_page_idx, uint64_t offset, uint64_t first_row) {
     RETURN_IF_ERROR(StoredColumnReaderImpl::load_specific_page(cur_page_idx, offset, first_row));
     _not_null_to_skip = 0;
+    //// Todo: cache decoded level in this layer is error-prone, move it to level_decoder
+    if (_levels_decoded != _levels_parsed) {
+        _levels_parsed = 0;
+        _levels_decoded = 0;
+    }
     return _reader->load_page();
 }
 } // namespace starrocks::parquet
