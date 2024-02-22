@@ -241,7 +241,7 @@ AS SELECT /*+ SET_VAR(query_timeout=500) */ * from dual;
 
 You can set one or more [user-defined variables](../reference/user_defined_variables.md) by using the `SET_USER_VARIABLE` hint in the form of the syntax `/*+ SET_USER_VARIABLE(...) */` in SELECT statements, or in the SELECT clause.
 
-If a query references the result of a scalar subquery or scalar expression, you can use a user-defined variable hint to set that subquery or expression as a user-defined variable. This not only can help avoid duplicate computation, but also does not influence the entire session because user-defined variable hints take effect at the statement level, unlike the [general usage of user-defined variables](../reference/user_defined_variables.md) that take effect at the session level.
+If a query references the result of a scalar subquery or scalar expression, you can use a user-defined variable hint to set that subquery or expression as a user-defined variable and then run the query. This not only can help avoid duplicate computation, but also does not influence the entire session because user-defined variable hints take effect at the statement level, unlike the [general usage of user-defined variables](../reference/user_defined_variables.md) that take effect at the session level.
 
 #### Syntax
 
@@ -251,6 +251,7 @@ If a query references the result of a scalar subquery or scalar expression, you 
 
 #### Examples
 
+The following query references scalar subqueries `select max(age) from users` and `select min(name) from users`, so you can use user-defined variable hints to set these two subqueries as user-defined variables, and then run the query.
 
 ~~~SQL
 SELECT /*+ SET_USER_VARIABLE (@a = (select max(age) from users), @b = (select min(name) from users)) */ *  FROM sales_orders where sales_orders.age = @a and sales_orders.name = @b;
