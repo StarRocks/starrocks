@@ -1019,7 +1019,7 @@ FUNCTION(ADD_BE_BENCH BENCH_NAME)
     get_filename_component(BENCH_DIR_NAME ${BENCH_NAME} PATH)
     set(BENCH_OUTPUT_DIR_NAME "output")
     get_filename_component(BENCH_FILE_NAME ${BENCH_NAME} NAME)
-    
+
     find_package(benchmark REQUIRED)
     ADD_EXECUTABLE(${BENCH_FILE_NAME} ${BENCH_NAME}.cpp)
     TARGET_LINK_LIBRARIES(${BENCH_FILE_NAME} ${TEST_LINK_LIBS} benchmark benchmark_main)
@@ -1077,6 +1077,7 @@ install(FILES
     ${BASE_DIR}/../bin/common.sh
     ${BASE_DIR}/../bin/start_backend.sh
     ${BASE_DIR}/../bin/start_be.sh
+    ${BASE_DIR}/../bin/upload_coredump.sh
     ${BASE_DIR}/../bin/start_cn.sh
     ${BASE_DIR}/../bin/stop_be.sh
     ${BASE_DIR}/../bin/stop_cn.sh

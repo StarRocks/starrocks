@@ -28,7 +28,7 @@ FROM ubuntu:22.04
 ARG STARROCKS_ROOT=/opt/starrocks
 
 RUN apt-get update -y && apt-get install -y --no-install-recommends \
-        binutils-dev default-jdk python2 mysql-client curl vim tree net-tools less tzdata linux-tools-common linux-tools-generic && \
+        binutils-dev default-jdk python2 mysql-client curl vim tree net-tools less tzdata linux-tools-common linux-tools-generic locales pigz inotify-tools && \
         ln -fs /usr/share/zoneinfo/UTC /etc/localtime && \
         dpkg-reconfigure -f noninteractive tzdata && \
         rm -rf /var/lib/apt/lists/*
@@ -49,6 +49,8 @@ USER $USER
 
 # Copy all artifacts to the runtime container image
 COPY --from=artifacts --chown=starrocks:starrocks /release/be_artifacts/ $STARROCKS_ROOT/
+
+ADD 'https://github.com/dengliu/s3sync/releases/download/1.1.0/s3sync' $STARROCKS_ROOT/s3sync
 
 # Copy be k8s scripts to the runtime container image
 COPY --chown=starrocks:starrocks docker/dockerfiles/be/*.sh $STARROCKS_ROOT/
