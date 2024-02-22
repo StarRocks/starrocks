@@ -342,7 +342,7 @@ HASH_JOIN_NODE (id=2):(Active: 996.337ms, % non-child: 52.05%)
 
 ### 系统变量 Hint
 
-在 SELECT, SUBMIT TASK 语句中通过 `/*+ SET_VAR(...) */` 注释的形式设置一个或多个[系统变量](../reference/System_variable.md) Hint。其他语句中如果包含 SELECT 子句（如 CREATE MATERIALIZED VIEW AS SELECT，CREATE VIEW AS SELECT），则您也可以在该 SELECT 子句中使用系统变量 Hint。
+在 SELECT, SUBMIT TASK 语句中通过 `/*+ SET_VAR(...) */` 注释的形式设置一个或多个[系统变量](../reference/System_variable.md) Hint。其他语句中如果包含 SELECT 子句（如 CREATE MATERIALIZED VIEW AS SELECT，CREATE VIEW AS SELECT），则您也可以在该 SELECT 子句中使用系统变量 Hint。注意，此时系统变量是语句级别生效。
 
 #### 语法
 
@@ -379,7 +379,9 @@ CREATE MATERIALIZED VIEW mv
 
 ### 用户自定义变量 Hint
 
-在 SELECT 语句中通过 `/*+ SET_USER_VARIABLE(...) */` 注释的形式设置一个或多个[用户自定义变量](../reference/user_defined_variables.md) Hint。
+在 SELECT 语句中通过 `/*+ SET_USER_VARIABLE(...) */` 注释的形式设置一个或多个[用户自定义变量](../reference/user_defined_variables.md) Hint。注意，此时用户自定义变量是语句级别生效。
+
+如果查询语句中引用了某个标量子查询或者标量表达式的结果，则可以使用用户自定义变量 Hint，将该子查询和表达式设置为用户自定义变量，这样可以减少子查询的重复计算，并且区别于[用户自定义变量的一般用法](../reference/user_defined_variables.md)是会话级别生效的，用户自定义变量 Hint 是语句级别生效，不会影响一样影响整个会话。
 
 #### 语法
 
@@ -389,7 +391,7 @@ CREATE MATERIALIZED VIEW mv
 
 #### 示例
 
-查询语句中引用了某个标量子查询的查询结果，设置一个语句级别的变量可以减少子查询的重复计算，同时不像普通的用户自定义变量一样影响整个查询连接。
+如下查询语句中引用了标量子查询 `select max(age) from users` 和 `select min(name) from users，则您可以用户自定义变量 Hint，将这两个子查询设置为用户自定义变量。
 
 ```SQL
 SELECT /*+ SET_USER_VARIABLE (@a = (select max(age) from users), @b = (select min(name) from users)) */ *  FROM sales_orders where sales_orders.age = @a and sales_orders.name = @b;
@@ -445,7 +447,7 @@ SELECT /*+ SET_USER_VARIABLE (@a = (select max(age) from users), @b = (select mi
   select k1 from t1 join [COLOCATE] t2 on t1.k1 = t2.k2 group by t2.k2;
   ```
 
-### 查看实际的 Join 执行方式
+#### 查看实际的 Join 执行方式
 
 通过 `EXPLAIN` 命令来查看 Join Hint 是否生效。如果返回结果所显示的 Join 执行方式符合 Join Hint，则表示 Join Hint 生效。
 
