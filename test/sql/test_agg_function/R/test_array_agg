@@ -1833,8 +1833,6 @@ select array_agg(separator NULL);
 -- result:
 E: (1064, "Getting syntax error at line 1, column 27. Detail message: No viable statement for input 'array_agg(separator NULL'.")
 -- !result
-<<<<<<< HEAD
-=======
 select array_agg_distinct(name order by 1 asc), array_agg(distinct name order by 1 desc), array_agg(name order by 1 desc) from ss order by 1;
 -- result:
 [null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	["王武程咬金","欧阳诸葛方程","李四大闹天空","张三此地无银三百两","张三掩耳盗铃","Tom","Ti","May",null]	["王武程咬金","欧阳诸葛方程","李四大闹天空","张三此地无银三百两","张三掩耳盗铃","Tom","Tom","Tom","Tom","Ti","Ti","May",null,null]
@@ -1849,4 +1847,3 @@ select array_agg_distinct(name order by 1), cardinality(array_agg_distinct(arr o
 ["张三掩耳盗铃","张三此地无银三百两"]	2
 ["李四大闹天空"]	1
 -- !result
->>>>>>> fd97ca421f ([Feature] ARRAY_AGG_DISTINCT() is an alias to ARRAY_AGG(DISTINCT) (#40025))
