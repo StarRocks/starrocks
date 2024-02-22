@@ -237,9 +237,11 @@ REFRESH ASYNC
 AS SELECT /*+ SET_VAR(query_timeout=500) */ * from dual;
 ~~~
 
-### User variable hint
+### User-defined variables hint
 
 You can set one or more [user variables](../reference/user_defined_variables.md) by using the `SET_USER_VARIABLE` hint in the form of the syntax `/*+ SET_USER_VARIABLE(...) */` in SELECT statements, or in the SELECT clause.
+
+If a query references the result of a scalar subquery or scalar expression, you can use a user-defined variable hint to set that subquery or expression as a user-defined variable. This not only can help avoid duplicate computation, but also does not influence the entire session because user-defined variable hints take effect at the statement level, unlike the [general usage of user-defined variables](../reference/user_defined_variables.md) that take effect at the session level.
 
 #### Syntax
 
@@ -249,7 +251,6 @@ You can set one or more [user variables](../reference/user_defined_variables.md)
 
 #### Examples
 
-Setting a statement-level variable in a query reduces the redundant calculation of a scalar subquery's result, without affecting the entire query connection.
 
 ~~~SQL
 SELECT /*+ SET_USER_VARIABLE (@a = (select max(age) from users), @b = (select min(name) from users)) */ *  FROM sales_orders where sales_orders.age = @a and sales_orders.name = @b;
@@ -303,7 +304,7 @@ For multi-table join queries, the optimizer usually selects the optimal join exe
   select k1 from t1 join [COLOCATE] t2 on t1.k1 = t2.k2 group by t2.k2;
   ~~~
 
-### View join execution method
+#### View join execution method
 
 Use the `EXPLAIN` command to view the actual join execution method. If the returned result shows that the join execution method matches the join hint, it means that the join hint is effective.
 
