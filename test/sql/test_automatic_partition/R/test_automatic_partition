@@ -626,9 +626,6 @@ insert into ss values('2021-01-01', 1);
 select * from ss;
 -- result:
 2021-01-01	1
-<<<<<<< HEAD
--- !result
-=======
 -- !result
 
 -- name: test_two_replica
@@ -674,4 +671,3 @@ select * from ss;
 2002-01-08	2
 2002-01-09	2
 -- !result
->>>>>>> e98040cde9 ([BugFix] Fix data ingestion stuck when the new automatic partition and the old partition are distributed on different backends (#40638))
