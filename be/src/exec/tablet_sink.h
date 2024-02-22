@@ -154,6 +154,9 @@ public:
 
     bool is_incremental() const { return _is_incremental; }
 
+    bool has_primary_replica() const { return _has_primary_replica; }
+    void set_has_primary_replica(bool has_primary_replica) { _has_primary_replica = has_primary_replica; }
+
 private:
     Status _wait_request(ReusableClosure<PTabletWriterAddBatchResult>* closure);
     Status _wait_all_prev_request();
@@ -233,6 +236,8 @@ private:
     bool _is_incremental;
 
     ExprContext* _where_clause = nullptr;
+
+    bool _has_primary_replica = false;
 };
 
 class IndexChannel {
@@ -265,7 +270,7 @@ public:
         }
     }
 
-    void mark_as_failed(const NodeChannel* ch) { _failed_channels.insert(ch->node_id()); }
+    void mark_as_failed(const NodeChannel* ch);
 
     bool is_failed_channel(const NodeChannel* ch) { return _failed_channels.count(ch->node_id()) != 0; }
 
@@ -291,6 +296,8 @@ private:
 
     bool _has_incremental_node_channel = false;
     ExprContext* _where_clause = nullptr;
+
+    bool _has_intolerable_failure = false;
 };
 
 // Write data to Olap Table.
