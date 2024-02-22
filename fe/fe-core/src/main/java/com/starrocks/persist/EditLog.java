@@ -727,7 +727,8 @@ public class EditLog {
                 case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
                 case OperationType.OP_MODIFY_PRIMARY_INDEX_CACHE_EXPIRE_SEC:
                 case OperationType.OP_ALTER_TABLE_PROPERTIES:
-                case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY: {
+                case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY:
+                case OperationType.OP_MODIFY_EXTERNAL_COOLDOWN_CONFIG: {
                     ModifyTablePropertyOperationLog modifyTablePropertyOperationLog =
                             (ModifyTablePropertyOperationLog) journal.getData();
                     globalStateMgr.getLocalMetastore().replayModifyTableProperty(opCode, modifyTablePropertyOperationLog);
@@ -1858,6 +1859,10 @@ public class EditLog {
 
     public void logModifyBinlogAvailableVersion(ModifyTablePropertyOperationLog log) {
         logEdit(OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION, log);
+    }
+
+    public void logModifyExternalCoolDownConfig(ModifyTablePropertyOperationLog log) {
+        logEdit(OperationType.OP_MODIFY_EXTERNAL_COOLDOWN_CONFIG, log);
     }
 
     public void logMVJobState(MVMaintenanceJob job) {

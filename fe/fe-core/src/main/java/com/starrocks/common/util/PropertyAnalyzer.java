@@ -53,6 +53,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
@@ -70,6 +71,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.externalcooldown.ExternalCoolDownConfig;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -250,6 +252,14 @@ public class PropertyAnalyzer {
      */
     public static final String MULTI_LOCATION_LABELS_REGEX = "\\s*" + SINGLE_LOCATION_LABEL_REGEX +
             "\\s*(,\\s*" + SINGLE_LOCATION_LABEL_REGEX + "){0,9}\\s*";
+    // "external_cooldown_target"="iceberg_catalog.iceberg_db.iceberg_tbl",
+    public static final String PROPERTIES_EXTERNAL_COOLDOWN_TARGET = "external_cooldown_target";
+
+    // "external_cooldown_schedule"="START <start_time> END <end_time> EVERY INTERVAL <cooldown_interval>"
+    public static final String PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE = "external_cooldown_schedule";
+
+    // "external_cooldown_wait_second"="86400"
+    public static final String PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND = "external_cooldown_wait_second";
 
     public static DataProperty analyzeDataProperty(Map<String, String> properties,
                                                    DataProperty inferredDataProperty,
@@ -1685,6 +1695,57 @@ public class PropertyAnalyzer {
         }
 
         return dataProperty;
+    }
+
+    public static ExternalCoolDownConfig analyzeExternalCoolDownConfig(Map<String, String> properties) throws AnalysisException {
+        ExternalCoolDownConfig externalCoolDownConfig = new ExternalCoolDownConfig();
+
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET)) {
+            String target = properties.get(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET);
+            properties.remove(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET);
+            if (!target.isEmpty()) {
+                Pattern targetPattern = Pattern.compile("^\\w+\\.\\w+\\.\\w+$", Pattern.CASE_INSENSITIVE);
+                if (!targetPattern.matcher(target).find()) {
+                    throw new AnalysisException("Property " + PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET +
+                            " must be format of {catalog}.{db}.{tbl}");
+                }
+                String[] parts = target.split("\\.");
+                Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(parts[0], parts[1], parts[2]);
+                if (table == null) {
+                    throw new AnalysisException("Property " + PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET +
+                            " table " + target + " not exist");
+                }
+                if (!(table instanceof IcebergTable)) {
+                    throw new AnalysisException("Property " + PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET +
+                            " only support iceberg table");
+                }
+            }
+            externalCoolDownConfig.setTarget(target);
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE)) {
+            String schedule = properties.get(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE);
+            properties.remove(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE);
+            Pattern schedulePattern = Pattern.compile(
+                    "^\\s*START\\s+\\d+:\\d+\\s+END\\s+\\d+:\\d+\\s+EVERY\\s+INTERVAL\\s+\\d+[smh]\\s*$",
+                    Pattern.CASE_INSENSITIVE);
+            if (!schedulePattern.matcher(schedule).find()) {
+                throw new AnalysisException("Property " + PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE +
+                        " must be format like `START 01:00 END 07:59 EVERY INTERVAL 1m`");
+            }
+            externalCoolDownConfig.setSchedule(schedule);
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND)) {
+            long waitSecond;
+            try {
+                waitSecond = PropertyAnalyzer.analyzeLongProp(properties,
+                        PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND, 0);
+            } catch (NumberFormatException e) {
+                throw new AnalysisException("Property " +
+                        PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND + " must be long");
+            }
+            externalCoolDownConfig.setWaitSecond(waitSecond);
+        }
+        return externalCoolDownConfig;
     }
 
     /**

@@ -53,6 +53,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.WriteQuorum;
+import com.starrocks.externalcooldown.ExternalCoolDownConfig;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.gson.GsonPostProcessable;
@@ -303,6 +304,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
     private boolean useFastSchemaEvolution;
 
     private PeriodDuration dataCachePartitionDuration;
+    private ExternalCoolDownConfig externalCoolDownConfig;
 
     private Multimap<String, String> location;
 
@@ -394,9 +396,16 @@ public class TableProperty implements Writable, GsonPostProcessable {
             case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY:
                 buildConstraint();
                 break;
+            case OperationType.OP_MODIFY_EXTERNAL_COOLDOWN_CONFIG:
+                buildExternalCoolDownConfig();
+                break;
             default:
                 break;
         }
+        return this;
+    }
+
+    public TableProperty buildExternalCoolDownProperties() {
         return this;
     }
 
@@ -431,6 +440,22 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // just modify binlogConfig, not properties
     public void setBinlogConfig(BinlogConfig binlogConfig) {
         this.binlogConfig = binlogConfig;
+    }
+
+    public TableProperty buildExternalCoolDownConfig() {
+        String externalCoolDownTarget = properties.get(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET);
+        String externalCoolDownSchedule = properties.get(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE);
+        long externalCoolDownWaitSecond = Long.parseLong(properties.getOrDefault(
+                PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND,
+                String.valueOf(0)));
+        externalCoolDownConfig = new ExternalCoolDownConfig(
+                externalCoolDownTarget, externalCoolDownSchedule, externalCoolDownWaitSecond);
+        return this;
+    }
+
+    // just modify externalCoolDownConfig, not properties
+    public void setExternalCoolDownConfig(ExternalCoolDownConfig externalCoolDownConfig) {
+        this.externalCoolDownConfig = externalCoolDownConfig;
     }
 
     public TableProperty buildDynamicProperty() {
@@ -1009,6 +1034,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return binlogConfig;
     }
 
+    public ExternalCoolDownConfig getExternalCoolDownConfig() {
+        return externalCoolDownConfig;
+    }
+
     public List<UniqueConstraint> getUniqueConstraints() {
         return uniqueConstraints;
     }
@@ -1057,6 +1086,27 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return useFastSchemaEvolution;
     }
 
+    public String getExternalCoolDownTarget() {
+        if (externalCoolDownConfig == null) {
+            return null;
+        }
+        return externalCoolDownConfig.getTarget();
+    }
+
+    public String getExternalCoolDownSchedule() {
+        if (externalCoolDownConfig == null) {
+            return null;
+        }
+        return externalCoolDownConfig.getSchedule();
+    }
+
+    public long getExternalCoolDownWaitSecond() {
+        if (externalCoolDownConfig == null) {
+            return 0;
+        }
+        return externalCoolDownConfig.getWaitSecond();
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
@@ -1094,5 +1144,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildMvProperties();
         buildLocation();
         buildBaseCompactionForbiddenTimeRanges();
+        buildExternalCoolDownConfig();
     }
 }

@@ -774,6 +774,11 @@ public class JournalEntity implements Writable {
                 data = DropWarehouseLog.read(in);
                 break;
             }
+            case OperationType.OP_MODIFY_EXTERNAL_COOLDOWN_CONFIG: {
+                data = ModifyTablePropertyOperationLog.read(in);
+                isRead = true;
+                break;
+            }
             default: {
                 if (Config.metadata_ignore_unknown_operation_type) {
                     LOG.warn("UNKNOWN Operation Type {}", opCode);

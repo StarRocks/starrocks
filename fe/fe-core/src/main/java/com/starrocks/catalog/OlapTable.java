@@ -88,6 +88,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.externalcooldown.ExternalCoolDownConfig;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.StorageInfo;
@@ -485,6 +486,31 @@ public class OlapTable extends Table {
 
     public void setBinlogTxnId(long binlogTxnId) {
         this.binlogTxnId = binlogTxnId;
+    }
+
+    public ExternalCoolDownConfig getCurExternalCoolDownConfig() {
+        if (tableProperty != null) {
+            return tableProperty.getExternalCoolDownConfig();
+        }
+        return null;
+    }
+
+    public void setCurExternalCoolDownConfig(ExternalCoolDownConfig externalCoolDownConfig) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(Maps.newHashMap());
+        }
+        tableProperty.modifyTableProperties(externalCoolDownConfig.toProperties());
+        tableProperty.setExternalCoolDownConfig(externalCoolDownConfig);
+    }
+
+    public boolean containsExternalCoolDownConfig() {
+        if (tableProperty == null ||
+                tableProperty.getExternalCoolDownConfig() == null) {
+            return false;
+        }
+
+        return tableProperty.getExternalCoolDownConfig().getTarget() != null &&
+                !tableProperty.getExternalCoolDownConfig().getTarget().isEmpty();
     }
 
     public void setTableProperty(TableProperty tableProperty) {
@@ -3504,6 +3530,27 @@ public class OlapTable extends Table {
 
     public boolean hasRowStorageType() {
         return TStorageType.ROW == getStorageType() || TStorageType.COLUMN_WITH_ROW == getStorageType();
+    }
+
+    public String getExternalCoolDownTarget() {
+        if (tableProperty != null) {
+            return tableProperty.getExternalCoolDownTarget();
+        }
+        return null;
+    }
+
+    public String getExternalCoolDownSchedule() {
+        if (tableProperty != null) {
+            return tableProperty.getExternalCoolDownSchedule();
+        }
+        return null;
+    }
+
+    public Long getExternalCoolDownWaitSecond() {
+        if (tableProperty != null) {
+            return tableProperty.getExternalCoolDownWaitSecond();
+        }
+        return null;
     }
 
     // ------ for lake table and lake materialized view start ------
