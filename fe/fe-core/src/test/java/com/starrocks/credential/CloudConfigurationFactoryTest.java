@@ -209,8 +209,8 @@ public class CloudConfigurationFactoryTest {
         cc.applyToConfiguration(conf);
         cc.toFileStoreInfo();
         Assert.assertEquals(cc.toConfString(),
-                "HDFSCloudConfiguration{resources='', jars='', cred=HDFSCloudCredential{authentication='simple', username='XX'," +
-                        " password='XX', krbPrincipal='', krbKeyTabFile='', krbKeyTabData=''}}");
+                "HDFSCloudConfiguration{resources='', jars='', hdpuser='XX', cred=HDFSCloudCredential{authentication='simple', " +
+                        "username='XX', password='XX', krbPrincipal='', krbKeyTabFile='', krbKeyTabData=''}}");
     }
 
     @Test
