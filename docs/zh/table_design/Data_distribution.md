@@ -1,5 +1,9 @@
 ---
 displayed_sidebar: "Chinese"
+<<<<<<< HEAD
+=======
+keywords: ['fenqu','fentong', 'lengre']
+>>>>>>> 31fcc3e3f9 ([Doc] add Pinyin keywords (#41362))
 ---
 
 # 数据分布
