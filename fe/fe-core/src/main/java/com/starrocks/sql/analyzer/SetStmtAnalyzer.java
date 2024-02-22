@@ -253,6 +253,24 @@ public class SetStmtAnalyzer {
             checkRangeIntVariable(resolvedExpression, SessionVariable.CBO_MATERIALIZED_VIEW_REWRITE_RELATED_MVS_LIMIT,
                     1, null);
         }
+<<<<<<< HEAD
+=======
+        // big_query_profile_threshold
+        if (variable.equalsIgnoreCase(SessionVariable.BIG_QUERY_PROFILE_THRESHOLD)) {
+            String timeStr = resolvedExpression.getStringValue();
+            TimeValue timeValue = TimeValue.parseTimeValue(timeStr, null);
+            if (timeValue == null) {
+                throw new SemanticException(String.format("failed to parse time value %s", timeStr));
+            }
+        }
+        // catalog
+        if (variable.equalsIgnoreCase(SessionVariable.CATALOG)) {
+            String catalog = resolvedExpression.getStringValue();
+            if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalog)) {
+                throw new SemanticException(String.format("Unknown catalog %s", catalog));
+            }
+        }
+>>>>>>> e8868b072d ([Enhancement] Make catalog a session variable (#41329))
 
         var.setResolvedExpression(resolvedExpression);
     }

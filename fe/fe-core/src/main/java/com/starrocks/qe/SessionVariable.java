@@ -41,6 +41,7 @@ import com.google.common.reflect.TypeToken;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.ToNumberPolicy;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.CompressionUtils;
@@ -149,6 +150,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String INTERACTIVE_TIMTOUT = "interactive_timeout";
     public static final String WAIT_TIMEOUT = "wait_timeout";
     public static final String WAREHOUSE = "warehouse";
+
+    public static final String CATALOG = "catalog";
     public static final String NET_WRITE_TIMEOUT = "net_write_timeout";
     public static final String NET_READ_TIMEOUT = "net_read_timeout";
     public static final String TIME_ZONE = "time_zone";
@@ -1297,6 +1300,23 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_POPULATE_DATACACHE, alias = ENABLE_POPULATE_BLOCK_CACHE)
     private boolean enablePopulateDataCache = true;
 
+<<<<<<< HEAD
+=======
+    @VariableMgr.VarAttr(name = CATALOG, flag = VariableMgr.SESSION_ONLY)
+    private String catalog = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+
+    public void setCatalog(String catalog) {
+        this.catalog = catalog;
+    }
+
+    public String getCatalog() {
+        return this.catalog;
+    }
+
+    @VariableMgr.VarAttr(name = ENABLE_DYNAMIC_PRUNE_SCAN_RANGE)
+    private boolean enableDynamicPruneScanRange = true;
+
+>>>>>>> e8868b072d ([Enhancement] Make catalog a session variable (#41329))
     @VariableMgr.VarAttr(name = IO_TASKS_PER_SCAN_OPERATOR)
     private int ioTasksPerScanOperator = 4;
 
