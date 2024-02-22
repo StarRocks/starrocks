@@ -94,6 +94,9 @@ public class TableTestBase {
     protected static final PartitionSpec SPEC_F =
             PartitionSpec.builderFor(SCHEMA_F).day("dt").build();
 
+    protected static final PartitionSpec SPEC_F_1 =
+            PartitionSpec.builderFor(SCHEMA_F).identity("dt").build();
+
     public static final DataFile FILE_A =
             DataFiles.builder(SPEC_A)
                     .withPath("/path/to/data-a.parquet")
@@ -210,6 +213,11 @@ public class TableTestBase {
     public TestTables.TestTable mockedNativeTableE = null;
     public TestTables.TestTable mockedNativeTableF = null;
     public TestTables.TestTable mockedNativeTableG = null;
+<<<<<<< HEAD
+=======
+    public TestTables.TestTable mockedNativeTableH = null;
+    public TestTables.TestTable mockedNativeTableI = null;
+>>>>>>> 7d35bda324 ([BugFix] fix iceberg prune null partitions (#41389))
 
     protected final int formatVersion = 1;
 
@@ -226,6 +234,11 @@ public class TableTestBase {
         this.mockedNativeTableE = create(SCHEMA_D, SPEC_D_1, "te", 1);
         this.mockedNativeTableF = create(SCHEMA_F, SPEC_F, "tf", 1);
         this.mockedNativeTableG = create(SCHEMA_B, SPEC_B_1, "tg", 1);
+<<<<<<< HEAD
+=======
+        this.mockedNativeTableH = create(SCHEMA_H, PartitionSpec.unpartitioned(), "th", 1);
+        this.mockedNativeTableI = create(SCHEMA_F, SPEC_F_1, "ti", 1);
+>>>>>>> 7d35bda324 ([BugFix] fix iceberg prune null partitions (#41389))
     }
 
     @After
