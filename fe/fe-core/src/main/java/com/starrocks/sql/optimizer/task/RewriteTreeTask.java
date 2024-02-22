@@ -44,7 +44,7 @@ public class RewriteTreeTask extends OptimizerTask {
     public void execute() {
         // first node must be RewriteAnchorNode
         rewrite(planTree, 0, planTree.getInputs().get(0));
-
+        context.getOptimizerContext().reset();
         if (change > 0 && !onlyOnce) {
             pushTask(new RewriteTreeTask(context, planTree, rules, onlyOnce));
         }
