@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+keywords: ['fenqu','fentong', 'lengre']
 ---
 
 # 数据分布
