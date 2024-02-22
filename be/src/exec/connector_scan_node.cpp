@@ -437,9 +437,7 @@ bool ConnectorScanNode::_submit_streaming_load_scanner(ConnectorScanner* scanner
 }
 
 void ConnectorScanNode::_scanner_thread(ConnectorScanner* scanner) {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(scanner->runtime_state()->instance_mem_tracker());
     DeferOp op([&] {
-        tls_thread_status.set_mem_tracker(prev_tracker);
         _running_threads.fetch_sub(1, std::memory_order_release);
 
         if (_closed_scanners.load(std::memory_order_acquire) == _num_scanners) {

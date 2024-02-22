@@ -156,8 +156,6 @@ void ReplicateChannel::_send_request(SegmentPB* segment, butil::IOBuf& data, boo
         _closure->cntl.request_attachment().append(data);
     }
     _closure->request_size = _closure->cntl.request_attachment().size();
-    // brpc send buffer is also considered as part of the memory used by load
-    _mem_tracker->consume(_closure->request_size);
 
     _stub->tablet_writer_add_segment(&_closure->cntl, &request, &_closure->result, _closure);
 
@@ -170,7 +168,6 @@ void ReplicateChannel::_send_request(SegmentPB* segment, butil::IOBuf& data, boo
 Status ReplicateChannel::_wait_response(std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos,
                                         std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos) {
     if (_closure->join()) {
-        _mem_tracker->release(_closure->request_size);
         if (_closure->cntl.Failed()) {
             _st = Status::InternalError(_closure->cntl.ErrorText());
             LOG(WARNING) << "Failed to send rpc to " << debug_string() << " err=" << _st;

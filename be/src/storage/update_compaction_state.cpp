@@ -27,7 +27,6 @@ namespace starrocks {
 CompactionState::CompactionState() = default;
 
 CompactionState::~CompactionState() {
-    StorageEngine::instance()->update_manager()->compaction_state_mem_tracker()->release(_memory_usage);
     if (!_status.ok()) {
         LOG(WARNING) << "bad CompactionState, status:" << _status;
     }
@@ -121,7 +120,6 @@ Status CompactionState::_load_segments(Rowset* rowset, uint32_t segment_id) {
     }
     dest = std::move(col);
     _memory_usage += dest->memory_usage();
-    tracker->consume(dest->memory_usage());
 
     if (tracker->any_limit_exceeded()) {
         // currently we can only log error here, and allow memory over usage
@@ -149,7 +147,6 @@ void CompactionState::release_segments(Rowset* rowset, uint32_t segment_id) {
     auto update_manager = StorageEngine::instance()->update_manager();
     auto tracker = update_manager->compaction_state_mem_tracker();
     _memory_usage -= pk_cols[segment_id]->memory_usage();
-    tracker->release(pk_cols[segment_id]->memory_usage());
     pk_cols[segment_id]->reset_column();
 }
 

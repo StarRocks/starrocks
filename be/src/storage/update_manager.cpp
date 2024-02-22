@@ -159,11 +159,6 @@ Status UpdateManager::get_delta_column_group(KVStore* meta, const TabletSegmentI
         // fill delta column group cache
         std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
         bool ok = _delta_column_group_cache.insert({tsid, new_dcgs}).second;
-        if (ok) {
-            // insert success
-            _delta_column_group_cache_mem_tracker->consume(
-                    StorageEngine::instance()->delta_column_group_list_memory_usage(new_dcgs));
-        }
     }
     return Status::OK();
 }
@@ -191,12 +186,9 @@ Status UpdateManager::get_del_vec(KVStore* meta, const TabletSegmentId& tsid, in
         auto itr = _del_vec_cache.find(tsid);
         if (itr == _del_vec_cache.end()) {
             _del_vec_cache.emplace(tsid, *pdelvec);
-            _del_vec_cache_mem_tracker->consume((*pdelvec)->memory_usage());
         } else if (latest_version > itr->second->version()) {
             // should happen rarely
-            _del_vec_cache_mem_tracker->release(itr->second->memory_usage());
             itr->second = (*pdelvec);
-            _del_vec_cache_mem_tracker->consume(itr->second->memory_usage());
         }
     }
     return Status::OK();
@@ -205,30 +197,18 @@ Status UpdateManager::get_del_vec(KVStore* meta, const TabletSegmentId& tsid, in
 void UpdateManager::clear_cache() {
     _update_state_cache.clear();
     _update_column_state_cache.clear();
-    if (_update_state_mem_tracker) {
-        _update_state_mem_tracker->release(_update_state_mem_tracker->consumption());
-    }
     _index_cache.clear();
-    if (_index_cache_mem_tracker) {
-        _index_cache_mem_tracker->release(_index_cache_mem_tracker->consumption());
-    }
     StarRocksMetrics::instance()->update_primary_index_num.set_value(0);
     StarRocksMetrics::instance()->update_primary_index_bytes_total.set_value(0);
     {
         std::lock_guard<std::mutex> lg(_del_vec_cache_lock);
         _del_vec_cache.clear();
-        if (_del_vec_cache_mem_tracker) {
-            _del_vec_cache_mem_tracker->release(_del_vec_cache_mem_tracker->consumption());
-        }
         StarRocksMetrics::instance()->update_del_vector_num.set_value(0);
         StarRocksMetrics::instance()->update_del_vector_bytes_total.set_value(0);
     }
     {
         std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
         _delta_column_group_cache.clear();
-        if (_delta_column_group_cache_mem_tracker) {
-            _delta_column_group_cache_mem_tracker->release(_delta_column_group_cache_mem_tracker->consumption());
-        }
     }
 }
 
@@ -237,7 +217,6 @@ void UpdateManager::clear_cached_del_vec(const std::vector<TabletSegmentId>& tsi
     for (const auto& tsid : tsids) {
         auto itr = _del_vec_cache.find(tsid);
         if (itr != _del_vec_cache.end()) {
-            _del_vec_cache_mem_tracker->release(itr->second->memory_usage());
             _del_vec_cache.erase(itr);
         }
     }
@@ -282,8 +261,6 @@ void UpdateManager::clear_cached_delta_column_group(const std::vector<TabletSegm
     for (const auto& tsid : tsids) {
         auto itr = _delta_column_group_cache.find(tsid);
         if (itr != _delta_column_group_cache.end()) {
-            _delta_column_group_cache_mem_tracker->release(
-                    StorageEngine::instance()->delta_column_group_list_memory_usage(itr->second));
             _delta_column_group_cache.erase(itr);
         }
     }
@@ -336,7 +313,6 @@ Status UpdateManager::set_cached_delta_column_group(KVStore* meta, const TabletS
         auto itr = _delta_column_group_cache.find(tsid);
         if (itr != _delta_column_group_cache.end()) {
             itr->second.insert(itr->second.begin(), dcg);
-            _delta_column_group_cache_mem_tracker->consume(dcg->memory_usage());
             return Status::OK();
         }
     }
@@ -346,13 +322,7 @@ Status UpdateManager::set_cached_delta_column_group(KVStore* meta, const TabletS
             TabletMetaManager::get_delta_column_group(meta, tsid.tablet_id, tsid.segment_id, INT64_MAX, &new_dcgs));
     std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
     auto itr = _delta_column_group_cache.find(tsid);
-    if (itr != _delta_column_group_cache.end()) {
-        _delta_column_group_cache_mem_tracker->release(
-                StorageEngine::instance()->delta_column_group_list_memory_usage(itr->second));
-    }
     _delta_column_group_cache[tsid] = new_dcgs;
-    _delta_column_group_cache_mem_tracker->consume(
-            StorageEngine::instance()->delta_column_group_list_memory_usage(new_dcgs));
     return Status::OK();
 }
 
@@ -460,7 +430,6 @@ Status UpdateManager::get_latest_del_vec(KVStore* meta, const TabletSegmentId& t
         int64_t latest_version = 0;
         RETURN_IF_ERROR(get_del_vec_in_meta(meta, tsid, INT64_MAX, pdelvec->get(), &latest_version));
         _del_vec_cache.emplace(tsid, *pdelvec);
-        _del_vec_cache_mem_tracker->consume((*pdelvec)->memory_usage());
     }
     return Status::OK();
 }
@@ -477,13 +446,10 @@ Status UpdateManager::set_cached_del_vec(const TabletSegmentId& tsid, const DelV
             LOG(ERROR) << msg;
             return Status::InternalError(msg);
         } else {
-            _del_vec_cache_mem_tracker->release(itr->second->memory_usage());
             itr->second = delvec;
-            _del_vec_cache_mem_tracker->consume(itr->second->memory_usage());
         }
     } else {
         _del_vec_cache.emplace(tsid, delvec);
-        _del_vec_cache_mem_tracker->consume(delvec->memory_usage());
     }
     return Status::OK();
 }

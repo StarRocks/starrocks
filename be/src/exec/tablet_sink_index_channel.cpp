@@ -446,7 +446,6 @@ Status NodeChannel::add_chunk(Chunk* input, const std::vector<int64_t>& tablet_i
         // passthrough: try to send data if queue not empty
     } else {
         // 3. chunk full push back to queue
-        _mem_tracker->consume(_cur_chunk->memory_usage());
         _request_queue.emplace_back(std::move(_cur_chunk), _rpc_request);
         _cur_chunk = input->clone_empty_with_slot();
         _rpc_request.mutable_requests(0)->clear_tablet_ids();
@@ -496,7 +495,6 @@ Status NodeChannel::add_chunks(Chunk* input, const std::vector<std::vector<int64
         // passthrough: try to send data if queue not empty
     } else {
         // 3. chunk full push back to queue
-        _mem_tracker->consume(_cur_chunk->memory_usage());
         _request_queue.emplace_back(std::move(_cur_chunk), _rpc_request);
         _cur_chunk = input->clone_empty_with_slot();
         for (size_t index_i = 0; index_i < index_tablet_ids.size(); ++index_i) {
@@ -540,7 +538,6 @@ Status NodeChannel::_send_request(bool eos, bool wait_all_sender_close) {
             if (_cur_chunk.get() == nullptr) {
                 _cur_chunk = std::make_unique<Chunk>();
             }
-            _mem_tracker->consume(_cur_chunk->memory_usage());
             _request_queue.emplace_back(std::move(_cur_chunk), _rpc_request);
             _cur_chunk = nullptr;
         }
@@ -556,8 +553,6 @@ Status NodeChannel::_send_request(bool eos, bool wait_all_sender_close) {
 
     auto request = add_chunk.second;
     auto chunk = std::move(add_chunk.first);
-
-    _mem_tracker->release(chunk->memory_usage());
 
     RETURN_IF_ERROR(_wait_one_prev_request());
 
@@ -597,8 +592,6 @@ Status NodeChannel::_send_request(bool eos, bool wait_all_sender_close) {
     _add_batch_closures[_current_request_index]->cntl.set_timeout_ms(_rpc_timeout_ms);
     _add_batch_closures[_current_request_index]->cntl.ignore_eovercrowded();
     _add_batch_closures[_current_request_index]->request_size = request.ByteSizeLong();
-
-    _mem_tracker->consume(_add_batch_closures[_current_request_index]->request_size);
 
     if (_enable_colocate_mv_index) {
         request.set_is_repeated_chunk(true);
@@ -653,7 +646,6 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
     if (!closure->join()) {
         return Status::OK();
     }
-    _mem_tracker->release(closure->request_size);
 
     _ts_profile->client_rpc_timer->update(closure->latency());
 

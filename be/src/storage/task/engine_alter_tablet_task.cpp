@@ -52,9 +52,6 @@ EngineAlterTabletTask::EngineAlterTabletTask(MemTracker* mem_tracker, const TAlt
 }
 
 Status EngineAlterTabletTask::execute() {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker.get());
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
-
     StarRocksMetrics::instance()->create_rollup_requests_total.increment(1);
 
     auto scope = IOProfiler::scope(IOProfiler::TAG_ALTER, _alter_tablet_req.new_tablet_id);

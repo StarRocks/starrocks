@@ -560,22 +560,6 @@ void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* track
         mem_resource_mgr.to_low_memory_mode();
         return;
     }
-
-    // convert to low-memory mode if reserve memory failed
-    if (mem_resource_mgr.releaseable() && op->revocable_mem_bytes() > state->spill_operator_min_bytes()) {
-        int64_t request_reserved = 0;
-        if (chunk == nullptr) {
-            request_reserved = op->estimated_memory_reserved();
-        } else {
-            request_reserved = op->estimated_memory_reserved(chunk);
-        }
-        request_reserved += state->spill_mem_table_num() * state->spill_mem_table_size();
-
-        if (!tls_thread_status.try_mem_reserve(request_reserved, tracker,
-                                               tracker->limit() * state->spill_mem_limit_threshold())) {
-            mem_resource_mgr.to_low_memory_mode();
-        }
-    }
 }
 
 const double release_buffer_mem_ratio = 0.8;

@@ -41,11 +41,8 @@ struct EmptyMemGuard {
 
 struct MemTrackerGuard {
     MemTrackerGuard(MemTracker* scope_tracker_) : scope_tracker(scope_tracker_) {}
-    bool scoped_begin() const {
-        old_tracker = tls_thread_status.set_mem_tracker(scope_tracker);
-        return true;
-    }
-    void scoped_end() const { tls_thread_status.set_mem_tracker(old_tracker); }
+    bool scoped_begin() const { return true; }
+    void scoped_end() const {}
     MemTracker* scope_tracker;
     mutable MemTracker* old_tracker = nullptr;
 };
@@ -61,14 +58,10 @@ struct ResourceMemTrackerGuard {
             return false;
         }
         captured = std::move(res.value());
-        old_tracker = tls_thread_status.set_mem_tracker(scope_tracker);
         return true;
     }
 
-    void scoped_end() const {
-        tls_thread_status.set_mem_tracker(old_tracker);
-        captured = {};
-    }
+    void scoped_end() const { captured = {}; }
 
 private:
     auto capture(const std::tuple<WeakPtrs...>& weak_tup) const

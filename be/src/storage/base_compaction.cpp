@@ -43,9 +43,6 @@ Status BaseCompaction::compact() {
     TRACE("rowsets picked");
     TRACE_COUNTER_INCREMENT("input_rowsets_count", _input_rowsets.size());
 
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
-    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
-
     // 2. do base compaction, merge rowsets
     RETURN_IF_ERROR(do_compaction());
     TRACE("compaction finished");

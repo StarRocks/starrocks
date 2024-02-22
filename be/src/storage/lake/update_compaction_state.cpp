@@ -25,11 +25,7 @@
 
 namespace starrocks::lake {
 
-CompactionState::~CompactionState() {
-    if (_update_manager != nullptr) {
-        _update_manager->compaction_state_mem_tracker()->release(_memory_usage);
-    }
-}
+CompactionState::~CompactionState() {}
 
 Status CompactionState::load_segments(Rowset* rowset, UpdateManager* update_manager,
                                       const TabletSchemaCSPtr& tablet_schema, uint32_t segment_id) {
@@ -97,7 +93,6 @@ Status CompactionState::_load_segments(Rowset* rowset, const TabletSchemaCSPtr& 
     }
     dest = std::move(col);
     _memory_usage += dest->memory_usage();
-    _update_manager->compaction_state_mem_tracker()->consume(dest->memory_usage());
     return Status::OK();
 }
 
@@ -106,7 +101,6 @@ void CompactionState::release_segments(uint32_t segment_id) {
         return;
     }
     _memory_usage -= pk_cols[segment_id]->memory_usage();
-    _update_manager->compaction_state_mem_tracker()->release(pk_cols[segment_id]->memory_usage());
     // reset ptr to release memory immediately
     pk_cols[segment_id].reset();
 }

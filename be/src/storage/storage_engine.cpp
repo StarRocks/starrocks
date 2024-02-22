@@ -1510,10 +1510,6 @@ Status StorageEngine::get_delta_column_group(KVStore* meta, int64_t tablet_id, R
         // fill delta column group cache
         std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
         bool ok = _delta_column_group_cache.insert({dcg_key, new_dcgs}).second;
-        if (ok) {
-            // insert success
-            _delta_column_group_cache_mem_tracker->consume(delta_column_group_list_memory_usage(new_dcgs));
-        }
     }
     return Status::OK();
 }
@@ -1545,8 +1541,6 @@ void StorageEngine::clear_cached_delta_column_group(const std::vector<DeltaColum
     for (const auto& dcg_key : dcg_keys) {
         auto itr = _delta_column_group_cache.find(dcg_key);
         if (itr != _delta_column_group_cache.end()) {
-            _delta_column_group_cache_mem_tracker->release(
-                    StorageEngine::instance()->delta_column_group_list_memory_usage(itr->second));
             _delta_column_group_cache.erase(itr);
         }
     }

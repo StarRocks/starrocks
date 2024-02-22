@@ -92,12 +92,10 @@ EngineCloneTask::EngineCloneTask(MemTracker* mem_tracker, const TCloneReq& clone
 }
 
 Status EngineCloneTask::execute() {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker.get());
     auto tablet_manager = StorageEngine::instance()->tablet_manager();
     // Prevent the snapshot directory from been removed by the path GC worker.
     tablet_manager->register_clone_tablet(_clone_req.tablet_id);
     DeferOp op([&] {
-        tls_thread_status.set_mem_tracker(prev_tracker);
         tablet_manager->unregister_clone_tablet(_clone_req.tablet_id);
     });
     auto tablet = tablet_manager->get_tablet(_clone_req.tablet_id, false);

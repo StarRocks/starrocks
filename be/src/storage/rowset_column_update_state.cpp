@@ -390,14 +390,12 @@ Status RowsetColumnUpdateState::_read_chunk_from_update(const RowidsToUpdateRowi
             _update_chunk_cache[cur_update_file_id]->reserve(DEFAULT_CHUNK_SIZE);
             // if already read from this update file, iterator will return end of file, and continue
             RETURN_IF_ERROR(read_chunk_from_update_file(update_iterator, _update_chunk_cache[cur_update_file_id]));
-            tracker->consume(_update_chunk_cache[cur_update_file_id]->memory_usage());
         }
         return Status::OK();
     };
     auto clear_update_chunk_cache_fn = [&]() {
         // clear cache if Update MemTracker limit exceeded
         if (tracker->any_limit_exceeded() && _update_chunk_cache[cur_update_file_id].get() != nullptr) {
-            tracker->release(_update_chunk_cache[cur_update_file_id]->memory_usage());
             _update_chunk_cache[cur_update_file_id].reset(nullptr);
         }
     };
@@ -656,7 +654,6 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
             // When final step or need to switch to next batch columns, we should reclaim cache
             std::for_each(_update_chunk_cache.begin(), _update_chunk_cache.end(), [&](auto& cache) {
                 if (cache.get() != nullptr) {
-                    tracker->release(cache->memory_usage());
                     cache.reset(nullptr);
                 }
             });
@@ -719,18 +716,12 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
             ASSIGN_OR_RETURN(auto source_chunk_ptr,
                              read_from_source_segment(rowset, partial_schema, tablet, &stats,
                                                       latest_applied_version.major_number(), rowsetid_segid, seg_path));
-            const size_t source_chunk_size = source_chunk_ptr->memory_usage();
-            tracker->consume(source_chunk_size);
-            DeferOp tracker_defer([&]() { tracker->release(source_chunk_size); });
             // 3.2 read from update segment
             int64_t t2 = MonotonicMillis();
             std::vector<uint32_t> rowids;
             auto update_chunk_ptr = ChunkHelper::new_chunk(partial_schema, each.second.size());
             RETURN_IF_ERROR(_read_chunk_from_update(each.second, partial_schema, tracker, rowset, &stats, rowids,
                                                     update_chunk_ptr.get()));
-            const size_t update_chunk_size = update_chunk_ptr->memory_usage();
-            tracker->consume(update_chunk_size);
-            DeferOp tracker_defer2([&]() { tracker->release(update_chunk_size); });
             int64_t t3 = MonotonicMillis();
             // 3.4 merge source chunk and update chunk
             RETURN_IF_EXCEPTION(source_chunk_ptr->update_rows(*update_chunk_ptr, rowids.data()));

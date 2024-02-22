@@ -116,16 +116,11 @@ TabletMeta::TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id
                                             compression_type);
     CHECK(st.ok()) << st;
     init_from_pb(&tablet_meta_pb);
-    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
 }
 
-TabletMeta::TabletMeta() : _tablet_uid(0, 0) {
-    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
-}
+TabletMeta::TabletMeta() : _tablet_uid(0, 0) {}
 
-TabletMeta::~TabletMeta() {
-    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
-}
+TabletMeta::~TabletMeta() {}
 
 Status TabletMeta::create_from_file(const string& file_path) {
     TabletMetaPB tablet_meta_pb;

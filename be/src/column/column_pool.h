@@ -138,9 +138,6 @@ class CACHELINE_ALIGNED ColumnPool {
             auto bytes = column_bytes(obj);
             _curr_free.bytes -= bytes;
 
-            tls_thread_status.mem_consume(bytes);
-            _pool->mem_tracker()->release(bytes);
-
             return obj;
         }
 
@@ -155,9 +152,6 @@ class CACHELINE_ALIGNED ColumnPool {
                 _curr_free.ptrs[_curr_free.nfree++] = ptr;
                 _curr_free.bytes += bytes;
 
-                tls_thread_status.mem_release(bytes);
-                _pool->mem_tracker()->consume(bytes);
-
                 return;
             }
             if (_pool->_push_free_block(_curr_free)) {
@@ -165,9 +159,6 @@ class CACHELINE_ALIGNED ColumnPool {
                 _curr_free.nfree = 1;
                 _curr_free.ptrs[0] = ptr;
                 _curr_free.bytes = bytes;
-
-                tls_thread_status.mem_release(bytes);
-                _pool->mem_tracker()->consume(bytes);
 
                 return;
             }
@@ -183,8 +174,6 @@ class CACHELINE_ALIGNED ColumnPool {
             }
             if (freed_bytes > 0) {
                 _curr_free.bytes -= freed_bytes;
-                tls_thread_status.mem_consume(freed_bytes);
-                _pool->mem_tracker()->release(freed_bytes);
             }
         }
 
@@ -246,9 +235,6 @@ public:
             freed_bytes += blk->bytes;
             _release_free_block(blk);
         }
-
-        _mem_tracker->release(freed_bytes);
-        tls_thread_status.mem_consume(freed_bytes);
 
         return freed_bytes;
     }

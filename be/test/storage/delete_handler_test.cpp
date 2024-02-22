@@ -88,8 +88,6 @@ static void tear_down(const std::string& sub_path) {
     config::storage_root_path = std::filesystem::current_path().string() + "/" + sub_path;
     fs::remove_all(config::storage_root_path);
     fs::remove_all(string(getenv("STARROCKS_HOME")) + UNUSED_PREFIX);
-    k_metadata_mem_tracker->release(k_metadata_mem_tracker->consumption());
-    k_schema_change_mem_tracker->release(k_schema_change_mem_tracker->consumption());
     if (k_engine != nullptr) {
         k_engine->stop();
         delete k_engine;

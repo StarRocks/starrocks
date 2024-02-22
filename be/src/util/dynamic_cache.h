@@ -126,7 +126,6 @@ public:
             _object_size++;
             if (insert->_size > 0) {
                 _size += insert->_size;
-                if (_mem_tracker) _mem_tracker->consume(insert->_size);
                 _evict();
             }
             return *ret;
@@ -152,7 +151,6 @@ public:
             _list.erase(entry->_handle);
             _object_size--;
             _size -= entry->_size;
-            if (_mem_tracker) _mem_tracker->release(entry->_size);
             delete entry;
         }
     }
@@ -168,7 +166,6 @@ public:
             _list.erase(entry->_handle);
             _object_size--;
             _size -= entry->_size;
-            if (_mem_tracker) _mem_tracker->release(entry->_size);
             delete entry;
             return true;
         }
@@ -194,7 +191,6 @@ public:
             _list.erase(v);
             _object_size--;
             _size -= entry->_size;
-            if (_mem_tracker) _mem_tracker->release(entry->_size);
             delete entry;
         }
         return true;
@@ -218,7 +214,6 @@ public:
             _list.erase(v);
             _object_size--;
             _size -= entry->_size;
-            if (_mem_tracker) _mem_tracker->release(entry->_size);
             delete entry;
         }
         return true;
@@ -230,7 +225,6 @@ public:
     bool update_object_size(Entry* entry, size_t new_size) {
         std::lock_guard<std::mutex> lg(_lock);
         _size += new_size - entry->_size;
-        if (_mem_tracker) _mem_tracker->consume(new_size - entry->_size);
         entry->_size = new_size;
         return _evict();
     }
@@ -250,7 +244,6 @@ public:
                     itr = _list.erase(itr);
                     _object_size--;
                     _size -= entry->_size;
-                    if (_mem_tracker) _mem_tracker->release(entry->_size);
                     entry_list.push_back(entry);
                 } else {
                     itr++;
@@ -276,7 +269,6 @@ public:
                     itr = _list.erase(itr);
                     _object_size--;
                     _size -= entry->_size;
-                    if (_mem_tracker) _mem_tracker->release(entry->_size);
                     entry_list.push_back(entry);
                 } else {
                     itr++;
@@ -341,7 +333,6 @@ private:
                 itr = _list.erase(itr);
                 _object_size--;
                 _size -= entry->_size;
-                if (_mem_tracker) _mem_tracker->release(entry->_size);
                 entry_list->push_back(entry);
             } else {
                 itr++;

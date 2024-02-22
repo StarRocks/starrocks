@@ -66,8 +66,6 @@ private:
 };
 
 void RoaringBitmapMemTest::do_bench(benchmark::State& state) {
-    CurrentThread::current().set_mem_tracker(_tracker.get());
-
     size_t start_size = CurrentThread::current().mem_tracker()->consumption();
 
     _bitmap.resize(100);
@@ -84,7 +82,6 @@ void RoaringBitmapMemTest::do_bench(benchmark::State& state) {
     LOG(INFO) << "MEM_USAGE: " << (end_size - start_size) / 100;
     LOG(INFO) << "DISK_SIZE(V1): " << _bitmap[0].getSizeInBytes(1);
     LOG(INFO) << "DISK_SIZE(v2): " << _bitmap[0].getSizeInBytes(2);
-    CurrentThread::current().set_mem_tracker(nullptr);
 }
 
 static void bench_func(benchmark::State& state) {

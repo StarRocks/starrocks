@@ -399,11 +399,6 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         ++_total_in_flight_rpc;
         ++_num_in_flight_rpcs[instance_id.lo];
 
-        // Attachment will be released by process_mem_tracker in closure->Run() in bthread, when receiving the response,
-        // so decrease the memory usage of attachment from instance_mem_tracker immediately before sending the request.
-        //_mem_tracker->release(request.attachment_physical_bytes);
-        //GlobalEnv::GetInstance()->process_mem_tracker()->consume(request.attachment_physical_bytes);
-
         closure->cntl.Reset();
         closure->cntl.set_timeout_ms(_brpc_timeout_ms);
 

@@ -149,20 +149,6 @@ MemChunkAllocator::MemChunkAllocator(MemTracker* mem_tracker, size_t reserve_lim
 bool MemChunkAllocator::allocate(size_t size, MemChunk* chunk) {
     FAIL_POINT_TRIGGER_RETURN(random_error, false);
     bool ret = true;
-#ifndef BE_TEST
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
-    DeferOp op([&] {
-        if (ret) {
-            if (LIKELY(_mem_tracker != nullptr)) {
-                _mem_tracker->release(chunk->size);
-            }
-            if (LIKELY(prev_tracker != nullptr)) {
-                prev_tracker->consume(chunk->size);
-            }
-        }
-        tls_thread_status.set_mem_tracker(prev_tracker);
-    });
-#endif
 
     // fast path: allocate from current core arena
     int core_id = CpuInfo::get_current_core();
@@ -207,20 +193,6 @@ bool MemChunkAllocator::allocate(size_t size, MemChunk* chunk) {
 }
 
 void MemChunkAllocator::free(const MemChunk& chunk) {
-#ifndef BE_TEST
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
-    DeferOp op([&] {
-        int64_t chunk_size = chunk.size;
-        if (LIKELY(prev_tracker != nullptr)) {
-            prev_tracker->release(chunk_size);
-        }
-        if (LIKELY(_mem_tracker != nullptr)) {
-            _mem_tracker->consume(chunk_size);
-        }
-        tls_thread_status.set_mem_tracker(prev_tracker);
-    });
-#endif
-
     int64_t old_reserved_bytes = _reserved_bytes;
     int64_t new_reserved_bytes = 0;
     do {

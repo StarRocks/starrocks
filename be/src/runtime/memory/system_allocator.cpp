@@ -60,9 +60,6 @@ void SystemAllocator::free(MemTracker* mem_tracker, uint8_t* ptr, size_t length)
         if (res != 0) {
             PLOG(ERROR) << "fail to free memory via munmap";
         }
-        if (mem_tracker != nullptr) {
-            mem_tracker->release(length);
-        }
     } else {
         ::free(ptr);
     }
@@ -84,9 +81,6 @@ uint8_t* SystemAllocator::allocate_via_mmap(MemTracker* mem_tracker, size_t leng
     if (ptr == MAP_FAILED) {
         PLOG(ERROR) << "fail to allocate memory via mmap";
         return nullptr;
-    }
-    if (mem_tracker != nullptr) {
-        mem_tracker->consume(length);
     }
     return ptr;
 }
