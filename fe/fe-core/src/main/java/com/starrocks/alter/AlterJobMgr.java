@@ -670,7 +670,10 @@ public class AlterJobMgr {
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT) ||
-                        properties.containsKey(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC));
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC) ||
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET) ||
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND) ||
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE));
 
                 olapTable = (OlapTable) db.getTable(tableName);
                 if (properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY)) {
@@ -702,6 +705,13 @@ public class AlterJobMgr {
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
                         || properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
                     schemaChangeHandler.updateTableConstraint(db, olapTable.getName(), properties);
+                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET)
+                        || properties.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE)
+                        || properties.containsKey(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND)) {
+                    boolean isSuccess = schemaChangeHandler.updateExternalCoolDownConfigMeta(db, olapTable.getId(), properties);
+                    if (!isSuccess) {
+                        throw new DdlException("modify external cool down config of FEMeta failed or table has been dropped");
+                    }
                 } else {
                     throw new DdlException("Invalid alter operation: " + alterClause.getOpType());
                 }

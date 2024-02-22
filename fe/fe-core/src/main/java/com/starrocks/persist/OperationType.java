@@ -912,6 +912,9 @@ public class OperationType {
     // Replication job
     @IgnorableOnReplayFailed
     public static final short OP_REPLICATION_JOB = 13500;
+    // External cool down config
+    @IgnorableOnReplayFailed
+    public static final short OP_MODIFY_EXTERNAL_COOLDOWN_CONFIG = 13600;
 
     /**
      * NOTICE: OperationType cannot use a value exceeding 20000, and an error will be reported if it exceeds

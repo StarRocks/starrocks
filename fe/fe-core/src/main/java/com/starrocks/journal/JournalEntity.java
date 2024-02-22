@@ -1143,6 +1143,11 @@ public class JournalEntity implements Writable {
                 data = ReplicationJobLog.read(in);
                 isRead = true;
                 break;
+            case OperationType.OP_MODIFY_EXTERNAL_COOLDOWN_CONFIG: {
+                data = ModifyTablePropertyOperationLog.read(in);
+                isRead = true;
+                break;
+            }
             default: {
                 if (Config.ignore_unknown_log_id) {
                     LOG.warn("UNKNOWN Operation Type {}", opCode);

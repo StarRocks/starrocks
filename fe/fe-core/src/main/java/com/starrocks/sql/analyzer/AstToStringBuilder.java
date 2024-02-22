@@ -83,6 +83,7 @@ import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.credential.CredentialUtil;
+import com.starrocks.externalcooldown.ExternalCoolDownConfig;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivilegeType;
@@ -1597,6 +1598,31 @@ public class AstToStringBuilder {
                             .append(PropertyAnalyzer.PROPERTIES_BINLOG_MAX_SIZE)
                             .append("\" = \"");
                     sb.append(binlogConfig.getBinlogMaxSize()).append("\"");
+                }
+
+                // external cool down config
+                if (olapTable.containsExternalCoolDownConfig()) {
+                    ExternalCoolDownConfig externalCoolDownConfig = olapTable.getCurExternalCoolDownConfig();
+                    sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                            .append(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET)
+                            .append("\" = \"");
+                    sb.append(externalCoolDownConfig.getTarget()).append("\"");
+
+                    String schedule = externalCoolDownConfig.getSchedule();
+                    if (schedule != null && !schedule.isEmpty()) {
+                        sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                                .append(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE)
+                                .append("\" = \"");
+                        sb.append(externalCoolDownConfig.getSchedule()).append("\"");
+                    }
+
+                    long waitSecond = externalCoolDownConfig.getWaitSecond();
+                    if (waitSecond >= 0) {
+                        sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                                .append(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND)
+                                .append("\" = \"");
+                        sb.append(waitSecond).append("\"");
+                    }
                 }
 
                 // write quorum

@@ -22,6 +22,7 @@ import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -306,5 +307,13 @@ public class CreateTableStmt extends DdlStmt {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCreateTableStatement(this, context);
+    }
+
+    public void removeExternalCoolDownConfigProperties() {
+        if (this.properties != null) {
+            this.properties.remove(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_TARGET);
+            this.properties.remove(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_SCHEDULE);
+            this.properties.remove(PropertyAnalyzer.PROPERTIES_EXTERNAL_COOLDOWN_WAIT_SECOND);
+        }
     }
 }

@@ -130,6 +130,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.externalcooldown.ExternalCoolDownConfig;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTablet;
@@ -4325,6 +4326,18 @@ public class LocalMetastore implements ConnectorMetadata {
         table.setCurBinlogConfig(binlogConfig);
     }
 
+    public void modifyExternalCoolDownMeta(Database db, OlapTable table, ExternalCoolDownConfig externalCoolDownConfig) {
+        Locker locker = new Locker();
+        Preconditions.checkArgument(locker.isWriteLockHeldByCurrentThread(db));
+        ModifyTablePropertyOperationLog log = new ModifyTablePropertyOperationLog(
+                db.getId(),
+                table.getId(),
+                externalCoolDownConfig.toProperties());
+        GlobalStateMgr.getCurrentState().getEditLog().logModifyExternalCoolDownConfig(log);
+
+        table.setCurExternalCoolDownConfig(externalCoolDownConfig);
+    }
+
     // The caller need to hold the db write lock
     public void modifyTableInMemoryMeta(Database db, OlapTable table, Map<String, String> properties) {
         Locker locker = new Locker();
@@ -4577,6 +4590,8 @@ public class LocalMetastore implements ConnectorMetadata {
                     if (!olapTable.isBinlogEnabled()) {
                         olapTable.clearBinlogAvailableVersion();
                     }
+                } else if (opCode == OperationType.OP_MODIFY_EXTERNAL_COOLDOWN_CONFIG) {
+                    olapTable.setCurExternalCoolDownConfig(tableProperty.getExternalCoolDownConfig());
                 }
             }
         } catch (Exception ex) {
