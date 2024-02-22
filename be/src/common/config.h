@@ -965,6 +965,9 @@ CONF_mBool(dependency_librdkafka_debug_enable, "false");
 // admin, eos, mock, assigner, conf
 CONF_String(dependency_librdkafka_debug, "all");
 
+// DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3, WARN by default
+CONF_mInt16(pulsar_client_log_level, "2");
+
 // max loop count when be waiting its fragments finish
 CONF_Int64(loop_count_wait_fragments_finish, "0");
 
@@ -1021,9 +1024,9 @@ CONF_Int64(max_length_for_bitmap_function, "1000000");
 
 // Configuration items for datacache
 CONF_Bool(datacache_enable, "false");
-CONF_mString(datacache_mem_size, "10%");
-CONF_mString(datacache_disk_size, "0");
-CONF_mString(datacache_disk_path, "${STARROCKS_HOME}/datacache/");
+CONF_String(datacache_mem_size, "10%");
+CONF_String(datacache_disk_size, "0");
+CONF_String(datacache_disk_path, "${STARROCKS_HOME}/datacache/");
 CONF_String(datacache_meta_path, "${STARROCKS_HOME}/datacache/");
 CONF_Int64(datacache_block_size, "262144"); // 256K
 CONF_Bool(datacache_checksum_enable, "false");
