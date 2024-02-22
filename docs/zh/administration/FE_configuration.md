@@ -142,6 +142,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 含义：是否开启 Decimal V3。
 - 默认值：TRUE
 
+#### expr_children_limit
+
+- 含义：一个表达式中子表达式的最大数量。
+- 默认值：10000
+
 #### enable_sql_blacklist
 
 - 含义：是否开启 SQL Query 黑名单校验。如果开启，在黑名单中的 Query 不能被执行。
@@ -349,7 +354,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 #### disable_load_job
 
-- 含义：是否禁用任何导入任务，集群出问题时的止损措施。
+- 含义：是否禁用任何导入任务，集群出问题时的止损措施。设置为 TRUE 时，无法进行导入任务，集群仅处于可读状态。
 - 默认值：FALSE
 
 #### history_job_keep_max_second
@@ -526,7 +531,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 #### catalog_trash_expire_second
 
-- 含义：删除表/数据库之后，元数据在回收站中保留的时长，超过这个时长，数据就不可以再恢复。
+- 含义：通过 DROP 删除数据库、表或分区之后，元数据在回收站中保留的时长，超过这个时长，数据就不可以通过 RECOVER 命令再恢复。
 - 单位：秒
 - 默认值：86400
 
@@ -826,6 +831,12 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 - 含义：创建异步物化视图后，是否立即刷新该物化视图。当设置为 `true` 时，异步物化视图创建后会立即刷新。
 - 默认值：TRUE
+- 引入版本：v3.2.3
+
+##### default_mv_refresh_partition_num
+
+- 含义：单次物化视图刷新需更新多个分区时，任务将分批执行。该值用于指定单个批次内刷新的分区数。
+- 默认值：1
 - 引入版本：v3.2.3
 
 ## 配置 FE 静态参数

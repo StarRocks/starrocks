@@ -153,17 +153,17 @@ BE dynamic parameters are as follows.
 #### tablet_rowset_stale_sweep_time_sec
 
 - **Default:** 1,800 seconds
-- **Description:** The time interval at which to sweep the stale rowsets in tablets.
+- **Description:** The time interval at which to sweep the stale rowsets in tablets. A shorter interval can reduce metadata usage during loading.
 
 #### snapshot_expire_time_sec
 
 - **Default:** 172,800 seconds
-- **Description:** The expiration time of snapshot files.
+- **Description:** The expiration time of snapshot files. The system cleans snapshot files at a specified interval. If a snapshot is retained for a duration longer than the value of this parameter, it will be cleaned. The clean interval depends on disk space usage. If the disk space usage is less than 60%, the clean interval is `max_garbage_sweep_interval`. If the disk space usage is larger than 80%, the clean interval is `min_garbage_sweep_interval`.
 
 #### trash_file_expire_time_sec
 
 - **Default:** 86,400 seconds
-- **Description:** The time interval at which to clean trash files. The default value has been changed from 259,200 to 86,400 since v2.5.17, v3.0.9, and v3.1.6.
+- **Description:** The maximum duration files can be retained in trash. The system cleans trash files at a specified interval. If a trash file is retained for a duration longer than the value of this parameter, it will be cleaned. The clean interval depends on disk space usage. If the disk space usage is less than 60%, the clean interval is `max_garbage_sweep_interval`. If the disk space usage is larger than 80%, the clean interval is `min_garbage_sweep_interval`. Since v2.5.17, v3.0.9, and v3.1.6, the default value has been changed from 259200 to 86400.
 
 #### base_compaction_check_interval_seconds
 
@@ -280,6 +280,12 @@ BE dynamic parameters are as follows.
 - **Default:** 500
 - **Unit:** ms
 - **Description:** The time interval at which to collect the Counter statistics.
+
+#### pindex_major_compaction_limit_per_disk
+
+- **Default:** 1
+- **Description:** The maximum concurrency of compaction on a disk. This addresses the issue of uneven I/O across disks due to compaction. This issue can cause excessively high I/O for certain disks.
+- **Introduced in:** 3.0.9
 
 #### load_error_log_reserve_hours
 
@@ -437,16 +443,17 @@ BE dynamic parameters are as follows.
 - **Default:** 20%
 - **Description:** The PageCache size. It can be specified as size, for example, `20G`, `20,480M`, `20,971,520K`, or `21,474,836,480B`. It can also be specified as the ratio (percentage) to the memory size, for example, `20%`. It takes effect only when `disable_storage_page_cache` is set to `false`.
 
-#### internal_service_async_thread_num
-
-- **Default:** 10 (Number of Threads)
-- **Description:** The thread pool size allowed on each BE for interacting with Kafka. Currently, the FE responsible for processing Routine Load requests depends on BEs to interact with Kafka, and each BE in StarRocks has its own thread pool for interactions with Kafka. If a large number of Routine Load tasks are distributed to a BE, the BE's thread pool for interactions with Kafka may be too busy to process all tasks in a timely manner. In this situation, you can adjust the value of this parameter to suit your needs.
-
 #### lake_enable_vertical_compaction_fill_data_cache
 
 - **Default:** false
 - **Description:** Whether to allow compaction tasks to cache data on local disks in a shared-data cluster.
 - **Introduced in:** v3.1.7, v3.2.3
+
+#### lake_pk_compaction_max_input_rowsets
+
+- **Default:** 5
+- **Description:** The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster.
+- **Introduced in:** v3.1.8, v3.2.3
 
 #### compact_threads
 
@@ -871,7 +878,12 @@ BE static parameters are as follows.
 
 - **Default**: 10
 - **Unit**: N/A
-- **Description**: The thread pool size for Routine Load on each BE. Since v3.1.0, this parameter is deprecated. The thread pool size for Routine Load on each BE is now controlled by the FE dynamic parameter max_routine_load_task_num_per_be.
+- **Description**: The thread pool size for Routine Load on each BE. Since v3.1.0, this parameter is deprecated. The thread pool size for Routine Load on each BE is now controlled by the FE dynamic parameter `max_routine_load_task_num_per_be`.
+
+#### internal_service_async_thread_num
+
+- **Default:** 10 (Number of Threads)
+- **Description:** The thread pool size allowed on each BE for interacting with Kafka. Currently, the FE responsible for processing Routine Load requests depends on BEs to interact with Kafka, and each BE in StarRocks has its own thread pool for interactions with Kafka. If a large number of Routine Load tasks are distributed to a BE, the BE's thread pool for interactions with Kafka may be too busy to process all tasks in a timely manner. In this situation, you can adjust the value of this parameter to suit your needs. **Since v3.1.0, this parameter is deprecated. The thread pool size for Routine Load on each BE is now controlled by the FE dynamic parameter `max_routine_load_task_num_per_be`.**
 
 #### brpc_max_body_size
 

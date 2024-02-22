@@ -100,7 +100,6 @@ public class InfoSchemaDbTest {
 
         Assert.assertFalse(db.registerTableUnlocked(null));
         db.dropTable("authors");
-        db.dropTableWithLock("authors");
         db.write(null);
         Assert.assertNull(db.getTable("authors"));
     }

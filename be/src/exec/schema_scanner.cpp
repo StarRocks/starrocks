@@ -33,6 +33,7 @@
 #include "exec/schema_scanner/schema_load_tracking_logs_scanner.h"
 #include "exec/schema_scanner/schema_loads_scanner.h"
 #include "exec/schema_scanner/schema_materialized_views_scanner.h"
+#include "exec/schema_scanner/schema_partitions_meta_scanner.h"
 #include "exec/schema_scanner/schema_pipe_files.h"
 #include "exec/schema_scanner/schema_pipes.h"
 #include "exec/schema_scanner/schema_routine_load_jobs_scanner.h"
@@ -50,6 +51,7 @@
 #include "exec/schema_scanner/starrocks_grants_to_scanner.h"
 #include "exec/schema_scanner/starrocks_role_edges_scanner.h"
 #include "exec/schema_scanner/sys_fe_locks.h"
+#include "exec/schema_scanner/sys_fe_memory_usage.h"
 #include "exec/schema_scanner/sys_object_dependencies.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/FrontendService_types.h"
@@ -181,6 +183,10 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SchemaTablePipes>();
     case TSchemaTableType::SYS_FE_LOCKS:
         return std::make_unique<SysFeLocks>();
+    case TSchemaTableType::SYS_FE_MEMORY_USAGE:
+        return std::make_unique<SysFeMemoryUsage>();
+    case TSchemaTableType::SCH_PARTITIONS_META:
+        return std::make_unique<SchemaPartitionsMetaScanner>();
     default:
         return std::make_unique<SchemaDummyScanner>();
     }

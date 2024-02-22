@@ -803,12 +803,12 @@ CONF_Int64(text_io_range_size, "16777216");
 
 // orc reader
 CONF_Bool(enable_orc_late_materialization, "true");
-CONF_Int32(orc_row_index_cache_max_size, "1048576");
-CONF_Int32(orc_stripe_cache_max_size, "8388608");
 CONF_Bool(enable_orc_libdeflate_decompression, "true");
-CONF_Int32(orc_file_cache_max_size, "8388608");
 CONF_Int32(orc_natural_read_size, "8388608");
 CONF_mBool(orc_coalesce_read_enable, "true");
+// For orc tiny stripe optimization
+// Default is 8MB for tiny stripe threshold size
+CONF_Int32(orc_tiny_stripe_threshold_size, "8388608");
 
 // parquet reader
 CONF_mBool(parquet_coalesce_read_enable, "true");
@@ -938,6 +938,7 @@ CONF_mBool(lake_enable_publish_version_trace_log, "false");
 CONF_mString(lake_vacuum_retry_pattern, "*request rate*");
 CONF_mInt64(lake_vacuum_retry_max_attempts, "5");
 CONF_mInt64(lake_vacuum_retry_min_delay_ms, "10");
+CONF_mInt64(lake_max_garbage_version_distance, "100");
 CONF_mBool(enable_primary_key_recover, "false");
 CONF_mBool(lake_enable_compaction_async_write, "false");
 CONF_mInt64(lake_pk_compaction_max_input_rowsets, "5");
@@ -1005,9 +1006,9 @@ CONF_Int64(max_length_for_bitmap_function, "1000000");
 
 // Configuration items for datacache
 CONF_Bool(datacache_enable, "false");
-CONF_mString(datacache_mem_size, "10%");
-CONF_mString(datacache_disk_size, "0");
-CONF_mString(datacache_disk_path, "${STARROCKS_HOME}/datacache/");
+CONF_String(datacache_mem_size, "10%");
+CONF_String(datacache_disk_size, "0");
+CONF_String(datacache_disk_path, "${STARROCKS_HOME}/datacache/");
 CONF_String(datacache_meta_path, "${STARROCKS_HOME}/datacache/");
 CONF_Int64(datacache_block_size, "262144"); // 256K
 CONF_Bool(datacache_checksum_enable, "false");
@@ -1178,4 +1179,7 @@ CONF_mInt64(pk_dump_interval_seconds, "3600"); // 1 hour
 
 // whether enable query profile for queries initiated by spark or flink
 CONF_mBool(enable_profile_for_external_plan, "false");
+
+// the max length supported for varchar type
+CONF_mInt32(olap_string_max_length, "1048576");
 } // namespace starrocks::config

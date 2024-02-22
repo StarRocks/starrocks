@@ -30,14 +30,17 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -49,7 +52,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
-import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.SetUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.roaringbitmap.RoaringBitmap;
@@ -75,6 +79,8 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
+import static com.starrocks.qe.SessionVariableConstants.AggregationStage.AUTO;
+import static com.starrocks.qe.SessionVariableConstants.AggregationStage.ONE_STAGE;
 import static java.util.function.Function.identity;
 
 public class Utils {
@@ -673,6 +679,78 @@ public class Utils {
             eqColumnRefs.put(Objects.requireNonNull(lhsColRef), Objects.requireNonNull(rhsColRef));
         }
         return eqColumnRefs;
+    }
+
+    public static boolean couldGenerateMultiStageAggregate(LogicalProperty inputLogicalProperty,
+                                                           Operator inputOp, Operator childOp) {
+        // 1. check if must generate multi stage aggregate.
+        if (mustGenerateMultiStageAggregate(inputOp, childOp)) {
+            return true;
+        }
+
+        // 2. Respect user hint
+        int aggStage = ConnectContext.get().getSessionVariable().getNewPlannerAggStage();
+        if (aggStage == ONE_STAGE.ordinal() ||
+                (aggStage == AUTO.ordinal() && inputLogicalProperty.oneTabletProperty().supportOneTabletOpt)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    public static boolean mustGenerateMultiStageAggregate(Operator inputOp, Operator childOp) {
+        // Must do two stage aggregate if child operator is RepeatOperator
+        // If the repeat node is used as the input node of the Exchange node.
+        // Will cause the node to be unable to confirm whether it is const during serialization
+        // (BE does this for efficiency reasons).
+        // Therefore, it is forcibly ensured that no one-stage aggregation nodes are generated
+        // on top of the repeat node.
+        if (OperatorType.LOGICAL_REPEAT.equals(childOp.getOpType()) || OperatorType.PHYSICAL_REPEAT.equals(childOp.getOpType())) {
+            return true;
+        }
+
+        Map<ColumnRefOperator, CallOperator> aggs = Maps.newHashMap();
+        if (OperatorType.LOGICAL_AGGR.equals(inputOp.getOpType())) {
+            aggs = ((LogicalAggregationOperator) inputOp).getAggregations();
+        } else if (OperatorType.PHYSICAL_HASH_AGG.equals(inputOp.getOpType())) {
+            aggs = ((PhysicalHashAggregateOperator) inputOp).getAggregations();
+        }
+
+        for (CallOperator callOperator : aggs.values()) {
+            if (callOperator.isDistinct()) {
+                String fnName = callOperator.getFnName();
+                List<ScalarOperator> children = callOperator.getChildren();
+                if (children.size() > 1 || children.stream().anyMatch(c -> c.getType().isComplexType())) {
+                    return true;
+                }
+                if (FunctionSet.GROUP_CONCAT.equalsIgnoreCase(fnName) || FunctionSet.AVG.equalsIgnoreCase(fnName)) {
+                    return true;
+                } else if (FunctionSet.ARRAY_AGG.equalsIgnoreCase(fnName))  {
+                    if (children.size() > 1 || children.get(0).getType().isDecimalOfAnyVersion()) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    // without distinct function, the common distinctCols is an empty list.
+    public static Optional<List<ColumnRefOperator>> extractCommonDistinctCols(Collection<CallOperator> aggCallOperators) {
+        Set<ColumnRefOperator> distinctChildren = Sets.newHashSet();
+        for (CallOperator callOperator : aggCallOperators) {
+            if (callOperator.isDistinct()) {
+                if (distinctChildren.isEmpty()) {
+                    distinctChildren = Sets.newHashSet(callOperator.getColumnRefs());
+                } else {
+                    Set<ColumnRefOperator> nextDistinctChildren = Sets.newHashSet(callOperator.getColumnRefs());
+                    if (!SetUtils.isEqualSet(distinctChildren, nextDistinctChildren)) {
+                        return Optional.empty();
+                    }
+                }
+            }
+        }
+        return Optional.of(Lists.newArrayList(distinctChildren));
     }
 
     public static boolean hasNonDeterministicFunc(ScalarOperator operator) {

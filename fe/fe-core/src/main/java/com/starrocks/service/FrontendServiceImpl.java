@@ -69,6 +69,7 @@ import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.sys.GrantsTo;
 import com.starrocks.catalog.system.sys.RoleEdges;
 import com.starrocks.catalog.system.sys.SysFeLocks;
+import com.starrocks.catalog.system.sys.SysFeMemoryUsage;
 import com.starrocks.catalog.system.sys.SysObjectDependencies;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
@@ -177,6 +178,8 @@ import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TFeLocksReq;
 import com.starrocks.thrift.TFeLocksRes;
+import com.starrocks.thrift.TFeMemoryReq;
+import com.starrocks.thrift.TFeMemoryRes;
 import com.starrocks.thrift.TFeResult;
 import com.starrocks.thrift.TFetchResourceResult;
 import com.starrocks.thrift.TFinishSlotRequirementRequest;
@@ -194,6 +197,8 @@ import com.starrocks.thrift.TGetLoadTxnStatusRequest;
 import com.starrocks.thrift.TGetLoadTxnStatusResult;
 import com.starrocks.thrift.TGetLoadsParams;
 import com.starrocks.thrift.TGetLoadsResult;
+import com.starrocks.thrift.TGetPartitionsMetaRequest;
+import com.starrocks.thrift.TGetPartitionsMetaResponse;
 import com.starrocks.thrift.TGetProfileRequest;
 import com.starrocks.thrift.TGetProfileResponse;
 import com.starrocks.thrift.TGetRoleEdgesRequest;
@@ -654,6 +659,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TFeLocksRes listFeLocks(TFeLocksReq params) throws TException {
         return SysFeLocks.listLocks(params, true);
+    }
+
+    @Override
+    public TFeMemoryRes listFeMemoryUsage(TFeMemoryReq request) throws TException {
+        return SysFeMemoryUsage.listFeMemoryUsage(request);
     }
 
     // list MaterializedView table match pattern
@@ -2511,6 +2521,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TGetTablesConfigResponse getTablesConfig(TGetTablesConfigRequest request) throws TException {
         return InformationSchemaDataSource.generateTablesConfigResponse(request);
+    }
+
+    @Override
+    public TGetPartitionsMetaResponse getPartitionsMeta(TGetPartitionsMetaRequest request) throws TException {
+        return InformationSchemaDataSource.generatePartitionsMetaResponse(request);
     }
 
     @Override

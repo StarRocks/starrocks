@@ -128,7 +128,8 @@ public class MaterializedViewAnalyzer {
                     Table.TableType.PAIMON,
                     Table.TableType.ODPS,
                     Table.TableType.DELTALAKE,
-                    Table.TableType.VIEW);
+                    Table.TableType.VIEW,
+                    Table.TableType.HIVE_VIEW);
 
     public static void analyze(StatementBase stmt, ConnectContext session) {
         new MaterializedViewAnalyzerVisitor().visit(stmt, session);

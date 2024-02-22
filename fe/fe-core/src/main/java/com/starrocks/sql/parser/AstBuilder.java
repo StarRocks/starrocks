@@ -5713,6 +5713,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String functionName;
         boolean isGroupConcat = false;
         boolean isLegacyGroupConcat = false;
+        boolean isDistinct = false;
         if (context.aggregationFunction().COUNT() != null) {
             functionName = FunctionSet.COUNT;
         } else if (context.aggregationFunction().AVG() != null) {
@@ -5723,6 +5724,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             functionName = FunctionSet.MIN;
         } else if (context.aggregationFunction().ARRAY_AGG() != null) {
             functionName = FunctionSet.ARRAY_AGG;
+        } else if (context.aggregationFunction().ARRAY_AGG_DISTINCT() != null) { // alias to ARRAY_AGG
+            functionName = FunctionSet.ARRAY_AGG;
+            isDistinct = true;
         } else if (context.aggregationFunction().GROUP_CONCAT() != null) {
             functionName = FunctionSet.GROUP_CONCAT;
             isGroupConcat = true;
@@ -5740,7 +5744,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             hints = context.aggregationFunction().bracketHint().identifier().stream().map(
                     RuleContext::getText).collect(Collectors.toList());
         }
-        boolean isDistinct = false;
         if (context.aggregationFunction().setQuantifier() != null) {
             isDistinct = context.aggregationFunction().setQuantifier().DISTINCT() != null;
         }
@@ -5783,6 +5786,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
             // remove const order-by items
             orderByElements = orderByElements.stream().filter(x -> !x.getExpr().isConstant()).collect(toList());
+        }
+        if (CollectionUtils.isNotEmpty(orderByElements)) {
+            orderByElements.stream().forEach(e -> exprs.add(e.getExpr()));
         }
         FunctionCallExpr functionCallExpr = new FunctionCallExpr(functionName,
                 context.aggregationFunction().ASTERISK_SYMBOL() == null ?

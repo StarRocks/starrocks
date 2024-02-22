@@ -57,7 +57,6 @@ public:
         uint64_t size;
         bool is_active;
     };
-    enum class PrepareCacheScope { READ_FULL_FILE, READ_FULL_STRIPE, READ_FULL_ROW_INDEX };
 
     virtual ~InputStream();
 
@@ -92,12 +91,12 @@ public:
      */
     virtual const std::string& getName() const = 0;
 
-    virtual void prepareCache(PrepareCacheScope scope, uint64_t offset, uint64_t length);
-
+    virtual std::atomic<int32_t>* get_lazy_column_coalesce_counter();
+    virtual bool isAlreadyCollectedInSharedBuffer(const int64_t offset, const int64_t length) const;
     virtual bool isIOCoalesceEnabled() const;
     virtual bool isIOAdaptiveCoalesceEnabled() const;
-    virtual void clearIORanges();
-    virtual void setIORanges(std::vector<InputStream::IORange>& io_ranges, const bool is_from_stripe);
+    virtual void releaseToOffset(const int64_t offset);
+    virtual void setIORanges(std::vector<InputStream::IORange>& io_ranges);
 };
 
 /**

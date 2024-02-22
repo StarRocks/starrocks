@@ -60,6 +60,9 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.hive.Partition;
+import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.MemoryUsageTracker;
+import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.ObjectType;
@@ -73,7 +76,9 @@ import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.collections4.SetUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.spark.util.SizeEstimator;
 
+import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.DayOfWeek;
@@ -191,6 +196,12 @@ public class ScalarOperatorFunctions {
         }
     }
 
+    @ConstantFunction(name = "quarters_add", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
+    public static ConstantOperator quartersAdd(ConstantOperator date, ConstantOperator quarter) {
+        return ConstantOperator.createDatetime(
+                date.getDatetime().plus(quarter.getInt(), IsoFields.QUARTER_YEARS));
+    }
+
     @ConstantFunction.List(list = {
             @ConstantFunction(name = "months_add", argTypes = {DATETIME,
                     INT}, returnType = DATETIME, isMonotonic = true),
@@ -205,6 +216,11 @@ public class ScalarOperatorFunctions {
         } else {
             return ConstantOperator.createDatetime(date.getDatetime().plusMonths(month.getInt()));
         }
+    }
+
+    @ConstantFunction(name = "weeks_add", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
+    public static ConstantOperator weeksAdd(ConstantOperator date, ConstantOperator week) {
+        return ConstantOperator.createDatetime(date.getDatetime().plusWeeks(week.getInt()));
     }
 
     @ConstantFunction.List(list = {
@@ -231,6 +247,10 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDatetime(date.getDatetime().plusSeconds(second.getInt()));
     }
 
+    @ConstantFunction(name = "milliseconds_add", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
+    public static ConstantOperator millisecondsAdd(ConstantOperator date, ConstantOperator millisecond) {
+        return ConstantOperator.createDatetime(date.getDatetime().plus(millisecond.getInt(), ChronoUnit.MILLIS));
+    }
 
     @ConstantFunction.List(list = {
             @ConstantFunction(name = "date_trunc", argTypes = {VARCHAR, DATETIME}, returnType = DATETIME, isMonotonic = true),
@@ -358,13 +378,19 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "to_date", argTypes = {DATETIME}, returnType = DATE, isMonotonic = true)
     public static ConstantOperator toDate(ConstantOperator dateTime) {
         LocalDateTime dt = dateTime.getDatetime();
-        dt.truncatedTo(ChronoUnit.DAYS);
-        return ConstantOperator.createDate(dt);
+        LocalDateTime newDt = dt.truncatedTo(ChronoUnit.DAYS);
+        return ConstantOperator.createDate(newDt);
     }
 
     @ConstantFunction(name = "years_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
     public static ConstantOperator yearsSub(ConstantOperator date, ConstantOperator year) {
         return ConstantOperator.createDatetime(date.getDatetime().minusYears(year.getInt()));
+    }
+
+    @ConstantFunction(name = "quarters_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
+    public static ConstantOperator quartersSub(ConstantOperator date, ConstantOperator quarter) {
+        return ConstantOperator.createDatetime(
+                date.getDatetime().minus(quarter.getInt(), IsoFields.QUARTER_YEARS));
     }
 
     @ConstantFunction(name = "months_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
@@ -381,6 +407,11 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDatetime(date.getDatetime().minusDays(day.getInt()));
     }
 
+    @ConstantFunction(name = "weeks_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
+    public static ConstantOperator weeksSub(ConstantOperator date, ConstantOperator week) {
+        return ConstantOperator.createDatetime(date.getDatetime().minusWeeks(week.getInt()));
+    }
+
     @ConstantFunction(name = "hours_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
     public static ConstantOperator hoursSub(ConstantOperator date, ConstantOperator hour) {
         return ConstantOperator.createDatetime(date.getDatetime().minusHours(hour.getInt()));
@@ -394,6 +425,11 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "seconds_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
     public static ConstantOperator secondsSub(ConstantOperator date, ConstantOperator second) {
         return ConstantOperator.createDatetime(date.getDatetime().minusSeconds(second.getInt()));
+    }
+
+    @ConstantFunction(name = "milliseconds_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
+    public static ConstantOperator millisecondsSub(ConstantOperator date, ConstantOperator millisecond) {
+        return ConstantOperator.createDatetime(date.getDatetime().minus(millisecond.getInt(), ChronoUnit.MILLIS));
     }
 
     @ConstantFunction.List(list = {
@@ -1143,7 +1179,7 @@ public class ScalarOperatorFunctions {
 
     // =================================== meta functions ==================================== //
 
-    private static Table inspectExternalTable(TableName tableName) {
+    public static Table inspectExternalTable(TableName tableName) {
         Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName)
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName));
         ConnectContext connectContext = ConnectContext.get();
@@ -1159,7 +1195,7 @@ public class ScalarOperatorFunctions {
         return table;
     }
 
-    private static Pair<Database, Table> inspectTable(TableName tableName) {
+    public static Pair<Database, Table> inspectTable(TableName tableName) {
         Database db = GlobalStateMgr.getCurrentState().mayGetDb(tableName.getDb())
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR, tableName.getDb()));
         Table table = db.tryGetTable(tableName.getTbl())
@@ -1256,6 +1292,65 @@ public class ScalarOperatorFunctions {
 
         String json = GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().inspect();
         return ConstantOperator.createVarchar(json);
+    }
+
+    @ConstantFunction(name = "inspect_memory", argTypes = {VARCHAR}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator inspectMemory(ConstantOperator moduleName) {
+        Map<String, MemoryTrackable> statMap = MemoryUsageTracker.REFERENCE.get(moduleName.getVarchar());
+        if (statMap == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                    "Module " + moduleName + " not found.");
+        }
+        long estimateSize = 0;
+        for (Map.Entry<String, MemoryTrackable> statEntry : statMap.entrySet()) {
+            MemoryTrackable tracker = statEntry.getValue();
+            estimateSize += tracker.estimateSize();
+        }
+
+        return ConstantOperator.createVarchar(new ByteSizeValue(estimateSize).toString());
+    }
+
+    @ConstantFunction(name = "inspect_memory_detail", argTypes = {VARCHAR, VARCHAR},
+            returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator inspectMemoryDetail(ConstantOperator moduleName, ConstantOperator clazzInfo) {
+        Map<String, MemoryTrackable> statMap = MemoryUsageTracker.REFERENCE.get(moduleName.getVarchar());
+        if (statMap == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                    "Module " + moduleName + " not found.");
+        }
+        String classInfo = clazzInfo.getVarchar();
+        String clazzName;
+        String fieldName = null;
+        if (classInfo.contains(".")) {
+            clazzName = classInfo.split("\\.")[0];
+            fieldName = classInfo.split("\\.")[1];
+        } else {
+            clazzName = classInfo;
+        }
+        MemoryTrackable memoryTrackable = statMap.get(clazzName);
+        if (memoryTrackable == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                    "In module " + moduleName + " - " + clazzName + " not found.");
+        }
+        long estimateSize = 0;
+        if (fieldName == null) {
+            estimateSize = memoryTrackable.estimateSize();
+        } else {
+            try {
+                Field field = memoryTrackable.getClass().getDeclaredField(fieldName);
+                field.setAccessible(true);
+                Object object = field.get(memoryTrackable);
+                estimateSize = SizeEstimator.estimate(object);
+            } catch (NoSuchFieldException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                        "In module " + moduleName + " - " + clazzName + " field " + fieldName + " not found.");
+            } catch (IllegalAccessException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                        "Get module " + moduleName + " - " + clazzName + " field " + fieldName + " error.");
+            }
+        }
+
+        return ConstantOperator.createVarchar(new ByteSizeValue(estimateSize).toString());
     }
 
     /**

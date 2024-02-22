@@ -303,6 +303,10 @@ public class ScalarType extends Type implements Cloneable {
         }
     }
 
+    public static int getOlapMaxVarcharLength() {
+        return Config.max_varchar_length;
+    }
+
     public static ScalarType createDefaultString() {
         ScalarType stringType = ScalarType.createVarcharType(ScalarType.DEFAULT_STRING_LENGTH);
         return stringType;
@@ -315,7 +319,7 @@ public class ScalarType extends Type implements Cloneable {
     }
 
     public static ScalarType createMaxVarcharType() {
-        ScalarType stringType = ScalarType.createVarcharType(ScalarType.MAX_VARCHAR_LENGTH);
+        ScalarType stringType = ScalarType.createVarcharType(ScalarType.getOlapMaxVarcharLength());
         return stringType;
     }
 

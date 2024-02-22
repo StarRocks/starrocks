@@ -139,15 +139,14 @@ import com.starrocks.sql.optimizer.rule.transformation.RewriteBitmapCountDistinc
 import com.starrocks.sql.optimizer.rule.transformation.RewriteCountIfFunction;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteDuplicateAggregateFnRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteHllCountDistinctRule;
-import com.starrocks.sql.optimizer.rule.transformation.RewriteMultiDistinctByCTERule;
-import com.starrocks.sql.optimizer.rule.transformation.RewriteMultiDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSumByAssociativeRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2AnalyticRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2JoinRule;
-import com.starrocks.sql.optimizer.rule.transformation.SplitAggregateRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitLimitRule;
+import com.starrocks.sql.optimizer.rule.transformation.SplitMultiPhaseAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitTopNRule;
+import com.starrocks.sql.optimizer.rule.transformation.SplitTwoPhaseAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.OnlyJoinRule;
@@ -360,11 +359,6 @@ public class RuleSet {
                 new RewriteCountIfFunction()
         ));
 
-        REWRITE_RULES.put(RuleSetType.MULTI_DISTINCT_REWRITE, ImmutableList.of(
-                new RewriteMultiDistinctByCTERule(),
-                new RewriteMultiDistinctRule()
-        ));
-
         REWRITE_RULES.put(RuleSetType.PRUNE_PROJECT, ImmutableList.of(
                 new PruneProjectRule(),
                 new PruneProjectEmptyRule(),
@@ -434,7 +428,8 @@ public class RuleSet {
 
     public RuleSet() {
         // Add common transform rule
-        transformRules.add(SplitAggregateRule.getInstance());
+        transformRules.add(SplitMultiPhaseAggRule.getInstance());
+        transformRules.add(SplitTwoPhaseAggRule.getInstance());
         transformRules.add(GroupByCountDistinctDataSkewEliminateRule.getInstance());
         transformRules.add(SplitTopNRule.getInstance());
     }

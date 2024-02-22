@@ -29,6 +29,7 @@ public class TaskRunContext {
     Constants.TaskType type;
     TaskRunStatus status;
     ExecuteOption executeOption;
+    TaskRun taskRun;
 
     public TaskRunContext() {
     }
@@ -43,6 +44,7 @@ public class TaskRunContext {
         this.type = context.type;
         this.status = context.status;
         this.executeOption = context.executeOption;
+        this.taskRun = context.taskRun;
     }
 
     public ConnectContext getCtx() {
@@ -115,5 +117,13 @@ public class TaskRunContext {
 
     public void setExecuteOption(ExecuteOption executeOption) {
         this.executeOption = executeOption;
+    }
+
+    public TaskRun getTaskRun() {
+        return taskRun;
+    }
+
+    public void setTaskRun(TaskRun taskRun) {
+        this.taskRun = taskRun;
     }
 }

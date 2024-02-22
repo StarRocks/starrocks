@@ -74,7 +74,10 @@ struct HdfsScanStats {
     // late materialize round-by-round
     int64_t group_min_round_cost = 0;
 
-    std::vector<int64_t> orc_stripe_sizes;
+    // orc stripe information
+    std::vector<int64_t> orc_stripe_sizes{};
+    int64_t orc_total_tiny_stripe_size = 0;
+
     // io coalesce
     int64_t orc_stripe_active_lazy_coalesce_together = 0;
     int64_t orc_stripe_active_lazy_coalesce_seperately = 0;
@@ -117,6 +120,7 @@ struct HdfsScanProfile {
 
     RuntimeProfile::Counter* shared_buffered_shared_io_count = nullptr;
     RuntimeProfile::Counter* shared_buffered_shared_io_bytes = nullptr;
+    RuntimeProfile::Counter* shared_buffered_shared_align_io_bytes = nullptr;
     RuntimeProfile::Counter* shared_buffered_shared_io_timer = nullptr;
     RuntimeProfile::Counter* shared_buffered_direct_io_count = nullptr;
     RuntimeProfile::Counter* shared_buffered_direct_io_bytes = nullptr;

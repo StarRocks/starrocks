@@ -24,8 +24,9 @@ ScanExecutor::ScanExecutor(std::unique_ptr<ThreadPool> thread_pool, std::unique_
     REGISTER_GAUGE_STARROCKS_METRIC(pipe_scan_executor_queuing, [this]() { return _task_queue->size(); });
 }
 
-ScanExecutor::~ScanExecutor() {
+void ScanExecutor::close() {
     _task_queue->close();
+    _thread_pool->shutdown();
 }
 
 void ScanExecutor::initialize(int num_threads) {

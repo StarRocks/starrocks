@@ -255,18 +255,17 @@ void GlobalEnv::_init_storage_page_cache() {
 }
 
 int64_t GlobalEnv::get_storage_page_cache_size() {
-    std::lock_guard<std::mutex> l(*config::get_mstring_conf_lock());
     int64_t mem_limit = MemInfo::physical_mem();
     if (process_mem_tracker()->has_limit()) {
         mem_limit = process_mem_tracker()->limit();
     }
-    return ParseUtil::parse_mem_spec(config::storage_page_cache_limit, mem_limit);
+    return ParseUtil::parse_mem_spec(config::storage_page_cache_limit.value(), mem_limit);
 }
 
 int64_t GlobalEnv::check_storage_page_cache_size(int64_t storage_cache_limit) {
     if (storage_cache_limit > MemInfo::physical_mem()) {
         LOG(WARNING) << "Config storage_page_cache_limit is greater than memory size, config="
-                     << config::storage_page_cache_limit << ", memory=" << MemInfo::physical_mem();
+                     << config::storage_page_cache_limit.value() << ", memory=" << MemInfo::physical_mem();
     }
     if (!config::disable_storage_page_cache) {
         if (storage_cache_limit < kcacheMinSize) {
@@ -569,12 +568,48 @@ void ExecEnv::stop() {
         _agent_server->stop();
     }
 
+    if (_runtime_filter_worker) {
+        _runtime_filter_worker->close();
+    }
+
+    if (_profile_report_worker) {
+        _profile_report_worker->close();
+    }
+
     if (_automatic_partition_pool) {
         _automatic_partition_pool->shutdown();
     }
 
+    if (_query_rpc_pool) {
+        _query_rpc_pool->shutdown();
+    }
+
     if (_load_rpc_pool) {
         _load_rpc_pool->shutdown();
+    }
+
+    if (_scan_executor) {
+        _scan_executor->close();
+    }
+
+    if (_connector_scan_executor) {
+        _connector_scan_executor->close();
+    }
+
+    if (_thread_pool) {
+        _thread_pool->shutdown();
+    }
+
+    if (_query_context_mgr) {
+        _query_context_mgr->clear();
+    }
+
+    if (_result_mgr) {
+        _result_mgr->stop();
+    }
+
+    if (_stream_mgr) {
+        _stream_mgr->close();
     }
 
     if (_routine_load_task_executor) {
@@ -608,6 +643,7 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_pipeline_prepare_pool);
     SAFE_DELETE(_pipeline_sink_io_pool);
     SAFE_DELETE(_query_rpc_pool);
+    _load_rpc_pool.reset();
     SAFE_DELETE(_scan_executor);
     SAFE_DELETE(_connector_scan_executor);
     SAFE_DELETE(_thread_pool);

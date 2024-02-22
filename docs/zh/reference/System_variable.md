@@ -171,6 +171,12 @@ StarRocks 数据库支持的字符集，当前仅支持 UTF8 编码 （`utf8`）
 
 外表查询时每个 Scan 算子能同时下发的 I/O 任务的最大数量。取值为整数，默认值 16。目前外表查询时会使用自适应算法来调整并发 I/O 任务的数量，通过 `enable_connector_adaptive_io_tasks` 开关来控制，默认打开。
 
+### connector_sink_compression_codec（3.2.3 及以后）
+
+用于指定写入 Hive 表或 Iceberg 表时以及使用 Files() 导出数据时的压缩算法。
+
+有效值：`gzip`、`brotli`、`zstd` 和 `lz4`。
+
 ### count_distinct_column_buckets（2.5 及以后）
 
 group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该变量只有在 `enable_distinct_column_bucketization` 设置为 `true` 时才会生效。默认值：1024。
@@ -217,9 +223,11 @@ group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该�
 
 用于设置通过 INSERT 语句进行数据导入时，是否开启严格模式 (Strict Mode)。默认为 `true`，即开启严格模式。关于该模式的介绍，可以参阅[严格模式](../loading/load_concept/strict_mode.md)。
 
-### enable_materialized_view_rewrite_for_insert (3.2.2 and later)
+### enable_materialized_view_for_insert
 
-是否允许 StarRocks 改写 INSERT INTO SELECT 语句中的查询。默认为 `false`，即默认关闭该场景下的物化视图查询改写。
+* 含义：是否允许 StarRocks 改写 INSERT INTO SELECT 语句中的查询。
+* 默认值：false，即默认关闭该场景下的物化视图查询改写。
+* 引入版本：v2.5.18, v3.0.9, v3.1.7, v3.2.2
 
 ### enable_materialized_view_union_rewrite（2.5 及以后）
 
@@ -228,6 +236,11 @@ group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该�
 ### enable_rule_based_materialized_view_rewrite（2.5 及以后）
 
 是否开启基于规则的物化视图查询改写功能，主要用于处理单表查询改写。默认值：`true`。
+
+### enable_short_circuit（3.2.3 及以后）
+
+是否启用短路径查询。默认值：`false`。如果将其设置为 `true`，当表为[行列混存表](../table_design/hybrid_table.md)，并且[查询满足条件](../table_design/hybrid_table.md#查询数据)
+（用于评估是否为点查）：WHERE 子句的条件列必须包含所有主键列，并且运算符为 `=` 或者 `IN`，则该查询才会走短路径，直接查询按行存储的数据。
 
 ### enable_spill（3.0 及以后）
 
@@ -515,7 +528,7 @@ GROUP BY 聚合的高基数上限。GROUP BY 聚合的输出预估超过该行�
 
 ### query_mem_limit
 
-用于设置每个 BE 节点上查询的内存限制。单位：Byte。默认值为 `0`，表示没有限制。该项仅在启用 Pipeline Engine 后生效。
+用于设置每个 BE 节点上单个查询的内存限制。单位：Byte。默认值为 `0`，表示没有限制。该项仅在启用 Pipeline Engine 后生效。
 
 ### query_queue_concurrency_limit (global)
 
@@ -655,6 +668,17 @@ set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
 ### time_zone
 
 用于设置当前会话的时区。时区会对某些时间函数的结果产生影响。
+
+### trace_log_mode
+
+- 含义：用于控制 Query Trace Profile 的 Logs 的输出位置。有效值包括：
+  - `command`：在执行 TRACE LOGS 后作为 **Explain String** 返回。
+  - `file`：在 FE 日志文件 **fe.log** 中以 `FileLogTracer` 为类名返回。
+
+  有关 Query Trace Profile 的更多信息，请参阅 [Query Trace Profile](../developers/trace-tools/query_trace_profile.md)。
+
+- 默认值：`command`
+- 引入版本：v3.2.0
 
 ### transaction_read_only
 

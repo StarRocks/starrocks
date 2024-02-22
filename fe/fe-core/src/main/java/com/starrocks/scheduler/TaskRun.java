@@ -49,6 +49,7 @@ public class TaskRun implements Comparable<TaskRun> {
     public static final String PARTITION_START = "PARTITION_START";
     public static final String PARTITION_END = "PARTITION_END";
     public static final String FORCE = "FORCE";
+    private boolean isKilled = false;
 
     private long taskId;
 
@@ -133,6 +134,14 @@ public class TaskRun implements Comparable<TaskRun> {
         this.executeOption = executeOption;
     }
 
+    public void kill() {
+        isKilled = true;
+    }
+
+    public boolean isKilled() {
+        return isKilled;
+    }
+
     public Map<String, String> refreshTaskProperties(ConnectContext ctx) {
         Map<String, String> newProperties = Maps.newHashMap();
         if (task.getSource() != Constants.TaskSource.MV) {
@@ -187,6 +196,12 @@ public class TaskRun implements Comparable<TaskRun> {
         runCtx.getState().reset();
         runCtx.setQueryId(UUID.fromString(status.getQueryId()));
 
+        // NOTE: Ensure the thread local connect context is always the same with the newest ConnectContext.
+        // NOTE: Ensure this thread local is removed after this method to avoid memory leak in JVM.
+        runCtx.setThreadLocalInfo();
+        LOG.info("[QueryId:{}] [ThreadLocal QueryId: {}] start to execute task run, task_id:{}",
+                runCtx.getQueryId(), ConnectContext.get() == null ? "" : ConnectContext.get().getQueryId(), taskId);
+
         Map<String, String> newProperties = refreshTaskProperties(runCtx);
         properties.putAll(newProperties);
 
@@ -210,9 +225,12 @@ public class TaskRun implements Comparable<TaskRun> {
         taskRunContext.setTaskType(type);
         taskRunContext.setStatus(status);
         taskRunContext.setExecuteOption(executeOption);
+        taskRunContext.setTaskRun(this);
 
         processor.processTaskRun(taskRunContext);
         QueryState queryState = runCtx.getState();
+        LOG.info("[QueryId:{}] finished to execute task run, task_id:{}, query_state:{}",
+                runCtx.getQueryId(), taskId, queryState);
         if (runCtx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
             status.setErrorMessage(queryState.getErrorMessage());
             int errorCode = -1;

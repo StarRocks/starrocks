@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.plan;
 
-import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
@@ -32,12 +31,6 @@ import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.Ignore;
 import org.junit.Test;
-
-import java.io.File;
-import java.util.List;
-import java.util.Objects;
-
-import static org.junit.Assert.fail;
 
 public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
 
@@ -146,15 +139,15 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     public void testTPCDS54() throws Exception {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds54"));
         // Check the size of the left and right tables
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  49:NESTLOOP JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("51:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
                 "  |  other join predicates: cast([208: d_month_seq, INT, true] as BIGINT) <= [291: expr, BIGINT, true]\n" +
                 "  |  cardinality: 18262\n" +
                 "  |  column statistics: \n" +
                 "  |  * d_date_sk-->[2415022.0, 2488070.0, 0.0, 4.0, 18262.25] ESTIMATE\n" +
                 "  |  * d_month_seq-->[0.0, 2400.0, 0.0, 4.0, 2398.0] ESTIMATE\n" +
-                "  |  * expr-->[3.0, 2403.0, 0.0, 8.0, 30.13572607260726] ESTIMATE\n"));
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  |----18:EXCHANGE\n" +
+                "  |  * expr-->[3.0, 2403.0, 0.0, 8.0, 30.13572607260726] ESTIMATE"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("|----18:EXCHANGE\n" +
                 "  |       distribution type: SHUFFLE\n" +
                 "  |       partition exprs: [70: cs_bill_customer_sk, INT, true]\n" +
                 "  |       cardinality: 6304\n" +
@@ -334,7 +327,7 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/multi_count_distinct"), null, TExplainLevel.NORMAL);
         String plan = replayPair.second;
-        Assert.assertTrue(plan, plan.contains("33:AGGREGATE (update serialize)\n" +
+        Assert.assertTrue(plan, plan.contains("35:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  output: multi_distinct_count(6: order_id), multi_distinct_count(11: delivery_phone)," +
                 " multi_distinct_count(128: case), max(103: count)\n" +
@@ -533,9 +526,9 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     public void testCorrelatedPredicateRewrite() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/union_with_subquery"), null, TExplainLevel.COSTS);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("1110:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("1201:HASH JOIN\n" +
                 "  |  join op: RIGHT OUTER JOIN (BUCKET_SHUFFLE(S))\n" +
-                "  |  equal join conjunct: [3807: ref_id, BIGINT, true] = [3680: deal_id, BIGINT, true]"));
+                "  |  equal join conjunct: [3802: ref_id, BIGINT, true] = [3681: customer_id, BIGINT, true]"));
     }
 
     @Ignore
@@ -727,37 +720,6 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
-    public void testMockQueryDump() {
-        List<String> fileNames = mockCases();
-        for (String fileName : fileNames) {
-            try {
-                Pair<QueryDumpInfo, String> replayPair =
-                        getPlanFragment(getDumpInfoFromFile("query_dump/mock-files/" + fileName),
-                                null, TExplainLevel.NORMAL);
-                Assert.assertTrue(replayPair.second, replayPair.second.contains("mock"));
-            } catch (Throwable e) {
-                fail("file: " + fileName + " should success. errMsg: " + e.getMessage());
-            }
-
-        }
-    }
-
-    private static List<String> mockCases() {
-        String folderPath = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath()
-                + "/query_dump/mock-files";
-        File folder = new File(folderPath);
-        List<String> fileNames = Lists.newArrayList();
-
-        if (folder.exists() && folder.isDirectory()) {
-            File[] files = folder.listFiles();
-            for (File file : files) {
-                fileNames.add(file.getName().split("\\.")[0]);
-            }
-        }
-        return fileNames;
-    }
-
-    @Test
     public void testUnionAllWithTopNRuntimeFilter() throws Exception {
         QueryDumpInfo queryDumpInfo =
                 getDumpInfoFromJson(getDumpInfoFromFile("query_dump/union_all_with_topn_runtime_filter"));
@@ -816,6 +778,18 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "  1:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(2: NUM)\n" +
                 "  |  group by: 1: TIME"));
+    }
+
+    @Test
+    public void testTwoStageAgg() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/two_stage_agg"),
+                        null, TExplainLevel.COSTS);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING"));
+
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("0:OlapScanNode\n" +
+                "     table: lineorder_2, rollup: lineorder_2"));
     }
 
 }

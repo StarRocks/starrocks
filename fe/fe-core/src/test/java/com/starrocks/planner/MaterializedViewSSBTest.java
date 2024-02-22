@@ -14,11 +14,14 @@
 
 package com.starrocks.planner;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.List;
 
 public class MaterializedViewSSBTest extends MaterializedViewTestBase {
     @BeforeClass
@@ -88,6 +91,7 @@ public class MaterializedViewSSBTest extends MaterializedViewTestBase {
 
     @Test
     public void testQuery4_1() {
+        setTracLogModule("MV");
         runFileUnitTest("materialized-view/ssb/q4-1");
     }
 
@@ -127,5 +131,34 @@ public class MaterializedViewSSBTest extends MaterializedViewTestBase {
         String plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "lineorder_flat_mv");
         connectContext.getSessionVariable().setCboMaterializedViewRewriteRelatedMVsLimit(oldVal);
+    }
+
+    @Test
+    public void testNestedMVRewriteWithSSB() {
+        String mv1 = "CREATE MATERIALIZED VIEW mv1 REFRESH ASYNC every (interval 10 minute) AS\n" +
+                "select lo_orderkey, lo_custkey, p_partkey, p_name\n" +
+                "from lineorder join part on lo_partkey = p_partkey;";
+        String mv2 = "CREATE MATERIALIZED VIEW mv2 REFRESH ASYNC every (interval 10 minute) AS\n" +
+                "select c_custkey from customer group by c_custkey;";
+        String mv3 = "CREATE MATERIALIZED VIEW mv3 REFRESH ASYNC every (interval 10 minute) AS\n" +
+                "select * from mv1 lo join mv2 cust on lo.lo_custkey = cust.c_custkey;";
+
+        connectContext.getSessionVariable().setQueryIncludingMVNames("mv1,mv2,mv3");
+        starRocksAssert.withMaterializedViews(ImmutableList.of(mv1, mv2, mv3), (obj) -> {
+            String query = "select *\n" +
+                    "from (\n" +
+                    "    select lo_orderkey, lo_custkey, p_partkey, p_name\n" +
+                    "    from lineorder\n" +
+                    "    join part on lo_partkey = p_partkey\n" +
+                    ") lo\n" +
+                    "join (\n" +
+                    "    select c_custkey\n" +
+                    "    from customer\n" +
+                    "    group by c_custkey\n" +
+                    ") cust\n" +
+                    "on lo.lo_custkey = cust.c_custkey;";
+            sql(query).contains("mv3");
+        });
+        connectContext.getSessionVariable().setQueryIncludingMVNames("");
     }
 }

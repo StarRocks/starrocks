@@ -173,6 +173,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // enable table pruning(CBO) in cardinality-preserving joins
     public static final String ENABLE_CBO_TABLE_PRUNE = "enable_cbo_table_prune";
+
+    // Table pruning on update statement is risky, so turn off in default.
+    public static final String ENABLE_TABLE_PRUNE_ON_UPDATE = "enable_table_prune_on_update";
+
     // if set to true, some of stmt will be forwarded to leader FE to get result
 
     // if set to true, some of stmt will be forwarded to leader FE to get result
@@ -449,6 +453,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         LEADER      // proxy queries to leader no matter the follower's replay progress
     }
     public static final String FOLLOWER_QUERY_FORWARD_MODE = "follower_query_forward_mode";
+
+    public static final String ENABLE_ARRAY_DISTINCT_AFTER_AGG_OPT = "enable_array_distinct_after_agg_opt";
 
     public enum MaterializedViewRewriteMode {
         DISABLE,            // disable materialized view rewrite
@@ -831,8 +837,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = CHUNK_SIZE, flag = VariableMgr.INVISIBLE)
     private int chunkSize = 4096;
 
-    public static final int PIPELINE_BATCH_SIZE = 4096;
-
     // auto, force_streaming, force_preaggregation
     @VariableMgr.VarAttr(name = STREAMING_PREAGGREGATION_MODE)
     private String streamingPreaggregationMode = SessionVariableConstants.AUTO;
@@ -958,6 +962,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_CBO_TABLE_PRUNE)
     private boolean enableCboTablePrune = false;
+
+    @VarAttr(name = ENABLE_TABLE_PRUNE_ON_UPDATE)
+    private boolean enableTablePruneOnUpdate = false;
     @VariableMgr.VarAttr(name = FORWARD_TO_LEADER, alias = FORWARD_TO_MASTER)
     private boolean forwardToLeader = false;
 
@@ -1040,7 +1047,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // corresponding stages respectively. However, stages 3 and 4 can only be generated in
     // single-column distinct scenarios
     @VariableMgr.VarAttr(name = NEW_PLANER_AGG_STAGE)
-    private int newPlannerAggStage = 0;
+    private int newPlannerAggStage = SessionVariableConstants.AggregationStage.AUTO.ordinal();
 
     @VariableMgr.VarAttr(name = TRANSMISSION_COMPRESSION_TYPE)
     private String transmissionCompressionType = "NO_COMPRESSION";
@@ -1599,6 +1606,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return cboDecimalCastStringStrict;
     }
 
+    @VarAttr(name = ENABLE_ARRAY_DISTINCT_AFTER_AGG_OPT)
+    private boolean enableArrayDistinctAfterAggOpt = true;
+
     public String getCboEqBaseType() {
         return cboEqBaseType;
     }
@@ -1798,6 +1808,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return hivePartitionStatsSampleSize;
     }
 
+    public void setForceScheduleLocal(boolean forceScheduleLocal) {
+        this.forceScheduleLocal = forceScheduleLocal;
+    }
+
     public boolean getEnableAdaptiveSinkDop() {
         return enableAdaptiveSinkDop;
     }
@@ -1982,6 +1996,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return exchangeInstanceParallel;
     }
 
+    public int getChunkSize() {
+        return chunkSize;
+    }
+
     public boolean getEnableInsertStrict() {
         return enableInsertStrict;
     }
@@ -2016,6 +2034,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableCboTablePrune() {
         return enableCboTablePrune;
+    }
+
+    public void setEnableTablePruneOnUpdate(boolean on) {
+        this.enableTablePruneOnUpdate = on;
+    }
+
+    public boolean isEnableTablePruneOnUpdate() {
+        return enableTablePruneOnUpdate;
     }
 
     public int getSpillMemTableSize() {
@@ -3071,6 +3097,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableStrictOrderBy(boolean enableStrictOrderBy) {
         this.enableStrictOrderBy = enableStrictOrderBy;
+    }
+
+    public boolean getEnableArrayDistinctAfterAggOpt() {
+        return  enableArrayDistinctAfterAggOpt;
     }
 
     // Serialize to thrift object

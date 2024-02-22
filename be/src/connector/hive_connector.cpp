@@ -69,13 +69,6 @@ std::string HiveDataSource::name() const {
 }
 
 Status HiveDataSource::open(RuntimeState* state) {
-    // right now we don't force user to set JAVA_HOME.
-    // but when we access hdfs via JNI, we have to make sure JAVA_HOME is set,
-    // otherwise be will crash because of failure to create JVM.
-    const char* p = std::getenv("JAVA_HOME");
-    if (p == nullptr) {
-        return Status::RuntimeError("env 'JAVA_HOME' is not set");
-    }
     const auto& hdfs_scan_node = _provider->_hdfs_scan_node;
     if (_scan_range.file_length == 0) {
         _no_data = true;
@@ -376,6 +369,8 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
         ADD_COUNTER(_runtime_profile, prefix, TUnit::NONE);
         _profile.shared_buffered_shared_io_bytes =
                 ADD_CHILD_COUNTER(_runtime_profile, "SharedIOBytes", TUnit::BYTES, prefix);
+        _profile.shared_buffered_shared_align_io_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "SharedAlignIOBytes", TUnit::BYTES, prefix);
         _profile.shared_buffered_shared_io_count =
                 ADD_CHILD_COUNTER(_runtime_profile, "SharedIOCount", TUnit::UNIT, prefix);
         _profile.shared_buffered_shared_io_timer = ADD_CHILD_TIMER(_runtime_profile, "SharedIOTime", prefix);

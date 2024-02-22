@@ -188,7 +188,7 @@ Release date: April 28, 2023
 
 #### Deployment
 
-- Updated Docker image and the related [Docker deployment document](../quick_start/deploy_with_docker.md) for version 3.0. [#20623](https://github.com/StarRocks/starrocks/pull/20623) [#21021](https://github.com/StarRocks/starrocks/pull/21021)
+- Updated Docker image and the related [Docker deployment document](https://docs.starrocks.io/docs/quick_start/shared-nothing/) for version 3.0. [#20623](https://github.com/StarRocks/starrocks/pull/20623) [#21021](https://github.com/StarRocks/starrocks/pull/21021)
 
 #### Storage engine and data ingestion
 

@@ -11,7 +11,7 @@
       "type": "category",
       "label": "Quick Start",
       "link": {"type": "doc", "id": "quick_start/quick_start"},
-      "items": ["quick_start/shared-nothing", "quick_start/shared-data", "quick_start/iceberg"]
+      "items": ["quick_start/shared-nothing", "quick_start/shared-data", "quick_start/iceberg", "quick_start/hudi"]
     },
     {
       "type": "category",
@@ -74,6 +74,7 @@
           "link": {"type": "doc", "id": "table_design/indexes/indexes_overview"},
           "items": ["table_design/indexes/Prefix_index_sort_key","table_design/indexes/Bitmap_index", "table_design/indexes/Bloomfilter_index"]
         },
+        "table_design/hybrid_table",
         "table_design/data_compression"
       ]
     },
@@ -313,7 +314,14 @@
             "administration/Backup_and_restore",
             "administration/FE_configuration",
             "administration/BE_configuration",
-            "administration/Monitor_and_Alert",
+            {
+              "type": "category",
+              "label": "Monitor and Alert",
+              "link": {"type": "doc", "id": "administration/Monitor_and_Alert"},
+              "items": [
+                "administration/metrics"
+              ]
+            },
             "administration/audit_loader",
             "administration/enable_fqdn",
             "administration/timezone",
@@ -338,6 +346,7 @@
           ]
         },
         "administration/Data_recovery",
+        "administration/data_migration_tool",
         {
           "type": "category",
           "label": "User Privileges and Authentication",
@@ -815,6 +824,7 @@
           "link": {"type": "doc", "id": "table_design/indexes/indexes_overview"},
           "items": ["table_design/indexes/Prefix_index_sort_key","table_design/indexes/Bitmap_index", "table_design/indexes/Bloomfilter_index"]
         },
+        "table_design/hybrid_table",
         "table_design/data_compression"
       ]
     },
@@ -1056,7 +1066,14 @@
             "administration/Backup_and_restore",
             "administration/FE_configuration",
             "administration/BE_configuration",
-            "administration/Monitor_and_Alert",
+            {
+              "type": "category",
+              "label": "监控报警",
+              "link": {"type": "doc", "id": "administration/Monitor_and_Alert"},
+              "items": [
+                "administration/metrics"
+              ]
+            },
             "administration/audit_loader",
             "administration/enable_fqdn",
             "administration/timezone",
@@ -1080,6 +1097,7 @@
           ]
         },
         "administration/Data_recovery",
+        "administration/data_migration_tool",
         {
           "type": "category",
           "label": "管理用户权限",
