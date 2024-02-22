@@ -134,7 +134,7 @@ public class MvPartitionCompensator {
 
         // If no partition table and columns, no need compensate
         MaterializedView mv = mvContext.getMv();
-        Pair<Table, Column> partitionTableAndColumns = mv.getDirectTableAndPartitionColumn();
+        Pair<Table, Column> partitionTableAndColumns = mv.getBaseTableAndPartitionColumn();
         if (partitionTableAndColumns == null) {
             return Optional.of(false);
         }
@@ -477,7 +477,7 @@ public class MvPartitionCompensator {
             MaterializedView mv,
             OptExpression mvPlan,
             Set<String> mvPartitionNamesToRefresh) throws AnalysisException {
-        Pair<Table, Column> partitionTableAndColumns = mv.getDirectTableAndPartitionColumn();
+        Pair<Table, Column> partitionTableAndColumns = mv.getBaseTableAndPartitionColumn();
         if (partitionTableAndColumns == null) {
             return null;
         }
@@ -627,7 +627,7 @@ public class MvPartitionCompensator {
 
     public static List<ScalarOperator> getMVPrunedPartitionPredicates(MaterializedView mv,
                                                                       OptExpression mvPlan) {
-        Pair<Table, Column> partitionTableAndColumns = mv.getDirectTableAndPartitionColumn();
+        Pair<Table, Column> partitionTableAndColumns = mv.getBaseTableAndPartitionColumn();
         if (partitionTableAndColumns == null) {
             return null;
         }
