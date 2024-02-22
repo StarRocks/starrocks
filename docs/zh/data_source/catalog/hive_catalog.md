@@ -8,7 +8,7 @@ Hive Catalog 是一种 External Catalog。通过 Hive Catalog，您不需要执�
 
 StarRocks 从 2.3 版本开始支持 Hive Catalog。另外从 3.1 版本起，还支持访问 Hive Catalog 内的视图。
 
-为保证正常访问 Hive 内的数据，StarRocks 集群必须集成以下两个关键组件：
+为保证正常访问 Hive 内的数据，StarRocks 集群必须能够访问 Hive 集群的存储系统和元数据服务。目前 StarRocks 支持以下存储系统和元数据服务：
 
 - 分布式文件系统 (HDFS) 或对象存储。当前支持的对象存储包括：AWS S3、Microsoft Azure Storage、Google GCS、其他兼容 S3 协议的对象存储（如阿里云 OSS、MinIO）。
 
