@@ -49,6 +49,11 @@ import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.CreateTableLikeStmt;
+>>>>>>> 2ca9130146 ([Feature] Support Create Table Like DDL for Hive (#37685))
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -265,6 +270,51 @@ public class MetadataMgr {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public void createTableLike(CreateTableLikeStmt stmt) throws DdlException {
+        String catalogName = stmt.getCatalogName();
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+
+        if (connectorMetadata.isPresent()) {
+            String dbName = stmt.getDbName();
+            String tableName = stmt.getTableName();
+            if (tableExists(catalogName, dbName, tableName)) {
+                if (stmt.isSetIfNotExists()) {
+                    LOG.info("create table[{}] which already exists", tableName);
+                    return;
+                } else {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
+                }
+            }
+            connectorMetadata.get().createTableLike(stmt);
+        } else {
+            throw new DdlException("Invalid catalog " + catalogName + " , ConnectorMetadata doesn't exist");
+        }
+    }
+
+    public void alterTable(AlterTableStmt stmt) throws UserException {
+        String catalogName = stmt.getCatalogName();
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+
+        if (connectorMetadata.isPresent()) {
+            String dbName = stmt.getDbName();
+            String tableName = stmt.getTableName();
+            if (getDb(catalogName, dbName) == null) {
+                throw new DdlException("Database '" + dbName + "' does not exist in catalog '" + catalogName + "'");
+            }
+
+            if (!tableExists(catalogName, dbName, tableName)) {
+                throw new DdlException("Table '" + tableName + "' does not exist in database '" + dbName + "'");
+            }
+
+            connectorMetadata.get().alterTable(stmt);
+        } else {
+            throw new  DdlException("Invalid catalog " + catalogName + " , ConnectorMetadata doesn't exist");
+        }
+    }
+
+>>>>>>> 2ca9130146 ([Feature] Support Create Table Like DDL for Hive (#37685))
     public void dropTable(String catalogName, String dbName, String tblName) {
         TableName tableName = new TableName(catalogName, dbName, tblName);
         DropTableStmt dropTableStmt = new DropTableStmt(false, tableName, false);

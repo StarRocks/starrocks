@@ -254,7 +254,11 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateTableLikeStatement(CreateTableLikeStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
+<<<<<<< HEAD
                 context.getGlobalStateMgr().createTableLike(stmt);
+=======
+                context.getGlobalStateMgr().getMetadataMgr().createTableLike(stmt);
+>>>>>>> 2ca9130146 ([Feature] Support Create Table Like DDL for Hive (#37685))
             });
             return null;
         }
