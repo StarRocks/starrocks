@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sysctl-corepattern
+---
+apiVersion: "apps/v1"
+kind: "DaemonSet"
+metadata:
+  name: sysctl-corepattern
+  namespace: sysctl-corepattern
+spec:
+  selector:
+    matchLabels:
+      app: sysctl-corepattern
+  template:
+    metadata:
+      labels:
+        app: sysctl-corepattern
+    spec:
+      tolerations:
+        - effect: NoSchedule
+          key: dedicated
+          operator: Equal
+          value: celostar
+      initContainers:
+        - name: sysctl
+          image: busybox:latest
+          securityContext:
+            privileged: true
+          command: # change core pattern /proc/sys/kernel/core_pattern
+            - bin/sh
+            - -c
+            - sysctl -w kernel.core_pattern="/opt/starrocks/be/storage/coredumps/core.%s.%h.%t"
+      containers:
+        - name: pause
+          image: gcr.io/google_containers/pause
