@@ -26,6 +26,7 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.common.Version;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ColumnTypeConverter;
@@ -575,11 +576,11 @@ public class HiveMetastoreApiConverter {
 
     public static HiveCommonStats toHiveCommonStats(Map<String, String> params) {
         long numRows = getLongParam(ROW_COUNT, params);
-        if (numRows == -1) {
+        if (numRows == -1 && Config.enable_reuse_spark_column_statistics) {
             numRows = getLongParam("spark.sql.statistics.numRows", params);
         }
         long totalSize = getLongParam(TOTAL_SIZE, params);
-        if (totalSize == -1) {
+        if (totalSize == -1 && Config.enable_reuse_spark_column_statistics) {
             totalSize = getLongParam("spark.sql.statistics.totalSize", params);
         }
         return new HiveCommonStats(numRows, totalSize);
