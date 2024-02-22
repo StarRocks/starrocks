@@ -204,6 +204,7 @@ import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DistributionDesc;
@@ -872,6 +873,11 @@ public class LocalMetastore implements ConnectorMetadata {
             throw e;
         }
         return true;
+    }
+
+    @Override
+    public void createTableLike(CreateTableLikeStmt stmt) throws DdlException {
+        createTable(stmt.getCreateTableStmt());
     }
 
     @Override
