@@ -248,6 +248,13 @@ public class SetStmtAnalyzer {
             checkRangeIntVariable(resolvedExpression, SessionVariable.CBO_MATERIALIZED_VIEW_REWRITE_RELATED_MVS_LIMIT,
                     1, null);
         }
+        // catalog
+        if (variable.equalsIgnoreCase(SessionVariable.CATALOG)) {
+            String catalog = resolvedExpression.getStringValue();
+            if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalog)) {
+                throw new SemanticException(String.format("Unknown catalog %s", catalog));
+            }
+        }
 
         var.setResolvedExpression(resolvedExpression);
     }
