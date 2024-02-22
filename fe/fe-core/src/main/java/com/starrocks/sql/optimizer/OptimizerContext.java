@@ -267,4 +267,20 @@ public class OptimizerContext {
     public boolean isInMemoPhase() {
         return this.inMemoPhase;
     }
+<<<<<<< HEAD
+=======
+
+    public List<IsNullPredicateOperator> getPushdownNotNullPredicates() {
+        return pushdownNotNullPredicates;
+    }
+
+    public void addPushdownNotNullPredicates(IsNullPredicateOperator notNullPredicate) {
+        pushdownNotNullPredicates.add(notNullPredicate);
+    }
+
+    // Should clear pushdownNotNullPredicates after each call of PUSH_DOWN_PREDICATE rule set
+    public void clearNotNullPredicates() {
+        pushdownNotNullPredicates.clear();
+    }
+>>>>>>> 9eb8155625 ([BugFix] fix convert left outer join to inner join bug (#41428))
 }
