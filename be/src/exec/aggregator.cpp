@@ -1111,6 +1111,9 @@ Status Aggregator::_evaluate_group_by_exprs(Chunk* chunk) {
             // TODO: optimized the memory usage
             _group_by_columns[i] =
                     NullableColumn::create(_group_by_columns[i], NullColumn::create(_group_by_columns[i]->size(), 0));
+        } else if (!_group_by_types[i].is_nullable && _group_by_columns[i]->is_nullable()) {
+            return Status::InternalError(fmt::format("error nullablel column, index: {}, slot: {}", i,
+                                                     _group_by_expr_ctxs[i]->root()->debug_string()));
         }
     }
 
