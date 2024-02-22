@@ -37,6 +37,7 @@ public class TPCHPlanWithCostTest extends DistributedEnvPlanTestBase {
         FeConstants.showScanNodeLocalShuffleColumnsInExplain = false;
         connectContext.getSessionVariable().setEnableGlobalRuntimeFilter(true);
         connectContext.getSessionVariable().setEnableMultiColumnsOnGlobbalRuntimeFilter(true);
+        connectContext.getSessionVariable().setEnableQueryDump(true);
     }
 
     @AfterAll

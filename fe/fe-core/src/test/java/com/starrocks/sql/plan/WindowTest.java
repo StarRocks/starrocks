@@ -20,6 +20,9 @@ import org.junit.Assert;
 import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
 
+import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
+
 public class WindowTest extends PlanTestBase {
 
     @Test
@@ -44,10 +47,11 @@ public class WindowTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "functions: [, lag(NULL, 1, 1), ]");
 
-        sql = "select lag(id_datetime, 1, '2020-01-01xxx') over(partition by t1c) from test_all_type;";
-        expectedEx.expect(SemanticException.class);
-        expectedEx.expectMessage("The type of the third parameter of LEAD/LAG not match the type DATETIME");
-        getThriftPlan(sql);
+
+        String invalidSql = "select lag(id_datetime, 1, '2020-01-01xxx') over(partition by t1c) from test_all_type;";
+        SemanticException e = assertThrows(SemanticException.class, () -> getThriftPlan(invalidSql));
+        Assert.assertTrue(e.getMessage(),
+                e.getMessage().contains("The type of the third parameter of LEAD/LAG not match the type DATETIME"));
     }
 
     @Test
@@ -1115,10 +1119,8 @@ public class WindowTest extends PlanTestBase {
                 "    select *, " +
                         "        row_number() over (PARTITION BY v1 order by v2) as rk " +
                         "    from t0 where v1 > 1 and v2 > 1 having rk = 1;\n";
-
-        expectedEx.expect(SemanticException.class);
-        expectedEx.expectMessage("HAVING clause cannot contain window function");
-        getFragmentPlan(sql);
+        SemanticException e = assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+        assertTrue(e.getMessage(), e.getMessage().contains("HAVING clause cannot contain window function"));
     }
 
     @Test
