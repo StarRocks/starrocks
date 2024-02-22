@@ -113,6 +113,57 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public List<String> listTableNames(String dbName) {
+        return hmsOps.getAllTableNames(dbName);
+    }
+
+    @Override
+    public boolean createTable(CreateTableStmt stmt) throws DdlException {
+        return hmsOps.createTable(stmt);
+    }
+
+    @Override
+    public void createTableLike(CreateTableLikeStmt stmt) throws DdlException {
+        hmsOps.createTableLike(stmt);
+    }
+
+    @Override
+    public void dropTable(DropTableStmt stmt) throws DdlException {
+        String dbName = stmt.getDbName();
+        String tableName = stmt.getTableName();
+        if (isResourceMappingCatalog(catalogName)) {
+            HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) GlobalStateMgr.getCurrentState()
+                    .getMetadata().getTable(dbName, tableName);
+            if (hmsTable != null) {
+                cacheUpdateProcessor.ifPresent(processor -> processor.invalidateTable(
+                        hmsTable.getDbName(), hmsTable.getTableName(), hmsTable.getTableLocation()));
+            }
+        } else {
+            if (!stmt.isForceDrop()) {
+                throw new DdlException(String.format("Table location will be cleared." +
+                        " 'Force' must be set when dropping a hive table." +
+                        " Please execute 'drop table %s.%s.%s force'", stmt.getCatalogName(), dbName, tableName));
+            }
+
+            HiveTable hiveTable = (HiveTable) getTable(dbName, tableName);
+            if (hiveTable == null && stmt.isSetIfExists()) {
+                LOG.warn("Table {}.{} doesn't exist", dbName, tableName);
+                return;
+            }
+
+            if (hiveTable.getHiveTableType() != HiveTable.HiveTableType.MANAGED_TABLE) {
+                throw new StarRocksConnectorException("Only support to drop hive managed table");
+            }
+
+            hmsOps.dropTable(dbName, tableName);
+            StatisticUtils.dropStatisticsAfterDropTable(hiveTable);
+        }
+    }
+
+    @Override
+>>>>>>> 0cc4021439 ([BugFix] adapt to drop hive table of resource (#41404))
     public Table getTable(String dbName, String tblName) {
         Table table;
         try {
