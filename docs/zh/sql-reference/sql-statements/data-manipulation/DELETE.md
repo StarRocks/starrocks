@@ -358,3 +358,7 @@ select * from score_board;
 +------+------+-------+
 2 rows in set (0.00 sec)
 ```
+
+## 相关 SQL
+
+[SHOW DELETE](./SHOW_DELETE.md)：用于查询在指定数据库下，所有在明细表、聚合表、更新表上成功执行的历史删除 (DELETE) 任务。

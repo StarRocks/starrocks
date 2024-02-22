@@ -362,3 +362,7 @@ select * from score_board;
 +------+------+-------+
 2 rows in set (0.00 sec)
 ```
+
+## References
+
+[SHOW DELETE](./SHOW_DELETE.md): queries historical DELETE operations that were successfully performed on Duplicate Key tables, Aggregate tables, and Unique Key tables.
