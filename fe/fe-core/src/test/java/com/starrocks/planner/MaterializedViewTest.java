@@ -1341,6 +1341,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+    
     public void testJoinAggregateMaterializationAggregateFuncs5() {
         testRewriteOK("select empid, depts.deptno, count(*) + 1 as c, sum(empid) as s\n"
                         + "from emps join depts using (deptno)\n"
@@ -2722,7 +2723,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
-
     public void testCountDistinctToBitmapCount1() {
         String mv = "select user_id, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id;";
         testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags group by user_id;");
