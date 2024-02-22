@@ -38,7 +38,10 @@ struct ConfigInfo {
 
     bool operator<(const ConfigInfo& rhs) const { return name < rhs.name; }
 
-    bool operator==(const ConfigInfo& rhs) const = default;
+    bool operator==(const ConfigInfo& rhs) const {
+        return name == rhs.name && value == rhs.value && type == rhs.type && defval == rhs.defval &&
+               valmutable == rhs.valmutable;
+    }
 };
 
 inline std::ostream& operator<<(std::ostream& os, const ConfigInfo& info) {
