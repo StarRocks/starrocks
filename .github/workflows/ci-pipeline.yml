@@ -13,6 +13,8 @@ concurrency:
   group: ${{ github.event.number }}
   cancel-in-progress: true
 
+env:
+  IS_INSPECTION: true
 
 jobs:
 
@@ -36,6 +38,8 @@ jobs:
           contains(github.event.pull_request.labels.*.name, 'force-check')
         run: |
           echo "pass=true" >> $GITHUB_OUTPUT
+          echo ${IS_INSPECTION}
+          exit -1
 
       - name: Upload info
         run: |
@@ -320,7 +324,7 @@ jobs:
 
       - name: Run java checkstyle
         if: needs.fe-checker.outputs.java_filter == 'true'
-        uses: dbelyaev/action-checkstyle@v0.7.5
+        uses: dbelyaev/action-checkstyle@v1.5.6
         with:
           workdir: "./fe"
           checkstyle_config: checkstyle.xml
