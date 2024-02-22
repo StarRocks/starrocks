@@ -49,6 +49,7 @@
 #include "exec/spill/dir_manager.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/work_group.h"
+#include "fs/fs_s3.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/TFileBrokerService.h"
 #include "gutil/strings/join.h"
@@ -254,18 +255,17 @@ Status GlobalEnv::_init_storage_page_cache() {
 }
 
 int64_t GlobalEnv::get_storage_page_cache_size() {
-    std::lock_guard<std::mutex> l(*config::get_mstring_conf_lock());
     int64_t mem_limit = MemInfo::physical_mem();
     if (process_mem_tracker()->has_limit()) {
         mem_limit = process_mem_tracker()->limit();
     }
-    return ParseUtil::parse_mem_spec(config::storage_page_cache_limit, mem_limit);
+    return ParseUtil::parse_mem_spec(config::storage_page_cache_limit.value(), mem_limit);
 }
 
 int64_t GlobalEnv::check_storage_page_cache_size(int64_t storage_cache_limit) {
     if (storage_cache_limit > MemInfo::physical_mem()) {
         LOG(WARNING) << "Config storage_page_cache_limit is greater than memory size, config="
-                     << config::storage_page_cache_limit << ", memory=" << MemInfo::physical_mem();
+                     << config::storage_page_cache_limit.value() << ", memory=" << MemInfo::physical_mem();
     }
     if (!config::disable_storage_page_cache) {
         if (storage_cache_limit < kcacheMinSize) {
@@ -532,11 +532,35 @@ void ExecEnv::add_rf_event(const RfTracePoint& pt) {
 }
 
 void ExecEnv::stop() {
-    // Clear load channel should be executed before stopping the storage engine,
-    // otherwise some writing tasks will still be in the MemTableFlushThreadPool of the storage engine,
-    // so when the ThreadPool is destroyed, it will crash.
+    if (_stream_mgr != nullptr) {
+        _stream_mgr->close();
+    }
+
     if (_load_channel_mgr) {
-        _load_channel_mgr->clear();
+        // Clear load channel should be executed before stopping the storage engine,
+        // otherwise some writing tasks will still be in the MemTableFlushThreadPool of the storage engine,
+        // so when the ThreadPool is destroyed, it will crash.
+        _load_channel_mgr->close();
+    }
+
+    if (_load_stream_mgr) {
+        _load_stream_mgr->close();
+    }
+
+    if (_fragment_mgr) {
+        _fragment_mgr->close();
+    }
+
+    if (_pipeline_sink_io_pool) {
+        _pipeline_sink_io_pool->shutdown();
+    }
+
+    if (_wg_driver_executor) {
+        _wg_driver_executor->close();
+    }
+
+    if (_agent_server) {
+        _agent_server->stop();
     }
 
     if (_automatic_partition_pool) {
@@ -546,6 +570,10 @@ void ExecEnv::stop() {
     if (_load_rpc_pool) {
         _load_rpc_pool->shutdown();
     }
+
+#ifndef BE_TEST
+    close_s3_clients();
+#endif
 }
 
 void ExecEnv::destroy() {
@@ -558,14 +586,14 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_stream_context_mgr);
     SAFE_DELETE(_routine_load_task_executor);
     SAFE_DELETE(_stream_load_executor);
-    SAFE_DELETE(_brpc_stub_cache);
+    SAFE_DELETE(_fragment_mgr);
     SAFE_DELETE(_load_stream_mgr);
     SAFE_DELETE(_load_channel_mgr);
     SAFE_DELETE(_broker_mgr);
     SAFE_DELETE(_bfd_parser);
     SAFE_DELETE(_load_path_mgr);
     SAFE_DELETE(_wg_driver_executor);
-    SAFE_DELETE(_fragment_mgr);
+    SAFE_DELETE(_brpc_stub_cache);
     SAFE_DELETE(_udf_call_pool);
     SAFE_DELETE(_pipeline_prepare_pool);
     SAFE_DELETE(_pipeline_sink_io_pool);
@@ -598,6 +626,27 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_lake_replication_txn_manager);
     SAFE_DELETE(_cache_mgr);
     _metrics = nullptr;
+}
+
+void ExecEnv::_wait_for_fragments_finish() {
+    size_t max_loop_cnt_cfg = config::loop_count_wait_fragments_finish;
+    if (max_loop_cnt_cfg == 0) {
+        return;
+    }
+
+    size_t running_fragments = _fragment_mgr->running_fragment_count();
+    size_t loop_cnt = 0;
+
+    while (running_fragments && loop_cnt < max_loop_cnt_cfg) {
+        DLOG(INFO) << running_fragments << " fragment(s) are still running...";
+        sleep(10);
+        running_fragments = _fragment_mgr->running_fragment_count();
+        loop_cnt++;
+    }
+}
+
+void ExecEnv::wait_for_finish() {
+    _wait_for_fragments_finish();
 }
 
 int32_t ExecEnv::calc_pipeline_dop(int32_t pipeline_dop) const {

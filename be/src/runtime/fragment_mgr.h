@@ -80,6 +80,8 @@ public:
     Status exec_plan_fragment(const TExecPlanFragmentParams& params, const StartSuccCallback& start_cb,
                               const FinishCallback& cb);
 
+    void close();
+
     Status cancel(const TUniqueId& fragment_id) {
         return cancel(fragment_id, PPlanFragmentCancelReason::INTERNAL_ERROR);
     }
@@ -128,6 +130,7 @@ private:
     std::thread _cancel_thread;
     // every job is a pool
     std::unique_ptr<ThreadPool> _thread_pool;
+    bool _closed = false;
 };
 
 } // namespace starrocks
