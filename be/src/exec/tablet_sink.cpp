@@ -1748,24 +1748,23 @@ Status OlapTableSink::try_close(RuntimeState* state) {
                 }
 
                 // close both initial & incremental node channel
-                index_channel->for_each_node_channel(
-                        [&index_channel, &err_st, &intolerable_failure](NodeChannel* ch) {
-                            if (!index_channel->is_failed_channel(ch)) {
-                                auto st = ch->try_close();
-                                if (!st.ok()) {
-                                    LOG(WARNING) << "close incremental channel failed. channel_name=" << ch->name()
-                                                 << ", load_info=" << ch->print_load_info()
-                                                 << ", error_msg=" << st.get_error_msg();
-                                    err_st = st;
-                                    index_channel->mark_as_failed(ch);
-                                }
-                            } else {
-                                ch->cancel();
-                            }
-                            if (index_channel->has_intolerable_failure()) {
-                                intolerable_failure = true;
-                            }
-                        });
+                index_channel->for_each_node_channel([&index_channel, &err_st, &intolerable_failure](NodeChannel* ch) {
+                    if (!index_channel->is_failed_channel(ch)) {
+                        auto st = ch->try_close();
+                        if (!st.ok()) {
+                            LOG(WARNING) << "close incremental channel failed. channel_name=" << ch->name()
+                                         << ", load_info=" << ch->print_load_info()
+                                         << ", error_msg=" << st.get_error_msg();
+                            err_st = st;
+                            index_channel->mark_as_failed(ch);
+                        }
+                    } else {
+                        ch->cancel();
+                    }
+                    if (index_channel->has_intolerable_failure()) {
+                        intolerable_failure = true;
+                    }
+                });
 
             } else {
                 index_channel->for_each_node_channel([&index_channel, &err_st, &intolerable_failure](NodeChannel* ch) {
