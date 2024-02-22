@@ -53,6 +53,7 @@ import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -269,6 +270,27 @@ public class MetadataMgr {
             return connectorMetadata.get().createTable(stmt);
         } else {
             throw new  DdlException("Invalid catalog " + catalogName + " , ConnectorMetadata doesn't exist");
+        }
+    }
+
+    public void createTableLike(CreateTableLikeStmt stmt) throws DdlException {
+        String catalogName = stmt.getCatalogName();
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+
+        if (connectorMetadata.isPresent()) {
+            String dbName = stmt.getDbName();
+            String tableName = stmt.getTableName();
+            if (tableExists(catalogName, dbName, tableName)) {
+                if (stmt.isSetIfNotExists()) {
+                    LOG.info("create table[{}] which already exists", tableName);
+                    return;
+                } else {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
+                }
+            }
+            connectorMetadata.get().createTableLike(stmt);
+        } else {
+            throw new DdlException("Invalid catalog " + catalogName + " , ConnectorMetadata doesn't exist");
         }
     }
 
