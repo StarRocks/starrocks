@@ -958,6 +958,31 @@ bool StoredColumnReader::_cur_page_selected(size_t row_readed, const Filter* fil
 bool RepeatedStoredColumnReader::_cur_page_selected(size_t row_readed, const Filter* filter, size_t to_read) {
     // for repeated column we can't judge the last row in the current page,
     // to_read is all complete row, row + 1 contains the last incomplete row
+<<<<<<< HEAD
     return StoredColumnReader::_cur_page_selected(row_readed, filter, to_read + 1);
+=======
+    return StoredColumnReaderImpl::_cur_page_selected(row_readed, filter, to_read + 1);
+}
+
+Status StoredColumnReaderImpl::load_specific_page(size_t cur_page_idx, uint64_t offset, uint64_t first_row) {
+    _reader->set_next_read_page_idx(cur_page_idx);
+    RETURN_IF_ERROR(_reader->seek_to_offset(offset));
+    RETURN_IF_ERROR(_reader->load_header());
+    _cur_page_loaded = false;
+    _num_values_left_in_cur_page = _reader->num_values();
+    _read_cursor = first_row;
+    return Status::OK();
+}
+
+Status RepeatedStoredColumnReader::load_specific_page(size_t cur_page_idx, uint64_t offset, uint64_t first_row) {
+    RETURN_IF_ERROR(StoredColumnReaderImpl::load_specific_page(cur_page_idx, offset, first_row));
+    _not_null_to_skip = 0;
+    //// Todo: cache decoded level in this layer is error-prone, move it to level_decoder
+    if (_levels_decoded != _levels_parsed) {
+        _levels_parsed = 0;
+        _levels_decoded = 0;
+    }
+    return _reader->load_page();
+>>>>>>> 019b1aa418 ([BugFix]For repeated column when load new page clear level cahce (#41233))
 }
 } // namespace starrocks::parquet
