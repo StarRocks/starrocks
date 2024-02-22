@@ -1341,7 +1341,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
-
     public void testJoinAggregateMaterializationAggregateFuncs5() {
         testRewriteOK("select empid, depts.deptno, count(*) + 1 as c, sum(empid) as s\n"
                         + "from emps join depts using (deptno)\n"
