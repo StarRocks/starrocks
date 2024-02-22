@@ -2467,5 +2467,4 @@ public class AlterTest {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
     }
-
 }
