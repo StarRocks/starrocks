@@ -66,6 +66,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.Table.TableType.HIVE;
 import static com.starrocks.common.util.DateUtils.DATE_FORMATTER_UNIX;
 import static com.starrocks.connector.hive.CachingHiveMetastore.createCatalogLevelInstance;
 import static com.starrocks.connector.hive.HiveClassNames.MAPRED_PARQUET_INPUT_FORMAT_CLASS;
@@ -159,6 +160,11 @@ public class MockedHiveMetadata implements ConnectorMetadata {
             }
         }
         return ret;
+    }
+
+    @Override
+    public com.starrocks.catalog.Table.TableType getTableType() {
+        return HIVE;
     }
 
     @Override

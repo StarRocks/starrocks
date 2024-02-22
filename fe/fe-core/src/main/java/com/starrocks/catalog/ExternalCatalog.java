@@ -26,13 +26,15 @@ public class ExternalCatalog extends Catalog {
         Preconditions.checkNotNull(config.get(CATALOG_TYPE));
     }
 
-    // database uuid format: external_catalog_name.db_name
+    // old database uuid format: external_catalog_name.db_name
+    // new database uuid format: db_name
     public static String getDbNameFromUUID(String uuid) {
         // To be in compatible with code before external table privilege is supported
         return uuid.contains(".") ? uuid.split("\\.")[1] : uuid;
     }
 
-    // table uuid format: external_catalog_name.db_name.table_name.creation_time
+    // old table uuid format: external_catalog_name.db_name.table_name.creation_time
+    // new table uuid format: table_name
     public static String getTableNameFromUUID(String uuid) {
         // To be in compatible with code before external table privilege is supported
         return uuid.contains(".") ? uuid.split("\\.")[2] : uuid;
