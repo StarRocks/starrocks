@@ -74,6 +74,8 @@ DataStreamMgr::~DataStreamMgr() {
             }
         }
     }
+    // explicitly call close to release PassThroughChunkBufferManager resources
+    _pass_through_chunk_buffer_manager.close();
 }
 
 inline uint32_t DataStreamMgr::get_bucket(const TUniqueId& fragment_instance_id) {
@@ -202,7 +204,7 @@ Status DataStreamMgr::deregister_recvr(const TUniqueId& fragment_instance_id, Pl
 }
 
 void DataStreamMgr::close() {
-    for (size_t i = 0; i < _receiver_map->size(); i++) {
+    for (size_t i = 0; i < BUCKET_NUM; i++) {
         std::lock_guard<Mutex> l(_lock[i]);
         for (auto& iter : _receiver_map[i]) {
             for (auto& sub_iter : *iter.second) {
@@ -210,7 +212,9 @@ void DataStreamMgr::close() {
             }
         }
     }
-    _pass_through_chunk_buffer_manager.close();
+    // NOTE: delay _pass_through_chunk_buffer_manager's close action until DataStreamMgr is destroyed
+    // Let all the fragments take chances to cancel/close its PassThroughChunkBuffer asynchronously
+    // from other threads.
 }
 
 void DataStreamMgr::cancel(const TUniqueId& fragment_instance_id) {
