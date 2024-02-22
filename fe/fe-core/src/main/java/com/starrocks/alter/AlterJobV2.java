@@ -34,6 +34,7 @@
 
 package com.starrocks.alter;
 
+import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -45,7 +46,10 @@ import com.starrocks.common.TraceManager;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.privilege.PrivilegeBuiltinConstants;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.UserIdentity;
 import io.opentelemetry.api.trace.Span;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -175,6 +179,17 @@ public abstract class AlterJobV2 implements Writable {
         this.finishedTimeMs = finishedTimeMs;
     }
 
+    public void createConnectContextIfNeeded() {
+        if (ConnectContext.get() == null) {
+            ConnectContext context = new ConnectContext();
+            context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+            context.setCurrentUserIdentity(UserIdentity.ROOT);
+            context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+            context.setQualifiedUser(UserIdentity.ROOT.getUser());
+            context.setThreadLocalInfo();
+        }
+    }
+
     /**
      * The keyword 'synchronized' only protects 2 methods:
      * run() and cancel()
@@ -190,6 +205,9 @@ public abstract class AlterJobV2 implements Writable {
             cancelImpl("Timeout");
             return;
         }
+
+        // create connectcontext
+        createConnectContextIfNeeded();
 
         try {
             while (true) {
