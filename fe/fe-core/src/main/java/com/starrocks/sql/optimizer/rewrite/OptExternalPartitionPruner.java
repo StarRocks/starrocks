@@ -302,6 +302,56 @@ public class OptExternalPartitionPruner {
             }
             scanOperatorPredicates.setSelectedPartitionIds(selectedPartitionIds);
             scanOperatorPredicates.getNoEvalPartitionConjuncts().addAll(partitionPruner.getNoEvalConjuncts());
+<<<<<<< HEAD
+=======
+        } else if (table instanceof IcebergTable) {
+            IcebergTable icebergTable = (IcebergTable) table;
+            if (!icebergTable.getSnapshot().isPresent()) {
+                // TODO: for iceberg table, it cannot decide whether it's pruned or not when `selectedPartitionIds`
+                //  is empty. It's expensive to set all partitions here.
+                return;
+            }
+
+            ImmutableMap.Builder<Long, PartitionKey> idToPartitionKey = ImmutableMap.builder();
+            if (table.isUnPartitioned()) {
+                idToPartitionKey.put(0L, new PartitionKey());
+            } else {
+                String catalogName = icebergTable.getCatalogName();
+                List<PartitionKey> partitionKeys = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                        .getPrunedPartitions(catalogName, icebergTable, operator.getPredicate(), operator.getLimit());
+                List<Long> ids = table.allocatePartitionIdByKey(partitionKeys);
+                for (int i = 0; i < partitionKeys.size(); i++) {
+                    idToPartitionKey.put(ids.get(i), partitionKeys.get(i));
+                }
+            }
+
+            Map<Long, PartitionKey> partitionKeyMap = idToPartitionKey.build();
+            scanOperatorPredicates.getIdToPartitionKey().putAll(partitionKeyMap);
+            scanOperatorPredicates.setSelectedPartitionIds(partitionKeyMap.keySet());
+        } else if (table instanceof PaimonTable) {
+            PaimonTable paimonTable = (PaimonTable) table;
+            List<String> fieldNames = operator.getColRefToColumnMetaMap().keySet().stream()
+                    .map(ColumnRefOperator::getName)
+                    .collect(Collectors.toList());
+            List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
+                    paimonTable.getCatalogName(), table, null, -1, operator.getPredicate(), fieldNames, -1);
+            if (fileInfos.isEmpty()) {
+                return;
+            }
+
+            RemoteFileDesc remoteFileDesc = fileInfos.get(0).getFiles().get(0);
+            if (remoteFileDesc == null) {
+                return;
+            }
+            List<Split> splits = remoteFileDesc.getPaimonSplitsInfo().getPaimonSplits();
+            if (splits.isEmpty()) {
+                return;
+            }
+            long rowCount = getRowCount(splits);
+            if (rowCount > 0) {
+                scanOperatorPredicates.getSelectedPartitionIds().add(1L);
+            }
+>>>>>>> f801860efe ([BugFix] Support Iceberg partition compensation for mv rewrite (backport #41145) (#41318))
         }
     }
 

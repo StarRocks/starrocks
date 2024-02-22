@@ -41,6 +41,8 @@ import org.junit.Test;
 
 import java.util.Set;
 
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator.convertToDateRange;
+
 public class MvUtilsTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
@@ -146,4 +148,60 @@ public class MvUtilsTest {
         Assert.assertEquals(null, MvUtils.getCompensationPredicateForDisjunctive(compound, alwaysFalse));
         Assert.assertEquals(alwaysTrue, MvUtils.getCompensationPredicateForDisjunctive(compound, compound));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testConvertToDateRange() throws AnalysisException {
+        {
+            PartitionKey upper = PartitionKey.ofString("20231010");
+            Range<PartitionKey> upRange = Range.atMost(upper);
+            Range<PartitionKey> upResult = convertToDateRange(upRange);
+            Assert.assertTrue(upResult.hasUpperBound());
+            Assert.assertTrue(upResult.upperEndpoint().getTypes().get(0).isDateType());
+            Assert.assertTrue(upResult.upperEndpoint().getKeys().get(0) instanceof DateLiteral);
+            DateLiteral date = (DateLiteral) upResult.upperEndpoint().getKeys().get(0);
+            Assert.assertEquals(2023, date.getYear());
+            Assert.assertEquals(10, date.getMonth());
+            Assert.assertEquals(10, date.getDay());
+            Assert.assertEquals(0, date.getHour());
+        }
+        {
+            PartitionKey lower = PartitionKey.ofString("20231010");
+            Range<PartitionKey> lowRange = Range.atLeast(lower);
+            Range<PartitionKey> lowResult = convertToDateRange(lowRange);
+            Assert.assertTrue(lowResult.hasLowerBound());
+            Assert.assertTrue(lowResult.lowerEndpoint().getTypes().get(0).isDateType());
+            Assert.assertTrue(lowResult.lowerEndpoint().getKeys().get(0) instanceof DateLiteral);
+            DateLiteral date = (DateLiteral) lowResult.lowerEndpoint().getKeys().get(0);
+            Assert.assertEquals(2023, date.getYear());
+            Assert.assertEquals(10, date.getMonth());
+            Assert.assertEquals(10, date.getDay());
+            Assert.assertEquals(0, date.getHour());
+        }
+        {
+            PartitionKey lower = PartitionKey.ofString("20231010");
+            Range<PartitionKey> range = Range.atLeast(lower);
+            range = range.intersection(Range.atMost(PartitionKey.ofString("20231020")));
+            Range<PartitionKey> result = convertToDateRange(range);
+            Assert.assertTrue(result.hasLowerBound());
+            Assert.assertTrue(result.lowerEndpoint().getTypes().get(0).isDateType());
+            Assert.assertTrue(result.lowerEndpoint().getKeys().get(0) instanceof DateLiteral);
+            DateLiteral date = (DateLiteral) result.lowerEndpoint().getKeys().get(0);
+            Assert.assertEquals(2023, date.getYear());
+            Assert.assertEquals(10, date.getMonth());
+            Assert.assertEquals(10, date.getDay());
+            Assert.assertEquals(0, date.getHour());
+
+            Assert.assertTrue(result.hasUpperBound());
+            Assert.assertTrue(result.upperEndpoint().getTypes().get(0).isDateType());
+            Assert.assertTrue(result.upperEndpoint().getKeys().get(0) instanceof DateLiteral);
+            DateLiteral upperDate = (DateLiteral) result.upperEndpoint().getKeys().get(0);
+            Assert.assertEquals(2023, upperDate.getYear());
+            Assert.assertEquals(10, upperDate.getMonth());
+            Assert.assertEquals(20, upperDate.getDay());
+            Assert.assertEquals(0, upperDate.getHour());
+        }
+    }
+>>>>>>> f801860efe ([BugFix] Support Iceberg partition compensation for mv rewrite (backport #41145) (#41318))
 }

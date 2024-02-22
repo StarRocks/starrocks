@@ -30,6 +30,7 @@ import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
@@ -258,7 +259,7 @@ public class OptimizerTest extends MvRewriteTestBase {
             Assert.assertNotNull(expr3);
             MaterializationContext materializationContext3 = optimizer3.getContext().getCandidateMvs().iterator().next();
             Assert.assertEquals("mv_5", materializationContext3.getMv().getName());
-            List<OptExpression> scanExpr3 = MvUtils.collectScanExprs(materializationContext3.getMvExpression());
+            List<LogicalScanOperator> scanExpr3 = MvUtils.getScanOperator(materializationContext3.getMvExpression());
             Assert.assertEquals(1, scanExpr3.size());
             ScalarOperator scalarOperator3  = materializationContext3.getMvPartialPartitionPredicate();
             if (scalarOperator3 != null) {
