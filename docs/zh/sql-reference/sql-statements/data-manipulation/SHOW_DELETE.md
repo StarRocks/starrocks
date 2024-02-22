@@ -6,11 +6,7 @@ displayed_sidebar: "Chinese"
 
 ## 功能
 
-<<<<<<< HEAD
-该语句用于展示在当前数据库下，所有在明细模型表 (Duplicate Key) 上成功执行的历史删除 (DELETE) 任务。
-=======
 用于展示在指定数据库下，所有在明细表、聚合表、更新表上成功执行的历史删除 (DELETE) 任务。
->>>>>>> 6b2ef16a51 ([Doc] add  more table type to show delete and add a note about changing table types (#41350))
 
 有关删除操作的更多信息，参见 [DELETE](DELETE.md)。
 
