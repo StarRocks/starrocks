@@ -1689,6 +1689,10 @@ public class MaterializedViewRewriter {
 
     private OptExpression doPushdownPredicate(OptExpression joinOptExpression, ScalarOperator predicate) {
         Preconditions.checkState(joinOptExpression.getOp() instanceof LogicalJoinOperator);
+<<<<<<< HEAD
+=======
+        optimizerContext.clearNotNullPredicates();
+>>>>>>> 9eb8155625 ([BugFix] fix convert left outer join to inner join bug (#41428))
         JoinPredicatePushdown joinPredicatePushdown = new JoinPredicatePushdown(joinOptExpression,
                 false, true, materializationContext.getQueryRefFactory());
         return joinPredicatePushdown.pushdown(predicate);
