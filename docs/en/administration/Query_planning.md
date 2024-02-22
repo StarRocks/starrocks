@@ -199,9 +199,9 @@ By removing the specific expressions (only keep the operators), the query plan c
 
 ## Query hint
 
-Query hints are directives or comments that explicitly suggest the query optimizer on how to execute a query. Currently, StarRocks supports three types of hints: variable-setting hint, user variable hint and join hint. Hints only take effect within a single query.
+Query hints are directives or comments that explicitly suggest the query optimizer on how to execute a query. Currently, StarRocks supports three types of hints: system variable hint, user-defined variable hint and join hint. Hints only take effect within a single query.
 
-### Variable-Setting hint
+### System variable hint
 
 You can set one or more [system variables](../reference/System_variable.md) by using the `SET_VAR` hint in the form of the syntax `/*+ SET_VAR(var_name = value) */` in SELECT and SUBMIT TASK statements, or in the SELECT clause that is included in other statement, such as CREATE MATERIALIZED VIEW AS SELECT and CREATE VIEW AS SELECT.
 
@@ -237,9 +237,9 @@ REFRESH ASYNC
 AS SELECT /*+ SET_VAR(query_timeout=500) */ * from dual;
 ~~~
 
-### User-defined variables hint
+### User-defined variable hint
 
-You can set one or more [user variables](../reference/user_defined_variables.md) by using the `SET_USER_VARIABLE` hint in the form of the syntax `/*+ SET_USER_VARIABLE(...) */` in SELECT statements, or in the SELECT clause.
+You can set one or more [user-defined variables](../reference/user_defined_variables.md) by using the `SET_USER_VARIABLE` hint in the form of the syntax `/*+ SET_USER_VARIABLE(...) */` in SELECT statements, or in the SELECT clause.
 
 If a query references the result of a scalar subquery or scalar expression, you can use a user-defined variable hint to set that subquery or expression as a user-defined variable. This not only can help avoid duplicate computation, but also does not influence the entire session because user-defined variable hints take effect at the statement level, unlike the [general usage of user-defined variables](../reference/user_defined_variables.md) that take effect at the session level.
 
