@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+keywords: ['Fuben']
 ---
 
 # 管理副本

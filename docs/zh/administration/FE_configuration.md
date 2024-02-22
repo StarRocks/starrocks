@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+keywords: ['Canshu']
 ---
 
 # FE 配置项
