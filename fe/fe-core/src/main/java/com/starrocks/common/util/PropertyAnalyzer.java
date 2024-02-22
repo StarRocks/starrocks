@@ -205,6 +205,14 @@ public class PropertyAnalyzer {
             return inferredDataProperty;
         }
 
+        // Data property is not supported in shared mode. Return the inferredDataProperty directly.
+        if (RunMode.isSharedDataMode()) {
+            properties.remove(mediumKey);
+            properties.remove(coolDownTimeKey);
+            properties.remove(coolDownTTLKey);
+            return inferredDataProperty;
+        }
+
         TStorageMedium storageMedium = null;
         long coolDownTimeStamp = DataProperty.MAX_COOLDOWN_TIME_MS;
 
