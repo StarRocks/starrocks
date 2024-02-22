@@ -168,15 +168,16 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
                                                   ReplaceColumnRefRewriter queryColumnRefRewriter) {
         // Cache partition predicate predicates because it's expensive time costing if there are too many materialized views or
         // query expressions are too complex.
-        final ScalarOperator queryPartitionPredicate = MvUtils.compensatePartitionPredicate(mvContext,
-                queryColumnRefFactory, queryExpression);
+        final ScalarOperator queryPartitionPredicate = MvUtils.compensateQueryPartitionPredicate(
+                mvContext, queryColumnRefFactory, queryExpression);
         if (queryPartitionPredicate == null) {
             logMVRewrite(mvContext.getOptimizerContext(), this, "Compensate query expression's partition " +
                     "predicates from pruned partitions failed.");
             return null;
         }
-        // only add valid predicates into query split predicate
+
         Set<ScalarOperator> queryConjuncts = MvUtils.getPredicateForRewrite(queryExpression);
+        // only add valid predicates into query split predicate
         if (!ConstantOperator.TRUE.equals(queryPartitionPredicate)) {
             logMVRewrite(optimizerContext, this, "Query compensate partition predicate:{}",
                     queryPartitionPredicate);

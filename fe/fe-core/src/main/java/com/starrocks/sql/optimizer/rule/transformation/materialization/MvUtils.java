@@ -593,13 +593,9 @@ public class MvUtils {
                     if (context != null) {
                         joinKeyColumns.union(context);
                     }
-                    optExpression.inputAt(0).getOp().accept(this, optExpression.inputAt(0), joinKeyColumns);
-                    optExpression.inputAt(1).getOp().accept(this, optExpression.inputAt(1), joinKeyColumns);
-                } else if (joinType.isLeftOuterJoin() || joinType.isLeftAntiJoin()) {
-                    optExpression.inputAt(0).getOp().accept(this, optExpression.inputAt(0), joinKeyColumns);
-                } else if (joinType.isRightOuterJoin() || joinType.isRightAntiJoin()) {
-                    optExpression.inputAt(1).getOp().accept(this, optExpression.inputAt(1), joinKeyColumns);
                 }
+                optExpression.inputAt(0).getOp().accept(this, optExpression.inputAt(0), joinKeyColumns);
+                optExpression.inputAt(1).getOp().accept(this, optExpression.inputAt(1), joinKeyColumns);
                 List<ScalarOperator> conjuncts = Utils.extractConjuncts(
                         Utils.compoundAnd(joinOperator.getPredicate(), joinOperator.getOnPredicate()));
                 for (ScalarOperator conjunct : conjuncts) {
@@ -1065,7 +1061,7 @@ public class MvUtils {
      *      `partitionPredicate` : k1>='2020-02-11'
      *      however for mv  we need: k1>='2020-02-11' and k1 < "2020-03-01"
      */
-    public static ScalarOperator compensatePartitionPredicate(MaterializationContext mvContext,
+    public static ScalarOperator compensateQueryPartitionPredicate(MaterializationContext mvContext,
                                                               ColumnRefFactory columnRefFactory,
                                                               OptExpression queryExpression) {
         List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(queryExpression);
@@ -1327,31 +1323,6 @@ public class MvUtils {
 
             ColumnRefOperator columnRef = scanOperator.getColumnReference(partitionColumn);
             return convertPartitionKeysToPredicate(columnRef, latestBaseTableRanges);
-        }
-        return null;
-    }
-
-    public static List<ScalarOperator> getMVPrunedPartitionPredicates(MaterializedView mv,
-                                                                      OptExpression mvPlan) {
-        Pair<Table, Column> partitionTableAndColumns = mv.getBaseTableAndPartitionColumn();
-        if (partitionTableAndColumns == null) {
-            return null;
-        }
-
-        Table refBaseTable = partitionTableAndColumns.first;
-        List<OptExpression> scanExprs = MvUtils.collectScanExprs(mvPlan);
-        for (OptExpression scanExpr : scanExprs) {
-            LogicalScanOperator scanOperator = (LogicalScanOperator) scanExpr.getOp();
-            if (!isRefBaseTable(scanOperator, refBaseTable)) {
-                continue;
-            }
-
-            List<ScalarOperator> prunedPredicates = getScanOpPrunedPartitionPredicates(scanOperator);
-            if (prunedPredicates == null || prunedPredicates.isEmpty()) {
-                return ImmutableList.of(ConstantOperator.TRUE);
-            } else {
-                return prunedPredicates;
-            }
         }
         return null;
     }
