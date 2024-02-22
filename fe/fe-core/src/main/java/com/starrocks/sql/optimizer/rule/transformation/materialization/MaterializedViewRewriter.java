@@ -610,10 +610,16 @@ public class MaterializedViewRewriter {
         return ConstantOperator.TRUE;
     }
 
+    /**
+     * Only compensate mv's partition predicate when mv's freshness cannot satisfy query's need.
+     * When mv's freshness is ok, return constant true because
+     * {@link com.starrocks.sql.optimizer.MaterializedViewOptimizer#optimize} disabled partition pruning and no need
+     * compensate pruned predicates.
+     * @return
+     */
     private ScalarOperator getMVCompensatePartitionPredicate() {
         return  materializationContext.isCompensatePartitionPredicate() ?
-                materializationContext.getMvPartialPartitionPredicate() :
-                materializationContext.getMVPrunedPartitionPredicate();
+                materializationContext.getMvPartialPartitionPredicate() : ConstantOperator.TRUE;
     }
 
     private OptExpression rewriteViewDelta(List<Table> queryTables,

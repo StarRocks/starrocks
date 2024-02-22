@@ -107,6 +107,7 @@ import com.starrocks.sql.common.SqlDigestBuilder;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
+import com.starrocks.sql.optimizer.OptimizerConfig;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -748,6 +749,45 @@ public class UtFrameUtils {
         }
     }
 
+    public static LogicalPlan getQueryLogicalPlan(ConnectContext connectContext,
+                                                  ColumnRefFactory columnRefFactory,
+                                                  QueryStatement statement) {
+        LogicalPlan logicalPlan;
+        try (Timer t = Tracers.watchScope("Transformer")) {
+            logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
+                    .transform((statement).getQueryRelation());
+
+        }
+        return logicalPlan;
+    }
+
+    public static OptExpression getQueryOptExpression(ConnectContext connectContext,
+                                                      ColumnRefFactory columnRefFactory,
+                                                      LogicalPlan logicalPlan,
+                                                      OptimizerConfig optimizerConfig) {
+        OptExpression optimizedPlan;
+        try (Timer t = Tracers.watchScope("Optimizer")) {
+            Optimizer optimizer = null;
+            if (optimizerConfig != null) {
+                optimizer = new Optimizer(optimizerConfig);
+            } else {
+                optimizer = new Optimizer();
+            }
+            optimizedPlan = optimizer.optimize(
+                    connectContext,
+                    logicalPlan.getRoot(),
+                    new PhysicalPropertySet(),
+                    new ColumnRefSet(logicalPlan.getOutputColumn()),
+                    columnRefFactory);
+        }
+        return optimizedPlan;
+    }
+    public static OptExpression getQueryOptExpression(ConnectContext connectContext,
+                                                      ColumnRefFactory columnRefFactory,
+                                                      LogicalPlan logicalPlan) {
+        return getQueryOptExpression(connectContext, columnRefFactory, logicalPlan, null);
+    }
+
     private static Pair<String, ExecPlan> getQueryExecPlan(QueryStatement statement, ConnectContext connectContext)
             throws Exception {
         SessionVariable oldSessionVariable = connectContext.getSessionVariable();
@@ -757,24 +797,8 @@ public class UtFrameUtils {
             }
 
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-
-            LogicalPlan logicalPlan;
-            try (Timer t = Tracers.watchScope("Transformer")) {
-                logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
-                        .transform((statement).getQueryRelation());
-
-            }
-
-            OptExpression optimizedPlan;
-            try (Timer t = Tracers.watchScope("Optimizer")) {
-                Optimizer optimizer = new Optimizer();
-                optimizedPlan = optimizer.optimize(
-                        connectContext,
-                        logicalPlan.getRoot(),
-                        new PhysicalPropertySet(),
-                        new ColumnRefSet(logicalPlan.getOutputColumn()),
-                        columnRefFactory);
-            }
+            LogicalPlan logicalPlan = getQueryLogicalPlan(connectContext, columnRefFactory, statement);
+            OptExpression optimizedPlan = getQueryOptExpression(connectContext, columnRefFactory, logicalPlan);
 
             ExecPlan execPlan;
             try (Timer t = Tracers.watchScope("Builder")) {
