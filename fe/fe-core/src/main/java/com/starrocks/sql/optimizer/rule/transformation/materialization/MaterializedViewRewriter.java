@@ -1699,7 +1699,7 @@ public class MaterializedViewRewriter {
 
     private OptExpression doPushdownPredicate(OptExpression joinOptExpression, ScalarOperator predicate) {
         Preconditions.checkState(joinOptExpression.getOp() instanceof LogicalJoinOperator);
-        optimizerContext.reset();
+        optimizerContext.clearNotNullPredicates();
         JoinPredicatePushdown joinPredicatePushdown = new JoinPredicatePushdown(joinOptExpression,
                 false, true, materializationContext.getQueryRefFactory(), optimizerContext);
         return joinPredicatePushdown.pushdown(predicate);
