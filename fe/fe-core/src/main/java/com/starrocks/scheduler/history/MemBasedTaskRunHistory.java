@@ -39,7 +39,7 @@ public class MemBasedTaskRunHistory implements TaskRunHistory {
             Collections.synchronizedMap(Maps.newLinkedHashMap());
 
     @Override
-    public void addHistory(TaskRunStatus status) {
+    public void addHistory(TaskRunStatus status, boolean isReplay) {
         historyTaskRunMap.put(status.getQueryId(), status);
         taskName2Status.put(status.getTaskName(), status);
     }

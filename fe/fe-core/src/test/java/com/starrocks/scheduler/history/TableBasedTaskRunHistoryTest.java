@@ -46,12 +46,12 @@ class TableBasedTaskRunHistoryTest {
     public void testTaskRunStatusSerialization() {
         TaskRunStatus status = new TaskRunStatus();
         String json = status.toJSON();
-        assertEquals("{\"taskId\":0,\"createTime\":0,\"finishTime\":0,\"processStartTime\":0," +
-                "\"state\":\"PENDING\",\"progress\":0,\"errorCode\":0,\"expireTime\":0,\"priority\":0," +
-                "\"mergeRedundant\":false,\"source\":\"CTAS\",\"mvExtraMessage\":" +
-                "{\"forceRefresh\":false,\"mvPartitionsToRefresh\":[],\"refBasePartitionsToRefreshMap\":{}," +
-                "\"basePartitionsToRefreshMap\":{},\"executeOption\":{\"priority\":0,\"isMergeRedundant\":false," +
-                "\"isManual\":false,\"isSync\":false,\"isReplay\":false}}}", json);
+        assertEquals("{\"taskId\":0,\"createTime\":0,\"expireTime\":0,\"priority\":0,\"mergeRedundant\":false," +
+                        "\"source\":\"CTAS\",\"errorCode\":0,\"finishTime\":0,\"processStartTime\":0,\"state\":\"PENDING\"," +
+                        "\"progress\":0,\"mvExtraMessage\":{\"forceRefresh\":false,\"mvPartitionsToRefresh\":[]," +
+                        "\"refBasePartitionsToRefreshMap\":{},\"basePartitionsToRefreshMap\":{},\"executeOption\":" +
+                        "{\"priority\":0,\"isMergeRedundant\":false,\"isManual\":false,\"isSync\":false,\"isReplay\":false}}}",
+                json);
 
         TaskRunStatus b = TaskRunStatus.fromJson(json);
         assertEquals(status.toJSON(), b.toJSON());
@@ -61,18 +61,16 @@ class TableBasedTaskRunHistoryTest {
     public void testCRUD(@Mocked RepoExecutor repo) {
         new Expectations() {
             {
-                repo.executeDML(
-                        "INSERT INTO _statistics_.task_run_history (task_id, task_run_id, task_name, create_time, " +
-                                "finish_time, expire_time, history_content_json) VALUES(0, 'aaa', 't1', " +
-                                "'1970-01-01 08:00:00', '1970-01-01 08:00:00', '1970-01-01 08:00:00', " +
-                                "'{\"startTaskRunId\":\"aaa\",\"taskId\":0,\"taskName\":\"t1\",\"createTime\":0," +
-                                "\"finishTime\":0,\"processStartTime\":0,\"state\":\"PENDING\",\"progress\":0," +
-                                "\"errorCode\":0,\"expireTime\":0,\"priority\":0,\"mergeRedundant\":false," +
-                                "\"source\":\"CTAS\",\"mvExtraMessage\":{\"forceRefresh\":false,\"mvPartitionsToRefresh\":" +
-                                "[],\"refBasePartitionsToRefreshMap\":{},\"basePartitionsToRefreshMap\":{}," +
-                                "\"executeOption\":{\"priority\":0,\"isMergeRedundant\":false,\"isManual\":false," +
-                                "\"isSync\":false,\"isReplay\":false}}}')");
-
+                repo.executeDML("INSERT INTO _statistics_.task_run_history (task_id, task_run_id, task_name, " +
+                        "create_time, finish_time, expire_time, history_content_json) VALUES(0, 'aaa', 't1', " +
+                        "'1970-01-01 08:00:00', '1970-01-01 08:00:00', '1970-01-01 08:00:00', " +
+                        "'{\"startTaskRunId\":\"aaa\",\"taskId\":0,\"taskName\":\"t1\",\"createTime\":0," +
+                        "\"expireTime\":0,\"priority\":0,\"mergeRedundant\":false,\"source\":\"CTAS\"," +
+                        "\"errorCode\":0,\"finishTime\":0,\"processStartTime\":0,\"state\":\"PENDING\",\"progress\":0," +
+                        "\"mvExtraMessage\":{\"forceRefresh\":false,\"mvPartitionsToRefresh\":[]," +
+                        "\"refBasePartitionsToRefreshMap\":{},\"basePartitionsToRefreshMap\":{},\"executeOption\":" +
+                        "{\"priority\":0,\"isMergeRedundant\":false,\"isManual\":false,\"isSync\":false," +
+                        "\"isReplay\":false}}}')");
             }
         };
 
@@ -80,7 +78,7 @@ class TableBasedTaskRunHistoryTest {
         TaskRunStatus status = new TaskRunStatus();
         status.setStartTaskRunId("aaa");
         status.setTaskName("t1");
-        history.addHistory(status);
+        history.addHistory(status, false);
 
         // getTaskByName
         new Expectations() {

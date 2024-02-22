@@ -183,10 +183,8 @@ public class TaskManager implements MemoryTrackable {
                     taskRun.getStatus().setErrorMessage("Fe abort the task");
                     taskRun.getStatus().setErrorCode(-1);
                     taskRun.getStatus().setState(Constants.TaskRunState.FAILED);
-                    taskRunManager.getTaskRunHistory().addHistory(taskRun.getStatus());
-                    TaskRunStatusChange statusChange = new TaskRunStatusChange(taskRun.getTaskId(), taskRun.getStatus(),
-                            Constants.TaskRunState.PENDING, Constants.TaskRunState.FAILED);
-                    GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
+                    taskRunManager.addTaskRunHistory(taskRun, Constants.TaskRunState.PENDING,
+                            Constants.TaskRunState.FAILED);
                 }
                 pendingIter.remove();
             }
@@ -198,10 +196,8 @@ public class TaskManager implements MemoryTrackable {
                 taskRun.getStatus().setState(Constants.TaskRunState.FAILED);
                 taskRun.getStatus().setFinishTime(System.currentTimeMillis());
                 runningIter.remove();
-                taskRunManager.getTaskRunHistory().addHistory(taskRun.getStatus());
-                TaskRunStatusChange statusChange = new TaskRunStatusChange(taskRun.getTaskId(), taskRun.getStatus(),
-                        Constants.TaskRunState.RUNNING, Constants.TaskRunState.FAILED);
-                GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
+                taskRunManager.addTaskRunHistory(taskRun, Constants.TaskRunState.RUNNING,
+                        Constants.TaskRunState.FAILED);
             }
         } finally {
             taskRunManager.taskRunUnlock();
@@ -736,14 +732,14 @@ public class TaskManager implements MemoryTrackable {
             // this will happen in build image
             case RUNNING:
                 status.setState(Constants.TaskRunState.FAILED);
-                taskRunManager.getTaskRunHistory().addHistory(status);
+                taskRunManager.getTaskRunHistory().addHistory(status, true);
                 break;
             case FAILED:
-                taskRunManager.getTaskRunHistory().addHistory(status);
+                taskRunManager.getTaskRunHistory().addHistory(status, true);
                 break;
             case SUCCESS:
                 status.setProgress(100);
-                taskRunManager.getTaskRunHistory().addHistory(status);
+                taskRunManager.getTaskRunHistory().addHistory(status, true);
                 break;
         }
     }
@@ -794,7 +790,7 @@ public class TaskManager implements MemoryTrackable {
                 status.setErrorMessage(statusChange.getErrorMessage());
                 status.setErrorCode(statusChange.getErrorCode());
                 status.setState(Constants.TaskRunState.FAILED);
-                taskRunManager.getTaskRunHistory().addHistory(status);
+                taskRunManager.getTaskRunHistory().addHistory(status, true);
             }
             if (taskRunQueue.size() == 0) {
                 taskRunManager.getPendingTaskRunMap().remove(taskId);
@@ -816,7 +812,7 @@ public class TaskManager implements MemoryTrackable {
                     status.setProgress(100);
                     status.setFinishTime(statusChange.getFinishTime());
                     status.setExtraMessage(statusChange.getExtraMessage());
-                    taskRunManager.getTaskRunHistory().addHistory(status);
+                    taskRunManager.getTaskRunHistory().addHistory(status, true);
                 }
             } else {
                 // Find the task status from history map.

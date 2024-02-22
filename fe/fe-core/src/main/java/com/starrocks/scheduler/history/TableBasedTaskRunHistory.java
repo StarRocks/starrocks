@@ -16,11 +16,9 @@ package com.starrocks.scheduler.history;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonParser;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.scheduler.persist.TaskRunStatus;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TResultBatch;
 import io.netty.buffer.ByteBuf;
@@ -92,9 +90,8 @@ public class TableBasedTaskRunHistory implements TaskRunHistory {
     }
 
     @Override
-    public void addHistory(TaskRunStatus status) {
-        // Only leader node needs to persist the history
-        if (!GlobalStateMgr.getCurrentState().isLeader() && !FeConstants.runningUnitTest) {
+    public void addHistory(TaskRunStatus status, boolean isReplay) {
+        if (isReplay) {
             return;
         }
 

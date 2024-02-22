@@ -23,7 +23,7 @@ import java.util.List;
  */
 public interface TaskRunHistory {
 
-    void addHistory(TaskRunStatus status);
+    void addHistory(TaskRunStatus status, boolean isReplay);
 
     List<TaskRunStatus> getTaskByName(String taskName);
 

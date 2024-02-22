@@ -201,7 +201,7 @@ public class TaskRunManager implements MemoryTrackable {
             if (future.isDone()) {
                 runningIterator.remove();
                 LOG.info("Task run is done from state RUNNING to {}, {}", taskRun.getStatus().getState(), taskRun);
-                getTaskRunHistory().addHistory(taskRun.getStatus());
+                getTaskRunHistory().addHistory(taskRun.getStatus(), false);
                 TaskRunStatusChange statusChange = new TaskRunStatusChange(taskRun.getTaskId(), taskRun.getStatus(),
                         Constants.TaskRunState.RUNNING, taskRun.getStatus().getState());
                 GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
@@ -292,8 +292,19 @@ public class TaskRunManager implements MemoryTrackable {
         return runningTaskRunMap;
     }
 
+    public boolean useTableBasedTaskRunHistory() {
+        return Config.use_table_based_task_run_history;
+    }
+
     public TaskRunHistory getTaskRunHistory() {
         return Config.use_table_based_task_run_history ? tableBasedTaskRunHistory : memBasedTaskRunHistory;
+    }
+
+    public void addTaskRunHistory(TaskRun taskRun, Constants.TaskRunState fromState, Constants.TaskRunState toState) {
+        getTaskRunHistory().addHistory(taskRun.getStatus(), false);
+        TaskRunStatusChange statusChange =
+                new TaskRunStatusChange(taskRun.getTaskId(), taskRun.getStatus(), fromState, toState);
+        GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
     }
 
     public long getPendingTaskRunCount() {
