@@ -225,7 +225,7 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     runtime_state->set_fragment_ctx(_fragment_ctx.get());
     runtime_state->set_query_ctx(_query_ctx);
 
-    auto* parent_mem_tracker = wg != nullptr ? wg->mem_tracker() : exec_env->query_pool_mem_tracker();
+    auto* parent_mem_tracker = wg != nullptr ? wg->mem_tracker() : GlobalEnv::GetInstance()->query_pool_mem_tracker();
     auto per_instance_mem_limit = query_options.__isset.mem_limit ? query_options.mem_limit : -1;
     auto option_query_mem_limit = query_options.__isset.query_mem_limit ? query_options.query_mem_limit : -1;
     int64_t query_mem_limit = _query_ctx->compute_query_mem_limit(parent_mem_tracker->limit(), per_instance_mem_limit,
@@ -645,7 +645,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         int64_t prepare_runtime_state_time = 0;
         int64_t prepare_pipeline_driver_time = 0;
 
-        int64_t process_mem_bytes = ExecEnv::GetInstance()->process_mem_tracker()->consumption();
+        int64_t process_mem_bytes = GlobalEnv::GetInstance()->process_mem_tracker()->consumption();
         size_t num_process_drivers = ExecEnv::GetInstance()->driver_limiter()->num_total_drivers();
     } profiler;
 
@@ -683,7 +683,8 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     });
 
     SCOPED_RAW_TIMER(&profiler.prepare_time);
-    RETURN_IF_ERROR(exec_env->query_pool_mem_tracker()->check_mem_limit("Start execute plan fragment."));
+    RETURN_IF_ERROR(
+            GlobalEnv::GetInstance()->query_pool_mem_tracker()->check_mem_limit("Start execute plan fragment."));
     {
         SCOPED_RAW_TIMER(&profiler.prepare_query_ctx_time);
         RETURN_IF_ERROR(_prepare_query_ctx(exec_env, request));

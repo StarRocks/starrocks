@@ -438,7 +438,7 @@ bool NodeChannel::is_full() {
 
 Status NodeChannel::add_chunk(Chunk* input, const std::vector<int64_t>& tablet_ids,
                               const std::vector<uint32_t>& indexes, uint32_t from, uint32_t size) {
-    if (_cancelled || _send_finished) {
+    if (_cancelled || _closed) {
         return _err_st;
     }
 
@@ -519,7 +519,7 @@ Status NodeChannel::_filter_indexes_with_where_expr(Chunk* input, const std::vec
 
 Status NodeChannel::add_chunks(Chunk* input, const std::vector<std::vector<int64_t>>& tablet_ids,
                                const std::vector<uint32_t>& indexes, uint32_t from, uint32_t size) {
-    if (_cancelled || _send_finished) {
+    if (_cancelled || _closed) {
         return _err_st;
     }
 
@@ -569,8 +569,8 @@ Status NodeChannel::add_chunks(Chunk* input, const std::vector<std::vector<int64
     return _send_request(false);
 }
 
-Status NodeChannel::_send_request(bool eos, bool wait_all_sender_close) {
-    if (eos) {
+Status NodeChannel::_send_request(bool eos, bool finished) {
+    if (eos || finished) {
         if (_request_queue.empty()) {
             if (_cur_chunk.get() == nullptr) {
                 _cur_chunk = std::make_unique<Chunk>();
@@ -583,6 +583,7 @@ Status NodeChannel::_send_request(bool eos, bool wait_all_sender_close) {
         // try to send chunk in queue first
         if (_request_queue.size() > 1) {
             eos = false;
+            finished = false;
         }
     }
 
@@ -602,14 +603,19 @@ Status NodeChannel::_send_request(bool eos, bool wait_all_sender_close) {
         auto req = request.mutable_requests(i);
         if (UNLIKELY(eos)) {
             req->set_eos(true);
-            if (wait_all_sender_close) {
-                req->set_wait_all_sender_close(true);
-            }
             for (auto pid : _parent->_partition_ids) {
                 req->add_partition_ids(pid);
             }
             // eos request must be the last request
-            _send_finished = true;
+            _closed = true;
+        }
+
+        // This is added for automatic partition. We need to ensure that
+        // all data has been sent before the incremental channel is closed.
+        if (UNLIKELY(finished)) {
+            req->set_wait_all_sender_close(true);
+
+            _finished = true;
         }
 
         req->set_packet_seq(_next_packet_seq);
@@ -836,13 +842,13 @@ Status NodeChannel::_wait_one_prev_request() {
     return Status::OK();
 }
 
-Status NodeChannel::try_close(bool wait_all_sender_close) {
-    if (_cancelled || _send_finished) {
+Status NodeChannel::try_close() {
+    if (_cancelled || _closed) {
         return _err_st;
     }
 
     if (_check_prev_request_done()) {
-        auto st = _send_request(true /* eos */, wait_all_sender_close);
+        auto st = _send_request(true /* eos */, false /* finished */);
         if (!st.ok()) {
             _cancelled = true;
             _err_st = st;
@@ -853,8 +859,28 @@ Status NodeChannel::try_close(bool wait_all_sender_close) {
     return Status::OK();
 }
 
+Status NodeChannel::try_finish() {
+    if (_cancelled || _finished || _closed) {
+        return _err_st;
+    }
+
+    if (_check_prev_request_done()) {
+        auto st = _send_request(false /* eos */, true /* finished */);
+        if (!st.ok()) {
+            _cancelled = true;
+            _err_st = st;
+            return _err_st;
+        }
+    }
+    return Status::OK();
+}
+
 bool NodeChannel::is_close_done() {
-    return (_send_finished && _check_all_prev_request_done()) || _cancelled;
+    return (_closed && _check_all_prev_request_done()) || _cancelled;
+}
+
+bool NodeChannel::is_finished() {
+    return (_finished && _check_all_prev_request_done()) || _cancelled;
 }
 
 Status NodeChannel::close_wait(RuntimeState* state) {
@@ -863,7 +889,7 @@ Status NodeChannel::close_wait(RuntimeState* state) {
     }
 
     // 1. send eos request to commit write util finish
-    while (!_send_finished) {
+    while (!_closed) {
         RETURN_IF_ERROR(_send_request(true /* eos */));
     }
 
@@ -926,7 +952,9 @@ Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPart
             return Status::NotFound(msg);
         }
         std::vector<int64_t> bes;
-        for (auto& node_id : location->node_ids) {
+        auto node_ids_size = location->node_ids.size();
+        for (size_t i = 0; i < node_ids_size; ++i) {
+            auto& node_id = location->node_ids[i];
             NodeChannel* channel = nullptr;
             auto it = _node_channels.find(node_id);
             if (it == std::end(_node_channels)) {
@@ -941,6 +969,9 @@ Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPart
             }
             channel->add_tablet(_index_id, tablet);
             bes.emplace_back(node_id);
+            if (_parent->_enable_replicated_storage && i == 0) {
+                channel->set_has_primary_replica(true);
+            }
         }
         _tablet_to_be.emplace(tablet.tablet_id(), std::move(bes));
     }
@@ -955,7 +986,19 @@ Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPart
     return Status::OK();
 }
 
+void IndexChannel::mark_as_failed(const NodeChannel* ch) {
+    // primary replica use for replicated storage
+    // if primary replica failed, we should mark this index as failed
+    if (ch->has_primary_replica()) {
+        _has_intolerable_failure = true;
+    }
+    _failed_channels.insert(ch->node_id());
+}
+
 bool IndexChannel::has_intolerable_failure() {
+    if (_has_intolerable_failure) {
+        return _has_intolerable_failure;
+    }
     if (_write_quorum_type == TWriteQuorumType::ALL) {
         return _failed_channels.size() > 0;
     } else if (_write_quorum_type == TWriteQuorumType::ONE) {
@@ -1169,6 +1212,9 @@ Status OlapTableSink::_init_node_channels(RuntimeState* state) {
                             node_channel = it->second.get();
                         }
                         node_channel->add_tablet(index->index_id, tablet_info);
+                        if (_enable_replicated_storage && i == 0) {
+                            node_channel->set_has_primary_replica(true);
+                        }
                     }
                 }
 
@@ -1261,7 +1307,7 @@ Status OlapTableSink::open_wait() {
                 }
             });
 
-            if (index_channel->has_intolerable_failure() || (_enable_replicated_storage && !err_st.ok())) {
+            if (index_channel->has_intolerable_failure()) {
                 LOG(WARNING) << "Open channel failed. load_id: " << _load_id << ", error: " << err_st.to_string();
                 return err_st;
             }
@@ -1382,7 +1428,7 @@ Status OlapTableSink::_incremental_open_node_channel(const std::vector<TOlapTabl
             }
         });
 
-        if (channel->has_intolerable_failure() || (_enable_replicated_storage && !err_st.ok())) {
+        if (channel->has_intolerable_failure()) {
             LOG(WARNING) << "Open channel failed. load_id: " << _load_id << ", error: " << err_st.to_string();
             return err_st;
         }
@@ -1685,11 +1731,13 @@ Status OlapTableSink::try_close(RuntimeState* state) {
     } else {
         for (auto& index_channel : _channels) {
             if (index_channel->has_incremental_node_channel()) {
-                // close initial node channel and wait it done
+                // try to finish initial node channel and wait it done
+                // This is added for automatic partition. We need to ensure that
+                // all data has been sent before the incremental channel is closed.
                 index_channel->for_each_initial_node_channel(
                         [&index_channel, &err_st, &intolerable_failure](NodeChannel* ch) {
                             if (!index_channel->is_failed_channel(ch)) {
-                                auto st = ch->try_close(true);
+                                auto st = ch->try_finish();
                                 if (!st.ok()) {
                                     LOG(WARNING) << "close initial channel failed. channel_name=" << ch->name()
                                                  << ", load_info=" << ch->print_load_info()
@@ -1709,35 +1757,34 @@ Status OlapTableSink::try_close(RuntimeState* state) {
                     break;
                 }
 
-                bool is_initial_node_channel_close_done = true;
-                index_channel->for_each_initial_node_channel([&is_initial_node_channel_close_done](NodeChannel* ch) {
-                    is_initial_node_channel_close_done &= ch->is_close_done();
+                bool is_initial_node_channel_finished = true;
+                index_channel->for_each_initial_node_channel([&is_initial_node_channel_finished](NodeChannel* ch) {
+                    is_initial_node_channel_finished &= ch->is_close_done();
                 });
 
-                // close initial node channel not finish, can not close incremental node channel
-                if (!is_initial_node_channel_close_done) {
+                // initial node channel not finish, can not close incremental node channel
+                if (!is_initial_node_channel_finished) {
                     break;
                 }
 
-                // close incremental node channel
-                index_channel->for_each_incremental_node_channel(
-                        [&index_channel, &err_st, &intolerable_failure](NodeChannel* ch) {
-                            if (!index_channel->is_failed_channel(ch)) {
-                                auto st = ch->try_close();
-                                if (!st.ok()) {
-                                    LOG(WARNING) << "close incremental channel failed. channel_name=" << ch->name()
-                                                 << ", load_info=" << ch->print_load_info()
-                                                 << ", error_msg=" << st.get_error_msg();
-                                    err_st = st;
-                                    index_channel->mark_as_failed(ch);
-                                }
-                            } else {
-                                ch->cancel();
-                            }
-                            if (index_channel->has_intolerable_failure()) {
-                                intolerable_failure = true;
-                            }
-                        });
+                // close both initial & incremental node channel
+                index_channel->for_each_node_channel([&index_channel, &err_st, &intolerable_failure](NodeChannel* ch) {
+                    if (!index_channel->is_failed_channel(ch)) {
+                        auto st = ch->try_close();
+                        if (!st.ok()) {
+                            LOG(WARNING) << "close incremental channel failed. channel_name=" << ch->name()
+                                         << ", load_info=" << ch->print_load_info()
+                                         << ", error_msg=" << st.get_error_msg();
+                            err_st = st;
+                            index_channel->mark_as_failed(ch);
+                        }
+                    } else {
+                        ch->cancel();
+                    }
+                    if (index_channel->has_intolerable_failure()) {
+                        intolerable_failure = true;
+                    }
+                });
 
             } else {
                 index_channel->for_each_node_channel([&index_channel, &err_st, &intolerable_failure](NodeChannel* ch) {
@@ -1761,7 +1808,7 @@ Status OlapTableSink::try_close(RuntimeState* state) {
         }
     }
 
-    if (intolerable_failure || (_enable_replicated_storage && !err_st.ok())) {
+    if (intolerable_failure) {
         return err_st;
     } else {
         return Status::OK();
@@ -1929,7 +1976,7 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
                         }
                         ch->time_report(&node_add_batch_counter_map, &serialize_batch_ns, &actual_consume_ns);
                     });
-                    if (index_channel->has_intolerable_failure() || (_enable_replicated_storage && !err_st.ok())) {
+                    if (index_channel->has_intolerable_failure()) {
                         status = err_st;
                         index_channel->for_each_node_channel([&status](NodeChannel* ch) { ch->cancel(status); });
                     }

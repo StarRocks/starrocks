@@ -6,9 +6,11 @@ displayed_sidebar: "Chinese"
 
 ## 功能
 
-该语句用于展示在当前数据库下，所有在明细模型表 (Duplicate Key) 上成功执行的历史删除 (DELETE) 任务。
+用于展示在指定数据库下，所有在明细表、聚合表、更新表上成功执行的历史删除 (DELETE) 任务。
 
 有关删除操作的更多信息，参见 [DELETE](DELETE.md)。
+
+注意该语句不能用于查询在主键表上执行的 DELETE 操作。
 
 ## 语法
 
@@ -20,11 +22,11 @@ SHOW DELETE [FROM <db_name>]
 
 命令返回字段：
 
-- TableName: 表名称，即从哪些表中删除了数据。
-- PartitionName：表的分区名称，即从哪些分区中删除了数据。如果表是**非分区表**，则显示为 `*`。
-- CreateTime: DELETE 任务的创建时间。
-- DeleteCondition: 指定的删除条件。
-- State: DELETE 任务的状态。
+- `TableName`: 表名称，即从哪些表中删除了数据。
+- `PartitionName`：表的分区名称，即从哪些分区中删除了数据。如果表是**非分区表**，则显示为 `*`。
+- `CreateTime`: DELETE 任务的创建时间。
+- `DeleteCondition`: 指定的删除条件。
+- `State`: DELETE 任务的状态。
 
 ## 示例
 

@@ -267,7 +267,6 @@ public:
 
     void apply(const std::vector<TWorkGroupOp>& ops);
     std::vector<TWorkGroup> list_workgroups();
-    std::vector<TWorkGroup> list_all_workgroups();
 
     using WorkGroupConsumer = std::function<void(const WorkGroup&)>;
     void for_each_workgroup(WorkGroupConsumer consumer) const;

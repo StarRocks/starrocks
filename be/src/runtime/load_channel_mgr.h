@@ -86,7 +86,7 @@ public:
 
     std::shared_ptr<LoadChannel> remove_load_channel(const UniqueId& load_id);
 
-    void clear();
+    void close();
 
     void abort_txn(int64_t txn_id);
 

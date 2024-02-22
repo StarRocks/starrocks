@@ -133,10 +133,12 @@ public:
     // async close interface: try_close() -> [is_close_done()] -> close_wait()
     // if is_close_done() return true, close_wait() will not block
     // otherwise close_wait() will block
-    Status try_close(bool wait_all_sender_close = false);
+    Status try_close();
     bool is_close_done();
     Status close_wait(RuntimeState* state);
 
+    Status try_finish();
+    bool is_finished();
     void cancel(const Status& err_st);
     void cancel();
 
@@ -154,6 +156,9 @@ public:
     bool enable_colocate_mv_index() const { return _enable_colocate_mv_index; }
 
     bool is_incremental() const { return _is_incremental; }
+
+    bool has_primary_replica() const { return _has_primary_replica; }
+    void set_has_primary_replica(bool has_primary_replica) { _has_primary_replica = has_primary_replica; }
 
 private:
     Status _wait_request(ReusableClosure<PTabletWriterAddBatchResult>* closure);
@@ -192,8 +197,11 @@ private:
     bool _cancelled{false};
     bool _cancel_finished{true};
 
-    // send finished means the consumer thread which send the rpc can exit
-    bool _send_finished{false};
+    // channel is closed
+    bool _closed{false};
+
+    // data sending is finished
+    bool _finished{false};
 
     std::unique_ptr<RowDescriptor> _row_desc;
 
@@ -235,6 +243,8 @@ private:
     bool _is_incremental;
 
     ExprContext* _where_clause = nullptr;
+
+    bool _has_primary_replica = false;
 };
 
 class IndexChannel {
@@ -267,7 +277,7 @@ public:
         }
     }
 
-    void mark_as_failed(const NodeChannel* ch) { _failed_channels.insert(ch->node_id()); }
+    void mark_as_failed(const NodeChannel* ch);
 
     bool is_failed_channel(const NodeChannel* ch) { return _failed_channels.count(ch->node_id()) != 0; }
 
@@ -293,6 +303,8 @@ private:
 
     bool _has_incremental_node_channel = false;
     ExprContext* _where_clause = nullptr;
+
+    bool _has_intolerable_failure = false;
 };
 
 // Write data to Olap Table.

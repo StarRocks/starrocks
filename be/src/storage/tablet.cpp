@@ -82,15 +82,15 @@ Tablet::Tablet(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir)
           _cumulative_point(kInvalidCumulativePoint) {
     // change _rs_graph to _timestamped_version_tracker
     _timestamped_version_tracker.construct_versioned_tracker(_tablet_meta->all_rs_metas());
-    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
+    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
 }
 
 Tablet::Tablet() {
-    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
+    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
 }
 
 Tablet::~Tablet() {
-    MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
+    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
 }
 
 Status Tablet::_init_once_action() {
@@ -1619,6 +1619,7 @@ void Tablet::get_basic_info(TabletBasicInfo& info) {
         info.max_version = _timestamped_version_tracker.get_max_continuous_version();
         info.min_version = _timestamped_version_tracker.get_min_readable_version();
         info.num_rowset = _tablet_meta->version_count();
+        info.num_segment = _tablet_meta->segment_count();
         info.num_row = _tablet_meta->num_rows();
         info.data_size = _tablet_meta->tablet_footprint();
     }
