@@ -158,7 +158,7 @@ Status UpdateManager::get_delta_column_group(KVStore* meta, const TabletSegmentI
     {
         // fill delta column group cache
         std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
-        bool ok = _delta_column_group_cache.insert({tsid, new_dcgs}).second;
+        _delta_column_group_cache.insert({tsid, new_dcgs}).second;
     }
     return Status::OK();
 }
@@ -321,7 +321,6 @@ Status UpdateManager::set_cached_delta_column_group(KVStore* meta, const TabletS
     RETURN_IF_ERROR(
             TabletMetaManager::get_delta_column_group(meta, tsid.tablet_id, tsid.segment_id, INT64_MAX, &new_dcgs));
     std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
-    auto itr = _delta_column_group_cache.find(tsid);
     _delta_column_group_cache[tsid] = new_dcgs;
     return Status::OK();
 }

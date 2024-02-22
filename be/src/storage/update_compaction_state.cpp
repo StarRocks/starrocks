@@ -144,8 +144,6 @@ void CompactionState::release_segments(Rowset* rowset, uint32_t segment_id) {
     if (segment_id >= pk_cols.size() || pk_cols[segment_id] == nullptr) {
         return;
     }
-    auto update_manager = StorageEngine::instance()->update_manager();
-    auto tracker = update_manager->compaction_state_mem_tracker();
     _memory_usage -= pk_cols[segment_id]->memory_usage();
     pk_cols[segment_id]->reset_column();
 }

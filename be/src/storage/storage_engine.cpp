@@ -1509,7 +1509,7 @@ Status StorageEngine::get_delta_column_group(KVStore* meta, int64_t tablet_id, R
     {
         // fill delta column group cache
         std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
-        bool ok = _delta_column_group_cache.insert({dcg_key, new_dcgs}).second;
+        _delta_column_group_cache.insert({dcg_key, new_dcgs}).second;
     }
     return Status::OK();
 }
