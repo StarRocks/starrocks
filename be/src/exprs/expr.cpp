@@ -229,7 +229,7 @@ Status Expr::rewrite_jit_exprs(std::vector<ExprContext*>& expr_ctxs, ObjectPool*
         auto* prev_expr = ctx->root();
         auto* root_expr = &prev_expr;
         bool replaced = false;
-        auto st = (*root_expr)->replace_compilable_exprs(root_expr, pool, replaced);
+        auto st = (*root_expr)->replace_compilable_exprs(root_expr, pool, state, replaced);
         if (!st.ok()) {
             LOG(WARNING) << "Can't replace compilable exprs.\n" << st.message() << "\n" << (*root_expr)->debug_string();
             // Fall back to the non-JIT path.

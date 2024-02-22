@@ -237,7 +237,7 @@ public:
     // This method searches from top to bottom for compilable expressions.
     // Once a compilable expression is found, it skips over its compilable subexpressions and continues the search downwards.
     // TODO(Yueyang): The algorithm is imperfect and may further be optimized in the future.
-    Status replace_compilable_exprs(Expr** expr, ObjectPool* pool, RuntimeState* state, bool& replaced));
+    Status replace_compilable_exprs(Expr** expr, ObjectPool* pool, RuntimeState* state, bool& replaced);
 
     // Establishes whether the current expression should undergo compilation.
     bool should_compile(RuntimeState* state) const;
