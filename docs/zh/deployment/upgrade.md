@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
-keywords: ['Shenji']
+keywords: ['shengji']
 ---
 
 # 升级 StarRocks
