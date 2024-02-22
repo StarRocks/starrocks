@@ -618,13 +618,13 @@ void StorageEngine::stop() {
     JOIN_THREADS(_manual_compaction_threads)
     JOIN_THREADS(_tablet_checkpoint_threads)
 
+    JOIN_THREAD(_pk_index_major_compaction_thread)
+
     JOIN_THREAD(_pk_dump_thread);
 
 #ifdef USE_STAROS
     JOIN_THREAD(_local_pk_index_shared_data_gc_evict_thread)
 #endif
-
-    JOIN_THREAD(_pk_index_major_compaction_thread)
 
     JOIN_THREAD(_fd_cache_clean_thread)
     JOIN_THREAD(_adjust_cache_thread)
