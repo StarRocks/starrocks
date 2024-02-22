@@ -400,8 +400,8 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
 Status HdfsTextScanner::_setup_io_ranges() const {
     if (_shared_buffered_input_stream != nullptr) {
         std::vector<io::SharedBufferedInputStream::IORange> ranges{};
-        const int64_t scan_range_end = _scanner_params.scan_range->offset + _scanner_params.scan_range->length;
-        for (int64_t offset = _scanner_params.scan_range->offset; offset < scan_range_end;) {
+        const int64_t scan_range_end = _scanner_params.scan_ranges[0]->offset + _scanner_params.scan_ranges[0]->length;
+        for (int64_t offset = _scanner_params.scan_ranges[0]->offset; offset < scan_range_end;) {
             const int64_t remain_length = std::min(config::text_io_range_size, scan_range_end - offset);
             ranges.emplace_back(offset, remain_length);
             offset += remain_length;
