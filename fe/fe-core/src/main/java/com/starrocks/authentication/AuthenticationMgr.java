@@ -184,7 +184,7 @@ public class AuthenticationMgr {
     public long getMaxConn(String userName) {
         UserProperty userProperty = userNameToProperty.get(userName);
         if (userProperty == null) {
-            throw new SemanticException("Can not find user " + userName);
+            throw new SemanticException("Unknown user: " + userName);
         } else {
             return userNameToProperty.get(userName).getMaxConn();
         }
