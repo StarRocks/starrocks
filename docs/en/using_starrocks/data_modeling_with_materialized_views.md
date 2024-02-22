@@ -145,8 +145,9 @@ Schema changes follow these principles:
 
 Whereas the data consistency of inactive materialized views cannot be guaranteed, you can restore the functionality of them using the following methods:
 
-- **Manual repair**: You can manually repair an inactive materialized view by executing ALTER MATERIALIZED VIEW `<mv_name>` ACTIVE. This statement will recreate the materialized view based on its original SQL definition. Please note that the SQL definition must still be valid after the underlying schema changes, otherwise, the operation will fail.
-- **Automatic repair**: StarRocks will attempt to automatically activate inactive materialized views. However, the timeliness of this process cannot be guaranteed.
+- **Manual Active**: You can manually repair an inactive materialized view by executing `ALTER MATERIALIZED VIEW <mv_name> ACTIVE`. This statement will recreate the materialized view based on its original SQL definition. Please note that the SQL definition must still be valid after the underlying schema changes, otherwise, the operation will fail.
+- **Active before refresh**: The system will try to activate the materialized view before refreshing it
+- **Automatic Active**: StarRocks will attempt to automatically activate inactive materialized views. However, the timeliness of this process cannot be guaranteed. You can turn off this functionality via `ADMIN SET FRONTEND CONFIG('enable_mv_automatic_active_check'='false')` command. This functionality is available since 3.1.4 and 3.2.0.
 
 ## Partitioned modeling
 
