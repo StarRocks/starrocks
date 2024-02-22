@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.operator;
 
+import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
@@ -73,9 +74,13 @@ public class ScanOperatorPredicates {
         return noEvalPartitionConjuncts;
     }
 
+    /**
+     * TODO: it's better to record pruned partition predicates directly.
+     * @return: Return pruned partition conjuncts after OptPartitionPruner.
+     */
     public List<ScalarOperator> getPrunedPartitionConjuncts() {
         return partitionConjuncts.stream()
-                .filter(x -> !nonPartitionConjuncts.contains(x)).collect(Collectors.toList());
+                .filter(x -> !noEvalPartitionConjuncts.contains(x)).collect(Collectors.toList());
     }
 
     public List<ScalarOperator> getNonPartitionConjuncts() {
@@ -136,5 +141,26 @@ public class ScanOperatorPredicates {
     public int hashCode() {
         return Objects.hash(idToPartitionKey, selectedPartitionIds, partitionConjuncts, noEvalPartitionConjuncts,
                 nonPartitionConjuncts, minMaxConjuncts, minMaxColumnRefMap);
+    }
+
+    @Override
+    public String toString() {
+        List<String> strings = Lists.newArrayList();
+        if (!selectedPartitionIds.isEmpty()) {
+            strings.add(String.format("selectedPartitionIds=%s", selectedPartitionIds));
+        }
+        if (!partitionConjuncts.isEmpty()) {
+            strings.add(String.format("partitionConjuncts=%s", partitionConjuncts));
+        }
+        if (!noEvalPartitionConjuncts.isEmpty()) {
+            strings.add(String.format("noEvalPartitionConjuncts=%s", noEvalPartitionConjuncts));
+        }
+        if (!nonPartitionConjuncts.isEmpty()) {
+            strings.add(String.format("nonPartitionConjuncts=%s", nonPartitionConjuncts));
+        }
+        if (!minMaxConjuncts.isEmpty()) {
+            strings.add(String.format("minMaxConjuncts=%s", minMaxConjuncts));
+        }
+        return Joiner.on(", ").join(strings);
     }
 }
