@@ -105,6 +105,8 @@ StorageEngine* init_storage_engine(GlobalEnv* global_env, std::vector<StorePath>
     return engine;
 }
 
+extern void shutdown_tracer();
+
 void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     int start_step = 1;
 
@@ -280,6 +282,8 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     global_env->stop();
     LOG(INFO) << "BE exit step " << exit_step++ << ": global env stop successfully";
+
+    shutdown_tracer();
 
     LOG(INFO) << "BE exited successfully";
 }
