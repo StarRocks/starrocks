@@ -102,6 +102,9 @@ Status HiveDataSource::open(RuntimeState* state) {
     if (state->query_options().__isset.enable_file_metacache) {
         _use_file_metacache = state->query_options().enable_file_metacache;
     }
+    if (state->query_options().__isset.enable_connector_split_io_tasks) {
+        _enable_split_tasks = state->query_options().enable_connector_split_io_tasks;
+    }
 
     RETURN_IF_ERROR(_init_conjunct_ctxs(state));
     _init_tuples_and_slots(state);
@@ -772,7 +775,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.profile = &_profile;
     scanner_params.lazy_column_coalesce_counter = get_lazy_column_coalesce_counter();
     scanner_params.split_context = _split_context;
-    scanner_params.enable_split_tasks = true;
+    scanner_params.enable_split_tasks = _enable_split_tasks;
 
     if (!_equality_delete_slots.empty()) {
         MORParams& mor_params = scanner_params.mor_params;
