@@ -538,11 +538,6 @@ void FragmentMgr::receive_runtime_filter(const PTransmitRuntimeFilterParams& par
 }
 
 void FragmentMgr::close() {
-<<<<<<< HEAD
-    std::lock_guard<std::mutex> lock(_lock);
-    for (auto& it : _fragment_map) {
-        cancel(it.second->fragment_instance_id(), PPlanFragmentCancelReason::USER_CANCEL);
-=======
     std::vector<TUniqueId> frag_instance_ids;
     {
         std::lock_guard<std::mutex> lock(_lock);
@@ -558,7 +553,6 @@ void FragmentMgr::close() {
     for (auto& id : frag_instance_ids) {
         WARN_IF_ERROR(cancel(id, PPlanFragmentCancelReason::USER_CANCEL),
                       strings::Substitute("Fail to cancel fragment $0", print_id(id)));
->>>>>>> b7312dd8e9 ([BugFix] fix FragmentMgr dead lock in close() (#34181))
     }
 }
 
