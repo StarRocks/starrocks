@@ -2,15 +2,17 @@
 displayed_sidebar: "English"
 ---
 
-# Hive catalog
+# Unified catalog
 
-A Hive catalog is a kind of external catalog that enables you to query data from Apache Hive™ without ingestion.
+A unified catalog is a type of external catalog that is provided by StarRocks from v3.2 onwards to handle tables from Apache Hive™, Apache Iceberg, Apache Hudi, and Delta Lake data sources as a unified data source without ingestion. With unified catalogs, you can:
 
-Also, you can directly transform and load data from Hive by using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) based on Hive catalogs. StarRocks supports Hive catalogs from v2.4 onwards.
+- Directly query data stored in Hive, Iceberg, Hudi, and Delta Lake without the need to manually create tables.
+- Use [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) or asynchronous materialized views (which are supported from v2.5 onwards) to process data stored in Hive, Iceberg, Hudi, and Delta Lake and load the data into StarRocks.
+- Perform operations on StarRocks to create or drop Hive and Iceberg databases and tables.
 
-To ensure successful SQL workloads on your Hive cluster, your StarRocks cluster must be able to access the storage system and metastore of your Hive cluster. StarRocks supports the following storage systems and metastores:
+To ensure successful SQL workloads on your unified data source, your StarRocks cluster must be able to access the storage system and metastore of your unified data source. StarRocks supports the following storage systems and metastores:
 
-- Object storage or distributed file system like AWS S3, other S3-compatible storage system, Microsoft Azure Storage, Google GCS, or HDFS
+- Distributed file system (HDFS) or object storage like AWS S3, Microsoft Azure Storage, Google GCS, or other S3-compatible storage system (for example, MinIO)
 
 - Metastore like Hive metastore or AWS Glue
 
@@ -18,41 +20,32 @@ To ensure successful SQL workloads on your Hive cluster, your StarRocks cluster 
   >
   > If you choose AWS S3 as storage, you can use HMS or AWS Glue as metastore. If you choose any other storage system, you can only use HMS as metastore.
 
+## Limits
+
+One unified catalog supports integrations with only a single storage system and a single metastore service. Therefore, make sure all the data sources you want to integrate as a unified data source with StarRocks use the same storage system and metastore service.
+
 ## Usage notes
 
-- The file formats of Hive that StarRocks supports are Parquet, ORC, and CSV:
+- See the "Usage notes" section in [Hive catalog](../../data_source/catalog/hive_catalog.md), [Iceberg catalog](../../data_source/catalog/iceberg_catalog.md), [Hudi catalog](../../data_source/catalog/hudi_catalog.md), and [Delta Lake catalog](../../data_source/catalog/deltalake_catalog.md) to understand the file formats and data types supported.
 
-  - Parquet files support the following compression formats: SNAPPY, LZ4, ZSTD, GZIP, and NO_COMPRESSION.
-  - ORC files support the following compression formats: ZLIB, SNAPPY, LZO, LZ4, ZSTD, and NO_COMPRESSION.
+- Format-specific operations are supported only for specific table formats. For example, [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) and [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) are supported only for Hive and Iceberg, and [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH_EXTERNAL_TABLE.md) is supported only for Hive and Hudi.
 
-- The data types of Hive that StarRocks does not support are INTERVAL, BINARY, and UNION. Additionally, StarRocks does not support the MAP and STRUCT data types for CSV-formatted Hive tables.
-- You can only use Hive catalogs to query data. You cannot use Hive catalogs to drop, delete, or insert data into your Hive cluster.
+  When you create a table within a unified catalog by using the [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) statement, use the `ENGINE` parameter to specify the table format (Hive or Iceberg).
 
 ## Integration preparations
 
-Before you create a Hive catalog, make sure your StarRocks cluster can integrate with the storage system and metastore of your Hive cluster.
+Before you create a unified catalog, make sure your StarRocks cluster can integrate with the storage system and metastore of your unified data source.
 
 ### AWS IAM
 
-If your Hive cluster uses AWS S3 as storage or AWS Glue as metastore, choose your suitable authentication method and make the required preparations to ensure that your StarRocks cluster can access the related AWS cloud resources.
-
-The following authentication methods are recommended:
-
-- Instance profile
-- Assumed role
-- IAM user
-
-Of the above-mentioned three authentication methods, instance profile is the most widely used.
-
-For more information, see [Preparation for authentication in AWS IAM](../../integrations/authenticate_to_aws_resources.md#preparation-for-authentication-in-aws-iam).
+If you use AWS S3 as storage or AWS Glue as metastore, choose your suitable authentication method and make the required preparations to ensure that your StarRocks cluster can access the related AWS cloud resources. For more information, see [Authenticate to AWS resources - Preparations](../../integrations/authenticate_to_aws_resources.md#preparations).
 
 ### HDFS
 
 If you choose HDFS as storage, configure your StarRocks cluster as follows:
 
 - (Optional) Set the username that is used to access your HDFS cluster and Hive metastore. By default, StarRocks uses the username of the FE and BE processes to access your HDFS cluster and Hive metastore. You can also set the username by adding `export HADOOP_USER_NAME="<user_name>"` at the beginning of the **fe/conf/hadoop_env.sh** file of each FE and at the beginning of the **be/conf/hadoop_env.sh** file of each BE. After you set the username in these files, restart each FE and each BE to make the parameter settings take effect. You can set only one username for each StarRocks cluster.
-- When you query Hive data, the FEs and BEs of your StarRocks cluster use the HDFS client to access your HDFS cluster. In most cases, you do not need to configure your StarRocks cluster to achieve that purpose, and StarRocks starts the HDFS client using the default configurations. You need to configure your StarRocks cluster only in the following situations:
-
+- When you query data, the FEs and BEs of your StarRocks cluster use the HDFS client to access your HDFS cluster. In most cases, you do not need to configure your StarRocks cluster to achieve that purpose, and StarRocks starts the HDFS client using the default configurations. You need to configure your StarRocks cluster only in the following situations:
   - High availability (HA) is enabled for your HDFS cluster: Add the **hdfs-site.xml** file of your HDFS cluster to the **$FE_HOME/conf** path of each FE and to the **$BE_HOME/conf** path of each BE.
   - View File System (ViewFs) is enabled for your HDFS cluster: Add the **core-site.xml** file of your HDFS cluster to the **$FE_HOME/conf** path of each FE and to the **$BE_HOME/conf** path of each BE.
 
@@ -65,9 +58,9 @@ If you choose HDFS as storage, configure your StarRocks cluster as follows:
 If Kerberos authentication is enabled for your HDFS cluster or Hive metastore, configure your StarRocks cluster as follows:
 
 - Run the `kinit -kt keytab_path principal` command on each FE and each BE to obtain Ticket Granting Ticket (TGT) from Key Distribution Center (KDC). To run this command, you must have the permissions to access your HDFS cluster and Hive metastore. Note that accessing KDC with this command is time-sensitive. Therefore, you need to use cron to run this command periodically.
-- Add `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"` to the **$FE_HOME/conf/fe.conf** file of each FE and to the **$BE_HOME/conf/be.conf** file of each BE. In this example, `/etc/krb5.conf` is the save path of the **krb5.conf** file. You can modify the path based on your needs.
+- Add `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"` to the **$FE_HOME/conf/fe.conf** file of each FE and to the **$BE_HOME/conf/be.conf** file of each BE. In this example, `/etc/krb5.conf` is the save path of the krb5.conf file. You can modify the path based on your needs.
 
-## Create a Hive catalog
+## Create a unified catalog
 
 ### Syntax
 
@@ -76,8 +69,7 @@ CREATE EXTERNAL CATALOG <catalog_name>
 [COMMENT <comment>]
 PROPERTIES
 (
-    "type" = "hive",
-    GeneralParams,
+    "type" = "unified",
     MetastoreParams,
     StorageCredentialParams,
     MetadataUpdateParams
@@ -88,52 +80,42 @@ PROPERTIES
 
 #### catalog_name
 
-The name of the Hive catalog. The naming conventions are as follows:
+The name of the unified catalog. The naming conventions are as follows:
 
 - The name can contain letters, digits (0-9), and underscores (_). It must start with a letter.
 - The name is case-sensitive and cannot exceed 1023 characters in length.
 
 #### comment
 
-The description of the Hive catalog. This parameter is optional.
+The description of the unified catalog. This parameter is optional.
 
 #### type
 
-The type of your data source. Set the value to `hive`.
-
-#### GeneralParams
-
-A set of general parameters.
-
-The following table describes the parameters you can configure in `GeneralParams`.
-
-| Parameter                | Required | Description                                                  |
-| ------------------------ | -------- | ------------------------------------------------------------ |
-| enable_recursive_listing | No       | Specifies whether StarRocks reads data from a table and its partitions and from the subdirectories within the physical locations of the table and its partitions. Valid values: `true` and `false`. Default value: `false`. The value `true` specifies to recursively list subdirectories, and the value `false` specifies to ignore subdirectories. |
+The type of your data source. Set the value to `unified`.
 
 #### MetastoreParams
 
-A set of parameters about how StarRocks integrates with the metastore of your data source.
+A set of parameters about how StarRocks integrates with your metastore.
 
 ##### Hive metastore
 
-If you choose Hive metastore as the metastore of your data source, configure `MetastoreParams` as follows:
+If you choose Hive metastore as the metastore of your unified data source, configure `MetastoreParams` as follows:
 
 ```SQL
-"hive.metastore.type" = "hive",
+"unified.metastore.type" = "hive",
 "hive.metastore.uris" = "<hive_metastore_uri>"
 ```
 
 > **NOTE**
 >
-> Before querying Hive data, you must add the mapping between the host names and IP addresses of your Hive metastore nodes to the `/etc/hosts` path. Otherwise, StarRocks may fail to access your Hive metastore when you start a query.
+> Before querying data, you must add the mapping between the host names and IP addresses of your Hive metastore nodes to the **/etc/hosts** path. Otherwise, StarRocks may fail to access your Hive metastore when you start a query.
 
-The following table describes the parameter you need to configure in `MetastoreParams`.
+The following table describes the parameters you need to configure in `MetastoreParams`.
 
-| Parameter           | Required | Description                                                  |
-| ------------------- | -------- | ------------------------------------------------------------ |
-| hive.metastore.type | Yes      | The type of metastore that you use for your Hive cluster. Set the value to `hive`. |
-| hive.metastore.uris | Yes      | The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br />If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`. |
+| Parameter              | Required | Description                                                  |
+| ---------------------- | -------- | ------------------------------------------------------------ |
+| unified.metastore.type | Yes      | The type of metastore that you use for your unified data source. Set the value to `hive`. |
+| hive.metastore.uris    | Yes      | The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`. If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`. |
 
 ##### AWS Glue
 
@@ -142,7 +124,7 @@ If you choose AWS Glue as the metastore of your data source, which is supported 
 - To choose the instance profile-based authentication method, configure `MetastoreParams` as follows:
 
   ```SQL
-  "hive.metastore.type" = "glue",
+  "unified.metastore.type" = "glue",
   "aws.glue.use_instance_profile" = "true",
   "aws.glue.region" = "<aws_glue_region>"
   ```
@@ -150,7 +132,7 @@ If you choose AWS Glue as the metastore of your data source, which is supported 
 - To choose the assumed role-based authentication method, configure `MetastoreParams` as follows:
 
   ```SQL
-  "hive.metastore.type" = "glue",
+  "unified.metastore.type" = "glue",
   "aws.glue.use_instance_profile" = "true",
   "aws.glue.iam_role_arn" = "<iam_role_arn>",
   "aws.glue.region" = "<aws_glue_region>"
@@ -159,7 +141,7 @@ If you choose AWS Glue as the metastore of your data source, which is supported 
 - To choose the IAM user-based authentication method, configure `MetastoreParams` as follows:
 
   ```SQL
-  "hive.metastore.type" = "glue",
+  "unified.metastore.type" = "glue",
   "aws.glue.use_instance_profile" = "false",
   "aws.glue.access_key" = "<iam_user_access_key>",
   "aws.glue.secret_key" = "<iam_user_secret_key>",
@@ -170,7 +152,7 @@ The following table describes the parameters you need to configure in `Metastore
 
 | Parameter                     | Required | Description                                                  |
 | ----------------------------- | -------- | ------------------------------------------------------------ |
-| hive.metastore.type           | Yes      | The type of metastore that you use for your Hive cluster. Set the value to `glue`. |
+| unified.metastore.type        | Yes      | The type of metastore that you use for your unified data source. Set the value to `glue`. |
 | aws.glue.use_instance_profile | Yes      | Specifies whether to enable the instance profile-based authentication method and the assumed role-based authentication. Valid values: `true` and `false`. Default value: `false`. |
 | aws.glue.iam_role_arn         | No       | The ARN of the IAM role that has privileges on your AWS Glue Data Catalog. If you use the assumed role-based authentication method to access AWS Glue, you must specify this parameter. |
 | aws.glue.region               | Yes      | The region in which your AWS Glue Data Catalog resides. Example: `us-west-1`. |
@@ -189,7 +171,7 @@ If you use AWS S3, other S3-compatible storage system, Microsoft Azure Storage, 
 
 ##### AWS S3
 
-If you choose AWS S3 as storage for your Hive cluster, take one of the following actions:
+If you choose AWS S3 as storage, take one of the following actions:
 
 - To choose the instance profile-based authentication method, configure `StorageCredentialParams` as follows:
 
@@ -229,13 +211,11 @@ For information about how to choose an authentication method for accessing AWS S
 
 ##### S3-compatible storage system
 
-Hive catalogs support S3-compatible storage systems from v2.5 onwards.
-
-If you choose an S3-compatible storage system, such as MinIO, as storage for your Hive cluster, configure `StorageCredentialParams` as follows to ensure a successful integration:
+If you choose an S3-compatible storage system, such as MinIO, as storage, configure `StorageCredentialParams` as follows to ensure a successful integration:
 
 ```SQL
-"aws.s3.enable_ssl" = "{true | false}",
-"aws.s3.enable_path_style_access" = "{true | false}",
+"aws.s3.enable_ssl" = "false",
+"aws.s3.enable_path_style_access" = "true",
 "aws.s3.endpoint" = "<s3_endpoint>",
 "aws.s3.access_key" = "<iam_user_access_key>",
 "aws.s3.secret_key" = "<iam_user_secret_key>"
@@ -253,11 +233,9 @@ The following table describes the parameters you need to configure in `StorageCr
 
 ##### Microsoft Azure Storage
 
-Hive catalogs support Microsoft Azure Storage from v3.0 onwards.
-
 ###### Azure Blob Storage
 
-If you choose Blob Storage as storage for your Hive cluster, take one of the following actions:
+If you choose Blob Storage as storage, take one of the following actions:
 
 - To choose the Shared Key authentication method, configure `StorageCredentialParams` as follows:
 
@@ -291,7 +269,7 @@ If you choose Blob Storage as storage for your Hive cluster, take one of the fol
 
 ###### Azure Data Lake Storage Gen2
 
-If you choose Data Lake Storage Gen2 as storage for your Hive cluster, take one of the following actions:
+If you choose Data Lake Storage Gen2 as storage, take one of the following actions:
 
 - To choose the Managed Identity authentication method, configure `StorageCredentialParams` as follows:
 
@@ -341,7 +319,7 @@ If you choose Data Lake Storage Gen2 as storage for your Hive cluster, take one 
 
 ###### Azure Data Lake Storage Gen1
 
-If you choose Data Lake Storage Gen1 as storage for your Hive cluster, take one of the following actions:
+If you choose Data Lake Storage Gen1 as storage, take one of the following actions:
 
 - To choose the Managed Service Identity authentication method, configure `StorageCredentialParams` as follows:
 
@@ -373,9 +351,7 @@ If you choose Data Lake Storage Gen1 as storage for your Hive cluster, take one 
 
 ##### Google GCS
 
-Hive catalogs support Google GCS from v3.0 onwards.
-
-If you choose Google GCS as storage for your Hive cluster, take one of the following actions:
+If you choose Google GCS as storage, take one of the following actions:
 
 - To choose the VM-based authentication method, configure `StorageCredentialParams` as follows:
 
@@ -441,42 +417,35 @@ If you choose Google GCS as storage for your Hive cluster, take one of the follo
 
 #### MetadataUpdateParams
 
-A set of parameters about how StarRocks updates the cached metadata of Hive. This parameter set is optional.
-
-StarRocks implements the [automatic asynchronous update policy](#appendix-understand-metadata-automatic-asynchronous-update) by default.
+A set of parameters about how StarRocks updates the cached metadata of Hive, Hudi, and Delta Lake. This parameter set is optional. For more information about the policies for updating cached metadata from Hive, Hudi, and Delta Lake, see [Hive catalog](../../data_source/catalog/hive_catalog.md), [Hudi catalog](../../data_source/catalog/hudi_catalog.md), and [Delta Lake catalog](../../data_source/catalog/deltalake_catalog.md).
 
 In most cases, you can ignore `MetadataUpdateParams` and do not need to tune the policy parameters in it, because the default values of these parameters already provide you with an out-of-the-box performance.
 
-However, if the frequency of data updates in Hive is high, you can tune these parameters to further optimize the performance of automatic asynchronous updates.
-
-> **NOTE**
->
-> In most cases, if your Hive data is updated at a granularity of 1 hour or less, the data update frequency is considered high.
+However, if the frequency of data updates in Hive, Hudi, or Delta Lake is high, you can tune these parameters to further optimize the performance of automatic asynchronous updates.
 
 | Parameter                              | Required | Description                                                  |
-|----------------------------------------| -------- | ------------------------------------------------------------ |
-| enable_metastore_cache                 | No       | Specifies whether StarRocks caches the metadata of Hive tables. Valid values: `true` and `false`. Default value: `true`. The value `true` enables the cache, and the value `false` disables the cache. |
-| enable_remote_file_cache               | No       | Specifies whether StarRocks caches the metadata of the underlying data files of Hive tables or partitions. Valid values: `true` and `false`. Default value: `true`. The value `true` enables the cache, and the value `false` disables the cache. |
-| metastore_cache_refresh_interval_sec   | No       | The time interval at which StarRocks asynchronously updates the metadata of Hive tables or partitions cached in itself. Unit: seconds. Default value: `7200`, which is 2 hours. |
-| remote_file_cache_refresh_interval_sec | No       | The time interval at which StarRocks asynchronously updates the metadata of the underlying data files of Hive tables or partitions cached in itself. Unit: seconds. Default value: `60`. |
-| metastore_cache_ttl_sec                | No       | The time interval at which StarRocks automatically discards the metadata of Hive tables or partitions cached in itself. Unit: seconds. Default value: `86400`, which is 24 hours. |
-| remote_file_cache_ttl_sec              | No       | The time interval at which StarRocks automatically discards the metadata of the underlying data files of Hive tables or partitions cached in itself. Unit: seconds. Default value: `129600`, which is 36 hours. |
-| enable_cache_list_names                | No       | Specifies whether StarRocks caches Hive partition names. Valid values: `true` and `false`. Default value: `true`. The value `true` enables the cache, and the value `false` disables the cache. |
+| -------------------------------------- | -------- | ------------------------------------------------------------ |
+| enable_metastore_cache                 | No       | Specifies whether StarRocks caches the metadata of Hive, Hudi, or Delta Lake tables. Valid values: `true` and `false`. Default value: `true`. The value `true` enables the cache, and the value `false` disables the cache. |
+| enable_remote_file_cache               | No       | Specifies whether StarRocks caches the metadata of the underlying data files of Hive, Hudi, or Delta Lake tables or partitions. Valid values: `true` and `false`. Default value: `true`. The value true enables the cache, and the value `false` disables the cache. |
+| metastore_cache_refresh_interval_sec   | No       | The time interval at which StarRocks asynchronously updates the metadata of Hive, Hudi, or Delta Lake tables or partitions cached in itself. Unit: seconds. Default value: `7200`, which is 2 hours. |
+| remote_file_cache_refresh_interval_sec | No       | The time interval at which StarRocks asynchronously updates the metadata of the underlying data files of Hive, Hudi, or Delta Lake tables or partitions cached in itself. Unit: seconds. Default value: `60`. |
+| metastore_cache_ttl_sec                | No       | The time interval at which StarRocks automatically discards the metadata of Hive, Hudi, or Delta Lake tables or partitions cached in itself. Unit: seconds. Default value: `86400`, which is 24 hours. |
+| remote_file_cache_ttl_sec              | No       | The time interval at which StarRocks automatically discards the metadata of the underlying data files of Hive, Hudi, or Delta Lake tables or partitions cached in itself. Unit: seconds. Default value: `129600`, which is 36 hours. |
 
 ### Examples
 
-The following examples create a Hive catalog named `hive_catalog_hms` or `hive_catalog_glue`, depending on the type of metastore you use, to query data from your Hive cluster.
+The following examples create a unified catalog named `unified_catalog_hms` or `unified_catalog_glue`, depending on the type of metastore you use, to query data from your unified data source.
 
 #### HDFS
 
 If you use HDFS as storage, run a command like below:
 
 ```SQL
-CREATE EXTERNAL CATALOG hive_catalog_hms
+CREATE EXTERNAL CATALOG unified_catalog_hms
 PROPERTIES
 (
-    "type" = "hive",
-    "hive.metastore.type" = "hive",
+    "type" = "unified",
+    "unified.metastore.type" = "hive",
     "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
 );
 ```
@@ -485,28 +454,28 @@ PROPERTIES
 
 ##### Instance profile-based authentication
 
-- If you use Hive metastore in your Hive cluster, run a command like below:
+- If you use Hive metastore, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG unified_catalog_hms
   PROPERTIES
   (
-      "type" = "hive",
-      "hive.metastore.type" = "hive",
+      "type" = "unified",
+      "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.region" = "us-west-2"
   );
   ```
 
-- If you use AWS Glue in your Amazon EMR Hive cluster, run a command like below:
+- If you use AWS Glue with Amazon EMR, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_glue
+  CREATE EXTERNAL CATALOG unified_catalog_glue
   PROPERTIES
   (
-      "type" = "hive",
-      "hive.metastore.type" = "glue",
+      "type" = "unified",
+      "unified.metastore.type" = "glue",
       "aws.glue.use_instance_profile" = "true",
       "aws.glue.region" = "us-west-2",
       "aws.s3.use_instance_profile" = "true",
@@ -516,14 +485,14 @@ PROPERTIES
 
 ##### Assumed role-based authentication
 
-- If you use Hive metastore in your Hive cluster, run a command like below:
+- If you use Hive metastore, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG unified_catalog_hms
   PROPERTIES
   (
-      "type" = "hive",
-      "hive.metastore.type" = "hive",
+      "type" = "unified",
+      "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
@@ -531,14 +500,14 @@ PROPERTIES
   );
   ```
 
-- If you use AWS Glue in your Amazon EMR Hive cluster, run a command like below:
+- If you use AWS Glue with Amazon EMR, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_glue
+  CREATE EXTERNAL CATALOG unified_catalog_glue
   PROPERTIES
   (
-      "type" = "hive",
-      "hive.metastore.type" = "glue",
+      "type" = "unified",
+      "unified.metastore.type" = "glue",
       "aws.glue.use_instance_profile" = "true",
       "aws.glue.iam_role_arn" = "arn:aws:iam::081976408565:role/test_glue_role",
       "aws.glue.region" = "us-west-2",
@@ -550,14 +519,14 @@ PROPERTIES
 
 ##### IAM user-based authentication
 
-- If you use Hive metastore in your Hive cluster, run a command like below:
+- If you use Hive metastore, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG unified_catalog_hms
   PROPERTIES
   (
-      "type" = "hive",
-      "hive.metastore.type" = "hive",
+      "type" = "unified",
+      "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "false",
       "aws.s3.access_key" = "<iam_user_access_key>",
@@ -566,14 +535,14 @@ PROPERTIES
   );
   ```
 
-- If you use AWS Glue in your Amazon EMR Hive cluster, run a command like below:
+- If you use AWS Glue with Amazon EMR, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_glue
+  CREATE EXTERNAL CATALOG unified_catalog_glue
   PROPERTIES
   (
-      "type" = "hive",
-      "hive.metastore.type" = "glue",
+      "type" = "unified",
+      "unified.metastore.type" = "glue",
       "aws.glue.use_instance_profile" = "false",
       "aws.glue.access_key" = "<iam_user_access_key>",
       "aws.glue.secret_key" = "<iam_user_secret_key>",
@@ -590,11 +559,11 @@ PROPERTIES
 Use MinIO as an example. Run a command like below:
 
 ```SQL
-CREATE EXTERNAL CATALOG hive_catalog_hms
+CREATE EXTERNAL CATALOG unified_catalog_hms
 PROPERTIES
 (
-    "type" = "hive",
-    "hive.metastore.type" = "hive",
+    "type" = "unified",
+    "unified.metastore.type" = "hive",
     "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
     "aws.s3.enable_ssl" = "true",
     "aws.s3.enable_path_style_access" = "true",
@@ -611,11 +580,11 @@ PROPERTIES
 - If you choose the Shared Key authentication method, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG unified_catalog_hms
   PROPERTIES
   (
-      "type" = "hive",
-      "hive.metastore.type" = "hive",
+      "type" = "unified",
+      "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.blob.storage_account" = "<blob_storage_account_name>",
       "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
@@ -625,11 +594,11 @@ PROPERTIES
 - If you choose the SAS Token authentication method, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG unified_catalog_hms
   PROPERTIES
   (
-      "type" = "hive",
-      "hive.metastore.type" = "hive",
+      "type" = "unified",
+      "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.blob.storage_account" = "<blob_storage_account_name>",
       "azure.blob.container" = "<blob_container_name>",
@@ -642,11 +611,11 @@ PROPERTIES
 - If you choose the Managed Service Identity authentication method, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG unified_catalog_hms
   PROPERTIES
   (
-      "type" = "hive",
-      "hive.metastore.type" = "hive",
+      "type" = "unified",
+      "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.adls1.use_managed_service_identity" = "true"    
   );
@@ -655,11 +624,11 @@ PROPERTIES
 - If you choose the Service Principal authentication method, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG unified_catalog_hms
   PROPERTIES
   (
-      "type" = "hive",
-      "hive.metastore.type" = "hive",
+      "type" = "unified",
+      "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.adls1.oauth2_client_id" = "<application_client_id>",
       "azure.adls1.oauth2_credential" = "<application_client_credential>",
@@ -672,11 +641,11 @@ PROPERTIES
 - If you choose the Managed Identity authentication method, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG unified_catalog_hms
   PROPERTIES
   (
-      "type" = "hive",
-      "hive.metastore.type" = "hive",
+      "type" = "unified",
+      "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.adls2.oauth2_use_managed_identity" = "true",
       "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
@@ -687,11 +656,11 @@ PROPERTIES
 - If you choose the Shared Key authentication method, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG unified_catalog_hms
   PROPERTIES
   (
-      "type" = "hive",
-      "hive.metastore.type" = "hive",
+      "type" = "unified",
+      "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.adls2.storage_account" = "<storage_account_name>",
       "azure.adls2.shared_key" = "<shared_key>"     
@@ -701,11 +670,11 @@ PROPERTIES
 - If you choose the Service Principal authentication method, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG unified_catalog_hms
   PROPERTIES
   (
-      "type" = "hive",
-      "hive.metastore.type" = "hive",
+      "type" = "unified",
+      "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.adls2.oauth2_client_id" = "<service_client_id>",
       "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
@@ -718,11 +687,11 @@ PROPERTIES
 - If you choose the VM-based authentication method, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG unified_catalog_hms
   PROPERTIES
   (
-      "type" = "hive",
-      "hive.metastore.type" = "hive",
+      "type" = "unified",
+      "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "gcp.gcs.use_compute_engine_service_account" = "true"    
   );
@@ -731,11 +700,11 @@ PROPERTIES
 - If you choose the service account-based authentication method, run a command like below:
 
   ```SQL
-  CREATE EXTERNAL CATALOG hive_catalog_hms
+  CREATE EXTERNAL CATALOG unified_catalog_hms
   PROPERTIES
   (
-      "type" = "hive",
-      "hive.metastore.type" = "hive",
+      "type" = "unified",
+      "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "gcp.gcs.service_account_email" = "<google_service_account_email>",
       "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
@@ -748,11 +717,11 @@ PROPERTIES
   - If you make a VM instance impersonate a service account, run a command like below:
 
     ```SQL
-    CREATE EXTERNAL CATALOG hive_catalog_hms
+    CREATE EXTERNAL CATALOG unified_catalog_hms
     PROPERTIES
     (
-        "type" = "hive",
-        "hive.metastore.type" = "hive",
+        "type" = "unified",
+        "unified.metastore.type" = "hive",
         "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
         "gcp.gcs.use_compute_engine_service_account" = "true",
         "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"    
@@ -762,11 +731,11 @@ PROPERTIES
   - If you make a service account impersonate another service account, run a command like below:
 
     ```SQL
-    CREATE EXTERNAL CATALOG hive_catalog_hms
+    CREATE EXTERNAL CATALOG unified_catalog_hms
     PROPERTIES
     (
-        "type" = "hive",
-        "hive.metastore.type" = "hive",
+        "type" = "unified",
+        "unified.metastore.type" = "hive",
         "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
         "gcp.gcs.service_account_email" = "<google_service_account_email>",
         "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
@@ -775,7 +744,7 @@ PROPERTIES
     );
     ```
 
-## View Hive catalogs
+## View unified catalogs
 
 You can use [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) to query all catalogs in the current StarRocks cluster:
 
@@ -783,17 +752,17 @@ You can use [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation
 SHOW CATALOGS;
 ```
 
-You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a Hive catalog named `hive_catalog_glue`:
+You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a unified catalog named `unified_catalog_glue`:
 
 ```SQL
-SHOW CREATE CATALOG hive_catalog_glue;
+SHOW CREATE CATALOG unified_catalog_glue;
 ```
 
-## Switch to a Hive Catalog and a database in it
+## Switch to a Unified Catalog and a database in it
 
-You can use one of the following methods to switch to a Hive catalog and a database in it:
+You can use one of the following methods to switch to a unified catalog and a database in it:
 
-- Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) to specify a Hive catalog in the current session, and then use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to specify an active database:
+- Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) to specify a unified catalog in the current session, and then use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to specify an active database:
 
   ```SQL
   -- Switch to a specified catalog in the current session:
@@ -802,25 +771,25 @@ You can use one of the following methods to switch to a Hive catalog and a datab
   USE <db_name>
   ```
 
-- Directly use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to switch to a Hive catalog and a database in it:
+- Directly use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to switch to a unified catalog and a database in it:
 
   ```SQL
   USE <catalog_name>.<db_name>
   ```
 
-## Drop a Hive catalog
+## Drop a unified catalog
 
 You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) to drop an external catalog.
 
-The following example drops a Hive catalog named `hive_catalog_glue`:
+The following example drops a unified catalog named `unified_catalog_glue`:
 
 ```SQL
-DROP Catalog hive_catalog_glue;
+DROP CATALOG unified_catalog_glue;
 ```
 
-## View the schema of a Hive table
+## View the schema of a table from a unified catalog
 
-You can use one of the following syntaxes to view the schema of a Hive table:
+You can use one of the following syntaxes to view the schema of a table from a unified catalog:
 
 - View schema
 
@@ -834,15 +803,17 @@ You can use one of the following syntaxes to view the schema of a Hive table:
   SHOW CREATE TABLE <catalog_name>.<database_name>.<table_name>
   ```
 
-## Query a Hive table
+## Query data from a unified catalog
 
-1. Use [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) to view the databases in your Hive cluster:
+To query data from a unified catalog, follow these steps:
+
+1. Use [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) to view the databases in your unified data source with which the unified catalog is associated:
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>
    ```
 
-2. [Switch to a Hive Catalog and a database in it](#switch-to-a-hive-catalog-and-a-database-in-it).
+2. [Switch to a Hive Catalog and a database in it](#switch-to-a-unified-catalog-and-a-database-in-it).
 
 3. Use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the destination table in the specified database:
 
@@ -850,142 +821,156 @@ You can use one of the following syntaxes to view the schema of a Hive table:
    SELECT count(*) FROM <table_name> LIMIT 10
    ```
 
-## Load data from Hive
+## Load data from Hive, Iceberg, Hudi, or Delta Lake
 
-Suppose you have an OLAP table named `olap_tbl`, you can transform and load data like below:
+You can use [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) to load the data of a Hive, Iceberg, Hudi, or Delta Lake table into a StarRocks table created within a unified catalog.
 
-```SQL
-INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM hive_table
-```
-
-## Manually or automatically update metadata cache
-
-### Manual update
-
-By default, StarRocks caches the metadata of Hive and automatically updates the metadata in asynchronous mode to deliver better performance. Additionally, after some schema changes or table updates are made on a Hive table, you can also use [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH_EXTERNAL_TABLE.md) to manually update its metadata, thereby ensuring that StarRocks can obtain up-to-date metadata at its earliest opportunity and generate appropriate execution plans:
+The following example loads the data of the Hive table `hive_table` into the StarRocks table `test_tbl` created in the database `test_database` that belongs to the unified catalog `unified_catalog`:
 
 ```SQL
-REFRESH EXTERNAL TABLE <table_name>
+INSERT INTO unified_catalog.test_database.test_table SELECT * FROM hive_table
 ```
 
-You need to manually update metadata in the following situations:
+## Create a database in a unified catalog
 
-- A data file in an existing partition is changed, for example, by running the `INSERT OVERWRITE ... PARTITION ...` command.
-- Schema changes are made on a Hive table.
-- An existing Hive table is deleted by using the DROP statement, and a new Hive table with the same name as the deleted Hive table is created.
-- You have specified `"enable_cache_list_names" = "true"` in `PROPERTIES` at the creation of your Hive catalog, and you want to query new partitions that you just created on your Hive cluster.
+Similar to the internal catalog of StarRocks, if you have the [CREATE DATABASE](../../administration/privilege_item.md#catalog) privilege on a unified catalog, you can use the [CREATE DATABASE](../../sql-reference/sql-statements/data-definition/CREATE_DATABASE.md) statement to create a database in that catalog.
 
-  > **NOTE**
-  >
-  > From v2.5.5 onwards, StarRocks provides the periodic Hive metadata cache refresh feature. For more information, see the below "[Periodically refresh metadata cache](#periodically-refresh-metadata-cache)" section of this topic. After you enable this feature, StarRocks refreshes your Hive metadata cache every 10 minutes by default. Therefore, manual updates are not needed in most cases. You need to perform a manual update only when you want to query new partitions immediately after the new partitions are created on your Hive cluster.
+> **NOTE**
+>
+> You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
 
-Note that the REFRESH EXTERNAL TABLE refreshes only the tables and partitions cached in your FEs.
+StarRocks supports creating only Hive and Iceberg databases in unified catalogs.
 
-### Automatic incremental update
+[Switch to a unified catalog](#switch-to-a-unified-catalog-and-a-database-in-it), and then use the following statement to create a database in that catalog:
 
-Unlike the automatic asynchronous update policy, the automatic incremental update policy enables the FEs in your StarRocks cluster to read events, such as adding columns, removing partitions, and updating data, from your Hive metastore. StarRocks can automatically update the metadata cached in the FEs based on these events. This means you do not need to manually update the metadata of your Hive tables.
-
-This feature may cause significant pressure to the HMS, exercise caution when you use this feature. We recommend that you use [Periodically refresh metadata cache](#periodically-refresh-metadata-cache).
-
-To enable automatic incremental update, follow these steps:
-
-#### Step 1: Configure event listener for your Hive metastore
-
-Both Hive metastore v2.x and v3.x support configuring an event listener. This step uses the event listener configuration used for Hive metastore v3.1.2 as an example. Add the following configuration items to the **$HiveMetastore/conf/hive-site.xml** file, and then restart your Hive metastore:
-
-```XML
-<property>
-    <name>hive.metastore.event.db.notification.api.auth</name>
-    <value>false</value>
-</property>
-<property>
-    <name>hive.metastore.notifications.add.thrift.objects</name>
-    <value>true</value>
-</property>
-<property>
-    <name>hive.metastore.alter.notifications.basic</name>
-    <value>false</value>
-</property>
-<property>
-    <name>hive.metastore.dml.events</name>
-    <value>true</value>
-</property>
-<property>
-    <name>hive.metastore.transactional.event.listeners</name>
-    <value>org.apache.hive.hcatalog.listener.DbNotificationListener</value>
-</property>
-<property>
-    <name>hive.metastore.event.db.listener.timetolive</name>
-    <value>172800s</value>
-</property>
-<property>
-    <name>hive.metastore.server.max.message.size</name>
-    <value>858993459</value>
-</property>
+```SQL
+CREATE DATABASE <database_name>
+[properties ("location" = "<prefix>://<path_to_database>/<database_name.db>")]
 ```
 
-You can search for `event id` in the FE log file to check whether the event listener is successfully configured. If the configuration fails, `event id` values are `0`.
+The `location` parameter specifies the file path in which you want to create the database, which can be in either HDFS or cloud storage.
 
-#### Step 2: Enable automatic incremental update on StarRocks
+- When you use Hive metastore as the metastore of your data source, the `location` parameter defaults to `<warehouse_location>/<database_name.db>`, which is supported by Hive metastore if you do not specify that parameter at database creation.
+- When you use AWS Glue as the metastore of your data source, the `location` parameter does not have a default value, and therefore you must specify that parameter at database creation.
 
-You can enable automatic incremental update for a single Hive catalog or for all Hive catalogs in your StarRocks cluster.
+The `prefix` varies based on the storage system you use:
 
-- To enable automatic incremental update for a single Hive catalog, set the `enable_hms_events_incremental_sync` parameter to `true` in `PROPERTIES` like below when you create the Hive catalog:
+| **Storage system**                                         | **`Prefix`** **value**                                       |
+| ---------------------------------------------------------- | ------------------------------------------------------------ |
+| HDFS                                                       | `hdfs`                                                       |
+| Google GCS                                                 | `gs`                                                         |
+| Azure Blob Storage                                         | <ul><li>If your storage account allows access over HTTP, the `prefix` is `wasb`.</li><li>If your storage account allows access over HTTPS, the `prefix` is `wasbs`.</li></ul> |
+| Azure Data Lake Storage Gen1                               | `adl`                                                        |
+| Azure Data Lake Storage Gen2                               | <ul><li>If your storage account allows access over HTTP, the`prefix` is `abfs`.</li><li>If your storage account allows access over HTTPS, the `prefix` is `abfss`.</li></ul> |
+| AWS S3 or other S3-compatible storage (for example, MinIO) | `s3`                                                         |
 
-  ```SQL
-  CREATE EXTERNAL CATALOG <catalog_name>
-  [COMMENT <comment>]
-  PROPERTIES
-  (
-      "type" = "hive",
-      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
-       ....
-      "enable_hms_events_incremental_sync" = "true"
-  );
-  ```
+## Drop a database from a unified catalog
 
-- To enable automatic incremental update for all Hive catalogs, add `"enable_hms_events_incremental_sync" = "true"` to the `$FE_HOME/conf/fe.conf` file of each FE, and then restart each FE to make the parameter setting take effect.
+Similar to the internal databases of StarRocks, if you have the [DROP](../../administration/privilege_item.md#database) privilege on a database created within a unified catalog, you can use the [DROP DATABASE](../../sql-reference/sql-statements/data-definition/DROP_DATABASE.md) statement to drop that database. You can only drop empty databases.
 
-You can also tune the following parameters in the `$FE_HOME/conf/fe.conf` file of each FE based on your business requirements, and then restart each FE to make the parameter settings take effect.
+> **NOTE**
+>
+> You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
 
-| Parameter                         | Description                                                  |
-| --------------------------------- | ------------------------------------------------------------ |
-| hms_events_polling_interval_ms    | The time interval at which StarRocks reads events from your Hive metastore. Default value: `5000`. Unit: milliseconds. |
-| hms_events_batch_size_per_rpc     | The maximum number of events that StarRocks can read at a time. Default value: `500`. |
-| enable_hms_parallel_process_evens | Specifies whether StarRocks processes events in parallel as it reads the events. Valid values: `true` and `false`. Default value: `true`. The value `true` enables parallelism, and the value `false` disables parallelism. |
-| hms_process_events_parallel_num   | The maximum number of events that StarRocks can process in parallel. Default value: `4`. |
+StarRocks supports dropping only Hive and Iceberg databases from unified catalogs.
 
-## Periodically refresh metadata cache
+When you drop a database from a unified catalog, the database's file path on your HDFS cluster or cloud storage will not be dropped along with the database.
 
-From v2.5.5 onwards, StarRocks can periodically refresh the cached metadata of the frequently accessed Hive catalogs to perceive data changes. You can configure the Hive metadata cache refresh through the following [FE parameters](../../administration/Configuration.md#fe-configuration-items):
-| Configuration item                                           | Default                              | Description                          |
-| ------------------------------------------------------------ | ------------------------------------ | ------------------------------------ |
-| enable_background_refresh_connector_metadata                 | `true` in v3.0<br />`false` in v2.5  | Whether to enable the periodic Hive metadata cache refresh. After it is enabled, StarRocks polls the metastore (Hive Metastore or AWS Glue) of your Hive cluster, and refreshes the cached metadata of the frequently accessed Hive catalogs to perceive data changes. `true` indicates to enable the Hive metadata cache refresh, and `false` indicates to disable it. This item is an [FE dynamic parameter](../../administration/Configuration.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) command. |
-| background_refresh_metadata_interval_millis                  | `600000` (10 minutes)                | The interval between two consecutive Hive metadata cache refreshes. Unit: millisecond. This item is an [FE dynamic parameter](../../administration/Configuration.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) command. |
-| background_refresh_metadata_time_secs_since_last_access_secs | `86400` (24 hours)                   | The expiration time of a Hive metadata cache refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its cached metadata. Unit: second. This item is an [FE dynamic parameter](../../administration/Configuration.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) command. |
-Using the periodic Hive metadata cache refresh feature and the metadata automatic asynchronous update policy together significantly accelerates data access, reduces the read load from external data sources, and improves query performance.
+[Switch to a unified catalog](#switch-to-a-unified-catalog-and-a-database-in-it), and then use the following statement to drop a database in that catalog:
 
-## Appendix: Understand automatic asynchronous update
+```SQL
+DROP DATABASE <database_name>
+```
 
-Automatic asynchronous update is the default policy that StarRocks uses to update the metadata in Hive catalogs.
+## Create a table in a unified catalog
 
-By default (namely, when the `enable_metastore_cache` and `enable_remote_file_cache` parameters are both set to `true`), if a query hits a partition of a Hive table, StarRocks automatically caches the metadata of the partition and the metadata of the underlying data files of the partition. The cached metadata is updated by using the lazy update policy.
+Similar to the internal databases of StarRocks, if you have the [CREATE TABLE](../../administration/privilege_item.md#database) privilege on a database created within a unified catalog, you can use the [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) or [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md) statement to create a table in that database.
 
-For example, there is a Hive table named `table2`, which has four partitions: `p1`, `p2`, `p3`, and `p4`. A query hits `p1`, and StarRocks caches the metadata of `p1` and the metadata of the underlying data files of `p1`. Assume that the default time intervals to update and discard the cached metadata are as follows:
+> **NOTE**
+>
+> You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
 
-- The time interval (specified by the `metastore_cache_refresh_interval_sec` parameter) to asynchronously update the cached metadata of `p1` is 2 hours.
-- The time interval (specified by the `remote_file_cache_refresh_interval_sec` parameter) to asynchronously update the cached metadata of the underlying data files of `p1` is 60 seconds.
-- The time interval (specified by the `metastore_cache_ttl_sec` parameter) to automatically discard the cached metadata of `p1` is 24 hours.
-- The time interval (specified by the `remote_file_cache_ttl_sec` parameter) to automatically discard the cached metadata of the underlying data files of `p1` is 36 hours.
+StarRocks supports creating only Hive and Iceberg tables in unified catalogs.
 
-The following figure shows the time intervals on a timeline for easier understanding.
+[Switch to a Hive Catalog and a database in it](#switch-to-a-unified-catalog-and-a-database-in-it). Then, use [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) to create a Hive or Iceberg table in that database:
 
-![Timeline for updating and discarding cached metadata](../../assets/catalog_timeline.png)
+```SQL
+CREATE TABLE <table_name>
+(column_definition1[, column_definition2, ...]
+ENGINE = {|hive|iceberg}
+[partition_desc]
+```
 
-Then StarRocks updates or discards the metadata in compliance with the following rules:
+For more information, see [Create a Hive table](../catalog/hive_catalog.md#create-a-hive-table) and [Create an Iceberg table](../catalog/iceberg_catalog.md#create-an-iceberg-table).
 
-- If another query hits `p1` again and the current time from the last update is less than 60 seconds, StarRocks does not update the cached metadata of `p1` or the cached metadata of the underlying data files of `p1`.
-- If another query hits `p1` again and the current time from the last update is more than 60 seconds, StarRocks updates the cached metadata of the underlying data files of `p1`.
-- If another query hits `p1` again and the current time from the last update is more than 2 hours, StarRocks updates the cached metadata of `p1`.
-- If `p1` has not been accessed within 24 hours from the last update, StarRocks discards the cached metadata of `p1`. The metadata will be cached at the next query.
-- If `p1` has not been accessed within 36 hours from the last update, StarRocks discards the cached metadata of the underlying data files of `p1`. The metadata will be cached at the next query.
+The following example creates a Hive table named `hive_table`. The table consists of three columns `action`, `id`, and `dt`, of which `id` and `dt`are partition columns.
+
+```SQL
+CREATE TABLE hive_table
+(
+    action varchar(65533),
+    id int,
+    dt date
+)
+ENGINE = hive
+PARTITION BY (id,dt);
+```
+
+## Sink data to a table in a unified catalog
+
+Similar to the internal tables of StarRocks, if you have the [INSERT](../../administration/privilege_item.md#table) privilege on a table created within a unified catalog, you can use the [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md) statement to sink the data of a StarRocks table to that Unified Catalog table (currently only Parquet-formatted Unified Catalog tables are supported).
+
+> **NOTE**
+>
+> You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
+
+StarRocks supports sinking data only to Hive and Iceberg tables in unified catalogs.
+
+[Switch to a Hive Catalog and a database in it](#switch-to-a-unified-catalog-and-a-database-in-it). Then, use [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) to insert data into a Hive or Iceberg table in that database:
+
+```SQL
+INSERT {INTO | OVERWRITE} <table_name>
+[ (column_name [, ...]) ]
+{ VALUES ( { expression | DEFAULT } [, ...] ) [, ...] | query }
+
+-- If you want to sink data to specified partitions, use the following syntax:
+INSERT {INTO | OVERWRITE} <table_name>
+PARTITION (par_col1=<value> [, par_col2=<value>...])
+{ VALUES ( { expression | DEFAULT } [, ...] ) [, ...] | query }
+```
+
+For more information, see [Sink data to a Hive table ](../catalog/hive_catalog.md#sink-data-to-a-hive-table) and [Sink data to an Iceberg table](../catalog/iceberg_catalog.md#sink-data-to-an-iceberg-table).
+
+The following example inserts three data rows to a Hive table named `hive_table`:
+
+```SQL
+INSERT INTO hive_table
+VALUES
+    ("buy", 1, "2023-09-01"),
+    ("sell", 2, "2023-09-02"),
+    ("buy", 3, "2023-09-03");
+```
+
+## Drop a table from a unified catalog
+
+Similar to the internal tables of StarRocks, if you have the [DROP](../../administration/privilege_item.md#table) privilege on a table created within a unified catalog, you can use the [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) statement to drop that table.
+
+> **NOTE**
+>
+> You can grant and revoke privileges by using [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md).
+
+StarRocks supports dropping only Hive and Iceberg tables from unified catalogs.
+
+[Switch to a Hive Catalog and a database in it](#switch-to-a-unified-catalog-and-a-database-in-it). Then, use [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) to drop a Hive or Iceberg table in that database:
+
+```SQL
+DROP TABLE <table_name>
+```
+
+For more information, see [Drop a Hive table](../catalog/hive_catalog.md#drop-a-hive-table) and [Drop an Iceberg table](../catalog/iceberg_catalog.md#drop-an-iceberg-table).
+
+The following example drops a Hive table named `hive_table`:
+
+```SQL
+DROP TABLE hive_table FORCE
+```
