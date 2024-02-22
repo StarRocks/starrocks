@@ -362,31 +362,7 @@ select * from score_board;
 +------+------+-------+
 2 rows in set (0.00 sec)
 ```
-<<<<<<< HEAD
-=======
-
-##### Delete data by using multi-table join or CTE
-
-To delete all movies produced by the producer "foo", you can execute the following statement:
-
-```SQL
-DELETE FROM films USING producers
-WHERE producer_id = producers.id
-    AND producers.name = 'foo';
-```
-
-You can also use a CTE to rewrite the above statement to improve readability.
-
-```SQL
-WITH foo_producers as (
-    SELECT * from producers
-    where producers.name = 'foo'
-)
-DELETE FROM films USING foo_producers
-WHERE producer_id = foo_producers.id;
-```
 
 ## References
 
 [SHOW DELETE](./SHOW_DELETE.md): queries historical DELETE operations that were successfully performed on Duplicate Key tables, Aggregate tables, and Unique Key tables.
->>>>>>> 6b2ef16a51 ([Doc] add  more table type to show delete and add a note about changing table types (#41350))
