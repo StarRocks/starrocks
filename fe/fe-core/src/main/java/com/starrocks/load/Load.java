@@ -615,6 +615,7 @@ public class Load {
                         context.setThreadLocalInfo();
                     }
                     ConnectContext.get().setDatabase(dbName);
+                    break;
                 }
             }
         }
