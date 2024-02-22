@@ -197,13 +197,9 @@ TEST_F(OrcChunkWriterTest, TestWriteIntergersNullable) {
 
     auto parquet_output_stream = std::make_unique<OrcOutputStream>(std::move(output_stream.value()));
 
-    std::vector<std::unique_ptr<ColumnEvaluator>> column_evaluators;
-    for (int i = 0; i < 4; i++) {
-        column_evaluators.push_back(std::make_unique<ColumnSlotIdEvaluator>(i));
-    }
-
-    auto writer_options = std::make_shared<formats::ORCFileWriter::ORCWriterOptions>();
-    auto writer = std::make_unique<formats::ORCFileWriter>(
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer_options = std::make_shared<formats::ORCWriterOptions>();
+    auto writer = std::make_unique<formats::ORCFileWriter>("",
             std::move(parquet_output_stream), column_names, type_descs, std::move(column_evaluators), writer_options,
             []() {}, nullptr);
     ASSERT_OK(writer->init());

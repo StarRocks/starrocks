@@ -21,7 +21,9 @@
 namespace starrocks::pipeline {
 
 Status ConnectorSinkOperator::prepare(RuntimeState* state) {
+#ifndef BE_TEST
     RETURN_IF_ERROR(Operator::prepare(state));
+#endif
     RETURN_IF_ERROR(_connector_chunk_sink->init());
     return Status::OK();
 }
@@ -33,7 +35,9 @@ void ConnectorSinkOperator::close(RuntimeState* state) {
             _rollback_actions.pop();
         }
     }
+#ifndef BE_TEST
     Operator::close(state);
+#endif
 }
 
 template <typename R>
@@ -105,7 +109,8 @@ bool ConnectorSinkOperator::is_finished() const {
 Status ConnectorSinkOperator::set_finishing(RuntimeState* state) {
     _no_more_input = true;
     auto future = _connector_chunk_sink->finish();
-    return _enqueue_futures(std::move(future));
+    _enqueue_futures(std::move(future));
+    return Status::OK();
 }
 
 bool ConnectorSinkOperator::pending_finish() const {
@@ -124,17 +129,17 @@ StatusOr<ChunkPtr> ConnectorSinkOperator::pull_chunk(RuntimeState* state) {
 
 Status ConnectorSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     ASSIGN_OR_RETURN(auto future, _connector_chunk_sink->add(chunk));
-    return _enqueue_futures(std::move(future));
+    _enqueue_futures(std::move(future));
+    return Status::OK();
 }
 
-Status ConnectorSinkOperator::_enqueue_futures(connector::ConnectorChunkSink::Futures future) {
+void ConnectorSinkOperator::_enqueue_futures(connector::ConnectorChunkSink::Futures future) {
     for (auto& f : future.add_chunk_future) {
         _add_chunk_future_queue.push(std::move(f));
     }
     for (auto& f : future.commit_file_future) {
         _commit_file_future_queue.push(std::move(f));
     }
-    return Status::OK();
 }
 
 ConnectorSinkOperatorFactory::ConnectorSinkOperatorFactory(

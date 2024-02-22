@@ -62,7 +62,7 @@ public:
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
 private:
-    Status _enqueue_futures(connector::ConnectorChunkSink::Futures future);
+    void _enqueue_futures(connector::ConnectorChunkSink::Futures future);
 
     std::unique_ptr<connector::ConnectorChunkSink> _connector_chunk_sink;
 
