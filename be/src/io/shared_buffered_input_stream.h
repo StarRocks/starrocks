@@ -36,6 +36,21 @@ public:
         int64_t max_dist_size = 1 * MB;
         int64_t max_buffer_size = 8 * MB;
     };
+<<<<<<< HEAD
+=======
+    struct SharedBuffer {
+        // request range
+        int64_t raw_offset;
+        int64_t raw_size;
+        // request range after alignment
+        int64_t offset;
+        int64_t size;
+        int64_t ref_count;
+        std::vector<uint8_t> buffer;
+        void align(int64_t align_size, int64_t file_size);
+        std::string debug() const;
+    };
+>>>>>>> 6d74a85c71 ([Enhancement] Improve orc/text code (#41330))
 
     SharedBufferedInputStream(std::shared_ptr<SeekableInputStream> stream, const std::string& filename,
                               size_t file_size);
