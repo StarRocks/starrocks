@@ -788,7 +788,7 @@ std::string Expr::jit_func_name(RuntimeState* state) const {
 }
 
 std::string Expr::jit_func_name_impl(RuntimeState* state) const {
-    // DCHECK(!is_compilable());
+    DCHECK(!is_compilable(state));
     // uncompilable inputs, reducing string size.
     return std::string("col[") + (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string() +
            "]";
