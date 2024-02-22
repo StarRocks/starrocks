@@ -1054,9 +1054,11 @@ void RowReaderImpl::startNextStripe() {
         }
 
         bool skipStripe = false;
+        bool skipStripeByScanRangeMisMatch = false;
         if (sargsApplier && sargsApplier->getRowReaderFilter()) {
             if (sargsApplier->getRowReaderFilter()->filterOnOpeningStripe(currentStripe, &currentStripeInfo)) {
                 skipStripe = true;
+                skipStripeByScanRangeMisMatch = true;
                 goto end;
             }
         }
@@ -1142,6 +1144,15 @@ void RowReaderImpl::startNextStripe() {
             // advance to next stripe when current stripe has no matching rows
             currentStripe += 1;
             currentRowInStripe = 0;
+<<<<<<< HEAD
+=======
+
+            // We do not count the skipped stripes because the scan range does not match
+            if (!skipStripeByScanRangeMisMatch && contents->stream->get_lazy_column_coalesce_counter() != nullptr) {
+                // Skip entrie stripe, which means we didn't need to coalesce active and lazy column together
+                contents->stream->get_lazy_column_coalesce_counter()->fetch_sub(1, std::memory_order_relaxed);
+            }
+>>>>>>> 6d74a85c71 ([Enhancement] Improve orc/text code (#41330))
         } else {
             break;
         }
