@@ -129,7 +129,7 @@ void UpdateManager::remove_primary_index_cache(IndexEntry* index_entry) {
     }
 }
 
-void UpdateManager::remove_primary_index(int64_t tablet_id) {
+void UpdateManager::unload_and_remove_primary_index(int64_t tablet_id) {
     auto index_entry = _index_cache.get(tablet_id);
     if (index_entry != nullptr) {
         auto& index = index_entry->value();

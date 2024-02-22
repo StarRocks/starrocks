@@ -143,7 +143,7 @@ public:
     // remove index entry if it isn't nullptr
     void remove_primary_index_cache(IndexEntry* index_entry);
 
-    void remove_primary_index(int64_t tablet_id);
+    void unload_and_remove_primary_index(int64_t tablet_id);
 
     DynamicCache<uint64_t, LakePrimaryIndex>& index_cache() { return _index_cache; }
 
