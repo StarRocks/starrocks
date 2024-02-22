@@ -64,6 +64,8 @@ public:
 
     Status next_record(Record* record);
 
+    size_t get_offset();
+
 protected:
     Status _fill_buffer() override;
 
@@ -81,6 +83,10 @@ private:
     // Hive TextFile's line delimiter maybe \n, \r or \r\n, we need to probe it
     bool _need_probe_line_delimiter = false;
 };
+
+size_t HdfsScannerCSVReader::get_offset() {
+    return _offset;
+}
 
 Status HdfsScannerCSVReader::reset(size_t offset, size_t remain_length) {
     RETURN_IF_ERROR(_file->seek(offset));
@@ -299,6 +305,12 @@ Status HdfsTextScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk
 }
 
 Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
+    if (_shared_buffered_input_stream != nullptr) {
+        // we need to release previous shared buffers to save memory
+        const size_t reader_offset = down_cast<HdfsScannerCSVReader*>(_reader.get())->get_offset();
+        _shared_buffered_input_stream->release_to_offset(reader_offset);
+    }
+
     DCHECK_EQ(0, chunk->get()->num_rows());
 
     int num_columns = chunk->get()->num_columns();
@@ -443,8 +455,9 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
 Status HdfsTextScanner::_setup_io_ranges() const {
     if (_shared_buffered_input_stream != nullptr) {
         std::vector<io::SharedBufferedInputStream::IORange> ranges{};
-        for (int64_t offset = 0; offset < _scanner_params.file_size;) {
-            const int64_t remain_length = std::min(config::text_io_range_size, _scanner_params.file_size - offset);
+        const int64_t scan_range_end = _scanner_params.scan_range->offset + _scanner_params.scan_range->length;
+        for (int64_t offset = _scanner_params.scan_range->offset; offset < scan_range_end;) {
+            const int64_t remain_length = std::min(config::text_io_range_size, scan_range_end - offset);
             ranges.emplace_back(offset, remain_length);
             offset += remain_length;
         }
