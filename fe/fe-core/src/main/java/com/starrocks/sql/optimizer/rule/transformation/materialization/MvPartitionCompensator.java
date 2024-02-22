@@ -641,7 +641,7 @@ public class MvPartitionCompensator {
 
             List<ScalarOperator> prunedPredicates = getScanOpPrunedPartitionPredicates(scanOperator);
             if (prunedPredicates == null || prunedPredicates.isEmpty()) {
-                return List.of(ConstantOperator.TRUE);
+                return ImmutableList.of(ConstantOperator.TRUE);
             } else {
                 return prunedPredicates;
             }
