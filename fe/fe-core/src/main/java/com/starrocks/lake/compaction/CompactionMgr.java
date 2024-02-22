@@ -218,4 +218,16 @@ public class CompactionMgr {
     public long getPartitionStatsCount() {
         return partitionStatisticsHashMap.size();
     }
+
+    public PartitionStatistics triggerManualCompaction(PartitionIdentifier partition) {
+        PartitionStatistics statistics = partitionStatisticsHashMap.compute(partition, (k, v) -> {
+            if (v == null) {
+                v = new PartitionStatistics(partition);
+            }
+            v.setPriority(PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
+            return v;
+        });
+        LOG.info("Trigger manual compaction, {}", statistics);
+        return statistics;
+    }
 }

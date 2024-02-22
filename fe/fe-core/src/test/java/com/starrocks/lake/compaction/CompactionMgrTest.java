@@ -27,6 +27,7 @@ import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -109,7 +110,8 @@ public class CompactionMgrTest {
         long txnId = 11111;
         CompactionMgr compactionManager = new CompactionMgr();
         CompactionScheduler compactionScheduler =
-                new CompactionScheduler(compactionManager, GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                new CompactionScheduler(compactionManager,
+                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
                         GlobalStateMgr.getCurrentState().getGlobalTransactionMgr(), GlobalStateMgr.getCurrentState());
         compactionManager.setCompactionScheduler(compactionScheduler);
         new MockUp<CompactionScheduler>() {
@@ -126,5 +128,17 @@ public class CompactionMgrTest {
             }
         };
         Assert.assertEquals(true, compactionManager.existCompaction(txnId));
+    }
+
+    public void testTriggerManualCompaction() {
+        CompactionMgr compactionManager = new CompactionMgr();
+        PartitionIdentifier partition = new PartitionIdentifier(1, 2, 3);
+
+        PartitionStatistics statistics = compactionManager.triggerManualCompaction(partition);
+        Assert.assertEquals(PartitionStatistics.CompactionPriority.MANUAL_COMPACT, statistics.getPriority());
+
+        Collection<PartitionStatistics> allStatistics = compactionManager.getAllStatistics();
+        Assert.assertEquals(1, allStatistics.size());
+        Assert.assertTrue(allStatistics.contains(statistics));
     }
 }
