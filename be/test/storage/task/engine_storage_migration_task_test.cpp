@@ -309,13 +309,8 @@ int main(int argc, char** argv) {
         fprintf(stderr, "you need set STARROCKS_HOME environment variable.\n");
         exit(-1);
     }
-<<<<<<< HEAD
     std::string conffile = std::string(getenv("STARROCKS_HOME")) + "/conf/be.conf";
-    if (!starrocks::config::init(conffile.c_str(), false)) {
-=======
-    std::string conffile = std::string(getenv("STARROCKS_HOME")) + "/conf/be_test.conf";
     if (!starrocks::config::init(conffile.c_str())) {
->>>>>>> 7c2f5be397 ([BugFix] Fixed incorrect config value obtained by /varz (#41394))
         fprintf(stderr, "error read config file. \n");
         return -1;
     }
