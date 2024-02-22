@@ -105,6 +105,8 @@ import io.trino.sql.tree.CoalesceExpression;
 import io.trino.sql.tree.ComparisonExpression;
 import io.trino.sql.tree.CreateTableAsSelect;
 import io.trino.sql.tree.Cube;
+import io.trino.sql.tree.CurrentCatalog;
+import io.trino.sql.tree.CurrentSchema;
 import io.trino.sql.tree.CurrentTime;
 import io.trino.sql.tree.CurrentUser;
 import io.trino.sql.tree.DataType;
@@ -1103,6 +1105,16 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     @Override
     protected ParseNode visitCurrentTime(CurrentTime node, ParseTreeContext context) {
         return new FunctionCallExpr(node.getFunction().getName(), new ArrayList<>());
+    }
+
+    @Override
+    protected ParseNode visitCurrentCatalog(CurrentCatalog node, ParseTreeContext context) {
+        return new InformationFunction(FunctionSet.CATALOG.toUpperCase());
+    }
+
+    @Override
+    protected ParseNode visitCurrentSchema(CurrentSchema node, ParseTreeContext context) {
+        return new InformationFunction(FunctionSet.SCHEMA.toUpperCase());
     }
 
     @Override
