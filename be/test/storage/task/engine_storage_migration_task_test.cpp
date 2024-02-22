@@ -322,7 +322,7 @@ int main(int argc, char** argv) {
         exit(-1);
     }
     std::string conffile = std::string(getenv("STARROCKS_HOME")) + "/conf/be_test.conf";
-    if (!starrocks::config::init(conffile.c_str(), false)) {
+    if (!starrocks::config::init(conffile.c_str())) {
         fprintf(stderr, "error read config file. \n");
         return -1;
     }
@@ -386,6 +386,7 @@ int main(int argc, char** argv) {
     delete engine;
     // destroy exec env
     starrocks::tls_thread_status.set_mem_tracker(nullptr);
+    exec_env->stop();
     exec_env->destroy();
     global_env->stop();
 

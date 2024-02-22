@@ -105,6 +105,8 @@ StorageEngine* init_storage_engine(GlobalEnv* global_env, std::vector<StorePath>
     return engine;
 }
 
+extern void shutdown_tracer();
+
 void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     int start_step = 1;
 
@@ -237,19 +239,6 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     brpc_server->Stop(0);
     thrift_server->stop();
 
-    http_server->join();
-    LOG(INFO) << "BE exit step " << exit_step++ << ": http server exit successfully";
-
-    brpc_server->Join();
-    LOG(INFO) << "BE exit step " << exit_step++ << ": brpc server exit successfully";
-
-    thrift_server->join();
-    LOG(INFO) << "BE exit step " << exit_step++ << ": thrift server exit successfully";
-
-    http_server.reset();
-    brpc_server.reset();
-    thrift_server.reset();
-
     daemon->stop();
     daemon.reset();
     LOG(INFO) << "BE exit step " << exit_step++ << ": daemon threads exit successfully";
@@ -272,7 +261,21 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     }
 #endif
 
+    http_server->join();
+    http_server.reset();
+    LOG(INFO) << "BE exit step " << exit_step++ << ": http server exit successfully";
+
+    brpc_server->Join();
+    brpc_server.reset();
+    LOG(INFO) << "BE exit step " << exit_step++ << ": brpc server exit successfully";
+
+    thrift_server->join();
+    thrift_server.reset();
+    LOG(INFO) << "BE exit step " << exit_step++ << ": thrift server exit successfully";
+
     exec_env->destroy();
+    LOG(INFO) << "BE exit step " << exit_step++ << ": exec env destroy successfully";
+
     delete storage_engine;
 
     // Unbind with MemTracker
@@ -280,6 +283,8 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     global_env->stop();
     LOG(INFO) << "BE exit step " << exit_step++ << ": global env stop successfully";
+
+    shutdown_tracer();
 
     LOG(INFO) << "BE exited successfully";
 }

@@ -444,7 +444,10 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _stream_load_executor = new StreamLoadExecutor(this);
     _stream_context_mgr = new StreamContextMgr();
     _transaction_mgr = new TransactionMgr(this);
+
     _routine_load_task_executor = new RoutineLoadTaskExecutor(this);
+    RETURN_IF_ERROR(_routine_load_task_executor->init());
+
     _small_file_mgr = new SmallFileMgr(this, config::small_file_dir);
     _runtime_filter_worker = new RuntimeFilterWorker(this);
     _runtime_filter_cache = new RuntimeFilterCache(8);
@@ -563,12 +566,52 @@ void ExecEnv::stop() {
         _agent_server->stop();
     }
 
+    if (_runtime_filter_worker) {
+        _runtime_filter_worker->close();
+    }
+
+    if (_profile_report_worker) {
+        _profile_report_worker->close();
+    }
+
     if (_automatic_partition_pool) {
         _automatic_partition_pool->shutdown();
     }
 
+    if (_query_rpc_pool) {
+        _query_rpc_pool->shutdown();
+    }
+
     if (_load_rpc_pool) {
         _load_rpc_pool->shutdown();
+    }
+
+    if (_scan_executor) {
+        _scan_executor->close();
+    }
+
+    if (_connector_scan_executor) {
+        _connector_scan_executor->close();
+    }
+
+    if (_thread_pool) {
+        _thread_pool->shutdown();
+    }
+
+    if (_query_context_mgr) {
+        _query_context_mgr->clear();
+    }
+
+    if (_result_mgr) {
+        _result_mgr->stop();
+    }
+
+    if (_stream_mgr) {
+        _stream_mgr->close();
+    }
+
+    if (_routine_load_task_executor) {
+        _routine_load_task_executor->stop();
     }
 
 #ifndef BE_TEST
@@ -598,6 +641,7 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_pipeline_prepare_pool);
     SAFE_DELETE(_pipeline_sink_io_pool);
     SAFE_DELETE(_query_rpc_pool);
+    _load_rpc_pool.reset();
     SAFE_DELETE(_scan_executor);
     SAFE_DELETE(_connector_scan_executor);
     SAFE_DELETE(_thread_pool);

@@ -587,6 +587,8 @@ void StorageEngine::stop() {
             // store_pair.second will be delete later
             store_pair.second->stop_bg_worker();
         }
+        // notify the cv in case anyone is waiting for.
+        _report_cv.notify_all();
     }
 
     _bg_worker_stopped.store(true, std::memory_order_release);
@@ -606,6 +608,7 @@ void StorageEngine::stop() {
     JOIN_THREAD(_unused_rowset_monitor_thread)
     JOIN_THREAD(_garbage_sweeper_thread)
     JOIN_THREAD(_disk_stat_monitor_thread)
+    wake_finish_publish_vesion_thread();
     JOIN_THREAD(_finish_publish_version_thread)
 
     JOIN_THREADS(_base_compaction_threads)
@@ -617,7 +620,7 @@ void StorageEngine::stop() {
     JOIN_THREADS(_manual_compaction_threads)
     JOIN_THREADS(_tablet_checkpoint_threads)
 
-    JOIN_THREAD(_pk_index_major_compaction_thread);
+    JOIN_THREAD(_pk_index_major_compaction_thread)
 
     JOIN_THREAD(_pk_dump_thread);
 
@@ -649,6 +652,10 @@ void StorageEngine::stop() {
     _checker_cv.notify_all();
     if (_compaction_checker_thread.joinable()) {
         _compaction_checker_thread.join();
+    }
+
+    if (_update_manager) {
+        _update_manager->stop();
     }
 }
 
