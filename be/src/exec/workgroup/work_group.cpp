@@ -167,11 +167,11 @@ TWorkGroup WorkGroup::to_thrift_verbose() const {
 
 void WorkGroup::init() {
     _memory_limit_bytes = _memory_limit == ABSENT_MEMORY_LIMIT
-                                  ? ExecEnv::GetInstance()->query_pool_mem_tracker()->limit()
-                                  : ExecEnv::GetInstance()->query_pool_mem_tracker()->limit() * _memory_limit;
+                                  ? GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit()
+                                  : GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit() * _memory_limit;
     _spill_mem_limit_bytes = _spill_mem_limit_threshold * _memory_limit_bytes;
     _mem_tracker = std::make_shared<MemTracker>(MemTracker::RESOURCE_GROUP, _memory_limit_bytes, _name,
-                                                ExecEnv::GetInstance()->query_pool_mem_tracker());
+                                                GlobalEnv::GetInstance()->query_pool_mem_tracker());
     _mem_tracker->set_reserve_limit(_spill_mem_limit_bytes);
     _driver_sched_entity.set_queue(std::make_unique<pipeline::QuerySharedDriverQueue>());
     _scan_sched_entity.set_queue(workgroup::create_scan_task_queue());

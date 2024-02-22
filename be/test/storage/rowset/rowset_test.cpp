@@ -106,6 +106,7 @@ protected:
     }
 
     void TearDown() override {
+        k_engine->update_manager()->clear_cache();
         k_engine->stop();
         delete k_engine;
         k_engine = nullptr;

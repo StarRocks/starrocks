@@ -210,7 +210,7 @@ void calculate_metrics(void* arg_this) {
 
         // update datacache mem_tracker
         int64_t datacache_mem_bytes = 0;
-        auto datacache_mem_tracker = ExecEnv::GetInstance()->datacache_mem_tracker();
+        auto datacache_mem_tracker = GlobalEnv::GetInstance()->datacache_mem_tracker();
         if (datacache_mem_tracker) {
             BlockCache* block_cache = BlockCache::instance();
             if (block_cache->is_initialized()) {

@@ -46,7 +46,8 @@ Status StreamPipelineTest::prepare() {
     _query_ctx->set_query_expire_seconds(600);
     _query_ctx->extend_delivery_lifetime();
     _query_ctx->extend_query_lifetime();
-    _query_ctx->init_mem_tracker(_exec_env->query_pool_mem_tracker()->limit(), _exec_env->query_pool_mem_tracker());
+    _query_ctx->init_mem_tracker(GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit(),
+                                 GlobalEnv::GetInstance()->query_pool_mem_tracker());
 
     _fragment_ctx = _query_ctx->fragment_mgr()->get_or_register(fragment_id);
     _fragment_ctx->set_query_id(query_id);

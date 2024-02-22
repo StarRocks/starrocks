@@ -209,7 +209,7 @@ Segment::Segment(std::shared_ptr<FileSystem> fs, FileInfo segment_file_info, uin
           _segment_file_info(std::move(segment_file_info)),
           _tablet_schema(tablet_schema),
           _segment_id(segment_id) {
-    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->segment_metadata_mem_tracker(), _basic_info_mem_usage());
+    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->segment_metadata_mem_tracker(), _basic_info_mem_usage());
 }
 
 Segment::Segment(std::shared_ptr<FileSystem> fs, FileInfo segment_file_info, uint32_t segment_id,
@@ -219,12 +219,12 @@ Segment::Segment(std::shared_ptr<FileSystem> fs, FileInfo segment_file_info, uin
           _tablet_schema(std::move(tablet_schema)),
           _segment_id(segment_id),
           _tablet_manager(tablet_manager) {
-    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->segment_metadata_mem_tracker(), _basic_info_mem_usage());
+    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->segment_metadata_mem_tracker(), _basic_info_mem_usage());
 }
 
 Segment::~Segment() {
-    MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->segment_metadata_mem_tracker(), _basic_info_mem_usage());
-    MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->short_key_index_mem_tracker(), _short_key_index_mem_usage());
+    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->segment_metadata_mem_tracker(), _basic_info_mem_usage());
+    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->short_key_index_mem_tracker(), _short_key_index_mem_usage());
 }
 
 Status Segment::open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
@@ -331,7 +331,7 @@ Status Segment::load_index(bool skip_fill_local_cache) {
 
         Status st = _load_index(skip_fill_local_cache);
         if (st.ok()) {
-            MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->short_key_index_mem_tracker(),
+            MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->short_key_index_mem_tracker(),
                                      _short_key_index_mem_usage());
             update_cache_size();
         } else {

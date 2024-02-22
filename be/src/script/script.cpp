@@ -188,16 +188,20 @@ void bind_exec_env(ForeignModule& m) {
         cls.funcStaticExt<&get_file_write_history>("get_file_write_history");
         cls.funcStaticExt<&unix_seconds>("unix_seconds");
         cls.funcStaticExt<&list_stack_trace_of_long_wait_mutex>("list_stack_trace_of_long_wait_mutex");
-        REG_METHOD(ExecEnv, process_mem_tracker);
-        REG_METHOD(ExecEnv, query_pool_mem_tracker);
-        REG_METHOD(ExecEnv, load_mem_tracker);
-        REG_METHOD(ExecEnv, metadata_mem_tracker);
-        REG_METHOD(ExecEnv, tablet_metadata_mem_tracker);
-        REG_METHOD(ExecEnv, rowset_metadata_mem_tracker);
-        REG_METHOD(ExecEnv, segment_metadata_mem_tracker);
-        REG_METHOD(ExecEnv, compaction_mem_tracker);
-        REG_METHOD(ExecEnv, update_mem_tracker);
-        REG_METHOD(ExecEnv, clone_mem_tracker);
+    }
+    {
+        auto& cls = m.klass<GlobalEnv>("GlobalEnv");
+        REG_STATIC_METHOD(GlobalEnv, GetInstance);
+        REG_METHOD(GlobalEnv, process_mem_tracker);
+        REG_METHOD(GlobalEnv, query_pool_mem_tracker);
+        REG_METHOD(GlobalEnv, load_mem_tracker);
+        REG_METHOD(GlobalEnv, metadata_mem_tracker);
+        REG_METHOD(GlobalEnv, tablet_metadata_mem_tracker);
+        REG_METHOD(GlobalEnv, rowset_metadata_mem_tracker);
+        REG_METHOD(GlobalEnv, segment_metadata_mem_tracker);
+        REG_METHOD(GlobalEnv, compaction_mem_tracker);
+        REG_METHOD(GlobalEnv, update_mem_tracker);
+        REG_METHOD(GlobalEnv, clone_mem_tracker);
     }
     {
         auto& cls = m.klass<HeapProf>("HeapProf");
@@ -508,7 +512,7 @@ Status execute_script(const std::string& script, std::string& output) {
     bind_common(m);
     bind_exec_env(m);
     StorageEngineRef::bind(m);
-    vm.runFromSource("main", R"(import "starrocks" for ExecEnv, HeapProf, StorageEngine)");
+    vm.runFromSource("main", R"(import "starrocks" for ExecEnv, GlobalEnv, HeapProf, StorageEngine)");
     try {
         vm.runFromSource("main", script);
     } catch (const std::exception& e) {
