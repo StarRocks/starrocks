@@ -375,4 +375,13 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         sql = "select isnotnull(null)";
         assertPlanContains(sql, "<slot 2> : FALSE");
     }
+
+    @Test
+    public void testUtilityFunction() throws Exception {
+        String sql = "select current_catalog";
+        assertPlanContains(sql, "<slot 2> : CATALOG()");
+
+        sql = "select current_schema";
+        assertPlanContains(sql, "<slot 2> : SCHEMA()");
+    }
 }
