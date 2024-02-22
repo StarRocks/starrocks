@@ -753,7 +753,7 @@ public class CreateRoutineLoadStmtTest {
             ConnectContext ctx = starRocksAssert.getCtx();
             CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt) SqlParser.parse(createSQL, 32).get(0);
             CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
-            Assert.assertEquals(createRoutineLoadStmt.getJsonPaths(), "[\"$.k1\",\"$.k2.\\\"k2.1\\\"\"]");
+            Assert.assertEquals("[\"$.k1\",\"$.k2.\\\"k2.1\\\"\"]", createRoutineLoadStmt.getJsonPaths());
     
             String selectSQL = "SELECT \"Pat O\"\"Hanrahan & <Matthew Eldridge]\"\"\";";
             QueryStatement selectStmt = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(selectSQL, ctx);
@@ -761,7 +761,7 @@ public class CreateRoutineLoadStmtTest {
             Expr expr = ((SelectRelation) (selectStmt.getQueryRelation())).getOutputExpression().get(0);
             Assert.assertTrue(expr instanceof StringLiteral);
             StringLiteral stringLiteral = (StringLiteral) expr;
-            Assert.assertEquals(stringLiteral.getValue(), "Pat O\"Hanrahan & <Matthew Eldridge]\"");        
+            Assert.assertEquals("Pat O\"Hanrahan & <Matthew Eldridge]\"", stringLiteral.getValue());
         }
     }
 
@@ -787,7 +787,7 @@ public class CreateRoutineLoadStmtTest {
             ConnectContext ctx = starRocksAssert.getCtx();
             CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt) SqlParser.parse(createSQL, 32).get(0);
             CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
-            Assert.assertEquals(createRoutineLoadStmt.getJsonPaths(), "[\"$.k1\",\"$.k2.\\\"k2.1\\\"\"]");
+            Assert.assertEquals("[\"$.k1\",\"$.k2.\\\"k2.1\\\"\"]", createRoutineLoadStmt.getJsonPaths());
             Assert.assertEquals("https://user:password@confluent.west.us", createRoutineLoadStmt.getConfluentSchemaRegistryUrl());
         }
     }
@@ -813,9 +813,9 @@ public class CreateRoutineLoadStmtTest {
             ConnectContext ctx = starRocksAssert.getCtx();
             CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt) SqlParser.parse(createSQL, 32).get(0);
             CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
-            Assert.assertEquals(createRoutineLoadStmt.isTrimspace(), true);
-            Assert.assertEquals(createRoutineLoadStmt.getEnclose(), '\'');
-            Assert.assertEquals(createRoutineLoadStmt.getEscape(), '|');
+            Assert.assertEquals(true, createRoutineLoadStmt.isTrimspace());
+            Assert.assertEquals('\'', createRoutineLoadStmt.getEnclose());
+            Assert.assertEquals('|', createRoutineLoadStmt.getEscape());
         }
     }
 
@@ -841,10 +841,10 @@ public class CreateRoutineLoadStmtTest {
             ConnectContext ctx = starRocksAssert.getCtx();
             CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt) SqlParser.parse(createSQL, 32).get(0);
             CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
-            Assert.assertEquals(createRoutineLoadStmt.getMaxErrorNum(), 10);
-            Assert.assertEquals(createRoutineLoadStmt.getEnclose(), 0);
-            Assert.assertEquals(createRoutineLoadStmt.getEscape(), 0);
-            Assert.assertEquals(createRoutineLoadStmt.isTrimspace(), false);
+            Assert.assertEquals(10, createRoutineLoadStmt.getMaxErrorNum());
+            Assert.assertEquals(0, createRoutineLoadStmt.getEnclose());
+            Assert.assertEquals(0, createRoutineLoadStmt.getEscape());
+            Assert.assertEquals(false, createRoutineLoadStmt.isTrimspace());
         }
     }
 

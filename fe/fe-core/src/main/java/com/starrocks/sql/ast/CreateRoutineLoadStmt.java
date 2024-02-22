@@ -137,7 +137,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
 
     private static final String NAME_TYPE = "ROUTINE LOAD NAME";
     private static final String ENDPOINT_REGEX = "[-A-Za-z0-9+&@#/%?=~_|!:,.;]+[-A-Za-z0-9+&@#/%=~_|]";
-    private static final String IPV6_REGEX = "\\[([0-9a-zA-Z\\-%._:]*)\\]:([0-9]+)";
+    private static final String IPV6_REGEX = "\\[([0-9a-zA-Z\\-%._:]*)\\]:(\\d+)";
 
     private static final ImmutableSet<String> PROPERTIES_SET = new ImmutableSet.Builder<String>()
             .add(DESIRED_CONCURRENT_NUMBER_PROPERTY)
