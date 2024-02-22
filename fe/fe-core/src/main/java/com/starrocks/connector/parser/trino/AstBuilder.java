@@ -39,6 +39,7 @@ import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.FunctionParams;
 import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
+import com.starrocks.analysis.InformationFunction;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.LargeIntLiteral;
@@ -98,6 +99,8 @@ import io.trino.sql.tree.Cast;
 import io.trino.sql.tree.CoalesceExpression;
 import io.trino.sql.tree.ComparisonExpression;
 import io.trino.sql.tree.Cube;
+import io.trino.sql.tree.CurrentCatalog;
+import io.trino.sql.tree.CurrentSchema;
 import io.trino.sql.tree.CurrentTime;
 import io.trino.sql.tree.DataType;
 import io.trino.sql.tree.DateTimeDataType;
@@ -1081,6 +1084,16 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     @Override
     protected ParseNode visitCurrentTime(CurrentTime node, ParseTreeContext context) {
         return new FunctionCallExpr(node.getFunction().getName(), new ArrayList<>());
+    }
+
+    @Override
+    protected ParseNode visitCurrentCatalog(CurrentCatalog node, ParseTreeContext context) {
+        return new InformationFunction("CATALOG");
+    }
+
+    @Override
+    protected ParseNode visitCurrentSchema(CurrentSchema node, ParseTreeContext context) {
+        return new InformationFunction("SCHEMA");
     }
 
     @Override
