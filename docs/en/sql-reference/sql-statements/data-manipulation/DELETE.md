@@ -388,3 +388,7 @@ WITH foo_producers as (
 DELETE FROM films USING foo_producers
 WHERE producer_id = foo_producers.id;
 ```
+
+## References
+
+[SHOW DELETE](./SHOW_DELETE.md): queries historical DELETE operations that were successfully performed on Duplicate Key tables, Aggregate tables, and Unique Key tables.

@@ -385,3 +385,7 @@ WITH foo_producers as (
 DELETE FROM films USING foo_producers
 WHERE producer_id = foo_producers.id;
 ```
+
+## 相关 SQL
+
+[SHOW DELETE](./SHOW_DELETE.md)：用于查询在指定数据库下，所有在明细表、聚合表、更新表上成功执行的历史删除 (DELETE) 任务。
