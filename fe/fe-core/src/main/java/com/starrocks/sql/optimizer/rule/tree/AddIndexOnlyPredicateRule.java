@@ -20,6 +20,7 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -59,15 +60,17 @@ public class AddIndexOnlyPredicateRule implements TreeRewriteRule {
             }
             // if projection has function in INDEX_ONLY_FUNCTIONS
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getColumnRefMap().entrySet()) {
-                ColumnRefOperator key = entry.getKey();
-                if (FunctionSet.INDEX_ONLY_FUNCTIONS.contains(key.getName())) {
-                    ScalarOperator func = entry.getValue();
-                    // Set as index only filter
-                    func.setIndexOnlyFilter(true);
-                    BinaryPredicateOperator newIndexPredicate =
-                            BinaryPredicateOperator.ge(func, ConstantOperator.createDouble(0));
-                    scan.setPredicate(CompoundPredicateOperator.and(scan.getPredicate(), newIndexPredicate));
-                    return null;
+                ScalarOperator value = entry.getValue();
+                if (value instanceof CallOperator) {
+                    CallOperator call = (CallOperator) value;
+                    if (FunctionSet.INDEX_ONLY_FUNCTIONS.contains(call.getFnName())) {
+                        // Set as index only filter
+                        call.setIndexOnlyFilter(true);
+                        BinaryPredicateOperator newIndexPredicate =
+                                BinaryPredicateOperator.ge(call, ConstantOperator.createDouble(0));
+                        scan.setPredicate(CompoundPredicateOperator.and(scan.getPredicate(), newIndexPredicate));
+                        return null;
+                    }
                 }
             }
             return null;
