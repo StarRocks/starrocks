@@ -27,6 +27,7 @@ import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.history.MemBasedTaskRunHistory;
+import com.starrocks.scheduler.history.MergedTaskRunHistory;
 import com.starrocks.scheduler.history.TableBasedTaskRunHistory;
 import com.starrocks.scheduler.history.TaskRunHistory;
 import com.starrocks.scheduler.persist.TaskRunStatus;
@@ -57,8 +58,8 @@ public class TaskRunManager implements MemoryTrackable {
 
     // include SUCCESS/FAILED/CANCEL taskRun
     @Deprecated
-    private final TaskRunHistory memBasedTaskRunHistory = new MemBasedTaskRunHistory();
-    private final TaskRunHistory tableBasedTaskRunHistory = new TableBasedTaskRunHistory();
+    private final MemBasedTaskRunHistory memBasedTaskRunHistory = new MemBasedTaskRunHistory();
+    private final TableBasedTaskRunHistory tableBasedTaskRunHistory = new TableBasedTaskRunHistory();
 
     // Use to execute actual TaskRun
     private final TaskRunExecutor taskRunExecutor = new TaskRunExecutor();
@@ -292,12 +293,10 @@ public class TaskRunManager implements MemoryTrackable {
         return runningTaskRunMap;
     }
 
-    public boolean useTableBasedTaskRunHistory() {
-        return Config.use_table_based_task_run_history;
-    }
-
     public TaskRunHistory getTaskRunHistory() {
-        return Config.use_table_based_task_run_history ? tableBasedTaskRunHistory : memBasedTaskRunHistory;
+        return Config.use_table_based_task_run_history ?
+                new MergedTaskRunHistory(memBasedTaskRunHistory, tableBasedTaskRunHistory) :
+                memBasedTaskRunHistory;
     }
 
     public void addTaskRunHistory(TaskRun taskRun, Constants.TaskRunState fromState, Constants.TaskRunState toState) {
