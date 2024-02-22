@@ -336,8 +336,6 @@ Status set_config(const std::string& field, const std::string& value) {
             strings::Substitute("'$0' is type of '$1' which is not support to modify", field, it->second.type));
 }
 
-<<<<<<< HEAD
-=======
 std::string Register::Field::value() const {
     if (strcmp(type, "bool") == 0) {
         return std::to_string(*reinterpret_cast<bool*>(storage));
@@ -383,5 +381,4 @@ std::vector<ConfigInfo> list_configs() {
     return infos;
 }
 
->>>>>>> 743cc83135 ([Enhancement] Ensure mutable string configs are thread-safe (#41259))
 } // namespace starrocks::config

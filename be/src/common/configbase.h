@@ -29,8 +29,6 @@ class Status;
 
 namespace config {
 
-<<<<<<< HEAD
-=======
 struct ConfigInfo {
     std::string name;
     std::string value;
@@ -81,7 +79,6 @@ inline std::ostream& operator<<(std::ostream& os, const MutableString& s) {
     return os << s.value();
 }
 
->>>>>>> 743cc83135 ([Enhancement] Ensure mutable string configs are thread-safe (#41259))
 class Register {
 public:
     struct Field {
@@ -173,11 +170,7 @@ bool init(const char* filename, bool fillconfmap = false);
 
 Status set_config(const std::string& field, const std::string& value);
 
-<<<<<<< HEAD
-std::mutex* get_mstring_conf_lock();
-=======
 std::vector<ConfigInfo> list_configs();
->>>>>>> 743cc83135 ([Enhancement] Ensure mutable string configs are thread-safe (#41259))
 
 } // namespace config
 } // namespace starrocks

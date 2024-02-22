@@ -37,13 +37,13 @@ SchemaBeConfigsScanner::~SchemaBeConfigsScanner() = default;
 
 Status SchemaBeConfigsScanner::start(RuntimeState* state) {
     auto o_id = get_backend_id();
+    std::vector<config::ConfigInfo> configs = config::list_configs();
     _be_id = o_id.has_value() ? o_id.value() : -1;
     _infos.clear();
-    std::lock_guard<std::mutex> l(*config::get_mstring_conf_lock());
-    for (const auto& it : *(config::full_conf_map)) {
+    for (const auto& cfg : configs) {
         auto& info = _infos.emplace_back();
-        info.first = it.first;
-        info.second = it.second;
+        info.first = cfg.name;
+        info.second = cfg.value;
     }
     _cur_idx = 0;
     return Status::OK();

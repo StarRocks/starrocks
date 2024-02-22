@@ -917,42 +917,6 @@ CONF_Int64(max_length_for_to_base64, "200000");
 // Used by bitmap functions
 CONF_Int64(max_length_for_bitmap_function, "1000000");
 
-<<<<<<< HEAD
-=======
-// Configuration items for datacache
-CONF_Bool(datacache_enable, "false");
-CONF_String(datacache_mem_size, "10%");
-CONF_String(datacache_disk_size, "0");
-CONF_String(datacache_disk_path, "${STARROCKS_HOME}/datacache/");
-CONF_String(datacache_meta_path, "${STARROCKS_HOME}/datacache/");
-CONF_Int64(datacache_block_size, "262144"); // 256K
-CONF_Bool(datacache_checksum_enable, "false");
-CONF_Bool(datacache_direct_io_enable, "false");
-// Maximum number of concurrent inserts we allow globally for datacache.
-// 0 means unlimited.
-CONF_Int64(datacache_max_concurrent_inserts, "1500000");
-// Total memory limit for in-flight cache jobs.
-// Once this is reached, cache populcation will be rejected until the flying memory usage gets under the limit.
-CONF_Int64(datacache_max_flying_memory_mb, "256");
-// Whether to use datacache adaptor, which will skip reading cache when disk overload is high.
-CONF_Bool(datacache_adaptor_enable, "true");
-// A factor to control the io traffic between cache and network. The larger this parameter,
-// the more requests will be sent to the network.
-// Usually there is no need to modify it.
-CONF_Int64(datacache_skip_read_factor, "1");
-// Whether to use block buffer to hold the datacache block data.
-CONF_Bool(datacache_block_buffer_enable, "true");
-// DataCache engines, alternatives: cachelib, starcache.
-// Set the default value empty to indicate whether it is manully configured by users.
-// If not, we need to adjust the default engine based on build switches like "WITH_CACHELIB" and "WITH_STARCACHE".
-CONF_String(datacache_engine, "");
-// The interval time (millisecond) for agent report datacache metrics to FE.
-CONF_mInt32(report_datacache_metrics_interval_ms, "60000");
-
-// The following configurations will be deprecated, and we use the `datacache` prefix instead.
-// But it is temporarily necessary to keep them for a period of time to be compatible with
-// the old configuration files.
->>>>>>> 743cc83135 ([Enhancement] Ensure mutable string configs are thread-safe (#41259))
 CONF_Bool(block_cache_enable, "false");
 CONF_Int64(block_cache_disk_size, "0");
 CONF_String(block_cache_disk_path, "${STARROCKS_HOME}/block_cache/");
