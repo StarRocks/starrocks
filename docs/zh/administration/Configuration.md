@@ -366,6 +366,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | update_compaction_check_interval_seconds              | 60          | second | Primary key 模型 Update compaction 的检查间隔。              |
 | min_compaction_failure_interval_sec                   | 120         | second | Tablet Compaction 失败之后，再次被调度的间隔。               |
 | periodic_counter_update_period_ms                     | 500         | ms     | Counter 统计信息的间隔。                                     |
+| pindex_major_compaction_limit_per_disk|1|N/A|每块盘 Compaction 的最大并发数，用于解决 Compaction 在磁盘之间不均衡导致个别磁盘 I/O 过高的问题。引入版本：3.0.9。|
 | load_error_log_reserve_hours                          | 48          | hour   | 导入数据信息保留的时长。                                     |
 | streaming_load_max_mb                                 | 10240       | MB     | 流式导入单个文件大小的上限。                                 |
 | streaming_load_max_batch_size_mb                      | 100         | MB     | 流式导入单个 JSON 文件大小的上限。                             |
