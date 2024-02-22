@@ -29,7 +29,6 @@ Hive Catalog 是一种 External Catalog，自 2.3 版本开始支持。通过 Hi
   - CSV 文件从 v3.1.5 起支持 LZO 压缩格式。
 
 - StarRocks 查询 Hive 数据时，不支持 INTERVAL、BINARY 和 UNION 三种数据类型。此外，对于 CSV 格式的 Hive 表，StarRocks 不支持 MAP、STRUCT 数据类型。
-- Hive Catalog 仅支持查询 Hive 数据，不支持针对 Hive 的写/删操作。
 
 ## 准备工作
 

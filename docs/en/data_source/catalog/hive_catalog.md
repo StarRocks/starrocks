@@ -29,7 +29,6 @@ To ensure successful SQL workloads on your Hive cluster, your StarRocks cluster 
   - CSV files support the LZO compression format from v3.1.5 onwards.
 
 - The data types of Hive that StarRocks does not support are INTERVAL, BINARY, and UNION. Additionally, StarRocks does not support the MAP and STRUCT data types for CSV-formatted Hive tables.
-- You can only use Hive catalogs to query data. You cannot use Hive catalogs to drop, delete, or insert data into your Hive cluster.
 
 ## Integration preparations
 
