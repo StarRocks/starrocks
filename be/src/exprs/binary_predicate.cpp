@@ -426,8 +426,8 @@ public:
             auto* r = datums[1].value;
             auto* l_null = datums[0].null_flag;
             auto* r_null = datums[1].null_flag;
-            auto* if_value = b.CreateAnd(l_null, r_null);
-            auto* elseif_value = b.CreateXor(l_null, r_null);
+            auto* if_value = IRHelper::bool_to_cond(b, b.CreateAnd(l_null, r_null));
+            auto* elseif_value = IRHelper::bool_to_cond(b, b.CreateXor(l_null, r_null));
             llvm::Value* cmp;
             if constexpr (lt_is_float<Type>) {
                 cmp = b.CreateFCmpOEQ(l, r);
