@@ -168,7 +168,7 @@ Status DataStreamMgr::transmit_chunk(const PTransmitChunkParams& request, ::goog
     TUniqueId t_finst_id;
     t_finst_id.hi = finst_id.hi();
     t_finst_id.lo = finst_id.lo();
-    SCOPED_SET_TRACE_INFO({}, {}, t_finst_id);
+    SCOPED_SET_TRACE_INFO({}, {}, t_finst_id)
     std::shared_ptr<DataStreamRecvr> recvr = find_recvr(t_finst_id, request.node_id());
     if (recvr == nullptr) {
         // The receiver may remove itself from the receiver map via deregister_recvr()
