@@ -5275,6 +5275,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitExpressionSingleton(StarRocksParser.ExpressionSingletonContext context) {
+        return visit(context.expression());
+    }
+
+    @Override
     public ParseNode visitLogicalNot(StarRocksParser.LogicalNotContext context) {
         return new CompoundPredicate(CompoundPredicate.Operator.NOT, (Expr) visit(context.expression()),
                 null, createPos(context));
