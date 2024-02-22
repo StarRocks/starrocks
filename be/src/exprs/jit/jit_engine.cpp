@@ -378,7 +378,7 @@ llvm::Module* JITEngine::Engine::module() const {
     return module_.get();
 }
 
-static void optimize_module(llvm::Module& module, [[maybe_unused]] llvm::TargetIRAnalysis target_analysis) {
+static void optimize_module(llvm::Module& module) {
     llvm::legacy::FunctionPassManager fpm(&module);
     llvm::PassManagerBuilder pass_manager_builder;
     llvm::legacy::PassManager pass_manager;
@@ -404,8 +404,7 @@ Status JITEngine::Engine::optimize_and_finalize_module() {
     if (llvm::verifyModule(*module_, &errs)) {
         return Status::JitCompileError(fmt::format("Failed to generate scalar function IR, errors: {}", errs.str()));
     }
-    auto target_analysis = target_machine_->getTargetIRAnalysis();
-    optimize_module(*module_, std::move(target_analysis));
+    optimize_module(*module_);
 
     if (llvm::verifyModule(*module_, &errs)) {
         return Status::JitCompileError(fmt::format("Failed to optimize scalar function IR, errors: {}", errs.str()));
