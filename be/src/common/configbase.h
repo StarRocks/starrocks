@@ -35,7 +35,21 @@ struct ConfigInfo {
     std::string type;
     std::string defval;
     bool valmutable;
+
+    bool operator<(const ConfigInfo& rhs) const { return name < rhs.name; }
+
+    bool operator==(const ConfigInfo& rhs) const = default;
 };
+
+inline std::ostream& operator<<(std::ostream& os, const ConfigInfo& info) {
+    os << "ConfigInfo{"
+       << "name=\"" << info.name << "\","
+       << "value=\"" << info.value << "\","
+       << "type=" << info.type << ","
+       << "default=\"" << info.defval << "\","
+       << "mutable=" << info.valmutable << "}";
+    return os;
+}
 
 // A wrapper on std::string, it's safe to read/write MutableString concurrently.
 class MutableString {
@@ -166,10 +180,7 @@ private:
 
 extern Properties props;
 
-// Full configurations.
-extern std::map<std::string, std::string>* full_conf_map;
-
-bool init(const char* filename, bool fillconfmap = false);
+bool init(const char* filename);
 
 Status set_config(const std::string& field, const std::string& value);
 

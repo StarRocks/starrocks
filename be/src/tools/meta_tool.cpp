@@ -1152,7 +1152,7 @@ int meta_tool_main(int argc, char** argv) {
         }
         std::cout << json << '\n';
     } else if (FLAGS_operation == "lake_datafile_gc") {
-        if (!starrocks::config::init(FLAGS_conf_file.c_str(), false)) {
+        if (!starrocks::config::init(FLAGS_conf_file.c_str())) {
             std::cerr << "Init config failed, conf file: " << FLAGS_conf_file << std::endl;
             return -1;
         }
