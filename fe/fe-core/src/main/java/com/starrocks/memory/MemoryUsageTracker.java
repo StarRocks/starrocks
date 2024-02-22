@@ -114,6 +114,7 @@ public class MemoryUsageTracker extends FrontendDaemon {
                     memoryStat.setPeakConsumption(currentEstimateSize);
                 }
                 memoryStat.setCounterInfo(GsonUtils.GSON.toJson(counterMap));
+                memoryStat.setCounterMap(counterMap);
                 usageMap.put(className, memoryStat);
 
                 LOG.info("({}ms) Module {} - {} estimated {} of memory. Contains {}",

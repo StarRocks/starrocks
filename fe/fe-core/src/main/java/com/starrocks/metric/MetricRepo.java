@@ -64,6 +64,7 @@ import com.starrocks.load.routineload.KafkaProgress;
 import com.starrocks.load.routineload.KafkaRoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadMgr;
+import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.metric.Metric.MetricType;
 import com.starrocks.metric.Metric.MetricUnit;
 import com.starrocks.monitor.jvm.JvmStatCollector;
@@ -159,6 +160,9 @@ public final class MetricRepo {
 
     public static List<GaugeMetricImpl<Long>> GAUGE_ROUTINE_LOAD_LAGS;
 
+    public static List<GaugeMetricImpl<Long>> GAUGE_MEMORY_USAGE_STATS;
+    public static List<GaugeMetricImpl<Long>> GAUGE_OBJECT_COUNT_STATS;
+
     // Currently, we use gauge for safe mode metrics, since we do not have unTyped metrics till now
     public static GaugeMetricImpl<Integer> GAUGE_SAFE_MODE;
 
@@ -172,6 +176,8 @@ public final class MetricRepo {
         }
 
         GAUGE_ROUTINE_LOAD_LAGS = new ArrayList<>();
+        GAUGE_MEMORY_USAGE_STATS = new ArrayList<>();
+        GAUGE_OBJECT_COUNT_STATS = new ArrayList<>();
 
         // 1. gauge
         // load jobs
@@ -801,6 +807,44 @@ public final class MetricRepo {
         } // end for backends
     }
 
+    public static void updateMemoryUsageMetrics() {
+        if (GAUGE_MEMORY_USAGE_STATS.size() ==
+                MemoryUsageTracker.MEMORY_USAGE.values().stream().mapToInt(Map::size).sum()) {
+            return;
+        }
+
+        List<GaugeMetricImpl<Long>> memoryUsageGauges = new ArrayList<>();
+        List<GaugeMetricImpl<Long>> objectCountGauges = new ArrayList<>();
+        MemoryUsageTracker.MEMORY_USAGE.forEach((moduleName, module) -> {
+            if (module != null) {
+                module.forEach((className, memoryState) -> {
+                    GaugeMetricImpl<Long> metricBytes =
+                            new GaugeMetricImpl<>("memory_usage", MetricUnit.BYTES,
+                                    "The bytes of module");
+                    metricBytes.addLabel(new MetricLabel("module", moduleName));
+                    metricBytes.addLabel(new MetricLabel("className", className));
+                    metricBytes.setValue(memoryState.getCurrentConsumption());
+                    memoryUsageGauges.add(metricBytes);
+
+                    Map<String, Long> counterMap = memoryState.getCounterMap();
+                    counterMap.forEach((name, value) -> {
+                        GaugeMetricImpl<Long> metricCount =
+                                new GaugeMetricImpl<>("object_count", MetricUnit.NOUNIT,
+                                        "The count of object");
+                        metricCount.addLabel(new MetricLabel("module", moduleName));
+                        metricCount.addLabel(new MetricLabel("className", className));
+                        metricCount.addLabel(new MetricLabel("objectName", name));
+                        metricCount.setValue(value);
+                        objectCountGauges.add(metricCount);
+                    });
+                });
+
+            }
+        });
+
+        GAUGE_MEMORY_USAGE_STATS = memoryUsageGauges;
+        GAUGE_OBJECT_COUNT_STATS = objectCountGauges;
+    }
     public static void updateRoutineLoadProcessMetrics() {
         List<RoutineLoadJob> jobs = GlobalStateMgr.getCurrentState().getRoutineLoadMgr().getRoutineLoadJobByState(
                 Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE,
@@ -921,6 +965,10 @@ public final class MetricRepo {
             collectRoutineLoadProcessMetrics(visitor);
         }
 
+        if (Config.memory_tracker_enable) {
+            collectMemoryUsageMetrics(visitor);
+        }
+
         // collect http metrics
         HttpMetricRegistry.getInstance().visit(visitor);
 
@@ -990,6 +1038,15 @@ public final class MetricRepo {
 
     private static void collectRoutineLoadProcessMetrics(MetricVisitor visitor) {
         for (GaugeMetricImpl<Long> metric : GAUGE_ROUTINE_LOAD_LAGS) {
+            visitor.visit(metric);
+        }
+    }
+
+    private static void collectMemoryUsageMetrics(MetricVisitor visitor) {
+        for (GaugeMetricImpl<Long> metric : GAUGE_MEMORY_USAGE_STATS) {
+            visitor.visit(metric);
+        }
+        for (GaugeMetricImpl<Long> metric : GAUGE_OBJECT_COUNT_STATS) {
             visitor.visit(metric);
         }
     }
