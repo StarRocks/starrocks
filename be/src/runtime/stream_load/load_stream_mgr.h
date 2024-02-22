@@ -57,6 +57,14 @@ public:
     }
     ~LoadStreamMgr() = default;
 
+    void close() {
+        std::lock_guard<std::mutex> l(_lock);
+        for (auto iter = _stream_map.begin(); iter != _stream_map.end();) {
+            iter->second->close();
+            iter = _stream_map.erase(iter);
+        }
+    }
+
     Status put(const UniqueId& id, const std::shared_ptr<StreamLoadPipe>& stream) {
         std::lock_guard<std::mutex> l(_lock);
         auto it = _stream_map.find(id);
