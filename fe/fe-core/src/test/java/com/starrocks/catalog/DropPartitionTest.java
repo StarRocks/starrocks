@@ -111,7 +111,7 @@ public class DropPartitionTest {
 
         new Expectations(agent) {
             {
-                agent.allocateFilePath(anyString, anyLong);
+                agent.allocateFilePath(anyString, anyLong, anyLong);
                 result = pathInfo;
                 agent.createShardGroup(anyLong, anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentState().getNextId();

@@ -310,7 +310,7 @@ public class LakeRestoreJob extends RestoreJob {
     @Override
     protected Status resetTableForRestore(OlapTable remoteOlapTbl, Database db) {
         try {
-            FilePathInfo pathInfo = globalStateMgr.getStarOSAgent().allocateFilePath(remoteOlapTbl.getId());
+            FilePathInfo pathInfo = globalStateMgr.getStarOSAgent().allocateFilePath(db.getId(), remoteOlapTbl.getId());
             LakeTable remoteLakeTbl = (LakeTable) remoteOlapTbl;
             StorageInfo storageInfo = remoteLakeTbl.getTableProperty().getStorageInfo();
             remoteLakeTbl.setStorageInfo(pathInfo, storageInfo.getDataCacheInfo());

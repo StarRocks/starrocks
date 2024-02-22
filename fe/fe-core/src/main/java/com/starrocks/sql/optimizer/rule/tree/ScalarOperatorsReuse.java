@@ -146,7 +146,8 @@ public class ScalarOperatorsReuse {
         public ScalarOperator visitCollectionElement(CollectionElementOperator elemOp, Void context) {
             ScalarOperator operator = new CollectionElementOperator(elemOp.getType(),
                     elemOp.getChild(0).accept(this, null),
-                    elemOp.getChild(1).accept(this, null));
+                    elemOp.getChild(1).accept(this, null),
+                    elemOp.isCheckOutOfBounds());
             return tryRewrite(operator);
         }
 

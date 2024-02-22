@@ -33,7 +33,7 @@ public:
 
     Status remove_cache(const std::string& key) override;
 
-    std::unordered_map<std::string, double> cache_stats() override;
+    const DataCacheMetrics cache_metrics() override;
 
     Status shutdown() override;
 

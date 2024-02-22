@@ -2500,17 +2500,9 @@ public class OlapTable extends Table {
         }
     }
 
-    @Override
-    public void onDrop(Database db, boolean force, boolean replay) {
-        // drop all temp partitions of this table, so that there is no temp partitions in recycle bin,
-        // which make things easier.
-        dropAllTempPartitions();
-        LocalMetastore.inactiveRelatedMaterializedView(db, this,
-                MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(getName()));
-    }
-
-    public void onErase(boolean isReplay) {
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+    // Remove all Tablets belonging to this table from TabletInvertedIndex
+    public void removeTabletsFromInvertedIndex() {
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         Collection<Partition> allPartitions = getAllPartitions();
         for (Partition partition : allPartitions) {
             for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
@@ -2519,15 +2511,36 @@ public class OlapTable extends Table {
                 }
             }
         }
+    }
 
+    // If you are modifying this function, please check if you need to modify LakeTable.onDrop also.
+    @Override
+    public void onDrop(Database db, boolean force, boolean replay) {
+        // drop all temp partitions of this table, so that there is no temp partitions
+        // in recycle bin,
+        // which make things easier.
+        dropAllTempPartitions();
+        LocalMetastore.inactiveRelatedMaterializedView(db, this,
+                MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(getName()));
+        if (!replay && hasAutoIncrementColumn()) {
+            sendDropAutoIncrementMapTask();
+        }
+    }
+
+    public void removeTableBinds(boolean isReplay) {
+        GlobalStateMgr.getCurrentState().getLocalMetastore().removeAutoIncrementIdByTableId(getId(), isReplay);
         GlobalStateMgr.getCurrentState().getColocateTableIndex().removeTable(getId(), this, isReplay);
         GlobalStateMgr.getCurrentState().getStorageVolumeMgr().unbindTableToStorageVolume(getId());
     }
 
     @Override
-    public Runnable delete(boolean replay) {
-        onErase(replay);
-        return replay ? null : new DeleteOlapTableTask(this);
+    public boolean delete(long dbId, boolean isReplay) {
+        removeTableBinds(isReplay);
+        removeTabletsFromInvertedIndex();
+        if (!isReplay) {
+            deleteAllReplicas();
+        }
+        return true;
     }
 
     @Override
@@ -2539,63 +2552,56 @@ public class OlapTable extends Table {
         return new OlapTableAlterJobV2Builder(this);
     }
 
-    private static class DeleteOlapTableTask implements Runnable {
-        private final OlapTable table;
+    private void deleteAllReplicas() {
+        HashMap<Long, AgentBatchTask> batchTaskMap = new HashMap<>();
 
-        public DeleteOlapTableTask(OlapTable table) {
-            this.table = table;
-        }
-
-        @Override
-        public void run() {
-            HashMap<Long, AgentBatchTask> batchTaskMap = new HashMap<>();
-
-            // drop all replicas
-            for (Partition partition : table.getAllPartitions()) {
-                List<MaterializedIndex> allIndices =
-                        partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
-                for (MaterializedIndex materializedIndex : allIndices) {
-                    long indexId = materializedIndex.getId();
-                    int schemaHash = table.getSchemaHashByIndexId(indexId);
-                    for (Tablet tablet : materializedIndex.getTablets()) {
-                        long tabletId = tablet.getId();
-                        List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
-                        for (Replica replica : replicas) {
-                            long backendId = replica.getBackendId();
-                            DropReplicaTask dropTask = new DropReplicaTask(backendId, tabletId, schemaHash, true);
-                            AgentBatchTask batchTask = batchTaskMap.get(backendId);
-                            if (batchTask == null) {
-                                batchTask = new AgentBatchTask();
-                                batchTaskMap.put(backendId, batchTask);
-                            }
-                            batchTask.addTask(dropTask);
-                        } // end for replicas
-                    } // end for tablets
-                } // end for indices
-            } // end for partitions
-
-            int numDropTaskPerBe = Config.max_agent_tasks_send_per_be;
-            for (Map.Entry<Long, AgentBatchTask> entry : batchTaskMap.entrySet()) {
-                AgentBatchTask originTasks = entry.getValue();
-                if (originTasks.getTaskNum() > numDropTaskPerBe) {
-                    AgentBatchTask partTask = new AgentBatchTask();
-                    List<AgentTask> allTasks = originTasks.getAllTasks();
-                    int curTask = 1;
-                    for (AgentTask task : allTasks) {
-                        partTask.addTask(task);
-                        if (curTask++ > numDropTaskPerBe) {
-                            AgentTaskExecutor.submit(partTask);
-                            curTask = 1;
-                            partTask = new AgentBatchTask();
-                            ThreadUtil.sleepAtLeastIgnoreInterrupts(1000);
+        // drop all replicas
+        for (Partition partition : getAllPartitions()) {
+            List<MaterializedIndex> allIndices = partition 
+                    .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+            for (MaterializedIndex materializedIndex : allIndices) {
+                long indexId = materializedIndex.getId();
+                int schemaHash = getSchemaHashByIndexId(indexId);
+                for (Tablet tablet : materializedIndex.getTablets()) {
+                    long tabletId = tablet.getId();
+                    List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
+                    for (Replica replica : replicas) {
+                        long backendId = replica.getBackendId();
+                        DropReplicaTask dropTask = new DropReplicaTask(backendId, tabletId, schemaHash, true);
+                        AgentBatchTask batchTask = batchTaskMap.get(backendId);
+                        if (batchTask == null) {
+                            batchTask = new AgentBatchTask();
+                            batchTaskMap.put(backendId, batchTask);
                         }
-                    }
-                    if (!partTask.getAllTasks().isEmpty()) {
+                        batchTask.addTask(dropTask);
+                        LOG.info("delete tablet[{}] from backend[{}] because table {}-{} is dropped",
+                                tabletId, backendId, getId(), getName());
+                    } // end for replicas
+                } // end for tablets
+            }
+        } // end for partitions
+
+        int numDropTaskPerBe = Config.max_agent_tasks_send_per_be;
+        for (Map.Entry<Long, AgentBatchTask> entry : batchTaskMap.entrySet()) {
+            AgentBatchTask originTasks = entry.getValue();
+            if (originTasks.getTaskNum() > numDropTaskPerBe) {
+                AgentBatchTask partTask = new AgentBatchTask();
+                List<AgentTask> allTasks = originTasks.getAllTasks();
+                int curTask = 1;
+                for (AgentTask task : allTasks) {
+                    partTask.addTask(task);
+                    if (curTask++ > numDropTaskPerBe) {
                         AgentTaskExecutor.submit(partTask);
+                        curTask = 1;
+                        partTask = new AgentBatchTask();
+                        ThreadUtil.sleepAtLeastIgnoreInterrupts(1000);
                     }
-                } else {
-                    AgentTaskExecutor.submit(originTasks);
                 }
+                if (!partTask.getAllTasks().isEmpty()) {
+                    AgentTaskExecutor.submit(partTask);
+                }
+            } else {
+                AgentTaskExecutor.submit(originTasks);
             }
         }
     }

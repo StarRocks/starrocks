@@ -34,7 +34,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-public class NativeAccessControl implements AccessControl {
+public class NativeAccessControl implements AccessController {
     private static final Logger LOG = LogManager.getLogger(NativeAccessControl.class);
 
     @Override

@@ -663,8 +663,16 @@ TEST_F(LakeServiceTest, test_drop_table) {
     request.set_tablet_id(_tablet_id);
     _lake_service.drop_table(&cntl, &request, &response, nullptr);
     ASSERT_FALSE(cntl.Failed());
+    ASSERT_TRUE(response.has_status());
+    ASSERT_EQ(0, response.status().status_code());
+
     auto st = FileSystem::Default()->path_exists(kRootLocation);
     ASSERT_TRUE(st.is_not_found()) << st;
+
+    _lake_service.drop_table(&cntl, &request, &response, nullptr);
+    ASSERT_FALSE(cntl.Failed());
+    ASSERT_TRUE(response.has_status());
+    ASSERT_EQ(0, response.status().status_code());
 }
 
 // NOLINTNEXTLINE
@@ -1103,7 +1111,7 @@ TEST_F(LakeServiceTest, test_drop_table_no_thread_pool) {
 
     lake::DropTableRequest request;
     lake::DropTableResponse response;
-    request.set_tablet_id(100);
+    request.set_tablet_id(_tablet_id);
     brpc::Controller cntl;
     _lake_service.drop_table(&cntl, &request, &response, nullptr);
     ASSERT_TRUE(cntl.Failed());
@@ -1384,6 +1392,45 @@ TEST_F(LakeServiceTest, test_abort3) {
     ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
 
     EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, log.txn_id())));
+}
+
+// NOLINTNEXTLINE
+TEST_F(LakeServiceTest, test_drop_table_thread_pool_full) {
+    SyncPoint::GetInstance()->SetCallBack("ThreadPool::do_submit:1", [](void* arg) { *(int64_t*)arg = 0; });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("ThreadPool::do_submit:1");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    lake::DropTableRequest request;
+    lake::DropTableResponse response;
+    request.set_tablet_id(_tablet_id);
+    brpc::Controller cntl;
+    _lake_service.drop_table(&cntl, &request, &response, nullptr);
+    ASSERT_FALSE(cntl.Failed());
+    ASSERT_TRUE(response.has_status());
+    ASSERT_EQ(TStatusCode::SERVICE_UNAVAILABLE, response.status().status_code());
+}
+
+// NOLINTNEXTLINE
+TEST_F(LakeServiceTest, test_drop_table_no_permission) {
+    SyncPoint::GetInstance()->SetCallBack("PosixFileSystem::delete_dir",
+                                          [](void* arg) { *(Status*)arg = Status::IOError("Permission denied"); });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("PosixFileSystem::delete_dir");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    lake::DropTableRequest request;
+    lake::DropTableResponse response;
+    request.set_tablet_id(_tablet_id);
+    brpc::Controller cntl;
+    _lake_service.drop_table(&cntl, &request, &response, nullptr);
+    ASSERT_FALSE(cntl.Failed());
+    ASSERT_EQ(TStatusCode::IO_ERROR, response.status().status_code());
+    ASSERT_EQ(1, response.status().error_msgs_size());
+    ASSERT_TRUE(MatchPattern(response.status().error_msgs(0), "*Permission denied*"));
 }
 
 } // namespace starrocks

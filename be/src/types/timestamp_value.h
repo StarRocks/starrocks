@@ -35,6 +35,8 @@ public:
     inline static TimestampValue create(int year, int month, int day, int hour, int minute, int second,
                                         int microsecond);
 
+    static TimestampValue create_from_unixtime(int64_t ts, const cctz::time_zone& ctz);
+
     inline Timestamp timestamp() const { return _timestamp; }
 
     void set_timestamp(Timestamp timestamp) { _timestamp = timestamp; }

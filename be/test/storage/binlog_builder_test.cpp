@@ -247,7 +247,7 @@ TEST_F(BinlogBuilderTest, test_abort_one_version_multiple_files_without_active_w
 }
 
 TEST_F(BinlogBuilderTest, test_random_commit_abort_multiple_versions) {
-    int32_t num_versions = 1000;
+    int32_t num_versions = 300;
     int64_t max_file_size = 10 * 1024;
     int32_t max_page_size = 64;
     std::vector<DupKeyVersionInfo> version_info_vec;

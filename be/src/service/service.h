@@ -24,8 +24,5 @@ class ExecEnv;
 extern std::atomic<bool> k_starrocks_exit;
 extern std::atomic<bool> k_starrocks_exit_quick;
 
-void wait_for_fragments_finish(ExecEnv* exec_env, size_t max_loop_cnt_cfg);
-} // namespace starrocks
-
-void start_cn();
 void start_be();
+} // namespace starrocks

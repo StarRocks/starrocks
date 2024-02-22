@@ -98,6 +98,9 @@ Status StorageEngine::start_bg_threads() {
     _disk_stat_monitor_thread = std::thread([this] { _disk_stat_monitor_thread_callback(nullptr); });
     Thread::set_thread_name(_disk_stat_monitor_thread, "disk_monitor");
 
+    _pk_dump_thread = std::thread([this] { _pk_dump_thread_callback(nullptr); });
+    Thread::set_thread_name(_pk_dump_thread, "pk_dump");
+
 #ifdef USE_STAROS
     _local_pk_index_shared_data_gc_evict_thread =
             std::thread([this] { _local_pk_index_shared_data_gc_evict_thread_callback(nullptr); });
@@ -289,7 +292,7 @@ void* StorageEngine::_adjust_pagecache_callback(void* arg_this) {
         if (config::disable_storage_page_cache) {
             continue;
         }
-        MemTracker* memtracker = ExecEnv::GetInstance()->process_mem_tracker();
+        MemTracker* memtracker = GlobalEnv::GetInstance()->process_mem_tracker();
         if (memtracker == nullptr || !memtracker->has_limit() || cache == nullptr) {
             continue;
         }
@@ -329,7 +332,7 @@ void* StorageEngine::_adjust_pagecache_callback(void* arg_this) {
             size_t bytes_to_dec = dec_advisor->bytes_should_gc(MonoTime::Now(), delta_high);
             evict_pagecache(cache, static_cast<int64_t>(bytes_to_dec), _bg_worker_stopped);
         } else {
-            int64_t max_cache_size = std::max(ExecEnv::GetInstance()->get_storage_page_cache_size(), kcacheMinSize);
+            int64_t max_cache_size = std::max(GlobalEnv::GetInstance()->get_storage_page_cache_size(), kcacheMinSize);
             int64_t cur_cache_size = cache->get_capacity();
             if (cur_cache_size >= max_cache_size) {
                 continue;
@@ -408,6 +411,24 @@ void* StorageEngine::_pk_index_major_compaction_thread_callback(void* arg) {
             _update_manager->get_pindex_compaction_mgr()->schedule([&]() {
                 return StorageEngine::instance()->tablet_manager()->pick_tablets_to_do_pk_index_major_compaction();
             });
+        }
+    }
+
+    return nullptr;
+}
+
+void* StorageEngine::_pk_dump_thread_callback(void* arg) {
+#ifdef GOOGLE_PROFILER
+    ProfilerRegisterThread();
+#endif
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
+        SLEEP_IN_BG_WORKER(60);
+        // disable pk dump generation when pk_dump_interval_seconds less than 0
+        if (config::pk_dump_interval_seconds > 0) {
+            auto st = StorageEngine::instance()->tablet_manager()->generate_pk_dump();
+            if (!st.ok()) {
+                LOG(ERROR) << "generate pk dump failed, st: " << st;
+            }
         }
     }
 
@@ -504,7 +525,7 @@ void* StorageEngine::_repair_compaction_thread_callback(void* arg) {
             }
             vector<pair<uint32_t, string>> rowset_results;
             for (auto rowsetid : task.second) {
-                auto st = tablet->updates()->compaction(ExecEnv::GetInstance()->compaction_mem_tracker(), {rowsetid});
+                auto st = tablet->updates()->compaction(GlobalEnv::GetInstance()->compaction_mem_tracker(), {rowsetid});
                 if (!st.ok()) {
                     LOG(WARNING) << "repair compaction failed tablet: " << task.first << " rowset: " << rowsetid << " "
                                  << st;

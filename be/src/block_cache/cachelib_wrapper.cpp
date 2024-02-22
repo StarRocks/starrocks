@@ -97,6 +97,12 @@ std::unordered_map<std::string, double> CacheLibWrapper::cache_stats() {
     return navy_stats;
 }
 
+const DataCacheMetrics CacheLibWrapper::cache_metrics() {
+    // not implemented
+    DataCacheMetrics metrics{};
+    return metrics;
+}
+
 Status CacheLibWrapper::shutdown() {
     if (_cache) {
         _dump_cache_stats();

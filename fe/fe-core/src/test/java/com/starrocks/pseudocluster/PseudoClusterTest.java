@@ -102,7 +102,7 @@ public class PseudoClusterTest {
             }
 
             @Mock
-            public FilePathInfo allocateFilePath(String storageVolumeId, long tableId) {
+            public FilePathInfo allocateFilePath(String storageVolumeId, long dbId, long tableId) {
                 return pathInfo;
             }
         };

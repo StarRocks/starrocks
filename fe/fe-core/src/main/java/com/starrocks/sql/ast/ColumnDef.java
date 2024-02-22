@@ -416,7 +416,8 @@ public class ColumnDef implements ParseNode {
                 case DECIMAL64:
                 case DECIMAL128:
                     DecimalLiteral decimalLiteral = new DecimalLiteral(defaultValue);
-                    decimalLiteral.checkPrecisionAndScale(scalarType.getScalarPrecision(), scalarType.getScalarScale());
+                    decimalLiteral.checkPrecisionAndScale(scalarType,
+                            scalarType.getScalarPrecision(), scalarType.getScalarScale());
                     break;
                 case DATE:
                 case DATETIME:

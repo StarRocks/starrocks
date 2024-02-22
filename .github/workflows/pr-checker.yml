@@ -4,7 +4,7 @@ on:
   pull_request_target:
     branches:
       - main
-      - 'branch-[0-9].[0-9]*'
+      - 'branch*'
 
     types:
       - opened
@@ -121,7 +121,8 @@ jobs:
     if: >
       (startsWith(github.event.pull_request.title, '[BugFix]') ||
        startsWith(github.event.pull_request.title, '[Enhancement]') ||
-       startsWith(github.event.pull_request.title, '[Doc]')) &&
+       startsWith(github.event.pull_request.title, '[Doc]') ||
+       startsWith(github.event.pull_request.title, '[UT]')) &&
       !contains(github.event.pull_request.title, 'cherry-pick') &&
       !contains(github.event.pull_request.title, 'backport')
     steps:
@@ -177,7 +178,9 @@ jobs:
       - name: check-done
         if: >
           (startsWith(github.event.pull_request.title, '[BugFix]') ||
-           startsWith(github.event.pull_request.title, '[Enhancement]'))&&
+           startsWith(github.event.pull_request.title, '[Enhancement]') ||
+           startsWith(github.event.pull_request.title, '[Doc]') ||
+           startsWith(github.event.pull_request.title, '[UT]')) &&
           !contains(github.event.pull_request.title, 'cherry-pick') &&
           !contains(github.event.pull_request.title, 'backport') &&
           contains(toJson(github.event.pull_request.body), '[ ] I have checked the version labels')

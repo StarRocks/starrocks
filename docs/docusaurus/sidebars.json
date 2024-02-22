@@ -102,12 +102,7 @@
         "loading/Flink-connector-starrocks",
         "loading/Load_to_Primary_Key_tables",
         "loading/Etl_in_loading",
-        {
-          "type": "category",
-          "label": "Concepts",
-          "link": {"type": "doc", "id": "loading/load_concept/strict_mode"},
-          "items": [ "loading/load_concept/strict_mode" ]
-        }
+        "loading/load_concept/strict_mode"
       ]
     },
     {
@@ -128,8 +123,8 @@
         {
           "type": "category",
           "label": "Catalog",
-          "link": {"type": "doc", "id": "data_source/catalog/catalog_overview"},
-          "items": ["data_source/catalog/default_catalog", "data_source/catalog/hive_catalog", "data_source/catalog/iceberg_catalog", "data_source/catalog/hudi_catalog", "data_source/catalog/deltalake_catalog", "data_source/catalog/jdbc_catalog", "data_source/catalog/elasticsearch_catalog", "data_source/catalog/paimon_catalog", "data_source/catalog/query_external_data" ]
+          "link": {"type": "doc", "id": "data_source/catalog/catalog_intro"},
+          "items": ["data_source/catalog/catalog_overview", "data_source/catalog/default_catalog", "data_source/catalog/hive_catalog", "data_source/catalog/iceberg_catalog", "data_source/catalog/hudi_catalog", "data_source/catalog/deltalake_catalog", "data_source/catalog/jdbc_catalog", "data_source/catalog/elasticsearch_catalog", "data_source/catalog/paimon_catalog", "data_source/catalog/query_external_data" ]
         },
         "data_source/External_table",
         "data_source/file_external_table",
@@ -225,7 +220,8 @@
             "integrations/IDE_integrations/jupysql"
           ]
         },
-        "integrations/other_integrations/intro"
+        "integrations/hive_bitmap_udf",
+        "integrations/other_integrations/intro"   
       ]
     },
     {
@@ -241,7 +237,14 @@
             "administration/Scale_up_down",
             "administration/Backup_and_restore",
             "administration/Configuration",
-            "administration/Monitor_and_Alert",
+            {
+              "type": "category",
+              "label": "Monitor and Alert",
+              "link": {"type": "doc", "id": "administration/Monitor_and_Alert"},
+              "items": [
+                "administration/metrics"
+              ]
+            },
             "administration/audit_loader",
             "administration/enable_fqdn",
             "administration/timezone",
@@ -267,6 +270,7 @@
           ]
         },
         "administration/Data_recovery",
+        "administration/data_migration_tool",
         {
           "type": "category",
           "label": "User Privileges and Authentication",
@@ -656,7 +660,7 @@
     },
     {
       "type": "category",
-      "label": " 项目协助",
+      "label": "技术支持",
       "link": {"type": "doc", "id": "project_help/project_help"},
       "items": ["project_help/slack"]
     },
@@ -743,7 +747,8 @@
         "loading/Flink_cdc_load",
         "loading/Flink-connector-starrocks",
         "loading/Load_to_Primary_Key_tables",
-        "loading/Etl_in_loading"
+        "loading/Etl_in_loading",
+        "loading/load_concept/strict_mode"
       ]
     },
     {
@@ -764,8 +769,8 @@
         {
           "type": "category",
           "label": "Catalog",
-          "link": {"type": "doc", "id": "data_source/catalog/catalog_overview"},
-          "items": ["data_source/catalog/default_catalog", "data_source/catalog/hive_catalog", "data_source/catalog/iceberg_catalog", "data_source/catalog/hudi_catalog", "data_source/catalog/deltalake_catalog", "data_source/catalog/jdbc_catalog", "data_source/catalog/elasticsearch_catalog", "data_source/catalog/paimon_catalog", "data_source/catalog/query_external_data" ]
+          "link": {"type": "doc", "id": "data_source/catalog/catalog_intro"},
+          "items": ["data_source/catalog/catalog_overview", "data_source/catalog/default_catalog", "data_source/catalog/hive_catalog", "data_source/catalog/iceberg_catalog", "data_source/catalog/hudi_catalog", "data_source/catalog/deltalake_catalog", "data_source/catalog/jdbc_catalog", "data_source/catalog/elasticsearch_catalog", "data_source/catalog/paimon_catalog", "data_source/catalog/query_external_data" ]
         },
         "data_source/External_table",
         "data_source/file_external_table",
@@ -861,6 +866,7 @@
             "integrations/IDE_integrations/jupysql"
           ]
         },
+        "integrations/hive_bitmap_udf",
         "integrations/other_integrations/intro"
       ]
     },
@@ -877,7 +883,14 @@
             "administration/Scale_up_down",
             "administration/Backup_and_restore",
             "administration/Configuration",
-            "administration/Monitor_and_Alert",
+            {
+              "type": "category",
+              "label": "监控报警",
+              "link": {"type": "doc", "id": "administration/Monitor_and_Alert"},
+              "items": [
+                "administration/metrics"
+              ]
+            },
             "administration/audit_loader",
             "administration/enable_fqdn",
             "administration/timezone",
@@ -902,6 +915,7 @@
           ]
         },
         "administration/Data_recovery",
+        "administration/data_migration_tool",
         {
           "type": "category",
           "label": "管理用户权限",

@@ -17,8 +17,11 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.FixMethodOrder;
 import org.junit.Test;
+import org.junit.runners.MethodSorters;
 
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class MvRewriteNestedMVTest extends MvRewriteTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -46,10 +49,7 @@ public class MvRewriteNestedMVTest extends MvRewriteTestBase {
                 "PARTITION `p6` VALUES LESS THAN ('7')\n" +
                 ")\n" +
                 "DISTRIBUTED BY HASH(k1);");
-        cluster.runSql("test", "insert into t1 values (1,1,1),(1,1,2),(1,1,3),(1,2,1),(1,2,2),(1,2,3)," +
-                " (1,3,1),(1,3,2),(1,3,3)\n" +
-                " ,(2,1,1),(2,1,2),(2,1,3),(2,2,1),(2,2,2),(2,2,3),(2,3,1),(2,3,2),(2,3,3)\n" +
-                " ,(3,1,1),(3,1,2),(3,1,3),(3,2,1),(3,2,2),(3,2,3),(3,3,1),(3,3,2),(3,3,3);");
+        executeInsertSql(connectContext, "insert into t1 values (1,1,1),(2,1,1),(3,1,1)");
         createAndRefreshMv("CREATE MATERIALIZED VIEW nested_mv_1" +
                 " PARTITION BY k1 DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
                 "REFRESH MANUAL AS SELECT k1, v1 as k2, v2 as k3 from t1;");
@@ -58,7 +58,7 @@ public class MvRewriteNestedMVTest extends MvRewriteTestBase {
                 "REFRESH MANUAL AS SELECT k1, count(k2) as count_k2, sum(k3) as sum_k3 from nested_mv_1 group by k1;");
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW nested_mv_3 DISTRIBUTED BY HASH(k1)\n" +
                 "REFRESH MANUAL AS SELECT k1, count_k2, sum_k3 from nested_mv_2 where k1 >1;");
-        cluster.runSql("test", "insert into t1 values (4,1,1);");
+        executeInsertSql(connectContext, "insert into t1 values (4,1,1);");
         refreshMaterializedView("test", "nested_mv_1");
         refreshMaterializedView("test", "nested_mv_2");
         String query1 = "SELECT k1, count(v1), sum(v2) from t1 where k1 >1 group by k1";

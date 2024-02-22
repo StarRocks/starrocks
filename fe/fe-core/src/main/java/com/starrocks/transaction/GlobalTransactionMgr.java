@@ -34,6 +34,7 @@
 
 package com.starrocks.transaction;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
@@ -44,6 +45,7 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
+import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -62,6 +64,7 @@ import com.starrocks.thrift.TCommitRemoteTxnResponse;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTabletCommitInfo;
+import com.starrocks.thrift.TTabletFailInfo;
 import com.starrocks.thrift.TTransactionStatus;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
@@ -76,6 +79,7 @@ import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -93,7 +97,7 @@ import javax.validation.constraints.NotNull;
  * Attention: all api in txn manager should get db lock or load lock first, then get txn manager's lock, or
  * there will be dead lock
  */
-public class GlobalTransactionMgr implements Writable {
+public class GlobalTransactionMgr implements Writable, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(GlobalTransactionMgr.class);
 
     private Map<Long, DatabaseTransactionMgr> dbIdToDatabaseTransactionMgrs = Maps.newConcurrentMap();
@@ -240,7 +244,9 @@ public class GlobalTransactionMgr implements Writable {
 
     // abort transaction in remote StarRocks cluster
     public void abortRemoteTransaction(long dbId, long transactionId,
-                                       String host, int port, String errorMsg)
+                                       String host, int port, String errorMsg,
+                                       List<TTabletCommitInfo> tabletCommitInfos,
+                                       List<TTabletFailInfo> tabletFailInfos)
             throws AbortTransactionException {
 
         TNetworkAddress addr = new TNetworkAddress(host, port);
@@ -248,6 +254,8 @@ public class GlobalTransactionMgr implements Writable {
         request.setDb_id(dbId);
         request.setTxn_id(transactionId);
         request.setError_msg(errorMsg);
+        request.setCommit_infos(tabletCommitInfos);
+        request.setFail_infos(tabletFailInfos);
         TAbortRemoteTxnResponse response;
         try {
             response = FrontendServiceProxy.call(addr,
@@ -506,24 +514,28 @@ public class GlobalTransactionMgr implements Writable {
     }
 
     public void abortTransaction(long dbId, long transactionId, String reason) throws UserException {
-        abortTransaction(dbId, transactionId, reason, Lists.newArrayList());
+        abortTransaction(dbId, transactionId, reason, Collections.emptyList());
     }
 
     public void abortTransaction(long dbId, long transactionId, String reason, List<TabletFailInfo> failedTablets)
             throws UserException {
-        abortTransaction(dbId, transactionId, reason, failedTablets, null);
+        abortTransaction(dbId, transactionId, reason, Collections.emptyList(), failedTablets, null);
     }
 
     public void abortTransaction(Long dbId, Long transactionId, String reason, TxnCommitAttachment txnCommitAttachment)
             throws UserException {
-        abortTransaction(dbId, transactionId, reason, Lists.newArrayList(), txnCommitAttachment);
+        abortTransaction(dbId, transactionId, reason, Collections.emptyList(), Collections.emptyList(),
+                txnCommitAttachment);
     }
 
-    public void abortTransaction(long dbId, long transactionId, String reason, List<TabletFailInfo> failedTablets,
+    public void abortTransaction(long dbId, long transactionId, String reason,
+                                 List<TabletCommitInfo> finishedTablets,
+                                 List<TabletFailInfo> failedTablets,
                                  TxnCommitAttachment txnCommitAttachment)
             throws UserException {
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
-        dbTransactionMgr.abortTransaction(transactionId, reason, txnCommitAttachment, failedTablets);
+        dbTransactionMgr.abortTransaction(transactionId, true, reason, txnCommitAttachment,
+                finishedTablets, failedTablets);
     }
 
     // for http cancel stream load api
@@ -885,7 +897,7 @@ public class GlobalTransactionMgr implements Writable {
             try {
                 DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(txnInfo.first);
                 dbTransactionMgr.abortTransaction(txnInfo.second, false, "coordinate BE is down", null,
-                        Lists.newArrayList());
+                        Collections.emptyList(), Collections.emptyList());
             } catch (UserException e) {
                 LOG.warn("Abort txn on coordinate BE {} failed, msg={}", coordinateHost, e.getMessage());
             }
@@ -923,5 +935,14 @@ public class GlobalTransactionMgr implements Writable {
             return "";
         }
         return dbTransactionMgr.getTxnPublishTimeoutDebugInfo(txnId);
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        long count = 0;
+        for (DatabaseTransactionMgr databaseTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
+            count += databaseTransactionMgr.getTransactionNum();
+        }
+        return ImmutableMap.of("Transaction", count);
     }
 }

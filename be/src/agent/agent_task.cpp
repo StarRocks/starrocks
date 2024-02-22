@@ -67,7 +67,7 @@ static void alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signat
     TSchemaHash new_schema_hash = 0;
     new_tablet_id = agent_task_req.new_tablet_id;
     new_schema_hash = agent_task_req.new_schema_hash;
-    EngineAlterTabletTask engine_task(ExecEnv::GetInstance()->schema_change_mem_tracker(), agent_task_req);
+    EngineAlterTabletTask engine_task(GlobalEnv::GetInstance()->schema_change_mem_tracker(), agent_task_req);
     Status sc_status = StorageEngine::instance()->execute_task(&engine_task);
     AgentStatus status;
     if (!sc_status.ok()) {
@@ -173,6 +173,10 @@ void run_drop_tablet_task(const std::shared_ptr<DropTabletAgentTaskRequest>& age
                 StorageEngine::instance()->txn_manager()->get_tablet_related_txns(
                         drop_tablet_req.tablet_id, drop_tablet_req.schema_hash, dropped_tablet->tablet_uid(),
                         &partition_id, &transaction_ids);
+                if (transaction_ids.empty()) {
+                    StorageEngine::instance()->replication_txn_manager()->get_tablet_related_txns(
+                            drop_tablet_req.tablet_id, &transaction_ids);
+                }
             }
             if (!transaction_ids.empty()) {
                 std::stringstream ss;
@@ -355,7 +359,7 @@ void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req
             }
         }
     } else {
-        EngineCloneTask engine_task(ExecEnv::GetInstance()->clone_mem_tracker(), clone_req, agent_task_req->signature,
+        EngineCloneTask engine_task(GlobalEnv::GetInstance()->clone_mem_tracker(), clone_req, agent_task_req->signature,
                                     &error_msgs, &tablet_infos, &status);
         Status res = StorageEngine::instance()->execute_task(&engine_task);
         if (!res.ok()) {
@@ -473,7 +477,7 @@ void run_check_consistency_task(const std::shared_ptr<CheckConsistencyTaskReques
     TStatus task_status;
     uint32_t checksum = 0;
 
-    MemTracker* mem_tracker = ExecEnv::GetInstance()->consistency_mem_tracker();
+    MemTracker* mem_tracker = GlobalEnv::GetInstance()->consistency_mem_tracker();
     Status check_limit_st = mem_tracker->check_mem_limit("Start consistency check.");
     if (!check_limit_st.ok()) {
         LOG(WARNING) << "check consistency failed: " << check_limit_st.message();
@@ -513,7 +517,7 @@ void run_compaction_task(const std::shared_ptr<CompactionTaskRequest>& agent_tas
     TStatus task_status;
 
     for (auto tablet_id : compaction_req.tablet_ids) {
-        EngineManualCompactionTask engine_task(ExecEnv::GetInstance()->compaction_mem_tracker(), tablet_id,
+        EngineManualCompactionTask engine_task(GlobalEnv::GetInstance()->compaction_mem_tracker(), tablet_id,
                                                compaction_req.is_base_compaction);
         StorageEngine::instance()->execute_task(&engine_task);
     }
@@ -833,7 +837,7 @@ void run_drop_auto_increment_map_task(const std::shared_ptr<DropAutoIncrementMap
 
 void run_remote_snapshot_task(const std::shared_ptr<RemoteSnapshotAgentTaskRequest>& agent_task_req,
                               ExecEnv* exec_env) {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(ExecEnv::GetInstance()->replication_mem_tracker());
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(GlobalEnv::GetInstance()->replication_mem_tracker());
     DeferOp op([prev_tracker] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
     const TRemoteSnapshotRequest& remote_snapshot_req = agent_task_req->task_req;
@@ -867,7 +871,6 @@ void run_remote_snapshot_task(const std::shared_ptr<RemoteSnapshotAgentTaskReque
     } else {
         finish_task_request.__set_snapshot_path(src_snapshot_path);
         finish_task_request.__set_incremental_snapshot(incremental_snapshot);
-        LOG(INFO) << "remote snapshot success, signature:" << agent_task_req->signature;
     }
 
     task_status.__set_status_code(status_code);
@@ -877,12 +880,14 @@ void run_remote_snapshot_task(const std::shared_ptr<RemoteSnapshotAgentTaskReque
 #ifndef BE_TEST
     finish_task(finish_task_request);
 #endif
-    remove_task_info(agent_task_req->task_type, agent_task_req->signature);
+    auto task_queue_size = remove_task_info(agent_task_req->task_type, agent_task_req->signature);
+    LOG(INFO) << "Remove task success. type=" << agent_task_req->task_type
+              << ", signature=" << agent_task_req->signature << ", task_count_in_queue=" << task_queue_size;
 }
 
 void run_replicate_snapshot_task(const std::shared_ptr<ReplicateSnapshotAgentTaskRequest>& agent_task_req,
                                  ExecEnv* exec_env) {
-    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(ExecEnv::GetInstance()->replication_mem_tracker());
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(GlobalEnv::GetInstance()->replication_mem_tracker());
     DeferOp op([prev_tracker] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
     const TReplicateSnapshotRequest& replicate_snapshot_req = agent_task_req->task_req;
@@ -901,8 +906,6 @@ void run_replicate_snapshot_task(const std::shared_ptr<ReplicateSnapshotAgentTas
         status_code = TStatusCode::RUNTIME_ERROR;
         LOG(WARNING) << "replicate snapshot failed. status: " << res << ", signature:" << agent_task_req->signature;
         error_msgs.emplace_back("replicate snapshot failed, " + res.to_string());
-    } else {
-        LOG(INFO) << "replicate snapshot success, signature:" << agent_task_req->signature;
     }
 
     // Return result to fe
@@ -919,7 +922,9 @@ void run_replicate_snapshot_task(const std::shared_ptr<ReplicateSnapshotAgentTas
 #ifndef BE_TEST
     finish_task(finish_task_request);
 #endif
-    remove_task_info(agent_task_req->task_type, agent_task_req->signature);
+    auto task_queue_size = remove_task_info(agent_task_req->task_type, agent_task_req->signature);
+    LOG(INFO) << "Remove task success. type=" << agent_task_req->task_type
+              << ", signature=" << agent_task_req->signature << ", task_count_in_queue=" << task_queue_size;
 }
 
 } // namespace starrocks

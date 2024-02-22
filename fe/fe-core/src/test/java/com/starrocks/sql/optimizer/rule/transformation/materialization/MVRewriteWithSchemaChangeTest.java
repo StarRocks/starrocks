@@ -131,7 +131,7 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
                 cluster.runSql("test", "alter materialized view test_cache_mv1 active;");
                 Assert.fail("could not active the mv");
             } catch (Exception e) {
-                Assert.assertTrue(e.getMessage().contains("mv schema changed"));
+                Assert.assertTrue(e.getMessage(), e.getMessage().contains("Column schema not compatible"));
             }
 
             plan = getFragmentPlan(sql);
@@ -168,6 +168,8 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
                 "FROM t1_agg AS t1_17 " +
                 "GROUP BY t1_17.c_1_0, t1_17.c_1_1 ORDER BY t1_17.c_1_0 DESC, t1_17.c_1_1 ASC");
 
+        // NOTE: change `selectBestRowCountIndex` to prefer non-baseIndexId so can choose the mv for
+        // mv's rowCount and columnSize is the same with the base table.
         {
             String query = "select * from t1_agg";
             String plan = UtFrameUtils.getVerboseFragmentPlan(connectContext, query);

@@ -143,6 +143,24 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long slow_lock_log_every_ms = 3000L;
 
+    @ConfField
+    public static String custom_config_dir = "/conf";
+
+    /*
+     * internal log:
+     * This specifies FE MV/Statistics log dir.
+     */
+    @ConfField
+    public static String internal_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
+    @ConfField
+    public static int internal_log_roll_num = 90;
+    @ConfField
+    public static String[] internal_log_modules = {"base", "statistic"};
+    @ConfField
+    public static String internal_log_roll_interval = "DAY";
+    @ConfField
+    public static String internal_log_delete_age = "7d";
+
     /**
      * dump_log_dir:
      * This specifies FE dump log dir.
@@ -618,6 +636,13 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean http_web_page_display_hardware = true;
+
+    /**
+     * Whether to enable the detail metrics for http. It may be expensive
+     * to get those metrics, and only enable it for debug in general.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_http_detail_metrics = false;
 
     /**
      * Cluster name will be shown as the title of web page
@@ -1121,6 +1146,18 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long dynamic_partition_check_interval_seconds = 600;
+
+    /**
+     * If set to true, memory tracker feature will open
+     */
+    @ConfField(mutable = true)
+    public static boolean memory_tracker_enable = true;
+
+    /**
+     * Decide how often to track the memory usage of the FE process
+     */
+    @ConfField(mutable = true)
+    public static long memory_tracker_interval_seconds = 60;
 
     /**
      * If batch creation of partitions is allowed to create half of the partitions, it is easy to generate holes.
@@ -2545,6 +2582,30 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static String access_control = "native";
 
+    /**
+     *  Kerberos principal used for mutual authentication with ranger
+     */
+    @ConfField(mutable = true)
+    public static String ranger_spnego_kerberos_principal = "";
+
+    /**
+     *  Kerberos keytab file used for mutual authentication with ranger
+     */
+    @ConfField(mutable = true)
+    public static String ranger_spnego_kerberos_keytab = "";
+
+    /**
+     *  Kerberos krb5.conf configure path, default /etc/krb5.conf
+     */
+    @ConfField(mutable = true)
+    public static String ranger_kerberos_krb5_conf = "";
+
+    /**
+     * Whether to use the unix group as the ranger authentication group
+     */
+    @ConfField(mutable = true)
+    public static boolean ranger_user_ugi = false;
+
     @ConfField(mutable = true)
     public static int catalog_metadata_cache_size = 500;
 
@@ -2589,18 +2650,31 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static long routine_load_unstable_threshold_second = 3600;
-    
+
     /*
-     * replication transaction config
+     * Replication config
      */
+    @ConfField
+    public static int replication_interval_ms = 10;
     @ConfField(mutable = true)
-    public static int replication_transaction_max_parallel_job_count = 100; // 100
+    public static int replication_max_parallel_table_count = 100; // 100
     @ConfField(mutable = true)
-    public static int replication_transaction_max_parallel_replication_data_size_mb = 10240; // 10g
+    public static int replication_max_parallel_data_size_mb = 10240; // 10g
     @ConfField(mutable = true)
     public static int replication_transaction_timeout_sec = 1 * 60 * 60; // 1hour
+
     @ConfField(mutable = true)
-    public static int replication_transaction_remote_snapshot_timeout_sec = 30 * 60; // 30minute
+    public static boolean jdbc_meta_default_cache_enable = false;
+
     @ConfField(mutable = true)
-    public static int replication_transaction_replicate_snapshot_timeout_sec = 30 * 60; // 30minute
+    public static long jdbc_meta_default_cache_expire_sec = 600L;
+
+    @ConfField(mutable = false)
+    public static int jdbc_connection_pool_size = 8;
+
+    @ConfField(mutable = false)
+    public static int jdbc_minimum_idle_connections = 1;
+
+    @ConfField(mutable = false)
+    public static int jdbc_connection_idle_timeout_ms = 600000;
 }

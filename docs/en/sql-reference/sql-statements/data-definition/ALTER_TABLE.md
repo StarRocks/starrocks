@@ -17,9 +17,9 @@ Modifies an existing table, including:
 - [Modify bitmap index](#modify-bitmap-indexes)
 - [Manual data version compaction](#manual-compaction-from-31)
 
-> **NOTE**
->
-> This operation requires the ALTER privilege on the destination table.
+:::tip
+This operation requires the ALTER privilege on the destination table.
+:::
 
 ## Syntax
 
@@ -31,18 +31,20 @@ alter_clause1[, alter_clause2, ...]
 `alter_clause` is classified into six operations: partition, rollup, schema change, rename, index, swap, comment, and compact.
 
 - rename: renames a table, rollup index, or partition. **Note that column names cannot be modified.**
-- comment: modifies the table comment (supported from **v3.1 onwards**).
-- swap: atomic exchange of two tables.
+- comment: modifies the table comment (supported from **v3.1 onwards**). Currently, column comments cannot be modified.
 - partition: modifies partition properties, drops a partition, or adds a partition.
+- bucket: modifies the bucketing method and number of buckets.
+- column: adds, drops, or reorders columns, or modifies column type.
+- rollup index: creates or drops a rollup index.
+- bitmap index: modifies index (only Bitmap index can be modified).
+- swap: atomic exchange of two tables.
 - schema change: adds, drops, or reorders columns, or modifies column type.
-- rollup: creates or drops a rollup index.
-- index: modifies index (only Bitmap index can be modified).
 - compact: performs manual compaction to merge versions of loaded data (supported from **v3.1 onwards**).
 
 :::note
 
 - Schema change, rollup, and partition operations cannot be performed in one ALTER TABLE statement.
-- Schema change and rollup are asynchronous operations. A success message is return immediately after the task is submitted. You can run the [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) command to check the progress.
+- Schema change and rollup are asynchronous operations. A success message is returned immediately after the task is submitted. You can run the [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) command to check the progress.
 - Partition, rename, swap, and index are synchronous operations, and a command return indicates that the execution is finished.
 :::
 
@@ -77,6 +79,10 @@ Syntax:
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 ```
+
+:::tip
+Currently, column comments cannot be modified.
+:::
 
 ### Modify partition
 
@@ -121,7 +127,7 @@ DROP PARTITION [IF EXISTS] <partition_name> [FORCE]
 Note:
 
 1. Keep at least one partition for partitioned tables.
-2. After executing DROP PARTITION for a while, the dropped partition can be recovered by the RECOVER statement. See the RECOVER statement for details.
+2. After executing DROP PARTITION, you can recover the dropped partition by using the [RECOVER](./RECOVER.md) command within a specified period (1 day by default).
 3. If DROP PARTITION FORCE is executed, the partition will be deleted directly and cannot be recovered without checking whether there are any unfinished activities on the partition. Thus, generally this operation is not recommended.
 
 #### Add a temporary partition

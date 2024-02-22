@@ -20,15 +20,23 @@
 #include "http/http_client.h"
 #include "util/defer_op.h"
 #include "util/md5.h"
+#include "util/uuid_generator.h"
 
 namespace starrocks {
 
-Status DownloadUtil::download(const std::string& url, const std::string& tmp_file, const std::string& target_file,
+Status DownloadUtil::download(const std::string& url, const std::string& target_file,
                               const std::string& expected_checksum) {
+    auto success = false;
+    auto tmp_file =
+            fmt::format("{}_{}_{}", target_file, expected_checksum, ThreadLocalUUIDGenerator::next_uuid_string());
     auto fp = fopen(tmp_file.c_str(), "w");
     DeferOp defer([&]() {
         if (fp != nullptr) {
             fclose(fp);
+        }
+        if (!success) {
+            // delete tmp file
+            (void)remove(tmp_file.c_str());
         }
     });
 
@@ -68,6 +76,8 @@ Status DownloadUtil::download(const std::string& url, const std::string& tmp_fil
         LOG(ERROR) << fmt::format("fail to rename file {} to {}", tmp_file, target_file);
         return Status::InternalError(fmt::format("fail to rename file from {} to {}", tmp_file, target_file));
     }
+
+    success = true;
     return Status::OK();
 }
 } // namespace starrocks

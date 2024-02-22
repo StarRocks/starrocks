@@ -30,12 +30,14 @@ import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.HashDistributionDesc;
+import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.DataSkewInfo;
 import com.starrocks.sql.optimizer.operator.Operator;
-import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
@@ -56,11 +58,13 @@ import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
 import com.starrocks.statistic.StatisticUtils;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.EXECUTE_COST_PENALTY;
@@ -218,76 +222,30 @@ public class CostModel {
                     inputStatistics.getComputeSize());
         }
 
-        boolean canGenerateOneStageAggNode(ExpressionContext context) {
-            // 1. Must do two stage aggregate if child operator is LogicalRepeatOperator
-            //   If the repeat node is used as the input node of the Exchange node.
-            //   Will cause the node to be unable to confirm whether it is const during serialization
-            //   (BE does this for efficiency reasons).
-            //   Therefore, it is forcibly ensured that no one-stage aggregation nodes are generated
-            //   on top of the repeat node.
-            if (context.getChildOperator(0).getOpType().equals(OperatorType.LOGICAL_REPEAT)) {
-                return false;
-            }
-
-            // 2. Must do multi stage aggregate when aggregate distinct function has array type
-            if (context.getOp() instanceof PhysicalHashAggregateOperator) {
-                PhysicalHashAggregateOperator operator = (PhysicalHashAggregateOperator) context.getOp();
-                if (operator.getAggregations().values().stream().anyMatch(callOperator
-                        -> callOperator.getChildren().stream().anyMatch(c -> c.getType().isComplexType()) &&
-                        callOperator.isDistinct())) {
-                    return false;
-                }
-            }
-
-            // 3. agg distinct function with multi columns can not generate one stage aggregate
-            if (context.getOp() instanceof PhysicalHashAggregateOperator) {
-                PhysicalHashAggregateOperator operator = (PhysicalHashAggregateOperator) context.getOp();
-                if (operator.getAggregations().values().stream().anyMatch(callOperator -> callOperator.isDistinct() &&
-                        callOperator.getChildren().size() > 1)) {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        boolean mustGenerateOneStageAggNode(ExpressionContext context) {
-            // Must do one stage aggregate If the child contains limit,
-            // the aggregation must be a single node to ensure correctness.
-            // eg. select count(*) from (select * table limit 2) t
-            if (context.getChildOperator(0).hasLimit()) {
-                return true;
-            }
-            return false;
-        }
-
-        // Note: This method logic must consistent with SplitAggregateRule::needGenerateMultiStageAggregate
-        boolean needGenerateOneStageAggNode(ExpressionContext context) {
-            if (!canGenerateOneStageAggNode(context)) {
-                return false;
-            }
-            if (mustGenerateOneStageAggNode(context)) {
-                return true;
-            }
-            // respect user hint
-            int aggStage = ConnectContext.get().getSessionVariable().getNewPlannerAggStage();
-            return aggStage == 1 || aggStage == 0;
-        }
-
         @Override
         public CostEstimate visitPhysicalHashAggregate(PhysicalHashAggregateOperator node, ExpressionContext context) {
-            if (!needGenerateOneStageAggNode(context) && node.getDistinctColumnDataSkew() == null && !node.isSplit() &&
-                    node.getType().isGlobal()) {
-                return CostEstimate.infinite();
+            Optional<CostEstimate> cost;
+            cost = invalidOneStageAggCost(node, context);
+            if (cost.isPresent()) {
+                return cost.get();
+            }
+
+            cost = redundantTwoStageAggCost(node, context);
+            if (cost.isPresent()) {
+                return cost.get();
             }
 
             Statistics statistics = context.getStatistics();
             Statistics inputStatistics = context.getChildStatistics(0);
-            double penalty = 1.0;
+            double factor = 1.0;
+
             if (node.getDistinctColumnDataSkew() != null) {
-                penalty = computeDataSkewPenaltyOfGroupByCountDistinct(node, inputStatistics);
+                factor = computeDataSkewPenaltyOfGroupByCountDistinct(node, inputStatistics);
+            } else if (node.isSplit() && node.getType().isLocal()) {
+                factor = 0.1;
             }
 
-            return CostEstimate.of(inputStatistics.getComputeSize() * penalty, statistics.getComputeSize() * penalty,
+            return CostEstimate.of(inputStatistics.getComputeSize() * factor, statistics.getComputeSize() * factor,
                     0);
         }
 
@@ -351,15 +309,7 @@ public class CostModel {
             SessionVariable sessionVariable = ctx.getSessionVariable();
             DistributionSpec distributionSpec = node.getDistributionSpec();
             double outputSize = statistics.getOutputSize(outputColumns);
-            double penalty = 1.0;
-            Operator childOp = context.getChildOperator(0);
-            if (childOp instanceof PhysicalHashAggregateOperator) {
-                PhysicalHashAggregateOperator childAggOp = (PhysicalHashAggregateOperator) childOp;
-                DataSkewInfo skewInfo = childAggOp.getDistinctColumnDataSkew();
-                if (skewInfo != null && skewInfo.getStage() == 3) {
-                    penalty = skewInfo.getPenaltyFactor();
-                }
-            }
+            double factor = setExchangeCostFactor(context.getChildOperator(0));
             // set network start cost 1 at least
             // avoid choose network plan when the cost is same as colocate plans
             switch (distributionSpec.getType()) {
@@ -389,7 +339,7 @@ public class CostModel {
                             && GlobalStateMgr.getCurrentSystemInfo().isSingleBackendAndComputeNode();
                     double networkCost = ignoreNetworkCost ? 0 : Math.max(outputSize, 1);
 
-                    result = CostEstimate.of(outputSize * penalty, 0, networkCost * penalty);
+                    result = CostEstimate.of(outputSize * factor, 0, networkCost * factor);
                     break;
                 case GATHER:
                     result = CostEstimate.of(outputSize, 0,
@@ -522,5 +472,64 @@ public class CostModel {
         public CostEstimate visitPhysicalNoCTE(PhysicalNoCTEOperator node, ExpressionContext context) {
             return CostEstimate.zero();
         }
+
+        // if there exists a skew hint factor use it
+        // if this is an enforcer above a local agg set 0.1 to reduce this exchange cost.
+        // The reason is as below:
+        // In most scenes, local agg -> exchange -> global agg is better than exchange -> global agg
+        // but when we estimated a very high cardinality of group by key but actually its cardinality is small,
+        // the local agg cost is same as the global agg cost and the planner choose the second one which
+        // is relatively slow when exchange a large amount of data.
+        private double setExchangeCostFactor(Operator childOp) {
+            double factor = 1.0;
+            if (childOp instanceof LogicalAggregationOperator) {
+                LogicalAggregationOperator childAggOp = childOp.cast();
+                DataSkewInfo skewInfo = childAggOp.getDistinctColumnDataSkew();
+                if (skewInfo != null && skewInfo.getStage() == 3) {
+                    factor = skewInfo.getPenaltyFactor();
+                } else if (childAggOp.isSplit() && childAggOp.getType().isLocal()) {
+                    factor = 0.1;
+                }
+            } else if (childOp instanceof PhysicalHashAggregateOperator) {
+                PhysicalHashAggregateOperator childAggOp = childOp.cast();
+                DataSkewInfo skewInfo = childAggOp.getDistinctColumnDataSkew();
+                if (skewInfo != null && skewInfo.getStage() == 3) {
+                    factor = skewInfo.getPenaltyFactor();
+                } else if (childAggOp.isSplit() && childAggOp.getType().isLocal()) {
+                    factor = 0.1;
+                }
+            }
+            return factor;
+        }
+
+        // use cost to eliminate invalid one phase agg plan
+        private Optional<CostEstimate> invalidOneStageAggCost(PhysicalHashAggregateOperator node, ExpressionContext context) {
+            boolean mustMultiStageAgg = Utils.mustGenerateMultiStageAggregate(node, context.getChildOperator(0));
+            if (mustMultiStageAgg && !node.isSplit() && node.getType().isGlobal()) {
+
+                return Optional.of(CostEstimate.infinite());
+            }
+            return Optional.empty();
+        }
+
+        // If we already have a one stage agg best plan like input -> global agg, use cost to
+        // eliminate plan like input -> local agg -> global agg plan to remove this unnecessary local agg step.
+        private Optional<CostEstimate> redundantTwoStageAggCost(PhysicalHashAggregateOperator node, ExpressionContext context) {
+            if (node.isSplit() && node.getType().isGlobal()
+                    && CollectionUtils.isNotEmpty(inputProperties)
+                    && inputProperties.get(0).getDistributionProperty().isShuffle()
+                    && context.getGroupExpression() != null) {
+                HashDistributionSpec spec = (HashDistributionSpec) inputProperties.get(0).getDistributionProperty().getSpec();
+                HashDistributionDesc desc = spec.getHashDistributionDesc();
+                Group group = context.getGroupExpression().getGroup();
+                boolean existBestPlan = CollectionUtils.isNotEmpty(group.getAllBestExpressionWithCost());
+                if (existBestPlan && desc.getSourceType() != HashDistributionDesc.SourceType.SHUFFLE_AGG) {
+                    return Optional.of(CostEstimate.infinite());
+                }
+            }
+            return Optional.empty();
+        }
     }
+
+
 }

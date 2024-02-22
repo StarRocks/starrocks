@@ -15,7 +15,7 @@ You can submit an asynchronous INSERT task using [SUBMIT TASK](./SUBMIT_TASK.md)
 ```Bash
 INSERT { INTO | OVERWRITE } [db_name.]<table_name>
 [ PARTITION (<partition_name> [, ...) ]
-[ TEMPORARY_PARTITION (<temporary_partition_name>[, ...) ]
+[ TEMPORARY PARTITION (<temporary_partition_name>[, ...) ]
 [ WITH LABEL <label>]
 [ (<column_name>[, ...]) ]
 { VALUES ( { <expression> | DEFAULT }[, ...] )

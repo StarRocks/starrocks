@@ -123,7 +123,7 @@ Status DataDir::init_persistent_index_dir() {
 }
 
 Status DataDir::_init_tmp_dir() {
-    std::string tmp_path = _path + TMP_PREFIX;
+    std::string tmp_path = get_tmp_path();
     auto st = _fs->create_dir_recursive(tmp_path);
     LOG_IF(ERROR, !st.ok()) << "failed to create temp directory " << tmp_path;
     return st;
@@ -154,7 +154,7 @@ void DataDir::health_check() {
     if (_is_used) {
         Status res = _read_and_write_test_file();
         if (!res.ok()) {
-            LOG(WARNING) << "store read/write test file occur IO Error. path=" << _path;
+            LOG(WARNING) << "store read/write test file occur IO Error. path=" << _path << ", res=" << res.to_string();
             if (is_io_error(res)) {
                 _is_used = false;
             }

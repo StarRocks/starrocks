@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.plan;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -140,6 +141,7 @@ public class MockTpchStatisticStorage implements StatisticStorage {
         tableCustomer.put("c_mktsegment", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 10, 5));
         // C_COMMENT VARCHAR(117)
         tableCustomer.put("c_comment", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 117, 149968));
+        tableCustomer.put("pad", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 1, 1));
         tableStatistics.put("customer", tableCustomer);
 
         Map<String, ColumnStatistic> tableLineitem = new CaseInsensitiveMap<>();
@@ -315,6 +317,8 @@ public class MockTpchStatisticStorage implements StatisticStorage {
         // S_COMMENT   VARCHAR(101)
         tableSupplier.put("s_comment", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 101, 10000));
         tableStatistics.put("supplier", tableSupplier);
+
+        tableStatistics.put("lineorder_new_l", ImmutableMap.of("P_SIZE", new ColumnStatistic(1, 5, 0, 1, 5)));
     }
 
     @Override

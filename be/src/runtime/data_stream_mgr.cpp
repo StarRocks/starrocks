@@ -168,7 +168,7 @@ Status DataStreamMgr::transmit_chunk(const PTransmitChunkParams& request, ::goog
     TUniqueId t_finst_id;
     t_finst_id.hi = finst_id.hi();
     t_finst_id.lo = finst_id.lo();
-    SCOPED_SET_TRACE_INFO({}, {}, t_finst_id);
+    SCOPED_SET_TRACE_INFO({}, {}, t_finst_id)
     std::shared_ptr<DataStreamRecvr> recvr = find_recvr(t_finst_id, request.node_id());
     if (recvr == nullptr) {
         // The receiver may remove itself from the receiver map via deregister_recvr()
@@ -234,6 +234,18 @@ Status DataStreamMgr::deregister_recvr(const TUniqueId& fragment_instance_id, Pl
         LOG(ERROR) << err.str();
         return Status::InternalError(err.str());
     }
+}
+
+void DataStreamMgr::close() {
+    for (size_t i = 0; i < _receiver_map->size(); i++) {
+        std::lock_guard<Mutex> l(_lock[i]);
+        for (auto& iter : _receiver_map[i]) {
+            for (auto& sub_iter : *iter.second) {
+                sub_iter.second->cancel_stream();
+            }
+        }
+    }
+    _pass_through_chunk_buffer_manager.close();
 }
 
 void DataStreamMgr::cancel(const TUniqueId& fragment_instance_id) {

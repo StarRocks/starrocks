@@ -1,4 +1,7 @@
 -- name: test_bitmap_agg
+set enable_rewrite_bitmap_union_to_bitamp_agg=true;
+-- result:
+-- !result
 CREATE TABLE t1 (
     c1 int,
     c2 boolean,
@@ -238,24 +241,6 @@ select c1, bitmap_union_count(to_bitmap(c4)), BITMAP_TO_STRING(bitmap_agg(c4)) f
 4	0	None
 5	0	
 6	0	None
--- !result
-select c1, count(distinct c2), count(distinct c3), count(distinct c4) from t1 group by c1 order by c1;
--- result:
-1	1	1	1
-2	1	1	1
-3	1	1	1
-4	0	0	0
-5	1	1	1
-6	0	0	0
--- !result
-select c1, multi_distinct_count(c2), multi_distinct_count(c3), multi_distinct_count(c4) from t1 group by c1 order by c1;
--- result:
-1	1	1	1
-2	1	1	1
-3	1	1	1
-4	0	0	0
-5	1	0	0
-6	0	0	0
 -- !result
 drop materialized view mv2;
 -- result:

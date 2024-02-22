@@ -274,6 +274,7 @@ public class SimpleSchedulerTest {
         String host = backendA.getHost();
         List<Integer> ports = new ArrayList<Integer>();
         Collections.addAll(ports, backendA.getBePort(), backendA.getBrpcPort(), backendA.getHttpPort());
+
         boolean accessible = NetUtils.checkAccessibleForAllPorts(host, ports);
         Assert.assertFalse(accessible);
 
@@ -320,7 +321,7 @@ public class SimpleSchedulerTest {
                 times = 2;
 
                 // backend 10001 will be removed
-                systemInfoService.getBackend(10001L);
+                systemInfoService.getBackendOrComputeNode(10001L);
                 result = null;
                 times = 1;
 
@@ -330,11 +331,11 @@ public class SimpleSchedulerTest {
                 backend1.setHost("host10002");
                 backend1.setBrpcPort(10002);
                 backend1.setHttpPort(10012);
-                systemInfoService.getBackend(10002L);
+                systemInfoService.getBackendOrComputeNode(10002L);
                 result = backend1;
                 times = 1;
 
-                systemInfoService.checkBackendAvailable(10002L);
+                systemInfoService.checkNodeAvailable(backend1);
                 result = true;
                 times = 1;
 
@@ -343,16 +344,16 @@ public class SimpleSchedulerTest {
                 times = 1;
 
                 // backend 10003, which is not available, will not be be removed
-                Backend backend2 = new Backend();
-                backend2.setAlive(false);
-                backend2.setHost("host10003");
-                backend2.setBrpcPort(10003);
-                backend2.setHttpPort(10013);
-                systemInfoService.getBackend(10003L);
-                result = backend2;
+                ComputeNode computeNode1 = new Backend();
+                computeNode1.setAlive(false);
+                computeNode1.setHost("host10003");
+                computeNode1.setBrpcPort(10003);
+                computeNode1.setHttpPort(10013);
+                systemInfoService.getBackendOrComputeNode(10003L);
+                result = computeNode1;
                 times = 2;
 
-                systemInfoService.checkBackendAvailable(10003L);
+                systemInfoService.checkNodeAvailable(computeNode1);
                 result = false;
                 times = 2;
             }

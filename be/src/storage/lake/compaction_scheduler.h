@@ -248,8 +248,6 @@ private:
 
     int choose_task_queue_by_txn_id(int64_t txn_id) { return txn_id % _task_queues.task_queue_safe_size(); }
 
-    bool txn_log_exists(int64_t tablet_id, int64_t txn_id) const;
-
     bool reschedule_task_if_needed(int id);
 
     TabletManager* _tablet_mgr;

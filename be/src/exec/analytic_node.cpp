@@ -122,9 +122,9 @@ Status AnalyticNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     return Status::OK();
 }
 
-Status AnalyticNode::close(RuntimeState* state) {
+void AnalyticNode::close(RuntimeState* state) {
     if (is_closed()) {
-        return Status::OK();
+        return;
     }
 
     if (_analytor != nullptr) {
@@ -132,7 +132,7 @@ Status AnalyticNode::close(RuntimeState* state) {
         _analytor.reset();
     }
 
-    return ExecNode::close(state);
+    ExecNode::close(state);
 }
 
 Status AnalyticNode::_get_next_for_unbounded_frame(RuntimeState* state, ChunkPtr* chunk, bool* eos) {

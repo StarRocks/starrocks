@@ -14,7 +14,7 @@
 
 package com.starrocks.privilege.ranger;
 
-import com.starrocks.catalog.MaterializedView;
+import com.starrocks.common.Config;
 import com.starrocks.sql.ast.UserIdentity;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.logging.log4j.LogManager;
@@ -28,19 +28,23 @@ import java.util.HashSet;
 import java.util.Set;
 
 public class RangerStarRocksAccessRequest extends RangerAccessRequestImpl {
-    private static final Logger LOG = LogManager.getLogger(MaterializedView.class);
+    private static final Logger LOG = LogManager.getLogger(RangerStarRocksAccessRequest.class);
 
     private RangerStarRocksAccessRequest() {
     }
 
     public static RangerStarRocksAccessRequest createAccessRequest(RangerAccessResourceImpl resource, UserIdentity user,
                                                                    String accessType) {
-        UserGroupInformation ugi = UserGroupInformation.createRemoteUser(user.getUser());
-        String[] groups = ugi.getGroupNames();
         Set<String> userGroups = null;
-        if (groups != null && groups.length > 0) {
-            userGroups = new HashSet<>(Arrays.asList(groups));
+        if (Config.ranger_user_ugi) {
+            UserGroupInformation ugi = UserGroupInformation.createRemoteUser(user.getUser());
+            String[] groups = ugi.getGroupNames();
+
+            if (groups != null && groups.length > 0) {
+                userGroups = new HashSet<>(Arrays.asList(groups));
+            }
         }
+
         RangerStarRocksAccessRequest request = new RangerStarRocksAccessRequest();
         request.setUser(user.getUser());
         request.setUserGroups(userGroups);

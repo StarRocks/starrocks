@@ -347,7 +347,8 @@ public final class SqlToScalarOperatorTranslator {
             Preconditions.checkState(node.getChildren().size() == 2);
             ScalarOperator collectionOperator = visit(node.getChild(0), context.clone(node));
             ScalarOperator subscriptOperator = visit(node.getChild(1), context.clone(node));
-            return new CollectionElementOperator(node.getType(), collectionOperator, subscriptOperator);
+            return new CollectionElementOperator(node.getType(), collectionOperator, subscriptOperator,
+                    node.isCheckIsOutOfBounds());
         }
 
         @Override

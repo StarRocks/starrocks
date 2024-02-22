@@ -188,7 +188,7 @@ public class AnalyzeMgr implements Writable {
 
         expireList.forEach(status -> analyzeStatusMap.remove(status.getId()));
         StatisticExecutor statisticExecutor = new StatisticExecutor();
-        statisticExecutor.dropTableStatistics(StatisticUtils.buildConnectContext(), tableUUID);
+        statisticExecutor.dropExternalTableStatistics(StatisticUtils.buildConnectContext(), tableUUID);
     }
 
     public void addBasicStatsMeta(BasicStatsMeta basicStatsMeta) {

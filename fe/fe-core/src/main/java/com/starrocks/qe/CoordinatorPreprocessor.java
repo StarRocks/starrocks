@@ -690,6 +690,13 @@ public class CoordinatorPreprocessor {
                             hostSet.add(e.second);
                             recordUsedBackend(e.second, e.first);
                         });
+
+                        // The adaptive choose nodes process may change the selected nodes number.
+                        // When enable pipeline engine but dop is not 0, We have to change the maxParallelism value
+                        // to ensure it keeps equal with the size of hostSet.
+                        if (usePipeline) {
+                            maxParallelism = hostSet.size();
+                        }
                     }
                 }
 
@@ -1716,7 +1723,7 @@ public class CoordinatorPreprocessor {
 
                 if (isEnablePipelineEngine) {
                     commonParams.setIs_pipeline(true);
-                    commonParams.getQuery_options().setBatch_size(SessionVariable.PIPELINE_BATCH_SIZE);
+                    commonParams.getQuery_options().setBatch_size(sessionVariable.getChunkSize());
                     commonParams.setEnable_shared_scan(sessionVariable.isEnableSharedScan());
                     commonParams.params.setEnable_exchange_pass_through(sessionVariable.isEnableExchangePassThrough());
                     commonParams.params.setEnable_exchange_perf(sessionVariable.isEnableExchangePerf());

@@ -17,16 +17,21 @@ package com.starrocks.sql.plan;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.ConfigBase;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.planner.AggregationNode;
 import com.starrocks.planner.PlanFragment;
+import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.Coordinator;
+import com.starrocks.qe.CoordinatorPreprocessor;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.rule.transformation.DeriveRangeJoinPredicateRule;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
@@ -84,16 +89,12 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         String sql = "select count(distinct P_PARTKEY) from part group by P_BRAND;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  3:AGGREGATE (update serialize)\n" +
+        assertContains(plan, "2:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  output: count(1: P_PARTKEY)\n" +
                 "  |  group by: 4: P_BRAND\n" +
                 "  |  \n" +
-                "  2:AGGREGATE (merge finalize)\n" +
-                "  |  group by: 4: P_BRAND, 1: P_PARTKEY\n" +
-                "  |  \n" +
-                "  1:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
+                "  1:AGGREGATE (update finalize)\n" +
                 "  |  group by: 4: P_BRAND, 1: P_PARTKEY");
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
@@ -1054,12 +1055,12 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         String sql = "select count(distinct C_NAME) from customer group by C_CUSTKEY;";
         ExecPlan plan = getExecPlan(sql);
         Assert.assertTrue(plan.getFragments().get(1).isAssignScanRangesPerDriverSeq());
-        assertContains(plan.getExplainString(TExplainLevel.NORMAL), "2:AGGREGATE (update finalize)\n" +
-                "  |  output: count(2: C_NAME)\n" +
-                "  |  group by: 1: C_CUSTKEY\n" +
+        assertContains(plan.getExplainString(TExplainLevel.NORMAL), "2:Project\n" +
+                "  |  <slot 10> : 10: count\n" +
                 "  |  \n" +
-                "  1:AGGREGATE (update serialize)\n" +
-                "  |  group by: 1: C_CUSTKEY, 2: C_NAME");
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: multi_distinct_count(2: C_NAME)\n" +
+                "  |  group by: 1: C_CUSTKEY");
 
         ConnectContext.get().getSessionVariable().setNewPlanerAggStage(4);
         sql = "select count(distinct C_CUSTKEY) from customer;";
@@ -1580,5 +1581,54 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 3: C_ADDRESS = 11: P_NAME");
 
+    }
+
+    @Test
+    public void testNdvInOrPredicate() throws Exception {
+        String sql = "select count(*) from customer where C_NAME = 'b' or C_NATIONKEY = 1";
+        String plan = getCostExplain(sql);
+        assertCContains(plan, "C_NAME-->[-Infinity, Infinity, 0.0, 25.0, 600000.0] ESTIMATE",
+                "C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE");
+    }
+
+    @Test
+    public void testDecreaseNodesInPipeline() throws Exception {
+        ConfigBase.setMutableConfig("adaptive_choose_instances_threshold", "3");
+        connectContext.getSessionVariable().setChooseExecuteInstancesMode("auto");
+        connectContext.getSessionVariable().setPipelineDop(2);
+        connectContext.setExecutionId(new TUniqueId(0x33, 0x0));
+        String sql = "select count(*) from lineitem group by l_shipmode";
+        sql = "select count(*) from lineorder_new_l group by P_SIZE";
+        ExecPlan execPlan = getExecPlan(sql);
+        Coordinator coord = new Coordinator(connectContext, execPlan.getFragments(), execPlan.getScanNodes(),
+                execPlan.getDescTbl().toThrift());
+        coord.prepareExec();
+        PlanFragmentId botFragment = coord.getFragments().get(2).getFragmentId();
+        CoordinatorPreprocessor.FragmentExecParams params1 = coord.getFragmentExecParamsMap().get(botFragment);
+        Assert.assertEquals(3, params1.instanceExecParams.size());
+
+        PlanFragmentId exchangeFragment = coord.getFragments().get(1).getFragmentId();
+        CoordinatorPreprocessor.FragmentExecParams params2 = coord.getFragmentExecParamsMap().get(exchangeFragment);
+
+        // in pipeline engine, decrease nodes to 1. The instance exec param size should be 1.
+        Assert.assertEquals(1, params2.instanceExecParams.size());
+        Assert.assertEquals(1, params2.perExchNumSenders.size());
+
+        connectContext.getSessionVariable().setEnablePipelineEngine(false);
+        execPlan = getExecPlan(sql);
+        coord = new Coordinator(connectContext, execPlan.getFragments(), execPlan.getScanNodes(),
+                execPlan.getDescTbl().toThrift());
+        coord.prepareExec();
+        botFragment = coord.getFragments().get(2).getFragmentId();
+        params1 = coord.getFragmentExecParamsMap().get(botFragment);
+        Assert.assertEquals(3, params1.instanceExecParams.size());
+
+        exchangeFragment = coord.getFragments().get(1).getFragmentId();
+        params2 = coord.getFragmentExecParamsMap().get(exchangeFragment);
+
+        // not in pipeline engine, decrease nodes to 1. The instance exec param size also be 3.
+        Assert.assertEquals(3, params2.instanceExecParams.size());
+        Assert.assertEquals(1, params2.instanceExecParams.stream().map(e -> e.getHost()).collect(Collectors.toSet()).size());
+        Assert.assertEquals(1, params2.perExchNumSenders.size());
     }
 }

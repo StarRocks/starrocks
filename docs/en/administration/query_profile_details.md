@@ -162,6 +162,10 @@ Description: Cumulative allocated memory for all FragmentInstances under this Fr
 
 Description: Cumulative deallocated memory for all FragmentInstances under this Fragment.
 
+##### InstancePeakMemoryUsage
+
+Description: The peak memory usage across all FragmentInstances under this Fragment.
+
 ### Pipeline Metrics
 
 The relationship between core metrics is illustrated in the following diagram:
@@ -249,7 +253,7 @@ Description: Cumulative memory deallocated by the Operator.
 
 ##### OperatorPeakMemoryUsage
 
-Description: Peak memory usage of the Operator. This metric is meaningful for certain materialization operators, such as aggregation, sorting, Join, etc. It is not relevant for operators like Project because memory is allocated by the current operator and released by subsequent operators, making peak memory equivalent to cumulative allocated memory for the current operator.
+Description: Peak memory usage by the Operator across all compute nodes. This metric is meaningful for certain materialization operators, such as aggregation, sorting, Join, etc. It is not relevant for operators like Project because memory is allocated by the current operator and released by subsequent operators, making peak memory equivalent to cumulative allocated memory for the current operator. In versions earlier than v3.1.8 and v3.2.3, this metric represents the peak memory usage by the Operator across all *PipelineDrivers*.
 
 ##### PrepareTime
 
@@ -423,11 +427,16 @@ To facilitate a better understanding of the various metrics within the Scan Oper
 
 - Description: Execution time of IO tasks.
 - Level: Primary metric
-- Sub-metrics: CreateSegmentIter, GetDelVec, GetDeltaColumnGroup, GetRowsets, IOTime, LateMaterialize, ReadPKIndex, SegmentInit, SegmentRead
+- Sub-metrics: CreateSegmentIter, DictDecode, GetDelVec, GetDeltaColumnGroup, GetRowsets, IOTime, LateMaterialize, ReadPKIndex, SegmentInit, SegmentRead
 
 ##### CreateSegmentIter
 
 - Description: Time spent creating the Segment Iterator.
+- Level: Secondary metric
+
+##### DictDecode
+
+- Description: Time spent on decoding dictionary for low cardinality optimization.
 - Level: Secondary metric
 
 ##### GetDelVec

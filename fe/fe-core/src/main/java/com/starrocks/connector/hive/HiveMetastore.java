@@ -26,6 +26,7 @@ import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.NotificationEventResponse;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
+import org.apache.hadoop.hive.ql.io.AcidUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -76,6 +77,11 @@ public class HiveMetastore implements IHiveMetastore {
 
         if (!HiveMetastoreApiConverter.isHudiTable(table.getSd().getInputFormat())) {
             validateHiveTableType(table.getTableType());
+            if (AcidUtils.isFullAcidTable(table)) {
+                throw new StarRocksConnectorException(
+                        String.format("%s.%s is a hive transactional table(full acid), sr didn't support it yet", dbName,
+                                tableName));
+            }
             if (table.getTableType().equalsIgnoreCase("VIRTUAL_VIEW")) {
                 return HiveMetastoreApiConverter.toHiveView(table, catalogName);
             } else {

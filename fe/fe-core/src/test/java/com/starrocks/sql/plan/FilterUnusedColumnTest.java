@@ -67,10 +67,7 @@ public class FilterUnusedColumnTest extends PlanTestBase {
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\"\n" +
                 ");");
-        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW tpcds_100g_date_dim_mv as \n" +
-                "SELECT d_dow, d_day_name, max(d_date) \n" +
-                "FROM tpcds_100g_date_dim\n" +
-                "GROUP BY d_dow, d_day_name");
+
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         connectContext.getSessionVariable().setSqlMode(2);
         connectContext.getSessionVariable().enableTrimOnlyFilteredColumnsInScanStage();
@@ -147,14 +144,25 @@ public class FilterUnusedColumnTest extends PlanTestBase {
 
         try {
             connectContext.getSessionVariable().setEnableGlobalRuntimeFilter(true);
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW tpcds_100g_date_dim_mv as \n" +
+                    "SELECT d_dow, d_day_name, max(d_date) \n" +
+                    "FROM tpcds_100g_date_dim\n" +
+                    "GROUP BY d_dow, d_day_name");
 
             String sql;
             String plan;
 
             // Key columns cannot be pruned in the non-skip-aggr scan stage of MV.
+            sql = "select d_day_name from tpcds_100g_date_dim where d_dow > 1";
+            plan = getThriftPlan(sql);
+            assertContains(plan, "unused_output_column_name:[d_dow]");
+            assertContains(plan, "rollup_name:tpcds_100g_date_dim");
+
+            // Columns can pruned when using MV.
             sql = "select distinct d_day_name from tpcds_100g_date_dim where d_dow > 1";
             plan = getThriftPlan(sql);
-            assertContains(plan, "unused_output_column_name:[]");
+            assertContains(plan, "unused_output_column_name:[d_dow]");
+            assertContains(plan, "is_preaggregation:true");
             assertContains(plan, "rollup_name:tpcds_100g_date_dim_mv");
 
             // Columns can be pruned when not using MV.
@@ -165,6 +173,11 @@ public class FilterUnusedColumnTest extends PlanTestBase {
 
         } finally {
             connectContext.getSessionVariable().setEnableGlobalRuntimeFilter(prevEnable);
+            try {
+                starRocksAssert.dropMaterializedView("tpcds_100g_date_dim_mv");
+            } catch (Exception e) {
+                //
+            }
         }
     }
 

@@ -69,11 +69,6 @@ public class FunctionParams implements Writable {
         this.isDistinct = isDistinct;
         this.exprs = exprs;
         this.orderByElements = orderByElements;
-        // add order-by exprs in exprs, so that treating them as function's children
-        if(orderByElements != null && !orderByElements.isEmpty()) {
-            this.exprs.addAll(orderByElements.stream().map(OrderByElement::getExpr)
-                    .collect(Collectors.toList()));
-        }
     }
 
     // c'tor for non-star, non-distinct params

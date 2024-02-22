@@ -55,10 +55,8 @@ Status StarCacheWrapper::remove_cache(const std::string& key) {
     return Status::OK();
 }
 
-std::unordered_map<std::string, double> StarCacheWrapper::cache_stats() {
-    // TODO: fill some statistics information
-    std::unordered_map<std::string, double> stats;
-    return stats;
+const DataCacheMetrics StarCacheWrapper::cache_metrics() {
+    return _cache->metrics();
 }
 
 Status StarCacheWrapper::shutdown() {

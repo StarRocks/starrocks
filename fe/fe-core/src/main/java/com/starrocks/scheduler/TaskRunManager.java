@@ -15,12 +15,16 @@
 
 package com.starrocks.scheduler;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
+import com.google.gson.JsonObject;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.QueryableReentrantLock;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.Util;
+import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
@@ -36,7 +40,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
-public class TaskRunManager {
+public class TaskRunManager implements MemoryTrackable {
 
     private static final Logger LOG = LogManager.getLogger(TaskRunManager.class);
 
@@ -94,6 +98,7 @@ public class TaskRunManager {
         if (taskRun == null) {
             return false;
         }
+        taskRun.kill();
         ConnectContext runCtx = taskRun.getRunCtx();
         if (runCtx != null) {
             runCtx.kill(false);
@@ -216,14 +221,17 @@ public class TaskRunManager {
                         break;
                     }
                     TaskRun pendingTaskRun = taskRunQueue.poll();
-                    LOG.info("start to schedule pending task run to execute: {}", pendingTaskRun);
-                    taskRunExecutor.executeTaskRun(pendingTaskRun);
-                    runningTaskRunMap.put(taskId, pendingTaskRun);
-                    // RUNNING state persistence is for FE FOLLOWER update state
-                    TaskRunStatusChange statusChange = new TaskRunStatusChange(taskId, pendingTaskRun.getStatus(),
-                            Constants.TaskRunState.PENDING, Constants.TaskRunState.RUNNING);
-                    GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
-                    currentRunning++;
+                    if (taskRunExecutor.executeTaskRun(pendingTaskRun)) {
+                        LOG.info("start to schedule pending task run to execute: {}", pendingTaskRun);
+                        runningTaskRunMap.put(taskId, pendingTaskRun);
+                        // RUNNING state persistence is for FE FOLLOWER update state
+                        TaskRunStatusChange statusChange = new TaskRunStatusChange(taskId, pendingTaskRun.getStatus(),
+                                Constants.TaskRunState.PENDING, Constants.TaskRunState.RUNNING);
+                        GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
+                        currentRunning++;
+                    } else {
+                        LOG.warn("failed to scheduled task-run {}", pendingTaskRun);
+                    }
                 }
             }
         }
@@ -306,5 +314,32 @@ public class TaskRunManager {
 
     public long getHistoryTaskRunCount() {
         return taskRunHistory.getTaskRunCount();
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        long validPendingCount = 0;
+        for (Long taskId : pendingTaskRunMap.keySet()) {
+            PriorityBlockingQueue<TaskRun> taskRuns = pendingTaskRunMap.get(taskId);
+            if (taskRuns != null && !taskRuns.isEmpty()) {
+                validPendingCount += taskRuns.size();
+            }
+        }
+
+        return ImmutableMap.of("PendingTaskRun", validPendingCount,
+                "RunningTaskRun", (long) runningTaskRunMap.size(),
+                "HistoryTaskRun", taskRunHistory.getTaskRunCount());
+    }
+
+    /**
+     * For diagnosis purpose
+     *
+     * @return JSON-representation of the whole status
+     */
+    public String inspect() {
+        JsonObject res = new JsonObject();
+        res.addProperty("running", GsonUtils.GSON.toJson(runningTaskRunMap));
+        res.addProperty("pending", GsonUtils.GSON.toJson(pendingTaskRunMap));
+        return res.toString();
     }
 }

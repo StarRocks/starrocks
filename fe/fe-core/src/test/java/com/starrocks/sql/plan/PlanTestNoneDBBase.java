@@ -32,6 +32,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TExplainLevel;
@@ -549,11 +550,38 @@ public class PlanTestNoneDBBase {
         }
     }
 
+    private void checkWithIgnoreTabletListAndColRefIds(String expect, String actual) {
+        QueryDebugOptions queryDebugOptions =
+                connectContext.getSessionVariable().getQueryDebugOptions();
+        boolean isNormalizePredicate =
+                queryDebugOptions.enableNormalizePredicateAfterMVRewrite;
+
+        String ignoreExpect = Stream.of(expect.split("\n"))
+                .filter(s -> !s.contains("tabletList"))
+                .map(str -> str.replaceAll("\\d+", "").trim())
+                .map(str -> {
+                    return isNormalizePredicate ?
+                            Arrays.stream(str.split("")).sorted().collect(Collectors.joining())
+                            : str;
+                })
+                .collect(Collectors.joining("\n"));
+        String ignoreActual = Stream.of(actual.split("\n"))
+                .filter(s -> !s.contains("tabletList"))
+                .map(str -> str.replaceAll("\\d+", "").trim())
+                .map(str -> {
+                    return isNormalizePredicate ?
+                            Arrays.stream(str.split("")).sorted().collect(Collectors.joining())
+                            : str;
+                })
+                .collect(Collectors.joining("\n"));
+        Assert.assertEquals(actual, ignoreExpect, ignoreActual);
+    }
+
     protected void assertPlanContains(String sql, String... explain) throws Exception {
         String explainString = getFragmentPlan(sql);
 
         for (String expected : explain) {
-            Assert.assertTrue("expected is: " + expected + " but plan is \n" + explainString,
+            Assert.assertTrue("expected is:\n" + expected + "\n but plan is \n" + explainString,
                     StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected));
         }
     }

@@ -19,7 +19,6 @@
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/spill/operator_mem_resource_manager.h"
 #include "exprs/runtime_filter_bank.h"
-#include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/mem_tracker.h"
 #include "util/runtime_profile.h"
@@ -144,7 +143,7 @@ public:
 
     int32_t get_plan_node_id() const { return _plan_node_id; }
 
-    MemTracker* mem_tracker() const { return _mem_tracker.get(); }
+    MemTracker* mem_tracker() const { return _mem_tracker; }
 
     virtual std::string get_name() const {
         return strings::Substitute("$0_$1_$2($3)", _name, _plan_node_id, this, is_finished() ? "X" : "O");
@@ -260,6 +259,7 @@ protected:
     const std::string _name;
     // Which plan node this operator belongs to
     const int32_t _plan_node_id;
+    const bool _is_subordinate;
     const int32_t _driver_sequence;
     // _common_metrics and _unique_metrics are the only children of _runtime_profile
     // _common_metrics contains the common metrics of Operator, including counters and sub profiles,
@@ -311,9 +311,11 @@ private:
     void _init_rf_counters(bool init_bloom);
     void _init_conjuct_counters();
 
-    // All the memory usage will be automatically added to this MemTracker by memory allocate hook
-    // Do not use this MemTracker manually
-    std::shared_ptr<MemTracker> _mem_tracker = nullptr;
+    // All the memory usage will be automatically added to this MemTracker by memory allocate hook.
+    // DO NOT use this MemTracker manually.
+    // The MemTracker is owned by QueryContext, so that all the operators with the same plan_node_id can share
+    // the same MemTracker.
+    MemTracker* _mem_tracker = nullptr;
 };
 
 class OperatorFactory {

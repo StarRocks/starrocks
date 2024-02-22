@@ -51,9 +51,9 @@ class LakeTabletsChannelTest : public testing::Test {
 public:
     LakeTabletsChannelTest() {
         _schema_id = next_id();
-        _mem_tracker = std::make_unique<MemTracker>(-1);
+        _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _location_provider = std::make_unique<lake::FixedLocationProvider>(kTestGroupPath);
-        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider.get());
+        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider.get(), _mem_tracker.get());
         _tablet_manager =
                 std::make_unique<lake::TabletManager>(_location_provider.get(), _update_manager.get(), 1024 * 1024);
 

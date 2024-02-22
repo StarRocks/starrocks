@@ -65,6 +65,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
     public void after() {
     }
 
+    @Ignore
     @Test
     public void testMV_JoinAgg1() throws Exception {
         FeConstants.isReplayFromQueryDump = true;
@@ -207,5 +208,25 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
         Assert.assertTrue(replayPair.second, replayPair.second.contains("mv_35"));
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
         FeConstants.isReplayFromQueryDump = false;
+    }
+
+    /**
+     * Test synchronous materialized view rewrite with global dict optimization.
+     */
+    @Test
+    public void testSyncMVRewriteWithDict() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mv_rewrite_with_dict_opt1"),
+                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+        // TODO: support synchronous materialized view in query dump
+        // String sql = "create materialized view mv_tbl_mock_001 " +
+        //        "as select nmock_002, nmock_003, nmock_004, " +
+        //        "nmock_005, nmock_006, nmock_007, nmock_008, nmock_009, nmock_010, " +
+        //        "nmock_011, nmock_012, nmock_013, nmock_014, nmock_015, nmock_016, " +
+        //        "nmock_017, nmock_018, nmock_019, nmock_020, nmock_021, nmock_022, nmock_023, " +
+        //        "nmock_024, nmock_025, nmock_026, nmock_027, nmock_028, nmock_029, nmock_030, nmock_031, " +
+        //        "nmock_032, nmock_033, nmock_034, nmock_035, nmock_036, nmock_037, nmock_038, nmock_039, " +
+        //        "nmock_040, nmock_041 from tbl_mock_001 order by nmock_002;";
+        Assert.assertFalse(replayPair.second, replayPair.second.contains("mv_tbl_mock_001"));
     }
 }

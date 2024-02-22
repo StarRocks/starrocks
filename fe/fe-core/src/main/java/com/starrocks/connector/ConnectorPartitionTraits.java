@@ -103,6 +103,11 @@ public abstract class ConnectorPartitionTraits {
     abstract PartitionKey createPartitionKey(List<String> values, List<Column> columns) throws AnalysisException;
 
     /**
+     * Whether this table support partition-granular refresh as ref-table
+     */
+    public abstract boolean supportPartitionRefresh();
+
+    /**
      * Get all partitions' name
      */
     abstract List<String> getPartitionNames();
@@ -162,6 +167,11 @@ public abstract class ConnectorPartitionTraits {
                 partitionKey.pushColumn(exprValue, type.getPrimitiveType());
             }
             return partitionKey;
+        }
+
+        @Override
+        public boolean supportPartitionRefresh() {
+            return false;
         }
 
         protected String getTableName() {
@@ -265,6 +275,12 @@ public abstract class ConnectorPartitionTraits {
         }
 
         @Override
+        public boolean supportPartitionRefresh() {
+            // TODO: check partition types
+            return true;
+        }
+
+        @Override
         public Map<String, Range<PartitionKey>> getPartitionKeyRange(Column partitionColumn, Expr partitionExpr) {
             // TODO: check partition type
             return ((OlapTable) table).getRangePartitionMap();
@@ -325,6 +341,11 @@ public abstract class ConnectorPartitionTraits {
     static class HivePartitionTraits extends DefaultTraits {
 
         @Override
+        public boolean supportPartitionRefresh() {
+            return true;
+        }
+
+        @Override
         public String getDbName() {
             return ((HiveMetaStoreTable) table).getDbName();
         }
@@ -375,6 +396,12 @@ public abstract class ConnectorPartitionTraits {
     static class IcebergPartitionTraits extends DefaultTraits {
 
         @Override
+        public boolean supportPartitionRefresh() {
+            // TODO: refine the check
+            return true;
+        }
+
+        @Override
         public String getDbName() {
             return ((IcebergTable) table).getRemoteDbName();
         }
@@ -404,6 +431,13 @@ public abstract class ConnectorPartitionTraits {
     }
 
     static class JDBCPartitionTraits extends DefaultTraits {
+
+        @Override
+        public boolean supportPartitionRefresh() {
+            // TODO: refine check
+            return true;
+        }
+
         @Override
         public String getDbName() {
             return ((JDBCTable) table).getDbName();

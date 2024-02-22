@@ -180,10 +180,10 @@ void ZoneMapIndexWriterImpl<type>::add_values(const void* values, size_t count) 
         const auto* vals = reinterpret_cast<const CppType*>(values);
         auto [pmin, pmax] = std::minmax_element(vals, vals + count);
         if (unaligned_load<CppType>(pmin) < _page_zone_map.min_value.value) {
-            _type_info->direct_copy(&_page_zone_map.min_value.value, pmin, nullptr);
+            _type_info->direct_copy(&_page_zone_map.min_value.value, pmin);
         }
         if (unaligned_load<CppType>(pmax) > _page_zone_map.max_value.value) {
-            _type_info->direct_copy(&_page_zone_map.max_value.value, pmax, nullptr);
+            _type_info->direct_copy(&_page_zone_map.max_value.value, pmax);
         }
     }
 }
@@ -192,10 +192,10 @@ template <LogicalType type>
 Status ZoneMapIndexWriterImpl<type>::flush() {
     // Update segment zone map.
     if (_page_zone_map.min_value.value < _segment_zone_map.min_value.value) {
-        _type_info->direct_copy(&_segment_zone_map.min_value.value, &_page_zone_map.min_value.value, nullptr);
+        _type_info->direct_copy(&_segment_zone_map.min_value.value, &_page_zone_map.min_value.value);
     }
     if (_page_zone_map.max_value.value > _segment_zone_map.max_value.value) {
-        _type_info->direct_copy(&_segment_zone_map.max_value.value, &_page_zone_map.max_value.value, nullptr);
+        _type_info->direct_copy(&_segment_zone_map.max_value.value, &_page_zone_map.max_value.value);
     }
     if (_page_zone_map.has_null) {
         _segment_zone_map.has_null = true;
@@ -255,18 +255,18 @@ Status ZoneMapIndexWriterImpl<type>::finish(WritableFile* wfile, ColumnIndexMeta
 }
 
 ZoneMapIndexReader::ZoneMapIndexReader() {
-    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->column_zonemap_index_mem_tracker(), sizeof(ZoneMapIndexReader));
+    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(), sizeof(ZoneMapIndexReader));
 }
 
 ZoneMapIndexReader::~ZoneMapIndexReader() {
-    MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->column_zonemap_index_mem_tracker(), mem_usage());
+    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(), mem_usage());
 }
 
 StatusOr<bool> ZoneMapIndexReader::load(const IndexReadOptions& opts, const ZoneMapIndexPB& meta) {
     return success_once(_load_once, [&]() {
         Status st = _do_load(opts, meta);
         if (st.ok()) {
-            MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->column_zonemap_index_mem_tracker(),
+            MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(),
                                      mem_usage() - sizeof(ZoneMapIndexReader));
         } else {
             _reset();

@@ -217,12 +217,12 @@ bool DeleteHandler::parse_condition(const std::string& condition_str, TCondition
 
     try {
         // Condition string format
-        // eg:  condition_str="c1 = 1597751948193618247  and length(source)<1;\n;\n"
+        // eg:  condition_str="c1= 1597751948193618247  and length(source)<1;\n;\n"
         //  group1:  ([^\0=<>!\*]{1,64}) matches "c1"
         //  group2:  ((?:=)|(?:!=)|(?:>>)|(?:<<)|(?:>=)|(?:<=)|(?:\*=)|(?:IS)) matches  "="
-        //  group3:  ((?:[\s\S]+)?) matches "1597751948193618247  and length(source)<1;\n;\n"
+        //  group3:  ((?:[\s\S]+)?) matches " 1597751948193618247  and length(source)<1;\n;\n"
         const char* const CONDITION_STR_PATTERN =
-                R"(([^\0=<>!\*]{1,64})\s*((?:=)|(?:!=)|(?:>>)|(?:<<)|(?:>=)|(?:<=)|(?:\*=)|(?: IS ))\s*((?:[\s\S]+)?))";
+                R"(([^\0=<>!\*]{1,64})((?:=)|(?:!=)|(?:>>)|(?:<<)|(?:>=)|(?:<=)|(?:\*=)|(?: IS ))((?:[\s\S]+)?))";
         regex ex(CONDITION_STR_PATTERN);
         if (regex_match(condition_str, what, ex)) {
             if (condition_str.size() != what[0].str().size()) {

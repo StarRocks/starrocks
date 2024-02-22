@@ -37,6 +37,7 @@ package com.starrocks.load;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
@@ -79,6 +80,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.delete.LakeDeleteJob;
+import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -115,7 +117,7 @@ import java.util.UUID;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
-public class DeleteMgr implements Writable {
+public class DeleteMgr implements Writable, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(DeleteMgr.class);
 
     // TransactionId -> DeleteJob
@@ -643,7 +645,7 @@ public class DeleteMgr implements Writable {
 
         LiteralExpr result = LiteralExpr.create(value, Objects.requireNonNull(column.getType()));
         if (result instanceof DecimalLiteral) {
-            ((DecimalLiteral) result).checkPrecisionAndScale(column.getPrecision(), column.getScale());
+            ((DecimalLiteral) result).checkPrecisionAndScale(column.getType(), column.getPrecision(), column.getScale());
         } else if (result instanceof DateLiteral) {
             predicate.setChild(childNo, result);
         }
@@ -852,5 +854,14 @@ public class DeleteMgr implements Writable {
                     }.getType());
             dbToDeleteInfos.put(dbId, multiDeleteInfos);
         }
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        long count = 0;
+        for (List<MultiDeleteInfo> value : dbToDeleteInfos.values()) {
+            count += value.size();
+        }
+        return ImmutableMap.of("DeleteInfo", count);
     }
 }

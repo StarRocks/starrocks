@@ -75,6 +75,7 @@ public:
     METRIC_DEFINE_INT_GAUGE(chunk_allocator_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(clone_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(consistency_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(datacache_mem_bytes, MetricUnit::BYTES);
 
     // column pool metrics.
     METRIC_DEFINE_INT_GAUGE(column_pool_total_bytes, MetricUnit::BYTES);

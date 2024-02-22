@@ -103,5 +103,8 @@ public class SystemId {
     public static final long GRANTS_TO_ROLES_ID = 102L;
     public static final long GRANTS_TO_USERS_ID = 103L;
     public static final long OBJECT_DEPENDENCIES = 104L;
+    public static final long FE_LOCKS_ID = 105L;
+    public static final long MEMORY_USAGE_ID = 106L;
 
+    public static final long PARTITIONS_META_ID = 140L;
 }

@@ -37,6 +37,7 @@
 #include <fmt/format.h>
 
 #include "runtime/exec_env.h"
+#include "storage/replication_txn_manager.h"
 #include "storage/snapshot_manager.h"
 #include "storage/tablet_meta_manager.h"
 #include "util/defer_op.h"
@@ -111,6 +112,9 @@ Status EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
         std::set<int64_t> transaction_ids;
         StorageEngine::instance()->txn_manager()->get_tablet_related_txns(
                 _tablet_id, _schema_hash, tablet->tablet_uid(), &partition_id, &transaction_ids);
+        if (transaction_ids.empty()) {
+            StorageEngine::instance()->replication_txn_manager()->get_tablet_related_txns(_tablet_id, &transaction_ids);
+        }
         if (!transaction_ids.empty()) {
             LOG(WARNING) << "could not migration because has unfinished txns.";
             return Status::InternalError("could not migration because has unfinished txns.");
@@ -214,6 +218,9 @@ Status EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
         std::set<int64_t> transaction_ids;
         StorageEngine::instance()->txn_manager()->get_tablet_related_txns(
                 _tablet_id, _schema_hash, tablet->tablet_uid(), &partition_id, &transaction_ids);
+        if (transaction_ids.empty()) {
+            StorageEngine::instance()->replication_txn_manager()->get_tablet_related_txns(_tablet_id, &transaction_ids);
+        }
         if (!transaction_ids.empty()) {
             LOG(WARNING) << "could not migration because has unfinished txns.";
             need_remove_new_path = true;

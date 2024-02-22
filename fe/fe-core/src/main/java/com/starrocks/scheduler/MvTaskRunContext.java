@@ -61,6 +61,7 @@ public class MvTaskRunContext extends TaskRunContext {
         this.properties = context.properties;
         this.type = context.type;
         this.status = context.status;
+        this.taskRun = context.taskRun;
     }
 
     public Map<String, Set<String>> getRefBaseTableMVIntersectedPartitions() {

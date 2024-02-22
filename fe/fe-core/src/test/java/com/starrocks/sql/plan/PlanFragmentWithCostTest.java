@@ -32,6 +32,7 @@ import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TQueryPlanInfo;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -184,6 +185,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 + "  |  group by: 2: v2");
     }
 
+    // still choose two stage agg even it's a high cardinality scene to cover bad case when statistics is uncorrect
     @Test
     public void testAggWithHighCardinality(@Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
         new Expectations() {
@@ -195,13 +197,10 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
         String sql = "select sum(v2) from t0 group by v2";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  2:AGGREGATE (update finalize)\n"
-                + "  |  output: sum(2: v2)\n"
-                + "  |  group by: 2: v2");
-        Assert.assertFalse(plan.contains("  1:AGGREGATE (update serialize)\n" +
+        assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  output: sum(2: v2)\n" +
-                "  |  group by: 2: v2"));
+                "  |  group by: 2: v2");
     }
 
     @Test
@@ -1644,11 +1643,11 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
             Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
             plan = execPlan.getExplainString(TExplainLevel.NORMAL);
-            assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
-                    "  |  output: sum(2: v2)\n" +
+            assertContains(plan, " 3:AGGREGATE (merge finalize)\n" +
+                    "  |  output: sum(4: sum)\n" +
                     "  |  group by: 2: v2\n" +
                     "  |  \n" +
-                    "  1:EXCHANGE");
+                    "  2:EXCHANGE");
 
             // case 7: use two-phase aggregation for low-cardinality agg.
             isSingleBackendAndComputeNode.setRef(true);
@@ -1679,11 +1678,11 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
             Assert.assertFalse(containAnyColocateNode(execPlan.getFragments().get(1).getPlanRoot()));
             plan = execPlan.getExplainString(TExplainLevel.NORMAL);
-            assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
-                    "  |  output: sum(2: v2)\n" +
+            assertContains(plan, "3:AGGREGATE (merge finalize)\n" +
+                    "  |  output: sum(4: sum)\n" +
                     "  |  group by: 2: v2\n" +
                     "  |  \n" +
-                    "  1:EXCHANGE");
+                    "  2:EXCHANGE");
 
             // case 9: Plan with join cannot use one-phase local aggregation with local shuffle.
             isSingleBackendAndComputeNode.setRef(true);
@@ -1693,20 +1692,20 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "(select v2, sum(v2) from t0 group by v2) t2 on t1.v2=t2.v2";
             execPlan = getExecPlan(sql);
             plan = execPlan.getExplainString(TExplainLevel.NORMAL);
-            assertContains(plan, "  6:HASH JOIN\n" +
+            assertContains(plan, "8:HASH JOIN\n" +
                     "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 2: v2 = 6: v2\n" +
                     "  |  \n" +
-                    "  |----5:AGGREGATE (update finalize)\n" +
+                    "  |----7:AGGREGATE (merge finalize)\n" +
                     "  |    |  group by: 6: v2\n" +
                     "  |    |  \n" +
-                    "  |    4:EXCHANGE\n" +
+                    "  |    6:EXCHANGE\n" +
                     "  |    \n" +
-                    "  2:AGGREGATE (update finalize)\n" +
+                    "  3:AGGREGATE (merge finalize)\n" +
                     "  |  group by: 2: v2\n" +
                     "  |  \n" +
-                    "  1:EXCHANGE");
+                    "  2:EXCHANGE");
         } finally {
             connectContext.getSessionVariable().setEnableLocalShuffleAgg(prevEnableLocalShuffleAgg);
         }
@@ -2370,5 +2369,15 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "and t1.L_SUPPKEY = t2.N_NATIONKEY;";
         plan = getCostExplain(sql);
         assertContains(plan, "cardinality: 100000000");
+    }
+
+    @Test
+    public void testOutputColNames() throws Exception {
+        String sql = "select v1 as alias_1, v2 as alias_2, v2, abs(v2) as v2 from t0 where v3 = 1";
+        ExecPlan execPlan = getExecPlan(sql);
+        TQueryPlanInfo tQueryPlanInfo = new TQueryPlanInfo();
+        tQueryPlanInfo.output_names = execPlan.getColNames();
+        Assert.assertEquals(4, tQueryPlanInfo.output_names.size());
+        Assert.assertEquals("alias_1", tQueryPlanInfo.output_names.get(0));
     }
 }

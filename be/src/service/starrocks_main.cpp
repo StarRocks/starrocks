@@ -128,6 +128,7 @@ int main(int argc, char** argv) {
             as_cn = true;
         }
     }
+    google::ParseCommandLineFlags(&argc, &argv, true);
 
     if (getenv("STARROCKS_HOME") == nullptr) {
         fprintf(stderr, "you need set STARROCKS_HOME environment variable.\n");
@@ -261,7 +262,7 @@ int main(int argc, char** argv) {
     apache::thrift::GlobalOutput.setOutputFunction(starrocks::thrift_output);
 
     std::unique_ptr<starrocks::Daemon> daemon(new starrocks::Daemon());
-    daemon->init(argc, argv, paths);
+    daemon->init(as_cn, paths);
 
     // init jdbc driver manager
     EXIT_IF_ERROR(starrocks::JDBCDriverManager::getInstance()->init(std::string(getenv("STARROCKS_HOME")) +
@@ -271,15 +272,17 @@ int main(int argc, char** argv) {
         exit(-1);
     }
 
+    auto* global_env = starrocks::GlobalEnv::GetInstance();
+    EXIT_IF_ERROR(global_env->init());
+
     auto* exec_env = starrocks::ExecEnv::GetInstance();
-    EXIT_IF_ERROR(exec_env->init_mem_tracker());
 
     // Init and open storage engine.
     starrocks::EngineOptions options;
     options.store_paths = paths;
     options.backend_uid = starrocks::UniqueId::gen_uid();
-    options.compaction_mem_tracker = exec_env->compaction_mem_tracker();
-    options.update_mem_tracker = exec_env->update_mem_tracker();
+    options.compaction_mem_tracker = global_env->compaction_mem_tracker();
+    options.update_mem_tracker = global_env->update_mem_tracker();
     options.need_write_cluster_id = !as_cn;
     starrocks::StorageEngine* engine = nullptr;
 
@@ -290,8 +293,7 @@ int main(int argc, char** argv) {
     }
 
     // Init exec env.
-    EXIT_IF_ERROR(starrocks::ExecEnv::init(exec_env, paths, as_cn));
-    engine->set_heartbeat_flags(exec_env->heartbeat_flags());
+    EXIT_IF_ERROR(exec_env->init(paths, as_cn));
 
     // Start all background threads of storage engine.
     // SHOULD be called after exec env is initialized.
@@ -358,7 +360,7 @@ int main(int argc, char** argv) {
     }
 
     // cn need to support all ops for cloudnative table, so just start_be
-    start_be();
+    starrocks::start_be();
 
     if (starrocks::k_starrocks_exit_quick.load()) {
         LOG(INFO) << "BE is shutting down，will exit quickly";
@@ -385,10 +387,10 @@ int main(int argc, char** argv) {
 
     exec_env->agent_server()->stop();
 
-    starrocks::ExecEnv::stop(exec_env);
+    exec_env->stop();
     engine->stop();
     delete engine;
-    starrocks::ExecEnv::destroy(exec_env);
+    exec_env->destroy();
 
     return 0;
 }

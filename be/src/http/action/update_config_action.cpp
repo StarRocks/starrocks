@@ -84,16 +84,16 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             _exec_env->thread_pool()->set_num_thread(config::scanner_thread_pool_thread_num);
         });
         _config_callback.emplace("storage_page_cache_limit", [&]() {
-            int64_t cache_limit = _exec_env->get_storage_page_cache_size();
-            cache_limit = _exec_env->check_storage_page_cache_size(cache_limit);
+            int64_t cache_limit = GlobalEnv::GetInstance()->get_storage_page_cache_size();
+            cache_limit = GlobalEnv::GetInstance()->check_storage_page_cache_size(cache_limit);
             StoragePageCache::instance()->set_capacity(cache_limit);
         });
         _config_callback.emplace("disable_storage_page_cache", [&]() {
             if (config::disable_storage_page_cache) {
                 StoragePageCache::instance()->set_capacity(0);
             } else {
-                int64_t cache_limit = _exec_env->get_storage_page_cache_size();
-                cache_limit = _exec_env->check_storage_page_cache_size(cache_limit);
+                int64_t cache_limit = GlobalEnv::GetInstance()->get_storage_page_cache_size();
+                cache_limit = GlobalEnv::GetInstance()->check_storage_page_cache_size(cache_limit);
                 StoragePageCache::instance()->set_capacity(cache_limit);
             }
         });
@@ -136,6 +136,10 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         _config_callback.emplace("parallel_clone_task_per_path", [&]() {
             _exec_env->agent_server()->update_max_thread_by_type(TTaskType::CLONE,
                                                                  config::parallel_clone_task_per_path);
+        });
+        _config_callback.emplace("replication_threads", [&]() {
+            _exec_env->agent_server()->update_max_thread_by_type(TTaskType::REPLICATE_SNAPSHOT,
+                                                                 config::replication_threads);
         });
         _config_callback.emplace("alter_tablet_worker_count", [&]() {
             _exec_env->agent_server()->update_max_thread_by_type(TTaskType::ALTER, config::alter_tablet_worker_count);

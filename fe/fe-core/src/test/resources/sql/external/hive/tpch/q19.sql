@@ -68,7 +68,7 @@ OutPut Exchange Id: 08
 |  7 <-> [7: l_discount, DECIMAL64(15,2), true]
 |  cardinality: 19277
 |  column statistics:
-|  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 2856.1332873207584] ESTIMATE
+|  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 19276.89968941512] ESTIMATE
 |  * l_discount-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
 |
 5:HASH JOIN
@@ -80,15 +80,15 @@ OutPut Exchange Id: 08
 |  output columns: 5, 6, 7, 20, 22, 23
 |  cardinality: 19277
 |  column statistics:
-|  * l_partkey-->[1.0, 2.0E7, 0.0, 8.0, 2856.1332873207584] ESTIMATE
+|  * l_partkey-->[1.0, 2.0E7, 0.0, 8.0, 19276.89968941512] ESTIMATE
 |  * l_quantity-->[5.0, 35.0, 0.0, 8.0, 50.0] ESTIMATE
-|  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 2856.1332873207584] ESTIMATE
+|  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 19276.89968941512] ESTIMATE
 |  * l_discount-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
-|  * p_partkey-->[1.0, 2.0E7, 0.0, 8.0, 2856.1332873207584] ESTIMATE
+|  * p_partkey-->[1.0, 2.0E7, 0.0, 8.0, 19276.89968941512] ESTIMATE
 |  * p_brand-->[-Infinity, Infinity, 0.0, 10.0, 25.0] ESTIMATE
 |  * p_size-->[1.0, 15.0, 0.0, 4.0, 50.0] ESTIMATE
-|  * p_container-->[-Infinity, Infinity, 0.0, 10.0, 4.0] ESTIMATE
-|  * expr-->[810.9, 104949.5, 0.0, 16.0, 2856.1332873207584] ESTIMATE
+|  * p_container-->[-Infinity, Infinity, 0.0, 10.0, 12.0] ESTIMATE
+|  * expr-->[810.9, 104949.5, 0.0, 16.0, 19276.89968941512] ESTIMATE
 |
 |----4:EXCHANGE
 |       distribution type: SHUFFLE

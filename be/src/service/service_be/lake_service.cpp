@@ -213,9 +213,11 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
             auto txns = request->txn_ids().data();
             auto txns_size = request->txn_ids_size();
             auto commit_time = request->commit_time();
-            g_publish_tablet_version_queuing_latency << (run_ts - start_ts);
+            auto queuing_latency = run_ts - start_ts;
+            g_publish_tablet_version_queuing_latency << queuing_latency;
 
             TRACE_COUNTER_INCREMENT("tablet_id", tablet_id);
+            TRACE_COUNTER_INCREMENT("queuing_latency_us", queuing_latency);
 
             StatusOr<lake::TabletMetadataPtr> res;
             if (std::chrono::system_clock::now() < timeout_deadline) {
@@ -232,8 +234,13 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                 response->mutable_compaction_scores()->insert({tablet_id, score});
             } else {
                 g_publish_version_failed_tasks << 1;
-                LOG(WARNING) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
-                             << " txn_id=" << txns[0] << " version=" << new_version;
+                if (res.status().is_resource_busy()) {
+                    VLOG(2) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
+                            << " txn_id=" << txns[0] << " version=" << new_version;
+                } else {
+                    LOG(WARNING) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
+                                 << " txn_id=" << txns[0] << " version=" << new_version;
+                }
                 std::lock_guard l(response_mtx);
                 response->add_failed_tablets(tablet_id);
                 res.status().to_protobuf(response->mutable_status());
@@ -410,6 +417,7 @@ void LakeServiceImpl::drop_table(::google::protobuf::RpcController* controller,
         cntl->SetFailed("no thread pool to run task");
         return;
     }
+    response->mutable_status()->set_status_code(0);
     auto latch = BThreadCountDownLatch(1);
     auto task = [&]() {
         DeferOp defer([&] { latch.count_down(); });
@@ -417,14 +425,14 @@ void LakeServiceImpl::drop_table(::google::protobuf::RpcController* controller,
         auto st = fs::remove_all(location);
         if (!st.ok() && !st.is_not_found()) {
             LOG(ERROR) << "Fail to remove " << location << ": " << st;
-            cntl->SetFailed("Fail to remove " + location);
+            st.to_protobuf(response->mutable_status());
         }
     };
 
     auto st = thread_pool->submit_func(task);
     if (!st.ok()) {
         LOG(WARNING) << "Fail to submit drop table task: " << st;
-        cntl->SetFailed(st.get_error_msg());
+        st.to_protobuf(response->mutable_status());
         latch.count_down();
     }
 

@@ -85,9 +85,9 @@ struct DeltaColumnGroupKey {
     RowsetId rowsetid;
     uint32_t segment_id;
 
-    DeltaColumnGroupKey() {}
+    DeltaColumnGroupKey() = default;
     DeltaColumnGroupKey(int64_t tid, RowsetId rid, uint32_t sid) : tablet_id(tid), rowsetid(rid), segment_id(sid) {}
-    ~DeltaColumnGroupKey() {}
+    ~DeltaColumnGroupKey() = default;
 
     bool operator==(const DeltaColumnGroupKey& rhs) const {
         return tablet_id == rhs.tablet_id && segment_id == rhs.segment_id && rowsetid == rhs.rowsetid;
@@ -127,6 +127,9 @@ class StorageEngine {
 public:
     StorageEngine(const EngineOptions& options);
     virtual ~StorageEngine();
+
+    StorageEngine(const StorageEngine&) = delete;
+    const StorageEngine& operator=(const StorageEngine&) = delete;
 
     static Status open(const EngineOptions& options, StorageEngine** engine_ptr);
 
@@ -239,8 +242,6 @@ public:
 
     void release_rowset_id(const RowsetId& rowset_id) { return _rowset_id_generator->release_id(rowset_id); }
 
-    void set_heartbeat_flags(HeartbeatFlags* heartbeat_flags) { _heartbeat_flags = heartbeat_flags; }
-
     // start all backgroud threads. This should be call after env is ready.
     virtual Status start_bg_threads();
 
@@ -341,6 +342,8 @@ private:
     // pk index major compaction function
     void* _pk_index_major_compaction_thread_callback(void* arg);
 
+    void* _pk_dump_thread_callback(void* arg);
+
 #ifdef USE_STAROS
     // local pk index of SHARED_DATA gc/evict function
     void* _local_pk_index_shared_data_gc_evict_thread_callback(void* arg);
@@ -416,6 +419,8 @@ private:
     std::vector<std::thread> _manual_compaction_threads;
     // thread to run pk index major compaction
     std::thread _pk_index_major_compaction_thread;
+    // thread to generate pk dump
+    std::thread _pk_dump_thread;
     // thread to gc/evict local pk index in sharded_data
     std::thread _local_pk_index_shared_data_gc_evict_thread;
 
@@ -446,8 +451,6 @@ private:
     bool _need_report_tablet = false;
     bool _need_report_disk_stat = false;
 
-    std::mutex _engine_task_mutex;
-
     std::unique_ptr<TabletManager> _tablet_manager;
     std::unique_ptr<TxnManager> _txn_manager;
 
@@ -469,8 +472,6 @@ private:
 
     std::unique_ptr<PublishVersionManager> _publish_version_manager;
 
-    HeartbeatFlags* _heartbeat_flags = nullptr;
-
     std::unordered_map<int64_t, std::shared_ptr<AutoIncrementMeta>> _auto_increment_meta_map;
 
     std::mutex _auto_increment_mutex;
@@ -482,9 +483,6 @@ private:
     std::mutex _delta_column_group_cache_lock;
     std::map<DeltaColumnGroupKey, DeltaColumnGroupList> _delta_column_group_cache;
     std::unique_ptr<MemTracker> _delta_column_group_cache_mem_tracker;
-
-    StorageEngine(const StorageEngine&) = delete;
-    const StorageEngine& operator=(const StorageEngine&) = delete;
 };
 
 /// Load min_garbage_sweep_interval and max_garbage_sweep_interval from config,
