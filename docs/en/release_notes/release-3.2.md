@@ -32,6 +32,7 @@ Release date: February 8, 2024
 - Added the BE configuration item `enable_lazy_delta_column_compaction`. The default value is `true`, indicating that StarRocks does not perform frequent compaction operations on delta columns. [#36654](https://github.com/StarRocks/starrocks/pull/36654)
 - Added the FE configuration item `default_mv_refresh_immediate`, which specifies whether to immediately refresh the materialized view after the materialized view is created. The default value is `true`. [#37093](https://github.com/StarRocks/starrocks/pull/37093)
 - Changed the default value of the FE configuration item `default_mv_refresh_partition_num`to `1`. This indicates that when multiple partitions need to be updated during a materialized view refresh, the task will be split in batches, refreshing only one partition at a time. This helps reduce resource consumption during each refresh. [#36560](https://github.com/StarRocks/starrocks/pull/36560)
+- adjust the BE/CN configuration item `starlet_use_star_cache` to `true`, in shared-data mode, turn on block cache by default. If before upgrading, BE/CN configuration item `starlet_cache_evict_high_water` was manually configured as X，please also configure BE/CN configuration item `starlet_star_cache_disk_size_percent` as 1.0-X (if X is 0.3, then 1.0-X will be 0.7)，this will ensure that both file cache and block cache use the same disk capacity。[#38200](https://github.com/StarRocks/starrocks/pull/38200)
 
 ### Improvements
 
