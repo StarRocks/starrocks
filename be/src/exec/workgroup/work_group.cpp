@@ -582,23 +582,6 @@ std::vector<TWorkGroup> WorkGroupManager::list_workgroups() {
     return alive_workgroups;
 }
 
-<<<<<<< HEAD
-std::vector<TWorkGroup> WorkGroupManager::list_all_workgroups() {
-    std::vector<TWorkGroup> workgroups;
-    {
-        std::shared_lock read_lock(_mutex);
-        workgroups.reserve(_workgroups.size());
-        for (auto& _workgroup : _workgroups) {
-            const auto& wg = _workgroup.second;
-            auto twg = wg->to_thrift_verbose();
-            workgroups.push_back(twg);
-        }
-    }
-    std::sort(workgroups.begin(), workgroups.end(),
-              [](const auto& lhs, const auto& rhs) { return lhs.name < rhs.name; });
-    return workgroups;
-}
-
 void WorkGroupManager::for_each_workgroup(WorkGroupConsumer consumer) const {
     std::shared_lock read_lock(_mutex);
     for (const auto& [_, wg] : _workgroups) {
@@ -606,8 +589,6 @@ void WorkGroupManager::for_each_workgroup(WorkGroupConsumer consumer) const {
     }
 }
 
-=======
->>>>>>> 5fdc408d8d ([Refactor] Add join/stop interface for HttpServer (#27734))
 size_t WorkGroupManager::normal_workgroup_cpu_hard_limit() const {
     static int num_hardware_cores = CpuInfo::num_cores();
     return std::max<int>(1, num_hardware_cores - _rt_cpu_limit);
