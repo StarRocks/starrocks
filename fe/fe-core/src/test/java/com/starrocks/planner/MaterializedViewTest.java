@@ -2723,20 +2723,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
-<<<<<<< HEAD
-=======
-    public void testArrayAggDistinctWithRollup() {
-        String mv = "select user_id, array_distinct(array_agg(tag_id)) from user_tags group by user_id, time;";
-        testRewriteOK(mv, "select user_id, array_distinct(array_agg(tag_id)) from user_tags group by user_id, time;")
-                .notContain("array_unique_agg");
-        testRewriteOK(mv, "select user_id, array_distinct(array_agg(tag_id)) from user_tags group by user_id")
-                .contains("array_unique_agg");
-        testRewriteOK(mv, "select array_distinct(array_agg(tag_id)) from user_tags")
-                .contains("array_unique_agg");
-    }
 
-    @Test
->>>>>>> fd97ca421f ([Feature] ARRAY_AGG_DISTINCT() is an alias to ARRAY_AGG(DISTINCT) (#40025))
     public void testCountDistinctToBitmapCount1() {
         String mv = "select user_id, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id;";
         testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags group by user_id;");
