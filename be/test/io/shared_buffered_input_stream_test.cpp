@@ -176,7 +176,7 @@ TEST_F(SharedBufferedInputStreamTest, test_orc) {
     ASSERT_EQ(
             "SharedBuffer raw_offset=22420223, raw_size=197, offset=22282240, size=262144, ref_count=2, "
             "buffer_capacity=0",
-            sb.value()->debug());
+            sb.value()->debug_string());
 }
 
 } // namespace starrocks::io
