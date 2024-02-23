@@ -377,4 +377,13 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         sql = "select isnotnull(1, 2)";
         analyzeFail(sql, "isnotnull function must have 1 argument");
     }
+
+    @Test
+    public void testUtilityFunction() throws Exception {
+        String sql = "select current_catalog";
+        assertPlanContains(sql, "<slot 2> : CATALOG()");
+
+        sql = "select current_schema";
+        assertPlanContains(sql, "<slot 2> : SCHEMA()");
+    }
 }
