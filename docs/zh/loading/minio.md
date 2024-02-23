@@ -73,7 +73,7 @@ curl -O https://starrocks-examples.s3.amazonaws.com/user_behavior_ten_million_ro
 
 下面示例查询保存在您的 MinIO 系统里的 Parquet 文件：
 
-:::TIP
+:::tip
 
 下面命令示例中灰色底纹强化显示的参数配置，需要您根据情况进行替换：
 
@@ -161,7 +161,7 @@ Query OK, 10000000 rows affected (3.17 sec)
 {'label':'insert_a5da3ff5-9ee4-11ee-90b0-02420a060004', 'status':'VISIBLE', 'txnId':'17'}
 ```
 
-:::TIP
+:::tip
 
 注意要把上面命令示例中的 `AAA` 和 `BBB` 替换为可以用于访问 MinIO 系统的真实有效的 Access Key 和 Secret Key。
 
@@ -213,7 +213,7 @@ SELECT * from user_behavior_inferred LIMIT 3;
 - 定义哪些列作为键、以及这些列的数据类型
 - 数据分区分桶
 
-:::TIP
+:::tip
 
 要实现高效的表结构设计，您需要深度了解表中数据的用途、以及表中各列的内容。本文不对表设计做过多赘述，有关表设计的详细信息，参见[表设计](../table_design/StarRocks_table_design.md)。
 
@@ -268,7 +268,7 @@ DESCRIBE user_behavior_declared;
 5 rows in set (0.00 sec)
 ```
 
-:::TIP
+:::tip
 
 您可以从以下几个方面来对比手动建表的表结构与 `FILES()` 函数自动推断出来的表结构之间具体有哪些不同:
 
@@ -300,7 +300,7 @@ SELECT * FROM FILES
 );
 ```
 
-:::TIP
+:::tip
 
 注意要把上面命令示例中的 `AAA` 和 `BBB` 替换为可以用于访问 MinIO 系统的真实有效的 Access Key 和 Secret Key。
 
@@ -364,7 +364,7 @@ SELECT * FROM information_schema.loads WHERE LABEL = 'insert_e3b882f5-7eb3-11ee-
 REJECTED_RECORD_PATH: NULL
 ```
 
-:::TIP
+:::tip
 
 由于 INSERT 语句是一个同步命令，因此，如果作业还在运行当中，您需要打开另一个会话来查看 INSERT 作业的执行情况。
 
@@ -456,7 +456,7 @@ PROPERTIES
 
 执行如下命令创建 Broker Load 作业，把样例数据集 `user_behavior_ten_million_rows.parquet` 中的数据导入到表 `user_behavior` 中：
 
-:::TIP
+:::tip
 
 下面命令示例中灰色底纹强化显示的参数配置，需要您根据情况进行替换：
 
