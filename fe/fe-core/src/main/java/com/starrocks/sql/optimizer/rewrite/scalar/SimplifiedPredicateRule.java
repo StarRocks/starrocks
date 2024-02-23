@@ -364,6 +364,8 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
             return simplifiedTimeFns(call);
         } else if (FunctionSet.DATE_TRUNC.equalsIgnoreCase(call.getFnName())) {
             return simplifiedDateTrunc(call);
+        } else if (FunctionSet.COALESCE.equalsIgnoreCase(call.getFnName())) {
+            return simplifiedCoalesce(call);
         }
         return call;
     }
@@ -448,6 +450,40 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         if ("day".equalsIgnoreCase(child.toString())) {
             return call.getChild(1);
         }
+        return call;
+    }
+
+    private ScalarOperator simplifiedCoalesce(CallOperator call) {
+        return simplifiedCoalesce(call, false);
+    }
+
+    public static ScalarOperator simplifiedCoalesce(CallOperator call, boolean asFilter) {
+        ScalarOperator first = call.getChild(0);
+
+        // Find first not null arg.
+        int i = 1;
+        while (i < call.getChildren().size()) {
+            ScalarOperator child = call.getChild(i);
+            if (!ConstantOperator.NULL.equals(child)) {
+                break;
+            }
+            i++;
+        }
+
+        // All args from 1 to end is null
+        // coalesce(x, null, null, ...) equals to x.
+        if (i >= call.getChildren().size()) {
+            return first;
+        }
+
+        if (asFilter) {
+            // coalesce(x, false)/coalesce(x, null, ..., false) equals to x.
+            ScalarOperator notNull = call.getChild(i);
+            if (ConstantOperator.FALSE.equals(notNull)) {
+                return first;
+            }
+        }
+
         return call;
     }
 
