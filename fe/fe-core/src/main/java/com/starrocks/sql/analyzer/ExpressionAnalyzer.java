@@ -1840,10 +1840,20 @@ public class ExpressionAnalyzer {
                 if (strictModeIdx >= 0) {
                     expectTypeNames.add("BOOLEAN strict_mode");
                 }
-                List<String> actualTypeNames = actualTypes.stream().map(Type::canonicalName).collect(Collectors.toList());
-                throw new SemanticException(
-                        String.format("dict_mapping function params not match expected,\nExpect: %s\nActual: %s",
-                            String.join(", ", expectTypeNames), String.join(", ", actualTypeNames)));
+
+                for (int i = 0; i < node.getChildren().size(); ++i) {
+                    Expr actual = node.getChildren().get(i);
+                    Type expectedType = expectTypes.get(i);
+                    if (!Type.canCastTo(actual.getType(), expectedType)) {
+                        List<String> actualTypeNames = actualTypes.stream().map(Type::canonicalName).collect(Collectors.toList());
+                        throw new SemanticException(
+                                String.format("dict_mapping function params not match expected,\nExpect: %s\nActual: %s",
+                                    String.join(", ", expectTypeNames), String.join(", ", actualTypeNames)));
+                    }
+
+                    Expr castExpr = new CastExpr(expectedType, actual);
+                    node.getChildren().set(i, castExpr);
+                }
             }
 
             Type valueType = ScalarType.createType(valueColumn.getType().getPrimitiveType());

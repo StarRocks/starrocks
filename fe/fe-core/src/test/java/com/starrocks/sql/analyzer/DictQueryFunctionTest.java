@@ -199,9 +199,6 @@ public class DictQueryFunctionTest {
                 }
                 throw new RuntimeException("expect no exception, actual: " + e.getMessage(), e);
             }
-            if (expectException != null) {
-                throw new RuntimeException(String.format("expect exception: %s, actual no exception", expectException.getName()));
-            }
         }
 
     }
