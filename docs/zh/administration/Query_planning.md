@@ -338,7 +338,7 @@ HASH_JOIN_NODE (id=2):(Active: 996.337ms, % non-child: 52.05%)
 
 ## Query Hint
 
- StarRocks 支持提示（Hint）功能。Hint 是一种指令或注释，显式地向查询优化器建议如何执行查询。目前支持三种 Hint：系统变量 Hint (SET_VAR)，用户自定义变量 Hint (SET_USER_VARIABLE) 和 Join Hint。Hint 仅在单个查询范围内生效。
+StarRocks 支持提示（Hint）功能。Hint 是一种指令或注释，显式地向查询优化器建议如何执行查询。目前支持三种 Hint：系统变量 Hint (`SET_VAR`)，用户自定义变量 Hint (`SET_USER_VARIABLE`) 和 Join Hint。Hint 仅在单个查询范围内生效。
 
 ### 系统变量 Hint
 
