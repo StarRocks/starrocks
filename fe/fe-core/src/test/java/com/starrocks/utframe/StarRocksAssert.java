@@ -834,6 +834,10 @@ public class StarRocksAssert {
         return showExecutor.execute().getResultRows();
     }
 
+    public String showCreateTable(String sql) throws Exception {
+        return show(sql).get(0).get(1);
+    }
+
     public void ddl(String sql) throws Exception {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
     }

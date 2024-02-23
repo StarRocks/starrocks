@@ -137,10 +137,6 @@ public class MaterializedViewAnalyzer {
         new MaterializedViewAnalyzerVisitor().visit(stmt, session);
     }
 
-    public static void analyzeQueryRewriteAbility(StatementBase stmt, ConnectContext session) {
-
-    }
-
     public static Set<BaseTableInfo> getBaseTableInfos(QueryStatement queryStatement, boolean withCheck) {
         Set<BaseTableInfo> baseTableInfos = Sets.newHashSet();
         processBaseTables(queryStatement, baseTableInfos, withCheck);

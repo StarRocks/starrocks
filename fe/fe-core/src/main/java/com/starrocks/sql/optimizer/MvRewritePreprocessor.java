@@ -520,13 +520,13 @@ public class MvRewritePreprocessor {
             return Pair.create(false, message);
         }
         // if mv is a subset of query tables, it can be used for rewrite.
-        if (!queryTables.isEmpty() && !canMVRewriteIfMVHasExtraTables(connectContext, mv, queryTables)) {
+        if (CollectionUtils.isNotEmpty(queryTables) &&
+                !canMVRewriteIfMVHasExtraTables(connectContext, mv, queryTables)) {
             return Pair.create(false, "MV contains extra tables besides FK-PK");
         }
         // if mv is in plan cache(avoid building plan), check whether it's valid
         if (connectContext == null || connectContext.getSessionVariable().isEnableMaterializedViewPlanCache()) {
-            List<MvPlanContext> planContexts =
-                    force ?
+            List<MvPlanContext> planContexts = force ?
                             CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, false) :
                             CachingMvPlanContextBuilder.getInstance().getPlanContextFromCacheIfPresent(mv);
             if (CollectionUtils.isEmpty(planContexts)) {
