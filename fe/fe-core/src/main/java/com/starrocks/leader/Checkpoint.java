@@ -37,6 +37,7 @@ package com.starrocks.leader;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.journal.Journal;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.MetaCleaner;
@@ -121,14 +122,14 @@ public class Checkpoint extends FrontendDaemon {
             otherNodesCount = allFrontends.size() - 1; // skip master itself
             for (Frontend fe : allFrontends) {
                 String host = fe.getHost();
-                if (host.equals(GlobalStateMgr.getServingState().getNodeMgr().getLeaderIp())) {
+                if (NetUtils.isSameIP(host, GlobalStateMgr.getServingState().getNodeMgr().getLeaderIp())) {
                     // skip master itself
                     continue;
                 }
                 int port = Config.http_port;
 
-                String url = "http://" + host + ":" + port + "/put?version=" + checkpointVersion
-                        + "&port=" + port + "&subdir=" + subDir;
+                String url = "http://" + NetUtils.getHostPortInAccessibleFormat(host, port) + "/put?version=" +
+                        checkpointVersion + "&port=" + port + "&subdir=" + subDir;
                 LOG.info("Put image:{}", url);
 
                 try {
@@ -150,7 +151,7 @@ public class Checkpoint extends FrontendDaemon {
             if (successPushed > 0) {
                 for (Frontend fe : allFrontends) {
                     String host = fe.getHost();
-                    if (host.equals(GlobalStateMgr.getServingState().getNodeMgr().getLeaderIp())) {
+                    if (NetUtils.isSameIP(host, GlobalStateMgr.getServingState().getNodeMgr().getLeaderIp())) {
                         // skip master itself
                         continue;
                     }
@@ -164,7 +165,8 @@ public class Checkpoint extends FrontendDaemon {
                          * any non-master node's current replayed journal id. otherwise,
                          * this lagging node can never get the deleted journal.
                          */
-                        idURL = new URL("http://" + host + ":" + port + "/journal_id?prefix=" + journal.getPrefix());
+                        idURL = new URL("http://" + NetUtils.getHostPortInAccessibleFormat(host, port)
+                                + "/journal_id?prefix=" + journal.getPrefix());
                         conn = (HttpURLConnection) idURL.openConnection();
                         conn.setConnectTimeout(CONNECT_TIMEOUT_SECOND * 1000);
                         conn.setReadTimeout(READ_TIMEOUT_SECOND * 1000);

@@ -50,6 +50,7 @@ public class FrontendOptionsTest {
 
         List<String> priorityCidrs = FrontendOptions.PRIORITY_CIDRS;
         priorityCidrs.add("192.168.5.136/32");
+        priorityCidrs.add("2001:db8::/32");
 
         FrontendOptions frontendOptions = new FrontendOptions();
         boolean inPriorNetwork = frontendOptions.isInPriorNetwork("127.0.0.1");
@@ -57,7 +58,9 @@ public class FrontendOptionsTest {
 
         inPriorNetwork = frontendOptions.isInPriorNetwork("192.168.5.136");
         Assert.assertEquals(true, inPriorNetwork);
-
+        
+        inPriorNetwork = frontendOptions.isInPriorNetwork("2001:db8::1");
+        Assert.assertTrue(inPriorNetwork);
     }
 
     private void mockNet() {
