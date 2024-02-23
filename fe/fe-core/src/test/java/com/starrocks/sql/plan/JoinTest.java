@@ -3191,4 +3191,17 @@ public class JoinTest extends PlanTestBase {
         String plan = getFragmentPlan(query);
         assertContainsIgnoreColRefs(plan, "other join predicates: 4: v1 = 1: v1");
     }
+
+    @Test
+    public void testJoinOnAnonymousSubquery() throws Exception {
+        String query = "select 'a' " +
+                "FROM t0 join t1 on t0.v2 = t1.v5 and t1.v6 in ((((" +
+                "(select v8 from t2)" +
+                "))))";
+        String plan = getFragmentPlan(query);
+        assertContains(plan, "HASH JOIN\n" +
+                "  |  join op: LEFT SEMI JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 6: v6 = 8: v8");
+    }
 }
