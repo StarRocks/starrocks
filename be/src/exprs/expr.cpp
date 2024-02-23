@@ -433,10 +433,12 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
     case TExprNodeType::DICTIONARY_GET_EXPR:
         *expr = pool->add(new DictionaryGetExpr(texpr_node));
         break;
+    case TExprNodeType::IS_NULL_PRED:
+        *expr = pool->add(VectorizedIsNullPredicateFactory::from_thrift(texpr_node));
+        break;
     case TExprNodeType::ARRAY_SLICE_EXPR:
     case TExprNodeType::AGG_EXPR:
     case TExprNodeType::TABLE_FUNCTION_EXPR:
-    case TExprNodeType::IS_NULL_PRED:
     case TExprNodeType::LIKE_PRED:
     case TExprNodeType::LITERAL_PRED:
     case TExprNodeType::TUPLE_IS_NULL_PRED:
