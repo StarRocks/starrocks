@@ -407,7 +407,6 @@ public class AnalyzeExprTest {
         analyzeSuccess("select map{NULL:NULL}");
         analyzeSuccess("select map<int,map<varchar,int>>{2:map{3:3}}");
         analyzeSuccess("select map<int,map<int,int>>{2:map{'3':3}}");
-        analyzeSuccess("select map<int,map<int,int>>{map{3:3}:2}"); // runtime error will report when cast
         analyzeSuccess("select map<int,map<int,int>>{'2s':map{3:3}}");
 
         analyzeFail("select map(null)");
@@ -509,6 +508,21 @@ public class AnalyzeExprTest {
         analyzeSuccess("select coalesce(struct(to_date(\"2020-02-02 00:00:00\")), NULL)");
         analyzeSuccess("select ifnull(map{to_date(\"2020-02-02 00:00:00\"):1}, map{})");
         analyzeSuccess("select map_from_arrays([1, 2], NULL)");
+    }
+
+    @Test
+    public void testMapInvalidKeyType() {
+        analyzeSuccess("select map(1, 2)");
+        analyzeSuccess("select map(1, [])");
+        analyzeSuccess("select map('a', row(1, 2))");
+        analyzeSuccess("select map('abc', row(1, 2))");
+        analyzeSuccess("select map(cast('2020-02-20' as date), row(1, 2))");
+        analyzeSuccess("select map(cast('2020-02-20' as datetime), row(1, 2))");
+
+        analyzeFail("select map([], 123)");
+        analyzeFail("select map(row(1,2,3), 123)");
+        analyzeFail("select map(map(1,2), 123)");
+        analyzeFail("select map(parse_json('{\"a\": 1}'), map(1,2))");
     }
 
 }
