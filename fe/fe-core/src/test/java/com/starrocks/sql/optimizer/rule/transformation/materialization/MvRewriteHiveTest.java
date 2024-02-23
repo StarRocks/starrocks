@@ -406,7 +406,7 @@ public class MvRewriteHiveTest extends MvRewriteTestBase {
         Assert.assertTrue(scanOperatorPredicates.toString().equals("selectedPartitionIds=[1, 2, 3, 4, 5], " +
                 "partitionConjuncts=[date_trunc(month, 16: l_shipdate) = 1998-01-01, 16: l_shipdate >= 1998-01-01], " +
                 "noEvalPartitionConjuncts=[date_trunc(month, 16: l_shipdate) = 1998-01-01], " +
-                "nonPartitionConjuncts=[1: l_orderkey > 1000], minMaxConjuncts=[1: l_orderkey > 1000]"));
+                "nonPartitionConjuncts=[1: l_orderkey > 1000], minMaxConjuncts=[18: l_orderkey > 1000]"));
     }
 
     @Test
