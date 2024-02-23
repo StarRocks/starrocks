@@ -811,6 +811,7 @@ bool OrcChunkReader::_ok_to_add_conjunct(const Expr* conjunct) {
 
         if (node_type == TExprNodeType::FUNCTION_CALL) {
             // check is null & is not null
+            // null predicate only has one child
             std::string null_str;
             return conjunct->is_null_scalar_function(null_str);
         }
