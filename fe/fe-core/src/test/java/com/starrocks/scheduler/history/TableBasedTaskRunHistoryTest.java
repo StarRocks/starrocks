@@ -15,6 +15,7 @@
 package com.starrocks.scheduler.history;
 
 import com.google.common.collect.Lists;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.scheduler.persist.TaskRunStatus;
@@ -25,6 +26,7 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.junit.Assert;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -50,7 +52,8 @@ class TableBasedTaskRunHistoryTest {
                         "\"source\":\"CTAS\",\"errorCode\":0,\"finishTime\":0,\"processStartTime\":0,\"state\":\"PENDING\"," +
                         "\"progress\":0,\"mvExtraMessage\":{\"forceRefresh\":false,\"mvPartitionsToRefresh\":[]," +
                         "\"refBasePartitionsToRefreshMap\":{},\"basePartitionsToRefreshMap\":{},\"executeOption\":" +
-                        "{\"priority\":0,\"isMergeRedundant\":false,\"isManual\":false,\"isSync\":false,\"isReplay\":false}}}",
+                        "{\"priority\":0,\"isMergeRedundant\":false,\"isManual\":false,\"isSync\":false,\"isReplay\":false}}" +
+                        ",\"useTableBasedHistory\":false}",
                 json);
 
         TaskRunStatus b = TaskRunStatus.fromJson(json);
@@ -61,16 +64,16 @@ class TableBasedTaskRunHistoryTest {
     public void testCRUD(@Mocked RepoExecutor repo) {
         new Expectations() {
             {
-                repo.executeDML("INSERT INTO _statistics_.task_run_history (task_id, task_run_id, task_name, " +
+                repo.executeDML(("INSERT INTO _statistics_.task_run_history (task_id, task_run_id, task_name, " +
                         "create_time, finish_time, expire_time, history_content_json) VALUES(0, 'aaa', 't1', " +
-                        "'1970-01-01 08:00:00', '1970-01-01 08:00:00', '1970-01-01 08:00:00', " +
-                        "'{\"startTaskRunId\":\"aaa\",\"taskId\":0,\"taskName\":\"t1\",\"createTime\":0," +
-                        "\"expireTime\":0,\"priority\":0,\"mergeRedundant\":false,\"source\":\"CTAS\"," +
-                        "\"errorCode\":0,\"finishTime\":0,\"processStartTime\":0,\"state\":\"PENDING\",\"progress\":0," +
-                        "\"mvExtraMessage\":{\"forceRefresh\":false,\"mvPartitionsToRefresh\":[]," +
-                        "\"refBasePartitionsToRefreshMap\":{},\"basePartitionsToRefreshMap\":{},\"executeOption\":" +
-                        "{\"priority\":0,\"isMergeRedundant\":false,\"isManual\":false,\"isSync\":false," +
-                        "\"isReplay\":false}}}')");
+                        "'1970-01-01 08:00:00', '1970-01-01 08:00:00', '1970-01-01 08:00:00', '{\"startTaskRunId\":" +
+                        "\"aaa\",\"taskId\":0,\"taskName\":\"t1\",\"createTime\":0,\"expireTime\":0,\"priority\":0," +
+                        "\"mergeRedundant\":false,\"source\":\"CTAS\",\"errorCode\":0,\"finishTime\":0," +
+                        "\"processStartTime\":0,\"state\":\"PENDING\",\"progress\":0,\"mvExtraMessage\":" +
+                        "{\"forceRefresh\":false,\"mvPartitionsToRefresh\":[],\"refBasePartitionsToRefreshMap\":{}," +
+                        "\"basePartitionsToRefreshMap\":{},\"executeOption\":{\"priority\":0,\"isMergeRedundant\":" +
+                        "false,\"isManual\":false,\"isSync\":false,\"isReplay\":false}},\"useTableBasedHistory\":" +
+                        "false}')"));
             }
         };
 
@@ -158,4 +161,45 @@ class TableBasedTaskRunHistoryTest {
         assertTrue(keeper.isTableCorrected());
     }
 
+    @Test
+    public void testMerge() {
+        Config.use_table_based_task_run_history = false;
+        MemBasedTaskRunHistory mem = new MemBasedTaskRunHistory();
+        TableBasedTaskRunHistory table = new TableBasedTaskRunHistory();
+        MergedTaskRunHistory merged = new MergedTaskRunHistory(mem, table);
+
+        new Expectations(table) {
+            {
+                table.getTaskRunCount();
+                result = 0;
+            }
+        };
+
+        TaskRunStatus status = new TaskRunStatus();
+        status.setStartTaskRunId("aaa");
+        status.setTaskName("t1");
+        status.setQueryId("a1");
+        merged.addHistory(status, false);
+        Assert.assertEquals(1, mem.getTaskRunCount());
+        Assert.assertEquals(1, merged.getTaskRunCount());
+        new Expectations(mem) {
+            {
+                mem.gc();
+                mem.forceGC();
+            }
+        };
+        merged.gc();
+        merged.forceGC();
+
+        Config.use_table_based_task_run_history = true;
+        new Expectations(table) {
+            {
+                table.getTaskRunCount();
+                result = 1;
+            }
+        };
+        merged.addHistory(status, false);
+        Assert.assertEquals(1, table.getTaskRunCount());
+
+    }
 }

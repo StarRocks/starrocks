@@ -62,7 +62,7 @@ public class MergedTaskRunHistory implements TaskRunHistory {
 
     @Override
     public void forceGC() {
-        mem.gc();
+        mem.forceGC();
         table.forceGC();
     }
 
