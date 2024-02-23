@@ -206,6 +206,8 @@ private:
                 if (_metadata->enable_persistent_index() != alter_meta.enable_persistent_index()) {
                     _metadata->set_enable_persistent_index(alter_meta.enable_persistent_index());
 
+                    _tablet.update_mgr()->set_enable_persistent_index(_tablet.id(),
+                                                                      alter_meta.enable_persistent_index());
                     // Try remove index from index cache
                     // If tablet is doing apply rowset right now, remove primary index from index cache may be failed
                     // because the primary index is available in cache
