@@ -342,6 +342,8 @@ You can query the progress of INSERT jobs from the [`loads`](../reference/inform
 SELECT * FROM information_schema.loads ORDER BY JOB_ID DESC;
 ```
 
+For information about the fields provided in the `loads` view, see [`loads`](../reference/information_schema/loads.md).
+
 If you have submitted multiple load jobs, you can filter on the `LABEL` associated with the job. Example:
 
 ```SQL
@@ -371,8 +373,6 @@ SELECT * FROM information_schema.loads WHERE LABEL = 'insert_e3b882f5-7eb3-11ee-
         TRACKING_SQL: NULL
 REJECTED_RECORD_PATH: NULL
 ```
-
-For information about the fields provided in the `loads` view, see [loads](../reference/information_schema/loads.md).
 
 :::tip
 
@@ -524,6 +524,8 @@ You can query the progress of Broker Load jobs from the [`loads`](../reference/i
 SELECT * FROM information_schema.loads;
 ```
 
+For information about the fields provided in the `loads` view, see [`loads`](../reference/information_schema/loads.md).
+
 If you have submitted multiple load jobs, you can filter on the `LABEL` associated with the job. Example:
 
 ```sql
@@ -558,8 +560,6 @@ WHERE LABEL = 'UserBehavior'\G
 REJECTED_RECORD_PATH: NULL
 1 row in set (0.02 sec)
 ```
-
-For information about the fields provided in the `loads` view, see [loads](../reference/information_schema/loads.md).
 
 After you confirm that the load job has finished, you can check a subset of the destination table to see if the data has been successfully loaded. Example:
 
