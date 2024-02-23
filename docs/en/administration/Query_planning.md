@@ -241,7 +241,7 @@ AS SELECT /*+ SET_VAR(query_timeout=500) */ * from dual;
 
 You can set one or more [user-defined variables](../reference/user_defined_variables.md) hints by using `/*+ SET_USER_VARIABLE(...) */` in SELECT statements, or in the SELECT clause.
 
-If a query references the result of a scalar subquery or scalar expression, you can use the user-defined variable hint to set that subquery or expression as a user-defined variable and then run the query. This not only avoids duplicate computation, but also eliminates the influence on the entire session because the user-defined variable hints in the form of `SET_USER_VARIABLE` take effect at the statement level, unlike the [the normal usage of user-defined variables](../reference/user_defined_variables.md) that takes effect at the session level.
+If a query references the result of a scalar subquery or scalar expression, you can use the user-defined variable hint to set that subquery or expression as a user-defined variable and then run the query. This not only avoids duplicate computation, but also eliminates the influence on the entire session because the user-defined variable hints in the form of `SET_USER_VARIABLE` take effect at the statement level, unlike [the normal usage of user-defined variables](../reference/user_defined_variables.md) that takes effect at the session level.
 
 #### Syntax
 
