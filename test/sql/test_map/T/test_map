@@ -1,0 +1,77 @@
+-- name: testMapTopN
+CREATE TABLE map_top_n
+    (c1 int,
+    c2 map<varchar(8), int>)
+    PRIMARY KEY(c1)
+    DISTRIBUTED BY HASH(c1)
+    BUCKETS 1
+    PROPERTIES ("replication_num" = "1");
+
+insert into map_top_n values
+(1, map{"key1":1}),
+(2, map{"key1":5, "key2":6}),
+(3, map{"key1":2, "key2":3, "key4":4}),
+(4, map{"key1":12, "key2":13, "key3":14, "key4":15}),
+(5, map{"key1":7, "key2":8, "key3":9, "key4":10, "key5":11});
+
+select * from map_top_n order by c2["key1"];
+select * from map_top_n order by c2["key1"] limit 1,10;
+select * from map_top_n order by c2["key1"] limit 2,10;
+select * from map_top_n order by c2["key1"] limit 3,10;
+select * from map_top_n order by c2["key1"] limit 4,10;
+select * from map_top_n order by c2["key1"] limit 5,10;
+
+select element_at(map{'a':1,'b':2},'a');
+select map{'a':1,'b':2}['a'];
+select map{'a':NULL,'b':2}['a'];
+select map{}['a'];
+select c2["key1"] from map_top_n;
+select map{1: "a", 2: "b"}[c1] from map_top_n;
+select map{null: "a", 2: "b"}[null];
+
+-- name: testEmptyMap
+with t0 as (
+    select c1 from (values(map())) as t(c1)
+)
+select map_concat(map('a',1, 'b',2), c1)
+from t0;
+
+with t0 as (
+    select c1 from (values(map())) as t(c1)
+)
+select map_concat(c1, map('a',1, 'b',2))
+from t0;
+
+select map_concat(c1, map())
+from (select c1 from (values(map())) as t(c1)) t;
+
+select map_concat(c1, map(1,2))
+from (select c1 from (values(map())) as t(c1)) t;
+
+-- invaild map key type
+select map_concat(c1, map(map(),map()))
+from (select c1 from (values(map())) as t(c1)) t;
+
+select map_concat(c1, map(map(),[]))
+from (select c1 from (values(map())) as t(c1)) t;
+
+select map_concat(c1, map([],map()))
+from (select c1 from (values(map())) as t(c1)) t;
+
+select map_concat(c1, map())
+from (select c1 from (values(map([], []))) as t(c1)) t;
+
+select map_concat(c1, map())
+from (select c1 from (values(map([], [[]]))) as t(c1)) t;
+
+select map_concat(c1, map([1], [2]))
+from (select c1 from (values(map([], []))) as t(c1)) t;
+
+select map_concat(c1, map([1], [[2]]))
+from (select c1 from (values(map([], [[]]))) as t(c1)) t;
+
+select map_concat(c1, map(named_struct('1',2), named_struct('A', [map()])))
+from (select c1 from (values(map())) as t(c1)) t;
+
+select map_concat(c1, map(named_struct('1',2), named_struct('A', [map([],[[named_struct('C', [[map()]])]])])))
+from (select c1 from (values(map())) as t(c1)) t;

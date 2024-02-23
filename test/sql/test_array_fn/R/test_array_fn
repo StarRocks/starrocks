@@ -207,7 +207,215 @@ select REVERSE( cast ('null' as array<int>));
 -- result:
 None
 -- !result
+<<<<<<< HEAD
 select all_match((x,y) -> x < y, null, [4,5,6]);
+=======
+select array_length([map{1:2, 2:3, 3:4}]);
+-- result:
+1
+-- !result
+select array_append([map{1:2, 2:3, 3:4}], map{3: null, 4:5});
+-- result:
+[{1:2,2:3,3:4},{3:null,4:5}]
+-- !result
+select array_contains([map{1:2, 2:3, 3:4}, map{3:4, 4:5}], map{3:4, 4:5});
+-- result:
+1
+-- !result
+select array_contains([map{1:2, 2:3, 3:4}, map{3:4, 4:5}], map{3:4, 5:5});
+-- result:
+0
+-- !result
+select array_contains([map{1:2, 2:3, 3:4}, map{3:4, 4:null}], map{3:4, 4:null});
+-- result:
+1
+-- !result
+select array_remove([map{1:2, 2:3, 3:4}, map{3:4, 4:5}], map{3:4, 4:5});
+-- result:
+[{1:2,2:3,3:4}]
+-- !result
+select array_position([map{1:2, 2:3, 3:4}, map{3:4, 4:5}], map{3:4, 4:5});
+-- result:
+2
+-- !result
+select array_distinct([map{1:2, 2:3, 3:4}, map{3:4, 4:5}, map{3:4, 4:5}, map{1:2, 2:3, 3:4}]);
+-- result:
+[{1:2,2:3,3:4},{3:4,4:5}]
+-- !result
+select reverse([map{1:2, 2:3, 3:4}, map{3:4, 4:5}]);
+-- result:
+[{3:4,4:5},{1:2,2:3,3:4}]
+-- !result
+select array_slice([map{1:2, 2:3, 3:4}, map{3:4, 4:5}, map{3:4, 4:5}, map{1:2, 2:3, 3:4}], 2, 3);
+-- result:
+[{3:4,4:5},{3:4,4:5},{1:2,2:3,3:4}]
+-- !result
+select array_concat([map{1:2, 2:3, 3:4}], [map{null:3, 4:null}]);
+-- result:
+[{1:2,2:3,3:4},{null:3,4:null}]
+-- !result
+select arrays_overlap([map{1:2, 2:3, 3:4}, map{3:4, 4:5}, map{3:4, 4:5}, map{1:2, 2:3, 3:4}], [map{1:2, 2:3, 3:4}]);
+-- result:
+1
+-- !result
+select array_intersect([map{1:2, 2:3, 3:4}, map{3:4, 4:5}, map{3:4, 4:5}, map{1:2, 2:3, 3:4}], [map{1:2, 2:3, 3:4}]);
+-- result:
+[{1:2,2:3,3:4}]
+-- !result
+select array_contains_all([map{1:2, 2:3, 3:4}, map{3:4, 4:5}, map{3:4, 4:5}, map{1:2, 2:3, 3:4}], [map{1:2, 2:3, 3:4}, map{3:4, 4:5}]);
+-- result:
+1
+-- !result
+select array_filter([map{1:2, 2:3, 3:4}, map{3:4, 4:5}, map{3:4, 4:5}, map{1:2, 2:3, 3:4}], [1,0,0,0]);
+-- result:
+[{1:2,2:3,3:4}]
+-- !result
+select cardinality([map{1:2, 2:3, 3:4}, map{3:4, 4:5}, map{3:4, 4:5}, map{1:2, 2:3, 3:4}]);
+-- result:
+4
+-- !result
+select array_length([row(1,2,3), row(3,4,5)]);
+-- result:
+2
+-- !result
+select array_append([row(1,2,3), row(3,4,5)], row(5,6,7));
+-- result:
+[{"col1":1,"col2":2,"col3":3},{"col1":3,"col2":4,"col3":5},{"col1":5,"col2":6,"col3":7}]
+-- !result
+select array_contains([row(1,2,3), row(3,4,5)], row(5,6,7));
+-- result:
+0
+-- !result
+select array_contains([row(1,2,3), row(3,4,5)], row(3,4,5));
+-- result:
+1
+-- !result
+select array_contains([row(1,2,3), row(3,4,null)], row(3,4,null));
+-- result:
+1
+-- !result
+select array_remove([row(1,2,3), row(3,4,5)], row(5,6,7));
+-- result:
+[{"col1":1,"col2":2,"col3":3},{"col1":3,"col2":4,"col3":5}]
+-- !result
+select array_remove([row(1,2,3), row(3,4,5)], row(3,4,5));
+-- result:
+[{"col1":1,"col2":2,"col3":3}]
+-- !result
+select array_remove([row(1,2,3), row(3,4,null)], row(3,4,null));
+-- result:
+[{"col1":1,"col2":2,"col3":3}]
+-- !result
+select array_position([row(1,2,3), row(3,4,5)], row(3,4,5));
+-- result:
+2
+-- !result
+select array_distinct([row(1,2,3), row(3,4,5), row(3,4,5)]);
+-- result:
+[{"col1":1,"col2":2,"col3":3},{"col1":3,"col2":4,"col3":5}]
+-- !result
+select reverse([row(1,2,3), row(3,4,5)]);
+-- result:
+[{"col1":3,"col2":4,"col3":5},{"col1":1,"col2":2,"col3":3}]
+-- !result
+select array_slice([row(1,2,3), row(3,4,5),row(4,5,6)] ,1,2);
+-- result:
+[{"col1":1,"col2":2,"col3":3},{"col1":3,"col2":4,"col3":5}]
+-- !result
+select array_concat([row(1,2,3), row(3,4,5)], [row(4,5,6), row(5,6,7)]);
+-- result:
+[{"col1":1,"col2":2,"col3":3},{"col1":3,"col2":4,"col3":5},{"col1":4,"col2":5,"col3":6},{"col1":5,"col2":6,"col3":7}]
+-- !result
+select arrays_overlap([row(1,2,3), row(3,4,5), row(4,5,6)], [row(3,4,5)]);
+-- result:
+1
+-- !result
+select array_intersect([row(1,2,3), row(3,4,5)], [row(3,4,5)]);
+-- result:
+[{"col1":3,"col2":4,"col3":5}]
+-- !result
+select array_contains_all([row(1,2,3), row(3,4,5)], [row(3,4,5)]);
+-- result:
+1
+-- !result
+select array_filter([row(1,2,3), row(3,4,5), row(4,5,6)], [0,1,0]);
+-- result:
+[{"col1":3,"col2":4,"col3":5}]
+-- !result
+select cardinality([row(1,2,3), row(3,4,5)]);
+-- result:
+2
+-- !result
+select array_contains_seq([1,2,3,4], [2,3]);
+-- result:
+1
+-- !result
+select array_contains_seq([1,2,3,4], [3,2]);
+-- result:
+0
+-- !result
+select array_contains_seq([1,2,3,4], [1,2,3]);
+-- result:
+1
+-- !result
+select array_contains_seq([1,2,3,4], [1,2,4]);
+-- result:
+0
+-- !result
+select array_contains_seq([], []);
+-- result:
+1
+-- !result
+select array_contains_seq([1,null], [null]);
+-- result:
+1
+-- !result
+select array_contains_seq([1.0,2,3,4], [1]);
+-- result:
+1
+-- !result
+select array_contains_seq([cast(1.0 as decimal),2,3,4], [cast(1 as int)]);
+-- result:
+1
+-- !result
+select array_contains_seq(['a','b','c'], ['a','b']);
+-- result:
+1
+-- !result
+select array_contains_seq(['a','b','c'], ['a','c']);
+-- result:
+0
+-- !result
+select array_contains_seq([[1, 2], [3, 4], [5, 6]], [[1, 2], [3, 4]]);
+-- result:
+1
+-- !result
+select array_contains_seq([json_keys('{"a":1,"b":2}')], [json_keys('{"a":1}')]);
+-- result:
+0
+-- !result
+select array_contains_seq([json_keys('{"a":1,"b":2}')], [json_keys('{"a":1,"b":2}')]);
+-- result:
+1
+-- !result
+select array_contains_seq([map(1,[2,4,5])], [map(1,[2,4,5])]);
+-- result:
+1
+-- !result
+select array_contains_seq([map(1,[2,4,5])], [map(2,[2,4])]);
+-- result:
+0
+-- !result
+select array_contains_seq([1, 2, NULL, 3, 4], ['a']);
+-- result:
+0
+-- !result
+select array_contains_seq([1, 2, NULL, 3, 4], [2,3]);
+-- result:
+0
+-- !result
+select array_contains_seq([1, 2, NULL, 3, 4], null);
+>>>>>>> aa98e5c741 ([BugFix] MapExpr check invalid key type (#41311))
 -- result:
 None
 -- !result
@@ -278,6 +486,7 @@ None
 select all_match((x,y) -> x < y, [1,2,null], [4,5,6]);
 -- result:
 None
+<<<<<<< HEAD
 -- !result
 select all_match((x,y) -> x < y, [1,2,null], [4,5,6]), any_match((x,y) -> x < y, [11,12,8], [4,5,6]);
 -- result:
@@ -343,3 +552,10 @@ select all_match([[]]);
 -- result:
 E: (1064, "The second input of all_matchARRAY<ARRAY<NULL_TYPE>>  can't cast to ARRAY<BOOL>")
 -- !result
+=======
+None
+None
+None
+None
+-- !result
+>>>>>>> aa98e5c741 ([BugFix] MapExpr check invalid key type (#41311))

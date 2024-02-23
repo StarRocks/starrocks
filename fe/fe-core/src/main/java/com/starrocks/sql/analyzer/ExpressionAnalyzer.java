@@ -416,10 +416,21 @@ public class ExpressionAnalyzer {
         @Override
         public Void visitMapExpr(MapExpr node, Scope scope) {
             if (!node.getChildren().isEmpty()) {
+<<<<<<< HEAD
                 Type keyType = Type.NULL;
                 Type valueType = Type.NULL;
                 if (node.getKeyExpr() != null) {
                     keyType = node.getKeyExpr().getType();
+=======
+                Type originalType = node.getType();
+                if (originalType == Type.ANY_MAP) {
+                    Type keyType = node.getKeyCommonType();
+                    if (!keyType.isValidMapKeyType()) {
+                        throw new SemanticException("Map key don't supported type: " + keyType, node.getPos());
+                    }
+                    Type valueType = node.getValueCommonType();
+                    node.setType(new MapType(keyType, valueType));
+>>>>>>> aa98e5c741 ([BugFix] MapExpr check invalid key type (#41311))
                 }
                 if (node.getValueExpr() != null) {
                     valueType = node.getValueExpr().getType();

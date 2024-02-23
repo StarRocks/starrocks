@@ -343,4 +343,136 @@ public class AnalyzeExprTest {
         analyzeFail("select group_concat(1 order by 1 nulls first desc)");
         analyzeFail("select group_concat(name) over (partition by id) from ss");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testMapTypeConstructor() {
+        analyzeSuccess("select map()");
+        analyzeSuccess("select map(NULL,NULL)");
+        analyzeSuccess("select map(1,NULL)");
+        analyzeSuccess("select map{}");
+        analyzeSuccess("select map{NULL:NULL}");
+        analyzeSuccess("select map<int,map<varchar,int>>{2:map{3:3}}");
+        analyzeSuccess("select map<int,map<int,int>>{2:map{'3':3}}");
+        analyzeSuccess("select map<int,map<int,int>>{map{3:3}:2}"); // runtime error will report when cast
+        analyzeSuccess("select map<int,map<int,int>>{'2s':map{3:3}}");
+
+        analyzeFail("select map(null)");
+        analyzeFail("select map(1:4)");
+        analyzeFail("select map(1,3,4)");
+        analyzeFail("select {)");
+        analyzeFail("select map{NULL}");
+        analyzeFail("select map{1,3}");
+        analyzeFail("select map{1:3:3}");
+        analyzeFail("select map{1:3,}");
+        analyzeFail("select map<hll,int>{1:3}");
+        analyzeFail("select map<map<int,int>,int>{{1:3}:11}");
+    }
+
+
+    @Test
+    public void testAnalyzeMapFunc() {
+        analyzeSuccess("select cardinality(map{1:3,3:5,2:45})");
+        analyzeSuccess("select cardinality(map{})");
+        analyzeSuccess("select element_at(map{1:2,3:3,4:3},3)");
+        analyzeSuccess("select element_at(map{1:2,3:3,4:3},312)");
+        analyzeSuccess("select element_at(map{1:2,3:3,4:3},null)");
+        analyzeSuccess("select map_concat(NULL)");
+        analyzeSuccess("select map_concat(NULL,NULL)");
+        analyzeSuccess("select map_concat(NULL,map{})");
+        analyzeSuccess("select map_concat(NULL,map{to_date(\"2020-02-02 00:00:00\"):2})");
+
+        analyzeFail("select cardinality();");
+        analyzeFail("select cardinality(map{},map{})");
+        analyzeFail("select cardinality(1)");
+        analyzeFail("select element_at(map{1:2,3:3,4:3})");
+        analyzeFail("select map_concat()");
+    }
+
+    @Test
+    public void testAnalyzeStructFunc() {
+        analyzeFail("select row('a', 1, 'b', 2)[0]");
+        analyzeFail("select row('a', 1, 'b', 2)[5]");
+        analyzeFail("select row('a', 1, 'b', 2)[-5]");
+        analyzeSuccess("select row('a', 1, 'b', 2)[1]");
+        analyzeSuccess("select row('a', 1, 'b', 2)[-1]");
+    }
+
+    @Test
+    public void testAnalyzeArrayFunc() {
+        analyzeFail("select array_append('aaa','a')");
+        analyzeFail("select array_avg('aaa')");
+        analyzeFail("select array_concat('aaa','a')");
+        analyzeFail("select array_contains('abc','a')");
+        analyzeFail("select array_contains_all('abc','[]')");
+        analyzeFail("select array_cum_sum('arr')");
+        analyzeFail("select array_difference('aaa')");
+        analyzeFail("select ARRAY_DISTINCT('aa')");
+        analyzeFail("select array_filter('a','b')");
+        analyzeFail("select array_intersect('b','bb')");
+        analyzeFail("select ARRAY_JOIN('abc','-')");
+        analyzeFail("select array_length('abc')");
+        analyzeFail("select array_map('abc', x->upper(x))");
+        analyzeFail("select array_max('abc')");
+        analyzeFail("select array_min('bcd')");
+        analyzeFail("select arrays_overlap('abc','ab')");
+        analyzeFail("select array_position('abc','a')");
+        analyzeFail("select array_remove('abc','a')");
+        analyzeFail("select array_slice('abc', 1,2)");
+        analyzeFail("select ARRAY_SORT('abc')");
+        analyzeFail("select array_sortby('abc','b')");
+        analyzeFail("select array_sum('abc')");
+        analyzeFail("select array_to_bitmap('abc')");
+
+        analyzeFail("select array_append('[1,2]','a')");
+        analyzeFail("select array_avg('[1,2]')");
+        analyzeFail("select array_concat('[1,2]','a')");
+        analyzeFail("select array_contains('[1,2]','a')");
+        analyzeFail("select array_contains_all('[1,2]','[1]')");
+        analyzeFail("select array_cum_sum('[1,2]')");
+        analyzeFail("select array_difference('[1,2]')");
+        analyzeFail("select ARRAY_DISTINCT('[1,2]')");
+        analyzeFail("select array_filter('[1,2]','[1,2]')");
+        analyzeFail("select array_intersect('[1,2]','[1]')");
+        analyzeFail("select ARRAY_JOIN('[1,2]','-')");
+        analyzeFail("select array_length('[1,2]')");
+        analyzeFail("select array_map('[1,2]', x->upper(x))");
+        analyzeFail("select array_max('[1,2]')");
+        analyzeFail("select array_min('[1,2]')");
+        analyzeFail("select arrays_overlap('[1,2]','[1,2,4]')");
+        analyzeFail("select array_position('[1,2]','1')");
+        analyzeFail("select array_remove('[1,2]','1')");
+        analyzeFail("select array_slice('[1,3,2]', 1,2)");
+        analyzeFail("select ARRAY_SORT('[1,2]')");
+        analyzeFail("select array_sortby('[a,b]','[1,2]')");
+        analyzeFail("select array_sum('[1,2]')");
+        analyzeFail("select array_to_bitmap('[1,2]')");
+    }
+
+    @Test
+    public void testAnalyseNullToBoolean() {
+        analyzeSuccess("select coalesce(map{to_date(\"2020-02-02 00:00:00\"):1}, map{})");
+        analyzeSuccess("select coalesce([to_date(\"2020-02-02 00:00:00\")], [])");
+        analyzeSuccess("select coalesce(struct(to_date(\"2020-02-02 00:00:00\")), NULL)");
+        analyzeSuccess("select ifnull(map{to_date(\"2020-02-02 00:00:00\"):1}, map{})");
+        analyzeSuccess("select map_from_arrays([1, 2], NULL)");
+    }
+
+    @Test
+    public void testMapInvalidKeyType() {
+        analyzeSuccess("select map(1, 2)");
+        analyzeSuccess("select map(1, [])");
+        analyzeSuccess("select map('a', row(1, 2))");
+        analyzeSuccess("select map('abc', row(1, 2))");
+        analyzeSuccess("select map(cast('2020-02-20' as date), row(1, 2))");
+        analyzeSuccess("select map(cast('2020-02-20' as datetime), row(1, 2))");
+
+        analyzeFail("select map([], 123)");
+        analyzeFail("select map(row(1,2,3), 123)");
+        analyzeFail("select map(map(1,2), 123)");
+        analyzeFail("select map(parse_json('{\"a\": 1}'), map(1,2))");
+    }
+
+>>>>>>> aa98e5c741 ([BugFix] MapExpr check invalid key type (#41311))
 }
