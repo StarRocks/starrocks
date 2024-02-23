@@ -52,7 +52,7 @@ jobs:
         id: param
         run: |
           if [[ "${{ github.event_name }}" == "schedule" ]]; then
-            if [[ "${{ github.event.schedule }} != "0 10 * * 1-5" ]]; then
+            if [[ "${{ github.event.schedule }}" != "0 10 * * 1-5" ]]; then
               branch=main
             else
               branch=branch-3.2
