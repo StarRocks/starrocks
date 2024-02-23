@@ -65,7 +65,7 @@ We recommend you customize roles to manage privileges and users. The following e
      -- Grant the privilege to create databases in the default catalog.
      GRANT CREATE DATABASE ON CATALOG default_catalog TO ROLE recover;
      -- Grant the privilege to create tables in any database.
-     GRANT CREATE TABLE ON ALL DATABASE TO ROLE recover;
+     GRANT CREATE TABLE ON ALL DATABASES TO ROLE recover;
      -- Grant the privilege to load and export data on any table.
      GRANT INSERT, EXPORT ON ALL TABLES IN ALL DATABASES TO ROLE recover;
      ```
@@ -82,7 +82,7 @@ We recommend you customize roles to manage privileges and users. The following e
      -- Grant the privilege to create databases.
      GRANT CREATE DATABASE ON CATALOG default_catalog TO ROLE recover_db;
      -- Grant the privilege to create tables.
-     GRANT CREATE TABLE ON ALL DATABASE TO ROLE recover_db;
+     GRANT CREATE TABLE ON ALL DATABASES TO ROLE recover_db;
      -- Grant the privilege to load data into any table.
      GRANT INSERT ON ALL TABLES IN ALL DATABASES TO ROLE recover_db;
      -- Grant the privilege to export data from any table in the database to be backed up.
