@@ -803,6 +803,7 @@ bool OrcChunkReader::_ok_to_add_conjunct(const Expr* conjunct) {
         }
 
         if (node_type == TExprNodeType::IS_NULL_PRED) {
+            // null predicate only has one child
             return true;
         }
 
