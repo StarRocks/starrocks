@@ -18,8 +18,8 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
-import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ColumnTypeConverter;
+import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.hive.HiveMetaClient;
@@ -201,7 +201,7 @@ public class HudiTableTest {
     @Test
     public void testToThrift(
             @Mocked ConnectorMgr connectorMgr,
-            @Mocked CatalogConnector catalogConnector,
+            @Mocked Connector catalogConnector,
             @Mocked ConnectorMetadata connectorMetadata,
             @Mocked HoodieTableMetaClient hoodieTableMetaClient) {
         new Expectations() {
