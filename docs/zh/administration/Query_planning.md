@@ -381,19 +381,15 @@ CREATE MATERIALIZED VIEW mv
 
 ### 用户自定义变量 Hint
 
-在 SELECT 或者 INSERT 语句中使用 `SET_USER_VARIABLE` Hint 设置一个或多个[用户自定义变量](../reference/user_defined_variables.md) ，然后执行该语句。如果 INSERT 语句中包含 SELECT 子句，则您也可以在该 SELECT 子句中使用 `SET_USER_VARIABLE` Hint。
+在 SELECT 或者 INSERT 语句中使用 `SET_USER_VARIABLE` Hint 设置一个或多个[用户自定义变量](../reference/user_defined_variables.md) ，然后执行该语句。如果其他语句中包含 SELECT 子句（如 SELECT 语句和 INSERT 语句），则您也可以在该 SELECT 子句中使用 `SET_USER_VARIABLE` Hint。
 
 相比于[用户自定义变量的一般用法](../reference/user_defined_variables.md)是会话级别生效的，`SET_USER_VARIABLE` Hint 是语句级别生效，不会影响整个会话。
 
 #### 语法
 
 ```SQL
-SELECT /*+ SET_USER_VARIABLE(@var_name = expr [, @var_name = expr]) */ ...
-```
-
-```SQL
-INSERT /*+ SET_USER_VARIABLE(@var_name = expr [, @var_name = expr]) */ { INTO | OVERWRITE } [db_name.]<table_name> ...
-    SELECT [/*+ SET_USER_VARIABLE(@var_name = expr [, @var_name = expr]) */] ...
+[...] SELECT /*+ SET_USER_VARIABLE(@var_name = expr [, @var_name = expr]) */ ...
+INSERT /*+ SET_USER_VARIABLE(@var_name = expr [, @var_name = expr]) */ { INTO | OVERWRITE } ...
 ```
 
 #### 示例
