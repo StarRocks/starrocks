@@ -18,12 +18,18 @@ on:
           - branch-3.2
           - branch-3.1
 
+env:
+  IS_INSPECTION: true
+
 jobs:
   info:
     runs-on: ubuntu-latest
     name: INFO
+    env:
+      REPO: ${{ github.repository }}
     outputs:
       BRANCH: ${{ steps.branch.outputs.branch }}
+      BASE_VERSION: ${{ steps.branch.outputs.BASE_SHA }}
     steps:
       - id: branch
         name: BRANCH
@@ -43,7 +49,11 @@ jobs:
             branch=${{ inputs.BRANCH }}
           fi
           
+          base_sha=$(gh api /repos/${REPO}/branches/${branch} | jq -r .commit.sha)
+          [[ "${base_sha}" == "null" ]] && (echo "::error::Get HEAD SHA error, please check." && exit -1);
+          
           echo "branch=${branch}" >> $GITHUB_OUTPUT
+          echo "BASE_SHA=${base_sha}" >> $GITHUB_OUTPUT
 
 
   clang-format:
@@ -51,7 +61,7 @@ jobs:
     needs: info
     name: Clang-Format
     env:
-      PR_NUMBER: ${{ github.event.number }}
+      BASE_VERSION: ${{ needs.info.outputs.BASE_VERSION }}
     steps:
       - name: clean
         run: |
@@ -66,6 +76,7 @@ jobs:
 
       - name: Run Clang-Format
         run: |
+          git reset ${BASE_VERSION} --hard
           export PATH=/var/lib/llvm/bin:$PATH
           bash build-support/check-format.sh
 
@@ -81,6 +92,7 @@ jobs:
     name: BE UT
     env:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
+      BASE_VERSION: ${{ needs.info.outputs.BASE_VERSION }}
     steps:
       - name: UPDATE ECI & RUN UT
         id: run_ut
@@ -88,7 +100,7 @@ jobs:
         timeout-minutes: 180
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/elastic-ut.sh --branch ${BRANCH} --module be --repository ${{ github.repository }} --with-gcov
+          ./bin/elastic-ut.sh --branch ${BRANCH} --pr ${BASE_VERSION} --module be --repository ${{ github.repository }}
 
       - name: clean ECI - ${{ steps.run_ut.outputs.ECI_ID }}
         if: always()
@@ -119,6 +131,7 @@ jobs:
     if: needs.info.outputs.BRANCH == 'main'
     env:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
+      BASE_VERSION: ${{ needs.info.outputs.BASE_VERSION }}
     steps:
       - name: clean
         run: |
@@ -131,7 +144,7 @@ jobs:
         timeout-minutes: 60
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/elastic-build.sh --branch ${BRANCH} --repository ${{ github.repository }} --be --clang-tidy
+          ./bin/elastic-build.sh --branch ${BRANCH} --pr ${BASE_VERSION} --repository ${{ github.repository }} --be --clang-tidy
 
       - name: clean ECI
         if: always()
@@ -151,7 +164,8 @@ jobs:
     needs: info
     name: FE Code Style Check
     env:
-      PR_NUMBER: ${{ github.event.number }}
+      BRANCH: ${{ needs.info.outputs.BRANCH }}
+      BASE_VERSION: ${{ needs.info.outputs.BASE_VERSION }}
     steps:
       - name: clean
         run: |
@@ -168,13 +182,12 @@ jobs:
           cp fe/checkstyle* .
 
       - name: Run java checkstyle
-        if: ${{ steps.java-file.outputs.java == 'true' }}
-        uses: dbelyaev/action-checkstyle@v0.7.5
+        uses: dbelyaev/action-checkstyle@v1.5.6
         with:
           workdir: "./fe"
           checkstyle_config: checkstyle.xml
           reporter: 'github-pr-check'
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.PAT }}
           fail_on_error: true
           level: error
 
@@ -186,6 +199,7 @@ jobs:
       CODE_PATH: ${{ github.workspace }}
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       GH_TOKEN: ${{ github.token }}
+      BASE_VERSION: ${{ needs.info.outputs.BASE_VERSION }}
     steps:
       - name: clean
         run: |
@@ -210,7 +224,7 @@ jobs:
         timeout-minutes: 60
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/elastic-ut.sh --module fe --branch ${BRANCH} --build Release --repository ${{ github.repository }}
+          ./bin/elastic-ut.sh --module fe --pr ${BASE_VERSION} --branch ${BRANCH} --build Release --repository ${{ github.repository }}
 
       - name: Clean ECI - ${{ steps.run_ut.outputs.ECI_ID }}
         if: always()
@@ -242,6 +256,7 @@ jobs:
     name: BUILD
     env:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
+      BASE_VERSION: ${{ needs.info.outputs.BASE_VERSION }}
     steps:
       - name: clean
         run: |
@@ -256,7 +271,7 @@ jobs:
           SKIP_OSS: 'true'
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/elastic-build.sh --branch ${BRANCH} --repository ${{ github.repository }}
+          ./bin/elastic-build.sh --branch ${BRANCH} --pr ${BASE_VERSION} --repository ${{ github.repository }}
 
       - name: clean ECI - ${{ steps.run_build.outputs.ECI_ID }}
         if: always()
