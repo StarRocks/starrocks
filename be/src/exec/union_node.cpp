@@ -166,9 +166,9 @@ Status UnionNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     return Status::OK();
 }
 
-Status UnionNode::close(RuntimeState* state) {
+void UnionNode::close(RuntimeState* state) {
     if (is_closed()) {
-        return Status::OK();
+        return;
     }
     for (auto& exprs : _child_expr_lists) {
         Expr::close(exprs, state);
@@ -176,7 +176,7 @@ Status UnionNode::close(RuntimeState* state) {
     for (auto& exprs : _const_expr_lists) {
         Expr::close(exprs, state);
     }
-    return ExecNode::close(state);
+    ExecNode::close(state);
 }
 
 Status UnionNode::_get_next_passthrough(RuntimeState* state, ChunkPtr* chunk) {
@@ -191,7 +191,7 @@ Status UnionNode::_get_next_passthrough(RuntimeState* state, ChunkPtr* chunk) {
     while (true) {
         RETURN_IF_ERROR(child(_child_idx)->get_next(state, &tmp_chunk, &_child_eos));
         if (_child_eos) {
-            RETURN_IF_ERROR(child(_child_idx)->close(state));
+            child(_child_idx)->close(state);
             _child_idx++;
             break;
         }
@@ -218,7 +218,7 @@ Status UnionNode::_get_next_materialize(RuntimeState* state, ChunkPtr* chunk) {
     while (true) {
         RETURN_IF_ERROR(child(_child_idx)->get_next(state, &tmp_chunk, &_child_eos));
         if (_child_eos) {
-            RETURN_IF_ERROR(child(_child_idx)->close(state));
+            child(_child_idx)->close(state);
             _child_idx++;
             break;
         }
