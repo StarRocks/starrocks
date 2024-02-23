@@ -26,15 +26,8 @@ import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import org.apache.paimon.catalog.Identifier;
-import org.apache.paimon.data.BinaryString;
-import org.apache.paimon.table.sink.BatchTableCommit;
-import org.apache.paimon.table.sink.BatchTableWrite;
-import org.apache.paimon.types.DataField;
-import org.apache.paimon.types.DataTypes;
 import org.junit.BeforeClass;
 
-import java.util.Collections;
 import java.util.Map;
 
 public class ConnectorPlanTestBase extends PlanTestBase {
