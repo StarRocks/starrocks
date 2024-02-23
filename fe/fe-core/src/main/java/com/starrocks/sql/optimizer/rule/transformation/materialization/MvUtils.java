@@ -603,13 +603,9 @@ public class MvUtils {
                     if (context != null) {
                         joinKeyColumns.union(context);
                     }
-                    optExpression.inputAt(0).getOp().accept(this, optExpression.inputAt(0), joinKeyColumns);
-                    optExpression.inputAt(1).getOp().accept(this, optExpression.inputAt(1), joinKeyColumns);
-                } else if (joinType.isLeftOuterJoin() || joinType.isLeftAntiJoin()) {
-                    optExpression.inputAt(0).getOp().accept(this, optExpression.inputAt(0), joinKeyColumns);
-                } else if (joinType.isRightOuterJoin() || joinType.isRightAntiJoin()) {
-                    optExpression.inputAt(1).getOp().accept(this, optExpression.inputAt(1), joinKeyColumns);
                 }
+                optExpression.inputAt(0).getOp().accept(this, optExpression.inputAt(0), joinKeyColumns);
+                optExpression.inputAt(1).getOp().accept(this, optExpression.inputAt(1), joinKeyColumns);
                 List<ScalarOperator> conjuncts = Utils.extractConjuncts(
                         Utils.compoundAnd(joinOperator.getPredicate(), joinOperator.getOnPredicate()));
                 for (ScalarOperator conjunct : conjuncts) {
