@@ -26,10 +26,8 @@ public class MaterializedViewTPCDSTest extends MaterializedViewTestBase {
     @BeforeAll
     public static void beforeClass() throws Exception {
         MaterializedViewTestBase.beforeClass();
-        TPCDSTestUtil.prepareTables(starRocksAssert);
-        starRocksAssert.dropDatabase("test");
-        starRocksAssert.withDatabase("test").useDatabase("test");
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
+        TPCDSTestUtil.prepareTables(starRocksAssert);
     }
 
     @Test
