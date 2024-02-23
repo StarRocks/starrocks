@@ -341,6 +341,25 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String NESTED_MV_REWRITE_MAX_LEVEL = "nested_mv_rewrite_max_level";
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE = "enable_materialized_view_rewrite";
     public static final String ENABLE_MATERIALIZED_VIEW_UNION_REWRITE = "enable_materialized_view_union_rewrite";
+<<<<<<< HEAD
+=======
+    public static final String ENABLE_MATERIALIZED_VIEW_REWRITE_PARTITION_COMPENSATE =
+            "enable_materialized_view_rewrite_partition_compensate";
+
+    public static final String LARGE_DECIMAL_UNDERLYING_TYPE = "large_decimal_underlying_type";
+
+    public static final String ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE = "enable_iceberg_identity_column_optimize";
+    public static final String ENABLE_PIPELINE_LEVEL_SHUFFLE = "enable_pipeline_level_shuffle";
+
+    public static final String ENABLE_PLAN_SERIALIZE_CONCURRENTLY = "enable_plan_serialize_concurrently";
+
+    public static final String ENABLE_STRICT_ORDER_BY = "enable_strict_order_by";
+    private static final String CBO_SPLIT_SCAN_PREDICATE_WITH_DATE = "enable_split_scan_predicate_with_date";
+
+    private static final String ENABLE_RESULT_SINK_ACCUMULATE = "enable_result_sink_accumulate";
+
+    public static final String ENABLE_WAIT_DEPENDENT_EVENT = "enable_wait_dependent_event";
+>>>>>>> 49465c9f01 (support result sink accumulate (#41084))
 
     // Flag to control whether to proxy follower's query statement to leader/follower.
     public enum FollowerQueryForwardMode {
@@ -707,6 +726,89 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_INSERT_STRICT)
     private boolean enableInsertStrict = true;
 
+<<<<<<< HEAD
+=======
+    @VariableMgr.VarAttr(name = ENABLE_SPILL)
+    private boolean enableSpill = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_SPILL_TO_REMOTE_STORAGE)
+    private boolean enableSpillToRemoteStorage = false;
+
+    @VariableMgr.VarAttr(name = DISABLE_SPILL_TO_LOCAL_DISK)
+    private boolean disableSpillToLocalDisk = false;
+
+
+    // this is used to control which operators can spill, only meaningful when enable_spill=true
+    // it uses a bit to identify whether the spill of each operator is in effect, 0 means no, 1 means yes
+    // at present, only the lowest 4 bits are meaningful, corresponding to the four operators
+    // HASH_JOIN, AGG, AGG_DISTINCT and SORT respectively (see TSpillableOperatorType in InternalService.thrift)
+    // e.g.
+    // if spillable_operator_mask & 1 != 0, hash join operator can spill
+    // if spillable_operator_mask & 2 != 0, agg operator can spill
+    // if spillable_operator_mask & 4 != 0, agg distinct operator can spill
+    // if spillable_operator_mask & 8 != 0, sort operator can spill
+    // if spillable_operator_mask & 16 != 0, nest loop join operator can spill
+    // ...
+    // default value is -1, means all operators can spill
+    @VariableMgr.VarAttr(name = SPILLABLE_OPERATOR_MASK, flag = VariableMgr.INVISIBLE)
+    private long spillableOperatorMask = -1;
+
+    @VariableMgr.VarAttr(name = SPILL_MODE)
+    private String spillMode = "auto";
+
+    // These parameters are experimental. They may be removed in the future
+    @VarAttr(name = SPILL_MEM_TABLE_SIZE, flag = VariableMgr.INVISIBLE)
+    private int spillMemTableSize = 1024 * 1024 * 100;
+    @VarAttr(name = SPILL_MEM_TABLE_NUM, flag = VariableMgr.INVISIBLE)
+    private int spillMemTableNum = 2;
+    @VarAttr(name = SPILL_MEM_LIMIT_THRESHOLD, flag = VariableMgr.INVISIBLE)
+    private double spillMemLimitThreshold = 0.8;
+    @VarAttr(name = SPILL_OPERATOR_MIN_BYTES, flag = VariableMgr.INVISIBLE)
+    private long spillOperatorMinBytes = 1024L * 1024 * 50;
+    @VarAttr(name = SPILL_OPERATOR_MAX_BYTES, flag = VariableMgr.INVISIBLE)
+    private long spillOperatorMaxBytes = 1024L * 1024 * 1000;
+    // If the operator memory revocable memory exceeds this value, the operator will perform a spill as soon as possible
+    @VarAttr(name = SPILL_REVOCABLE_MAX_BYTES)
+    private long spillRevocableMaxBytes = 0;
+    // the encoding level of spilled data, the meaning of values is similar to transmission_encode_level,
+    // see more details in the comment above transmissionEncodeLevel
+    @VarAttr(name = SPILL_ENCODE_LEVEL)
+    private int spillEncodeLevel = 7;
+
+    @VarAttr(name = SPILL_ENABLE_DIRECT_IO)
+    private boolean spillEnableDirectIO = false;
+
+    @VarAttr(name = SPILL_STORAGE_VOLUME)
+    private String spillStorageVolume = "";
+
+    @VarAttr(name = SPILL_RAND_RATIO, flag = VariableMgr.INVISIBLE)
+    private double spillRandRatio = 0.1;
+
+    @VarAttr(name = ENABLE_AGG_SPILL_PREAGGREGATION, flag = VariableMgr.INVISIBLE)
+    public boolean enableAggSpillPreaggregation = true;
+
+    @VarAttr(name = ENABLE_RBO_TABLE_PRUNE)
+    private boolean enableRboTablePrune = false;
+
+    @VarAttr(name = ENABLE_CBO_TABLE_PRUNE)
+    private boolean enableCboTablePrune = false;
+
+    @VarAttr(name = ENABLE_TABLE_PRUNE_ON_UPDATE)
+    private boolean enableTablePruneOnUpdate = false;
+
+    @VarAttr(name = ENABLE_UKFK_OPT)
+    private boolean enableUKFKOpt = false;
+
+    @VarAttr(name = ENABLE_UKFK_JOIN_REORDER)
+    private boolean enableUKFKJoinReorder = false;
+
+    @VarAttr(name = MAX_UKFK_JOIN_REORDER_SCALE_RATIO, flag = VariableMgr.INVISIBLE)
+    private int maxUKFKJoinReorderScaleRatio = 100;
+
+    @VarAttr(name = MAX_UKFK_JOIN_REORDER_FK_ROWS, flag = VariableMgr.INVISIBLE)
+    private int maxUKFKJoinReorderFKRows = 100000000;
+
+>>>>>>> 49465c9f01 (support result sink accumulate (#41084))
     @VariableMgr.VarAttr(name = FORWARD_TO_LEADER, alias = FORWARD_TO_MASTER)
     private boolean forwardToLeader = false;
 
@@ -1072,6 +1174,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public boolean isEnableQueryQueue() {
         return enableQueryQueue;
     }
+
+    @VariableMgr.VarAttr(name = ENABLE_RESULT_SINK_ACCUMULATE)
+    private boolean enableResultSinkAccumulate = true;
 
     public boolean isCboDecimalCastStringStrict() {
         return cboDecimalCastStringStrict;
@@ -2112,8 +2217,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setConnector_scan_use_query_mem_ratio(connectorScanUseQueryMemRatio);
         tResult.setScan_use_query_mem_ratio(scanUseQueryMemRatio);
         tResult.setEnable_collect_table_level_scan_stats(enableCollectTableLevelScanStats);
+<<<<<<< HEAD
 
         tResult.setUse_page_cache(usePageCache);
+=======
+        tResult.setEnable_pipeline_level_shuffle(enablePipelineLevelShuffle);
+        tResult.setEnable_hyperscan_vec(enableHyperscanVec);
+        tResult.setEnable_jit(enableJit);
+        tResult.setEnable_result_sink_accumulate(enableResultSinkAccumulate);
+        tResult.setEnable_wait_dependent_event(enableWaitDependentEvent);
+>>>>>>> 49465c9f01 (support result sink accumulate (#41084))
         return tResult;
     }
 

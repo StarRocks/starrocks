@@ -244,7 +244,31 @@ struct TQueryOptions {
 
   107: optional i64 global_runtime_filter_build_max_size;
 
+<<<<<<< HEAD
   109: optional i64 big_query_profile_second_threshold;
+=======
+  109: optional i64 big_query_profile_threshold = 0;
+
+  110: optional TQueryQueueOptions query_queue_options;
+
+  111: optional bool enable_file_metacache;
+
+  112: optional bool enable_pipeline_level_shuffle;
+  113: optional bool enable_hyperscan_vec;
+
+  114: optional bool enable_jit = false;
+
+  115: optional TTimeUnit big_query_profile_threshold_unit = TTimeUnit.SECOND;
+
+  116: optional string sql_dialect;
+
+  117: optional bool enable_spill_to_remote_storage;
+  118: optional TSpillToRemoteStorageOptions spill_to_remote_storage_options;
+
+  119: optional bool enable_result_sink_accumulate;
+  
+  130: optional bool enable_wait_dependent_event = false;
+>>>>>>> 49465c9f01 (support result sink accumulate (#41084))
 }
 
 
