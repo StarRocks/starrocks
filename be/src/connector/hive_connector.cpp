@@ -540,7 +540,6 @@ HdfsScanner* HiveDataSource::_create_paimon_jni_scanner(const FSOptions& options
     }
     required_fields = required_fields.substr(0, required_fields.size() - 1);
 
-
     std::string nested_fields;
     for (auto slot : _tuple_desc->slots()) {
         const TypeDescriptor& type = slot->type();
