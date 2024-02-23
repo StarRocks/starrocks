@@ -18,6 +18,7 @@
 
 #include "storage/chunk_helper.h"
 #include "storage/lake/lake_local_persistent_index.h"
+#include "storage/lake/local_pk_index_manager.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/primary_key_encoder.h"
@@ -27,6 +28,13 @@
 namespace starrocks::lake {
 
 static bvar::LatencyRecorder g_load_pk_index_latency("lake_load_pk_index");
+
+LakePrimaryIndex::~LakePrimaryIndex() {
+    if (!_enable_persistent_index && _persistent_index != nullptr) {
+        auto st = LocalPkIndexManager::clear_persistent_index(_tablet_id);
+        LOG_IF(WARNING, !st.ok()) << "Fail to clear pk index from local disk: " << st.to_string();
+    }
+}
 
 Status LakePrimaryIndex::lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
                                    const MetaFileBuilder* builder) {
@@ -94,6 +102,7 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
                                     ->get_persistent_index_store(metadata->id())
                                     ->create_dir_if_path_not_exists(path));
             _persistent_index = std::make_unique<LakeLocalPersistentIndex>(path);
+            set_enable_persistent_index(true);
             return dynamic_cast<LakeLocalPersistentIndex*>(_persistent_index.get())
                     ->load_from_lake_tablet(tablet_mgr, metadata, base_version, builder);
         }
