@@ -487,13 +487,12 @@ BE dynamic parameters are as follows.
 #### starlet_use_star_cache
 
 - **Default**：true
-- **Description**：Whether to turn on block data cache in shared-data cluster.
+- **Description**：Whether to enable block data cache in a shared-data cluster. `true` indicates enabling this feature and `false` indicates disabling it.
 
 #### starlet_cache_evict_high_water
 
 - **Default**：0.2
-- **Description**：In shared-data cluster, if left disk space percentage is below this configuration, file data cache eviction will start. That is, file data cache will use 80% at most by default.
-
+- **Description**：In a shared-data cluster, if the percentage of the available disk capacity is below this value, file data cache eviction will be triggered. The default value indicates that file data cache will use at most 80% of the disk capacity.
 
 ## Configure BE static parameters
 
@@ -1001,4 +1000,4 @@ BE static parameters are as follows.
 #### starlet_star_cache_disk_size_percent
 
 - **Default**：80
-- **Description**：The percentage of disk space block data cache uses at most in shared-data cluster.
+- **Description**：The percentage of disk capacity that block data cache uses at most in a shared-data cluster.
