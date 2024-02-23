@@ -60,7 +60,7 @@ protected:
         ctx->tuple_desc = parquet::Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs.data());
         parquet::Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
         ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
-        ctx->scan_range =_create_scan_range(_file_path, file_size);
+        ctx->scan_range = _create_scan_range(_file_path, file_size);
         ctx->timezone = "Asia/Shanghai";
         ctx->stats = &g_hdfs_scan_stats;
 
@@ -169,9 +169,9 @@ TEST_F(ParquetFileWriterTest, TestWriteIntegralTypes) {
 
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<ParquetWriterOptions>();
-    auto writer = std::make_unique<ParquetFileWriter>("",
-            std::move(parquet_output_stream), column_names, type_descs, std::move(column_evaluators), writer_options,
-            []() {}, nullptr);
+    auto writer = std::make_unique<ParquetFileWriter>(
+            "", std::move(parquet_output_stream), column_names, type_descs, std::move(column_evaluators),
+            writer_options, []() {}, nullptr);
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();

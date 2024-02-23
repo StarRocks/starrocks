@@ -14,17 +14,17 @@
 
 #include "exec/pipeline/sink/connector_sink_operator.h"
 
+#include <gmock/gmock.h>
 #include <gtest/gtest-param-test.h>
 #include <gtest/gtest.h>
-#include <gmock/gmock.h>
 
 #include <future>
 #include <thread>
 
-#include "testutil/assert.h"
-#include "util/defer_op.h"
 #include "connector_sink/connector_chunk_sink.h"
 #include "formats/utils.h"
+#include "testutil/assert.h"
+#include "util/defer_op.h"
 
 namespace starrocks::pipeline {
 namespace {
@@ -49,7 +49,8 @@ public:
     MOCK_METHOD(Status, init, (), (override));
     MOCK_METHOD(StatusOr<Futures>, add, (ChunkPtr), (override));
     MOCK_METHOD(Futures, finish, (), (override));
-    MOCK_METHOD(std::function<void(const formats::FileWriter::CommitResult& result)>, callback_on_success, (), (override));
+    MOCK_METHOD(std::function<void(const formats::FileWriter::CommitResult& result)>, callback_on_success, (),
+                (override));
 };
 
 using ::testing::Return;
@@ -77,7 +78,7 @@ TEST_F(ConnectorSinkOperatorTest, test_prepare) {
 TEST_F(ConnectorSinkOperatorTest, test_push_chunk) {
     {
         auto mock_sink = std::make_unique<MockConnectorChunkSink>();
-        EXPECT_CALL(*mock_sink, add(_)).WillOnce(Return(ByMove(Futures{}))); // don't block
+        EXPECT_CALL(*mock_sink, add(_)).WillOnce(Return(ByMove(Futures{})));   // don't block
         EXPECT_CALL(*mock_sink, finish()).WillOnce(Return(ByMove(Futures{}))); // don't block
         auto op = std::make_unique<ConnectorSinkOperator>(nullptr, 0, 0, 0, std::move(mock_sink), nullptr);
         auto chunk = std::make_shared<Chunk>();
@@ -113,8 +114,8 @@ TEST_F(ConnectorSinkOperatorTest, test_push_chunk) {
         auto futures = Futures{};
         futures.commit_file_future.push_back(promise.get_future()); // block
         EXPECT_CALL(*mock_sink, add(_)).WillOnce(Return(ByMove(std::move(futures))));
-        EXPECT_CALL(*mock_sink, finish()).WillOnce(Return(ByMove(Futures{}))); // don't block
-        EXPECT_CALL(*mock_sink, callback_on_success()).WillOnce(Return([](CommitResult r){})); // don't block
+        EXPECT_CALL(*mock_sink, finish()).WillOnce(Return(ByMove(Futures{})));                  // don't block
+        EXPECT_CALL(*mock_sink, callback_on_success()).WillOnce(Return([](CommitResult r) {})); // don't block
         auto op = std::make_unique<ConnectorSinkOperator>(nullptr, 0, 0, 0, std::move(mock_sink), nullptr);
         auto chunk = std::make_shared<Chunk>();
         EXPECT_TRUE(op->need_input());
@@ -123,8 +124,8 @@ TEST_F(ConnectorSinkOperatorTest, test_push_chunk) {
         EXPECT_OK(op->set_finishing(_runtime_state));
         EXPECT_FALSE(op->is_finished());
         promise.set_value(CommitResult{
-            .io_status = Status::OK(),
-            .rollback_action = [](){},
+                .io_status = Status::OK(),
+                .rollback_action = []() {},
         });
         EXPECT_TRUE(op->is_finished());
     }
@@ -151,16 +152,14 @@ TEST_F(ConnectorSinkOperatorTest, test_push_chunk_error) {
 TEST_F(ConnectorSinkOperatorTest, test_cleanup_after_cancel) {
     {
         bool cleanup = false;
-        auto mock_sink= std::make_unique<MockConnectorChunkSink>();
+        auto mock_sink = std::make_unique<MockConnectorChunkSink>();
         auto futures = Futures{};
         futures.commit_file_future.push_back(make_ready_future(CommitResult{
                 .io_status = Status::OK(),
-                .rollback_action = [&](){
-                    cleanup = true;
-                },
+                .rollback_action = [&]() { cleanup = true; },
         }));
-        EXPECT_CALL(*mock_sink, finish()).WillOnce(Return(ByMove(std::move(futures)))); // don't block
-        EXPECT_CALL(*mock_sink, callback_on_success()).WillOnce(Return([](CommitResult r){})); // don't block
+        EXPECT_CALL(*mock_sink, finish()).WillOnce(Return(ByMove(std::move(futures))));         // don't block
+        EXPECT_CALL(*mock_sink, callback_on_success()).WillOnce(Return([](CommitResult r) {})); // don't block
         auto op = std::make_unique<ConnectorSinkOperator>(nullptr, 0, 0, 0, std::move(mock_sink), _fragment_context);
 
         EXPECT_OK(op->set_finishing(_runtime_state));

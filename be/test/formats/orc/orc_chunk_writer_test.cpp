@@ -199,9 +199,9 @@ TEST_F(OrcChunkWriterTest, TestWriteIntergersNullable) {
 
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::ORCWriterOptions>();
-    auto writer = std::make_unique<formats::ORCFileWriter>("",
-            std::move(parquet_output_stream), column_names, type_descs, std::move(column_evaluators), writer_options,
-            []() {}, nullptr);
+    auto writer = std::make_unique<formats::ORCFileWriter>(
+            "", std::move(parquet_output_stream), column_names, type_descs, std::move(column_evaluators),
+            writer_options, []() {}, nullptr);
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
