@@ -377,6 +377,8 @@ public class TabletStatMgr extends FrontendDaemon {
                             LakeTablet tablet = (LakeTablet) tablets.get(stat.tabletId);
                             tablet.setDataSize(stat.dataSize);
                             tablet.setRowCount(stat.numRows);
+                            tablet.setPrimaryIndexMemSize(stat.primaryIndexMemSize);
+                            tablet.setPrimaryIndexDiskSize(stat.primaryIndexDiskSize);
                             tablet.setDataSizeUpdateTime(collectStatTime);
                         }
                     }
