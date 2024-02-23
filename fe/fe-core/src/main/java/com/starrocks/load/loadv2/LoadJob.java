@@ -195,7 +195,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     // only for persistence param. see readFields() for usage
     private boolean isJobTypeRead = false;
 
-    private boolean startLoad = false;
+    protected boolean startLoad = false;
 
     // only for log replay
     public LoadJob() {
@@ -231,6 +231,11 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
     public long getId() {
         return id;
+    }
+
+    // unit test
+    public void setId(long id) {
+        this.id = id;
     }
 
     public Database getDb() throws MetaNotFoundException {
@@ -284,7 +289,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         }
         idToTasks.clear();
         finishedTaskIds.clear();
-        loadingStatus.setProgress(0);
+        loadingStatus.reset();
     }
 
     public boolean isTimeout() {
@@ -297,6 +302,10 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
     public long getTransactionId() {
         return transactionId;
+    }
+
+    public long getLoadStartTimestamp() {
+        return loadStartTimestamp;
     }
 
     public void initLoadProgress(TUniqueId loadId, Set<TUniqueId> fragmentIds, List<Long> relatedBackendIds) {
@@ -1011,6 +1020,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             progress = 99;
             transactionId = txnState.getTransactionId();
             state = JobState.COMMITTED;
+            failMsg = null;
         } finally {
             writeUnlock();
         }
@@ -1110,6 +1120,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             progress = 100;
             finishTimestamp = txnState.getFinishTime();
             state = JobState.FINISHED;
+            failMsg = null;
             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
         } finally {
             writeUnlock();

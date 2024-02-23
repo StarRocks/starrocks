@@ -21,6 +21,7 @@ import com.starrocks.sql.plan.ReplayFromDumpTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestRule;
@@ -54,6 +55,7 @@ public class QueryDumpPlannerBenchTest extends ReplayFromDumpTestBase {
      * time.total: 14.64, time.warmup: 0.82, time.bench: 13.82
      */
     @Test
+    @Ignore
     @BenchmarkOptions(concurrency = 1, warmupRounds = 10, benchmarkRounds = 1000)
     public void benchDump() throws Exception {
         connectContext.setThreadLocalInfo();

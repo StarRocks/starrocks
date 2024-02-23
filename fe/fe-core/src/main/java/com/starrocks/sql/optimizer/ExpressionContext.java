@@ -77,6 +77,10 @@ public class ExpressionContext {
         }
     }
 
+    public OptExpression getOptExpression() {
+        return expression;
+    }
+
     public Operator getOp() {
         if (expression != null) {
             return expression.getOp();

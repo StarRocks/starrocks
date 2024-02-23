@@ -165,8 +165,8 @@ GRANT
     TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ]
 ```
 
-* You must first run SET CATALOG before you run this command.
-* You can also use `<db_name>.<function_name>` to represent a function.
+- You must first run SET CATALOG before you run this command.
+- You can also use `<db_name>.<function_name>` to represent a function.
 
   ```SQL
   GRANT <priv> ON FUNCTION <db_name>.<function_name> TO {ROLE <role_name> | USER <user_name>}
@@ -249,7 +249,7 @@ GRANT db_admin, user_admin, cluster_admin TO USER user_platform;
 Example 9: Allow user `jack` to perform operations as user `rose`.
 
 ```SQL
-GRANT IMPERSONATE ON 'rose'@'%' TO 'jack'@'%';
+GRANT IMPERSONATE ON USER 'rose'@'%' TO USER 'jack'@'%';
 ```
 
 ## Best practices

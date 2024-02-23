@@ -198,6 +198,9 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
             OptExprBuilder optExprBuilder;
             Pair<OptExprBuilder, OptExprBuilder> cteRootAndMostDeepAnchor = buildCTEAnchorAndProducer(queryRelation);
+            if (cteRootAndMostDeepAnchor.first == null || cteRootAndMostDeepAnchor.second == null) {
+                return visit(relation);
+            }
             optExprBuilder = cteRootAndMostDeepAnchor.first;
             LogicalPlan logicalPlan = visit(relation);
             cteRootAndMostDeepAnchor.second.addChild(logicalPlan.getRootBuilder());
@@ -1020,9 +1023,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             return true;
         }
 
-        Subquery subquery = subqueries.get(0);
-        QueryStatement subqueryStmt = subquery.getQueryStatement();
-        SelectRelation selectRelation = (SelectRelation) subqueryStmt.getQueryRelation();
+        SelectRelation selectRelation = extractSubqueryRelation(subqueries);
         RelationId subqueryRelationId = selectRelation.getRelation().getScope().getRelationId();
         List<FieldId> correlatedFieldIds = selectRelation.getColumnReferences().values().stream()
                 .filter(field -> !Objects.equals(subqueryRelationId, field.getRelationId()))
@@ -1080,5 +1081,16 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         }
 
         return usingLeftRelation;
+    }
+
+    private static SelectRelation extractSubqueryRelation(List<Subquery> subqueries) {
+        Subquery subquery = subqueries.get(0);
+        QueryStatement subqueryStmt = subquery.getQueryStatement();
+        while ((subqueryStmt.getQueryRelation() instanceof SubqueryRelation) &&
+                ((SubqueryRelation) subqueryStmt.getQueryRelation()).isAnonymous()) {
+            // Eliminate anonymous subqueries, like a in (((( select... ))))
+            subqueryStmt = ((SubqueryRelation) subqueryStmt.getQueryRelation()).getQueryStatement();
+        }
+        return (SelectRelation) subqueryStmt.getQueryRelation();
     }
 }

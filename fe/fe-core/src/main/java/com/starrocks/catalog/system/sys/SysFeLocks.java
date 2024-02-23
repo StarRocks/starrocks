@@ -92,7 +92,7 @@ public class SysFeLocks {
 
     @VisibleForTesting
     protected static TFeLocksItem resolveLockInfo(Database db) {
-        var lock = db.getLock();
+        var lock = db.getRwLock();
         TFeLocksItem lockItem = new TFeLocksItem();
         lockItem.setLock_type("DATABASE");
         lockItem.setLock_object(db.getFullName());

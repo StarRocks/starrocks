@@ -388,11 +388,11 @@ MorselQueueFactory* PipelineBuilderContext::morsel_queue_factory_of_source_opera
     return morsel_queue_factory_of_source_operator(source_op->plan_node_id());
 }
 
-SourceOperatorFactory* PipelineBuilderContext::source_operator(OpFactories ops) {
+SourceOperatorFactory* PipelineBuilderContext::source_operator(const OpFactories& ops) {
     return down_cast<SourceOperatorFactory*>(ops[0].get());
 }
 
-bool PipelineBuilderContext::could_local_shuffle(OpFactories ops) const {
+bool PipelineBuilderContext::could_local_shuffle(const OpFactories& ops) const {
     return down_cast<SourceOperatorFactory*>(ops[0].get())->could_local_shuffle();
 }
 
@@ -465,6 +465,11 @@ void PipelineBuilderContext::push_dependent_pipeline(const Pipeline* pipeline) {
 }
 void PipelineBuilderContext::pop_dependent_pipeline() {
     _dependent_pipelines.pop_back();
+}
+
+void PipelineBuilderContext::subscribe_pipeline_event(Pipeline* pipeline, Event* event) {
+    pipeline->pipeline_event()->set_need_wait_dependencies_finished(true);
+    pipeline->pipeline_event()->add_dependency(event);
 }
 
 /// PipelineBuilder.

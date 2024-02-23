@@ -31,11 +31,6 @@
 
 namespace starrocks::lake {
 class PrimaryKeyTxnLogApplier : public TxnLogApplier {
-    template <class T>
-    using ParallelSet =
-            phmap::parallel_flat_hash_set<T, phmap::priv::hash_default_hash<T>, phmap::priv::hash_default_eq<T>,
-                                          phmap::priv::Allocator<T>, 4, std::mutex, true>;
-
 public:
     PrimaryKeyTxnLogApplier(Tablet tablet, MutableTabletMetadataPtr metadata, int64_t new_version)
             : _tablet(tablet),
@@ -46,31 +41,30 @@ public:
         _metadata->set_version(_new_version);
     }
 
-    ~PrimaryKeyTxnLogApplier() override {
-        // must release primary index before `handle_failure`, otherwise `handle_failure` will fail
-        _tablet.update_mgr()->release_primary_index_cache(_index_entry);
-        _index_entry = nullptr;
-        // handle failure first, then release lock
-        _builder.handle_failure();
-        if (_inited) {
-            _s_schema_change_set.erase(_tablet.id());
-        }
-    }
+    ~PrimaryKeyTxnLogApplier() override { handle_failure(); }
 
-    Status init() override {
-        auto [iter, ok] = _s_schema_change_set.insert(_tablet.id());
-        if (ok) {
-            _inited = true;
-            return check_meta_version();
-        } else {
-            return Status::ResourceBusy("primary key does not support concurrent log applying");
-        }
-    }
+    Status init() override { return check_meta_version(); }
 
     Status check_meta_version() {
         // check tablet meta
         RETURN_IF_ERROR(_tablet.update_mgr()->check_meta_version(_tablet, _base_version));
         return Status::OK();
+    }
+
+    void handle_failure() {
+        if (_index_entry != nullptr && !_has_finalized) {
+            // if we meet failures and have not finalized yet, have to clear primary index,
+            // then we can retry again.
+            // 1. unload index first
+            _index_entry->value().unload();
+            // 2. and then release guard
+            _guard.reset(nullptr);
+            // 3. remove index from cache to save resource
+            _tablet.update_mgr()->remove_primary_index_cache(_index_entry);
+        } else {
+            _tablet.update_mgr()->release_primary_index_cache(_index_entry);
+        }
+        _index_entry = nullptr;
     }
 
     Status apply(const TxnLogPB& log) override {
@@ -99,8 +93,11 @@ public:
         // because if `commit_primary_index` or `finalize` fail, we can remove index in `handle_failure`.
         // if `_index_entry` is null, do nothing.
         RETURN_IF_ERROR(_tablet.update_mgr()->commit_primary_index(_index_entry, &_tablet));
-        _guard.reset(nullptr);
-        return _builder.finalize(_max_txn_id);
+        Status st = _builder.finalize(_max_txn_id);
+        if (st.ok()) {
+            _has_finalized = true;
+        }
+        return st;
     }
 
 private:
@@ -209,6 +206,8 @@ private:
                 if (_metadata->enable_persistent_index() != alter_meta.enable_persistent_index()) {
                     _metadata->set_enable_persistent_index(alter_meta.enable_persistent_index());
 
+                    _tablet.update_mgr()->set_enable_persistent_index(_tablet.id(),
+                                                                      alter_meta.enable_persistent_index());
                     // Try remove index from index cache
                     // If tablet is doing apply rowset right now, remove primary index from index cache may be failed
                     // because the primary index is available in cache
@@ -288,8 +287,6 @@ private:
         return Status::OK();
     }
 
-    static inline ParallelSet<int64_t> _s_schema_change_set;
-
     Tablet _tablet;
     MutableTabletMetadataPtr _metadata;
     int64_t _base_version{0};
@@ -297,8 +294,9 @@ private:
     int64_t _max_txn_id{0}; // Used as the file name prefix of the delvec file
     MetaFileBuilder _builder;
     DynamicCache<uint64_t, LakePrimaryIndex>::Entry* _index_entry{nullptr};
-    bool _inited{false};
     std::unique_ptr<std::lock_guard<std::mutex>> _guard{nullptr};
+    // True when finalize meta file success.
+    bool _has_finalized = false;
 };
 
 class NonPrimaryKeyTxnLogApplier : public TxnLogApplier {

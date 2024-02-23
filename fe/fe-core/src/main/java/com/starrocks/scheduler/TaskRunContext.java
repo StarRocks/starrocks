@@ -30,6 +30,7 @@ public class TaskRunContext {
     TaskRunStatus status;
     ExecuteOption executeOption;
     String taskRunId;
+    TaskRun taskRun;
 
     public TaskRunContext() {
     }
@@ -45,6 +46,7 @@ public class TaskRunContext {
         this.status = context.status;
         this.executeOption = context.executeOption;
         this.taskRunId = context.taskRunId;
+        this.taskRun = context.taskRun;
     }
 
     public ConnectContext getCtx() {
@@ -125,5 +127,13 @@ public class TaskRunContext {
 
     public void setTaskRunId(String uuid) {
         this.taskRunId = uuid;
+    }
+
+    public TaskRun getTaskRun() {
+        return taskRun;
+    }
+
+    public void setTaskRun(TaskRun taskRun) {
+        this.taskRun = taskRun;
     }
 }

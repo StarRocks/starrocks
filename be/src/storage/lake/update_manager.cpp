@@ -17,6 +17,8 @@
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
+#include "storage/lake/lake_local_persistent_index.h"
+#include "storage/lake/local_pk_index_manager.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet.h"
@@ -72,6 +74,7 @@ StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(const TabletMetadataP
     auto index_entry = _index_cache.get_or_create(metadata->id());
     index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     auto& index = index_entry->value();
+    // Fetch lock guard before `lake_load`
     guard = index.fetch_guard();
     Status st = index.lake_load(_tablet_mgr, metadata, base_version, builder);
     _index_cache.update_object_size(index_entry, index.memory_usage());
@@ -92,7 +95,6 @@ StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(const TabletMetadataP
         LOG(ERROR) << msg;
         return Status::InternalError(msg);
     }
-    builder->set_has_update_index();
     return index_entry;
 }
 
@@ -120,6 +122,23 @@ Status UpdateManager::commit_primary_index(IndexEntry* index_entry, Tablet* tabl
 void UpdateManager::release_primary_index_cache(IndexEntry* index_entry) {
     if (index_entry != nullptr) {
         _index_cache.release(index_entry);
+    }
+}
+
+void UpdateManager::remove_primary_index_cache(IndexEntry* index_entry) {
+    if (index_entry != nullptr) {
+        _index_cache.remove(index_entry);
+    }
+}
+
+void UpdateManager::unload_and_remove_primary_index(int64_t tablet_id) {
+    auto index_entry = _index_cache.get(tablet_id);
+    if (index_entry != nullptr) {
+        auto& index = index_entry->value();
+        auto guard = index.fetch_guard();
+        index.unload();
+        guard.reset(nullptr);
+        _index_cache.remove(index_entry);
     }
 }
 
@@ -234,6 +253,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     TRACE_COUNTER_INCREMENT("deletes", state.deletes().size());
     TRACE_COUNTER_INCREMENT("new_del", new_del);
     TRACE_COUNTER_INCREMENT("total_del", total_del);
+    TRACE_COUNTER_INCREMENT("upsert_rows", op_write.rowset().num_rows());
     TRACE_COUNTER_INCREMENT("base_version", base_version);
     _print_memory_stats();
     return Status::OK();
@@ -332,15 +352,16 @@ Status UpdateManager::_handle_index_op(Tablet* tablet, int64_t base_version, boo
     // release index entry but keep it in cache
     DeferOp release_index_entry([&] { _index_cache.release(index_entry); });
     auto& index = index_entry->value();
-    if (!index.is_load(base_version)) {
-        return Status::Uninitialized(fmt::format("Primary index not load yet, tablet_id: {}", tablet->id()));
-    }
     std::unique_ptr<std::lock_guard<std::mutex>> guard = nullptr;
+    // Fetch lock guard before check `is_load()`
     if (need_lock) {
         guard = index.try_fetch_guard();
         if (guard == nullptr) {
             return Status::Cancelled(fmt::format("Fail to fetch primary index guard, tablet_id: {}", tablet->id()));
         }
+    }
+    if (!index.is_load(base_version)) {
+        return Status::Uninitialized(fmt::format("Primary index not load yet, tablet_id: {}", tablet->id()));
     }
     op(index);
 
@@ -633,16 +654,6 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     return Status::OK();
 }
 
-void UpdateManager::remove_primary_index_cache(uint32_t tablet_id) {
-    bool succ = false;
-    auto index_entry = _index_cache.get(tablet_id);
-    if (index_entry != nullptr) {
-        _index_cache.remove(index_entry);
-        succ = true;
-    }
-    LOG(WARNING) << "Lake update manager remove primary index cache, tablet_id: " << tablet_id << " , succ: " << succ;
-}
-
 bool UpdateManager::try_remove_primary_index_cache(uint32_t tablet_id) {
     return _index_cache.try_remove_by_key(tablet_id);
 }
@@ -688,6 +699,16 @@ void UpdateManager::update_primary_index_data_version(const Tablet& tablet, int6
         index.update_data_version(version);
         _index_cache.release(index_entry);
     }
+}
+
+int64_t UpdateManager::get_primary_index_data_version(int64_t tablet_id) {
+    auto index_entry = _index_cache.get(tablet_id);
+    if (index_entry != nullptr) {
+        int64_t version = index_entry->value().data_version();
+        _index_cache.release(index_entry);
+        return version;
+    }
+    return 0;
 }
 
 void UpdateManager::_print_memory_stats() {
@@ -821,6 +842,15 @@ void UpdateManager::preload_compaction_state(const TxnLog& txnlog, const Tablet&
         _compaction_cache.release(compaction_entry);
     }
     TEST_SYNC_POINT("UpdateManager::preload_compaction_state:return");
+}
+
+void UpdateManager::set_enable_persistent_index(int64_t tablet_id, bool enable_persistent_index) {
+    auto index_entry = _index_cache.get(tablet_id);
+    if (index_entry != nullptr) {
+        auto& index = index_entry->value();
+        index.set_enable_persistent_index(enable_persistent_index);
+        _index_cache.release(index_entry);
+    }
 }
 
 } // namespace starrocks::lake

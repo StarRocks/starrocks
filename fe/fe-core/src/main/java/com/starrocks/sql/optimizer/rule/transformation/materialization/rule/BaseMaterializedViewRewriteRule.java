@@ -30,6 +30,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -37,9 +38,11 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.TransformationRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.BestMvSelector;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVColumnPruner;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVPartitionPruner;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
 import org.apache.commons.collections4.CollectionUtils;
@@ -94,9 +97,20 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
     @Override
     public List<OptExpression> transform(OptExpression queryExpression, OptimizerContext context) {
         try {
-            return doTransform(queryExpression, context);
+            List<OptExpression> expressions = doTransform(queryExpression, context);
+            if (expressions == null || expressions.isEmpty()) {
+                return Lists.newArrayList();
+            }
+            if (context.isInMemoPhase()) {
+                return expressions;
+            } else {
+                // in rule phase, only return the best one result
+                BestMvSelector bestMvSelector = new BestMvSelector(
+                        expressions, context, queryExpression.getOp() instanceof LogicalAggregationOperator);
+                return Lists.newArrayList(bestMvSelector.selectBest());
+            }
         } catch (Exception e) {
-            String errMsg = ExceptionUtils.getMessage(e);
+            String errMsg = ExceptionUtils.getStackTrace(e);
             // for mv rewrite rules, do not disturb query when exception.
             logMVRewrite(context, this, "mv rewrite exception, exception message:{}", errMsg);
             return Lists.newArrayList();
@@ -116,6 +130,8 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             mvCandidateContexts.addAll(context.getCandidateMvs());
         }
         mvCandidateContexts.removeIf(x -> !x.prune(context, queryExpression));
+
+        // Order all candidate mvs by priority so can be rewritten fast.
         MaterializationContext.RewriteOrdering ordering =
                 new MaterializationContext.RewriteOrdering(queryExpression, context.getColumnRefFactory());
         mvCandidateContexts.sort(ordering);
@@ -203,18 +219,17 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
                                                   ReplaceColumnRefRewriter queryColumnRefRewriter) {
         // Cache partition predicate predicates because it's expensive time costing if there are too many materialized views or
         // query expressions are too complex.
-        final ScalarOperator queryPartitionPredicate = MvUtils.compensatePartitionPredicate(mvContext,
-                queryColumnRefFactory, queryExpression);
+        final ScalarOperator queryPartitionPredicate = MvPartitionCompensator.compensateQueryPartitionPredicate(
+                mvContext, queryColumnRefFactory, queryExpression);
         if (queryPartitionPredicate == null) {
             logMVRewrite(mvContext.getOptimizerContext(), this, "Compensate query expression's partition " +
                     "predicates from pruned partitions failed.");
             return null;
         }
-        // only add valid predicates into query split predicate
+
         Set<ScalarOperator> queryConjuncts = MvUtils.getPredicateForRewrite(queryExpression);
+        // only add valid predicates into query split predicate
         if (!ConstantOperator.TRUE.equals(queryPartitionPredicate)) {
-            logMVRewrite(mvContext.getOptimizerContext(), this, "Query compensate partition predicate:{}",
-                    queryPartitionPredicate);
             queryConjuncts.addAll(MvUtils.getAllValidPredicates(queryPartitionPredicate));
         }
 

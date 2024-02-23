@@ -521,7 +521,7 @@ dropIndexStatement
     ;
 
 indexType
-    : USING (BITMAP | GIN)
+    : USING (BITMAP | GIN | NGRAMBF)
     ;
 
 showTableStatement
@@ -2250,7 +2250,7 @@ expressionSingleton
     ;
 
 expression
-    : booleanExpression                                                                   #expressionDefault
+    : (BINARY)? booleanExpression                                                         #expressionDefault
     | NOT expression                                                                      #logicalNot
     | left=expression operator=(AND|LOGICAL_AND) right=expression                         #logicalBinary
     | left=expression operator=(OR|LOGICAL_OR) right=expression                           #logicalBinary
@@ -2793,5 +2793,5 @@ nonReserved
     | VALUE | VARBINARY | VARIABLES | VIEW | VIEWS | VERBOSE | VOLUME | VOLUMES
     | WARNINGS | WEEK | WHITELIST | WORK | WRITE  | WAREHOUSE | WAREHOUSES
     | YEAR
-    | DOTDOTDOT
+    | DOTDOTDOT | NGRAMBF
     ;

@@ -708,7 +708,6 @@ under the License.
                 <groupId>org.mariadb.jdbc</groupId>
                 <artifactId>mariadb-java-client</artifactId>
                 <version>3.3.2</version>
-                <scope>test</scope>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.postgresql/postgresql -->

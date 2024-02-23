@@ -610,10 +610,16 @@ public class MaterializedViewRewriter {
         return ConstantOperator.TRUE;
     }
 
+    /**
+     * Only compensate mv's partition predicate when mv's freshness cannot satisfy query's need.
+     * When mv's freshness is ok, return constant true because
+     * {@link com.starrocks.sql.optimizer.MaterializedViewOptimizer#optimize} disabled partition pruning and no need
+     * compensate pruned predicates.
+     * @return
+     */
     private ScalarOperator getMVCompensatePartitionPredicate() {
         return  materializationContext.isCompensatePartitionPredicate() ?
-                materializationContext.getMvPartialPartitionPredicate() :
-                materializationContext.getMVPrunedPartitionPredicate();
+                materializationContext.getMvPartialPartitionPredicate() : ConstantOperator.TRUE;
     }
 
     private OptExpression rewriteViewDelta(List<Table> queryTables,
@@ -1914,7 +1920,7 @@ public class MaterializedViewRewriter {
         // To ensure join's property is deduced which is needed in `predicate-push-down`, derive its logical property.
         deriveLogicalProperty(joinOptExpression);
         Preconditions.checkState(joinOptExpression.getOp() instanceof LogicalJoinOperator);
-        optimizerContext.reset();
+        optimizerContext.clearNotNullPredicates();
         JoinPredicatePushdown joinPredicatePushdown = new JoinPredicatePushdown(joinOptExpression,
                 false, true, materializationContext.getQueryRefFactory(),
                 true, optimizerContext);
@@ -2198,12 +2204,12 @@ public class MaterializedViewRewriter {
             }
             ColumnRefOperator left = getColumnRef(equalPredicate, 0);
             ColumnRefOperator right = getColumnRef(equalPredicate, 1);
-            ColumnRefOperator leftTarget = (columnRewriter == null) ? left : columnRewriter.rewriteViewToQuery(left).cast();
-            ColumnRefOperator rightTarget = (columnRewriter == null) ? right : columnRewriter.rewriteViewToQuery(right).cast();
+            ScalarOperator leftTarget = (columnRewriter == null) ? left : columnRewriter.rewriteViewToQuery(left);
+            ScalarOperator rightTarget = (columnRewriter == null) ? right : columnRewriter.rewriteViewToQuery(right);
             if (leftTarget == null || rightTarget == null) {
                 return null;
             }
-            ec.addEquivalence(leftTarget, rightTarget);
+            ec.addEquivalence(leftTarget.cast(), rightTarget.cast());
         }
         return ec;
     }
@@ -2261,12 +2267,12 @@ public class MaterializedViewRewriter {
         for (final Map.Entry<ColumnRefOperator, ColumnRefOperator> entry : compensationJoinColumns.entries()) {
             final ColumnRefOperator left = entry.getKey();
             final ColumnRefOperator right = entry.getValue();
-            ColumnRefOperator newKey = columnRewriter.rewriteViewToQuery(left).cast();
-            ColumnRefOperator newValue = columnRewriter.rewriteViewToQuery(right).cast();
+            ScalarOperator newKey = columnRewriter.rewriteViewToQuery(left);
+            ScalarOperator newValue = columnRewriter.rewriteViewToQuery(right);
             if (newKey == null || newValue == null) {
                 return false;
             }
-            ec.addEquivalence(newKey, newValue);
+            ec.addEquivalence(newKey.cast(), newValue.cast());
         }
         return true;
     }

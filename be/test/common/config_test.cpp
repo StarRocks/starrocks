@@ -21,7 +21,10 @@
 
 #include <gtest/gtest.h>
 
+#include <thread>
+
 #include "common/status.h"
+#include "gutil/strings/join.h"
 
 namespace starrocks {
 using namespace config;
@@ -30,34 +33,68 @@ class ConfigTest : public testing::Test {
     void SetUp() override { config::Register::_s_field_map->clear(); }
 };
 
-TEST_F(ConfigTest, DumpAllConfigs) {
-    CONF_Bool(cfg_bool_false, "false");
-    CONF_Bool(cfg_bool_true, "true");
+TEST_F(ConfigTest, test_list_configs) {
+    CONF_Bool(cfg_bool, "false");
+    CONF_mBool(cfg_mbool, "true");
     CONF_Double(cfg_double, "123.456");
-    CONF_Int16(cfg_int16_t, "2561");
-    CONF_Int32(cfg_int32_t, "65536123");
-    CONF_Int64(cfg_int64_t, "4294967296123");
-    CONF_String(cfg_std_string, "starrocks_config_test_string");
-    CONF_Bools(cfg_std_vector_bool, "true,false,true");
-    CONF_Doubles(cfg_std_vector_double, "123.456,123.4567,123.45678");
-    CONF_Int16s(cfg_std_vector_int16_t, "2561,2562,2563");
-    CONF_Int32s(cfg_std_vector_int32_t, "65536123,65536234,65536345");
-    CONF_Int64s(cfg_std_vector_int64_t, "4294967296123,4294967296234,4294967296345");
-    CONF_Strings(cfg_std_vector_std_string, "starrocks,config,test,string");
+    CONF_mDouble(cfg_mdouble, "-123.456");
+    CONF_Int16(cfg_int16, "2561");
+    CONF_mInt16(cfg_mint16, "-2561");
+    CONF_Int32(cfg_int32, "65536123");
+    CONF_mInt32(cfg_mint32, "-65536123");
+    CONF_Int64(cfg_int64, "4294967296123");
+    CONF_mInt64(cfg_mint64, "-4294967296123");
+    CONF_String(cfg_string, "test_string");
+    CONF_mString(cfg_mstring, "test_mstring");
+    CONF_Bools(cfg_bools, "true,false,true");
+    CONF_Doubles(cfg_doubles, "0.1,0.2,0.3");
+    CONF_Int16s(cfg_int16s, "1,2,3");
+    CONF_Int32s(cfg_int32s, "10,20,30");
+    CONF_Int64s(cfg_int64s, "100,200,300");
+    CONF_Strings(cfg_strings, "s1,s2,s3");
 
-    config::init(nullptr, true);
-    std::stringstream ss;
-    for (const auto& it : *(config::full_conf_map)) {
-        ss << it.first << "=" << it.second << std::endl;
+    config::init(nullptr);
+
+    std::vector<ConfigInfo> exp_configs = {
+            // name,value,type,default,mutable
+            {"cfg_bool", "false", "bool", "false", false},
+            {"cfg_mbool", "true", "bool", "true", true},
+            {"cfg_double", "123.456", "double", "123.456", false},
+            {"cfg_mdouble", "-123.456", "double", "-123.456", true},
+            {"cfg_int16", "2561", "int16_t", "2561", false},
+            {"cfg_mint16", "-2561", "int16_t", "-2561", true},
+            {"cfg_int32", "65536123", "int32_t", "65536123", false},
+            {"cfg_mint32", "-65536123", "int32_t", "-65536123", true},
+            {"cfg_int64", "4294967296123", "int64_t", "4294967296123", false},
+            {"cfg_mint64", "-4294967296123", "int64_t", "-4294967296123", true},
+            {"cfg_string", "test_string", "std::string", "test_string", false},
+            {"cfg_mstring", "test_mstring", "MutableString", "test_mstring", true},
+            {"cfg_bools", "true,false,true", "std::vector<bool>", "true,false,true", false},
+            {"cfg_doubles", "0.1,0.2,0.3", "std::vector<double>", "0.1,0.2,0.3", false},
+            {"cfg_int16s", "1,2,3", "std::vector<int16_t>", "1,2,3", false},
+            {"cfg_int32s", "10,20,30", "std::vector<int32_t>", "10,20,30", false},
+            {"cfg_int64s", "100,200,300", "std::vector<int64_t>", "100,200,300", false},
+            {"cfg_strings", "s1,s2,s3", "std::vector<std::string>", "s1,s2,s3", false},
+    };
+
+    std::vector<ConfigInfo> configs = config::list_configs();
+
+    std::sort(exp_configs.begin(), exp_configs.end());
+    std::sort(configs.begin(), configs.end());
+
+    auto as_string = [](const ConfigInfo& info) {
+        std::ostringstream ss;
+        ss << info;
+        return ss.str();
+    };
+
+    LOG(INFO) << "Expected configs: " << JoinMapped(exp_configs, as_string, ",")
+              << " Real configs: " << JoinMapped(configs, as_string, ",");
+
+    ASSERT_EQ(exp_configs.size(), configs.size());
+    for (int i = 0, sz = configs.size(); i < sz; ++i) {
+        EXPECT_EQ(exp_configs[i], configs[i]);
     }
-    ASSERT_EQ(
-            "cfg_bool_false=0\ncfg_bool_true=1\ncfg_double=123.456\ncfg_int16_t=2561\ncfg_int32_t="
-            "65536123\ncfg_int64_t=4294967296123\ncfg_std_string=starrocks_config_test_string\ncfg_std_"
-            "vector_bool=1, 0, 1\ncfg_std_vector_double=123.456, 123.457, "
-            "123.457\ncfg_std_vector_int16_t=2561, 2562, 2563\ncfg_std_vector_int32_t=65536123, "
-            "65536234, 65536345\ncfg_std_vector_int64_t=4294967296123, 4294967296234, "
-            "4294967296345\ncfg_std_vector_std_string=starrocks, config, test, string\n",
-            ss.str());
 }
 
 TEST_F(ConfigTest, UpdateConfigs) {
@@ -70,7 +107,7 @@ TEST_F(ConfigTest, UpdateConfigs) {
     CONF_String(cfg_std_string, "starrocks_config_test_string");
     CONF_mString(cfg_std_string_mutable, "starrocks_config_test_string_mutable");
 
-    config::init(nullptr, true);
+    config::init(nullptr);
 
     // bool
     ASSERT_FALSE(cfg_bool);
@@ -98,9 +135,9 @@ TEST_F(ConfigTest, UpdateConfigs) {
     ASSERT_EQ(cfg_int64_t, 4294967296124);
 
     // string
-    ASSERT_EQ(cfg_std_string_mutable, "starrocks_config_test_string_mutable");
+    ASSERT_EQ(cfg_std_string_mutable.value(), "starrocks_config_test_string_mutable");
     ASSERT_TRUE(config::set_config("cfg_std_string_mutable", "hello SR").ok());
-    ASSERT_EQ(cfg_std_string_mutable, "hello SR");
+    ASSERT_EQ(cfg_std_string_mutable.value(), "hello SR");
 
     // not exist
     Status s = config::set_config("cfg_not_exist", "123");
@@ -136,6 +173,41 @@ TEST_F(ConfigTest, UpdateConfigs) {
     ASSERT_FALSE(s.ok());
     ASSERT_EQ(s.to_string(), "Not supported: 'cfg_std_string' is not support to modify");
     ASSERT_EQ(cfg_std_string, "starrocks_config_test_string");
+}
+
+TEST_F(ConfigTest, test_read_write_mutable_string_concurrently) {
+    CONF_mString(config_test_mstring, "default");
+
+    ASSERT_TRUE(config::init(nullptr));
+
+    EXPECT_EQ("default", config_test_mstring.value());
+
+    std::vector<std::thread> threads;
+    threads.reserve(5);
+    for (int i = 0; i < 5; i++) {
+        threads.emplace_back([&, id = i]() {
+            if (id < 2) { // writer
+                for (int j = 0; j < 200; j++) {
+                    auto st = set_config("config_test_mstring", std::to_string(id));
+                    ASSERT_TRUE(st.ok()) << st;
+                }
+            } else { // reader
+                auto prev_val = config_test_mstring.value();
+                for (int j = 0; j < 1000; j++) {
+                    std::string val = config_test_mstring.value();
+                    if (val != "default" && val != "0" && val != "1") {
+                        GTEST_FAIL() << val;
+                    } else if (val != prev_val) {
+                        LOG(INFO) << "config value changed to " << val;
+                        prev_val = std::move(val);
+                    }
+                }
+            }
+        });
+    }
+    for (auto& t : threads) {
+        t.join();
+    }
 }
 
 } // namespace starrocks

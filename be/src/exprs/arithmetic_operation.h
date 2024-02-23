@@ -14,12 +14,13 @@
 
 #pragma once
 
+#include <llvm/IR/Constants.h>
+#include <llvm/IR/Value.h>
+
 #include "column/type_traits.h"
 #include "common/status.h"
 #include "exprs/expr_context.h"
 #include "exprs/jit/ir_helper.h"
-#include "llvm/IR/Constants.h"
-#include "llvm/IR/Value.h"
 #include "runtime/decimalv3.h"
 #include "types/logical_type.h"
 #include "util/guard.h"
@@ -206,7 +207,7 @@ struct ArithmeticBinaryOperator {
         auto* l = datums[0].value;
         auto* r = datums[1].value;
 
-        LLVMDatum result(b);
+        LLVMDatum result;
         result.null_flag = b.CreateOr(datums[0].null_flag, datums[1].null_flag);
         if constexpr (is_add_op<Op>) {
             if constexpr (lt_is_float<Type>) {

@@ -65,9 +65,9 @@
 #include "exprs/info_func.h"
 #include "exprs/is_null_predicate.h"
 #include "exprs/java_function_call_expr.h"
+#include "exprs/jit/ir_helper.h"
 #include "exprs/jit/jit_engine.h"
 #include "exprs/jit/jit_expr.h"
-#include "exprs/jit/jit_functions.h"
 #include "exprs/lambda_function.h"
 #include "exprs/literal.h"
 #include "exprs/map_apply_expr.h"
@@ -191,11 +191,15 @@ Expr::Expr(const TExprNode& node, bool is_slotref)
     if (node.__isset.is_monotonic) {
         _is_monotonic = node.is_monotonic;
     }
+    if (node.__isset.is_index_only_filter) {
+        _is_index_only_filter = node.is_index_only_filter;
+    }
 }
 
 Expr::~Expr() = default;
 
-Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext** ctx, RuntimeState* state) {
+Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext** ctx, RuntimeState* state,
+                              bool can_jit) {
     // input is empty
     if (texpr.nodes.empty()) {
         *ctx = nullptr;
@@ -203,7 +207,12 @@ Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext*
     }
     int node_idx = 0;
     Expr* e = nullptr;
-    Status status = create_tree_from_thrift_with_jit(pool, texpr.nodes, nullptr, &node_idx, &e, ctx, state);
+    Status status;
+    if (can_jit) {
+        status = create_tree_from_thrift_with_jit(pool, texpr.nodes, nullptr, &node_idx, &e, ctx, state);
+    } else {
+        status = create_tree_from_thrift(pool, texpr.nodes, nullptr, &node_idx, &e, ctx, state);
+    }
     if (status.ok() && node_idx + 1 != texpr.nodes.size()) {
         status = Status::InternalError("Expression tree only partially reconstructed. Not all thrift nodes were used.");
     }
@@ -217,12 +226,39 @@ Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext*
     return status;
 }
 
+Status Expr::rewrite_jit_exprs(std::vector<ExprContext*>& expr_ctxs, ObjectPool* pool, RuntimeState* state) {
+    std::vector<ExprContext*> tmp;
+    for (auto ctx : expr_ctxs) {
+        auto* prev_expr = ctx->root();
+        auto* root_expr = &prev_expr;
+        bool replaced = false;
+        auto st = (*root_expr)->replace_compilable_exprs(root_expr, pool, replaced);
+        if (!st.ok()) {
+            LOG(WARNING) << "Can't replace compilable exprs.\n" << st.message() << "\n" << (*root_expr)->debug_string();
+            // Fall back to the non-JIT path.
+            return Status::OK();
+        }
+        auto new_ctx = ctx;
+        if (replaced) {
+            // The node was replaced, so we need to update the context.
+            new_ctx = pool->add(new ExprContext(*root_expr));
+        }
+        tmp.emplace_back(new_ctx);
+    }
+    expr_ctxs.swap(tmp);
+    if (state != nullptr) {
+        RETURN_IF_ERROR(Expr::prepare(expr_ctxs, state));
+        RETURN_IF_ERROR(Expr::open(expr_ctxs, state));
+    }
+    return Status::OK();
+}
+
 Status Expr::create_expr_trees(ObjectPool* pool, const std::vector<TExpr>& texprs, std::vector<ExprContext*>* ctxs,
-                               RuntimeState* state) {
+                               RuntimeState* state, bool can_jit) {
     ctxs->clear();
     for (const auto& texpr : texprs) {
         ExprContext* ctx = nullptr;
-        RETURN_IF_ERROR(create_expr_tree(pool, texpr, &ctx, state));
+        RETURN_IF_ERROR(create_expr_tree(pool, texpr, &ctx, state, can_jit));
         ctxs->push_back(ctx);
     }
     return Status::OK();
@@ -231,7 +267,6 @@ Status Expr::create_expr_trees(ObjectPool* pool, const std::vector<TExpr>& texpr
 Status Expr::create_tree_from_thrift_with_jit(ObjectPool* pool, const std::vector<TExprNode>& nodes, Expr* parent,
                                               int* node_idx, Expr** root_expr, ExprContext** ctx, RuntimeState* state) {
     Status status = create_tree_from_thrift(pool, nodes, parent, node_idx, root_expr, ctx, state);
-
     // Enable JIT based on the "enable_jit" parameters.
     if (state == nullptr || !status.ok() || !state->is_jit_enabled()) {
         return status;
@@ -243,16 +278,16 @@ Status Expr::create_tree_from_thrift_with_jit(ObjectPool* pool, const std::vecto
         return status;
     }
 
-    const auto* prev_e = *root_expr;
-    status = (*root_expr)->replace_compilable_exprs(root_expr, pool);
+    bool replaced = false;
+    status = (*root_expr)->replace_compilable_exprs(root_expr, pool, replaced);
     if (!status.ok()) {
         LOG(WARNING) << "Can't replace compilable exprs.\n" << status.message() << "\n" << (*root_expr)->debug_string();
         // Fall back to the non-JIT path.
         return Status::OK();
     }
 
-    if (*root_expr != prev_e) {
-        // The root node was replaced, so we need to update the context.
+    if (replaced) {
+        // The node was replaced, so we need to update the context.
         *ctx = pool->add(new ExprContext(*root_expr));
     }
 
@@ -698,14 +733,58 @@ ColumnRef* Expr::get_column_ref() {
     return nullptr;
 }
 
-StatusOr<LLVMDatum> Expr::generate_ir(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
-                                      const std::vector<LLVMDatum>& datums) const {
-    if (!is_compilable()) {
-        return Status::NotSupported("JIT expr not supported");
+StatusOr<LLVMDatum> Expr::generate_ir(ExprContext* context, JITContext* jit_ctx) {
+    if (this->is_compilable()) {
+        return this->generate_ir_impl(context, jit_ctx);
+    } else {
+        return Expr::generate_ir_impl(context, jit_ctx);
     }
+}
 
-    ASSIGN_OR_RETURN(auto datum, generate_ir_impl(context, module, b, datums))
+StatusOr<LLVMDatum> Expr::generate_ir_impl(ExprContext* context, JITContext* jit_ctx) {
+    if (is_compilable()) {
+#if BE_TEST
+        throw std::runtime_error("[JIT] compilable expressions must not be here : " + debug_string());
+#else
+        return Status::NotSupported("[JIT] compilable expressions must override generate_ir_impl()");
+#endif
+    }
+    if (jit_ctx->input_index >= jit_ctx->columns.size() - 1) {
+#if BE_TEST
+        throw std::runtime_error("[JIT] vector overflow for expr :" + debug_string());
+#else
+        return Status::RuntimeError("[JIT] vector overflow for uncompilable expr");
+#endif
+    }
+    LLVMDatum datum(jit_ctx->builder);
+    datum.value = jit_ctx->builder.CreateLoad(
+            jit_ctx->columns[jit_ctx->input_index].value_type,
+            jit_ctx->builder.CreateInBoundsGEP(jit_ctx->columns[jit_ctx->input_index].value_type,
+                                               jit_ctx->columns[jit_ctx->input_index].values, jit_ctx->index_phi));
+    if (is_nullable()) {
+        datum.null_flag = jit_ctx->builder.CreateLoad(
+                jit_ctx->builder.getInt8Ty(),
+                jit_ctx->builder.CreateInBoundsGEP(jit_ctx->builder.getInt8Ty(),
+                                                   jit_ctx->columns[jit_ctx->input_index].null_flags,
+                                                   jit_ctx->index_phi));
+    }
+    jit_ctx->input_index++;
     return datum;
+}
+
+std::string Expr::jit_func_name() const {
+    if (this->is_compilable()) {
+        return this->jit_func_name_impl();
+    } else {
+        return Expr::jit_func_name_impl();
+    }
+}
+
+std::string Expr::jit_func_name_impl() const {
+    DCHECK(!is_compilable());
+    // uncompilable inputs, reducing string size.
+    return std::string("col[") + (is_constant() ? "c:" : "") + (is_nullable() ? "n:" : "") + type().debug_string() +
+           "]";
 }
 
 void Expr::get_uncompilable_exprs(std::vector<Expr*>& exprs) {
@@ -718,29 +797,23 @@ void Expr::get_uncompilable_exprs(std::vector<Expr*>& exprs) {
     }
 }
 
-void Expr::get_jit_exprs(std::vector<Expr*>& exprs) {
-    if (!this->is_compilable()) {
-        exprs.emplace_back(this);
-        return;
-    }
-    for (auto child : this->children()) {
-        child->get_jit_exprs(exprs);
-    }
-    exprs.emplace_back(this);
-}
-
 // This method attempts to traverse the entire expression tree from the current expression downwards, seeking to replace expressions with JITExprs.
 // This method searches from top to bottom for compilable expressions.
 // Once a compilable expression is found, it skips over its compilable subexpressions and continues the search downwards.
-Status Expr::replace_compilable_exprs(Expr** expr, ObjectPool* pool) {
+Status Expr::replace_compilable_exprs(Expr** expr, ObjectPool* pool, bool& replaced) {
+    if (_node_type == TExprNodeType::DICT_EXPR || _node_type == TExprNodeType::DICT_QUERY_EXPR ||
+        _node_type == TExprNodeType::DICTIONARY_GET_EXPR || _node_type == TExprNodeType::PLACEHOLDER_EXPR) {
+        return Status::OK();
+    }
     if ((*expr)->should_compile()) {
         // If the current expression is compilable, we will replace it with a JITExpr.
         // This expression and its compilable subexpressions will be compiled into a single function.
         *expr = JITExpr::create(pool, *expr);
+        replaced = true;
     }
 
     for (auto& child : (*expr)->_children) {
-        RETURN_IF_ERROR(child->replace_compilable_exprs(&child, pool));
+        RETURN_IF_ERROR(child->replace_compilable_exprs(&child, pool, replaced));
     }
     return Status::OK();
 }
@@ -759,7 +832,37 @@ bool Expr::should_compile() const {
         }
     }
 
-    return false;
+    return true;
+}
+
+bool Expr::support_ngram_bloom_filter(ExprContext* context) const {
+    bool support = false;
+    for (auto& child : _children) {
+        if (child->support_ngram_bloom_filter(context)) {
+            return true;
+        }
+    }
+    return support;
+}
+
+bool Expr::ngram_bloom_filter(ExprContext* context, const BloomFilter* bf, size_t gram_num) const {
+    bool no_need_to_filt = true;
+    for (auto& child : _children) {
+        if (!child->ngram_bloom_filter(context, bf, gram_num)) {
+            return false;
+        }
+    }
+    return no_need_to_filt;
+}
+
+bool Expr::is_index_only_filter() const {
+    bool is_index_only_filter = _is_index_only_filter;
+    for (auto& child : _children) {
+        if (child->is_index_only_filter()) {
+            return true;
+        }
+    }
+    return is_index_only_filter;
 }
 
 } // namespace starrocks

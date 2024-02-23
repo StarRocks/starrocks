@@ -26,6 +26,7 @@
 #include "exec/exchange_node.h"
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/adaptive/event.h"
+#include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
@@ -286,7 +287,7 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
                 DescriptorTbl::create(runtime_state, obj_pool, t_desc_tbl, &desc_tbl, runtime_state->chunk_size()));
     }
     runtime_state->set_desc_tbl(desc_tbl);
-
+    RETURN_IF_ERROR(_query_ctx->init_spill_manager(query_options));
     return Status::OK();
 }
 
@@ -712,11 +713,19 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         SCOPED_RAW_TIMER(&profiler.prepare_runtime_state_time);
         RETURN_IF_ERROR(_prepare_workgroup(request));
         RETURN_IF_ERROR(_prepare_runtime_state(exec_env, request));
+
+        auto mem_tracker = _fragment_ctx->runtime_state()->instance_mem_tracker();
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
+
         RETURN_IF_ERROR(_prepare_exec_plan(exec_env, request));
         RETURN_IF_ERROR(_prepare_global_dict(request));
     }
     {
         SCOPED_RAW_TIMER(&profiler.prepare_pipeline_driver_time);
+
+        auto mem_tracker = _fragment_ctx->runtime_state()->instance_mem_tracker();
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
+
         RETURN_IF_ERROR(_prepare_pipeline_driver(exec_env, request));
         RETURN_IF_ERROR(_prepare_stream_load_pipe(exec_env, request));
     }
@@ -835,6 +844,14 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
     auto fragment_ctx = context->fragment_context();
     if (typeid(*datasink) == typeid(starrocks::ResultSink)) {
         auto* result_sink = down_cast<starrocks::ResultSink*>(datasink.get());
+
+        // Accumulate chunks before sending to result sink
+        if (runtime_state->query_options().__isset.enable_result_sink_accumulate &&
+            runtime_state->query_options().enable_result_sink_accumulate) {
+            ExecNode::may_add_chunk_accumulate_operator(fragment_ctx->pipelines().back()->get_op_factories(), context,
+                                                        Operator::s_pseudo_plan_node_id_for_final_sink);
+        }
+
         // Result sink doesn't have plan node id;
         OpFactoryPtr op = nullptr;
         if (result_sink->get_sink_type() == TResultSinkType::FILE) {

@@ -29,6 +29,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
@@ -137,7 +138,7 @@ public class TabletSchedulerTest {
         long now = System.currentTimeMillis();
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
         recycleBin.recycleDatabase(badDb, new HashSet<>());
-        recycleBin.recycleTable(goodDB.getId(), badTable);
+        recycleBin.recycleTable(goodDB.getId(), badTable, true);
         recycleBin.recyclePartition(goodDB.getId(), goodTable.getId(), badPartition,
                 null, new DataProperty(TStorageMedium.HDD), (short) 2, false, null);
 
@@ -203,10 +204,10 @@ public class TabletSchedulerTest {
             for (int i = 0; i < 10; i++) {
                 tabletSchedCtxList.get(i).setOrigPriority(TabletSchedCtx.Priority.NORMAL);
                 try {
-                    goodDB.readLock();
+                    locker.lockDatabase(goodDB, LockType.READ);
                     tabletScheduler.blockingAddTabletCtxToScheduler(goodDB, tabletSchedCtxList.get(i), false);
                 } finally {
-                    goodDB.readUnlock();
+                    locker.unLockDatabase(goodDB, LockType.READ);
                 }
             }
         }, "testAddCtx").start();

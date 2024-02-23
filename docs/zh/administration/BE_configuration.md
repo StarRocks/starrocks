@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+keywords: ['Canshu']
 ---
 
 # BE 配置项
@@ -176,21 +177,21 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### tablet_rowset_stale_sweep_time_sec
 
-- 含义：失效 rowset 的清理间隔。
+- 含义：失效 rowset 的清理间隔。缩短该间隔可以降低导入时元数据的占用。
 - 单位：秒
 - 默认值：1800
 
 #### snapshot_expire_time_sec
 
-- 含义：快照文件清理的间隔，默认 48 个小时。
+- 含义：快照文件的保留时长，默认 48 个小时。后台会按照配置的清理间隔来定期清理保留时长超过 `snapshot_expire_time_sec` 的快照文件。清理间隔受磁盘空间使用率影响：当磁盘空间使用率小于 60% 时，会按照最大清理间隔 `max_garbage_sweep_interval` 来清理；当磁盘空间大于 80% 时，会按照最小清理间隔 `min_garbage_sweep_interval` 来清理。
 - 单位：秒
 - 默认值：172800
 
 #### trash_file_expire_time_sec
 
-- 含义：回收站清理的间隔，默认 24 个小时。自 v2.5.17、v3.0.9 以及 v3.1.6 起，默认值由 259,200 变为 86,400。
+- 含义：Trash 目录下文件的保留时长，默认 1 天。后台会按照配置的清理间隔来定期清理保留时长超过 `trash_file_expire_time_sec` 的文件内容。清理间隔受磁盘空间使用率影响：当磁盘空间使用率小于 60% 时，会按照最大清理间隔 `max_garbage_sweep_interval` 来清理；当磁盘空间大于 80% 时，会按照最小清理间隔 `min_garbage_sweep_interval` 来清理。自 v2.5.17、v3.0.9 以及 v3.1.6 起，默认值由 259200 变为 86400。
 - 单位：秒
-- 默认值：86,400
+- 默认值：86400
 
 #### base_compaction_check_interval_seconds
 
@@ -496,16 +497,17 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：Compaction 线程数上限（即 BaseCompaction + CumulativeCompaction 的最大并发）。该参数防止 Compaction 占用过多内存。 -1 代表没有限制。0 表示不允许 compaction。
 - 默认值：-1
 
-#### internal_service_async_thread_num
-
-- 含义：单个 BE 上与 Kafka 交互的线程池大小。当前 Routine Load FE 与 Kafka 的交互需经由 BE 完成，而每个 BE 上实际执行操作的是一个单独的线程池。当 Routine Load 任务较多时，可能会出现线程池线程繁忙的情况，可以调整该配置。
-- 默认值：10
-
 #### lake_enable_vertical_compaction_fill_data_cache
 
 - 含义：存算分离集群下，是否允许 Compaction 任务在执行时缓存数据到本地磁盘上。
 - 默认值：false
 - 引入版本：v3.1.7、v3.2.3
+
+#### lake_pk_compaction_max_input_rowsets
+
+- 含义：存算分离集群下，主键表 Compaction 任务中允许的最大输入 Rowset 数量。
+- 默认值：5
+- 引入版本：v3.1.8、v3.2.3
 
 #### compact_threads
 
@@ -858,7 +860,12 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### routine_load_thread_pool_size
 
-- 含义：单节点上 Routine Load 线程池大小。从 3.1.0 版本起，该参数已经废弃。单节点上 Routine Load 线程池大小完全由 FE 动态参数`max_routine_load_task_num_per_be` 控制。
+- 含义：单节点上 Routine Load 线程池大小。从 3.1.0 版本起，该参数已经废弃。单节点上 Routine Load 线程池大小完全由 FE 动态参数 `max_routine_load_task_num_per_be` 控制。
+- 默认值：10
+
+#### internal_service_async_thread_num
+
+- 含义：单个 BE 上与 Kafka 交互的线程池大小。当前 Routine Load FE 与 Kafka 的交互需经由 BE 完成，而每个 BE 上实际执行操作的是一个单独的线程池。当 Routine Load 任务较多时，可能会出现线程池线程繁忙的情况，可以调整该配置。从 3.1.0 版本起，该参数已经废弃。单节点上 Routine Load 线程池大小完全由 FE 动态参数 `max_routine_load_task_num_per_be` 控制。
 - 默认值：10
 
 #### brpc_max_body_size

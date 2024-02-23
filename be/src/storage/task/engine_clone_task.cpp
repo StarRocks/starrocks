@@ -940,7 +940,8 @@ Status EngineCloneTask::_finish_clone_primary(Tablet* tablet, const std::string&
     }
     auto snapshot_meta = std::move(res).value();
 
-    RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(&snapshot_meta, clone_dir));
+    RETURN_IF_ERROR(
+            SnapshotManager::instance()->assign_new_rowset_id(&snapshot_meta, clone_dir, tablet->tablet_schema()));
 
     // check all files in /clone and /tablet
     std::set<std::string> clone_files;

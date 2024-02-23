@@ -17,6 +17,7 @@ package com.starrocks.service;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
+import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
@@ -46,6 +47,7 @@ import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
@@ -78,7 +80,7 @@ public class InformationSchemaDataSource {
 
     private static final String DEF = "def";
     private static final String DEFAULT_EMPTY_STRING = "";
-    private static final long DEFAULT_EMPTY_NUM = -1L;
+    public static final long DEFAULT_EMPTY_NUM = -1L;
     public static final String UTF8_GENERAL_CI = "utf8_general_ci";
 
     @NotNull
@@ -251,6 +253,11 @@ public class InformationSchemaDataSource {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
             propsMap.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM,
                     properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM));
+        }
+
+        if (RunMode.isSharedDataMode()) {
+            String sv = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeNameOfTable(table.getId());
+            propsMap.put(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME, sv);
         }
         return propsMap;
     }
@@ -460,9 +467,9 @@ public class InformationSchemaDataSource {
                 try {
                     List<String> tableNames = metadataMgr.listTableNames(catalogName, dbName);
                     for (String tableName : tableNames) {
-                        Table table = null;
+                        BasicTable table = null;
                         try {
-                            table = metadataMgr.getTable(catalogName, dbName, tableName);
+                            table = metadataMgr.getBasicTable(catalogName, dbName, tableName);
                         } catch (Exception e) {
                             LOG.warn(e.getMessage());
                         }
@@ -513,9 +520,9 @@ public class InformationSchemaDataSource {
                             // INLINE_VIEW (use default)
                             // VIEW (use default)
                             // BROKER (use default)
+                            // EXTERNAL TABLE (use default)
                             genDefaultConfigInfo(info);
                         }
-                        // TODO(cjs): other table type (HIVE, MYSQL, ICEBERG, HUDI, JDBC, ELASTICSEARCH)
                         infos.add(info);
                     }
                 } finally {
@@ -527,7 +534,7 @@ public class InformationSchemaDataSource {
         return response;
     }
 
-    public static TTableInfo genNormalTableInfo(Table table, TTableInfo info) {
+    public static TTableInfo genNormalTableInfo(BasicTable table, TTableInfo info) {
 
         OlapTable olapTable = (OlapTable) table;
         Collection<PhysicalPartition> partitions = olapTable.getPhysicalPartitions();

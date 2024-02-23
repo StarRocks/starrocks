@@ -72,7 +72,7 @@ OutPut Exchange Id: 21
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * expr-->[810.9, 104949.5, 0.0, 8.0, 277544.5544554456] ESTIMATE
+|  * expr-->[810.9, 104949.5, 0.0, 8.0, 554645.0376237625] ESTIMATE
 |
 18:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -84,7 +84,7 @@ OutPut Exchange Id: 21
 |  output columns: 14, 15, 19, 46, 51
 |  cardinality: 554645
 |  column statistics:
-|  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 277544.5544554456] ESTIMATE
+|  * L_EXTENDEDPRICE-->[901.0, 104949.5, 0.0, 8.0, 554645.0376237625] ESTIMATE
 |  * L_DISCOUNT-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
 |  * L_SHIPDATE-->[7.888896E8, 8.519616E8, 0.0, 4.0, 2526.0] ESTIMATE
 |  * C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
@@ -92,7 +92,7 @@ OutPut Exchange Id: 21
 |  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * expr-->[810.9, 104949.5, 0.0, 8.0, 277544.5544554456] ESTIMATE
+|  * expr-->[810.9, 104949.5, 0.0, 8.0, 554645.0376237625] ESTIMATE
 |
 |----17:EXCHANGE
 |       distribution type: BROADCAST
@@ -147,7 +147,7 @@ table: lineitem, rollup: lineitem
 preAggregation: on
 Predicates: [19: L_SHIPDATE, DATE, false] >= '1995-01-01', [19: L_SHIPDATE, DATE, false] <= '1996-12-31'
 partitionsRatio=1/1, tabletsRatio=20/20
-tabletList=10289,10291,10293,10295,10297,10299,10301,10303,10305,10307 ...
+tabletList=10287,10289,10291,10293,10295,10297,10299,10301,10303,10305 ...
 actualRows=0, avgRowSize=32.0
 cardinality: 173465347
 probe runtime filters:
@@ -170,7 +170,7 @@ OutPut Exchange Id: 17
 table: supplier, rollup: supplier
 preAggregation: on
 partitionsRatio=1/1, tabletsRatio=1/1
-tabletList=10187
+tabletList=10185
 actualRows=0, avgRowSize=8.0
 cardinality: 1000000
 column statistics:
@@ -219,7 +219,7 @@ OutPut Exchange Id: 13
 table: orders, rollup: orders
 preAggregation: on
 partitionsRatio=1/1, tabletsRatio=10/10
-tabletList=10215,10217,10219,10221,10223,10225,10227,10229,10231,10233
+tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231
 actualRows=0, avgRowSize=16.0
 cardinality: 150000000
 probe runtime filters:
@@ -272,7 +272,7 @@ OutPut Exchange Id: 10
 table: customer, rollup: customer
 preAggregation: on
 partitionsRatio=1/1, tabletsRatio=10/10
-tabletList=10238,10240,10242,10244,10246,10248,10250,10252,10254,10256
+tabletList=10236,10238,10240,10242,10244,10246,10248,10250,10252,10254
 actualRows=0, avgRowSize=12.0
 cardinality: 15000000
 probe runtime filters:
@@ -306,7 +306,7 @@ table: nation, rollup: nation
 preAggregation: on
 Predicates: 46: N_NAME IN ('CANADA', 'IRAN')
 partitionsRatio=1/1, tabletsRatio=1/1
-tabletList=10261
+tabletList=10259
 actualRows=0, avgRowSize=29.0
 cardinality: 25
 column statistics:
@@ -324,7 +324,7 @@ table: nation, rollup: nation
 preAggregation: on
 Predicates: 51: N_NAME IN ('IRAN', 'CANADA')
 partitionsRatio=1/1, tabletsRatio=1/1
-tabletList=10261
+tabletList=10259
 actualRows=0, avgRowSize=29.0
 cardinality: 25
 column statistics:
@@ -390,4 +390,3 @@ column statistics:
   "exception": []
 }
 [end]
-

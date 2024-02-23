@@ -14,7 +14,7 @@ displayed_sidebar: "Chinese"
 
 资源隔离功能支持计划
 
-|  | 内部表 | 外部表 | 大小查询隔离 | Short query 资源组 | INSERT INTO、Broker Load 计算资源隔离 | Routine Load、Stream Load、Schema Change 资源隔离 |
+|  | 内部表 | 外部表 | 大查询熔断 | Short query 资源组 | INSERT INTO、Broker Load 计算资源隔离 | Routine Load、Stream Load、Schema Change 资源隔离 |
 |---|---|---|---|---|---|---|
 | 2.2 | √ | × | × | × | × | × |
 | 2.3 | √ | √ | √ |√ | × | × |

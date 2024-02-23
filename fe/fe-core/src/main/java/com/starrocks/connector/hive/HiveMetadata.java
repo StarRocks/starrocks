@@ -36,6 +36,7 @@ import com.starrocks.connector.hive.PartitionUpdate.UpdateMode;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -56,6 +57,7 @@ import java.util.Optional;
 import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.Table.TableType.HIVE;
 import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
 import static com.starrocks.connector.PartitionUtil.toPartitionValues;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
@@ -88,6 +90,11 @@ public class HiveMetadata implements ConnectorMetadata {
         this.cacheUpdateProcessor = cacheUpdateProcessor;
         this.updateExecutor = updateExecutor;
         this.refreshOthersFeExecutor = refreshOthersFeExecutor;
+    }
+
+    @Override
+    public Table.TableType getTableType() {
+        return HIVE;
     }
 
     @Override
@@ -130,8 +137,14 @@ public class HiveMetadata implements ConnectorMetadata {
         return hmsOps.getAllTableNames(dbName);
     }
 
+    @Override
     public boolean createTable(CreateTableStmt stmt) throws DdlException {
         return hmsOps.createTable(stmt);
+    }
+
+    @Override
+    public void createTableLike(CreateTableLikeStmt stmt) throws DdlException {
+        hmsOps.createTableLike(stmt);
     }
 
     @Override
@@ -141,8 +154,10 @@ public class HiveMetadata implements ConnectorMetadata {
         if (isResourceMappingCatalog(catalogName)) {
             HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) GlobalStateMgr.getCurrentState()
                     .getMetadata().getTable(dbName, tableName);
-            cacheUpdateProcessor.ifPresent(processor -> processor.invalidateTable(
-                    hmsTable.getDbName(), hmsTable.getTableName(), hmsTable.getTableLocation()));
+            if (hmsTable != null) {
+                cacheUpdateProcessor.ifPresent(processor -> processor.invalidateTable(
+                        hmsTable.getDbName(), hmsTable.getTableName(), hmsTable.getTableLocation()));
+            }
         } else {
             if (!stmt.isForceDrop()) {
                 throw new DdlException(String.format("Table location will be cleared." +

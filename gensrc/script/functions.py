@@ -186,6 +186,8 @@ vectorized_functions = [
 
     [10322, "square", "DOUBLE", ["DOUBLE"], "MathFunctions::square"],
 
+    [10330, "cbrt", "DOUBLE", ["DOUBLE"], "MathFunctions::cbrt"],
+
     # 20xxx: bit functions
     [20010, 'bitand', 'TINYINT', ['TINYINT', 'TINYINT'], "BitFunctions::bitAnd<TYPE_TINYINT>"],
     [20011, 'bitand', 'SMALLINT', ['SMALLINT', 'SMALLINT'], "BitFunctions::bitAnd<TYPE_SMALLINT>"],
@@ -328,8 +330,8 @@ vectorized_functions = [
      'StringFunctions::translate_prepare', 'StringFunctions::translate_close'],
     [30431, 'crc32', 'BIGINT', ['VARCHAR'], 'StringFunctions::crc32'],
 
-    [30440, 'ngram_search', 'FLOAT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::ngram_search','StringFunctions::ngram_search_prepare','StringFunctions::ngram_search_close'],
-    [30441, 'ngram_search_case_insensitive', 'FLOAT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::ngram_search_case_insensitive','StringFunctions::ngram_search_case_insensitive_prepare','StringFunctions::ngram_search_close'],
+    [30440, 'ngram_search', 'DOUBLE', ['VARCHAR', 'VARCHAR', 'INT'], 'StringFunctions::ngram_search','StringFunctions::ngram_search_prepare','StringFunctions::ngram_search_close'],
+    [30441, 'ngram_search_case_insensitive', 'DOUBLE', ['VARCHAR', 'VARCHAR','INT'], 'StringFunctions::ngram_search_case_insensitive','StringFunctions::ngram_search_case_insensitive_prepare','StringFunctions::ngram_search_close'],
 
     # Binary Functions
     # to_binary

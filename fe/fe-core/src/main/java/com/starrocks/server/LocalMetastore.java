@@ -50,12 +50,15 @@ import com.starrocks.alter.AlterJobExecutor;
 import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.SetVarHint;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TypeDef;
+import com.starrocks.analysis.UserVariableHint;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.CatalogUtils;
@@ -146,6 +149,7 @@ import com.starrocks.persist.ColumnRenameInfo;
 import com.starrocks.persist.CreateDbInfo;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DatabaseInfo;
+import com.starrocks.persist.DisableTableRecoveryInfo;
 import com.starrocks.persist.DropDbInfo;
 import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.ListPartitionPersistInfo;
@@ -200,6 +204,7 @@ import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DistributionDesc;
@@ -215,7 +220,6 @@ import com.starrocks.sql.ast.PartitionConvertContext;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.PartitionRenameClause;
-import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
@@ -224,7 +228,6 @@ import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RollupRenameClause;
-import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.ShowAlterStmt;
@@ -490,7 +493,6 @@ public class LocalMetastore implements ConnectorMetadata {
             unlock();
         }
 
-        List<Runnable> runnableList;
         // 2. drop tables in db
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.WRITE);
@@ -508,7 +510,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
             // save table names for recycling
             Set<String> tableNames = new HashSet<>(db.getTableNamesViewWithLock());
-            runnableList = unprotectDropDb(db, isForceDrop, false);
+            unprotectDropDb(db, isForceDrop, false);
             if (!isForceDrop) {
                 recycleBin.recycleDatabase(db, tableNames);
             } else {
@@ -537,26 +539,24 @@ public class LocalMetastore implements ConnectorMetadata {
         } finally {
             locker.unLockDatabase(db, LockType.WRITE);
         }
-
-        for (Runnable runnable : runnableList) {
-            runnable.run();
-        }
     }
 
     @NotNull
-    public List<Runnable> unprotectDropDb(Database db, boolean isForeDrop, boolean isReplay) {
-        List<Runnable> runnableList = new ArrayList<>();
+    public void unprotectDropDb(Database db, boolean isForeDrop, boolean isReplay) {
         for (Table table : db.getTables()) {
-            Runnable runnable = db.unprotectDropTable(table.getId(), isForeDrop, isReplay);
-            if (runnable != null) {
-                runnableList.add(runnable);
+            db.unprotectDropTable(table.getId(), isForeDrop, isReplay);
+            if (isForeDrop) {
+                // Normally we should delete table after releasing the database lock, to
+                // avoid occupying the database lock for too long. However, at this point
+                // we are in the process of dropping the database, which means that the
+                // database should no longer be in use, and occupying the database lock
+                // should have no effect.
+                table.delete(db.getId(), isReplay);
             }
         }
-        return runnableList;
     }
 
     public void replayDropDb(String dbName, boolean isForceDrop) throws DdlException {
-        List<Runnable> runnableList;
         tryLock(true);
         try {
             Database db = fullNameToDb.get(dbName);
@@ -564,7 +564,7 @@ public class LocalMetastore implements ConnectorMetadata {
             locker.lockDatabase(db, LockType.WRITE);
             try {
                 Set<String> tableNames = new HashSet(db.getTableNamesViewWithLock());
-                runnableList = unprotectDropDb(db, isForceDrop, true);
+                unprotectDropDb(db, isForceDrop, true);
                 if (!isForceDrop) {
                     recycleBin.recycleDatabase(db, tableNames);
                 } else {
@@ -581,10 +581,6 @@ public class LocalMetastore implements ConnectorMetadata {
             LOG.info("finish replay drop db, name: {}, id: {}", dbName, db.getId());
         } finally {
             unlock();
-        }
-
-        for (Runnable runnable : runnableList) {
-            runnable.run();
         }
     }
 
@@ -720,24 +716,30 @@ public class LocalMetastore implements ConnectorMetadata {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
 
-        AlterDatabaseQuotaStmt.QuotaType quotaType = stmt.getQuotaType();
-        if (quotaType == AlterDatabaseQuotaStmt.QuotaType.DATA) {
-            db.setDataQuotaWithLock(stmt.getQuota());
-        } else if (quotaType == AlterDatabaseQuotaStmt.QuotaType.REPLICA) {
-            db.setReplicaQuotaWithLock(stmt.getQuota());
-        }
-        long quota = stmt.getQuota();
-        DatabaseInfo dbInfo = new DatabaseInfo(db.getFullName(), "", quota, quotaType);
+        DatabaseInfo dbInfo = new DatabaseInfo(db.getFullName(), "", stmt.getQuota(), stmt.getQuotaType());
         GlobalStateMgr.getCurrentState().getEditLog().logAlterDb(dbInfo);
+
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
+        try {
+            replayAlterDatabaseQuota(dbInfo);
+        } finally {
+            locker.unLockDatabase(db, LockType.WRITE);
+        }
     }
 
-    public void replayAlterDatabaseQuota(String dbName, long quota, AlterDatabaseQuotaStmt.QuotaType quotaType) {
-        Database db = getDb(dbName);
+    public void replayAlterDatabaseQuota(DatabaseInfo dbInfo) {
+        String dbName = dbInfo.getDbName();
+        LOG.info("Begin to unprotect alter db info {}", dbName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+        AlterDatabaseQuotaStmt.QuotaType quotaType = dbInfo.getQuotaType();
+        long quota = dbInfo.getQuota();
+
         Preconditions.checkNotNull(db);
         if (quotaType == AlterDatabaseQuotaStmt.QuotaType.DATA) {
-            db.setDataQuotaWithLock(quota);
+            db.setDataQuota(quota);
         } else if (quotaType == AlterDatabaseQuotaStmt.QuotaType.REPLICA) {
-            db.setReplicaQuotaWithLock(quota);
+            db.setReplicaQuota(quota);
         }
     }
 
@@ -765,7 +767,13 @@ public class LocalMetastore implements ConnectorMetadata {
                 throw new DdlException("Database name[" + newFullDbName + "] is already used");
             }
             // 1. rename db
-            db.setNameWithLock(newFullDbName);
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.WRITE);
+            try {
+                db.setName(newFullDbName);
+            } finally {
+                locker.unLockDatabase(db, LockType.WRITE);
+            }
 
             // 2. add to meta. check again
             fullNameToDb.remove(fullDbName);
@@ -865,6 +873,11 @@ public class LocalMetastore implements ConnectorMetadata {
             throw e;
         }
         return true;
+    }
+
+    @Override
+    public void createTableLike(CreateTableLikeStmt stmt) throws DdlException {
+        createTable(stmt.getCreateTableStmt());
     }
 
     @Override
@@ -2293,10 +2306,7 @@ public class LocalMetastore implements ConnectorMetadata {
             }
             if (!db.registerTableUnlocked(table)) {
                 if (!isSetIfNotExists) {
-                    if (table instanceof OlapTable) {
-                        OlapTable olapTable = (OlapTable) table;
-                        olapTable.onErase(false);
-                    }
+                    table.delete(db.getId(), false);
                     ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(),
                             "table already exists");
                 } else {
@@ -2466,7 +2476,6 @@ public class LocalMetastore implements ConnectorMetadata {
             chooseBackendsArbitrary = true;
         }
 
-
         try {
             if (chooseBackendsArbitrary) {
                 backendsPerBucketSeq = Lists.newArrayList();
@@ -2538,7 +2547,7 @@ public class LocalMetastore implements ConnectorMetadata {
         List<Long> chosenBackendIds =
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getNodeSelector()
                         .seqChooseBackendIdsByStorageMedium(replicationNum,
-                        true, true, locReq, storageMedium);
+                                true, true, locReq, storageMedium);
         if (CollectionUtils.isEmpty(chosenBackendIds)) {
             throw new DdlException(
                     "Failed to find enough hosts with storage medium " + storageMedium +
@@ -2608,28 +2617,30 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public void replayDropTable(Database db, long tableId, boolean isForceDrop) {
-        Runnable runnable;
+        Table table;
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.WRITE);
         try {
-            runnable = db.unprotectDropTable(tableId, isForceDrop, true);
+            table = db.unprotectDropTable(tableId, isForceDrop, true);
         } finally {
             locker.unLockDatabase(db, LockType.WRITE);
         }
-        if (runnable != null) {
-            runnable.run();
+        if (table != null && isForceDrop) {
+            table.delete(db.getId(), true);
         }
     }
 
     public void replayEraseTable(long tableId) {
-        recycleBin.replayEraseTable(tableId);
+        recycleBin.replayEraseTable(Collections.singletonList(tableId));
     }
 
     public void replayEraseMultiTables(MultiEraseTableInfo multiEraseTableInfo) {
         List<Long> tableIds = multiEraseTableInfo.getTableIds();
-        for (Long tableId : tableIds) {
-            recycleBin.replayEraseTable(tableId);
-        }
+        recycleBin.replayEraseTable(tableIds);
+    }
+
+    public void replayDisableTableRecovery(DisableTableRecoveryInfo disableTableRecoveryInfo) {
+        recycleBin.replayDisableTableRecovery(disableTableRecoveryInfo.getTableIds());
     }
 
     public void replayRecoverTable(RecoverInfo info) {
@@ -2779,7 +2790,9 @@ public class LocalMetastore implements ConnectorMetadata {
                 LOG.warn("replay delete replica failed, db is null, meta: {}", meta);
                 continue;
             }
-            db.writeLock();
+
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.WRITE);
             try {
                 OlapTable olapTable = (OlapTable) getTableIncludeRecycleBin(db, meta.getTableId());
                 if (olapTable == null) {
@@ -2803,7 +2816,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
                 tablet.deleteReplicaByBackendId(info.getBackendId());
             } finally {
-                db.writeUnlock();
+                locker.unLockDatabase(db, LockType.WRITE);
             }
         }
     }
@@ -3147,22 +3160,18 @@ public class LocalMetastore implements ConnectorMetadata {
                 // remove this transient variable
                 properties.remove(PropertyAnalyzer.PROPERTY_MV_RANDOMIZE_START);
             }
-            if (asyncRefreshSchemeDesc.isDefineStartTime() || randomizeStart == -1) {
-                asyncRefreshContext.setStartTime(Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
-            } else if (asyncRefreshSchemeDesc.getIntervalLiteral() != null) {
-                // randomize the start time if not specified manually, to avoid refresh conflicts
-                // default random interval is min(300s, INTERVAL/2)
-                // user could specify it through mv_randomize_start
-                IntervalLiteral interval = asyncRefreshSchemeDesc.getIntervalLiteral();
-                long period = ((IntLiteral) interval.getValue()).getLongValue();
-                TimeUnit timeUnit =
-                        TimeUtils.convertUnitIdentifierToTimeUnit(interval.getUnitIdentifier().getDescription());
-                long intervalSeconds = TimeUtils.convertTimeUnitValueToSecond(period, timeUnit);
-                long currentTimeSecond = Utils.getLongFromDateTime(LocalDateTime.now());
-                long randomInterval = randomizeStart == 0 ? Math.min(300, intervalSeconds / 2) : randomizeStart;
-                long random = ThreadLocalRandom.current().nextLong(randomInterval);
-                long randomizedStart = currentTimeSecond + random;
 
+            long random = getRandomStart(asyncRefreshSchemeDesc.getIntervalLiteral(), randomizeStart);
+            if (asyncRefreshSchemeDesc.isDefineStartTime() || randomizeStart == -1) {
+                long definedStartTime = Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime());
+                // Add random set only if mv_random_start > 0 when user has already set the start time
+                if (randomizeStart > 0) {
+                    definedStartTime += random;
+                }
+                asyncRefreshContext.setStartTime(definedStartTime);
+            } else if (asyncRefreshSchemeDesc.getIntervalLiteral() != null) {
+                long currentTimeSecond = Utils.getLongFromDateTime(LocalDateTime.now());
+                long randomizedStart = currentTimeSecond + random;
                 asyncRefreshContext.setStartTime(randomizedStart);
             }
             if (asyncRefreshSchemeDesc.getIntervalLiteral() != null) {
@@ -3265,17 +3274,19 @@ public class LocalMetastore implements ConnectorMetadata {
         materializedView.setIndexMeta(baseIndexId, mvName, baseSchema, schemaVersion, schemaHash,
                 shortKeyColumnCount, baseIndexStorageType, stmt.getKeysType());
 
-        // validate optHints
-        Map<String, String> optHints = null;
-        QueryRelation queryRelation = stmt.getQueryStatement().getQueryRelation();
-        if (queryRelation instanceof SelectRelation) {
-            SelectRelation selectRelation = (SelectRelation) queryRelation;
-            optHints = selectRelation.getSelectList().getOptHints();
-            if (optHints != null && !optHints.isEmpty()) {
-                SessionVariable sessionVariable = VariableMgr.newSessionVariable();
-                for (String key : optHints.keySet()) {
-                    VariableMgr.setSystemVariable(sessionVariable,
-                            new SystemVariable(key, new StringLiteral(optHints.get(key))), true);
+        // validate hint
+        Map<String, String> optHints = Maps.newHashMap();
+        if (stmt.isExistQueryScopeHint()) {
+            SessionVariable sessionVariable = VariableMgr.newSessionVariable();
+            for (HintNode hintNode : stmt.getAllQueryScopeHints()) {
+                if (hintNode instanceof SetVarHint) {
+                    for (Map.Entry<String, String> entry : hintNode.getValue().entrySet()) {
+                        VariableMgr.setSystemVariable(sessionVariable,
+                                new SystemVariable(entry.getKey(), new StringLiteral(entry.getValue())), true);
+                        optHints.put(entry.getKey(), entry.getValue());
+                    }
+                } else if (hintNode instanceof UserVariableHint) {
+                    throw new DdlException("unsupported user variable hint in Materialized view for now.");
                 }
             }
         }
@@ -3330,6 +3341,22 @@ public class LocalMetastore implements ConnectorMetadata {
         // NOTE: The materialized view has been added to the database, and the following procedure cannot throw exception.
         createTaskForMaterializedView(dbName, materializedView, optHints);
         DynamicPartitionUtil.registerOrRemovePartitionTTLTable(db.getId(), materializedView);
+    }
+
+    private long getRandomStart(IntervalLiteral interval,
+                                long randomizeStart) throws DdlException {
+        if (interval == null || randomizeStart == -1) {
+            return 0;
+        }
+        // randomize the start time if not specified manually, to avoid refresh conflicts
+        // default random interval is min(300s, INTERVAL/2)
+        // user could specify it through mv_randomize_start
+        long period = ((IntLiteral) interval.getValue()).getLongValue();
+        TimeUnit timeUnit =
+                TimeUtils.convertUnitIdentifierToTimeUnit(interval.getUnitIdentifier().getDescription());
+        long intervalSeconds = TimeUtils.convertTimeUnitValueToSecond(period, timeUnit);
+        long randomInterval = randomizeStart == 0 ? Math.min(300, intervalSeconds / 2) : randomizeStart;
+        return ThreadLocalRandom.current().nextLong(randomInterval);
     }
 
     private DataProperty analyzeMVDataProperties(Database db,
@@ -3735,7 +3762,7 @@ public class LocalMetastore implements ConnectorMetadata {
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         Task refreshTask = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
         if (refreshTask != null) {
-            taskManager.killTask(refreshTask.getName(), false);
+            taskManager.killTask(refreshTask.getName(), true);
         }
     }
 
@@ -5477,14 +5504,13 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public void removeAutoIncrementIdByTableId(Long tableId, boolean isReplay) {
-        if (!isReplay) {
+        Long id = tableIdToIncrementId.remove(tableId);
+        if (!isReplay && id != null) {
             ConcurrentHashMap<Long, Long> deltaMap = new ConcurrentHashMap<>();
             deltaMap.put(tableId, 0L);
             AutoIncrementInfo info = new AutoIncrementInfo(deltaMap);
             GlobalStateMgr.getCurrentState().getEditLog().logSaveDeleteAutoIncrementId(info);
         }
-
-        tableIdToIncrementId.remove(tableId);
     }
 
     public ConcurrentHashMap<Long, Long> tableIdToIncrementId() {

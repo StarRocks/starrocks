@@ -187,11 +187,13 @@ Status TabletSinkSender::try_close(RuntimeState* state) {
     bool intolerable_failure = false;
     for (auto& index_channel : _channels) {
         if (index_channel->has_incremental_node_channel()) {
-            // close initial node channel and wait it done
+            // try to finish initial node channel and wait it done
+            // This is added for automatic partition. We need to ensure that
+            // all data has been sent before the incremental channel is closed.
             index_channel->for_each_initial_node_channel([&index_channel, &err_st,
                                                           &intolerable_failure](NodeChannel* ch) {
                 if (!index_channel->is_failed_channel(ch)) {
-                    auto st = ch->try_close(true);
+                    auto st = ch->try_finish();
                     if (!st.ok()) {
                         LOG(WARNING) << "close initial channel failed. channel_name=" << ch->name()
                                      << ", load_info=" << ch->print_load_info() << ", error_msg=" << st.message();
@@ -199,7 +201,7 @@ Status TabletSinkSender::try_close(RuntimeState* state) {
                         index_channel->mark_as_failed(ch);
                     }
                 } else {
-                    ch->cancel(Status::Cancelled("channel failed"));
+                    ch->cancel();
                 }
                 if (index_channel->has_intolerable_failure()) {
                     intolerable_failure = true;
@@ -210,19 +212,18 @@ Status TabletSinkSender::try_close(RuntimeState* state) {
                 break;
             }
 
-            bool is_initial_node_channel_close_done = true;
-            index_channel->for_each_initial_node_channel([&is_initial_node_channel_close_done](NodeChannel* ch) {
-                is_initial_node_channel_close_done &= ch->is_close_done();
+            bool is_initial_node_channel_finished = true;
+            index_channel->for_each_initial_node_channel([&is_initial_node_channel_finished](NodeChannel* ch) {
+                is_initial_node_channel_finished &= ch->is_finished();
             });
 
-            // close initial node channel not finish, can not close incremental node channel
-            if (!is_initial_node_channel_close_done) {
+            // initial node channel not finish, can not close incremental node channel
+            if (!is_initial_node_channel_finished) {
                 break;
             }
 
-            // close incremental node channel
-            index_channel->for_each_incremental_node_channel([&index_channel, &err_st,
-                                                              &intolerable_failure](NodeChannel* ch) {
+            // close both initial & incremental node channel
+            index_channel->for_each_node_channel([&index_channel, &err_st, &intolerable_failure](NodeChannel* ch) {
                 if (!index_channel->is_failed_channel(ch)) {
                     auto st = ch->try_close();
                     if (!st.ok()) {
@@ -232,7 +233,7 @@ Status TabletSinkSender::try_close(RuntimeState* state) {
                         index_channel->mark_as_failed(ch);
                     }
                 } else {
-                    ch->cancel(Status::Cancelled("channel failed"));
+                    ch->cancel();
                 }
                 if (index_channel->has_intolerable_failure()) {
                     intolerable_failure = true;
@@ -250,7 +251,7 @@ Status TabletSinkSender::try_close(RuntimeState* state) {
                         index_channel->mark_as_failed(ch);
                     }
                 } else {
-                    ch->cancel(Status::Cancelled("channel failed"));
+                    ch->cancel();
                 }
                 if (index_channel->has_intolerable_failure()) {
                     intolerable_failure = true;

@@ -478,7 +478,6 @@ public class PseudoBackend {
         request.setTablets(tabletManager.getAllTabletInfo());
         request.setTablet_max_compaction_score(100);
         request.setBackend(tBackend);
-        reportVersion.incrementAndGet();
         request.setReport_version(reportVersion.get());
         try {
             if (!shutdown) {
@@ -667,8 +666,6 @@ public class PseudoBackend {
         TFinishTaskRequest finishTaskRequest = new TFinishTaskRequest(tBackend,
                 request.getTask_type(), request.getSignature(),
                 new TStatus(TStatusCode.OK));
-        long v = reportVersion.incrementAndGet();
-        finishTaskRequest.setReport_version(v);
         try {
             switch (finishTaskRequest.task_type) {
                 case CREATE:
@@ -697,6 +694,8 @@ public class PseudoBackend {
             finishTaskRequest.setTask_status(toStatus(e));
         }
         try {
+            long v = reportVersion.incrementAndGet();
+            finishTaskRequest.setReport_version(v);
             frontendService.finishTask(finishTaskRequest);
         } catch (TException e) {
             LOG.warn("error call finishTask", e);

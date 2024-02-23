@@ -15,9 +15,14 @@
 #include "exprs/cast_expr.h"
 
 #include <llvm/ADT/APInt.h>
+#include <llvm/IR/Constants.h>
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/Value.h>
 #include <ryu/ryu.h>
 
+#include <limits>
 #include <stdexcept>
+#include <type_traits>
 #include <utility>
 
 #include "column/column_builder.h"
@@ -37,9 +42,6 @@
 #include "exprs/unary_function.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
-#include "llvm/IR/Constants.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Value.h"
 #include "runtime/datetime_value.h"
 #include "runtime/large_int_value.h"
 #include "runtime/runtime_state.h"
@@ -1141,23 +1143,31 @@ public:
                IRHelper::support_jit(FromType) && IRHelper::support_jit(ToType);
     }
 
-    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
-                                         const std::vector<LLVMDatum>& datums) const override {
-        auto* l = datums[0].value;
+    std::string jit_func_name_impl() const override {
+        return "{cast(" + _children[0]->jit_func_name() + ")}" + (is_constant() ? "c:" : "") +
+               (is_nullable() ? "n:" : "") + type().debug_string();
+    }
 
+    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
+        ASSIGN_OR_RETURN(auto datum, _children[0]->generate_ir(context, jit_ctx))
+        auto* l = datum.value;
+        auto& b = jit_ctx->builder;
         if constexpr (FromType == TYPE_JSON || ToType == TYPE_JSON) {
             return Status::NotSupported("JIT casting does not support JSON");
         } else if constexpr (lt_is_decimal<FromType> || lt_is_decimal<ToType>) {
             return Status::NotSupported("JIT casting does not support decimal");
         } else {
-            LLVMDatum datum(b);
             ASSIGN_OR_RETURN(datum.value, IRHelper::cast_to_type(b, l, FromType, ToType));
-            datum.null_flag = datums[0].null_flag;
             if constexpr ((lt_is_integer<FromType> || lt_is_float<FromType>)&&(lt_is_integer<ToType> ||
                                                                                lt_is_float<ToType>)) {
                 typedef RunTimeCppType<FromType> FromCppType;
                 typedef RunTimeCppType<ToType> ToCppType;
-                if constexpr (std::numeric_limits<ToCppType>::max() < std::numeric_limits<FromCppType>::max()) {
+
+                if constexpr ((std::is_floating_point_v<ToCppType> || std::is_floating_point_v<FromCppType>)
+                                      ? (static_cast<long double>(std::numeric_limits<ToCppType>::max()) <
+                                         static_cast<long double>(std::numeric_limits<FromCppType>::max()))
+                                      : (std::numeric_limits<ToCppType>::max() <
+                                         std::numeric_limits<FromCppType>::max())) {
                     // Check overflow.
 
                     llvm::Value* max_overflow = nullptr;
@@ -1198,8 +1208,7 @@ public:
         std::stringstream out;
         auto expr_debug_string = Expr::debug_string();
         out << "VectorizedCastExpr ("
-            << "from=" << _children[0]->type().debug_string() << ", to=" << this->type().debug_string()
-            << ", expr=" << expr_debug_string << ")";
+            << "from=" << _children[0]->type().debug_string() << ", to expr=" << expr_debug_string << ")";
         return out.str();
     }
 };

@@ -264,6 +264,15 @@ None
 2892.193
 2892.193
 -- !result
+select v1+v3+ null, v5 + 1.0 + null+v5, v3+null * v1, 2+null/3 * 5, v4-v1 *null  FROM jit_fpe ORDER BY 1,2,3,4;
+-- result:
+None	None	None	None	None
+None	None	None	None	None
+None	None	None	None	None
+None	None	None	None	None
+None	None	None	None	None
+None	None	None	None	None
+-- !result
 DROP TABLE IF EXISTS `jit_fpe`;
 -- result:
 -- !result
