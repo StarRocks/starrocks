@@ -41,7 +41,7 @@ public:
 
     PrimaryIndex();
     PrimaryIndex(const Schema& pk_schema);
-    ~PrimaryIndex();
+    virtual ~PrimaryIndex();
 
     // Fetch all primary keys from the tablet associated with this index into memory
     // to build a hash index.
