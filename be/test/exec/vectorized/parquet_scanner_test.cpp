@@ -629,4 +629,3 @@ TEST_F(ParquetScannerTest, datetime) {
 }
 
 } // namespace starrocks::vectorized
-

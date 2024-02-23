@@ -521,4 +521,4 @@ PARALLEL_TEST(ConvertHelperTest, testNullableStringConvertJson) {
     EXPECT_EQ("{}", c1->get(0).get_json()->to_string_uncheck());
     ASSERT_TRUE(c1->get(1).is_null());
 }
-} // namespace starrocks
+} // namespace starrocks::vectorized
