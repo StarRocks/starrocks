@@ -112,6 +112,4 @@ public class PushDownPredicateScanRule extends TransformationRule {
         OptExpression project = OptExpression.create(logicalProjectOperator, OptExpression.create(newScanOperator));
         return Lists.newArrayList(project);
     }
-
-
 }
