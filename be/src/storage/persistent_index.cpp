@@ -2545,16 +2545,18 @@ Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const Slice* ke
         check_keys_info.swap(keys_info);
     }
 
-    // an optimization for very small data import. In some real time scenario, user only import a very small batch data
-    // once, and we only need to read a little page but not total shard.
-    std::map<size_t, std::vector<KeyInfo>> keys_info_by_page;
-    Status st = _split_keys_info_by_page(shard_idx, check_keys_info, keys_info_by_page);
-    if (!st.ok()) {
-        return st;
-    }
+    if (config::enable_reab_pindex_by_page) {
+        // an optimization for very small data import. In some real time scenario, user only import a very small batch data
+        // once, and we only need to read a little page but not total shard.
+        std::map<size_t, std::vector<KeyInfo>> keys_info_by_page;
+        Status st = _split_keys_info_by_page(shard_idx, check_keys_info, keys_info_by_page);
+        if (!st.ok()) {
+            return st;
+        }
 
-    if (st.ok() && keys_info_by_page.size() == 1 && shard_info.uncompressed_size == 0) {
-        return _get_in_shard_by_page(shard_idx, n, keys, values, found_keys_info, keys_info_by_page);
+        if (st.ok() && keys_info_by_page.size() == 1 && shard_info.uncompressed_size == 0) {
+            return _get_in_shard_by_page(shard_idx, n, keys, values, found_keys_info, keys_info_by_page);
+        }
     }
 
     std::unique_ptr<ImmutableIndexShard> shard = std::make_unique<ImmutableIndexShard>(shard_info.npage);
