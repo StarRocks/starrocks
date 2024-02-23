@@ -43,6 +43,7 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.BloomFilterIndexUtil;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IndexDef;
@@ -1167,6 +1168,8 @@ public class SchemaChangeHandler extends AlterHandler {
         if (bfColumns == null) {
             bfFpp = 0;
         }
+
+        BloomFilterIndexUtil.analyseBfWithNgramBf(newSet, bfColumns);
 
         // property 3: timeout
         long timeoutSecond = PropertyAnalyzer.analyzeTimeout(propertyMap, Config.alter_table_timeout_second);
@@ -2323,7 +2326,7 @@ public class SchemaChangeHandler extends AlterHandler {
         newColset.addAll(indexDef.getColumns());
         for (Index existedIdx : existedIndexes) {
             // check the index id only if the index is CompatibleIndex(GIN)
-            // Bitmap index's id is always be -1
+            // Bitmap index/Ngram Bloom filter index's id is always be -1
             if (IndexDef.IndexType.isCompatibleIndex(existedIdx.getIndexType()) &&
                     IndexDef.IndexType.isCompatibleIndex(newIndex.getIndexType()) &&
                     existedIdx.getIndexId() >= newIndex.getIndexId()) {
@@ -2352,7 +2355,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     throw new DdlException(e.getMessage());
                 }
             } else {
-                throw new DdlException("BITMAP column does not exist in table. invalid column: " + col);
+                throw new DdlException(indexDef.getIndexName() + " column does not exist in table. invalid column: " + col);
             }
         }
         Preconditions.checkArgument(newIndex.isValidIndex(),

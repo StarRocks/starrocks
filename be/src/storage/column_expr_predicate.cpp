@@ -34,6 +34,10 @@ StatusOr<ColumnExprPredicate*> ColumnExprPredicate::make_column_expr_predicate(T
     // note: conjuncts would be shared by multiple scanners
     // so here we have to clone one to keep thread safe.
     expr_predicate->_add_expr_ctx(expr_ctx);
+    // passed by FE
+    if (expr_ctx != nullptr) {
+        expr_predicate->set_index_filter_only(expr_ctx->is_index_only_filter());
+    }
     return expr_predicate;
 }
 
@@ -178,6 +182,10 @@ bool ColumnExprPredicate::zone_map_filter(const ZoneMapDetail& detail) const {
     }
     VLOG_FILE << "ColumnExprPredicate: zone_map_filter succeeded. # of skipped rows = " << detail.num_rows();
     return false;
+}
+
+bool ColumnExprPredicate::ngram_bloom_filter(const BloomFilter* bf, size_t gram_num) const {
+    return _expr_ctxs[0]->ngram_bloom_filter(bf, gram_num);
 }
 
 Status ColumnExprPredicate::convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
