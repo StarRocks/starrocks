@@ -380,7 +380,7 @@ INSERT is a synchronous command. If an INSERT job is still running, you need to 
 
 :::
 
-## Compare the table sizes on disk
+### Compare the table sizes on disk
 
 This query compares the table with the inferred schema and the one where the schema
 is declared. Because the inferred schema has nullable columns and a varchar for the
