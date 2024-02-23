@@ -980,10 +980,6 @@ class StarrocksSQLApiLib(object):
             count += 1
         tools.assert_equal("FINISHED", status, "didn't wait pipe finish")
 
-
-<<<<<<< HEAD
-    def check_hit_materialized_view(self, query, mv_name):
-=======
     def check_hit_materialized_view_plan(self, res, mv_name):
         """
         assert mv_name is hit in query
@@ -991,7 +987,6 @@ class StarrocksSQLApiLib(object):
         tools.assert_true(str(res).find(mv_name) > 0, "assert mv %s is not found" % (mv_name))
 
     def check_hit_materialized_view(self, query, *expects):
->>>>>>> d229a2b469 ([BugFix] Synchronous materialized view rewrite should respect original base index (#40622))
         """
         assert mv_name is hit in query
         """
