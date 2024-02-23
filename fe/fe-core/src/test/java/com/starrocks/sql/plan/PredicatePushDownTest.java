@@ -50,6 +50,11 @@ public class PredicatePushDownTest extends PlanTestBase {
             assertContains(plan, "(coalesce(1: v1 < 2, NULL, FALSE)) OR (3: v3 > 2)");
         }
         {
+            String sql = "select * from t0 where coalesce(v1 < 2, null, false) is null";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "PREDICATES: coalesce(1: v1 < 2, NULL, FALSE) IS NULL");
+        }
+        {
             String sql = "select coalesce(v1 < 2, null, false) from t0";
             String plan = getFragmentPlan(sql);
             assertContains(plan, "coalesce(1: v1 < 2, NULL, FALSE)");
