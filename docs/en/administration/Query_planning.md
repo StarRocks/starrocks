@@ -251,7 +251,7 @@ If a query references the result of a scalar subquery or scalar expression, you 
 
 #### Examples
 
-The following query references scalar subqueries `select max(age) from users` and `select min(name) from users`, so you can use user-defined variable hints to set these two subqueries as user-defined variables, and then run the query.
+The following query references scalar subqueries `select max(age) from users` and `select min(name) from users`, so you can a `SET_USER_VARIABLE` hint to set these two scalar subqueries as user-defined variables and then run the query.
 
 ~~~SQL
 SELECT /*+ SET_USER_VARIABLE (@a = (select max(age) from users), @b = (select min(name) from users)) */ *  FROM sales_orders where sales_orders.age = @a and sales_orders.name = @b;
