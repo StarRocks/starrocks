@@ -104,6 +104,8 @@ public:
     // update primary index data version when meta file finalize success.
     void update_primary_index_data_version(const Tablet& tablet, int64_t version);
 
+    int64_t get_primary_index_data_version(int64_t tablet_id);
+
     void expire_cache();
 
     void evict_cache(int64_t memory_urgent_level, int64_t memory_high_level);
@@ -140,6 +142,8 @@ public:
     void release_primary_index_cache(IndexEntry* index_entry);
     // remove index entry if it isn't nullptr
     void remove_primary_index_cache(IndexEntry* index_entry);
+
+    void unload_and_remove_primary_index(int64_t tablet_id);
 
     DynamicCache<uint64_t, LakePrimaryIndex>& index_cache() { return _index_cache; }
 
