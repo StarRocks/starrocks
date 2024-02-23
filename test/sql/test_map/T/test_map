@@ -48,6 +48,7 @@ from (select c1 from (values(map())) as t(c1)) t;
 select map_concat(c1, map(1,2))
 from (select c1 from (values(map())) as t(c1)) t;
 
+-- invaild map key type
 select map_concat(c1, map(map(),map()))
 from (select c1 from (values(map())) as t(c1)) t;
 
