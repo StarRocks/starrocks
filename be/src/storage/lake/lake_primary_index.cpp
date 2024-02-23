@@ -18,6 +18,11 @@
 
 #include "storage/chunk_helper.h"
 #include "storage/lake/lake_local_persistent_index.h"
+<<<<<<< HEAD
+=======
+#include "storage/lake/local_pk_index_manager.h"
+#include "storage/lake/rowset.h"
+>>>>>>> a0d3198ba7 ([Enhancement] Remove persistent index dir when persistent index is disabled (#37284))
 #include "storage/lake/tablet.h"
 #include "storage/primary_key_encoder.h"
 #include "testutil/sync_point.h"
@@ -27,7 +32,18 @@ namespace starrocks::lake {
 
 static bvar::LatencyRecorder g_load_pk_index_latency("lake_load_pk_index");
 
+<<<<<<< HEAD
 Status LakePrimaryIndex::lake_load(Tablet* tablet, const TabletMetadata& metadata, int64_t base_version,
+=======
+LakePrimaryIndex::~LakePrimaryIndex() {
+    if (!_enable_persistent_index && _persistent_index != nullptr) {
+        auto st = LocalPkIndexManager::clear_persistent_index(_tablet_id);
+        LOG_IF(WARNING, !st.ok()) << "Fail to clear pk index from local disk: " << st.to_string();
+    }
+}
+
+Status LakePrimaryIndex::lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
+>>>>>>> a0d3198ba7 ([Enhancement] Remove persistent index dir when persistent index is disabled (#37284))
                                    const MetaFileBuilder* builder) {
     TRACE_COUNTER_SCOPE_LATENCY_US("primary_index_load_latency_us");
     std::lock_guard<std::mutex> lg(_lock);
@@ -92,6 +108,7 @@ Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& met
                                                                ->get_persistent_index_path(),
                                                        tablet->id());
 
+<<<<<<< HEAD
                 RETURN_IF_ERROR(StorageEngine::instance()
                                         ->get_persistent_index_store(tablet->id())
                                         ->create_dir_if_path_not_exists(path));
@@ -103,6 +120,19 @@ Status LakePrimaryIndex::_do_lake_load(Tablet* tablet, const TabletMetadata& met
                 LOG(WARNING) << "only support LOCAL lake_persistent_index_type for now";
                 return Status::InternalError("only support LOCAL lake_persistent_index_type for now");
             }
+=======
+            RETURN_IF_ERROR(StorageEngine::instance()
+                                    ->get_persistent_index_store(metadata->id())
+                                    ->create_dir_if_path_not_exists(path));
+            _persistent_index = std::make_unique<LakeLocalPersistentIndex>(path);
+            set_enable_persistent_index(true);
+            return dynamic_cast<LakeLocalPersistentIndex*>(_persistent_index.get())
+                    ->load_from_lake_tablet(tablet_mgr, metadata, base_version, builder);
+        }
+        default:
+            LOG(WARNING) << "only support LOCAL lake_persistent_index_type for now";
+            return Status::InternalError("only support LOCAL lake_persistent_index_type for now");
+>>>>>>> a0d3198ba7 ([Enhancement] Remove persistent index dir when persistent index is disabled (#37284))
         }
     }
 
