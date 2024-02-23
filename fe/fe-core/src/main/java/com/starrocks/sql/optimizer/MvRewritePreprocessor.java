@@ -529,11 +529,8 @@ public class MvRewritePreprocessor {
             List<MvPlanContext> planContexts = force ?
                             CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, false) :
                             CachingMvPlanContextBuilder.getInstance().getPlanContextFromCacheIfPresent(mv);
-            if (CollectionUtils.isEmpty(planContexts)) {
-                logMVPrepare(connectContext, "MV has no plan", mv.getName());
-                return Pair.create(false, "MV has no plan");
-            }
-            if (planContexts.stream().noneMatch(MvPlanContext::isValidMvPlan)) {
+            if (CollectionUtils.isNotEmpty(planContexts) &&
+                    planContexts.stream().noneMatch(MvPlanContext::isValidMvPlan)) {
                 logMVPrepare(connectContext, "MV {} has no valid plan from {} plan contexts",
                         mv.getName(), planContexts.size());
                 String message = planContexts.stream()
