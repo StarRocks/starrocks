@@ -176,7 +176,7 @@ int64_t date::standardize_date(int64_t value) {
 }
 
 static bool is_space(char ch) {
-    return UNLIKELY(ch == ' ' || ch == '\t' || ch == '\n' || ch == '\v' || ch == '\f' || ch == '\r');
+    return UNLIKELY(ch == ' ' || (ch >= 9 && ch <= 13));
 }
 
 bool date::from_string(const char* date_str, size_t len, int* year, int* month, int* day, int* hour, int* minute,
