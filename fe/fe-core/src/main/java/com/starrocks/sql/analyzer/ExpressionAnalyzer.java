@@ -420,6 +420,9 @@ public class ExpressionAnalyzer {
                 Type valueType = Type.NULL;
                 if (node.getKeyExpr() != null) {
                     keyType = node.getKeyExpr().getType();
+                    if (!keyType.isValidMapKeyType()) {
+                        throw new SemanticException("Map key don't supported type: " + keyType);
+                    }
                 }
                 if (node.getValueExpr() != null) {
                     valueType = node.getValueExpr().getType();
