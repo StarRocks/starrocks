@@ -161,7 +161,7 @@ public class CreateRoutineLoadStmtTest {
                     createRoutineLoadStmt.getRoutineLoadDesc().getPartitionNames().getPartitionNames());
             Assert.assertEquals(3, createRoutineLoadStmt.getDesiredConcurrentNum());
             Assert.assertEquals(20, createRoutineLoadStmt.getMaxBatchIntervalS());
-            Assert.assertEquals("[2001:db8:85a3::8a2e:370:7334]:9092,[2001:0db8:85a3:0000:0000:8a2e:0370:7335]:9092,192.168.164.164:9092", createRoutineLoadStmt.getKafkaBrokerList());
+            Assert.assertEquals("[2001:db8:85a3::8a2e:370:7334]:9092,[2001:0db8:85a3:0000:0000:8a2e:0370:7335]:9092,192.168.164.136:9092", createRoutineLoadStmt.getKafkaBrokerList());
             Assert.assertEquals("topictest", createRoutineLoadStmt.getKafkaTopic());
             Assert.assertEquals("Asia/Shanghai", createRoutineLoadStmt.getTimezone());
             Assert.assertEquals("https://user:password@confluent.west.us", createRoutineLoadStmt.getConfluentSchemaRegistryUrl());
