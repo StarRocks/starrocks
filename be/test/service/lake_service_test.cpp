@@ -34,6 +34,7 @@
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
 #include "testutil/sync_point.h"
+#include "util/bthreads/util.h"
 #include "util/countdown_latch.h"
 #include "util/defer_op.h"
 
@@ -136,7 +137,6 @@ protected:
     LakeServiceImpl _lake_service;
 };
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_publish_version_missing_tablet_ids) {
     brpc::Controller cntl;
     lake::PublishVersionRequest request;
@@ -149,7 +149,6 @@ TEST_F(LakeServiceTest, test_publish_version_missing_tablet_ids) {
     ASSERT_EQ("missing tablet_ids", cntl.ErrorText());
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_publish_version_missing_txn_ids) {
     brpc::Controller cntl;
     lake::PublishVersionRequest request;
@@ -162,7 +161,6 @@ TEST_F(LakeServiceTest, test_publish_version_missing_txn_ids) {
     ASSERT_EQ("missing txn_ids", cntl.ErrorText());
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_publish_version_missing_base_version) {
     brpc::Controller cntl;
     lake::PublishVersionRequest request;
@@ -175,7 +173,6 @@ TEST_F(LakeServiceTest, test_publish_version_missing_base_version) {
     ASSERT_EQ("missing base version", cntl.ErrorText());
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_publish_version_missing_new_version) {
     brpc::Controller cntl;
     lake::PublishVersionRequest request;
@@ -188,7 +185,6 @@ TEST_F(LakeServiceTest, test_publish_version_missing_new_version) {
     ASSERT_EQ("missing new version", cntl.ErrorText());
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_publish_version_thread_pool_full) {
     SyncPoint::GetInstance()->SetCallBack("ThreadPool::do_submit:1", [](void* arg) { *(int64_t*)arg = 0; });
     SyncPoint::GetInstance()->EnableProcessing();
@@ -210,7 +206,6 @@ TEST_F(LakeServiceTest, test_publish_version_thread_pool_full) {
     ASSERT_EQ(_tablet_id, response.failed_tablets(0));
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_publish_version_for_write) {
     std::vector<lake::TxnLog> logs;
     // Empty TxnLog
@@ -411,7 +406,6 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
     }
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_abort) {
     std::vector<lake::TxnLog> logs;
 
@@ -533,7 +527,6 @@ TEST_F(LakeServiceTest, test_abort) {
     }
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_delete_tablet) {
     brpc::Controller cntl;
     lake::DeleteTabletRequest request;
@@ -545,7 +538,6 @@ TEST_F(LakeServiceTest, test_delete_tablet) {
     EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_delete_tablet_dir_not_exit) {
     ASSERT_OK(fs::remove_all(kRootLocation));
     brpc::Controller cntl;
@@ -560,7 +552,6 @@ TEST_F(LakeServiceTest, test_delete_tablet_dir_not_exit) {
     ASSERT_OK(fs::create_directories(kRootLocation));
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_compact) {
     auto compact = [this](::google::protobuf::RpcController* cntl, const lake::CompactRequest* request,
                           lake::CompactResponse* response) {
@@ -648,7 +639,6 @@ TEST_F(LakeServiceTest, test_compact) {
     }
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_drop_table) {
     ASSERT_OK(FileSystem::Default()->path_exists(kRootLocation));
     lake::DropTableRequest request;
@@ -675,7 +665,6 @@ TEST_F(LakeServiceTest, test_drop_table) {
     ASSERT_EQ(0, response.status().status_code());
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_publish_log_version) {
     auto txn_id = next_id();
     {
@@ -772,7 +761,6 @@ TEST_F(LakeServiceTest, test_publish_log_version) {
     }
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_publish_version_for_schema_change) {
     // write 1 rowset when schema change
     {
@@ -1023,7 +1011,6 @@ TEST_F(LakeServiceTest, test_abort_compaction) {
 }
 
 // https://github.com/StarRocks/starrocks/issues/28244
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_publish_version_issue28244) {
     {
         lake::TxnLog txnlog;
@@ -1097,7 +1084,6 @@ TEST_F(LakeServiceTest, test_get_tablet_stats) {
     ASSERT_EQ(0, response.tablet_stats_size());
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_drop_table_no_thread_pool) {
     ASSERT_OK(FileSystem::Default()->path_exists(kRootLocation));
 
@@ -1118,7 +1104,39 @@ TEST_F(LakeServiceTest, test_drop_table_no_thread_pool) {
     ASSERT_EQ("no thread pool to run task", cntl.ErrorText());
 }
 
-// NOLINTNEXTLINE
+TEST_F(LakeServiceTest, test_drop_table_duplicate_request) {
+    ASSERT_OK(FileSystem::Default()->path_exists(kRootLocation));
+    SyncPoint::GetInstance()->LoadDependency(
+            {{"LakeService::drop_table:duplicate_path_id", "LakeService::drop_table:task_run"}});
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() { SyncPoint::GetInstance()->DisableProcessing(); });
+
+    auto path = "/path/for/test/drop/table";
+
+    bthread_t tids[2];
+    Status result_status[2];
+    for (int i = 0; i < 2; i++) {
+        ASSIGN_OR_ABORT(tids[i], bthreads::start_bthread([&, id = i]() {
+                            lake::DropTableRequest request;
+                            lake::DropTableResponse response;
+                            request.set_tablet_id(100);
+                            request.set_path(path);
+                            brpc::Controller cntl;
+                            _lake_service.drop_table(&cntl, &request, &response, nullptr);
+                            result_status[id] = Status(response.status());
+                        }));
+    }
+    bthread_join(tids[0], nullptr);
+    bthread_join(tids[1], nullptr);
+    if (result_status[0].ok()) {
+        ASSERT_TRUE(result_status[1].is_already_exist()) << result_status[1];
+    } else if (result_status[1].ok()) {
+        ASSERT_TRUE(result_status[0].is_already_exist()) << result_status[0];
+    } else {
+        FAIL() << "All tasks failed. " << result_status[0] << " : " << result_status[1];
+    }
+}
+
 TEST_F(LakeServiceTest, test_delete_tablet_no_thread_pool) {
     SyncPoint::GetInstance()->SetCallBack("AgentServer::Impl::get_thread_pool:1",
                                           [](void* arg) { *(ThreadPool**)arg = nullptr; });
@@ -1137,7 +1155,6 @@ TEST_F(LakeServiceTest, test_delete_tablet_no_thread_pool) {
     ASSERT_EQ("no thread pool to run task", cntl.ErrorText());
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_vacuum_null_thread_pool) {
     SyncPoint::GetInstance()->SetCallBack("AgentServer::Impl::get_thread_pool:1",
                                           [](void* arg) { *(ThreadPool**)arg = nullptr; });
@@ -1156,7 +1173,6 @@ TEST_F(LakeServiceTest, test_vacuum_null_thread_pool) {
     ASSERT_EQ("vacuum thread pool is null", cntl.ErrorText());
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_vacuum_thread_pool_full) {
     SyncPoint::GetInstance()->SetCallBack("ThreadPool::do_submit:1", [](void* arg) { *(int64_t*)arg = 0; });
     SyncPoint::GetInstance()->EnableProcessing();
@@ -1175,7 +1191,6 @@ TEST_F(LakeServiceTest, test_vacuum_thread_pool_full) {
     EXPECT_EQ(TStatusCode::SERVICE_UNAVAILABLE, response.status().status_code()) << response.status().status_code();
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_vacuum_full_null_thread_pool) {
     SyncPoint::GetInstance()->SetCallBack("AgentServer::Impl::get_thread_pool:1",
                                           [](void* arg) { *(ThreadPool**)arg = nullptr; });
@@ -1193,7 +1208,6 @@ TEST_F(LakeServiceTest, test_vacuum_full_null_thread_pool) {
     ASSERT_EQ("full vacuum thread pool is null", cntl.ErrorText());
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_vacuum_full_thread_pool_full) {
     SyncPoint::GetInstance()->SetCallBack("ThreadPool::do_submit:1", [](void* arg) { *(int64_t*)arg = 0; });
     SyncPoint::GetInstance()->EnableProcessing();
@@ -1211,7 +1225,6 @@ TEST_F(LakeServiceTest, test_vacuum_full_thread_pool_full) {
     EXPECT_EQ(TStatusCode::SERVICE_UNAVAILABLE, response.status().status_code()) << response.status().status_code();
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_duplicated_vacuum_request) {
     SyncPoint::GetInstance()->LoadDependency({{"LakeServiceImpl::vacuum:1", "LakeServiceImpl::vacuum:2"}});
     SyncPoint::GetInstance()->EnableProcessing();
@@ -1373,7 +1386,6 @@ TEST_F(LakeServiceTest, test_abort_txn2) {
     t1.join();
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_abort3) {
     auto txn_id = next_id();
     lake::TxnLog log;
@@ -1394,7 +1406,6 @@ TEST_F(LakeServiceTest, test_abort3) {
     EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, log.txn_id())));
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_drop_table_thread_pool_full) {
     SyncPoint::GetInstance()->SetCallBack("ThreadPool::do_submit:1", [](void* arg) { *(int64_t*)arg = 0; });
     SyncPoint::GetInstance()->EnableProcessing();
@@ -1413,7 +1424,6 @@ TEST_F(LakeServiceTest, test_drop_table_thread_pool_full) {
     ASSERT_EQ(TStatusCode::SERVICE_UNAVAILABLE, response.status().status_code());
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_drop_table_no_permission) {
     SyncPoint::GetInstance()->SetCallBack("PosixFileSystem::delete_dir",
                                           [](void* arg) { *(Status*)arg = Status::IOError("Permission denied"); });
