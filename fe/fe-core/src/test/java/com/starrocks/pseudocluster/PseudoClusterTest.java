@@ -85,15 +85,10 @@ public class PseudoClusterTest {
             } catch (Exception e) {
                 Assert.assertTrue(e.getMessage().contains("column_with_row storage type must have some non-key columns"));
             }
-            try {
-                stmt.execute("create table test2 ( pk bigint NOT NULL, v array<int> NOT NULL) " +
-                        "primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 7 " +
-                        "PROPERTIES(\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\", " +
-                        "\"storage_type\" = \"column_with_row\")");
-                Assert.fail("should throw exception");
-            } catch (Exception e) {
-                Assert.assertTrue(e.getMessage().contains("column_with_row storage type does not support complex type"));
-            }
+            stmt.execute("create table test2 ( pk bigint NOT NULL, v1 array<int> NOT NULL, v2 bitmap NOT NULL) " +
+                    "primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 7 " +
+                    "PROPERTIES(\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\", " +
+                    "\"storage_type\" = \"column_with_row\")");
             stmt.execute("create table test3 ( pk bigint NOT NULL, v int NOT NULL) " +
                     "primary KEY (pk) DISTRIBUTED BY HASH(pk) BUCKETS 7 " +
                     "PROPERTIES(\"replication_num\" = \"3\", \"storage_medium\" = \"SSD\", " +

@@ -562,12 +562,6 @@ public class PropertyAnalyzer {
                 if (olapTable.getColumns().stream().filter(column -> !column.isKey()).count() == 0) {
                     throw new AnalysisException("column_with_row storage type must have some non-key columns");
                 }
-                for (Column column : olapTable.getColumns()) {
-                    if (!column.isKey() && column.getType().isComplexType()) {
-                        throw new AnalysisException(
-                                "column_with_row storage type does not support complex type. column: " + column.getName());
-                    }
-                }
             } else {
                 throw new AnalysisException(storageType + " for " + olapTable.getKeysType() + " table not supported");
             }
