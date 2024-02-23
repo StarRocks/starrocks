@@ -34,6 +34,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -339,6 +340,11 @@ private:
 
 inline void swap(OwnedSlice& s1, OwnedSlice& s2) {
     s1.swap(s2);
+}
+
+void inline static tolower(const Slice& str, std::string& buf) {
+    buf.assign(str.get_data(), str.get_size());
+    std::transform(buf.begin(), buf.end(), buf.begin(), [](unsigned char c) { return std::tolower(c); });
 }
 
 } // namespace starrocks

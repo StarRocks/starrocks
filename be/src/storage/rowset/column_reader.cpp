@@ -686,14 +686,14 @@ size_t ColumnReader::mem_usage() const {
     return size;
 }
 
-size_t ColumnReader::_get_gram_num_for_ngram() const {
+BloomFilterReaderOptions ColumnReader::_get_reader_options_for_ngram() const {
     // initialize with invalid number
-    size_t gram_num = 0;
+    BloomFilterReaderOptions reader_options;
     std::shared_ptr<TabletIndex> ngram_bf_index;
 
     Status status = _segment->tablet_schema().get_indexes_for_column(_column_unique_id, NGRAMBF, ngram_bf_index);
     if (!status.ok() || ngram_bf_index.get() == nullptr) {
-        return gram_num;
+        return reader_options;
     }
 
     const std::map<std::string, std::string>& index_properties = ngram_bf_index->index_properties();
@@ -701,10 +701,17 @@ size_t ColumnReader::_get_gram_num_for_ngram() const {
     if (it != index_properties.end()) {
         // Found the key "ngram_size"
         const std::string& gram_num_str = it->second; // The value corresponding to the key "ngram_size"
-        gram_num = std::stoi(gram_num_str);
+        reader_options.index_gram_num = std::stoi(gram_num_str);
     }
 
-    return gram_num;
+    it = index_properties.find(CASE_SENSITIVE_KEY);
+    if (it != index_properties.end()) {
+        // Found the key "case_sensitive"
+        const std::string& case_sensitive_str = it->second; // The value corresponding to the key "case_sensitive"
+        reader_options.index_case_sensitive = (case_sensitive_str == "true");
+    }
+
+    return reader_options;
 }
 
 } // namespace starrocks

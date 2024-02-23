@@ -268,7 +268,7 @@ private:
     }
 
     void inline static tolower(const Slice& str, std::string& buf) {
-        buf = str.to_string();
+        buf.assign(str.get_data(), str.get_size());
         std::transform(buf.begin(), buf.end(), buf.begin(), [](unsigned char c) { return std::tolower(c); });
     }
 

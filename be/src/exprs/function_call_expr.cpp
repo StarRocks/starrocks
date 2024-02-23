@@ -27,6 +27,7 @@
 #include "runtime/user_function_cache.h"
 #include "storage/rowset/bloom_filter.h"
 #include "util/failpoint/fail_point.h"
+#include "util/slice.h"
 #include "util/utf8.h"
 
 namespace starrocks {
@@ -177,9 +178,11 @@ StatusOr<ColumnPtr> VectorizedFunctionCallExpr::evaluate_checked(starrocks::Expr
 }
 
 bool VectorizedFunctionCallExpr::ngram_bloom_filter(ExprContext* context, const BloomFilter* bf,
-                                                    size_t index_gram_num) const {
+                                                    const BloomFilterReaderOptions& reader_options) const {
     FunctionContext* fn_ctx = context->fn_context(_fn_context_index);
     std::vector<Slice>& ngram_set = fn_ctx->get_ngram_set();
+    size_t index_gram_num = reader_options.index_gram_num;
+    bool index_case_sensitive = reader_options.index_case_sensitive;
 
     const auto& gram_num_column = fn_ctx->get_constant_column(2);
     // case like ngram_search(col,"needle", 5) when col has a 4gram bloom filter, don't use this index
@@ -198,7 +201,13 @@ bool VectorizedFunctionCallExpr::ngram_bloom_filter(ExprContext* context, const 
         } else {
             // checked in support_ngram_bloom_filter(size_t gram_num), so it 's safe to get const column's value
             const auto& needle_column = fn_ctx->get_constant_column(1);
-            needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(needle_column);
+            if (index_case_sensitive) {
+                needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(needle_column);
+            } else {
+                std::string buf;
+                tolower(ColumnHelper::get_const_value<TYPE_VARCHAR>(needle_column), buf);
+                needle = Slice(buf);
+            }
         }
 
         std::vector<size_t> index;

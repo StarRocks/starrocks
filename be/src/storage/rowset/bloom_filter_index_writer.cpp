@@ -38,6 +38,7 @@
 #include <memory>
 #include <utility>
 
+#include "column/bytes.h"
 #include "fs/fs.h"
 #include "runtime/mem_pool.h"
 #include "storage/olap_type_infra.h"
@@ -202,12 +203,13 @@ public:
 template <>
 class NgramBloomFilterIndexWriterImpl<TYPE_VARCHAR> : public BloomFilterIndexWriterImpl<TYPE_VARCHAR> {
 public:
-    using CppType = typename CppTypeTraits<TYPE_CHAR>::CppType;
-    using ValueDict = typename BloomFilterTraits<CppType>::ValueDict;
-    using BloomFilterIndexWriterImpl<TYPE_VARCHAR>::_values;
-
     explicit NgramBloomFilterIndexWriterImpl(const BloomFilterOptions& bf_options, TypeInfoPtr typeinfo)
             : BloomFilterIndexWriterImpl<TYPE_VARCHAR>(bf_options, std::move(typeinfo)) {}
+
+    void inline static tolower(const Slice& str, std::string& buf) {
+        buf.assign(str.data, str.size);
+        std::transform(buf.begin(), buf.end(), buf.begin(), [](unsigned char c) { return std::tolower(c); });
+    }
 
     void add_values(const void* values, size_t count) override {
         size_t gram_num = this->_bf_options.gram_num;
@@ -225,17 +227,22 @@ public:
 
                 // add this ngram into set
                 if (_values.find(unaligned_load<CppType>(&cur_ngram)) == _values.end()) {
-                    // why deep copy?
-                    _values.insert(get_value<TYPE_VARCHAR>(&cur_ngram, this->_typeinfo, &this->_pool));
-                }
+                    if (this->_bf_options.case_sensitive) {
+                        _values.insert(get_value<TYPE_VARCHAR>(&cur_ngram, this->_typeinfo, &this->_pool));
+                    } else {
+                        // todo::exist two copy of ngram, need to optimize
+                        std::string lower_ngram;
+                        tolower(cur_ngram, lower_ngram);
+                        Slice lower_ngram_slice(lower_ngram);
+                        _values.insert(get_value<TYPE_VARCHAR>(&cur_ngram, this->_typeinfo, &this->_pool));
+                    }
             }
 
             // move to next row
             ++cur_slice;
         }
     }
-};
-} // namespace
+    };
 
 struct BloomFilterBuilderFunctor {
     template <LogicalType ftype>

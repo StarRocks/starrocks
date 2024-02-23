@@ -33,7 +33,8 @@ public:
     const FunctionDescriptor* get_function_desc() { return _fn_desc; }
 
     bool support_ngram_bloom_filter(ExprContext* context) const override;
-    bool ngram_bloom_filter(ExprContext* context, const BloomFilter* bf, size_t gram_num) const override;
+    bool ngram_bloom_filter(ExprContext* context, const BloomFilter* bf,
+                            const BloomFilterReaderOptions& reader_options) const override;
 
 protected:
     [[nodiscard]] Status prepare(RuntimeState* state, ExprContext* context) override;

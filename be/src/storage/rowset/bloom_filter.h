@@ -47,6 +47,7 @@
 namespace starrocks {
 static const std::string FPP_KEY = "bloom_filter_fpp";
 static const std::string GRAM_NUM_KEY = "gram_num";
+static const std::string CASE_SENSITIVE_KEY = "case_sensitive";
 struct BloomFilterOptions {
     // false positive probablity
     double fpp = 0.05;
@@ -54,6 +55,12 @@ struct BloomFilterOptions {
     bool use_ngram = false;
     // only use when use_ngram is true
     size_t gram_num = 0;
+    bool case_sensitive = true;
+};
+
+struct BloomFilterReaderOptions {
+    size_t index_gram_num = 0;
+    bool index_case_sensitive = true;
 };
 
 // Base class for bloom filter
