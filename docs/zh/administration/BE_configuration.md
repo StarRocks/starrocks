@@ -547,6 +547,19 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 单位：秒
 - 默认值：180
 
+#### starlet_use_star_cache
+
+- 含义：存算分离模式下是否使用块缓存。
+- 默认值：true
+- 引入版本：3.1
+
+#### starlet_cache_evict_high_water
+
+- 含义：存算分离模式下使用文件缓存，当剩余磁盘容量百分比低于此配置时，开始淘汰，即文件缓存默认最多使用 80%。
+- 默认值：0.2
+- 引入版本：3.0
+
+
 ## 配置 BE 静态参数
 
 以下 BE 配置项为静态参数，不支持在线修改，您需要在 **be.conf** 中修改并重启 BE 服务。
@@ -958,3 +971,9 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：在存算分离集群中，RPC 请求的最大并发数。当达到此阈值时，新请求会被拒绝。将此项设置为 0 表示对并发不做限制。
 - 单位：N/A
 - 默认值：0
+
+#### starlet_star_cache_disk_size_percent
+
+- 含义：存算分离模式下使用块缓存的磁盘百分比。
+- 默认值：80
+- 引入版本：3.1
