@@ -91,8 +91,16 @@ public class PlanTestNoneDBBase {
     }
 
     public static void assertContains(String text, String... pattern) {
-        for (String s : pattern) {
-            Assert.assertTrue(text, text.contains(s));
+        if (isIgnoreExplicitColRefIds()) {
+            String ignoreExpect = normalizeLogicalPlan(text);
+            for (String actual : pattern) {
+                String ignoreActual = normalizeLogicalPlan(actual);
+                Assert.assertTrue(text, ignoreExpect.contains(ignoreActual));
+            }
+        }  else {
+            for (String s : pattern) {
+                Assert.assertTrue(text, text.contains(s));
+            }
         }
     }
 
@@ -530,7 +538,7 @@ public class PlanTestNoneDBBase {
     /**
      * Whether ignore explicit column ref ids when checking the expected plans.
      */
-    protected boolean isIgnoreExplicitColRefIds() {
+    public static boolean isIgnoreExplicitColRefIds() {
         return false;
     }
 

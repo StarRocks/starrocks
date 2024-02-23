@@ -237,6 +237,14 @@ public class MSchema {
             " ,(2,1,1),(2,1,2),(2,1,3),(2,2,1),(2,2,2),(2,2,3),(2,3,1),(2,3,2),(2,3,3)" +
             " ,(3,1,1),(3,1,2),(3,1,3),(3,2,1),(3,2,2),(3,2,3),(3,3,1),(3,3,2),(3,3,3)");
 
+    public static final MTable T2 = new MTable("t2", "v1",
+            ImmutableList.of(
+                    "  `v1` bigint NULL",
+                    "  `v2` bigint NULL",
+                    "  `v3` bigint NULL"
+            )
+    ).withValues("(1, 2, 3)");
+
     public static final MTable T_METRICS = new MTable("t_metrics", "c1",
             Lists.newArrayList(
                     " c1 int",
@@ -306,6 +314,7 @@ public class MSchema {
             TABLE_WITH_DAY_PARTITION2,
             TEST_BASE_PART,
             T1,
+            T2,
             JSON_TBL,
             T_METRICS,
             TEST10,
@@ -319,7 +328,8 @@ public class MSchema {
 
     public static MTable getTable(String tableName) {
         if (!TABLE_MAP.containsKey(tableName)) {
-            throw new RuntimeException(String.format("%s is not in metadata marketing, please add it in the marketing"));
+            throw new RuntimeException(String.format("%s is not in metadata marketing, please add it in the marketing",
+                    tableName));
         }
         return TABLE_MAP.get(tableName);
     }

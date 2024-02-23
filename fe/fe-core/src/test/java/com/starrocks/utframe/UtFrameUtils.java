@@ -42,15 +42,22 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.staros.starlet.StarletAgentFactory;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
+import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksFEMetaVersion;
@@ -69,6 +76,7 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -81,6 +89,7 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
@@ -104,12 +113,15 @@ import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
+import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.warehouse.Warehouse;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.commons.codec.binary.Hex;
 import org.junit.Assert;
 
@@ -983,4 +995,86 @@ public class UtFrameUtils {
         return ctx;
     }
 
+    public static void setPartitionVersion(Partition partition, long version) {
+        partition.setVisibleVersion(version, System.currentTimeMillis());
+        MaterializedIndex baseIndex = partition.getBaseIndex();
+        List<Tablet> tablets = baseIndex.getTablets();
+        for (Tablet tablet : tablets) {
+            List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
+            for (Replica replica : replicas) {
+                replica.updateVersionInfo(version, -1, version);
+            }
+        }
+    }
+
+    public static void setDefaultConfigForAsyncMVTest(ConnectContext connectContext) {
+        Config.dynamic_partition_check_interval_seconds = 10;
+        Config.bdbje_heartbeat_timeout_second = 60;
+        Config.bdbje_replica_ack_timeout_second = 60;
+        Config.bdbje_lock_timeout_second = 60;
+
+        // set some parameters to speedup test
+        Config.tablet_sched_checker_interval_seconds = 1;
+        Config.tablet_sched_repair_delay_factor_second = 1;
+        Config.enable_new_publish_mechanism = true;
+        Config.alter_scheduler_interval_millisecond = 100;
+
+        // Use sync analyze
+        Config.mv_auto_analyze_async = false;
+
+        // Default REFRESH DEFERRED
+        Config.default_mv_refresh_immediate = false;
+        // default replication num: 1
+        Config.default_replication_num = 1;
+
+        // build a small cache for test
+        Config.mv_plan_cache_max_size = 10;
+
+        FeConstants.enablePruneEmptyOutputScan = false;
+        FeConstants.runningUnitTest = true;
+
+        if (connectContext != null) {
+            // 300s: 5min
+            connectContext.getSessionVariable().setOptimizerExecuteTimeout(300 * 1000);
+            // 300s: 5min
+            connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(300 * 1000);
+            // 300s: 5min
+            connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(300 * 1000);
+
+            connectContext.getSessionVariable().setEnableQueryCache(false);
+            connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
+            connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
+        }
+
+        new MockUp<PlanTestBase>() {
+            /**
+             * {@link com.starrocks.sql.plan.PlanTestNoneDBBase#isIgnoreExplicitColRefIds()}
+             */
+            @Mock
+            boolean isIgnoreExplicitColRefIds() {
+                return true;
+            }
+        };
+
+        new MockUp<StmtExecutor>() {
+            /**
+             * {@link StmtExecutor#handleDMLStmt(ExecPlan, DmlStmt)}
+             */
+            @Mock
+            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+                if (stmt instanceof InsertStmt) {
+                    InsertStmt insertStmt = (InsertStmt) stmt;
+                    TableName tableName = insertStmt.getTableName();
+                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+                    OlapTable tbl = ((OlapTable) testDb.getTable(tableName.getTbl()));
+                    if (tbl != null) {
+                        for (Long partitionId : insertStmt.getTargetPartitionIds()) {
+                            Partition partition = tbl.getPartition(partitionId);
+                            setPartitionVersion(partition, partition.getVisibleVersion() + 1);
+                        }
+                    }
+                }
+            }
+        };
+    }
 }

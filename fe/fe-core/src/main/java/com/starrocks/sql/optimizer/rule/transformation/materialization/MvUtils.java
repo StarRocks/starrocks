@@ -314,6 +314,9 @@ public class MvUtils {
     }
 
     public static List<LogicalOlapScanOperator> getOlapScanNode(OptExpression root) {
+        if (root == null) {
+            return Lists.newArrayList();
+        }
         List<LogicalOlapScanOperator> olapScanOperators = Lists.newArrayList();
         getOlapScanNode(root, olapScanOperators);
         return olapScanOperators;
