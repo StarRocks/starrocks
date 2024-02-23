@@ -51,7 +51,6 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
@@ -85,7 +84,6 @@ public class MvPartitionCompensator {
     public static final ImmutableSet<OperatorType> SUPPORTED_PARTITION_COMPENSATE_EXTERNAL_SCAN_TYPES =
             ImmutableSet.<OperatorType>builder()
                     .add(OperatorType.LOGICAL_HIVE_SCAN)
-                    .add(OperatorType.LOGICAL_ICEBERG_SCAN)
                     .build();
 
     public static final ImmutableSet<OperatorType> SUPPORTED_PARTITION_COMPENSATE_SCAN_TYPES =
@@ -127,9 +125,6 @@ public class MvPartitionCompensator {
         // If no scan operator, no need compensate
         if (scanOperators.isEmpty()) {
             return Optional.of(false);
-        }
-        if (scanOperators.stream().anyMatch(scan -> scan instanceof LogicalViewScanOperator)) {
-            return Optional.of(true);
         }
 
         // If no partition table and columns, no need compensate
@@ -307,8 +302,7 @@ public class MvPartitionCompensator {
         List<Range<PartitionKey>> ranges = Lists.newArrayList();
         for (PartitionKey selectedPartitionKey : scanOperatorPredicates.getSelectedPartitionKeys()) {
             try {
-                LiteralExpr expr = PartitionUtil.addOffsetForLiteral(selectedPartitionKey.getKeys().get(0), 1,
-                        PartitionUtil.getDateTimeInterval(baseTable, baseTable.getPartitionColumns().get(0)));
+                LiteralExpr expr = PartitionUtil.addOffsetForLiteral(selectedPartitionKey.getKeys().get(0), 1);
                 PartitionKey partitionKey = new PartitionKey(ImmutableList.of(expr), selectedPartitionKey.getTypes());
                 ranges.add(Range.closedOpen(selectedPartitionKey, partitionKey));
             } catch (AnalysisException e) {
@@ -498,13 +492,8 @@ public class MvPartitionCompensator {
             if (!isRefBaseTable(scanOperator, refBaseTable)) {
                 continue;
             }
-            final Optional<ColumnRefOperator> columnRefOption;
-            if (scanOperator instanceof LogicalViewScanOperator) {
-                LogicalViewScanOperator viewScanOperator = scanOperator.cast();
-                columnRefOption = Optional.ofNullable(viewScanOperator.getExpressionMapping(partitionExpr));
-            } else {
-                columnRefOption = Optional.ofNullable(scanOperator.getColumnReference(partitionColumn));
-            }
+            final Optional<ColumnRefOperator> columnRefOption =
+                    Optional.ofNullable(scanOperator.getColumnReference(partitionColumn));
             if (!columnRefOption.isPresent()) {
                 continue;
             }
@@ -690,9 +679,6 @@ public class MvPartitionCompensator {
         Table scanTable = scanOperator.getTable();
         if (scanTable.isNativeTableOrMaterializedView() && !scanTable.equals(refBaseTable)) {
             return false;
-        }
-        if (scanOperator instanceof LogicalViewScanOperator) {
-            return true;
         }
         if (!scanTable.isNativeTableOrMaterializedView() && !scanTable.getTableIdentifier().equals(
                 refBaseTable.getTableIdentifier())) {

@@ -1505,8 +1505,6 @@ public class OlapTable extends Table {
         return Status.OK;
     }
 
-<<<<<<< HEAD
-=======
     // Whether it's a partitioned table partition by columns, range or list.
     public boolean isPartitionedTable() {
         return partitionInfo != null && partitionInfo.isPartitioned();
@@ -1519,7 +1517,6 @@ public class OlapTable extends Table {
 
     // NOTE: It's different from `isPartitionedTable` which `isPartitioned` means table has many buckets rather than
     // partitions.
->>>>>>> f801860efe ([BugFix] Support Iceberg partition compensation for mv rewrite (backport #41145) (#41318))
     @Override
     public boolean isPartitioned() {
         int numSegs = 0;
