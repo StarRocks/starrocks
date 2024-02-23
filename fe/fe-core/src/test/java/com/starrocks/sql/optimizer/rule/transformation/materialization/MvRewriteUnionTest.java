@@ -193,11 +193,11 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
         PlanTestBase.assertContains(plan2, "2:OlapScanNode\n" +
                 "     TABLE: emps2\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 15: deptno < 120, 15: deptno >= 100");
-        PlanTestBase.assertContains(plan2, "1:OlapScanNode\n" +
-                "     TABLE: depts2\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 20: deptno < 120, 20: deptno >= 100");
+                "     PREDICATES: 15: deptno >= 100, 15: deptno < 120");
+        PlanTestBase.assertContains(plan2, "OlapScanNode\n" +
+                "  |       TABLE: depts2\n" +
+                "  |       PREAGGREGATION: ON\n" +
+                "  |       PREDICATES: 18: deptno >= 100, 18: deptno < 120");
     }
 
     @Test
