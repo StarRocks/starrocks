@@ -454,20 +454,21 @@ namespace drop_table_helper {
 static bthread::Mutex g_mutex;
 static std::unordered_set<std::string> g_paths;
 
-// Return true if the container doesn't already contain "path".
+// Returns true if the container already contains a |path|, false otherwise.
 bool dedup_path(const std::string& path) {
-    if (!path.empty()) {
-        std::lock_guard l(g_mutex);
-        return g_paths.insert(path).second;
+    if (path.empty()) {
+        return false;
     }
-    return true;
+    std::lock_guard l(g_mutex);
+    return !(g_paths.insert(path).second);
 }
 
 void remove_path(const std::string& path) {
-    if (!path.empty()) {
-        std::lock_guard l(g_mutex);
-        g_paths.erase(path);
+    if (path.empty()) {
+        return;
     }
+    std::lock_guard l(g_mutex);
+    g_paths.erase(path);
 }
 
 }; // namespace drop_table_helper
@@ -491,7 +492,7 @@ void LakeServiceImpl::drop_table(::google::protobuf::RpcController* controller,
 
     response->mutable_status()->set_status_code(0);
 
-    if (!drop_table_helper::dedup_path(request->path())) {
+    if (drop_table_helper::dedup_path(request->path())) {
         TEST_SYNC_POINT("LakeService::drop_table:duplicate_path_id");
         LOG(INFO) << "Rejected drop table request because the previous task has not yet finished. tablet_id="
                   << request->tablet_id() << " path=" << request->path();
