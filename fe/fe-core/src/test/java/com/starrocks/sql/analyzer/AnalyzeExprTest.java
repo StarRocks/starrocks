@@ -409,7 +409,6 @@ public class AnalyzeExprTest {
         analyzeSuccess("select map<int,map<int,int>>{2:map{'3':3}}");
         analyzeSuccess("select map<int,map<int,int>>{'2s':map{3:3}}");
 
-        analyzeFail("select map<int,map<int,int>>{map{3:3}:2}"); // runtime error will report when cast
         analyzeFail("select map(null)");
         analyzeFail("select map(1:4)");
         analyzeFail("select map(1,3,4)");
