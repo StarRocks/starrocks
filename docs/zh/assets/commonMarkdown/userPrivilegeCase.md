@@ -84,7 +84,7 @@
      -- 赋予角色创建数据库的权限。
      GRANT CREATE DATABASE ON CATALOG default_catalog TO ROLE recover;
      -- 赋予角色创建任意表的权限。
-     GRANT CREATE TABLE ON ALL DATABASE TO ROLE recover;
+     GRANT CREATE TABLE ON ALL DATABASES TO ROLE recover;
      -- 赋予角色向任意表导入、导出数据的权限。
      GRANT INSERT, EXPORT ON ALL TABLES IN ALL DATABASES TO ROLE recover;
      ```
