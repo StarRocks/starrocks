@@ -143,7 +143,7 @@ public class PipelineDriverAllocator {
         int dop = calculateDopByLimit(curNumAllocatedDrivers, numFragments, hardLimit);
 
         if (dop <= 1) {
-            return dop;
+            return 1;
         }
 
         // If there is only one running query, do not use driverLowWater to punish DOP.
