@@ -531,7 +531,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                                     try {
                                         Authorizer.checkAnyActionOnTableLikeObject(currentUser,
                                                 currentUser.isEphemeral() ? currentUser.getMappedRoleIds() : null,
-                                                tableName.getDb(), tbl);
+                                                db.getFullName(), tbl);
                                     } catch (AccessDeniedException e) {
                                         continue OUTER;
                                     }
