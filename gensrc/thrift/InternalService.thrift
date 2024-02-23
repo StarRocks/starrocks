@@ -244,6 +244,8 @@ struct TQueryOptions {
   112: optional bool enable_pipeline_level_shuffle;
 
   115: optional TTimeUnit big_query_profile_threshold_unit = TTimeUnit.SECOND;
+
+  119: optional bool enable_result_sink_accumulate;
 }
 
 

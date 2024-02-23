@@ -437,6 +437,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_STRICT_ORDER_BY = "enable_strict_order_by";
 
+    private static final String ENABLE_RESULT_SINK_ACCUMULATE = "enable_result_sink_accumulate";
+
     // Flag to control whether to proxy follower's query statement to leader/follower.
     public enum FollowerQueryForwardMode {
         DEFAULT,    // proxy queries by the follower's replay progress (default)
@@ -1509,6 +1511,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public boolean isEnableQueryQueue() {
         return enableQueryQueue;
     }
+
+    @VariableMgr.VarAttr(name = ENABLE_RESULT_SINK_ACCUMULATE)
+    private boolean enableResultSinkAccumulate = true;
 
     public boolean isCboDecimalCastStringStrict() {
         return cboDecimalCastStringStrict;
@@ -3015,6 +3020,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setScan_use_query_mem_ratio(scanUseQueryMemRatio);
         tResult.setEnable_collect_table_level_scan_stats(enableCollectTableLevelScanStats);
         tResult.setEnable_pipeline_level_shuffle(enablePipelineLevelShuffle);
+        tResult.setEnable_result_sink_accumulate(enableResultSinkAccumulate);
         return tResult;
     }
 
