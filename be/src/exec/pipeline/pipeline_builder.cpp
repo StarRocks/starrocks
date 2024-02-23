@@ -19,6 +19,7 @@
 #include "exec/pipeline/adaptive/collect_stats_context.h"
 #include "exec/pipeline/adaptive/collect_stats_sink_operator.h"
 #include "exec/pipeline/adaptive/collect_stats_source_operator.h"
+#include "exec/pipeline/adaptive/event.h"
 #include "exec/pipeline/exchange/exchange_source_operator.h"
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/spill_process_operator.h"

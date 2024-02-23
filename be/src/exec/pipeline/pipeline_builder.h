@@ -142,6 +142,9 @@ public:
     void push_dependent_pipeline(const Pipeline* pipeline);
     void pop_dependent_pipeline();
 
+    bool force_disable_adaptive_dop() const { return _force_disable_adaptive_dop; }
+    void set_force_disable_adaptive_dop(bool val) { _force_disable_adaptive_dop = val; }
+
     void subscribe_pipeline_event(Pipeline* pipeline, Event* event);
 
 private:
