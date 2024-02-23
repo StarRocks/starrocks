@@ -754,7 +754,7 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public Backend getBackendWithBePort(String host, int bePort) {
-        return (Backend) getComputeNodeWithBePortCommon(host, bePort, idToBackendRef);
+        return getComputeNodeWithBePortCommon(host, bePort, idToBackendRef);
     }
 
     public ComputeNode getBackendOrComputeNodeWithBePort(String host, int bePort) {
@@ -799,7 +799,8 @@ public class SystemInfoService implements GsonPostProcessable {
         return getComputeNodeWithBePortCommon(host, bePort, idToComputeNodeRef);
     }
 
-    private ComputeNode getComputeNodeWithBePortCommon(String host, int bePort, Map<Long, ? extends ComputeNode> nodeRef) {
+    private <T extends ComputeNode> T getComputeNodeWithBePortCommon(String host, int bePort,
+                                                                     Map<Long, T> nodeRef) {
         Pair<String, String> targetPair;
         try {
             targetPair = NetUtils.getIpAndFqdnByHost(host);
@@ -808,7 +809,7 @@ public class SystemInfoService implements GsonPostProcessable {
             return null;
         }
 
-        for (ComputeNode computeNode : nodeRef.values()) {
+        for (T computeNode : nodeRef.values()) {
             Pair<String, String> curPair;
             try {
                 curPair = NetUtils.getIpAndFqdnByHost(computeNode.getHost());
