@@ -129,6 +129,17 @@ void UpdateManager::remove_primary_index_cache(IndexEntry* index_entry) {
     }
 }
 
+void UpdateManager::unload_and_remove_primary_index(int64_t tablet_id) {
+    auto index_entry = _index_cache.get(tablet_id);
+    if (index_entry != nullptr) {
+        auto& index = index_entry->value();
+        auto guard = index.fetch_guard();
+        index.unload();
+        guard.reset(nullptr);
+        _index_cache.remove(index_entry);
+    }
+}
+
 // |metadata| contain last tablet meta info with new version
 Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
                                                  const TabletMetadata& metadata, Tablet* tablet,
@@ -686,6 +697,16 @@ void UpdateManager::update_primary_index_data_version(const Tablet& tablet, int6
         index.update_data_version(version);
         _index_cache.release(index_entry);
     }
+}
+
+int64_t UpdateManager::get_primary_index_data_version(int64_t tablet_id) {
+    auto index_entry = _index_cache.get(tablet_id);
+    if (index_entry != nullptr) {
+        int64_t version = index_entry->value().data_version();
+        _index_cache.release(index_entry);
+        return version;
+    }
+    return 0;
 }
 
 void UpdateManager::_print_memory_stats() {
