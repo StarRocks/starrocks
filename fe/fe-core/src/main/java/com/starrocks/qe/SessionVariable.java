@@ -378,6 +378,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String LARGE_DECIMAL_UNDERLYING_TYPE = "large_decimal_underlying_type";
 
     public static final String ENABLE_STRICT_ORDER_BY = "enable_strict_order_by";
+<<<<<<< HEAD
+=======
+    private static final String CBO_SPLIT_SCAN_PREDICATE_WITH_DATE = "enable_split_scan_predicate_with_date";
+
+    private static final String ENABLE_RESULT_SINK_ACCUMULATE = "enable_result_sink_accumulate";
+
+    public static final String ENABLE_WAIT_DEPENDENT_EVENT = "enable_wait_dependent_event";
+>>>>>>> 49465c9f01 (support result sink accumulate (#41084))
 
     // Flag to control whether to proxy follower's query statement to leader/follower.
     public enum FollowerQueryForwardMode {
@@ -821,6 +829,42 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // see more details in the comment above transmissionEncodeLevel
     @VarAttr(name = SPILL_ENCODE_LEVEL)
     private int spillEncodeLevel = 7;
+<<<<<<< HEAD
+=======
+
+    @VarAttr(name = SPILL_ENABLE_DIRECT_IO)
+    private boolean spillEnableDirectIO = false;
+
+    @VarAttr(name = SPILL_STORAGE_VOLUME)
+    private String spillStorageVolume = "";
+
+    @VarAttr(name = SPILL_RAND_RATIO, flag = VariableMgr.INVISIBLE)
+    private double spillRandRatio = 0.1;
+
+    @VarAttr(name = ENABLE_AGG_SPILL_PREAGGREGATION, flag = VariableMgr.INVISIBLE)
+    public boolean enableAggSpillPreaggregation = true;
+
+    @VarAttr(name = ENABLE_RBO_TABLE_PRUNE)
+    private boolean enableRboTablePrune = false;
+
+    @VarAttr(name = ENABLE_CBO_TABLE_PRUNE)
+    private boolean enableCboTablePrune = false;
+
+    @VarAttr(name = ENABLE_TABLE_PRUNE_ON_UPDATE)
+    private boolean enableTablePruneOnUpdate = false;
+
+    @VarAttr(name = ENABLE_UKFK_OPT)
+    private boolean enableUKFKOpt = false;
+
+    @VarAttr(name = ENABLE_UKFK_JOIN_REORDER)
+    private boolean enableUKFKJoinReorder = false;
+
+    @VarAttr(name = MAX_UKFK_JOIN_REORDER_SCALE_RATIO, flag = VariableMgr.INVISIBLE)
+    private int maxUKFKJoinReorderScaleRatio = 100;
+
+    @VarAttr(name = MAX_UKFK_JOIN_REORDER_FK_ROWS, flag = VariableMgr.INVISIBLE)
+    private int maxUKFKJoinReorderFKRows = 100000000;
+>>>>>>> 49465c9f01 (support result sink accumulate (#41084))
 
     @VariableMgr.VarAttr(name = FORWARD_TO_LEADER, alias = FORWARD_TO_MASTER)
     private boolean forwardToLeader = false;
@@ -1263,6 +1307,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_EQ_BASE_TYPE, flag = VariableMgr.INVISIBLE)
     private String cboEqBaseType = SessionVariableConstants.VARCHAR;
 
+<<<<<<< HEAD
 
     @VarAttr(name = ENABLE_QUERY_QUEUE, flag = VariableMgr.INVISIBLE)
     private boolean enableQueryQueue = true;
@@ -1270,6 +1315,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public boolean isEnableQueryQueue() {
         return enableQueryQueue;
     }
+=======
+    @VariableMgr.VarAttr(name = ENABLE_RESULT_SINK_ACCUMULATE)
+    private boolean enableResultSinkAccumulate = true;
+>>>>>>> 49465c9f01 (support result sink accumulate (#41084))
 
     public boolean isCboDecimalCastStringStrict() {
         return cboDecimalCastStringStrict;
@@ -2530,6 +2579,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setConnector_scan_use_query_mem_ratio(connectorScanUseQueryMemRatio);
         tResult.setScan_use_query_mem_ratio(scanUseQueryMemRatio);
         tResult.setEnable_collect_table_level_scan_stats(enableCollectTableLevelScanStats);
+<<<<<<< HEAD
+=======
+        tResult.setEnable_pipeline_level_shuffle(enablePipelineLevelShuffle);
+        tResult.setEnable_hyperscan_vec(enableHyperscanVec);
+        tResult.setEnable_jit(enableJit);
+        tResult.setEnable_result_sink_accumulate(enableResultSinkAccumulate);
+        tResult.setEnable_wait_dependent_event(enableWaitDependentEvent);
+>>>>>>> 49465c9f01 (support result sink accumulate (#41084))
         return tResult;
     }
 
