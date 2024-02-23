@@ -2126,19 +2126,12 @@ public class MaterializedViewRewriter {
                 // outer join on predicates can not be used to construct equivalence class
                 continue;
             }
-<<<<<<< HEAD
             Preconditions.checkState(equalPredicate.getChild(0).isColumnRef());
             ColumnRefOperator left = (ColumnRefOperator) equalPredicate.getChild(0);
             Preconditions.checkState(equalPredicate.getChild(1).isColumnRef());
             ColumnRefOperator right = (ColumnRefOperator) equalPredicate.getChild(1);
-            ColumnRefOperator leftTarget = columnRewriter == null ? left : columnRewriter.rewriteViewToQuery(left).cast();
-            ColumnRefOperator rightTarget = columnRewriter == null ? right : columnRewriter.rewriteViewToQuery(right).cast();
-=======
-            ColumnRefOperator left = getColumnRef(equalPredicate, 0);
-            ColumnRefOperator right = getColumnRef(equalPredicate, 1);
             ScalarOperator leftTarget = (columnRewriter == null) ? left : columnRewriter.rewriteViewToQuery(left);
             ScalarOperator rightTarget = (columnRewriter == null) ? right : columnRewriter.rewriteViewToQuery(right);
->>>>>>> 03c87fa32a ([BugFix] Fix possible NPE when mv rewrite (#40908))
             if (leftTarget == null || rightTarget == null) {
                 return null;
             }
