@@ -2088,6 +2088,12 @@ public class Config extends ConfigBase {
     public static boolean enable_refresh_hive_partitions_statistics = true;
 
     /**
+     * Enable reuse spark column statistics.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_reuse_spark_column_statistics = true;
+
+    /**
      * size of iceberg worker pool
      */
     @ConfField(mutable = true)
