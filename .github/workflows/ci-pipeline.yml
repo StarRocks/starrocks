@@ -376,8 +376,13 @@ jobs:
           cp fe/checkstyle* .
 
       - name: Run java checkstyle
+<<<<<<< HEAD
         if: ${{ steps.java-file.outputs.java == 'true' }}
         uses: dbelyaev/action-checkstyle@v0.7.5
+=======
+        if: needs.fe-checker.outputs.java_filter == 'true'
+        uses: dbelyaev/action-checkstyle@v1.5.6
+>>>>>>> dc6e8605c8 ([Tool] SQL-Tester add param: cloud/native (#41136))
         with:
           workdir: "./fe"
           checkstyle_config: checkstyle.xml
@@ -638,7 +643,13 @@ jobs:
       CLUSTER_NAME: ci-admit
       FE_NODE: ${{ needs.deploy.outputs.fe }}
       BE_NODE: ${{ needs.deploy.outputs.be }}
+<<<<<<< HEAD
       BASE_VERSION: ${{needs.build.outputs.base_version}}
+=======
+      BASE_VERSION: ${{ needs.build.outputs.base_version }}
+    outputs:
+      MYSQL_ECI_ID: ${{ steps.run_case.outputs.MYSQL_ECI_ID }}
+>>>>>>> dc6e8605c8 ([Tool] SQL-Tester add param: cloud/native (#41136))
     steps:
       - name: CLEAN
         run: |
@@ -699,8 +710,13 @@ jobs:
   admit:
     runs-on: [self-hosted, normal]
     name: ADMIT TEST
+<<<<<<< HEAD
     needs: [ deploy, SQL-Tester ]
     if: always() && needs.deploy.result == 'success' && needs.SQL-Tester.result == 'success'
+=======
+    needs: [ deploy, restart-fe, restart-be ]
+    if: always() && needs.restart-fe.result == 'success' && needs.restart-be.result == 'success' && needs.deploy.outputs.is_self_build == 'true'
+>>>>>>> dc6e8605c8 ([Tool] SQL-Tester add param: cloud/native (#41136))
     timeout-minutes: 40
     env:
       PR_NUMBER: ${{ github.event.number }}
