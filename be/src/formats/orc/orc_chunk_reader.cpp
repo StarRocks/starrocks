@@ -784,7 +784,7 @@ bool OrcChunkReader::_ok_to_add_conjunct(const Expr* conjunct) {
     // supported one level. first child is slot, and others are literal values.
     // and only support some of logical types.
     if (node_type == TExprNodeType::BINARY_PRED || node_type == TExprNodeType::IN_PRED ||
-        node_type == TExprNodeType::IS_NULL_PRED || node_type  == TExprNodeType::FUNCTION_CALL) {
+        node_type == TExprNodeType::IS_NULL_PRED || node_type == TExprNodeType::FUNCTION_CALL) {
         // first child should be slot
         // and others should be literal.
         Expr* c = conjunct->get_child(0);
