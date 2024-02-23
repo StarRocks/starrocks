@@ -186,19 +186,20 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                 " join depts2 d2 on emps2.deptno = d2.deptno where d1.deptno < 120";
         String plan2 = getFragmentPlan(query2);
         PlanTestBase.assertContains(plan2, "join_union_mv_1");
-        PlanTestBase.assertContains(plan2, "6:HASH JOIN\n" +
+        PlanTestBase.assertContains(plan2, "7:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (COLOCATE)\n" +
                 "  |  colocate: true\n" +
-                "  |  equal join conjunct: 15: deptno = 20: deptno");
-        PlanTestBase.assertContains(plan2, "2:OlapScanNode\n" +
-                "     TABLE: emps2\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 15: deptno >= 100, 15: deptno < 120\n" +
-                "     partitions=1/1");
+                "  |  equal join conjunct: 15: deptno = 18: deptno");
         PlanTestBase.assertContains(plan2, "1:OlapScanNode\n" +
                 "     TABLE: depts2\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 18: deptno >= 100, 18: deptno < 120");
+                "     PREDICATES: 20: deptno >= 100\n" +
+                "     partitions=1/1");
+        PlanTestBase.assertContains(plan2, "6:OlapScanNode\n" +
+                "  |       TABLE: depts2\n" +
+                "  |       PREAGGREGATION: ON\n" +
+                "  |       PREDICATES: 18: deptno >= 100, 18: deptno < 120\n" +
+                "  |       partitions=1/1");
     }
 
     @Test
@@ -250,17 +251,15 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
         String plan8 = getFragmentPlan(query8);
 
         PlanTestBase.assertContains(plan8, "join_agg_union_mv_2");
-        PlanTestBase.assertContains(plan8, "4:HASH JOIN\n" +
-                "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
+        PlanTestBase.assertContains(plan8, "5:HASH JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 20: v1 = 24: t1d\n" +
-                "  |  \n" +
-                "  |----3:EXCHANGE");
-        PlanTestBase.assertContains(plan8, "2:OlapScanNode\n" +
+                "  |  equal join conjunct: 24: t1d = 20: v1");
+        PlanTestBase.assertContains(plan8, "1:OlapScanNode\n" +
                 "     TABLE: test_all_type2\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 24: t1d >= 100, 24: t1d < 120");
-        PlanTestBase.assertContains(plan8, "1:OlapScanNode\n" +
+        PlanTestBase.assertContains(plan8, "3:OlapScanNode\n" +
                 "     TABLE: t02\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 20: v1 >= 100, 20: v1 < 120");

@@ -15,7 +15,6 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.base.Preconditions;
-import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.io.CharStreams;
 import com.google.gson.Gson;
@@ -222,17 +221,6 @@ public class PlanTestNoneDBBase {
     public String getFragmentPlan(String sql) throws Exception {
         return UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
                 getExplainString(TExplainLevel.NORMAL);
-    }
-
-    public String getFragmentPlan(String sql, String traceModule) throws Exception {
-        Pair<String, Pair<ExecPlan, String>> result =
-                UtFrameUtils.getFragmentPlanWithTrace(connectContext, sql, traceModule);
-        Pair<ExecPlan, String> execPlanWithQuery = result.second;
-        String traceLog = execPlanWithQuery.second;
-        if (!Strings.isNullOrEmpty(traceLog)) {
-            System.out.println(traceLog);
-        }
-        return execPlanWithQuery.first.getExplainString(TExplainLevel.NORMAL);
     }
 
     public String getLogicalFragmentPlan(String sql) throws Exception {

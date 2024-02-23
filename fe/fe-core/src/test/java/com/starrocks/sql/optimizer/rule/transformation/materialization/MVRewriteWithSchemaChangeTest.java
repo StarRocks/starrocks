@@ -66,6 +66,7 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
         String query = "select a, b*10 as col2, c+1 as col3 from sync_tbl_t1 order by a;";
         String plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "sync_mv1");
+        starRocksAssert.dropTable("sync_tbl_t1");
     }
 
 
@@ -310,5 +311,30 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
             dropMv("test", "join_mv_1");
             dropMv("test", "join_mv_2");
         }
+    }
+
+    @Test
+    public void testPartitionPrune_SyncMV1() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `sync_tbl_t1` (\n" +
+                "                  `dt` date NOT NULL COMMENT \"\",\n" +
+                "                  `a` bigint(20) NOT NULL COMMENT \"\",\n" +
+                "                  `b` bigint(20) NOT NULL COMMENT \"\",\n" +
+                "                  `c` bigint(20) NOT NULL COMMENT \"\"\n" +
+                "                ) \n" +
+                "                DUPLICATE KEY(`dt`)\n" +
+                "                COMMENT \"OLAP\"\n" +
+                "                PARTITION BY RANGE(`dt`)\n" +
+                "                (PARTITION p20220501 VALUES [('2022-05-01'), ('2022-05-02')),\n" +
+                "                 PARTITION p20220502 VALUES [('2022-05-02'), ('2022-05-03')),\n" +
+                "                PARTITION p20220503 VALUES [('2022-05-03'), ('2022-05-04')))\n" +
+                "                DISTRIBUTED BY HASH(`a`);");
+        String sql = "CREATE MATERIALIZED VIEW sync_mv1 AS select a, b*10 as col2, c+1 as col3 from sync_tbl_t1;";
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        GlobalStateMgr.getCurrentState().createMaterializedView((CreateMaterializedViewStmt) statementBase);
+        waitingRollupJobV2Finish();
+        String query = "select a, b*10 as col2, c+1 as col3 from sync_tbl_t1 order by a;";
+        String plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "sync_mv1");
+        starRocksAssert.dropTable("sync_tbl_t1");
     }
 }

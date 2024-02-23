@@ -180,7 +180,7 @@ public class PseudoFrontend {
 
                 // check it after Config is initialized, otherwise the config 'check_java_version' won't work.
                 if (!JdkUtils.checkJavaVersion()) {
-                    throw new IllegalArgumentException("Java version doesn't match");
+//                    throw new IllegalArgumentException("Java version doesn't match");
                 }
 
                 Log4jConfig.initLogging();

@@ -397,7 +397,7 @@ public class MvRewritePreprocessor {
         }
         // if mv is in plan cache(avoid building plan), check whether it's valid
         MvPlanContext planContext = CachingMvPlanContextBuilder.getInstance().getPlanContextFromCacheIfPresent(mv);
-        if (planContext == null || (planContext != null && !planContext.isValidMvPlan())) {
+        if ((planContext != null && !planContext.isValidMvPlan())) {
             logMVPrepare(connectContext, mv, "MV has not a valid plan: {}", mv.getName());
             return false;
         }
@@ -416,9 +416,6 @@ public class MvRewritePreprocessor {
             long mvQueryInteractedTableNum = MVCorrelation.getMvQueryIntersectedTableNum(baseTableInfos, queryTableNames);
             MvPlanContext planContext =
                     CachingMvPlanContextBuilder.getInstance().getPlanContextFromCacheIfPresent(mv);
-            if (planContext == null) {
-                continue;
-            }
             int mvQueryScanOpDiff = MVCorrelation.getMvQueryScanOpDiff(planContext, baseTableInfos.size(), queryScanOpNum);
             MVCorrelation mvCorrelation = new MVCorrelation(mv, mvQueryInteractedTableNum,
                     mvQueryScanOpDiff, mv.getLastRefreshTime());
@@ -453,7 +450,7 @@ public class MvRewritePreprocessor {
 
         // 3. choose max config related mvs for mv rewrite to avoid too much optimize time
         int maxRelatedMVsLimit = connectContext.getSessionVariable().getCboMaterializedViewRewriteRelatedMVsLimit();
-        if (maxRelatedMVsLimit < 1 && validMVs.size() <= maxRelatedMVsLimit) {
+        if (validMVs.size() <= maxRelatedMVsLimit) {
             return validMVs;
         }
         return chooseBestRelatedMVsByCorrelations(queryTables, validMVs, queryOptExpression, maxRelatedMVsLimit);

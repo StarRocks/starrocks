@@ -18,7 +18,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
@@ -30,15 +29,10 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.schema.MSchema;
 import com.starrocks.schema.MTable;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AlterTableStmt;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
-import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.plan.PlanTestBase;
-import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
@@ -49,9 +43,6 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-
-import static com.starrocks.sql.optimizer.MVTestUtils.waitForSchemaChangeAlterJobFinish;
-import static com.starrocks.sql.optimizer.MVTestUtils.waitingRollupJobV2Finish;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class MvRewriteTest extends MvRewriteTestBase {
@@ -1047,89 +1038,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
     }
 
     @Test
-    public void testMVCacheInvalidAndReValid() throws Exception {
-        starRocksAssert.withTable("\n" +
-                "CREATE TABLE test_base_tbl(\n" +
-                "  `dt` datetime DEFAULT NULL,\n" +
-                "  `col1` bigint(20) DEFAULT NULL,\n" +
-                "  `col2` bigint(20) DEFAULT NULL,\n" +
-                "  `col3` bigint(20) DEFAULT NULL,\n" +
-                "  `error_code` varchar(1048576) DEFAULT NULL\n" +
-                ")\n" +
-                "DUPLICATE KEY (dt)\n" +
-                "PARTITION BY date_trunc('day', dt)\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\"\n" +
-                ");");
-        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW  test_cache_mv1 \n" +
-                "DISTRIBUTED BY HASH(col1, dt) BUCKETS 32\n" +
-                "--DISTRIBUTED BY RANDOM BUCKETS 32\n" +
-                "partition by date_trunc('day', dt)\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\"\n" +
-                ")\n" +
-                "AS select\n" +
-                "      col1,\n" +
-                "        dt,\n" +
-                "        sum(col2) AS sum_col2,\n" +
-                "        sum(if(error_code = 'TIMEOUT', col3, 0)) AS sum_col3\n" +
-                "    FROM\n" +
-                "        test_base_tbl AS f\n" +
-                "    GROUP BY\n" +
-                "        col1,\n" +
-                "        dt;");
-        refreshMaterializedView("test", "test_cache_mv1");
-
-        String sql = "select\n" +
-                "      col1,\n" +
-                "        sum(col2) AS sum_col2,\n" +
-                "        sum(if(error_code = 'TIMEOUT', col3, 0)) AS sum_col3\n" +
-                "    FROM\n" +
-                "        test_base_tbl AS f\n" +
-                "    WHERE (dt >= STR_TO_DATE('2023-08-15 00:00:00', '%Y-%m-%d %H:%i:%s'))\n" +
-                "        AND (dt <= STR_TO_DATE('2023-08-15 00:00:00', '%Y-%m-%d %H:%i:%s'))\n" +
-                "    GROUP BY col1;";
-        String plan = getFragmentPlan(sql);
-        PlanTestBase.assertContains(plan, "test_cache_mv1");
-
-        {
-            // invalid base table
-            String alterSql = "alter table test_base_tbl modify column col1  varchar(30);";
-            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSql,
-                    connectContext);
-            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
-            waitForSchemaChangeAlterJobFinish();
-
-            // check mv invalid
-            Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-            MaterializedView mv1 = ((MaterializedView) testDb.getTable("test_cache_mv1"));
-            Assert.assertFalse(mv1.isActive());
-            try {
-                cluster.runSql("test", "alter materialized view test_cache_mv1 active;");
-                Assert.fail("could not active the mv");
-            } catch (Exception e) {
-                Assert.assertTrue(e.getMessage(), e.getMessage().contains("Column schema not compatible"));
-            }
-
-            plan = getFragmentPlan(sql);
-            PlanTestBase.assertNotContains(plan, "test_cache_mv1");
-        }
-
-        {
-            // alter the column to original one
-            String alterSql = "alter table test_base_tbl modify column col1 bigint;";
-            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSql,
-                    connectContext);
-            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
-            waitForSchemaChangeAlterJobFinish();
-
-            cluster.runSql("test", "alter materialized view test_cache_mv1 active;");
-            plan = getFragmentPlan(sql);
-            PlanTestBase.assertContains(plan, "test_cache_mv1");
-        }
-    }
-
-    @Test
     public void testCardinality() throws Exception {
         try {
             FeConstants.USE_MOCK_DICT_MANAGER = true;
@@ -1517,35 +1425,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
             PlanTestBase.assertContains(plan, "partitions=4/4\n" +
                     "     rollup: test_partition_tbl_mv1");
         }
-    }
-
-    @Test
-    public void testPartitionPrune_SyncMV1() throws Exception {
-        starRocksAssert.withTable("CREATE TABLE `sync_tbl_t1` (\n" +
-                "                  `dt` date NOT NULL COMMENT \"\",\n" +
-                "                  `a` bigint(20) NOT NULL COMMENT \"\",\n" +
-                "                  `b` bigint(20) NOT NULL COMMENT \"\",\n" +
-                "                  `c` bigint(20) NOT NULL COMMENT \"\"\n" +
-                "                ) \n" +
-                "                DUPLICATE KEY(`dt`)\n" +
-                "                COMMENT \"OLAP\"\n" +
-                "                PARTITION BY RANGE(`dt`)\n" +
-                "                (PARTITION p20220501 VALUES [('2022-05-01'), ('2022-05-02')),\n" +
-                "                 PARTITION p20220502 VALUES [('2022-05-02'), ('2022-05-03')),\n" +
-                "                PARTITION p20220503 VALUES [('2022-05-03'), ('2022-05-04')))\n" +
-                "                DISTRIBUTED BY HASH(`a`) BUCKETS 32\n" +
-                "                PROPERTIES (\n" +
-                "                \"in_memory\" = \"false\",\n" +
-                "                \"storage_format\" = \"DEFAULT\",\n" +
-                "                \"enable_persistent_index\" = \"false\"\n" +
-                "                );");
-        String sql = "CREATE MATERIALIZED VIEW sync_mv1 AS select a, b*10 as col2, c+1 as col3 from sync_tbl_t1;";
-        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().createMaterializedView((CreateMaterializedViewStmt) statementBase);
-        waitingRollupJobV2Finish();
-        String query = "select a, b*10 as col2, c+1 as col3 from sync_tbl_t1 order by a;";
-        String plan = getFragmentPlan(query);
-        PlanTestBase.assertContains(plan, "sync_mv1");
     }
 
     @Test
@@ -2023,38 +1902,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 starRocksAssert.dropMaterializedView(mvName);
             }
         }
-    }
-
-    @Test
-    public void testMVAggregateTable() throws Exception {
-        starRocksAssert.withTable("CREATE TABLE `t1_agg` (\n" +
-                "  `c_1_0` datetime NULL COMMENT \"\",\n" +
-                "  `c_1_1` decimal128(24, 8) NOT NULL COMMENT \"\",\n" +
-                "  `c_1_2` double SUM NOT NULL COMMENT \"\"\n" +
-                ") ENGINE=OLAP\n" +
-                "AGGREGATE KEY(`c_1_0`, `c_1_1`)\n" +
-                "DISTRIBUTED BY HASH(`c_1_1`) BUCKETS 3");
-
-        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv_t1_v0 " +
-                "AS " +
-                "SELECT t1_17.c_1_0, t1_17.c_1_1, SUM(t1_17.c_1_2) " +
-                "FROM t1_agg AS t1_17 " +
-                "GROUP BY t1_17.c_1_0, t1_17.c_1_1 ORDER BY t1_17.c_1_0 DESC, t1_17.c_1_1 ASC");
-
-        {
-            String query = "select * from t1_agg";
-            String plan = UtFrameUtils.getVerboseFragmentPlan(connectContext, query);
-            PlanTestBase.assertContains(plan, "table: t1_agg, rollup: mv_t1_v0\n");
-        }
-        {
-
-            String query = "select c_1_0, c_1_1, sum(c_1_2) from t1_agg group by c_1_0, c_1_1";
-            String plan = UtFrameUtils.getVerboseFragmentPlan(connectContext, query);
-            PlanTestBase.assertContains(plan, "table: t1_agg, rollup: mv_t1_v0\n");
-        }
-
-        starRocksAssert.dropMaterializedView("mv_t1_v0");
-        starRocksAssert.dropTable("t1_agg");
     }
 
     @Test

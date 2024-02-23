@@ -23,7 +23,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
@@ -35,8 +34,6 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
-import com.starrocks.sql.ast.DmlStmt;
-import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
@@ -50,7 +47,6 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
-import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
@@ -77,8 +73,8 @@ public class MvRewriteTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        PseudoCluster.getOrCreateWithRandomPort(true, 3);
-        GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(1000);
+        PseudoCluster.getOrCreateWithRandomPort(true, 1);
+        GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(100);
         cluster = PseudoCluster.getInstance();
 
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -96,24 +92,6 @@ public class MvRewriteTestBase {
             @Mock
             boolean isIgnoreExplicitColRefIds() {
                 return true;
-            }
-        };
-
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
-                if (stmt instanceof InsertStmt) {
-                    InsertStmt insertStmt = (InsertStmt) stmt;
-                    TableName tableName = insertStmt.getTableName();
-                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-                    OlapTable tbl = ((OlapTable) testDb.getTable(tableName.getTbl()));
-                    if (tbl != null) {
-                        for (Long partitionId : insertStmt.getTargetPartitionIds()) {
-                            Partition partition = tbl.getPartition(partitionId);
-                            setPartitionVersion(partition, partition.getVisibleVersion() + 1);
-                        }
-                    }
-                }
             }
         };
     }

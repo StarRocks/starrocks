@@ -1089,9 +1089,9 @@ public class MVRewriteTest {
         // NOTE: Since `deptno` is key column of the new mv, so use `PREAGGREGATION` instead.
         System.out.println(plan);
         Assert.assertTrue(plan.contains("1:OlapScanNode\n" +
-                "     TABLE: emps\n" +
+                "     TABLE: emps_mv\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 4: deptno > 300\n" +
+                "     PREDICATES: 18: deptno > 300\n" +
                 "     partitions=1/1\n" +
                 "     rollup: emps_mv"));
         Assert.assertTrue(plan.contains("7:OlapScanNode\n" +
