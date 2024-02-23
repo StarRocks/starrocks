@@ -1304,10 +1304,12 @@ public class PrivilegeCheckerTest {
 
         ConnectContext ctx1 = new ConnectContext(socketChannel);
         ctx1.setQualifiedUser("test");
+        ctx1.setCurrentUserIdentity(new UserIdentity("test", "%"));
         ctx1.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx1.setConnectionId(1);
         ConnectContext ctx2 = new ConnectContext(socketChannel);
         ctx2.setQualifiedUser("test2");
+        ctx2.setCurrentUserIdentity(new UserIdentity("test2", "%"));
         ctx2.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx2.setConnectionId(2);
 
