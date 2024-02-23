@@ -74,7 +74,7 @@ class OrderByTest extends PlanTestBase {
                 "sort_tuple_slot_exprs:[TExpr(nodes:[TExprNode(node_type:SLOT_REF, type:TTypeDesc(types:[TTypeNode"
                         + "(type:SCALAR, scalar_type:TScalarType(type:BIGINT))]), num_children:0, slot_ref:TSlotRef"
                         + "(slot_id:1, tuple_id:2), output_scale:-1, output_column:-1, "
-                        + "has_nullable_child:false, is_nullable:true, is_monotonic:true)])]"));
+                        + "has_nullable_child:false, is_nullable:true, is_monotonic:true"));
     }
 
     @Test

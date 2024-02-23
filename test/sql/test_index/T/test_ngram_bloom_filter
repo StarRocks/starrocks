@@ -1,0 +1,51 @@
+-- name: test_ngram_bloom_filter
+create database ngram_bloom_filter_db_1;
+use  ngram_bloom_filter_db_1;
+CREATE TABLE ngram_index(
+    timestamp DATETIME NOT NULL,
+    username STRING,
+    price INT NULL,
+    INDEX idx_name1(username) USING NGRAMBF ("gram_num" = "4", "bloom_filter_fpp" = "0.05")
+)PROPERTIES ("replication_num" = "1");
+
+show index from ngram_index;
+
+insert into ngram_index values ('2023-01-01',"chinese",3),('2023-01-02',"chineeeinese",4),('2023-01-03',"我爱吃烤全羊yangyangchinchin",4),('2023-01-04',"tonightisgreadchin",4);
+
+select * from ngram_index order by ngram_search(username, 'chinese',4) desc;
+drop index idx_name1 on ngram_index;
+function: wait_alter_table_finish()
+show index from ngram_index;
+
+ALTER TABLE ngram_index ADD INDEX idx_name1(username) USING NGRAMBF ('gram_num' = "4", "bloom_filter_fpp" = "0.01");
+function: wait_alter_table_finish()
+show index from ngram_index;
+select * from ngram_index order by  ngram_search(username, 'chinese',4) desc;
+drop database ngram_bloom_filter_db_1;
+
+-- name: test_ngram_bloom_filter_default
+create database ngram_bloom_filter_db_2;
+use  ngram_bloom_filter_db_2;
+CREATE TABLE ngram_index_default_1(
+    timestamp DATETIME NOT NULL,
+    username STRING,
+    price INT NULL,
+    INDEX idx_name1(username) USING NGRAMBF ("gram_num" = "4")
+)PROPERTIES ("replication_num" = "1");
+show index from ngram_index_default_1;
+
+CREATE TABLE ngram_index_default_2(
+    timestamp DATETIME NOT NULL,
+    username STRING,
+    price INT NULL,
+    INDEX idx_name1(username) USING NGRAMBF ("bloom_filter_fpp" = "0.05")
+)PROPERTIES ("replication_num" = "1");
+show index from ngram_index_default_2;
+
+CREATE TABLE ngram_index_default_3(
+    timestamp DATETIME NOT NULL,
+    username STRING,
+    price INT NULL,
+    INDEX idx_name1(username) USING NGRAMBF
+)PROPERTIES ("replication_num" = "1");
+show index from ngram_index_default_3;

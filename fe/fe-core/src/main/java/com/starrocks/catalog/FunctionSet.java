@@ -464,6 +464,10 @@ public class FunctionSet {
     public static final String STRUCT = "struct";
     public static final String NAMED_STRUCT = "named_struct";
 
+    public static final String NGRAM_SEARCH = "ngram_search";
+    public static final String NGRAM_SEARCH_CASE_INSENSITIVE = "ngram_search_case_insensitive";
+
+
     // JSON functions
     public static final Function JSON_QUERY_FUNC = new Function(
             new FunctionName(JSON_QUERY), new Type[] {Type.JSON, Type.VARCHAR}, Type.JSON, false);
@@ -708,6 +712,9 @@ public class FunctionSet {
                 fields.add(new StructField("count", Type.BIGINT));
                 return new ArrayType(new StructType(fields, true));
             };
+
+    public static final Set<String> INDEX_ONLY_FUNCTIONS =
+            ImmutableSet.<String>builder().add().add(NGRAM_SEARCH).add(NGRAM_SEARCH_CASE_INSENSITIVE).build();
 
     public FunctionSet() {
         vectorizedFunctions = Maps.newHashMap();

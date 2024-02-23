@@ -61,7 +61,7 @@ public class SetTest extends PlanTestBase {
         assertContains(plan, "[TExprNode(node_type:INT_LITERAL, type:TTypeDesc(types:" +
                 "[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:SMALLINT))])," +
                 " num_children:0, int_literal:TIntLiteral(value:2), output_scale:-1, " +
-                "has_nullable_child:false, is_nullable:false, is_monotonic:true)]");
+                "has_nullable_child:false, is_nullable:false, is_monotonic:true");
     }
 
     @Test

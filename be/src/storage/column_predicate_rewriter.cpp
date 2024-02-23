@@ -386,6 +386,8 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_expr_predicate(ObjectPool* pool
     ASSIGN_OR_RETURN(*ptr, ColumnExprPredicate::make_column_expr_predicate(
                                    get_type_info(kDictCodeType), pred->column_id(), state, filter, pred->slot_desc()))
     filter->close(state);
+    // still remember whether this predicate is index only filter or not
+    (*ptr)->set_index_filter_only(raw_pred->is_index_filter_only());
 
     return true;
 }
@@ -413,8 +415,11 @@ Status GlobalDictPredicatesRewriter::rewrite_predicate(ObjectPool* pool) {
                     code_mapping[codes[i]] = selection[i];
                 }
 
-                pred = new_column_dict_conjuct_predicate(get_type_info(kDictCodeType), pred->column_id(),
-                                                         std::move(code_mapping));
+                bool is_index_only_filter = pred->is_index_filter_only();
+                ColumnPredicate* newPred = new_column_dict_conjuct_predicate(
+                        get_type_info(kDictCodeType), pred->column_id(), std::move(code_mapping));
+                newPred->set_index_filter_only(is_index_only_filter);
+                pred = newPred;
                 pool->add(const_cast<ColumnPredicate*>(pred));
             }
         }

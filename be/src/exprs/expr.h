@@ -49,6 +49,7 @@
 
 namespace starrocks {
 
+class BloomFilter;
 class Expr;
 class ObjectPool;
 class RuntimeState;
@@ -249,6 +250,14 @@ public:
     // Establishes whether the current expression should undergo compilation.
     bool should_compile() const;
 
+    // Return true if this expr or any of its children support ngram bloom filter, otherwise return flase
+    virtual bool support_ngram_bloom_filter(ExprContext* context) const;
+
+    // Return false to filter out a data page.
+    virtual bool ngram_bloom_filter(ExprContext* context, const BloomFilter* bf, size_t gram_num) const;
+
+    // Return true if this expr or any of its children is index only filter, otherwise return false
+    bool is_index_only_filter() const;
 #if BE_TEST
     void set_type(TypeDescriptor t) { _type = t; }
 #endif
@@ -320,6 +329,9 @@ protected:
     // Is this expr monotnoic or not. This info is passed from FE
     bool _is_monotonic = false;
 
+    // In storage engine, Is this expr only used for index filter(so expr filter phase will skip this expr). This info is passed from FE
+    bool _is_index_only_filter = false;
+
     // analysis is done, types are fixed at this point
     TypeDescriptor _type;
     std::vector<Expr*> _children = std::vector<Expr*>();
@@ -334,6 +346,7 @@ protected:
     int _fn_context_index;
 
     std::once_flag _constant_column_evaluate_once{};
+    // set if this expr is constant, used to avoid redundant computation
     StatusOr<ColumnPtr> _constant_column = Status::OK();
 
     /// Simple debug string that provides no expr subclass-specific information

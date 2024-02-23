@@ -1,5 +1,7 @@
 #include <utility>
 
+#include "exprs/expr.h"
+#include "exprs/expr_context.h"
 #include "storage/column_predicate.h"
 #include "storage/olap_common.h"
 #include "storage/types.h"
@@ -42,6 +44,8 @@ public:
 
     bool zone_map_filter(const ZoneMapDetail& detail) const override;
     bool support_bloom_filter() const override { return false; }
+    bool support_ngram_bloom_filter() const override { return _expr_ctxs[0]->support_ngram_bloom_filter(); }
+    bool ngram_bloom_filter(const BloomFilter* bf, size_t gram_num) const override;
     PredicateType type() const override { return PredicateType::kExpr; }
     bool can_vectorized() const override { return true; }
 

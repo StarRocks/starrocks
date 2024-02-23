@@ -186,6 +186,18 @@ StatusOr<ColumnPtr> ExprContext::evaluate(Expr* e, Chunk* chunk, uint8_t* filter
     }
 }
 
+bool ExprContext::ngram_bloom_filter(const BloomFilter* bf, size_t gram_num) {
+    return _root->ngram_bloom_filter(this, bf, gram_num);
+}
+
+bool ExprContext::support_ngram_bloom_filter() {
+    return _root->support_ngram_bloom_filter(this);
+}
+
+bool ExprContext::is_index_only_filter() const {
+    return _root->is_index_only_filter();
+}
+
 bool ExprContext::error_if_overflow() const {
     return _runtime_state != nullptr && _runtime_state->error_if_overflow();
 }
