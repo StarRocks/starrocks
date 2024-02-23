@@ -74,6 +74,10 @@ StatusOr<ColumnPtr> DictionaryGetExpr::evaluate_checked(ExprContext* context, Ch
 
 Status DictionaryGetExpr::prepare(RuntimeState* state, ExprContext* context) {
     RETURN_IF_ERROR(Expr::prepare(state, context));
+    if (_is_prepared) {
+        return Status::OK();
+    }
+    _is_prepared = true;
     _runtime_state = state;
 
     _schema = StorageEngine::instance()->dictionary_cache_manager()->get_dictionary_schema_by_id(

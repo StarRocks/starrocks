@@ -227,6 +227,9 @@ Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext*
 }
 
 Status Expr::rewrite_jit_exprs(std::vector<ExprContext*>& expr_ctxs, ObjectPool* pool, RuntimeState* state) {
+    if (!state->is_jit_enabled()) {
+        return Status::OK();
+    }
     std::vector<ExprContext*> tmp;
     for (auto ctx : expr_ctxs) {
         auto* prev_expr = ctx->root();
@@ -242,14 +245,15 @@ Status Expr::rewrite_jit_exprs(std::vector<ExprContext*>& expr_ctxs, ObjectPool*
         if (replaced) {
             // The node was replaced, so we need to update the context.
             new_ctx = pool->add(new ExprContext(*root_expr));
+            if (state != nullptr) {
+                RETURN_IF_ERROR((*root_expr)->prepare(state, new_ctx));
+                RETURN_IF_ERROR((*root_expr)->open(state, new_ctx, FunctionContext::THREAD_LOCAL));
+            }
         }
         tmp.emplace_back(new_ctx);
     }
     expr_ctxs.swap(tmp);
-    if (state != nullptr) {
-        RETURN_IF_ERROR(Expr::prepare(expr_ctxs, state));
-        RETURN_IF_ERROR(Expr::open(expr_ctxs, state));
-    }
+
     return Status::OK();
 }
 
