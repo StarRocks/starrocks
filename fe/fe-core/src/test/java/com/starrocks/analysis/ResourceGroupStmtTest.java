@@ -218,7 +218,7 @@ public class ResourceGroupStmtTest {
             starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP " + name);
         }
         List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
-        String defaultWg = "default_mv_wg|1|80.0%|1|0|0|0|0|100%|MV|(weight=0.0)\n" +
+        String defaultWg = "default_mv_wg|1|null|1|0|0|0|null|100%|MV|(weight=0.0)\n" +
                 "default_wg|1|100.0%|1|0|0|0|0|100%|DEFAULT|(weight=0.0)";
         Assert.assertFalse(rows.isEmpty());
         Assert.assertEquals(2, rows.size());
@@ -1274,7 +1274,7 @@ public class ResourceGroupStmtTest {
                 "   'type' = 'normal'" +
                 "   );";
         String showResult =
-                "default_mv_wg|1|80.0%|1|0|0|0|0|100%|MV|(weight=0.0)\n" +
+                "default_mv_wg|1|null|1|0|0|0|null|100%|MV|(weight=0.0)\n" +
                         "default_wg|1|100.0%|1|0|0|0|0|100%|DEFAULT|(weight=0.0)\n" +
                         "rg1|17|20.0%|null|0|0|0|11|100%|NORMAL|(weight=3.0, user=rg1_user, plan_cpu_cost_range=[1.0, 2.0), plan_mem_cost_range=[-100.0, 1000.0))\n" +
                         "rg2|32|30.0%|null|0|0|0|31|100%|NORMAL|(weight=2.0, user=rg1_user, plan_mem_cost_range=[0.0, 2000.0))";
@@ -1373,7 +1373,7 @@ public class ResourceGroupStmtTest {
         List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show resource groups all");
         String actual = rowsToString(rows);
         String expected =
-                "default_mv_wg|1|80.0%|1|0|0|0|0|100%|MV|(weight=0.0)\n" +
+                "default_mv_wg|1|null|1|0|0|0|null|100%|MV|(weight=0.0)\n" +
                         "default_wg|1|100.0%|1|0|0|0|0|100%|DEFAULT|(weight=0.0)\n" +
                         "rg1|17|20.0%|null|0|0|0|11|100%|NORMAL|(weight=2.0, plan_cpu_cost_range=[11.0, 12.0), plan_mem_cost_range=[-100.0, 11000.0))\n" +
                         "rg2|16|20.0%|null|0|0|0|11|100%|NORMAL|(weight=1.0, plan_cpu_cost_range=[21.0, 22.0))\n" +
