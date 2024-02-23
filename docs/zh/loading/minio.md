@@ -71,7 +71,7 @@ curl -O https://starrocks-examples.s3.amazonaws.com/user_behavior_ten_million_ro
 - 您可以查看数据的最大值、最小值，并确定需要使用哪些数据类型。
 - 您可以检查数据中是否包含 `NULL` 值。
 
-下面示例查询保存在您的 MinIO 系统里的 Parquet 文件：
+下面示例查询您保存在 MinIO 系统里的 Parquet 文件：
 
 :::tip
 
@@ -114,7 +114,7 @@ LIMIT 3;
 3 rows in set (0.41 sec)
 ```
 
-:::INFO
+:::info
 
 以上返回结果中的列名是源 Parquet 文件中定义的列名。
 
@@ -143,29 +143,38 @@ USE mydatabase;
 
 通过 CTAS 自动创建表、并把保存在 MinIO 里的样例数据集 `user_behavior_ten_million_rows.parquet` 中的数据导入到新建表中：
 
-```SQL
+:::tip
+
+下面命令示例中灰色底纹强化显示的参数配置，需要您根据情况进行替换：
+
+- `endpoint` 和 `path` 需要设置为 MinIO 系统的终端节点和文件存储路径。
+- 如果 MinIO 系统启用了 SSL，须把 `enable_ssl` 设置为 `true`。
+- 把 `AAA` 和 `BBB` 替换为可以用于访问 MinIO 系统的真实有效的 Access Key 和 Secret Key。
+
+:::
+
+```sql
 CREATE TABLE user_behavior_inferred AS
 SELECT * FROM FILES
 (
+    -- highlight-start
     "aws.s3.endpoint" = "http://minio:9000",
     "path" = "s3://starrocks/user_behavior_ten_million_rows.parquet",
     "aws.s3.enable_ssl" = "false",
     "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
     "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    -- highlight-end
     "format" = "parquet",
     "aws.s3.use_aws_sdk_default_behavior" = "false",
     "aws.s3.use_instance_profile" = "false",
     "aws.s3.enable_path_style_access" = "true"
 );
+```
+
+```plaintext
 Query OK, 10000000 rows affected (3.17 sec)
 {'label':'insert_a5da3ff5-9ee4-11ee-90b0-02420a060004', 'status':'VISIBLE', 'txnId':'17'}
 ```
-
-:::tip
-
-注意要把上面命令示例中的 `AAA` 和 `BBB` 替换为可以用于访问 MinIO 系统的真实有效的 Access Key 和 Secret Key。
-
-:::
 
 建表完成后，您可以通过 [DESCRIBE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/Utility/DESCRIBE/) 查看新建表的表结构：
 
@@ -284,27 +293,33 @@ DESCRIBE user_behavior_declared;
 
 建表完成后，您可以通过 INSERT INTO SELECT FROM FILES() 向表内导入数据：
 
+:::tip
+
+下面命令示例中灰色底纹强化显示的参数配置，需要您根据情况进行替换：
+
+- `endpoint` 和 `path` 需要设置为 MinIO 系统的终端节点和文件存储路径。
+- 如果 MinIO 系统启用了 SSL，须把 `enable_ssl` 设置为 `true`。
+- 把 `AAA` 和 `BBB` 替换为可以用于访问 MinIO 系统的真实有效的 Access Key 和 Secret Key。
+
+:::
+
 ```SQL
 INSERT INTO user_behavior_declared
 SELECT * FROM FILES
 (
+    -- highlight-start
     "aws.s3.endpoint" = "http://minio:9000",
     "path" = "s3://starrocks/user_behavior_ten_million_rows.parquet",
     "aws.s3.enable_ssl" = "false",
     "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
     "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    -- highlight-end
     "format" = "parquet",
     "aws.s3.use_aws_sdk_default_behavior" = "false",
     "aws.s3.use_instance_profile" = "false",
     "aws.s3.enable_path_style_access" = "true"
 );
 ```
-
-:::tip
-
-注意要把上面命令示例中的 `AAA` 和 `BBB` 替换为可以用于访问 MinIO 系统的真实有效的 Access Key 和 Secret Key。
-
-:::
 
 导入完成后，您可以查询新建表中的数据，验证数据已成功导入。例如：
 

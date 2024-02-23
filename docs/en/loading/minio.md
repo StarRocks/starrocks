@@ -142,8 +142,17 @@ CREATE DATABASE IF NOT EXISTS mydatabase;
 USE mydatabase;
 ```
 
-Use CTAS to create a table and load the data of the
-sample dataset previously added to your MinIO system.
+Use CTAS to create a table and load the data of the sample dataset previously added to your MinIO system.
+
+:::tip
+
+The highlighted section of the command includes the settings that you may need to change:
+
+- Set the `endpoint` and `path` to match your MinIO system.
+- If your MinIO system uses SSL set `enable_ssl` to `true`.
+- Substitute your MinIO access key and secret key for `AAA` and `BBB`.
+
+:::
 
 ```sql
 CREATE TABLE user_behavior_inferred AS
@@ -167,12 +176,6 @@ SELECT * FROM FILES
 Query OK, 10000000 rows affected (3.17 sec)
 {'label':'insert_a5da3ff5-9ee4-11ee-90b0-02420a060004', 'status':'VISIBLE', 'txnId':'17'}
 ```
-
-:::tip
-
-Substitute your MinIO access key and secret for `AAA` and `BBB` in the above command.
-
-:::
 
 After creating the table, you can view its schema by using [DESCRIBE](../sql-reference/sql-statements/Utility/DESCRIBE.md):
 
@@ -292,6 +295,16 @@ To better control the schema of the destination table and for better query perfo
 
 After creating the table, you can load it with INSERT INTO SELECT FROM FILES():
 
+:::tip
+
+The highlighted section of the command includes the settings that you may need to change:
+
+- Set the `endpoint` and `path` to match your MinIO system.
+- If your MinIO system uses SSL set `enable_ssl` to `true`.
+- Substitute your MinIO access key and secret key for `AAA` and `BBB`.
+
+:::
+
 ```SQL
 INSERT INTO user_behavior_declared
 SELECT * FROM FILES
@@ -309,12 +322,6 @@ SELECT * FROM FILES
     "aws.s3.enable_path_style_access" = "true"
 );
 ```
-
-:::tip
-
-Substitute your MinIO access key and secret for `AAA` and `BBB` in the above command.
-
-:::
 
 After the load is complete, you can query the table to verify that the data has been loaded into it. Example:
 
