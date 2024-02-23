@@ -412,6 +412,9 @@ public:
         return _query_options.__isset.enable_collect_table_level_scan_stats &&
                _query_options.enable_collect_table_level_scan_stats;
     }
+    bool enable_wait_dependent_event() const {
+        return _query_options.__isset.enable_wait_dependent_event && _query_options.enable_wait_dependent_event;
+    }
 
 private:
     // Set per-query state.

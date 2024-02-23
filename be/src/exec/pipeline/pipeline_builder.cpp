@@ -19,6 +19,7 @@
 #include "exec/pipeline/adaptive/collect_stats_context.h"
 #include "exec/pipeline/adaptive/collect_stats_sink_operator.h"
 #include "exec/pipeline/adaptive/collect_stats_source_operator.h"
+#include "exec/pipeline/adaptive/event.h"
 #include "exec/pipeline/exchange/exchange_source_operator.h"
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/spill_process_operator.h"
@@ -446,6 +447,11 @@ void PipelineBuilderContext::push_dependent_pipeline(const Pipeline* pipeline) {
 }
 void PipelineBuilderContext::pop_dependent_pipeline() {
     _dependent_pipelines.pop_back();
+}
+
+void PipelineBuilderContext::subscribe_pipeline_event(Pipeline* pipeline, Event* event) {
+    pipeline->pipeline_event()->set_need_wait_dependencies_finished(true);
+    pipeline->pipeline_event()->add_dependency(event);
 }
 
 /// PipelineBuilder.
