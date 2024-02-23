@@ -37,64 +37,25 @@
 
 namespace starrocks::config {
 
-Properties props;
-
-// trim string
-std::string& trim(std::string& s) {
-    // rtrim
-    s.erase(std::find_if(s.rbegin(), s.rend(), std::not1(std::ptr_fun<int, int>(std::isspace))).base(), s.end());
-    // ltrim
-    s.erase(s.begin(), std::find_if(s.begin(), s.end(), std::not1(std::ptr_fun<int, int>(std::isspace))));
-    return s;
-}
-
-// Split string by '='.
-void splitkv(const std::string& s, std::string& k, std::string& v) {
-    const char sep = '=';
-    size_t start = 0;
-    size_t end = 0;
-    if ((end = s.find(sep, start)) != std::string::npos) {
-        k = s.substr(start, end - start);
-        v = s.substr(end + 1);
-    } else {
-        k = s;
-        v = "";
-    }
-}
-
 // Replace env variables.
-bool replaceenv(std::string& s) {
+Status replaceenv(std::string& s) {
     std::size_t pos = 0;
     std::size_t start = 0;
     while ((start = s.find("${", pos)) != std::string::npos) {
         std::size_t end = s.find('}', start + 2);
         if (end == std::string::npos) {
-            return false;
+            return Status::InvalidArgument(s);
         }
         std::string envkey = s.substr(start + 2, end - start - 2);
         const char* envval = std::getenv(envkey.c_str());
         if (envval == nullptr) {
-            return false;
+            return Status::InvalidArgument(fmt::format("Non-existent environment variable: {}", envkey));
         }
         s.erase(start, end - start + 1);
         s.insert(start, envval);
         pos = start + strlen(envval);
     }
-    return true;
-}
-
-template <typename T>
-bool strtox(const std::string& valstr, std::vector<T>& retval) {
-    std::stringstream ss(valstr);
-    std::string item;
-    T t;
-    while (std::getline(ss, item, ',')) {
-        if (!strtox(trim(item), t)) {
-            return false;
-        }
-        retval.push_back(t);
-    }
-    return true;
+    return Status::OK();
 }
 
 bool strtox(const std::string& valstr, bool& retval) {
@@ -165,8 +126,67 @@ bool strtox(const std::string& valstr, MutableString& retval) {
     return true;
 }
 
-// Load conf file.
-bool Properties::load(const char* filename) {
+// Configuration properties load from config file.
+class Properties {
+public:
+    bool load(std::istream& input);
+
+    std::optional<std::string> get(const std::string& key) const;
+
+private:
+    std::map<std::string, std::string> _configs;
+};
+
+inline std::optional<std::string> Properties::get(const std::string& key) const {
+    auto it = _configs.find(key);
+    if (it == _configs.end()) {
+        return {};
+    } else {
+        return {it->second};
+    }
+}
+
+inline bool Properties::load(std::istream& input) {
+    std::string line;
+    std::string key;
+    std::string value;
+    std::regex doris_start("^doris_");
+    line.reserve(512);
+    while (input) {
+        // Read one line at a time.
+        std::getline(input, line);
+
+        // Remove left and right spaces.
+        StripWhiteSpace(&line);
+
+        // Ignore comments.
+        if (line.empty() || line[0] == '#') {
+            continue;
+        }
+
+        // Read key and value.
+        std::pair<std::string, std::string> kv = strings::Split(line, strings::delimiter::Limit("=", 1));
+        StripWhiteSpace(&kv.first);
+        StripWhiteSpace(&kv.second);
+
+        // compatible with doris_config
+        kv.first = std::regex_replace(kv.first, doris_start, "");
+
+        if (kv.first.compare("webserver_port") == 0) {
+            kv.first = "be_http_port";
+        }
+
+        auto [_, ok] = _configs.insert(kv);
+        if (!ok) {
+            std::cerr << "Duplicate configuration item encountered: " << kv.first << '\n';
+            return false;
+        }
+    }
+    return true;
+}
+
+// Init conf fields.
+bool init(const char* filename) {
     // If 'filename' is null, use the empty props.
     if (filename == nullptr) {
         return true;
@@ -179,110 +199,48 @@ bool Properties::load(const char* filename) {
         return false;
     }
 
-    // load properties
-    std::string line;
-    std::string key;
-    std::string value;
-    std::regex doris_start("^doris_");
-    line.reserve(512);
-    while (input) {
-        // Read one line at a time.
-        std::getline(input, line);
-
-        // Remove left and right spaces.
-        trim(line);
-
-        // Ignore comments.
-        if (line.empty() || line[0] == '#') {
-            continue;
-        }
-
-        // Read key and value.
-        splitkv(line, key, value);
-        trim(key);
-        trim(value);
-
-        // compatible with doris_config
-        key = std::regex_replace(key, doris_start, "");
-
-        if (key.compare("webserver_port") == 0) {
-            // Avoid overwriting the existing config.
-            if (file_conf_map.find("be_http_port") != file_conf_map.end()) {
-                continue;
-            }
-
-            key = "be_http_port";
-        }
-
-        // Insert into 'file_conf_map'.
-        file_conf_map[key] = value;
-    }
+    bool ret = init(input);
 
     // Close the conf file.
     input.close();
 
-    return true;
+    return ret;
 }
 
-bool Properties::get(const std::string& key, const std::string& defstr, Field* field) const {
-    const auto& it = file_conf_map.find(key);
-    std::string valstr = (it != file_conf_map.end()) ? it->second : defstr;
-    trim(valstr);
-    if (!replaceenv(valstr)) {
-        return false;
-    }
-    return field->parse_value(valstr);
-}
-
-template <typename T>
-bool update(const std::string& value, T& retval) {
-    std::string valstr(value);
-    trim(valstr);
-    if (!replaceenv(valstr)) {
-        return false;
-    }
-    return strtox(valstr, retval);
-}
-
-template <typename T>
-std::ostream& operator<<(std::ostream& out, const std::vector<T>& v) {
-    size_t last = v.size() - 1;
-    for (size_t i = 0; i < v.size(); ++i) {
-        out << v[i];
-        if (i != last) {
-            out << ", ";
-        }
-    }
-    return out;
-}
-
-// Init conf fields.
-bool init(const char* filename) {
-    // Load properties file.
-    if (!props.load(filename)) {
+bool init(std::istream& input) {
+    Properties props;
+    if (!props.load(input)) {
         return false;
     }
 
     // Set conf fields.
-    for (const auto& [name, field] : Register::_s_field_map) {
-        if (!props.get(name, field->defval(), field)) {
-            std::cerr << "config field error: " << name << '\n';
+    for (const auto& [name, field] : Field::fields()) {
+        std::string value = props.get(name).value_or(field->defval());
+        StripWhiteSpace(&value);
+        auto st = replaceenv(value);
+        if (!st.ok()) {
+            std::cerr << st << '\n';
+            return false;
+        }
+        if (!field->parse_value(value)) {
+            std::cerr << name << ": Invalid config value: '" << value << '\n';
             return false;
         }
     }
-
     return true;
 }
 
 Status set_config(const std::string& field, const std::string& value) {
-    auto it = Register::_s_field_map.find(field);
-    if (it == Register::_s_field_map.end()) {
+    auto it = Field::fields().find(field);
+    if (it == Field::fields().end()) {
         return Status::NotFound(fmt::format("'{}' is not found", field));
     }
     if (!it->second->valmutable()) {
         return Status::NotSupported(fmt::format("'{}' is immutable", field));
     }
-    if (!it->second->parse_value(value)) {
+    std::string real_value = value;
+    RETURN_IF_ERROR(replaceenv(real_value));
+    if (!it->second->parse_value(real_value)) {
         return Status::InvalidArgument(fmt::format("{}: Invalid config value: '{}'", field, value));
     }
     return Status::OK();
@@ -290,7 +248,7 @@ Status set_config(const std::string& field, const std::string& value) {
 
 std::vector<ConfigInfo> list_configs() {
     std::vector<ConfigInfo> infos;
-    for (const auto& [name, field] : Register::_s_field_map) {
+    for (const auto& [name, field] : Field::fields()) {
         auto& info = infos.emplace_back();
         info.name = field->name();
         info.value = field->value();
@@ -299,6 +257,10 @@ std::vector<ConfigInfo> list_configs() {
         info.valmutable = field->valmutable();
     }
     return infos;
+}
+
+void TEST_clear_configs() {
+    Field::clear_fields();
 }
 
 } // namespace starrocks::config

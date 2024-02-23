@@ -17,7 +17,9 @@
 
 #pragma once
 #include <butil/containers/doubly_buffered_data.h>
+#include <fmt/format.h>
 
+#include <cassert>
 #include <cstdint>
 #include <map>
 #include <mutex>
@@ -25,9 +27,11 @@
 #include <vector>
 
 #ifdef __IN_CONFIGBASE_CPP__
-#include <fmt/format.h>
+#include <optional>
 
 #include "gutil/strings/join.h"
+#include "gutil/strings/split.h"
+#include "gutil/strings/strip.h"
 #endif
 
 namespace starrocks {
@@ -106,13 +110,26 @@ bool strtox(const std::string& valstr, int16_t& retval);
 bool strtox(const std::string& valstr, int32_t& retval);
 bool strtox(const std::string& valstr, int64_t& retval);
 bool strtox(const std::string& valstr, double& retval);
+bool strtox(const std::string& valstr, std::string& retval);
+bool strtox(const std::string& valstr, MutableString& retval);
 
 class Field {
 public:
-    Field(const char* type, const char* name, void* storage, const char* defval, bool valmutable)
-            : _type(type), _name(name), _storage(storage), _defval(defval), _valmutable(valmutable) {}
+    explicit Field(const char* type, const char* name, void* storage, const char* defval, bool valmutable)
+            : _type(type), _name(name), _storage(storage), _defval(defval), _valmutable(valmutable) {
+        _s_field_map.insert(std::make_pair(std::string(_name), this));
+    }
 
     virtual ~Field() = default;
+
+    // Disallow copy
+    Field(const Field&) = delete;
+    // Disallow assign
+    void operator=(const Field&) = delete;
+    // Disallow move ctor
+    Field(Field&&) = delete;
+    // Disallow move assign
+    void operator=(Field&&) = delete;
 
     const char* type() const { return _type; }
 
@@ -122,11 +139,17 @@ public:
 
     bool valmutable() const { return _valmutable; }
 
-    virtual std::string value() const;
+    virtual std::string value() const = 0;
 
-    virtual bool parse_value(const std::string& value);
+    virtual bool parse_value(const std::string& value) = 0;
+
+    static void clear_fields() { _s_field_map.clear(); }
+
+    static std::map<std::string, Field*>& fields() { return _s_field_map; }
 
 protected:
+    inline static std::map<std::string, Field*> _s_field_map{};
+
     const char* _type;
     const char* _name;
     void* _storage;
@@ -139,7 +162,7 @@ class FieldImpl;
 
 //// FieldImpl<bool/int16_t/int32_t/int64_t/double>
 template <typename T>
-class FieldImpl<T, typename std::enable_if_t<std::is_arithmetic<T>::value>> final : public Field {
+class FieldImpl<T> final : public Field {
 public:
     FieldImpl(const char* type, const char* name, void* storage, const char* defval, bool valmutable)
             : Field(type, name, storage, defval, valmutable) {}
@@ -147,22 +170,6 @@ public:
     std::string value() const override { return fmt::format("{}", *reinterpret_cast<T*>(_storage)); }
 
     bool parse_value(const std::string& valstr) override { return strtox(valstr, *reinterpret_cast<T*>(_storage)); }
-};
-
-//// FieldImpl<std::string/MutableString>
-template <typename T>
-class FieldImpl<T, typename std::enable_if_t<std::is_same_v<T, std::string> || std::is_same_v<T, MutableString>>> final
-        : public Field {
-public:
-    FieldImpl(const char* type, const char* name, void* storage, const char* defval, bool valmutable)
-            : Field(type, name, storage, defval, valmutable) {}
-
-    std::string value() const override { return *reinterpret_cast<T*>(_storage); }
-
-    bool parse_value(const std::string& valstr) override {
-        *reinterpret_cast<T*>(_storage) = valstr;
-        return true;
-    }
 };
 
 //// FieldImpl<std::vector<T>>
@@ -178,33 +185,28 @@ public:
         return JoinMapped(v, as_str, ",");
     }
 
-    bool parse_value(const std::string& valstr) override { return false; }
-};
-
-class Register {
-public:
-    inline static std::map<std::string, Field*> _s_field_map{};
-
-    explicit Register(Field* field) { _s_field_map.insert(std::make_pair(std::string(field->name()), field)); }
-};
-
-// Configuration properties load from config file.
-class Properties {
-public:
-    bool load(const char* filename);
-    bool get(const std::string& key, const std::string& defstr, Field* field) const;
-
-private:
-    std::map<std::string, std::string> file_conf_map;
+    bool parse_value(const std::string& valstr) override {
+        std::vector<T> tmp;
+        std::vector<std::string> parts = strings::Split(valstr, ",");
+        for (auto& part : parts) {
+            T v;
+            StripWhiteSpace(&part);
+            if (!strtox(part, v)) {
+                return false;
+            }
+            tmp.emplace_back(std::move(v));
+        }
+        auto& value = *reinterpret_cast<std::vector<T>*>(_storage);
+        value.swap(tmp);
+        return true;
+    }
 };
 
 #endif // __IN_CONFIGBASE_CPP__
 
-#define DEFINE_FIELD(FIELD_TYPE, FIELD_NAME, FIELD_DEFAULT, VALMUTABLE, TYPE_NAME)                          \
-    FIELD_TYPE FIELD_NAME;                                                                                  \
-    static FieldImpl<FIELD_TYPE> reg_field_##FIELD_NAME(TYPE_NAME, #FIELD_NAME, &FIELD_NAME, FIELD_DEFAULT, \
-                                                        VALMUTABLE);                                        \
-    static Register reg_##FIELD_NAME(&reg_field_##FIELD_NAME);
+#define DEFINE_FIELD(FIELD_TYPE, FIELD_NAME, FIELD_DEFAULT, VALMUTABLE, TYPE_NAME) \
+    FIELD_TYPE FIELD_NAME;                                                         \
+    static FieldImpl<FIELD_TYPE> reg_field_##FIELD_NAME(TYPE_NAME, #FIELD_NAME, &FIELD_NAME, FIELD_DEFAULT, VALMUTABLE);
 
 #define DECLARE_FIELD(FIELD_TYPE, FIELD_NAME) extern FIELD_TYPE FIELD_NAME;
 
@@ -248,11 +250,24 @@ private:
 #define CONF_mString(name, defaultstr) DECLARE_FIELD(MutableString, name)
 #endif
 
+// Initialize configurations from a config file.
 bool init(const char* filename);
+
+// Initialize configurations from a input stream.
+bool init(std::istream& input);
 
 Status set_config(const std::string& field, const std::string& value);
 
 std::vector<ConfigInfo> list_configs();
 
+void TEST_clear_configs();
+
 } // namespace config
 } // namespace starrocks
+
+template <>
+struct fmt::formatter<starrocks::config::MutableString> : formatter<std::string> {
+    auto format(const starrocks::config::MutableString& s, format_context& ctx) {
+        return formatter<std::string>::format(s.value(), ctx);
+    }
+};

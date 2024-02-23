@@ -30,8 +30,115 @@ namespace starrocks {
 using namespace config;
 
 class ConfigTest : public testing::Test {
-    void SetUp() override { config::Register::_s_field_map->clear(); }
+    void SetUp() override { config::TEST_clear_configs(); }
 };
+
+TEST_F(ConfigTest, test_init) {
+    CONF_Bool(cfg_bool, "false");
+    CONF_mBool(cfg_mbool, "true");
+    CONF_Double(cfg_double, "123.456");
+    CONF_mDouble(cfg_mdouble, "-123.456");
+    CONF_Int16(cfg_int16, "2561");
+    CONF_mInt16(cfg_mint16, "-2561");
+    CONF_Int32(cfg_int32, "65536123");
+    CONF_mInt32(cfg_mint32, "-65536123");
+    CONF_Int64(cfg_int64, "4294967296123");
+    CONF_mInt64(cfg_mint64, "-4294967296123");
+    CONF_String(cfg_string, "test_string");
+    CONF_mString(cfg_mstring, "test_mstring");
+    CONF_Bools(cfg_bools, "true,false,true");
+    CONF_Doubles(cfg_doubles, "0.1,0.2,0.3");
+    CONF_Int16s(cfg_int16s, "1,2,3");
+    CONF_Int32s(cfg_int32s, "10,20,30");
+    CONF_Int64s(cfg_int64s, "100,200,300");
+    CONF_Strings(cfg_strings, "s1,s2,s3");
+    CONF_String(cfg_string_env, "prefix/${ConfigTestEnv1}/suffix");
+    CONF_Bool(cfg_bool_env, "false");
+
+    // Invalid bool value
+    {
+        std::streamstream ss;
+        ss << R"DEL(
+           #comment
+           cfg_bool = t
+           )DEL";
+
+        EXPECT_FALSE(config::init(ss));
+    }
+
+    // Invalid numeric value
+    {
+        std::streamstream ss;
+        ss << R"DEL(
+           #comment
+           cfg_int32 = 0xAB
+           )DEL";
+
+        EXPECT_FALSE(config::init(ss));
+    }
+
+    // Invalid env
+    {
+        std::streamstream ss;
+        ss << R"DEL(
+           #comment
+           cfg_string = ${xxxx}
+           )DEL";
+
+        EXPECT_FALSE(config::init(ss));
+    }
+
+    // Valid input
+    {
+        std::streamstream ss;
+        ss << R"DEL(
+           #comment
+           cfg_bool = true
+           cfg_mbool = false
+           
+           cfg_double = 10.0
+
+           # cfg_int16 = 12
+           cfg_mint16 = 12
+
+           cfg_string = test string
+           
+           cfg_int32s = 123, 456, 789 
+      
+           cfg_strings = text1, hello world , StarRocks
+           
+           unknown_config
+           
+           unknown_config2 = 10
+
+           cfg_bool_env = ${ConfigTestEnv2}
+           )DEL";
+
+        ASSERT_EQ(0, ::setenv("ConfigTestEnv1", "env1_value", 1));
+        ASSERT_EQ(0, ::setenv("ConfigTestEnv2", " true", 1));
+
+        EXPECT_TRUE(config::init(ss));
+    }
+
+    EXPECT_EQ(true, cfg_bool);
+    EXPECT_EQ(false, cfg_mbool);
+    EXPECT_EQ(10, cfg_double);
+    EXPECT_EQ(-123.456, cfg_mdouble);
+    EXPECT_EQ(2561, cfg_int16);
+    EXPECT_EQ(12, cfg_mint16);
+    EXPECT_EQ(4294967296123, cfg_int64);
+    EXPECT_EQ(-4294967296123, cfg_int64);
+    EXPECT_EQ("test string", cfg_string);
+    EXPECT_EQ("test_mstring", cfg_mstring.value());
+    EXPECT_EQ(std::vector<bool>{true, false, true}, cfg_bools);
+    EXPECT_EQ(std::vector<double>{0.1, 0.2, 0.3}, cfg_doubles);
+    EXPECT_EQ(std::vector<int16_t>{1, 2, 3}, cfg_int16s);
+    EXPECT_EQ(std::vector<int32_t>{123, 456, 789}, cfg_int32s);
+    EXPECT_EQ(std::vecotr<int64_t>{100, 200, 300}, cfg_int64s);
+    EXPECT_EQ(std::vector<std::string>{"text1", "hello world", "StarRocks"}, cfg_strings);
+    EXPECT_EQ("prefix/env1_value/suffix", cfg_string_env);
+    EXPECT_EQ(true, cfg_bool_env);
+}
 
 TEST_F(ConfigTest, test_list_configs) {
     CONF_Bool(cfg_bool, "false");
