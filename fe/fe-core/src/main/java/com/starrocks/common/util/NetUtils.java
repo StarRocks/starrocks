@@ -35,16 +35,21 @@
 package com.starrocks.common.util;
 
 import com.google.common.base.Strings;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import org.apache.commons.validator.routines.InetAddressValidator;
 
 import java.io.IOException;
+import java.math.BigInteger;
+import java.net.Inet4Address;
+import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
 import java.net.Socket;
 import java.net.SocketException;
 import java.net.UnknownHostException;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
@@ -85,7 +90,7 @@ public class NetUtils {
 
         String ip = "";
         String fqdn = "";
-        if (InetAddressValidator.getInstance().isValidInet4Address(host)) {
+        if (InetAddressValidator.getInstance().isValid(host)) {
             // ipOrFqdn is ip
             ip = host;
         } else {
@@ -111,5 +116,109 @@ public class NetUtils {
             }
         }
         return accessible;
+    }
+
+    // assemble an accessible HostPort str, the addr maybe an ipv4/ipv6/FQDN
+    // if ip is ipv6 return: [$addr]:$port
+    // if ip is ipv4 or FQDN return: $addr:$port
+    public static String getHostPortInAccessibleFormat(String addr, int port) {
+        if (InetAddressValidator.getInstance().isValidInet6Address(addr)) {
+            return "[" + addr + "]:" + port;
+        }
+        return addr + ":" + port;
+    }
+
+    public static String[] resolveHostInfoFromHostPort(String hostPort) throws AnalysisException {
+        String[] pair;
+        if (hostPort.charAt(0) == '[') {
+            pair = hostPort.substring(1).split("]:");
+        } else {
+            int separatorIdx = hostPort.lastIndexOf(":");
+            pair = new String[2];
+            pair[0] = hostPort.substring(0, separatorIdx);
+            pair[1] = hostPort.substring(separatorIdx + 1);
+        }
+        if (pair.length != 2) {
+            throw new AnalysisException("invalid host port: " + hostPort);
+        }
+        return pair;
+    }
+
+    public static boolean isSameIP(String ip1, String ip2) {
+        try {
+            InetAddress addr1 = InetAddress.getByName(ip1);
+            InetAddress addr2 = InetAddress.getByName(ip2);
+            return addr1.equals(addr2);
+        } catch (UnknownHostException e) {
+            return false;
+        }
+    }
+
+    public static boolean isInPriorNetwork(String cidr, String ip) {
+        cidr = cidr.trim();
+        if (!cidr.contains("/")) {
+            // it is not valid CIDR, compare ip using InetAddress (because ipv6 str may different)
+            return isSameIP(cidr, ip);
+        } else {
+            if (cidr.split("/").length != 2) {
+                return false;
+            }
+            int index = cidr.indexOf("/");
+            String addrStr = cidr.substring(0, index);
+            int cidrPrefix = Integer.parseInt(cidr.substring(index + 1));
+            InetAddress baseIpAddress;
+            InetAddress address;
+            try {
+                baseIpAddress = InetAddress.getByName(addrStr);
+                address = InetAddress.getByName(ip);
+            } catch (UnknownHostException e) {
+                throw new IllegalArgumentException("Can not parse IP to InetAddress.");
+            }
+            
+            if (!isCIDRValid(baseIpAddress, address, cidrPrefix)) {
+                return false;
+            }
+
+            ByteBuffer maskBuffer;
+            if (baseIpAddress instanceof Inet4Address) {
+                maskBuffer = ByteBuffer.allocate(4).putInt(-1);
+            } else {
+                maskBuffer = ByteBuffer.allocate(16).putLong(-1L).putLong(-1L);
+            }
+
+            BigInteger mask = (new BigInteger(1, maskBuffer.array()).not().shiftRight(cidrPrefix));
+            ByteBuffer buffer = ByteBuffer.wrap(baseIpAddress.getAddress());
+            BigInteger ipVal = new BigInteger(1, buffer.array());
+            BigInteger startIp = ipVal.and(mask);
+            BigInteger endIp = startIp.add(mask.not());
+            BigInteger target = new BigInteger(1, address.getAddress());
+            int st = startIp.compareTo(target);
+            int te = target.compareTo(endIp);
+
+            return st <= 0 && te <= 0;
+        }
+    }
+
+    private static boolean isCIDRValid(InetAddress baseIpAddress, InetAddress address, int cidrPrefix) {
+        if (cidrPrefix < 0) {
+            return false;
+        }
+        if (baseIpAddress instanceof Inet4Address) {
+            if (cidrPrefix > 32) {
+                return false;
+            }
+        }
+        if (baseIpAddress instanceof Inet6Address) {
+            if (cidrPrefix > 128) {
+                return false;
+            }
+        }
+        if (address instanceof Inet4Address && baseIpAddress instanceof Inet6Address) {
+            return false;
+        }
+        if (address instanceof Inet6Address && baseIpAddress instanceof Inet4Address) {
+            return false;
+        }
+        return true;
     }
 }
