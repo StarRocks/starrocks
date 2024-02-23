@@ -34,6 +34,7 @@
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
 #include "testutil/sync_point.h"
+#include "util/bthreads/util.h"
 #include "util/countdown_latch.h"
 #include "util/defer_op.h"
 
@@ -136,7 +137,6 @@ protected:
     LakeServiceImpl _lake_service;
 };
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_publish_version_missing_tablet_ids) {
     brpc::Controller cntl;
     lake::PublishVersionRequest request;
@@ -149,7 +149,6 @@ TEST_F(LakeServiceTest, test_publish_version_missing_tablet_ids) {
     ASSERT_EQ("missing tablet_ids", cntl.ErrorText());
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_publish_version_missing_txn_ids) {
     brpc::Controller cntl;
     lake::PublishVersionRequest request;
@@ -162,7 +161,6 @@ TEST_F(LakeServiceTest, test_publish_version_missing_txn_ids) {
     ASSERT_EQ("missing txn_ids", cntl.ErrorText());
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_publish_version_missing_base_version) {
     brpc::Controller cntl;
     lake::PublishVersionRequest request;
@@ -175,7 +173,6 @@ TEST_F(LakeServiceTest, test_publish_version_missing_base_version) {
     ASSERT_EQ("missing base version", cntl.ErrorText());
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_publish_version_missing_new_version) {
     brpc::Controller cntl;
     lake::PublishVersionRequest request;
@@ -188,7 +185,6 @@ TEST_F(LakeServiceTest, test_publish_version_missing_new_version) {
     ASSERT_EQ("missing new version", cntl.ErrorText());
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_publish_version_thread_pool_full) {
     SyncPoint::GetInstance()->SetCallBack("ThreadPool::do_submit:1", [](void* arg) { *(int64_t*)arg = 0; });
     SyncPoint::GetInstance()->EnableProcessing();
@@ -210,7 +206,6 @@ TEST_F(LakeServiceTest, test_publish_version_thread_pool_full) {
     ASSERT_EQ(_tablet_id, response.failed_tablets(0));
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_publish_version_for_write) {
     std::vector<lake::TxnLog> logs;
     // Empty TxnLog
@@ -411,7 +406,284 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
     }
 }
 
+<<<<<<< HEAD
 // NOLINTNEXTLINE
+=======
+TEST_F(LakeServiceTest, test_publish_version_for_write_batch) {
+    // Empty TxnLog
+    {
+        lake::TxnLog txnlog;
+        txnlog.set_tablet_id(_tablet_id);
+        txnlog.set_txn_id(1002);
+        txnlog.mutable_op_write()->mutable_rowset()->set_num_rows(0);
+        txnlog.mutable_op_write()->mutable_rowset()->set_data_size(0);
+        txnlog.mutable_op_write()->mutable_rowset()->set_overlapped(false);
+        ASSERT_OK(_tablet_mgr->put_txn_log(txnlog));
+    }
+    // TxnLog with 2 segments
+    {
+        lake::TxnLog txnlog;
+        txnlog.set_tablet_id(_tablet_id);
+        txnlog.set_txn_id(1003);
+        txnlog.mutable_op_write()->mutable_rowset()->set_overlapped(true);
+        txnlog.mutable_op_write()->mutable_rowset()->set_num_rows(101);
+        txnlog.mutable_op_write()->mutable_rowset()->set_data_size(4096);
+        txnlog.mutable_op_write()->mutable_rowset()->add_segments("1.dat");
+        txnlog.mutable_op_write()->mutable_rowset()->add_segments("2.dat");
+        ASSERT_OK(_tablet_mgr->put_txn_log(txnlog));
+    }
+
+    // Publish txn 1002 and txn 1003
+    {
+        lake::PublishVersionRequest request;
+        lake::PublishVersionResponse response;
+        request.set_base_version(1);
+        request.set_new_version(3);
+        request.add_tablet_ids(_tablet_id);
+        request.add_txn_ids(1002);
+        request.add_txn_ids(1003);
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(0, response.failed_tablets_size());
+    }
+
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
+    ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(3));
+    ASSERT_EQ(3, metadata->version());
+    ASSERT_EQ(_tablet_id, metadata->id());
+    ASSERT_EQ(3, metadata->next_rowset_id());
+    ASSERT_EQ(1, metadata->rowsets_size());
+    ASSERT_EQ(1, metadata->rowsets(0).id());
+    ASSERT_EQ(2, metadata->rowsets(0).segments_size());
+    ASSERT_TRUE(metadata->rowsets(0).overlapped());
+    ASSERT_EQ(101, metadata->rowsets(0).num_rows());
+    ASSERT_EQ(4096, metadata->rowsets(0).data_size());
+    ASSERT_EQ("1.dat", metadata->rowsets(0).segments(0));
+    ASSERT_EQ("2.dat", metadata->rowsets(0).segments(1));
+
+    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    // TxnLog should't have been deleted
+    ASSERT_TRUE(tablet.get_txn_log(1002).status().ok());
+    ASSERT_TRUE(tablet.get_txn_log(1003).status().ok());
+
+    // Send publish version request again.
+    {
+        lake::PublishVersionRequest request;
+        lake::PublishVersionResponse response;
+        request.set_base_version(2);
+        request.set_new_version(3);
+        request.add_tablet_ids(_tablet_id);
+        request.add_txn_ids(1003);
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(0, response.failed_tablets_size());
+        ASSERT_EQ(1, response.compaction_scores_size());
+    }
+    // Send publish version request again with an non-exist tablet
+    {
+        lake::PublishVersionRequest request;
+        lake::PublishVersionResponse response;
+        request.set_base_version(2);
+        request.set_new_version(3);
+        request.add_tablet_ids(_tablet_id);
+        request.add_tablet_ids(9999);
+        request.add_txn_ids(1003);
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(1, response.failed_tablets_size());
+        ASSERT_EQ(9999, response.failed_tablets(0));
+        ASSERT_EQ(1, response.compaction_scores_size());
+        ASSERT_TRUE(response.compaction_scores().contains(_tablet_id));
+    }
+    // Send publish version request again with an non-exist txnlog
+    {
+        lake::PublishVersionRequest request;
+        lake::PublishVersionResponse response;
+        request.set_base_version(3);
+        request.set_new_version(4);
+        request.add_tablet_ids(_tablet_id);
+        request.add_txn_ids(1111);
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(1, response.failed_tablets_size());
+        ASSERT_EQ(_tablet_id, response.failed_tablets(0));
+        ASSERT_EQ(0, response.compaction_scores_size());
+    }
+    // Delete old version metadata then send publish version again
+    ASSERT_OK(tablet.delete_metadata(1));
+    {
+        lake::PublishVersionRequest request;
+        lake::PublishVersionResponse response;
+        request.set_base_version(1);
+        request.set_new_version(3);
+        request.add_tablet_ids(_tablet_id);
+        request.add_txn_ids(1002);
+        request.add_txn_ids(1003);
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(0, response.failed_tablets_size());
+        ASSERT_TRUE(response.compaction_scores().contains(_tablet_id));
+    }
+}
+
+TEST_F(LakeServiceTest, test_publish_version_transform_single_to_batch) {
+    std::vector<lake::TxnLog> logs;
+    // Empty TxnLog
+    logs.emplace_back(generate_write_txn_log(0, 0, 0));
+    ASSERT_OK(_tablet_mgr->put_txn_log(logs.back()));
+
+    // Empty TxnLog
+    logs.emplace_back(generate_write_txn_log(0, 0, 0));
+    ASSERT_OK(_tablet_mgr->put_txn_log(logs.back()));
+
+    // TxnLog with 2 segments
+    logs.emplace_back(generate_write_txn_log(2, 101, 4096));
+    ASSERT_OK(_tablet_mgr->put_txn_log(logs.back()));
+
+    // Publish version request for the first transaction
+    lake::PublishVersionRequest publish_request_1000;
+    publish_request_1000.set_base_version(1);
+    publish_request_1000.set_new_version(2);
+    publish_request_1000.add_tablet_ids(_tablet_id);
+    publish_request_1000.add_txn_ids(logs[0].txn_id());
+
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
+
+    // Publish txn single
+    {
+        lake::PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &publish_request_1000, &response, nullptr);
+        ASSERT_EQ(0, response.failed_tablets_size());
+
+        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        // TxnLog should have been deleted
+        ASSERT_TRUE(tablet.get_txn_log(logs[0].txn_id()).status().is_not_found());
+    }
+
+    // Publish version request for the two transactions
+    lake::PublishVersionRequest publish_request_1001;
+    publish_request_1001.set_base_version(1);
+    publish_request_1001.set_new_version(4);
+    publish_request_1001.add_tablet_ids(_tablet_id);
+    publish_request_1001.add_txn_ids(logs[0].txn_id());
+    publish_request_1001.add_txn_ids(logs[1].txn_id());
+    publish_request_1001.add_txn_ids(logs[2].txn_id());
+
+    // publish txn batch with previous txns which have been published
+    {
+        lake::PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &publish_request_1001, &response, nullptr);
+        ASSERT_EQ(0, response.failed_tablets_size());
+
+        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        // TxnLog of logs[0] should have been deleted
+        ASSERT_TRUE(tablet.get_txn_log(logs[0].txn_id()).status().is_not_found());
+        // the other txn_logs should't have been deleted
+        ASSERT_TRUE(tablet.get_txn_log(logs[1].txn_id()).status().ok());
+        ASSERT_TRUE(tablet.get_txn_log(logs[2].txn_id()).status().ok());
+
+        ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(4));
+        ASSERT_EQ(4, metadata->version());
+        ASSERT_EQ(_tablet_id, metadata->id());
+        ASSERT_EQ(3, metadata->next_rowset_id());
+        ASSERT_EQ(1, metadata->rowsets_size());
+        ASSERT_EQ(1, metadata->rowsets(0).id());
+        ASSERT_EQ(2, metadata->rowsets(0).segments_size());
+        ASSERT_TRUE(metadata->rowsets(0).overlapped());
+        ASSERT_EQ(101, metadata->rowsets(0).num_rows());
+        ASSERT_EQ(4096, metadata->rowsets(0).data_size());
+
+        // middle tablet meta should't exist
+        ASSERT_FALSE(tablet.get_metadata(3).status().ok());
+    }
+}
+
+TEST_F(LakeServiceTest, test_publish_version_transform_batch_to_single) {
+    std::vector<lake::TxnLog> logs;
+    // Empty TxnLog
+    logs.emplace_back(generate_write_txn_log(0, 0, 0));
+    ASSERT_OK(_tablet_mgr->put_txn_log(logs.back()));
+
+    // TxnLog with 2 segments
+    logs.emplace_back(generate_write_txn_log(2, 101, 4096));
+    ASSERT_OK(_tablet_mgr->put_txn_log(logs.back()));
+
+    // Publish version request
+    lake::PublishVersionRequest publish_request_1000;
+    publish_request_1000.set_base_version(1);
+    publish_request_1000.set_new_version(3);
+    publish_request_1000.add_tablet_ids(_tablet_id);
+    publish_request_1000.add_txn_ids(logs[0].txn_id());
+    publish_request_1000.add_txn_ids(logs[1].txn_id());
+
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
+
+    // Publish txn batch
+    {
+        lake::PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &publish_request_1000, &response, nullptr);
+        ASSERT_EQ(0, response.failed_tablets_size());
+
+        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        // TxnLog should't have been deleted
+        ASSERT_TRUE(tablet.get_txn_log(logs[0].txn_id()).status().ok());
+        ASSERT_TRUE(tablet.get_txn_log(logs[1].txn_id()).status().ok());
+
+        ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(3));
+        ASSERT_EQ(3, metadata->version());
+        ASSERT_EQ(_tablet_id, metadata->id());
+        ASSERT_EQ(101, metadata->rowsets(0).num_rows());
+        ASSERT_EQ(4096, metadata->rowsets(0).data_size());
+    }
+
+    // Publish single
+    lake::PublishVersionRequest publish_request_1001;
+    publish_request_1001.set_base_version(1);
+    publish_request_1001.set_new_version(2);
+    publish_request_1001.add_tablet_ids(_tablet_id);
+    publish_request_1001.add_txn_ids(logs[0].txn_id());
+
+    // publish first txn
+    {
+        lake::PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &publish_request_1001, &response, nullptr);
+        ASSERT_EQ(0, response.failed_tablets_size());
+
+        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        // TxnLog of logs[0] should have been deleted
+        ASSERT_TRUE(tablet.get_txn_log(logs[0].txn_id()).status().is_not_found());
+        // TxnLog of logs[1] should't have been deleted
+        ASSERT_TRUE(tablet.get_txn_log(logs[1].txn_id()).status().ok());
+
+        ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(2));
+        ASSERT_EQ(2, metadata->version());
+        ASSERT_EQ(_tablet_id, metadata->id());
+        ASSERT_EQ(0, metadata->rowsets_size());
+    }
+
+    // Publish single
+    lake::PublishVersionRequest publish_request_1002;
+    publish_request_1002.set_base_version(2);
+    publish_request_1002.set_new_version(3);
+    publish_request_1002.add_tablet_ids(_tablet_id);
+    publish_request_1002.add_txn_ids(logs[1].txn_id());
+
+    // publish second txn
+    {
+        _tablet_mgr->metacache()->prune();
+
+        lake::PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &publish_request_1002, &response, nullptr);
+        ASSERT_EQ(0, response.failed_tablets_size());
+
+        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        // TxnLog of logs[1] should have been deleted
+        ASSERT_TRUE(tablet.get_txn_log(logs[1].txn_id()).status().is_not_found());
+
+        ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(3));
+        ASSERT_EQ(3, metadata->version());
+        ASSERT_EQ(_tablet_id, metadata->id());
+        ASSERT_EQ(101, metadata->rowsets(0).num_rows());
+        ASSERT_EQ(4096, metadata->rowsets(0).data_size());
+    }
+}
+
+>>>>>>> 6942b39798 ([Enhancement] Reject duplicated LakeService::drop_table request (#40618))
 TEST_F(LakeServiceTest, test_abort) {
     std::vector<lake::TxnLog> logs;
 
@@ -533,7 +805,6 @@ TEST_F(LakeServiceTest, test_abort) {
     }
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_delete_tablet) {
     brpc::Controller cntl;
     lake::DeleteTabletRequest request;
@@ -545,7 +816,53 @@ TEST_F(LakeServiceTest, test_delete_tablet) {
     EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
 }
 
+<<<<<<< HEAD
 // NOLINTNEXTLINE
+=======
+TEST_F(LakeServiceTest, test_delete_txn_log) {
+    // missing tablet_ids
+    {
+        brpc::Controller cntl;
+        lake::DeleteTxnLogRequest request;
+        lake::DeleteTxnLogResponse response;
+        _lake_service.delete_txn_log(&cntl, &request, &response, nullptr);
+        ASSERT_TRUE(cntl.Failed());
+        ASSERT_EQ("missing tablet_ids", cntl.ErrorText());
+    }
+
+    // missing txn_ids
+    {
+        brpc::Controller cntl;
+        lake::DeleteTxnLogRequest request;
+        lake::DeleteTxnLogResponse response;
+        request.add_tablet_ids(_tablet_id);
+        _lake_service.delete_txn_log(&cntl, &request, &response, nullptr);
+        ASSERT_TRUE(cntl.Failed());
+        ASSERT_EQ("missing txn_ids", cntl.ErrorText());
+    }
+
+    // test normal
+    {
+        std::vector<lake::TxnLog> logs;
+
+        // TxnLog with 2 segments
+        logs.emplace_back(generate_write_txn_log(2, 101, 4096));
+        ASSERT_OK(_tablet_mgr->put_txn_log(logs.back()));
+
+        brpc::Controller cntl;
+        lake::DeleteTxnLogRequest request;
+        lake::DeleteTxnLogResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.add_txn_ids(logs.back().txn_id());
+        _lake_service.delete_txn_log(&cntl, &request, &response, nullptr);
+
+        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_id));
+        ASSERT_TRUE(tablet.get_txn_log(logs[0].txn_id()).status().is_not_found());
+    }
+}
+
+>>>>>>> 6942b39798 ([Enhancement] Reject duplicated LakeService::drop_table request (#40618))
 TEST_F(LakeServiceTest, test_delete_tablet_dir_not_exit) {
     ASSERT_OK(fs::remove_all(kRootLocation));
     brpc::Controller cntl;
@@ -560,7 +877,6 @@ TEST_F(LakeServiceTest, test_delete_tablet_dir_not_exit) {
     ASSERT_OK(fs::create_directories(kRootLocation));
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_compact) {
     auto compact = [this](::google::protobuf::RpcController* cntl, const lake::CompactRequest* request,
                           lake::CompactResponse* response) {
@@ -648,7 +964,6 @@ TEST_F(LakeServiceTest, test_compact) {
     }
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_drop_table) {
     ASSERT_OK(FileSystem::Default()->path_exists(kRootLocation));
     lake::DropTableRequest request;
@@ -675,7 +990,6 @@ TEST_F(LakeServiceTest, test_drop_table) {
     ASSERT_EQ(0, response.status().status_code());
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_publish_log_version) {
     auto txn_id = next_id();
     {
@@ -772,7 +1086,130 @@ TEST_F(LakeServiceTest, test_publish_log_version) {
     }
 }
 
+<<<<<<< HEAD
 // NOLINTNEXTLINE
+=======
+TEST_F(LakeServiceTest, test_publish_log_version_batch) {
+    {
+        lake::TxnLog txnlog;
+        txnlog.set_tablet_id(_tablet_id);
+        txnlog.set_txn_id(1001);
+        txnlog.mutable_op_write()->mutable_rowset()->set_overlapped(true);
+        txnlog.mutable_op_write()->mutable_rowset()->set_num_rows(101);
+        txnlog.mutable_op_write()->mutable_rowset()->set_data_size(4096);
+        txnlog.mutable_op_write()->mutable_rowset()->add_segments("1.dat");
+        txnlog.mutable_op_write()->mutable_rowset()->add_segments("2.dat");
+        ASSERT_OK(_tablet_mgr->put_txn_log(txnlog));
+
+        lake::TxnLog txnlog2;
+        txnlog2.set_tablet_id(_tablet_id);
+        txnlog2.set_txn_id(1002);
+        txnlog2.mutable_op_write()->mutable_rowset()->set_overlapped(true);
+        txnlog2.mutable_op_write()->mutable_rowset()->set_num_rows(101);
+        txnlog2.mutable_op_write()->mutable_rowset()->set_data_size(4096);
+        txnlog2.mutable_op_write()->mutable_rowset()->add_segments("3.dat");
+        txnlog2.mutable_op_write()->mutable_rowset()->add_segments("4.dat");
+        ASSERT_OK(_tablet_mgr->put_txn_log(txnlog2));
+    }
+    {
+        lake::PublishLogVersionBatchRequest request;
+        lake::PublishLogVersionResponse response;
+        brpc::Controller cntl;
+        _lake_service.publish_log_version_batch(&cntl, &request, &response, nullptr);
+        ASSERT_TRUE(cntl.Failed());
+        ASSERT_EQ("missing tablet_ids", cntl.ErrorText());
+    }
+    {
+        lake::PublishLogVersionBatchRequest request;
+        lake::PublishLogVersionResponse response;
+        request.add_tablet_ids(_tablet_id);
+        brpc::Controller cntl;
+        _lake_service.publish_log_version_batch(&cntl, &request, &response, nullptr);
+        ASSERT_TRUE(cntl.Failed());
+        ASSERT_EQ("missing txn_ids", cntl.ErrorText());
+    }
+    {
+        lake::PublishLogVersionBatchRequest request;
+        lake::PublishLogVersionResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.add_txn_ids(1001);
+        brpc::Controller cntl;
+        _lake_service.publish_log_version_batch(&cntl, &request, &response, nullptr);
+        ASSERT_TRUE(cntl.Failed());
+        ASSERT_EQ("missing versions", cntl.ErrorText());
+    }
+    {
+        lake::PublishLogVersionBatchRequest request;
+        lake::PublishLogVersionResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.add_txn_ids(1001);
+        request.add_txn_ids(1002);
+        request.add_versions(10);
+        request.add_versions(11);
+        brpc::Controller cntl;
+        _lake_service.publish_log_version_batch(&cntl, &request, &response, nullptr);
+        ASSERT_FALSE(cntl.Failed());
+        ASSERT_EQ(0, response.failed_tablets_size());
+        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+
+        _tablet_mgr->prune_metacache();
+        ASSERT_TRUE(_tablet_mgr->get_txn_log(_tablet_id, 1001).status().is_not_found())
+                << _tablet_mgr->get_txn_log(_tablet_id, 1001).status();
+        ASSERT_TRUE(_tablet_mgr->get_txn_log(_tablet_id, 1002).status().is_not_found())
+                << _tablet_mgr->get_txn_log(_tablet_id, 1002).status();
+
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_vlog(_tablet_id, 10));
+        ASSERT_EQ(_tablet_id, txn_log->tablet_id());
+        ASSERT_EQ(1001, txn_log->txn_id());
+
+        ASSIGN_OR_ABORT(auto txn_log2, _tablet_mgr->get_txn_vlog(_tablet_id, 11));
+        ASSERT_EQ(_tablet_id, txn_log2->tablet_id());
+        ASSERT_EQ(1002, txn_log2->txn_id());
+    }
+    // duplicate request
+    {
+        lake::PublishLogVersionBatchRequest request;
+        lake::PublishLogVersionResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.add_txn_ids(1001);
+        request.add_txn_ids(1002);
+        request.add_versions(10);
+        request.add_versions(11);
+        brpc::Controller cntl;
+        _lake_service.publish_log_version_batch(&cntl, &request, &response, nullptr);
+        ASSERT_FALSE(cntl.Failed());
+        ASSERT_EQ(0, response.failed_tablets_size());
+        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+
+        _tablet_mgr->prune_metacache();
+        ASSERT_TRUE(_tablet_mgr->get_txn_log(_tablet_id, 1001).status().is_not_found())
+                << _tablet_mgr->get_txn_log(_tablet_id, 1001).status();
+
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_vlog(_tablet_id, 10));
+        ASSERT_EQ(_tablet_id, txn_log->tablet_id());
+        ASSERT_EQ(1001, txn_log->txn_id());
+
+        ASSERT_TRUE(_tablet_mgr->get_txn_log(_tablet_id, 1002).status().is_not_found())
+                << _tablet_mgr->get_txn_log(_tablet_id, 1002).status();
+
+        ASSIGN_OR_ABORT(auto txn_log2, _tablet_mgr->get_txn_vlog(_tablet_id, 11));
+        ASSERT_EQ(_tablet_id, txn_log2->tablet_id());
+        ASSERT_EQ(1002, txn_log2->txn_id());
+    }
+
+    // not existing txnId
+    {
+        lake::PublishLogVersionBatchRequest request;
+        lake::PublishLogVersionResponse response;
+        request.add_tablet_ids(_tablet_id);
+        request.add_txn_ids(1111);
+        brpc::Controller cntl;
+        _lake_service.publish_log_version_batch(&cntl, &request, &response, nullptr);
+        ASSERT_TRUE(cntl.Failed());
+    }
+}
+
+>>>>>>> 6942b39798 ([Enhancement] Reject duplicated LakeService::drop_table request (#40618))
 TEST_F(LakeServiceTest, test_publish_version_for_schema_change) {
     // write 1 rowset when schema change
     {
@@ -1023,7 +1460,6 @@ TEST_F(LakeServiceTest, test_abort_compaction) {
 }
 
 // https://github.com/StarRocks/starrocks/issues/28244
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_publish_version_issue28244) {
     {
         lake::TxnLog txnlog;
@@ -1097,7 +1533,6 @@ TEST_F(LakeServiceTest, test_get_tablet_stats) {
     ASSERT_EQ(0, response.tablet_stats_size());
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_drop_table_no_thread_pool) {
     ASSERT_OK(FileSystem::Default()->path_exists(kRootLocation));
 
@@ -1118,7 +1553,39 @@ TEST_F(LakeServiceTest, test_drop_table_no_thread_pool) {
     ASSERT_EQ("no thread pool to run task", cntl.ErrorText());
 }
 
-// NOLINTNEXTLINE
+TEST_F(LakeServiceTest, test_drop_table_duplicate_request) {
+    ASSERT_OK(FileSystem::Default()->path_exists(kRootLocation));
+    SyncPoint::GetInstance()->LoadDependency(
+            {{"LakeService::drop_table:duplicate_path_id", "LakeService::drop_table:task_run"}});
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() { SyncPoint::GetInstance()->DisableProcessing(); });
+
+    auto path = "/path/for/test/drop/table";
+
+    bthread_t tids[2];
+    Status result_status[2];
+    for (int i = 0; i < 2; i++) {
+        ASSIGN_OR_ABORT(tids[i], bthreads::start_bthread([&, id = i]() {
+                            lake::DropTableRequest request;
+                            lake::DropTableResponse response;
+                            request.set_tablet_id(100);
+                            request.set_path(path);
+                            brpc::Controller cntl;
+                            _lake_service.drop_table(&cntl, &request, &response, nullptr);
+                            result_status[id] = Status(response.status());
+                        }));
+    }
+    bthread_join(tids[0], nullptr);
+    bthread_join(tids[1], nullptr);
+    if (result_status[0].ok()) {
+        ASSERT_TRUE(result_status[1].is_already_exist()) << result_status[1];
+    } else if (result_status[1].ok()) {
+        ASSERT_TRUE(result_status[0].is_already_exist()) << result_status[0];
+    } else {
+        FAIL() << "All tasks failed. " << result_status[0] << " : " << result_status[1];
+    }
+}
+
 TEST_F(LakeServiceTest, test_delete_tablet_no_thread_pool) {
     SyncPoint::GetInstance()->SetCallBack("AgentServer::Impl::get_thread_pool:1",
                                           [](void* arg) { *(ThreadPool**)arg = nullptr; });
@@ -1137,7 +1604,6 @@ TEST_F(LakeServiceTest, test_delete_tablet_no_thread_pool) {
     ASSERT_EQ("no thread pool to run task", cntl.ErrorText());
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_vacuum_null_thread_pool) {
     SyncPoint::GetInstance()->SetCallBack("AgentServer::Impl::get_thread_pool:1",
                                           [](void* arg) { *(ThreadPool**)arg = nullptr; });
@@ -1156,7 +1622,6 @@ TEST_F(LakeServiceTest, test_vacuum_null_thread_pool) {
     ASSERT_EQ("vacuum thread pool is null", cntl.ErrorText());
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_vacuum_thread_pool_full) {
     SyncPoint::GetInstance()->SetCallBack("ThreadPool::do_submit:1", [](void* arg) { *(int64_t*)arg = 0; });
     SyncPoint::GetInstance()->EnableProcessing();
@@ -1175,7 +1640,6 @@ TEST_F(LakeServiceTest, test_vacuum_thread_pool_full) {
     EXPECT_EQ(TStatusCode::SERVICE_UNAVAILABLE, response.status().status_code()) << response.status().status_code();
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_vacuum_full_null_thread_pool) {
     SyncPoint::GetInstance()->SetCallBack("AgentServer::Impl::get_thread_pool:1",
                                           [](void* arg) { *(ThreadPool**)arg = nullptr; });
@@ -1193,7 +1657,6 @@ TEST_F(LakeServiceTest, test_vacuum_full_null_thread_pool) {
     ASSERT_EQ("full vacuum thread pool is null", cntl.ErrorText());
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_vacuum_full_thread_pool_full) {
     SyncPoint::GetInstance()->SetCallBack("ThreadPool::do_submit:1", [](void* arg) { *(int64_t*)arg = 0; });
     SyncPoint::GetInstance()->EnableProcessing();
@@ -1211,7 +1674,6 @@ TEST_F(LakeServiceTest, test_vacuum_full_thread_pool_full) {
     EXPECT_EQ(TStatusCode::SERVICE_UNAVAILABLE, response.status().status_code()) << response.status().status_code();
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_duplicated_vacuum_request) {
     SyncPoint::GetInstance()->LoadDependency({{"LakeServiceImpl::vacuum:1", "LakeServiceImpl::vacuum:2"}});
     SyncPoint::GetInstance()->EnableProcessing();
@@ -1373,7 +1835,6 @@ TEST_F(LakeServiceTest, test_abort_txn2) {
     t1.join();
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_abort3) {
     auto txn_id = next_id();
     lake::TxnLog log;
@@ -1394,7 +1855,6 @@ TEST_F(LakeServiceTest, test_abort3) {
     EXPECT_TRUE(fs::path_exist(_tablet_mgr->txn_log_location(_tablet_id, log.txn_id())));
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_drop_table_thread_pool_full) {
     SyncPoint::GetInstance()->SetCallBack("ThreadPool::do_submit:1", [](void* arg) { *(int64_t*)arg = 0; });
     SyncPoint::GetInstance()->EnableProcessing();
@@ -1413,7 +1873,6 @@ TEST_F(LakeServiceTest, test_drop_table_thread_pool_full) {
     ASSERT_EQ(TStatusCode::SERVICE_UNAVAILABLE, response.status().status_code());
 }
 
-// NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_drop_table_no_permission) {
     SyncPoint::GetInstance()->SetCallBack("PosixFileSystem::delete_dir",
                                           [](void* arg) { *(Status*)arg = Status::IOError("Permission denied"); });
