@@ -27,6 +27,7 @@ jobs:
     name: INFO
     env:
       REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ github.token }}
     outputs:
       BRANCH: ${{ steps.branch.outputs.branch }}
       BASE_VERSION: ${{ steps.branch.outputs.BASE_SHA }}
