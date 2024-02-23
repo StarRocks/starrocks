@@ -2,6 +2,7 @@
 displayed_sidebar: "Chinese"
 sidebar_position: 2
 description: "存算分离"
+keywords: ['cunsuan']
 ---
 
 # 存算分离
@@ -115,7 +116,7 @@ minio          25 seconds ago   Up 24 seconds             0.0.0.0:9000-9001->900
 
 ### 打开 MinIO Web UI
 
-从浏览器进入 `http://localhost:9001/access-keys`。登录用的用户名和密码已经在 Docker Compose 文件中指定，分别为 `minioadmin` 和 `minioadmin`。成功登录后，点击 **Create access key +** 创建密钥。
+从浏览器进入 `http://localhost:9001/access-keys`。登录用的用户名和密码已经在 Docker Compose 文件中指定，分别为 `miniouser` 和 `miniopassword`。成功登录后，点击 **Create access key +** 创建密钥。
 
 MinIO 将生成一对密钥，点击 **Create** 生成并下载密钥。
 

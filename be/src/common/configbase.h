@@ -16,6 +16,8 @@
 // under the License.
 
 #pragma once
+#include <butil/containers/doubly_buffered_data.h>
+
 #include <cstdint>
 #include <map>
 #include <mutex>
@@ -33,7 +35,63 @@ struct ConfigInfo {
     std::string type;
     std::string defval;
     bool valmutable;
+
+    bool operator<(const ConfigInfo& rhs) const { return name < rhs.name; }
+
+    bool operator==(const ConfigInfo& rhs) const = default;
 };
+
+inline std::ostream& operator<<(std::ostream& os, const ConfigInfo& info) {
+    os << "ConfigInfo{"
+       << "name=\"" << info.name << "\","
+       << "value=\"" << info.value << "\","
+       << "type=" << info.type << ","
+       << "default=\"" << info.defval << "\","
+       << "mutable=" << info.valmutable << "}";
+    return os;
+}
+
+// A wrapper on std::string, it's safe to read/write MutableString concurrently.
+class MutableString {
+public:
+    MutableString() = default;
+    ~MutableString() = default;
+
+    // Disallow copy and move, because no usage now.
+    MutableString(const MutableString&) = delete;
+    void operator=(const MutableString&) = delete;
+    MutableString(MutableString&&) = delete;
+    void operator=(MutableString&&) = delete;
+
+    std::string value() const;
+
+    operator std::string() const { return value(); }
+
+    MutableString& operator=(std::string s);
+
+private:
+    static bool update_value(std::string& bg, std::string new_value) {
+        bg = std::move(new_value);
+        return true;
+    }
+
+    mutable butil::DoublyBufferedData<std::string> _str;
+};
+
+inline std::string MutableString::value() const {
+    butil::DoublyBufferedData<std::string>::ScopedPtr ptr;
+    _str.Read(&ptr);
+    return *ptr;
+}
+
+inline MutableString& MutableString::operator=(std::string s) {
+    _str.Modify(update_value, std::move(s));
+    return *this;
+}
+
+inline std::ostream& operator<<(std::ostream& os, const MutableString& s) {
+    return os << s.value();
+}
 
 class Register {
 public:
@@ -87,7 +145,7 @@ public:
 #define CONF_mInt32(name, defaultstr) DEFINE_FIELD(int32_t, name, defaultstr, true)
 #define CONF_mInt64(name, defaultstr) DEFINE_FIELD(int64_t, name, defaultstr, true)
 #define CONF_mDouble(name, defaultstr) DEFINE_FIELD(double, name, defaultstr, true)
-#define CONF_mString(name, defaultstr) DEFINE_FIELD(std::string, name, defaultstr, true)
+#define CONF_mString(name, defaultstr) DEFINE_FIELD(MutableString, name, defaultstr, true)
 #else
 #define CONF_Bool(name, defaultstr) DECLARE_FIELD(bool, name)
 #define CONF_Int16(name, defaultstr) DECLARE_FIELD(int16_t, name)
@@ -106,7 +164,7 @@ public:
 #define CONF_mInt32(name, defaultstr) DECLARE_FIELD(int32_t, name)
 #define CONF_mInt64(name, defaultstr) DECLARE_FIELD(int64_t, name)
 #define CONF_mDouble(name, defaultstr) DECLARE_FIELD(double, name)
-#define CONF_mString(name, defaultstr) DECLARE_FIELD(std::string, name)
+#define CONF_mString(name, defaultstr) DECLARE_FIELD(MutableString, name)
 #endif
 
 // Configuration properties load from config file.
@@ -122,14 +180,9 @@ private:
 
 extern Properties props;
 
-// Full configurations.
-extern std::map<std::string, std::string>* full_conf_map;
-
-bool init(const char* filename, bool fillconfmap = false);
+bool init(const char* filename);
 
 Status set_config(const std::string& field, const std::string& value);
-
-std::mutex* get_mstring_conf_lock();
 
 std::vector<ConfigInfo> list_configs();
 

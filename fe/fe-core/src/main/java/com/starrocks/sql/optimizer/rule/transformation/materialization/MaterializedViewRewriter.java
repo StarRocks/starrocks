@@ -610,10 +610,16 @@ public class MaterializedViewRewriter {
         return ConstantOperator.TRUE;
     }
 
+    /**
+     * Only compensate mv's partition predicate when mv's freshness cannot satisfy query's need.
+     * When mv's freshness is ok, return constant true because
+     * {@link com.starrocks.sql.optimizer.MaterializedViewOptimizer#optimize} disabled partition pruning and no need
+     * compensate pruned predicates.
+     * @return
+     */
     private ScalarOperator getMVCompensatePartitionPredicate() {
         return  materializationContext.isCompensatePartitionPredicate() ?
-                materializationContext.getMvPartialPartitionPredicate() :
-                materializationContext.getMVPrunedPartitionPredicate();
+                materializationContext.getMvPartialPartitionPredicate() : ConstantOperator.TRUE;
     }
 
     private OptExpression rewriteViewDelta(List<Table> queryTables,
@@ -1914,7 +1920,7 @@ public class MaterializedViewRewriter {
         // To ensure join's property is deduced which is needed in `predicate-push-down`, derive its logical property.
         deriveLogicalProperty(joinOptExpression);
         Preconditions.checkState(joinOptExpression.getOp() instanceof LogicalJoinOperator);
-        optimizerContext.reset();
+        optimizerContext.clearNotNullPredicates();
         JoinPredicatePushdown joinPredicatePushdown = new JoinPredicatePushdown(joinOptExpression,
                 false, true, materializationContext.getQueryRefFactory(),
                 true, optimizerContext);

@@ -44,8 +44,6 @@
 #include "exprs/expr_context.h"
 #include "exprs/function_context.h"
 #include "gen_cpp/Opcodes_types.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Module.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
 
@@ -158,14 +156,16 @@ public:
     /// Create expression tree from the list of nodes contained in texpr within 'pool'.
     /// Returns the root of expression tree in 'expr' and the corresponding ExprContext in
     /// 'ctx'.
-    [[nodiscard]] static Status create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext** ctx,
-                                                 RuntimeState* state);
+    static Status create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext** ctx, RuntimeState* state,
+                                   bool can_jit = false);
 
     /// Creates vector of ExprContexts containing exprs from the given vector of
     /// TExprs within 'pool'.  Returns an error if any of the individual conversions caused
     /// an error, otherwise OK.
-    [[nodiscard]] static Status create_expr_trees(ObjectPool* pool, const std::vector<TExpr>& texprs,
-                                                  std::vector<ExprContext*>* ctxs, RuntimeState* state);
+    static Status create_expr_trees(ObjectPool* pool, const std::vector<TExpr>& texprs, std::vector<ExprContext*>* ctxs,
+                                    RuntimeState* state, bool can_jit = false);
+
+    static Status rewrite_jit_exprs(std::vector<ExprContext*>& expr_ctxs, ObjectPool* pool, RuntimeState* state);
 
     /// Creates an expr tree for the node rooted at 'node_idx' via depth-first traversal.
     /// parameters
@@ -179,9 +179,8 @@ public:
     /// return
     ///   [[nodiscard]] Status.ok() if successful
     ///   ![[nodiscard]] Status.ok() if tree is inconsistent or corrupt
-    [[nodiscard]] static Status create_tree_from_thrift(ObjectPool* pool, const std::vector<TExprNode>& nodes,
-                                                        Expr* parent, int* node_idx, Expr** root_expr,
-                                                        ExprContext** ctx, RuntimeState* state);
+    static Status create_tree_from_thrift(ObjectPool* pool, const std::vector<TExprNode>& nodes, Expr* parent,
+                                          int* node_idx, Expr** root_expr, ExprContext** ctx, RuntimeState* state);
 
     static Status create_tree_from_thrift_with_jit(ObjectPool* pool, const std::vector<TExprNode>& nodes, Expr* parent,
                                                    int* node_idx, Expr** root_expr, ExprContext** ctx,
@@ -226,15 +225,16 @@ public:
     // Get the first column ref in expr.
     ColumnRef* get_column_ref();
 
-    /**
-     * @brief For JIT compile, generate specific evaluation IR code for this expr.
-     * Its internal logic is similar to the 'evaluate_checked' function.
-     */
+    StatusOr<LLVMDatum> generate_ir(ExprContext* context, JITContext* jit_ctx);
 
     virtual StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx);
 
     // Return true if this expression supports JIT compilation.
     virtual bool is_compilable() const { return false; }
+
+    std::string jit_func_name() const;
+
+    virtual std::string jit_func_name_impl() const;
 
     // This function will collect all uncompiled expressions in this expression tree.
     // The uncompiled expressions are those expressions which are not supported by JIT, it will become the input of JIT function.
@@ -244,7 +244,7 @@ public:
     // This method searches from top to bottom for compilable expressions.
     // Once a compilable expression is found, it skips over its compilable subexpressions and continues the search downwards.
     // TODO(Yueyang): The algorithm is imperfect and may further be optimized in the future.
-    Status replace_compilable_exprs(Expr** expr, ObjectPool* pool);
+    Status replace_compilable_exprs(Expr** expr, ObjectPool* pool, bool& replaced);
 
     // Establishes whether the current expression should undergo compilation.
     bool should_compile() const;

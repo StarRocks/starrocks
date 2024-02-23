@@ -42,6 +42,7 @@ set(EXEC_FILES
         ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/query_context_manger_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
+        ./exec/pipeline/sink/export_sink_operator_test.cpp
         ./exec/pipeline/sink/table_function_table_sink_operator_test.cpp
         ./exec/query_cache/query_cache_test.cpp
         ./exec/query_cache/transform_operator.cpp
@@ -104,6 +105,7 @@ set(EXEC_FILES
         ./exprs/function_helper_test.cpp
         ./exprs/in_predicate_test.cpp
         ./exprs/is_null_predicate_test.cpp
+        ./exprs/jit_func_cache_test.cpp
         ./exprs/json_functions_test.cpp
         ./exprs/lambda_array_expr_test.cpp
         ./exprs/lambda_map_expr_test.cpp
@@ -156,6 +158,7 @@ set(EXEC_FILES
         ./formats/orc/orc_column_reader_test.cpp
         ./formats/orc/orc_chunk_writer_test.cpp
         ./formats/orc/orc_lazy_load_test.cpp
+        ./formats/orc/utils_test.cpp
         ./formats/parquet/arrow_parquet_writer_test.cpp
         ./formats/parquet/parquet_schema_test.cpp
         ./formats/parquet/encoding_test.cpp
@@ -181,6 +184,7 @@ set(EXEC_FILES
         ./http/transaction_stream_load_test.cpp
         ./io/array_input_stream_test.cpp
         ./io/compressed_input_stream_test.cpp
+        ./io/io_profiler_test.cpp
         ./io/fd_output_stream_test.cpp
         ./io/s3_output_stream_test.cpp
         ./io/s3_input_stream_test.cpp

@@ -45,6 +45,7 @@ import java.util.List;
 import java.util.Map;
 
 import static com.starrocks.connector.hive.RemoteFileInputFormat.ORC;
+import static org.apache.hadoop.hive.common.StatsSetupConst.NUM_FILES;
 import static org.apache.hadoop.hive.common.StatsSetupConst.ROW_COUNT;
 import static org.apache.hadoop.hive.common.StatsSetupConst.TOTAL_SIZE;
 
@@ -189,6 +190,31 @@ public class HiveMetastoreTest {
     }
 
     @Test
+    public void testGetTableStatisticsFromSparkParams() {
+        HiveMetaClient client = new MockedHiveMetaClient();
+        HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
+        HivePartitionStats statistics = metastore.getTableStatistics("db1", "spark_table");
+        HiveCommonStats commonStats = statistics.getCommonStats();
+        Assert.assertEquals(3, commonStats.getRowNums());
+        Assert.assertEquals(5167, commonStats.getTotalFileBytes());
+        HiveColumnStats intColStats = statistics.getColumnStats().get("col_int");
+        Assert.assertEquals(0, intColStats.getTotalSizeBytes());
+        Assert.assertEquals(0, intColStats.getNumNulls());
+        Assert.assertEquals(3, intColStats.getNdv());
+        HiveColumnStats doubleColStats = statistics.getColumnStats().get("col_double");
+        Assert.assertEquals(3, doubleColStats.getNdv());
+        Assert.assertEquals(358.4, doubleColStats.getMin(), 0);
+        Assert.assertEquals(958.4, doubleColStats.getMax(), 0);
+        HiveColumnStats stringColStats = statistics.getColumnStats().get("col_string");
+        Assert.assertEquals(18, stringColStats.getTotalSizeBytes());
+        Assert.assertEquals(3, doubleColStats.getNdv());
+        HiveColumnStats booleanColStats = statistics.getColumnStats().get("col_boolean");
+        Assert.assertEquals(0, booleanColStats.getNumNulls());
+        HiveColumnStats dateColStats = statistics.getColumnStats().get("col_date");
+        Assert.assertEquals(1, dateColStats.getNdv());
+    }
+
+    @Test
     public void testGetPartitionStatistics() {
         HiveMetaClient client = new MockedHiveMetaClient();
         HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
@@ -285,7 +311,18 @@ public class HiveMetastoreTest {
                 }
             }
             List<FieldSchema> partKeys = Lists.newArrayList(new FieldSchema("col1", "INT", ""));
-            List<FieldSchema> unPartKeys = Lists.newArrayList(new FieldSchema("col2", "INT", ""));
+            List<FieldSchema> unPartKeys;
+            if (tblName.equals("spark_table")) {
+                unPartKeys = Lists.newArrayList(
+                        new FieldSchema("col_int", "INT", ""),
+                        new FieldSchema("col_double", "DOUBLE", ""),
+                        new FieldSchema("col_string", "STRING", ""),
+                        new FieldSchema("col_boolean", "BOOLEAN", ""),
+                        new FieldSchema("col_decimal", "DECIMAL", ""),
+                        new FieldSchema("col_date", "DATE", ""));
+            } else {
+                unPartKeys = Lists.newArrayList(new FieldSchema("col2", "INT", ""));
+            }
             String hdfsPath = "hdfs://127.0.0.1:10000/hive";
             StorageDescriptor sd = new StorageDescriptor();
             sd.setCols(unPartKeys);
@@ -300,7 +337,11 @@ public class HiveMetastoreTest {
 
             msTable1.setSd(sd);
             msTable1.setTableType("MANAGED_TABLE");
-            msTable1.setParameters(ImmutableMap.of(ROW_COUNT, "50", TOTAL_SIZE, "100"));
+            if (tblName.equals("spark_table")) {
+                msTable1.setParameters(buildSparkTableStats());
+            } else {
+                msTable1.setParameters(ImmutableMap.of(ROW_COUNT, "50", TOTAL_SIZE, "100"));
+            }
 
             if (!tblName.equals("unpartitioned_table")) {
                 msTable1.setPartitionKeys(partKeys);
@@ -338,6 +379,69 @@ public class HiveMetastoreTest {
             msTable1.setPartitionKeys(new ArrayList<>());
 
             return msTable1;
+        }
+
+        private Map<String, String> buildSparkTableStats() {
+            // Step to generate spark column stats:
+            // create table testparquet(col_int int, col_double double, col_string string, col_boolean boolean, col_decimal decimal, col_date date) stored as parquet;
+            // insert into testparquet values(110,458.4,'zhang',false,2.3, current_date());
+            // insert into testparquet values(115,358.4,'zhangsan',true,3.3, current_date());
+            // insert into testparquet values(119,958.4,'lisan',true,9.3, current_date());
+            // ANALYZE TABLE testparquet COMPUTE STATISTICS for all columns;
+            return ImmutableMap.<String, String>builder()
+                    .put("spark.sql.create.version", "3.5.0")
+                    // int
+                    .put("spark.sql.statistics.colStats.col_int.avgLen", "4")
+                    .put("spark.sql.statistics.colStats.col_int.distinctCount", "3")
+                    .put("spark.sql.statistics.colStats.col_int.max", "456")
+                    .put("spark.sql.statistics.colStats.col_int.maxLen", "4")
+                    .put("spark.sql.statistics.colStats.col_int.min", "123")
+                    .put("spark.sql.statistics.colStats.col_int.nullCount", "0")
+                    .put("spark.sql.statistics.colStats.col_int.version", "2")
+                    // double
+                    .put("spark.sql.statistics.colStats.col_double.avgLen", "8")
+                    .put("spark.sql.statistics.colStats.col_double.distinctCount", "3")
+                    .put("spark.sql.statistics.colStats.col_double.max", "958.4")
+                    .put("spark.sql.statistics.colStats.col_double.maxLen", "8")
+                    .put("spark.sql.statistics.colStats.col_double.min", "358.4")
+                    .put("spark.sql.statistics.colStats.col_double.nullCount", "0")
+                    .put("spark.sql.statistics.colStats.col_double.version", "2")
+                    // string
+                    .put("spark.sql.statistics.colStats.col_string.avgLen", "6")
+                    .put("spark.sql.statistics.colStats.col_string.distinctCount", "3")
+                    .put("spark.sql.statistics.colStats.col_string.maxLen", "8")
+                    .put("spark.sql.statistics.colStats.col_string.nullCount", "0")
+                    .put("spark.sql.statistics.colStats.col_string.version", "2")
+                    // boolean
+                    .put("spark.sql.statistics.colStats.col_boolean.avgLen", "1")
+                    .put("spark.sql.statistics.colStats.col_boolean.distinctCount", "2")
+                    .put("spark.sql.statistics.colStats.col_boolean.max", "true")
+                    .put("spark.sql.statistics.colStats.col_boolean.maxLen", "1")
+                    .put("spark.sql.statistics.colStats.col_boolean.min", "false")
+                    .put("spark.sql.statistics.colStats.col_boolean.nullCount", "0")
+                    .put("spark.sql.statistics.colStats.col_boolean.version", "2")
+                    // decimal
+                    .put("spark.sql.statistics.colStats.col_decimal.avgLen", "8")
+                    .put("spark.sql.statistics.colStats.col_decimal.distinctCount", "3")
+                    .put("spark.sql.statistics.colStats.col_decimal.max", "9")
+                    .put("spark.sql.statistics.colStats.col_decimal.maxLen", "8")
+                    .put("spark.sql.statistics.colStats.col_decimal.min", "2")
+                    .put("spark.sql.statistics.colStats.col_decimal.nullCount", "0")
+                    .put("spark.sql.statistics.colStats.col_decimal.version", "2")
+                    // date
+                    .put("spark.sql.statistics.colStats.col_date.avgLen", "4")
+                    .put("spark.sql.statistics.colStats.col_date.distinctCount", "1")
+                    .put("spark.sql.statistics.colStats.col_date.max", "2024-02-18")
+                    .put("spark.sql.statistics.colStats.col_date.maxLen", "4")
+                    .put("spark.sql.statistics.colStats.col_date.min", "2024-02-18")
+                    .put("spark.sql.statistics.colStats.col_date.nullCount", "0")
+                    .put("spark.sql.statistics.colStats.col_date.version", "2")
+                    // basic stats generated by spark analyze
+                    .put(NUM_FILES, "3")
+                    .put(TOTAL_SIZE, "5167")
+                    .put("numFilesErasureCoded", "0")
+                    .put("spark.sql.statistics.numRows", "3")
+                    .put("spark.sql.statistics.totalSize", "5167").buildOrThrow();
         }
 
         public boolean tableExists(String dbName, String tblName) {
@@ -414,6 +518,9 @@ public class HiveMetastoreTest {
         }
 
         public List<ColumnStatisticsObj> getTableColumnStats(String dbName, String tableName, List<String> columns) {
+            if (tableName.equals("spark_table")) {
+                return new ArrayList<>();
+            }
             ColumnStatisticsObj stats = new ColumnStatisticsObj();
             ColumnStatisticsData data = new ColumnStatisticsData();
             LongColumnStatsData longColumnStatsData = new LongColumnStatsData();

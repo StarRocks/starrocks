@@ -21,6 +21,8 @@
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
+#include "util/slice.h"
+#include "util/string_parser.hpp"
 #include "util/utf8_check.h"
 
 namespace starrocks {
@@ -113,8 +115,8 @@ char* CSVScanner::ScannerCSVReader::_find_line_delimiter(CSVBuffer& buffer, size
 }
 
 CSVScanner::CSVScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
-                       ScannerCounter* counter)
-        : FileScanner(state, profile, scan_range.params, counter), _scan_range(scan_range) {
+                       ScannerCounter* counter, bool schema_only)
+        : FileScanner(state, profile, scan_range.params, counter, schema_only), _scan_range(scan_range) {
     if (scan_range.params.__isset.multi_column_separator) {
         _parse_options.column_delimiter = scan_range.params.multi_column_separator;
     } else {
@@ -223,6 +225,49 @@ void CSVScanner::_materialize_src_chunk_adaptive_nullable_column(ChunkPtr& chunk
     }
 }
 
+Status CSVScanner::_init_reader() {
+    if (_curr_reader == nullptr && ++_curr_file_index < _scan_range.ranges.size()) {
+        std::shared_ptr<SequentialFile> file;
+        const TBrokerRangeDesc& range_desc = _scan_range.ranges[_curr_file_index];
+        Status st = create_sequential_file(range_desc, _scan_range.broker_addresses[0], _scan_range.params, &file);
+        if (!st.ok()) {
+            LOG(WARNING) << "Failed to create sequential files. status: " << st.to_string();
+            return st;
+        }
+
+        _curr_reader = std::make_unique<ScannerCSVReader>(file, _state, _parse_options);
+        _curr_reader->set_counter(_counter);
+        if (_scan_range.ranges[_curr_file_index].size > 0 &&
+            _scan_range.ranges[_curr_file_index].format_type == TFileFormatType::FORMAT_CSV_PLAIN) {
+            // Does not set limit for compressed file.
+            _curr_reader->set_limit(_scan_range.ranges[_curr_file_index].size);
+        }
+        if (_scan_range.ranges[_curr_file_index].start_offset > 0) {
+            // Skip the first record started from |start_offset|.
+            auto status = file->skip(_scan_range.ranges[_curr_file_index].start_offset);
+            if (status.is_time_out()) {
+                // open this file next time
+                --_curr_file_index;
+                _curr_reader.reset();
+                return status;
+            }
+            CSVReader::Record dummy;
+            RETURN_IF_ERROR(_curr_reader->next_record(&dummy));
+        }
+
+        if (_parse_options.skip_header) {
+            for (int64_t i = 0; i < _parse_options.skip_header; i++) {
+                CSVReader::Record dummy;
+                RETURN_IF_ERROR(_curr_reader->next_record(&dummy));
+            }
+        }
+        return Status::OK();
+    } else if (_curr_reader == nullptr) {
+        return Status::EndOfFile("CSVScanner");
+    }
+    return Status::OK();
+}
+
 StatusOr<ChunkPtr> CSVScanner::get_next() {
     SCOPED_RAW_TIMER(&_counter->total_ns);
 
@@ -230,44 +275,7 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
     auto src_chunk = _create_chunk(_src_slot_descriptors);
 
     do {
-        if (_curr_reader == nullptr && ++_curr_file_index < _scan_range.ranges.size()) {
-            std::shared_ptr<SequentialFile> file;
-            const TBrokerRangeDesc& range_desc = _scan_range.ranges[_curr_file_index];
-            Status st = create_sequential_file(range_desc, _scan_range.broker_addresses[0], _scan_range.params, &file);
-            if (!st.ok()) {
-                LOG(WARNING) << "Failed to create sequential files. status: " << st.to_string();
-                return st;
-            }
-
-            _curr_reader = std::make_unique<ScannerCSVReader>(file, _state, _parse_options);
-            _curr_reader->set_counter(_counter);
-            if (_scan_range.ranges[_curr_file_index].size > 0 &&
-                _scan_range.ranges[_curr_file_index].format_type == TFileFormatType::FORMAT_CSV_PLAIN) {
-                // Does not set limit for compressed file.
-                _curr_reader->set_limit(_scan_range.ranges[_curr_file_index].size);
-            }
-            if (_scan_range.ranges[_curr_file_index].start_offset > 0) {
-                // Skip the first record started from |start_offset|.
-                auto status = file->skip(_scan_range.ranges[_curr_file_index].start_offset);
-                if (status.is_time_out()) {
-                    // open this file next time
-                    --_curr_file_index;
-                    _curr_reader.reset();
-                    return status;
-                }
-                CSVReader::Record dummy;
-                RETURN_IF_ERROR(_curr_reader->next_record(&dummy));
-            }
-
-            if (_parse_options.skip_header) {
-                for (int64_t i = 0; i < _parse_options.skip_header; i++) {
-                    CSVReader::Record dummy;
-                    RETURN_IF_ERROR(_curr_reader->next_record(&dummy));
-                }
-            }
-        } else if (_curr_reader == nullptr) {
-            return Status::EndOfFile("CSVScanner");
-        }
+        RETURN_IF_ERROR(_init_reader());
 
         src_chunk->set_num_rows(0);
         Status status = Status::OK();
@@ -331,7 +339,7 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
 
         const char* data = _curr_reader->buffBasePtr() + row.parsed_start;
         CSVReader::Record record(data, row.parsed_end - row.parsed_start);
-        if (row.columns.size() != _num_fields_in_csv) {
+        if (row.columns.size() != _num_fields_in_csv && !_scan_range.params.flexible_column_mapping) {
             if (status.is_end_of_file()) {
                 break;
             }
@@ -360,11 +368,37 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
 
         SCOPED_RAW_TIMER(&_counter->fill_ns);
         bool has_error = false;
+        bool error_reported = false;
         for (int j = 0, k = 0; j < _num_fields_in_csv; j++) {
             auto slot = _src_slot_descriptors[j];
             if (slot == nullptr) {
                 continue;
             }
+
+            if (j >= row.columns.size()) {
+                // table columns are more than file fields
+
+                // append null.
+                _column_raw_ptrs[k]->append_default(1);
+
+                // report error.
+                if (_strict_mode && !error_reported) {
+                    if (_counter->num_rows_filtered++ < REPORT_ERROR_MAX_NUMBER) {
+                        std::string error_msg = make_column_count_not_matched_error_message(
+                                _num_fields_in_csv, row.columns.size(), _parse_options);
+                        _report_error(record, error_msg);
+                    }
+                    if (_state->enable_log_rejected_record()) {
+                        std::string error_msg = make_column_count_not_matched_error_message(
+                                _num_fields_in_csv, row.columns.size(), _parse_options);
+                        _report_rejected_record(record, error_msg);
+                    }
+                    error_reported = true;
+                }
+                k++;
+                continue;
+            }
+
             const CSVColumn& column = row.columns[j];
             char* basePtr = nullptr;
             if (column.is_escaped_column) {
@@ -427,7 +461,7 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
         fields.clear();
         _curr_reader->split_record(record, &fields);
 
-        if (fields.size() != _num_fields_in_csv) {
+        if (fields.size() != _num_fields_in_csv && !_scan_range.params.flexible_column_mapping) {
             if (_counter->num_rows_filtered++ < REPORT_ERROR_MAX_NUMBER) {
                 std::string error_msg =
                         make_column_count_not_matched_error_message(_num_fields_in_csv, fields.size(), _parse_options);
@@ -452,11 +486,37 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
 
         SCOPED_RAW_TIMER(&_counter->fill_ns);
         bool has_error = false;
+        bool error_reported = false;
         for (int j = 0, k = 0; j < _num_fields_in_csv; j++) {
             auto slot = _src_slot_descriptors[j];
             if (slot == nullptr) {
                 continue;
             }
+
+            if (j >= fields.size()) {
+                // table columns are more than file fields
+
+                // append null.
+                _column_raw_ptrs[k]->append_default(1);
+
+                // report error.
+                if (_strict_mode && !error_reported) {
+                    if (_counter->num_rows_filtered++ < REPORT_ERROR_MAX_NUMBER) {
+                        std::string error_msg = make_column_count_not_matched_error_message(
+                                _num_fields_in_csv, fields.size(), _parse_options);
+                        _report_error(record, error_msg);
+                    }
+                    if (_state->enable_log_rejected_record()) {
+                        std::string error_msg = make_column_count_not_matched_error_message(
+                                _num_fields_in_csv, fields.size(), _parse_options);
+                        _report_rejected_record(record, error_msg);
+                    }
+                    error_reported = true;
+                }
+                k++;
+                continue;
+            }
+
             const Slice& field = fields[j];
             options.type_desc = &(slot->type());
             if (!_converters[k]->read_string_for_adaptive_null_column(_column_raw_ptrs[k], field, options)) {
@@ -504,6 +564,106 @@ void CSVScanner::_report_error(const CSVReader::Record& record, const std::strin
 
 void CSVScanner::_report_rejected_record(const CSVReader::Record& record, const std::string& err_msg) {
     _state->append_rejected_record_to_file(record.to_string(), err_msg, _curr_reader->filename());
+}
+
+static TypeDescriptor get_type_desc(const Slice& field) {
+    StringParser::ParseResult result;
+
+    StringParser::string_to_int<int64_t>(field.get_data(), field.get_size(), &result);
+    if (result == StringParser::PARSE_SUCCESS) {
+        return TypeDescriptor(TYPE_BIGINT);
+    }
+
+    StringParser::string_to_float<double>(field.get_data(), field.get_size(), &result);
+    if (result == StringParser::PARSE_SUCCESS) {
+        return TypeDescriptor(TYPE_DOUBLE);
+    }
+
+    StringParser::string_to_bool(field.get_data(), field.get_size(), &result);
+    if (result == StringParser::PARSE_SUCCESS) {
+        return TypeDescriptor(TYPE_BOOLEAN);
+    }
+
+    // default VARCHAR.
+    return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+}
+
+Status CSVScanner::get_schema(std::vector<SlotDescriptor>* schema) {
+    if (schema == nullptr) return Status::InternalError("ouput schema is null");
+
+    RETURN_IF_ERROR(_init_reader());
+
+    if (_use_v2) return _get_schema_v2(schema);
+
+    return _get_schema(schema);
+}
+
+Status CSVScanner::_get_schema(std::vector<SlotDescriptor>* merged_schema) {
+    std::vector<std::vector<SlotDescriptor>> schemas;
+    std::vector<SlotDescriptor> schema;
+    CSVReader::Record record;
+    for (size_t i = 0; i < _scan_range.params.schema_sample_file_row_count;) {
+        record.clear();
+        auto st = _curr_reader->next_record(&record);
+        if (st.is_end_of_file()) {
+            break;
+        } else if (!st.ok()) {
+            return st;
+        }
+        // skip empty record.
+        if (record.empty()) continue;
+
+        schema.clear();
+        fields.clear();
+        _curr_reader->split_record(record, &fields);
+        for (size_t i = 0; i < fields.size(); i++) {
+            // column name: $1, $2, $3...
+            schema.emplace_back(SlotDescriptor(i, fmt::format("${}", i + 1), get_type_desc(fields[i])));
+        }
+        schemas.emplace_back(schema);
+        i++;
+    }
+
+    FileScanner::merge_schema(schemas, merged_schema);
+    return Status::OK();
+}
+
+Status CSVScanner::_get_schema_v2(std::vector<SlotDescriptor>* merged_schema) {
+    std::vector<std::vector<SlotDescriptor>> schemas;
+    std::vector<SlotDescriptor> schema;
+    CSVRow row;
+    for (size_t i = 0; i < _scan_range.params.schema_sample_file_row_count;) {
+        row.columns.clear();
+        auto st = _curr_reader->next_record(row);
+        if (st.is_end_of_file()) {
+            break;
+        } else if (!st.ok()) {
+            return st;
+        }
+        // skip empty record.
+        if (row.columns.empty()) continue;
+
+        schema.clear();
+        for (size_t i = 0; i < row.columns.size(); i++) {
+            const auto& column = row.columns[i];
+            char* basePtr = nullptr;
+            if (column.is_escaped_column) {
+                basePtr = _curr_reader->escapeDataPtr();
+            } else {
+                basePtr = _curr_reader->buffBasePtr();
+            }
+            const Slice field(basePtr + column.start_pos, column.length);
+
+            // column name: $1, $2, $3...
+            schema.emplace_back(SlotDescriptor(i, fmt::format("${}", i + 1), get_type_desc(field)));
+        }
+        schemas.emplace_back(schema);
+        i++;
+    }
+
+    FileScanner::merge_schema(schemas, merged_schema);
+
+    return Status::OK();
 }
 
 } // namespace starrocks

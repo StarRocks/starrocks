@@ -23,8 +23,12 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.validate.ValidateException;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 public class PrepareAnalyzer {
+
+    private static final Logger LOG = LogManager.getLogger(PrepareAnalyzer.class);
     private final ConnectContext session;
 
     public PrepareAnalyzer(ConnectContext session) {
@@ -42,6 +46,9 @@ public class PrepareAnalyzer {
             if (!(innerStmt instanceof QueryStatement)) {
                 throw new ValidateException("Invalid statement type for prepared statement", ErrorType.USER_ERROR);
             }
+            // Analyzing when preparing is only used to return the correct resultset meta, but not to generate an
+            // execution plan
+            Analyzer.analyze(innerStmt, ConnectContext.get());
         }
     }
 

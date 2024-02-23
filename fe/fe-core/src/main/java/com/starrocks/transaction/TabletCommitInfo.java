@@ -55,6 +55,9 @@ public class TabletCommitInfo implements Writable {
     private List<String> validDictCacheColumns = Lists.newArrayList();
     private List<Long> validDictCollectedVersions = Lists.newArrayList();
 
+    public TabletCommitInfo() {
+    }
+
     public TabletCommitInfo(long tabletId, long backendId) {
         super();
         this.tabletId = tabletId;
@@ -88,6 +91,14 @@ public class TabletCommitInfo implements Writable {
 
     public List<Long> getValidDictCollectedVersions() {
         return validDictCollectedVersions;
+    }
+
+    public void setTabletId(long tabletId) {
+        this.tabletId = tabletId;
+    }
+
+    public void setBackendId(long backendId) {
+        this.backendId = backendId;
     }
 
     @NotNull

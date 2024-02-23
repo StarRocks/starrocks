@@ -35,6 +35,8 @@ public class MaterializedViewOptimizer {
                                   boolean inlineView) {
         // optimize the sql by rule and disable rule based materialized view rewrite
         OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
+        // Disable partition prune for mv's plan so no needs  to compensate pruned predicates anymore.
+        // Only needs to compensate mv's ref-base-table's partition predicates when mv's freshness cannot be satisfied.
         optimizerConfig.disableRuleSet(RuleSetType.PARTITION_PRUNE);
         optimizerConfig.disableRuleSet(RuleSetType.ALL_MV_REWRITE);
         // INTERSECT_REWRITE is used for INTERSECT related plan optimize, which can not be SPJG;

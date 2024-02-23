@@ -91,9 +91,104 @@ function: wait_alter_table_finish()
 -- result:
 None
 -- !result
+CREATE TABLE `t_test_basic_create_index_replicated` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `id2` bigint(20) NOT NULL COMMENT "",
+  `id3` bigint(20) NOT NULL COMMENT "",
+  `id4` string NOT NULL COMMENT "",
+  `id5` string NOT NULL COMMENT "",
+  `id6` bigint(20) NOT NULL COMMENT "",
+  `id7` string NOT NULL COMMENT "",
+  INDEX `gin_id4` (`id4`) USING GIN ("parser" = "none") COMMENT ''
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+E: (1064, 'Unexpected exception: Getting analyzing error. Detail message: GIN does not support replicated mode.')
+-- !result
 DROP TABLE t_test_basic_create_index_pk;
 -- result:
 -- !result
 DROP TABLE t_test_basic_create_index_dup;
+-- result:
+-- !result
+
+-- name: test_query_gin_index
+CREATE TABLE `t_test_gin_index_query` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `query_none_analyzer` varchar(255) NOT NULL COMMENT "",
+  `query_english` varchar(255) NOT NULL COMMENT "",
+  `query_chinese` varchar(255) NOT NULL COMMENT "",
+   INDEX gin_none (`query_none_analyzer`) USING GIN ("parser" = "none") COMMENT 'whole line index',
+   INDEX gin_english (`query_english`) USING GIN ("parser" = "english") COMMENT 'english index',
+   INDEX gin_chinese (`query_chinese`) USING GIN ("parser" = "chinese") COMMENT 'chinese index'
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into t_test_gin_index_query values
+(1, 'starrocks', 'hello starrocks', '极速分析'),
+(2, 'starrocks', 'hello world', '你好世界'),
+(3, 'lakehouse', 'hello lakehouse', '湖仓一体'),
+(4, 'materialized view', 'materialized view', '物化视图'),
+(5, '中文测试', 'chinese test', '中文测试');
+-- result:
+-- !result
+select count(*) from t_test_gin_index_query where query_none_analyzer = 'starrocks';
+-- result:
+2
+-- !result
+select count(*) from t_test_gin_index_query where query_english = 'hello';
+-- result:
+3
+-- !result
+select count(*) from t_test_gin_index_query where query_english in ('world', 'lakehouse', 'view');
+-- result:
+3
+-- !result
+select count(*) from t_test_gin_index_query where query_english != 'hello' and id1 > 4;
+-- result:
+1
+-- !result
+select count(*) from t_test_gin_index_query where query_english = 'hello' and query_none_analyzer = 'lakehouse';
+-- result:
+1
+-- !result
+select count(*) from t_test_gin_index_query where query_none_analyzer like '%ed vi%';
+-- result:
+1
+-- !result
+select count(*) from t_test_gin_index_query where query_english like '%ed vi%';
+-- result:
+0
+-- !result
+select count(*) from t_test_gin_index_query where query_english like '%teria%';
+-- result:
+1
+-- !result
+select count(*) from t_test_gin_index_query where query_chinese = '你好';
+-- result:
+1
+-- !result
+select count(*) from t_test_gin_index_query where query_none_analyzer = '中文测试';
+-- result:
+1
+-- !result
+drop table t_test_gin_index_query;
 -- result:
 -- !result

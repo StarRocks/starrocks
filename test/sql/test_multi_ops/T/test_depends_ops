@@ -1,0 +1,121 @@
+-- name: test_depends_ops
+set enable_wait_dependent_event = true;
+
+create table t0 (c0 INT, c1 BIGINT) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 4 PROPERTIES('replication_num' = '1');
+
+insert into
+    t0
+SELECT
+    generate_series,
+    4096 - generate_series
+FROM
+    TABLE(generate_series(1, 4096));
+
+insert into
+    t0
+select
+    *
+from
+    t0;
+
+insert into
+    t0
+select
+    *
+from
+    t0;
+
+-- count rows
+select
+    count(*)
+from
+    t0;
+
+-- two aggregate table shuffle join
+with aggregated_table as (
+    select
+        trim(c0) as c0,
+        c1 as c1
+    from
+        t0
+    group by
+        1,
+        2
+)
+select
+    *
+from
+    aggregated_table l1
+    left join [shuffle] aggregated_table r1 on l1.c0 = r1.c0
+    and l1.c1 = r1.c1
+order by
+    1,
+    2,
+    3,
+    4 desc
+limit
+    10;
+
+-- three aggregate table shuffle join
+with aggregated_table as (
+    select
+        trim(c0) as c0,
+        c1 as c1
+    from
+        t0
+    group by
+        1,
+        2
+)
+select
+    count(*)
+from
+    (
+        select
+            *
+        from
+            aggregated_table l1
+            left join [shuffle] aggregated_table r1 on l1.c0 = r1.c0
+            and l1.c1 = r1.c1
+            left join [shuffle] aggregated_table r2 on l1.c0 = r2.c0
+            and l1.c1 = r2.c1
+    ) tb;
+
+-- three aggregate table shuffle join and sum
+with aggregated_table as (
+    select
+        trim(c0) as c0,
+        c1 as c1
+    from
+        t0
+    group by
+        1,
+        2
+)
+select
+    sum(l1.c0),
+    sum(l1.c1),
+    sum(l1.c0),
+    sum(l1.c1)
+from
+    aggregated_table l1
+    left join [shuffle] aggregated_table r1 on l1.c0 = r1.c0
+    and l1.c1 = r1.c1
+    left join [shuffle] aggregated_table r2 on l1.c0 = r2.c0
+    and l1.c1 = r2.c1;
+
+create view aggregated_table as
+select
+    trim(c0) as c0,
+    c1 as c1
+from
+    t0
+group by
+    1,
+    2;
+-- nest loop join
+select l.c1, sum(l.c0) ,sum(r.c0) from aggregated_table l join aggregated_table r on l.c0 <= r.c0 and r.c0 < 10 group by 1 order by 2, 3 limit 10;
+-- except operator
+select l.c1, l.c0 from aggregated_table l except select r.c1, r.c0 from aggregated_table r;
+-- intersect operator
+select l.c1, l.c0 from aggregated_table l intersect select r.c1, r.c0 from aggregated_table r order by 1, 2 limit 10;

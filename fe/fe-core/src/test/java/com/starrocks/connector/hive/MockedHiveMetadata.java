@@ -97,6 +97,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         mockPartitionTable();
         mockView();
         mockSubfieldTable();
+        mockFileSplitTable();
     }
 
     @Override
@@ -360,6 +361,16 @@ public class MockedHiveMetadata implements ConnectorMetadata {
                         "VIRTUAL_VIEW");
         HiveView view4 = HiveMetastoreApiConverter.toHiveView(hmsView4, MOCKED_HIVE_CATALOG_NAME);
         mockTables.put(hmsView4.getTableName(), new HiveTableInfo(view4));
+
+        Table hmsView5 =
+                new Table("customer_case_insensitive_view", "tpch", null, 0, 0, 0, sd, Lists.newArrayList(), Maps.newHashMap(),
+                        null,
+                        "select customer_upper.c_custkey, customer_upper.c_name, customer_upper.c_address, " +
+                                "CUSTOMER_UPPER.c_nationkey, CUSTOMER_UPPER.c_phone, CUSTOMER_UPPER.c_mktsegment, " +
+                                "CUSTOMER_UPPER.c_comment from (select * from TPCH.CUSTOMER) CUSTOMER_UPPER",
+                        "VIRTUAL_VIEW");
+        HiveView view5 = HiveMetastoreApiConverter.toHiveView(hmsView5, MOCKED_HIVE_CATALOG_NAME);
+        mockTables.put(hmsView5.getTableName(), new HiveTableInfo(view5));
     }
 
     private static void mockSubfieldTable() {
@@ -385,6 +396,50 @@ public class MockedHiveMetadata implements ConnectorMetadata {
                 new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(tbl, MOCKED_HIVE_CATALOG_NAME),
                         ImmutableList.of(), 5, regionStats, MOCKED_FILES));
 
+    }
+
+    private static void mockFileSplitTable() {
+        final String dbName = "file_split_db";
+        MOCK_TABLE_MAP.putIfAbsent(dbName, new CaseInsensitiveMap<>());
+        Map<String, HiveTableInfo> mockTables = MOCK_TABLE_MAP.get(dbName);
+
+        List<FieldSchema> cols = Lists.newArrayList();
+        cols.add(new FieldSchema("col_int", "int", null));
+        StorageDescriptor sd =
+                new StorageDescriptor(cols, "", MAPRED_PARQUET_INPUT_FORMAT_CLASS, "", false,
+                        -1, null, Lists.newArrayList(), Lists.newArrayList(), Maps.newHashMap());
+
+        CaseInsensitiveMap<String, ColumnStatistic> regionStats = new CaseInsensitiveMap<>();
+        regionStats.put("col_int", ColumnStatistic.unknown());
+
+        Table tbl =
+                new Table("file_split_tbl", dbName, null, 0, 0, 0, sd, Lists.newArrayList(), Maps.newHashMap(), null,
+                        null,
+                        "EXTERNAL_TABLE");
+
+        final long oneGigabytes = 1024 * 1024 * 1024;
+        final long oneMegabytes = 1024 * 1024;
+        HiveRemoteFileIO fileIO = new HiveRemoteFileIO(new Configuration());
+        ImmutableList<RemoteFileBlockDesc> blockDescs = ImmutableList.of(
+                new RemoteFileBlockDesc(0, 256 * oneMegabytes, new long[] {123}, new long[] {123}, fileIO),
+                new RemoteFileBlockDesc(256 * oneMegabytes, 256 * oneMegabytes, new long[] {123}, new long[] {123},
+                        fileIO),
+                new RemoteFileBlockDesc(512 * oneMegabytes, 256 * oneMegabytes, new long[] {123}, new long[] {123},
+                        fileIO),
+                new RemoteFileBlockDesc(768 * oneMegabytes, 256 * oneMegabytes, new long[] {123}, new long[] {123},
+                        fileIO)
+        );
+        RemoteFileDesc fileDesc1 = new RemoteFileDesc("file1", "zlib", oneGigabytes, 0, blockDescs, ImmutableList.of());
+        fileDesc1.setSplittable(true);
+        RemoteFileDesc fileDesc2 = new RemoteFileDesc("file2", "zlib", oneGigabytes, 0, blockDescs, ImmutableList.of());
+        fileDesc2.setSplittable(true);
+        List<RemoteFileInfo> files =
+                ImmutableList.of(new RemoteFileInfo(RemoteFileInputFormat.ORC, ImmutableList.of(
+                        fileDesc1, fileDesc2), null));
+
+        mockTables.put(tbl.getTableName(),
+                new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(tbl, MOCKED_HIVE_CATALOG_NAME),
+                        ImmutableList.of(), 5, regionStats, files));
     }
 
     public static void mockTPCHTable() {

@@ -2088,6 +2088,12 @@ public class Config extends ConfigBase {
     public static boolean enable_refresh_hive_partitions_statistics = true;
 
     /**
+     * Enable reuse spark column statistics.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_reuse_spark_column_statistics = true;
+
+    /**
      * size of iceberg worker pool
      */
     @ConfField(mutable = true)
@@ -2862,4 +2868,8 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = false)
     public static int jdbc_connection_idle_timeout_ms = 600000;
+
+    // The longest supported VARCHAR length.
+    @ConfField(mutable = true)
+    public static int max_varchar_length = 1048576;
 }

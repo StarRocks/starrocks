@@ -239,6 +239,14 @@ public class PropertyAnalyzer {
             return inferredDataProperty;
         }
 
+        // Data property is not supported in shared mode. Return the inferredDataProperty directly.
+        if (RunMode.isSharedDataMode()) {
+            properties.remove(mediumKey);
+            properties.remove(coolDownTimeKey);
+            properties.remove(coolDownTTLKey);
+            return inferredDataProperty;
+        }
+
         TStorageMedium storageMedium = null;
         long coolDownTimeStamp = DataProperty.MAX_COOLDOWN_TIME_MS;
 
@@ -1005,7 +1013,8 @@ public class PropertyAnalyzer {
             if (Strings.isNullOrEmpty(uniqueConstraintStr)) {
                 return uniqueConstraints;
             }
-            uniqueConstraints = UniqueConstraint.parse(uniqueConstraintStr);
+            uniqueConstraints = UniqueConstraint.parse(table.getCatalogName(), db.getFullName(), table.getName(),
+                    uniqueConstraintStr);
             if (uniqueConstraints == null || uniqueConstraints.isEmpty()) {
                 throw new SemanticException(String.format("invalid unique constraint:%s", uniqueConstraintStr));
             }
