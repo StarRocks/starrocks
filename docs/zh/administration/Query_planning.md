@@ -342,7 +342,7 @@ StarRocks 支持提示（Hint）功能。Hint 是一种指令或注释，显式�
 
 ### 系统变量 Hint
 
-在 SELECT, SUBMIT TASK 语句中通过 `/*+ SET_VAR(...) */` 注释的形式设置一个或多个[系统变量](../reference/System_variable.md) Hint。其他语句中如果包含 SELECT 子句（如 CREATE MATERIALIZED VIEW AS SELECT，CREATE VIEW AS SELECT），则您也可以在该 SELECT 子句中使用系统变量 Hint。
+在 SELECT, SUBMIT TASK 语句中使用 `SET_VAR` Hint 设置一个或多个[系统变量](../reference/System_variable.md) Hint。其他语句中如果包含 SELECT 子句（如 CREATE MATERIALIZED VIEW AS SELECT，CREATE VIEW AS SELECT），则您也可以在该 SELECT 子句中使用 `SET_VAR` Hint。
 
 #### 语法
 
@@ -379,9 +379,9 @@ CREATE MATERIALIZED VIEW mv
 
 ### 用户自定义变量 Hint
 
-在 SELECT 语句中通过 `/*+ SET_USER_VARIABLE(...) */` 注释的形式设置一个或多个[用户自定义变量](../reference/user_defined_variables.md) Hint。
+在 SELECT 语句中使用 `SET_USER_VARIABLE` Hint 设置一个或多个[用户自定义变量](../reference/user_defined_variables.md) 。
 
-如果查询语句中引用了某个标量子查询或者标量表达式的结果，则可以使用用户自定义变量 Hint，将该子查询和表达式设置为用户自定义变量，然后执行查询。这样可以减少子查询的重复计算，并且区别于[用户自定义变量的一般用法](../reference/user_defined_variables.md)是会话级别生效的，用户自定义变量 Hint 是语句级别生效，不会影响整个会话。
+如果查询语句中引用了某个标量子查询或者标量表达式的结果，则可以使用 `SET_USER_VARIABLE` Hint ，将该子查询和表达式设置为用户自定义变量，然后执行查询。这样可以减少子查询的重复计算，并且区别于[用户自定义变量的一般用法](../reference/user_defined_variables.md)是会话级别生效的，用户自定义变量 Hint 是语句级别生效，不会影响整个会话。
 
 #### 语法
 
@@ -391,7 +391,7 @@ CREATE MATERIALIZED VIEW mv
 
 #### 示例
 
-如下查询语句中引用了标量子查询 `select max(age) from users` 和 `select min(name) from users`，则您可以使用用户自定义变量 Hint，将这两个子查询设置为用户自定义变量，然后执行查询。
+如下查询语句中引用了标量子查询 `select max(age) from users` 和 `select min(name) from users`，则您可以使用 `SET_USER_VARIABLE` Hint，将这两个子查询设置为用户自定义变量，然后执行查询。
 
 ```SQL
 SELECT /*+ SET_USER_VARIABLE (@a = (select max(age) from users), @b = (select min(name) from users)) */ *  FROM sales_orders where sales_orders.age = @a and sales_orders.name = @b;
