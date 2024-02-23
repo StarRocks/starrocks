@@ -82,6 +82,14 @@ inline bool is_zone_map_key_type(LogicalType type) {
            type != TYPE_OBJECT && type != TYPE_HLL && type != TYPE_PERCENTILE;
 }
 
+// The approximation of FLOAT/DOUBLE in a certain precision range, the binary of byte is not
+// a fixed value, so these two types are ignored in calculating checksum.
+// And also HLL/OBJCET/PERCENTILE is too large to calculate the checksum.
+inline bool is_support_checksum_type(LogicalType type) {
+    return type != TYPE_FLOAT && type != TYPE_DOUBLE && type != TYPE_HLL && type != TYPE_OBJECT &&
+           type != TYPE_PERCENTILE && type != TYPE_JSON;
+}
+
 template <LogicalType TYPE>
 inline constexpr LogicalType DelegateType = TYPE;
 template <>
