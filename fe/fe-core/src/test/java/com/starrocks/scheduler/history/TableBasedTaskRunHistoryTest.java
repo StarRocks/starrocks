@@ -89,15 +89,6 @@ class TableBasedTaskRunHistoryTest {
         };
         history.getTaskByName("t1");
 
-        // getTask
-        new Expectations() {
-            {
-                repo.executeDQL("SELECT history_content_json " +
-                        "FROM _statistics_.task_run_history WHERE task_run_id = 't1'");
-            }
-        };
-        history.getTask("t1");
-
         // getAllHistory
         new Expectations() {
             {

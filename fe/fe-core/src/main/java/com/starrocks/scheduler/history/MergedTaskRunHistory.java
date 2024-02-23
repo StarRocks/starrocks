@@ -14,8 +14,8 @@
 
 package com.starrocks.scheduler.history;
 
-import com.starrocks.common.Config;
 import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import org.apache.commons.collections.ListUtils;
 
 import java.util.List;
@@ -35,7 +35,7 @@ public class MergedTaskRunHistory implements TaskRunHistory {
 
     @Override
     public void addHistory(TaskRunStatus status, boolean isReplay) {
-        if (Config.use_table_based_task_run_history) {
+        if (status.isUseTableBasedHistory()) {
             table.addHistory(status, isReplay);
         } else {
             mem.addHistory(status, isReplay);
@@ -48,12 +48,10 @@ public class MergedTaskRunHistory implements TaskRunHistory {
     }
 
     @Override
-    public TaskRunStatus getTask(String queryId) {
-        TaskRunStatus res = table.getTask(queryId);
-        if (res != null) {
-            return res;
+    public void replayTaskRunChange(String queryId, TaskRunStatusChange change) {
+        if (!change.isUseTableBasedHistory()) {
+            mem.replayTaskRunChange(queryId, change);
         }
-        return mem.getTask(queryId);
     }
 
     @Override

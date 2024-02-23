@@ -35,7 +35,6 @@ import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.jetbrains.annotations.Nullable;
 
 import java.util.Iterator;
 import java.util.Map;
@@ -173,20 +172,6 @@ public class TaskRunManager implements MemoryTrackable {
         return true;
     }
 
-    // Because java PriorityQueue does not provide an interface for searching by element,
-    // so find it by code O(n), which can be optimized later
-    @Nullable
-    private TaskRun getTaskRun(PriorityBlockingQueue<TaskRun> taskRuns, TaskRun taskRun) {
-        TaskRun oldTaskRun = null;
-        for (TaskRun run : taskRuns) {
-            if (run.equals(taskRun)) {
-                oldTaskRun = run;
-                break;
-            }
-        }
-        return oldTaskRun;
-    }
-
     // check if a running TaskRun is complete and remove it from running TaskRun map
     public void checkRunningTaskRun() {
         Iterator<Long> runningIterator = runningTaskRunMap.keySet().iterator();
@@ -295,15 +280,18 @@ public class TaskRunManager implements MemoryTrackable {
 
     public TaskRunHistory getTaskRunHistory() {
         return Config.use_table_based_task_run_history ?
-                new MergedTaskRunHistory(memBasedTaskRunHistory, tableBasedTaskRunHistory) :
-                memBasedTaskRunHistory;
+                new MergedTaskRunHistory(memBasedTaskRunHistory, tableBasedTaskRunHistory) : memBasedTaskRunHistory;
     }
 
     public void addTaskRunHistory(TaskRun taskRun, Constants.TaskRunState fromState, Constants.TaskRunState toState) {
-        getTaskRunHistory().addHistory(taskRun.getStatus(), false);
-        TaskRunStatusChange statusChange =
-                new TaskRunStatusChange(taskRun.getTaskId(), taskRun.getStatus(), fromState, toState);
-        GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
+        try {
+            getTaskRunHistory().addHistory(taskRun.getStatus(), false);
+            TaskRunStatusChange statusChange =
+                    new TaskRunStatusChange(taskRun.getTaskId(), taskRun.getStatus(), fromState, toState);
+            GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
+        } catch (Throwable e) {
+            LOG.warn("addTaskRunHistory failed {}", taskRun, e);
+        }
     }
 
     public long getPendingTaskRunCount() {

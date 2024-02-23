@@ -15,6 +15,7 @@
 package com.starrocks.scheduler.history;
 
 import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.scheduler.persist.TaskRunStatusChange;
 
 import java.util.List;
 
@@ -27,7 +28,7 @@ public interface TaskRunHistory {
 
     List<TaskRunStatus> getTaskByName(String taskName);
 
-    TaskRunStatus getTask(String queryId);
+    void replayTaskRunChange(String queryId, TaskRunStatusChange change);
 
     /**
      * @return removed TaskRunId in the history

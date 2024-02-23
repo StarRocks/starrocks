@@ -1153,6 +1153,8 @@ public class GlobalStateMgr {
 
             isReady.set(true);
 
+            restoreLeaderStates();
+
             String msg = "leader finished to replay journal, can write now.";
             Util.stdoutWithTime(msg);
             LOG.info(msg);
@@ -1249,9 +1251,6 @@ public class GlobalStateMgr {
         updateDbUsedDataQuotaDaemon.start();
         statisticsMetaManager.start();
         statisticAutoCollector.start();
-        taskManager.start();
-        taskCleaner.start();
-        tableKeeper.start();
         mvMVJobExecutor.start();
         pipeListener.start();
         pipeScheduler.start();
@@ -1272,6 +1271,15 @@ public class GlobalStateMgr {
         }
 
         replicationMgr.start();
+    }
+
+    /**
+     * Restore leader states, which need to wait for all threads ready and be able to write FE
+     */
+    private void restoreLeaderStates() {
+        tableKeeper.start();
+        taskManager.start();
+        taskCleaner.start();
     }
 
     // start threads that should run on all FE

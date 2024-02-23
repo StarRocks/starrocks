@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -50,11 +51,11 @@ public class MemBasedTaskRunHistory implements TaskRunHistory {
     }
 
     @Override
-    public TaskRunStatus getTask(String queryId) {
-        if (queryId == null) {
-            return null;
+    public void replayTaskRunChange(String queryId, TaskRunStatusChange change) {
+        TaskRunStatus run = historyTaskRunMap.get(queryId);
+        if (run != null) {
+            run.setExtraMessage(change.getExtraMessage());
         }
-        return historyTaskRunMap.get(queryId);
     }
 
     private void removeTask(String queryId) {
@@ -68,9 +69,9 @@ public class MemBasedTaskRunHistory implements TaskRunHistory {
     // Reserve historyTaskRunMap values to keep the last insert at the first.
     @Override
     public List<TaskRunStatus> getAllHistory() {
-        List<TaskRunStatus> historyRunStatus =
-                new ArrayList<>(historyTaskRunMap.values());
+        List<TaskRunStatus> historyRunStatus = new ArrayList<>(historyTaskRunMap.values());
         Collections.reverse(historyRunStatus);
+        historyRunStatus.forEach(x -> x.setUseTableBasedHistory(false));
         return historyRunStatus;
     }
 

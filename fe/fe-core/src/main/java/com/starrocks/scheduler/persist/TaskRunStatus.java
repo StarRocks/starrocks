@@ -115,6 +115,9 @@ public class TaskRunStatus implements Writable {
     @SerializedName("properties")
     private volatile Map<String, String> properties;
 
+    @SerializedName("useTableBasedHistory")
+    private boolean useTableBasedHistory = false;
+
     public TaskRunStatus() {
     }
 
@@ -281,6 +284,14 @@ public class TaskRunStatus implements Writable {
         } else {
             // do nothing
         }
+    }
+
+    public boolean isUseTableBasedHistory() {
+        return useTableBasedHistory;
+    }
+
+    public void setUseTableBasedHistory(boolean value) {
+        this.useTableBasedHistory = value;
     }
 
     public long getProcessStartTime() {

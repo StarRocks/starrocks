@@ -19,6 +19,7 @@ import com.google.gson.JsonParser;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TResultBatch;
 import io.netty.buffer.ByteBuf;
@@ -80,8 +81,6 @@ public class TableBasedTaskRunHistory implements TaskRunHistory {
             "VALUES({1}, {2}, {3}, {4}, {5}, {6}, {7})";
     private static final String SELECT_BY_TASK_NAME =
             "SELECT history_content_json FROM " + TABLE_FULL_NAME + " WHERE task_name = {0}";
-    private static final String SELECT_BY_TASK_RUN_ID =
-            "SELECT history_content_json FROM " + TABLE_FULL_NAME + " WHERE task_run_id = {0}";
     private static final String SELECT_ALL = "SELECT history_content_json FROM " + TABLE_FULL_NAME;
     private static final String COUNT_TASK_RUNS = "SELECT count(*) as cnt FROM " + TABLE_FULL_NAME;
 
@@ -117,11 +116,7 @@ public class TableBasedTaskRunHistory implements TaskRunHistory {
     }
 
     @Override
-    public TaskRunStatus getTask(String queryId) {
-        final String sql = MessageFormat.format(SELECT_BY_TASK_RUN_ID, Strings.quote(queryId));
-        List<TResultBatch> batch = RepoExecutor.getInstance().executeDQL(sql);
-        List<TaskRunStatus> taskRuns = TaskRunStatus.fromResultBatch(batch);
-        return CollectionUtils.isEmpty(taskRuns) ? null : taskRuns.get(0);
+    public void replayTaskRunChange(String queryId, TaskRunStatusChange change) {
     }
 
     @Override
