@@ -199,11 +199,11 @@ By removing the specific expressions (only keep the operators), the query plan c
 
 ## Query hint
 
-Query hints are directives or comments that explicitly suggest the query optimizer on how to execute a query. Currently, StarRocks supports three types of hints: system variable hint, user-defined variable hint and join hint. Hints only take effect within a single query.
+Query hints are directives or comments that explicitly suggest the query optimizer on how to execute a query. Currently, StarRocks supports three types of hints: system variable hint (`SET_VAR`), user-defined variable hint (`SET_USER_VARIABLE`), and join hint. Hints only take effect within a single query.
 
 ### System variable hint
 
-You can set one or more [system variables](../reference/System_variable.md) by using the `SET_VAR` hint in the form of the syntax `/*+ SET_VAR(var_name = value) */` in SELECT and SUBMIT TASK statements, or in the SELECT clause that is included in other statement, such as CREATE MATERIALIZED VIEW AS SELECT and CREATE VIEW AS SELECT.
+You can set one or more [system variables](../reference/System_variable.md) hints by using `/*+ SET_VAR(var_name = value) */` in SELECT and SUBMIT TASK statements, or in the SELECT clause that is included in other statement, such as CREATE MATERIALIZED VIEW AS SELECT and CREATE VIEW AS SELECT.
 
 #### Syntax
 
@@ -214,7 +214,7 @@ SUBMIT [/*+ SET_VAR(key=value [, key = value]*) */] TASK ...
 
 #### Examples
 
- Hint the aggregation method for an aggregate query by setting the system variables `streaming_preaggregation_mode` and `new_planner_agg_stage`.
+Hint the aggregation method for an aggregate query by setting the system variables `streaming_preaggregation_mode` and `new_planner_agg_stage`.
 
 ~~~SQL
 SELECT /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming',new_planner_agg_stage = '2') */ SUM(sales_amount) AS total_sales_amount FROM sales_orders;
@@ -239,9 +239,9 @@ AS SELECT /*+ SET_VAR(query_timeout=500) */ * from dual;
 
 ### User-defined variable hint
 
-You can set one or more [user-defined variables](../reference/user_defined_variables.md) by using the `SET_USER_VARIABLE` hint in the form of the syntax `/*+ SET_USER_VARIABLE(...) */` in SELECT statements, or in the SELECT clause.
+You can set one or more [user-defined variables](../reference/user_defined_variables.md) hints by using `/*+ SET_USER_VARIABLE(...) */` in SELECT statements, or in the SELECT clause.
 
-If a query references the result of a scalar subquery or scalar expression, you can use a user-defined variable hint to set that subquery or expression as a user-defined variable and then run the query. This not only can help avoid duplicate computation, but also does not influence the entire session because user-defined variable hints take effect at the statement level, unlike the [general usage of user-defined variables](../reference/user_defined_variables.md) that take effect at the session level.
+If a query references the result of a scalar subquery or scalar expression, you can use the user-defined variable hint to set that subquery or expression as a user-defined variable and then run the query. This not only avoids duplicate computation, but also eliminates the influence on the entire session because the user-defined variable hints in the form of `SET_USER_VARIABLE` take effect at the statement level, unlike the [the normal usage of user-defined variables](../reference/user_defined_variables.md) that takes effect at the session level.
 
 #### Syntax
 
