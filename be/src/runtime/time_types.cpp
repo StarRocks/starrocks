@@ -176,6 +176,7 @@ int64_t date::standardize_date(int64_t value) {
 }
 
 static bool is_space(char ch) {
+    // \t, \n, \v, \f, \r are 9~13, respectively.
     return UNLIKELY(ch == ' ' || (ch >= 9 && ch <= 13));
 }
 
