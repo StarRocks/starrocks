@@ -82,19 +82,9 @@ Status EngineChecksumTask::_compute_checksum() {
 
     size_t num_columns = tablet_schema.num_columns();
     for (size_t i = 0; i < num_columns; ++i) {
-<<<<<<< HEAD
         LogicalType type = tablet_schema.column(i).type();
-        // The approximation of FLOAT/DOUBLE in a certain precision range, the binary of byte is not
-        // a fixed value, so these two types are ignored in calculating checksum.
-        // And also HLL/OBJCET/PERCENTILE is too large to calculate the checksum.
-        if (type == TYPE_FLOAT || type == TYPE_DOUBLE || type == TYPE_HLL || type == TYPE_OBJECT ||
-            type == TYPE_PERCENTILE || type == TYPE_JSON) {
+        if (!is_support_checksum_type(type)) {
             continue;
-=======
-        LogicalType type = tablet_schema->column(i).type();
-        if (is_support_checksum_type(type)) {
-            return_columns.push_back(i);
->>>>>>> b248a90343 ([Tool] MetaTool support checksum (#30030))
         }
     }
 
