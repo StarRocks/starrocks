@@ -29,6 +29,7 @@ public class MaterializedViewTPCDSTest extends MaterializedViewTestBase {
         starRocksAssert.withDatabase(MATERIALIZED_DB_NAME)
                 .useDatabase(MATERIALIZED_DB_NAME);
         TPCDSTestUtil.prepareTables(starRocksAssert);
+        starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
     }
 
     @Test
