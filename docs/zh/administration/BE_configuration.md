@@ -549,13 +549,13 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### starlet_use_star_cache
 
-- 含义：存算分离模式下是否使用块缓存。
+- 含义：存算分离模式下是否使用 block data cache。`true` 表示启用该功能，`false` 表示禁用。
 - 默认值：true
 - 引入版本：3.1
 
 #### starlet_cache_evict_high_water
 
-- 含义：存算分离模式下使用文件缓存，当剩余磁盘容量百分比低于此配置时，开始淘汰，即文件缓存默认最多使用 80%。
+- 含义：在存算分离模式下启用 file data cache，如果当前剩余磁盘容量百分比低于此配置项中指定的值，StarRocks 将触发缓存淘汰。默认值表示 file data cache 默认最多使用 80% 磁盘容量。
 - 默认值：0.2
 - 引入版本：3.0
 
@@ -974,6 +974,6 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### starlet_star_cache_disk_size_percent
 
-- 含义：存算分离模式下使用块缓存的磁盘百分比。
+- 含义：存算分离模式下，block data cache 最多可使用的磁盘容量百分比。
 - 默认值：80
 - 引入版本：3.1
