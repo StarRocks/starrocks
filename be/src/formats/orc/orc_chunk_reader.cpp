@@ -727,6 +727,8 @@ static std::unordered_set<TExprNodeType::type> _supported_expr_node_types = {
         TExprNodeType::type::SLOT_REF,
         TExprNodeType::type::STRING_LITERAL,
         TExprNodeType::type::LARGE_INT_LITERAL,
+        // is null & is not null
+        TExprNodeType::type::FUNCTION_CALL,
 };
 
 static std::unordered_map<LogicalType, orc::PredicateDataType> _supported_logical_types = {
@@ -782,7 +784,7 @@ bool OrcChunkReader::_ok_to_add_conjunct(const Expr* conjunct) {
     // supported one level. first child is slot, and others are literal values.
     // and only support some of logical types.
     if (node_type == TExprNodeType::BINARY_PRED || node_type == TExprNodeType::IN_PRED ||
-        node_type == TExprNodeType::IS_NULL_PRED) {
+        node_type == TExprNodeType::IS_NULL_PRED || node_type  == TExprNodeType::FUNCTION_CALL) {
         // first child should be slot
         // and others should be literal.
         Expr* c = conjunct->get_child(0);
@@ -805,6 +807,12 @@ bool OrcChunkReader::_ok_to_add_conjunct(const Expr* conjunct) {
         if (node_type == TExprNodeType::IS_NULL_PRED) {
             // null predicate only has one child
             return true;
+        }
+
+        if (node_type == TExprNodeType::FUNCTION_CALL) {
+            // check is null & is not null
+            std::string null_str;
+            return conjunct->is_null_scalar_function(null_str);
         }
 
         if (conjunct->get_num_children() == 1) {
@@ -1008,7 +1016,7 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::
         return Status::OK();
     }
 
-    if (node_type == TExprNodeType::IS_NULL_PRED) {
+    if (node_type == TExprNodeType::IS_NULL_PRED || node_type == TExprNodeType::FUNCTION_CALL) {
         std::string null_function_name;
         if (conjunct->is_null_scalar_function(null_function_name)) {
             if (null_function_name == "null") {
