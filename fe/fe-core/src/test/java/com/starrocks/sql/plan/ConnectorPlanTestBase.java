@@ -70,8 +70,6 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         metadataMgr.registerMockedMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME, mockedHiveMetadata);
     }
 
-<<<<<<< HEAD
-=======
     public static void createPaimonTable(Catalog catalog, String db) throws Exception {
         catalog.createDatabase(db, false);
 
@@ -221,7 +219,6 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         metadataMgr.registerMockedMetadata(catalogName, metadata);
     }
 
->>>>>>> e95749dc9d ([BugFix] fix the issue of reading paimon table on OSS (#34996))
     private static void mockJDBCCatalogImpl(MockedMetadataMgr metadataMgr) throws DdlException {
         Map<String, String> properties = Maps.newHashMap();
 
