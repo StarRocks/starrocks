@@ -381,7 +381,7 @@ CREATE MATERIALIZED VIEW mv
 
 ### 用户自定义变量 Hint
 
-在 SELECT 或者 INSERT 语句中使用 `SET_USER_VARIABLE` Hint 设置一个或多个[用户自定义变量](../reference/user_defined_variables.md) ，然后执行该语句。如果其他语句中包含 SELECT 子句（如 SELECT 语句和 INSERT 语句，不包括  CREATE MATERIALIZED VIEW AS SELECT，CREATE VIEW AS SELECT），则您也可以在该 SELECT 子句中使用 `SET_USER_VARIABLE` Hint。注意如果在 CTE 中的 SELECT 子句中使用 `SET_USER_VARIABLE` Hint 设置系统变量，即使语句执行成功，但是该 `SET_USER_VARIABLE` Hint 不会生效。
+在 SELECT 或者 INSERT 语句中使用 `SET_USER_VARIABLE` Hint 设置一个或多个[用户自定义变量](../reference/user_defined_variables.md) ，然后执行该语句。如果其他语句中包含 SELECT 子句（如 SELECT 语句和 INSERT 语句，不包括 CREATE MATERIALIZED VIEW AS SELECT，CREATE VIEW AS SELECT），则您也可以在该 SELECT 子句中使用 `SET_USER_VARIABLE` Hint。注意如果在 CTE 中的 SELECT 子句中使用 `SET_USER_VARIABLE` Hint 设置系统变量，即使语句执行成功，但是该 `SET_USER_VARIABLE` Hint 不会生效。
 
 相比于[用户自定义变量的一般用法](../reference/user_defined_variables.md)是会话级别生效的，`SET_USER_VARIABLE` Hint 是语句级别生效，不会影响整个会话。
 
@@ -389,7 +389,7 @@ CREATE MATERIALIZED VIEW mv
 
 ```SQL
 [...] SELECT /*+ SET_USER_VARIABLE(@var_name = expr [, @var_name = expr]) */ ...
-INSERT /*+ SET_USER_VARIABLE(@var_name = expr [, @var_name = expr]) */ { INTO | OVERWRITE } ...
+INSERT /*+ SET_USER_VARIABLE(@var_name = expr [, @var_name = expr]) */ ...
 ```
 
 #### 示例
@@ -397,7 +397,7 @@ INSERT /*+ SET_USER_VARIABLE(@var_name = expr [, @var_name = expr]) */ { INTO | 
 如下 SELECT 语句中引用了标量子查询 `select max(age) from users` 和 `select min(name) from users`，则您可以使用 `SET_USER_VARIABLE` Hint，将这两个标量子查询设置为用户自定义变量，然后执行查询。
 
 ```SQL
-SELECT /*+ SET_USER_VARIABLE (@a = (select max(age) from users), @b = (select min(name) from users)) */ *  FROM sales_orders where sales_orders.age = @a and sales_orders.name = @b;
+SELECT /*+ SET_USER_VARIABLE (@a = (select max(age) from users), @b = (select min(name) from users)) */ * FROM sales_orders where sales_orders.age = @a and sales_orders.name = @b;
 ```
 
 ### Join Hint
