@@ -342,31 +342,33 @@ StarRocks 支持提示（Hint）功能。Hint 是一种指令或注释，显式�
 
 ### 系统变量 Hint
 
-在 SELECT, SUBMIT TASK 语句中使用 `SET_VAR` Hint 设置一个或多个[系统变量](../reference/System_variable.md) Hint，然后执行该语句。其他语句中如果包含 SELECT 子句（如 CREATE MATERIALIZED VIEW AS SELECT，CREATE VIEW AS SELECT），则您也可以在该 SELECT 子句中使用 `SET_VAR` Hint。相比于[系统变量的一般用法](../reference/System_variable.md)是会话级别生效的，用户自定义变量 Hint 是语句级别生效，不会影响整个会话。
+在 SELECT、SUBMIT TASK 语句中使用 `SET_VAR` Hint 设置一个或多个[系统变量](../reference/System_variable.md) ，然后执行该语句。其他语句中如果包含 SELECT 子句（如 CREATE MATERIALIZED VIEW AS SELECT，CREATE VIEW AS SELECT），则您也可以在该 SELECT 子句中使用 `SET_VAR` Hint。
+
+相比于[系统变量的一般用法](../reference/System_variable.md)是会话级别生效的，`SET_VAR` Hint 是语句级别生效，不会影响整个会话。
 
 #### 语法
 
 ```SQL
-[...] SELECT [/*+ SET_VAR(key=value [, key = value]*) */] ...
-SUBMIT [/*+ SET_VAR(key=value [, key = value]*) */] TASK ...
+[...] SELECT /*+ SET_VAR(key=value [, key = value]) */ ...
+SUBMIT [/*+ SET_VAR(key=value [, key = value]) */] TASK ...
 ```
 
 #### 示例
 
-在聚合查询语句中通过系统变量 `streaming_preaggregation_mode` 和 `new_planner_agg_stage` 来设置聚合方式。
+在聚合查询语句中使用 `SET_VAR` Hint 设置系统变量 `streaming_preaggregation_mode` 和 `new_planner_agg_stage` 来指定聚合方式。
 
 ```SQL
 SELECT /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming',new_planner_agg_stage = '2') */ SUM(sales_amount) AS total_sales_amount FROM sales_orders;
 ```
 
-在 SUBMIT TASK 语句中通过系统变量 `query_timeout` 来设置查询执行超时时间。
+在 SUBMIT TASK 语句中使用 `SET_VAR` Hint 设置系统变量 `query_timeout` 来指定查询执行超时时间。
 
 ```SQL
 SUBMIT /*+ SET_VAR(query_timeout=3) */ TASK 
     AS CREATE TABLE temp AS SELECT count(*) AS cnt FROM tbl1;
 ```
 
-创建物化视图时在 SELECT 子句中通过系统变量 `query_timeout` 来设置查询执行超时时间。
+创建物化视图时在 SELECT 子句中使用 `SET_VAR` Hint 通过系统变量 `query_timeout` 来设置查询执行超时时间。
 
 ```SQL
 CREATE MATERIALIZED VIEW mv 
@@ -379,19 +381,24 @@ CREATE MATERIALIZED VIEW mv
 
 ### 用户自定义变量 Hint
 
-在 SELECT 语句中使用 `SET_USER_VARIABLE` Hint 设置一个或多个[用户自定义变量](../reference/user_defined_variables.md) ，然后执行该语句。其他语句（目前仅支持 INSERT 语句）中如果包含的 SELECT 子句中，则您也可以在该 SELECT 子句中使用 `SET_USER_VARIABLE` Hint。相比于[用户自定义变量的一般用法](../reference/user_defined_variables.md)是会话级别生效的，用户自定义变量 Hint 是语句级别生效，不会影响整个会话。
+在 SELECT 或者 INSERT 语句中使用 `SET_USER_VARIABLE` Hint 设置一个或多个[用户自定义变量](../reference/user_defined_variables.md) ，然后执行该语句。如果 INSERT 语句中包含 SELECT 子句，则您也可以在该 SELECT 子句中使用 `SET_USER_VARIABLE` Hint。
 
-需要注意的是，如果需要将值，子查询和表达式设置为用户自定义变量，必须保证其为标量值，标量子查询和标量表表达式。
+相比于[用户自定义变量的一般用法](../reference/user_defined_variables.md)是会话级别生效的，`SET_USER_VARIABLE` Hint 是语句级别生效，不会影响整个会话。
 
 #### 语法
 
 ```SQL
-[...] SELECT [/*+ SET_USER_VARIABLE(@var_name = expr [, @var_name = expr]*) */] ...
+SELECT /*+ SET_USER_VARIABLE(@var_name = expr [, @var_name = expr]) */ ...
+```
+
+```SQL
+INSERT /*+ SET_USER_VARIABLE(@var_name = expr [, @var_name = expr]) */ { INTO | OVERWRITE } [db_name.]<table_name> ...
+    SELECT [/*+ SET_USER_VARIABLE(@var_name = expr [, @var_name = expr]) */] ...
 ```
 
 #### 示例
 
-如下查询语句中引用了标量子查询 `select max(age) from users` 和 `select min(name) from users`，则您可以使用 `SET_USER_VARIABLE` Hint，将这两个子查询设置为用户自定义变量，然后执行查询。
+如下 SELECT 语句中引用了标量子查询 `select max(age) from users` 和 `select min(name) from users`，则您可以使用 `SET_USER_VARIABLE` Hint，将这两个标量子查询设置为用户自定义变量，然后执行查询。
 
 ```SQL
 SELECT /*+ SET_USER_VARIABLE (@a = (select max(age) from users), @b = (select min(name) from users)) */ *  FROM sales_orders where sales_orders.age = @a and sales_orders.name = @b;
