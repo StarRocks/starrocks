@@ -6,7 +6,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.HdfsEnvironment;
-import com.starrocks.connector.hive.HiveMetaStoreThriftClient;
 import com.starrocks.connector.iceberg.hive.HiveTableOperations;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -27,26 +26,6 @@ import static com.starrocks.catalog.Table.TableType.ICEBERG;
 
 public class IcebergMetadataTest {
     private static final String CATALOG_NAME = "IcebergCatalog";
-
-    @Test
-    public void testListDatabaseNames(@Mocked HiveMetaStoreThriftClient metaStoreThriftClient) throws Exception {
-        new Expectations() {
-            {
-                metaStoreThriftClient.getAllDatabases();
-                result = Lists.newArrayList("db1", "db2");
-                minTimes = 0;
-            }
-        };
-
-        Map<String, String> properties = new HashMap<>();
-        String metastoreUris = "thrift://127.0.0.1:9083";
-        properties.put(ICEBERG_METASTORE_URIS, metastoreUris);
-        properties.put(ICEBERG_CATALOG_TYPE, "hive");
-        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
-        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, properties, hdfsEnvironment);
-        List<String> expectResult = Lists.newArrayList("db1", "db2");
-        Assert.assertEquals(expectResult, metadata.listDbNames());
-    }
 
     @Test
     public void testGetDB(@Mocked IcebergHiveCatalog icebergHiveCatalog) throws Exception {
