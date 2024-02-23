@@ -34,6 +34,7 @@ import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.UserPrivilegeCollectionV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.UserIdentity;
@@ -171,11 +172,31 @@ public class AuthenticationMgr {
         }
     }
 
+    /**
+     * Get max connection number of the user, if the user is ephemeral, i.e. the user is saved in SR,
+     * but some external system, like LDAP, return default max connection number
+     * @param currUserIdentity user identity of current connection
+     * @return max connection number of the user
+     */
+    public long getMaxConn(UserIdentity currUserIdentity) {
+        if (currUserIdentity.isEphemeral()) {
+            return DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER;
+        } else {
+            String userName = currUserIdentity.getUser();
+            return getMaxConn(userName);
+        }
+    }
+
+    /**
+     * Get max connection number based on plain username, the user should be an internal user,
+     * if the user doesn't exist in SR, it will throw an exception.
+     * @param userName plain username saved in SR
+     * @return max connection number of the user
+     */
     public long getMaxConn(String userName) {
         UserProperty userProperty = userNameToProperty.get(userName);
         if (userProperty == null) {
-            // TODO(yiming): find a better way to specify max connections for external user, like ldap, kerberos etc.
-            return DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER;
+            throw new SemanticException("Unknown user: " + userName);
         } else {
             return userNameToProperty.get(userName).getMaxConn();
         }
