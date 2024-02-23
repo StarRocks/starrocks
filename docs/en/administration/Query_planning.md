@@ -203,7 +203,7 @@ Query hints are directives or comments that explicitly suggest the query optimiz
 
 ### System variable hint
 
-You can set one or more [system variables](../reference/System_variable.md) hints by using `/*+ SET_VAR(var_name = value) */` in SELECT and SUBMIT TASK statements, or in the SELECT clause that is included in other statement, such as CREATE MATERIALIZED VIEW AS SELECT and CREATE VIEW AS SELECT.
+You can use a `SET_VAR` hint to set one or more [system variables](../reference/System_variable.md) in SELECT and SUBMIT TASK statements, or in the SELECT clause that is included in other statement, such as CREATE MATERIALIZED VIEW AS SELECT and CREATE VIEW AS SELECT.
 
 #### Syntax
 
@@ -239,9 +239,9 @@ AS SELECT /*+ SET_VAR(query_timeout=500) */ * from dual;
 
 ### User-defined variable hint
 
-You can set one or more [user-defined variables](../reference/user_defined_variables.md) hints by using `/*+ SET_USER_VARIABLE(...) */` in SELECT statements, or in the SELECT clause.
+You can use a `SET_USER_VARIABLE` hint to set one or more [user-defined variables](../reference/user_defined_variables.md) in SELECT statements, or in the SELECT clause.
 
-If a query references the result of a scalar subquery or scalar expression, you can use the user-defined variable hint to set that subquery or expression as a user-defined variable and then run the query. This not only avoids duplicate computation, but also eliminates the influence on the entire session because the user-defined variable hints in the form of `SET_USER_VARIABLE` take effect at the statement level, unlike [the normal usage of user-defined variables](../reference/user_defined_variables.md) that takes effect at the session level.
+If a query references the result of a scalar subquery or scalar expression, you can use the `SET_USER_VARIABLE` hint to set that subquery or expression as a user-defined variable and then run the query. This not only avoids duplicate computation, but also eliminates the influence on the entire session because the user-defined variable hints in the form of `SET_USER_VARIABLE` take effect at the statement level, unlike [the normal usage of user-defined variables](../reference/user_defined_variables.md) that takes effect at the session level.
 
 #### Syntax
 
