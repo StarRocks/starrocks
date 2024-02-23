@@ -21,6 +21,7 @@
 #include "exec/exchange_node.h"
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/adaptive/event.h"
+#include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
@@ -840,6 +841,14 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
     auto fragment_ctx = context->fragment_context();
     if (typeid(*datasink) == typeid(starrocks::ResultSink)) {
         auto* result_sink = down_cast<starrocks::ResultSink*>(datasink.get());
+
+        // Accumulate chunks before sending to result sink
+        if (runtime_state->query_options().__isset.enable_result_sink_accumulate &&
+            runtime_state->query_options().enable_result_sink_accumulate) {
+            ExecNode::may_add_chunk_accumulate_operator(fragment_ctx->pipelines().back()->get_op_factories(), context,
+                                                        Operator::s_pseudo_plan_node_id_for_final_sink);
+        }
+
         // Result sink doesn't have plan node id;
         OpFactoryPtr op = nullptr;
         if (result_sink->get_sink_type() == TResultSinkType::FILE) {
