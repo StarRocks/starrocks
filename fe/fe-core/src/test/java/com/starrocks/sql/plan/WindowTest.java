@@ -1348,11 +1348,11 @@ public class WindowTest extends PlanTestBase {
         plan = getDescTbl(sql);
         assertContains(plan, "TSlotDescriptor(id:11, parent:2, " +
                 "slotType:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:BIGINT))]), " +
-                "columnPos:-1, byteOffset:0, nullIndicatorByte:0, nullIndicatorBit:-1, " +
-                "colName:, slotIdx:0, isMaterialized:true)");
+                "columnPos:-1, byteOffset:-1, nullIndicatorByte:-1, nullIndicatorBit:-1, " +
+                "colName:, slotIdx:-1, isMaterialized:true, isOutputColumn:false, isNullable:false)");
         assertContains(plan, "TSlotDescriptor(id:11, parent:4, " +
                 "slotType:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:BIGINT))]), " +
-                "columnPos:-1, byteOffset:8, nullIndicatorByte:0, nullIndicatorBit:-1, " +
-                "colName:, slotIdx:2, isMaterialized:true)");
+                "columnPos:-1, byteOffset:-1, nullIndicatorByte:-1, nullIndicatorBit:-1, " +
+                "colName:, slotIdx:-1, isMaterialized:true, isOutputColumn:false, isNullable:false)");
     }
 }
