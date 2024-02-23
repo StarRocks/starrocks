@@ -295,6 +295,20 @@ StatusOr<ChunkIteratorPtr> Segment::new_iterator(const Schema& schema, const Seg
     return _new_iterator(schema, read_options);
 }
 
+Status Segment::new_inverted_index_iterator(uint32_t ucid, InvertedIndexIterator** iter,
+                                            const SegmentReadOptions& opts) {
+    auto column_reader_iter = _column_readers.find(ucid);
+
+    if (column_reader_iter != _column_readers.end()) {
+        std::shared_ptr<TabletIndex> index_meta;
+        RETURN_IF_ERROR(_tablet_schema->get_indexes_for_column(ucid, GIN, index_meta));
+        if (index_meta.get() != nullptr) {
+            return column_reader_iter->second->new_inverted_index_iterator(index_meta, iter, std::move(opts));
+        }
+    }
+    return Status::OK();
+}
+
 Status Segment::load_index(const LakeIOOptions& lake_io_opts) {
     auto res = success_once(_load_index_once, [&] {
         SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);

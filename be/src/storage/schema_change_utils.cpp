@@ -702,6 +702,10 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_sch
             } else if (new_column.has_bitmap_index() != ref_column.has_bitmap_index()) {
                 *sc_directly = true;
                 return Status::OK();
+            } else if (new_schema->has_index(new_column.unique_id(), GIN) !=
+                       base_schema->has_index(ref_column.unique_id(), GIN)) {
+                *sc_directly = true;
+                return Status::OK();
             }
         }
     }

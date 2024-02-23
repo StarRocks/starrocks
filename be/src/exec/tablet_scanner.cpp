@@ -376,6 +376,8 @@ void TabletScanner::update_counter() {
 
     COUNTER_UPDATE(_parent->_bi_filtered_counter, _reader->stats().rows_bitmap_index_filtered);
     COUNTER_UPDATE(_parent->_bi_filter_timer, _reader->stats().bitmap_index_filter_timer);
+    COUNTER_UPDATE(_parent->_gin_filtered_counter, _reader->stats().rows_gin_filtered);
+    COUNTER_UPDATE(_parent->_gin_filtered_timer, _reader->stats().gin_index_filter_timer);
     COUNTER_UPDATE(_parent->_block_seek_counter, _reader->stats().block_seek_num);
 
     COUNTER_UPDATE(_parent->_rowsets_read_count, _reader->stats().rowsets_read_count);

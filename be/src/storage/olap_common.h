@@ -265,6 +265,9 @@ struct OlapReaderStatistics {
 
     int64_t rows_del_vec_filtered = 0;
 
+    int64_t rows_gin_filtered = 0;
+    int64_t gin_index_filter_timer = 0;
+
     int64_t rowsets_read_count = 0;
     int64_t segments_read_count = 0;
     int64_t total_columns_data_page_count = 0;

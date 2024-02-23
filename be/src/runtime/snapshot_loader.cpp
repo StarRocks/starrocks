@@ -498,6 +498,7 @@ Status SnapshotLoader::primary_key_move(const std::string& snapshot_path, const 
     }
     snapshot_meta.tablet_meta().set_tablet_id(tablet_id);
 
+    // Do not need to copy GIN in pk table because it does not support GIN now
     RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(&snapshot_meta, snapshot_path));
 
     if (overwrite) {
