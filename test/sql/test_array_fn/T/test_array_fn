@@ -1,4 +1,4 @@
--- name: test_array_functions
+-]- name: test_array_functions
 CREATE TABLE array_test ( 
 pk bigint not null ,
 s_1   Array<String>, 
@@ -877,8 +877,8 @@ select array_contains_seq(['a','b','c'], ['a','c']);
 select array_contains_seq([[1, 2], [3, 4], [5, 6]], [[1, 2], [3, 4]]);
 select array_contains_seq([json_keys('{"a":1,"b":2}')], [json_keys('{"a":1}')]);
 select array_contains_seq([json_keys('{"a":1,"b":2}')], [json_keys('{"a":1,"b":2}')]);
-select array_contains_seq([map([1,2,5],[2,4,5])], [map([1,2,5],[2,4,5])]);
-select array_contains_seq([map([1,2,5],[2,4,5])], [map([1,2],[2,4])]);
+select array_contains_seq([map(1,[2,4,5])], [map(1,[2,4,5])]);
+select array_contains_seq([map(1,[2,4,5])], [map(2,[2,4])]);
 select array_contains_seq([1, 2, NULL, 3, 4], ['a']);
 select array_contains_seq([1, 2, NULL, 3, 4], [2,3]);
 select array_contains_seq([1, 2, NULL, 3, 4], null);
