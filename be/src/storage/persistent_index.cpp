@@ -2553,7 +2553,7 @@ Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const Slice* ke
         return st;
     }
 
-    if (st.ok() && keys_info_by_page.size() == 1) {
+    if (st.ok() && keys_info_by_page.size() == 1 && shard_info.uncompressed_size == 0) {
         return _get_in_shard_by_page(shard_idx, n, keys, values, found_keys_info, keys_info_by_page);
     }
 

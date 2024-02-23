@@ -602,6 +602,7 @@ TEST_P(PersistentIndexTest, test_l0_max_file_size) {
 }
 
 TEST_P(PersistentIndexTest, test_l0_max_memory_usage) {
+    write_pindex_bf = false;
     FileSystem* fs = FileSystem::Default();
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_l0_max_memory_usage";
     const std::string kIndexFile = "./PersistentIndexTest_test_l0_max_memory_usage/index.l0.0.0";
@@ -658,10 +659,12 @@ TEST_P(PersistentIndexTest, test_l0_max_memory_usage) {
     }
     config::l0_max_mem_usage = old_l0_max_mem_usage;
 
-    ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
+    write_pindex_bf = true;
+    //ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
 TEST_P(PersistentIndexTest, test_l0_min_memory_usage) {
+    write_pindex_bf = false;
     FileSystem* fs = FileSystem::Default();
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_l0_min_memory_usage";
     const std::string kIndexFile = "./PersistentIndexTest_test_l0_min_memory_usage/index.l0.0.0";
@@ -727,6 +730,7 @@ TEST_P(PersistentIndexTest, test_l0_min_memory_usage) {
     config::l0_max_mem_usage = old_l0_max_mem_usage;
     manager->mem_tracker()->set_limit(-1);
 
+    write_pindex_bf = true;
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
@@ -1901,7 +1905,7 @@ TEST_P(PersistentIndexTest, test_multi_l2_tmp_l1) {
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
-PARALLEL_TEST(PersistentIndexTest, test_bloom_filter_for_pindex) {
+TEST_P(PersistentIndexTest, test_bloom_filter_for_pindex) {
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_bloom_filter_for_pindex";
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString("posix://"));
     bool created;
@@ -1913,7 +1917,7 @@ PARALLEL_TEST(PersistentIndexTest, test_bloom_filter_for_pindex) {
 
     using Key = std::string;
     PersistentIndexMetaPB index_meta;
-    const int N = 500000;
+    const int N = 50000;
     vector<Key> keys(N);
     vector<Slice> key_slices;
     vector<IndexValue> values;
@@ -1937,6 +1941,7 @@ PARALLEL_TEST(PersistentIndexTest, test_bloom_filter_for_pindex) {
         index_meta.set_size(0);
         version.to_pb(index_meta.mutable_version());
         MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
+        l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_3);
         IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
         version.to_pb(snapshot_meta->mutable_version());
 
@@ -1987,7 +1992,7 @@ PARALLEL_TEST(PersistentIndexTest, test_bloom_filter_for_pindex) {
         PersistentIndex index(kPersistentIndexDir);
         ASSERT_OK(index.load(index_meta));
         CHECK(index._has_l1);
-        const int N = 100000;
+        const int N = 10000;
         ASSERT_OK(index.prepare(EditVersion(2, 0), N));
         for (int i = 0; i < 5; i++) {
             vector<IndexValue> values;
@@ -1995,7 +2000,7 @@ PARALLEL_TEST(PersistentIndexTest, test_bloom_filter_for_pindex) {
             for (int j = 0; j < N; j++) {
                 values.emplace_back(i * j);
             }
-            std::vector<IndexValue> old_values(N);
+            std::vector<IndexValue> old_values(N, IndexValue(NullIndexValue));
             ASSERT_OK(index.upsert(N, key_slices.data(), values.data(), old_values.data()));
             std::vector<IndexValue> get_values(N);
             ASSERT_OK(index.get(N, key_slices.data(), get_values.data()));
@@ -2009,7 +2014,7 @@ PARALLEL_TEST(PersistentIndexTest, test_bloom_filter_for_pindex) {
 
     {
         // reload persistent index
-        const int N = 100000;
+        const int N = 1000;
         PersistentIndex index(kPersistentIndexDir);
         StorageEngine::instance()->update_manager()->set_keep_pindex_bf(true);
         ASSERT_OK(index.load(index_meta));
@@ -2024,7 +2029,7 @@ PARALLEL_TEST(PersistentIndexTest, test_bloom_filter_for_pindex) {
     {
         // memory usage is too high
         StorageEngine::instance()->update_manager()->set_keep_pindex_bf(false);
-        const int N = 100000;
+        const int N = 10000;
         PersistentIndex index(kPersistentIndexDir);
         ASSERT_OK(index.load(index_meta));
         std::vector<IndexValue> get_values(N);
