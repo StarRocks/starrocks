@@ -24,6 +24,12 @@
 #include <string>
 #include <vector>
 
+#ifdef __IN_CONFIGBASE_CPP__
+#include <fmt/format.h>
+
+#include "gutil/strings/join.h"
+#endif
+
 namespace starrocks {
 class Status;
 
@@ -93,59 +99,134 @@ inline std::ostream& operator<<(std::ostream& os, const MutableString& s) {
     return os << s.value();
 }
 
-class Register {
-public:
-    struct Field {
-        const char* type = nullptr;
-        const char* name = nullptr;
-        void* storage = nullptr;
-        const char* defval = nullptr;
-        bool valmutable = false;
-        Field(const char* ftype, const char* fname, void* fstorage, const char* fdefval, bool fvalmutable)
-                : type(ftype), name(fname), storage(fstorage), defval(fdefval), valmutable(fvalmutable) {}
+#ifdef __IN_CONFIGBASE_CPP__
 
-        // Get the field value as string
-        std::string value() const;
-    };
+bool strtox(const std::string& valstr, bool& retval);
+bool strtox(const std::string& valstr, int16_t& retval);
+bool strtox(const std::string& valstr, int32_t& retval);
+bool strtox(const std::string& valstr, int64_t& retval);
+bool strtox(const std::string& valstr, double& retval);
 
+class Field {
 public:
-    static std::map<std::string, Field>* _s_field_map;
+    Field(const char* type, const char* name, void* storage, const char* defval, bool valmutable)
+            : _type(type), _name(name), _storage(storage), _defval(defval), _valmutable(valmutable) {}
 
+    virtual ~Field() = default;
+
+    const char* type() const { return _type; }
+
+    const char* name() const { return _name; }
+
+    const char* defval() const { return _defval; }
+
+    bool valmutable() const { return _valmutable; }
+
+    virtual std::string value() const;
+
+    virtual bool parse_value(const std::string& value);
+
+protected:
+    const char* _type;
+    const char* _name;
+    void* _storage;
+    const char* _defval;
+    bool _valmutable;
+};
+
+template <typename T, typename = void>
+class FieldImpl;
+
+//// FieldImpl<bool/int16_t/int32_t/int64_t/double>
+template <typename T>
+class FieldImpl<T, typename std::enable_if_t<std::is_arithmetic<T>::value>> final : public Field {
 public:
-    Register(const char* ftype, const char* fname, void* fstorage, const char* fdefval, bool fvalmutable) {
-        if (_s_field_map == nullptr) {
-            _s_field_map = new std::map<std::string, Field>();
-        }
-        Field field(ftype, fname, fstorage, fdefval, fvalmutable);
-        _s_field_map->insert(std::make_pair(std::string(fname), field));
+    FieldImpl(const char* type, const char* name, void* storage, const char* defval, bool valmutable)
+            : Field(type, name, storage, defval, valmutable) {}
+
+    std::string value() const override { return fmt::format("{}", *reinterpret_cast<T*>(_storage)); }
+
+    bool parse_value(const std::string& valstr) override { return strtox(valstr, *reinterpret_cast<T*>(_storage)); }
+};
+
+//// FieldImpl<std::string/MutableString>
+template <typename T>
+class FieldImpl<T, typename std::enable_if_t<std::is_same_v<T, std::string> || std::is_same_v<T, MutableString>>> final
+        : public Field {
+public:
+    FieldImpl(const char* type, const char* name, void* storage, const char* defval, bool valmutable)
+            : Field(type, name, storage, defval, valmutable) {}
+
+    std::string value() const override { return *reinterpret_cast<T*>(_storage); }
+
+    bool parse_value(const std::string& valstr) override {
+        *reinterpret_cast<T*>(_storage) = valstr;
+        return true;
     }
 };
 
-#define DEFINE_FIELD(FIELD_TYPE, FIELD_NAME, FIELD_DEFAULT, VALMUTABLE) \
-    FIELD_TYPE FIELD_NAME;                                              \
-    static Register reg_##FIELD_NAME(#FIELD_TYPE, #FIELD_NAME, &FIELD_NAME, FIELD_DEFAULT, VALMUTABLE);
+//// FieldImpl<std::vector<T>>
+template <typename T>
+class FieldImpl<std::vector<T>> final : public Field {
+public:
+    FieldImpl(const char* type, const char* name, void* storage, const char* defval, bool valmutable)
+            : Field(type, name, storage, defval, valmutable) {}
+
+    std::string value() const override {
+        auto as_str = [](const T& v) { return fmt::format("{}", v); };
+        const auto& v = *reinterpret_cast<const std::vector<T>*>(_storage);
+        return JoinMapped(v, as_str, ",");
+    }
+
+    bool parse_value(const std::string& valstr) override { return false; }
+};
+
+class Register {
+public:
+    inline static std::map<std::string, Field*> _s_field_map{};
+
+    explicit Register(Field* field) { _s_field_map.insert(std::make_pair(std::string(field->name()), field)); }
+};
+
+// Configuration properties load from config file.
+class Properties {
+public:
+    bool load(const char* filename);
+    bool get(const std::string& key, const std::string& defstr, Field* field) const;
+
+private:
+    std::map<std::string, std::string> file_conf_map;
+};
+
+#endif // __IN_CONFIGBASE_CPP__
+
+#define DEFINE_FIELD(FIELD_TYPE, FIELD_NAME, FIELD_DEFAULT, VALMUTABLE, TYPE_NAME)                          \
+    FIELD_TYPE FIELD_NAME;                                                                                  \
+    static FieldImpl<FIELD_TYPE> reg_field_##FIELD_NAME(TYPE_NAME, #FIELD_NAME, &FIELD_NAME, FIELD_DEFAULT, \
+                                                        VALMUTABLE);                                        \
+    static Register reg_##FIELD_NAME(&reg_field_##FIELD_NAME);
 
 #define DECLARE_FIELD(FIELD_TYPE, FIELD_NAME) extern FIELD_TYPE FIELD_NAME;
 
 #ifdef __IN_CONFIGBASE_CPP__
-#define CONF_Bool(name, defaultstr) DEFINE_FIELD(bool, name, defaultstr, false)
-#define CONF_Int16(name, defaultstr) DEFINE_FIELD(int16_t, name, defaultstr, false)
-#define CONF_Int32(name, defaultstr) DEFINE_FIELD(int32_t, name, defaultstr, false)
-#define CONF_Int64(name, defaultstr) DEFINE_FIELD(int64_t, name, defaultstr, false)
-#define CONF_Double(name, defaultstr) DEFINE_FIELD(double, name, defaultstr, false)
-#define CONF_String(name, defaultstr) DEFINE_FIELD(std::string, name, defaultstr, false)
-#define CONF_Bools(name, defaultstr) DEFINE_FIELD(std::vector<bool>, name, defaultstr, false)
-#define CONF_Int16s(name, defaultstr) DEFINE_FIELD(std::vector<int16_t>, name, defaultstr, false)
-#define CONF_Int32s(name, defaultstr) DEFINE_FIELD(std::vector<int32_t>, name, defaultstr, false)
-#define CONF_Int64s(name, defaultstr) DEFINE_FIELD(std::vector<int64_t>, name, defaultstr, false)
-#define CONF_Doubles(name, defaultstr) DEFINE_FIELD(std::vector<double>, name, defaultstr, false)
-#define CONF_Strings(name, defaultstr) DEFINE_FIELD(std::vector<std::string>, name, defaultstr, false)
-#define CONF_mBool(name, defaultstr) DEFINE_FIELD(bool, name, defaultstr, true)
-#define CONF_mInt16(name, defaultstr) DEFINE_FIELD(int16_t, name, defaultstr, true)
-#define CONF_mInt32(name, defaultstr) DEFINE_FIELD(int32_t, name, defaultstr, true)
-#define CONF_mInt64(name, defaultstr) DEFINE_FIELD(int64_t, name, defaultstr, true)
-#define CONF_mDouble(name, defaultstr) DEFINE_FIELD(double, name, defaultstr, true)
-#define CONF_mString(name, defaultstr) DEFINE_FIELD(MutableString, name, defaultstr, true)
+#define CONF_Bool(name, defaultstr) DEFINE_FIELD(bool, name, defaultstr, false, "bool")
+#define CONF_Int16(name, defaultstr) DEFINE_FIELD(int16_t, name, defaultstr, false, "int16")
+#define CONF_Int32(name, defaultstr) DEFINE_FIELD(int32_t, name, defaultstr, false, "int32")
+#define CONF_Int64(name, defaultstr) DEFINE_FIELD(int64_t, name, defaultstr, false, "int64")
+#define CONF_Double(name, defaultstr) DEFINE_FIELD(double, name, defaultstr, false, "double")
+#define CONF_String(name, defaultstr) DEFINE_FIELD(std::string, name, defaultstr, false, "string")
+#define CONF_Bools(name, defaultstr) DEFINE_FIELD(std::vector<bool>, name, defaultstr, false, "list<bool>")
+#define CONF_Int16s(name, defaultstr) DEFINE_FIELD(std::vector<int16_t>, name, defaultstr, false, "list<int16>")
+#define CONF_Int32s(name, defaultstr) DEFINE_FIELD(std::vector<int32_t>, name, defaultstr, false, "list<int32>")
+#define CONF_Int64s(name, defaultstr) DEFINE_FIELD(std::vector<int64_t>, name, defaultstr, false, "list<int64>")
+#define CONF_Doubles(name, defaultstr) DEFINE_FIELD(std::vector<double>, name, defaultstr, false, "list<double>")
+#define CONF_Strings(name, defaultstr) DEFINE_FIELD(std::vector<std::string>, name, defaultstr, false, "list<string>")
+#define CONF_mBool(name, defaultstr) DEFINE_FIELD(bool, name, defaultstr, true, "bool")
+#define CONF_mInt16(name, defaultstr) DEFINE_FIELD(int16_t, name, defaultstr, true, "int16")
+#define CONF_mInt32(name, defaultstr) DEFINE_FIELD(int32_t, name, defaultstr, true, "int32")
+#define CONF_mInt64(name, defaultstr) DEFINE_FIELD(int64_t, name, defaultstr, true, "int64")
+#define CONF_mDouble(name, defaultstr) DEFINE_FIELD(double, name, defaultstr, true, "double")
+#define CONF_mString(name, defaultstr) DEFINE_FIELD(MutableString, name, defaultstr, true, "string")
 #else
 #define CONF_Bool(name, defaultstr) DECLARE_FIELD(bool, name)
 #define CONF_Int16(name, defaultstr) DECLARE_FIELD(int16_t, name)
@@ -166,19 +247,6 @@ public:
 #define CONF_mDouble(name, defaultstr) DECLARE_FIELD(double, name)
 #define CONF_mString(name, defaultstr) DECLARE_FIELD(MutableString, name)
 #endif
-
-// Configuration properties load from config file.
-class Properties {
-public:
-    bool load(const char* filename);
-    template <typename T>
-    bool get(const char* key, const char* defstr, T& retval) const;
-
-private:
-    std::map<std::string, std::string> file_conf_map;
-};
-
-extern Properties props;
 
 bool init(const char* filename);
 

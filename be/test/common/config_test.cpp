@@ -61,20 +61,20 @@ TEST_F(ConfigTest, test_list_configs) {
             {"cfg_mbool", "true", "bool", "true", true},
             {"cfg_double", "123.456", "double", "123.456", false},
             {"cfg_mdouble", "-123.456", "double", "-123.456", true},
-            {"cfg_int16", "2561", "int16_t", "2561", false},
-            {"cfg_mint16", "-2561", "int16_t", "-2561", true},
-            {"cfg_int32", "65536123", "int32_t", "65536123", false},
-            {"cfg_mint32", "-65536123", "int32_t", "-65536123", true},
-            {"cfg_int64", "4294967296123", "int64_t", "4294967296123", false},
-            {"cfg_mint64", "-4294967296123", "int64_t", "-4294967296123", true},
-            {"cfg_string", "test_string", "std::string", "test_string", false},
-            {"cfg_mstring", "test_mstring", "MutableString", "test_mstring", true},
-            {"cfg_bools", "true,false,true", "std::vector<bool>", "true,false,true", false},
-            {"cfg_doubles", "0.1,0.2,0.3", "std::vector<double>", "0.1,0.2,0.3", false},
-            {"cfg_int16s", "1,2,3", "std::vector<int16_t>", "1,2,3", false},
-            {"cfg_int32s", "10,20,30", "std::vector<int32_t>", "10,20,30", false},
-            {"cfg_int64s", "100,200,300", "std::vector<int64_t>", "100,200,300", false},
-            {"cfg_strings", "s1,s2,s3", "std::vector<std::string>", "s1,s2,s3", false},
+            {"cfg_int16", "2561", "int16", "2561", false},
+            {"cfg_mint16", "-2561", "int16", "-2561", true},
+            {"cfg_int32", "65536123", "int32", "65536123", false},
+            {"cfg_mint32", "-65536123", "int32", "-65536123", true},
+            {"cfg_int64", "4294967296123", "int64", "4294967296123", false},
+            {"cfg_mint64", "-4294967296123", "int64", "-4294967296123", true},
+            {"cfg_string", "test_string", "string", "test_string", false},
+            {"cfg_mstring", "test_mstring", "string", "test_mstring", true},
+            {"cfg_bools", "true,false,true", "list<bool>", "true,false,true", false},
+            {"cfg_doubles", "0.1,0.2,0.3", "list<double>", "0.1,0.2,0.3", false},
+            {"cfg_int16s", "1,2,3", "list<int16>", "1,2,3", false},
+            {"cfg_int32s", "10,20,30", "list<int32>", "10,20,30", false},
+            {"cfg_int64s", "100,200,300", "list<int64>", "100,200,300", false},
+            {"cfg_strings", "s1,s2,s3", "list<string>", "s1,s2,s3", false},
     };
 
     std::vector<ConfigInfo> configs = config::list_configs();
@@ -148,7 +148,7 @@ TEST_F(ConfigTest, UpdateConfigs) {
     ASSERT_TRUE(cfg_bool_immutable);
     s = config::set_config("cfg_bool_immutable", "false");
     ASSERT_FALSE(s.ok());
-    ASSERT_EQ(s.to_string(), "Not supported: 'cfg_bool_immutable' is not support to modify");
+    ASSERT_EQ(s.to_string(), "Not supported: 'cfg_bool_immutable' is immutable");
     ASSERT_TRUE(cfg_bool_immutable);
 
     // convert error
@@ -171,7 +171,7 @@ TEST_F(ConfigTest, UpdateConfigs) {
     // not support
     s = config::set_config("cfg_std_string", "test");
     ASSERT_FALSE(s.ok());
-    ASSERT_EQ(s.to_string(), "Not supported: 'cfg_std_string' is not support to modify");
+    ASSERT_EQ(s.to_string(), "Not supported: 'cfg_std_string' is immutable");
     ASSERT_EQ(cfg_std_string, "starrocks_config_test_string");
 }
 
