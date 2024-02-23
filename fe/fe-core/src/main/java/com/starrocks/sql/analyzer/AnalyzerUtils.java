@@ -117,6 +117,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -563,11 +564,40 @@ public class AnalyzerUtils {
 
     private static class OlapTableCollector extends TableCollector {
         private Set<OlapTable> olapTables;
-        private Map<Long, OlapTable> idMap;
+        private Map<TableIndexId, OlapTable> idMap;
 
         public OlapTableCollector(Set<OlapTable> tables) {
             this.olapTables = tables;
             this.idMap = new HashMap<>();
+        }
+
+        /**
+         * One table may contain multi MaterializeIndexMetas. and it's different if one has tableA and baseIndex a
+         * and one has tableA and baseIndex b. So use TableId and its base table index as the key to distinguish a TableRelation.
+         */
+        class TableIndexId {
+            long tableId;
+            long baseIndexId;
+            public TableIndexId(long tableId, long indexId) {
+                this.tableId = tableId;
+                this.baseIndexId = indexId;
+            }
+            @Override
+            public boolean equals(Object o) {
+                if (this == o) {
+                    return true;
+                }
+                if (o == null || getClass() != o.getClass()) {
+                    return false;
+                }
+                TableIndexId that = (TableIndexId) o;
+                return tableId == that.tableId && baseIndexId == that.baseIndexId;
+            }
+
+            @Override
+            public int hashCode() {
+                return Objects.hash(tableId, baseIndexId);
+            }
         }
 
         @Override
@@ -592,7 +622,8 @@ public class AnalyzerUtils {
         // TODO: support cloud native table and mv
         private Table copyTable(Table originalTable) {
             OlapTable table = (OlapTable) originalTable;
-            OlapTable existed = idMap.get(table.getId());
+            TableIndexId tableIndexId = new TableIndexId(table.getId(), table.getBaseIndexId());
+            OlapTable existed = idMap.get(tableIndexId);
             if (existed != null) {
                 return existed;
             }
@@ -607,7 +638,7 @@ public class AnalyzerUtils {
             }
 
             olapTables.add(table);
-            idMap.put(table.getId(), table);
+            idMap.put(tableIndexId, table);
             table.copyOnlyForQuery(copied);
             return copied;
         }
