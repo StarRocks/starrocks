@@ -379,7 +379,7 @@ CREATE MATERIALIZED VIEW mv
 
 ### 用户自定义变量 Hint
 
-在 SELECT 语句中使用 `SET_USER_VARIABLE` Hint 设置一个或多个[用户自定义变量](../reference/user_defined_variables.md) 。
+在 SELECT 语句或者 INSERT 语句的 SELECT 子句中使用 `SET_USER_VARIABLE` Hint 设置一个或多个[用户自定义变量](../reference/user_defined_variables.md) 。
 
 如果查询语句中引用了某个标量子查询或者标量表达式的结果，则可以使用 `SET_USER_VARIABLE` Hint ，将该子查询和表达式设置为用户自定义变量，然后执行查询。这样可以减少子查询的重复计算，并且区别于[用户自定义变量的一般用法](../reference/user_defined_variables.md)是会话级别生效的，用户自定义变量 Hint 是语句级别生效，不会影响整个会话。
 
