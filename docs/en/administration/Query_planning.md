@@ -214,7 +214,7 @@ SUBMIT [/*+ SET_VAR(key=value [, key = value]*) */] TASK ...
 
 #### Examples
 
-Hint the aggregation method for an aggregate query by setting the system variables `streaming_preaggregation_mode` and `new_planner_agg_stage`.
+ Hint the aggregation method for an aggregate query by setting the system variables `streaming_preaggregation_mode` and `new_planner_agg_stage`.
 
 ~~~SQL
 SELECT /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming',new_planner_agg_stage = '2') */ SUM(sales_amount) AS total_sales_amount FROM sales_orders;
@@ -239,7 +239,7 @@ AS SELECT /*+ SET_VAR(query_timeout=500) */ * from dual;
 
 ### User-defined variable hint
 
-You can use a `SET_USER_VARIABLE` hint to set one or more [user-defined variables](../reference/user_defined_variables.md) in SELECT statements, or in the SELECT clause.
+You can use a `SET_USER_VARIABLE` hint to set one or more [user-defined variables](../reference/user_defined_variables.md) in SELECT statements, or in the INSERT INTO SELECT clause.
 
 If a query references the result of a scalar subquery or scalar expression, you can use the `SET_USER_VARIABLE` hint to set that subquery or expression as a user-defined variable and then run the query. This not only avoids duplicate computation, but also eliminates the influence on the entire session because the `SET_USER_VARIABLE` hint takes effect at the statement level, unlike [the normal usage of user-defined variables](../reference/user_defined_variables.md) that takes effect at the session level.
 
