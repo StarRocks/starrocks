@@ -19,8 +19,10 @@
 #include "common/configbase.h"
 #undef __IN_CONFIGBASE_CPP__
 
+#include <gmock/gmock.h> // EXPECT_THAT, ElementsAre
 #include <gtest/gtest.h>
 
+#include <sstream>
 #include <thread>
 
 #include "common/status.h"
@@ -28,6 +30,8 @@
 
 namespace starrocks {
 using namespace config;
+
+using namespace ::testing;
 
 class ConfigTest : public testing::Test {
     void SetUp() override { config::TEST_clear_configs(); }
@@ -57,9 +61,8 @@ TEST_F(ConfigTest, test_init) {
 
     // Invalid bool value
     {
-        std::streamstream ss;
+        std::stringstream ss;
         ss << R"DEL(
-           #comment
            cfg_bool = t
            )DEL";
 
@@ -68,9 +71,8 @@ TEST_F(ConfigTest, test_init) {
 
     // Invalid numeric value
     {
-        std::streamstream ss;
+        std::stringstream ss;
         ss << R"DEL(
-           #comment
            cfg_int32 = 0xAB
            )DEL";
 
@@ -79,9 +81,8 @@ TEST_F(ConfigTest, test_init) {
 
     // Invalid env
     {
-        std::streamstream ss;
+        std::stringstream ss;
         ss << R"DEL(
-           #comment
            cfg_string = ${xxxx}
            )DEL";
 
@@ -90,7 +91,7 @@ TEST_F(ConfigTest, test_init) {
 
     // Valid input
     {
-        std::streamstream ss;
+        std::stringstream ss;
         ss << R"DEL(
            #comment
            cfg_bool = true
@@ -127,15 +128,15 @@ TEST_F(ConfigTest, test_init) {
     EXPECT_EQ(2561, cfg_int16);
     EXPECT_EQ(12, cfg_mint16);
     EXPECT_EQ(4294967296123, cfg_int64);
-    EXPECT_EQ(-4294967296123, cfg_int64);
+    EXPECT_EQ(-4294967296123, cfg_mint64);
     EXPECT_EQ("test string", cfg_string);
     EXPECT_EQ("test_mstring", cfg_mstring.value());
-    EXPECT_EQ(std::vector<bool>{true, false, true}, cfg_bools);
-    EXPECT_EQ(std::vector<double>{0.1, 0.2, 0.3}, cfg_doubles);
-    EXPECT_EQ(std::vector<int16_t>{1, 2, 3}, cfg_int16s);
-    EXPECT_EQ(std::vector<int32_t>{123, 456, 789}, cfg_int32s);
-    EXPECT_EQ(std::vecotr<int64_t>{100, 200, 300}, cfg_int64s);
-    EXPECT_EQ(std::vector<std::string>{"text1", "hello world", "StarRocks"}, cfg_strings);
+    EXPECT_THAT(cfg_bools, ElementsAre(true, false, true));
+    EXPECT_THAT(cfg_doubles, ElementsAre(0.1, 0.2, 0.3));
+    EXPECT_THAT(cfg_int16s, ElementsAre(1, 2, 3));
+    EXPECT_THAT(cfg_int32s, ElementsAre(123, 456, 789));
+    EXPECT_THAT(cfg_int64s, ElementsAre(100, 200, 300));
+    EXPECT_THAT(cfg_strings, ElementsAre("text1", "hello world", "StarRocks"));
     EXPECT_EQ("prefix/env1_value/suffix", cfg_string_env);
     EXPECT_EQ(true, cfg_bool_env);
 }
@@ -204,7 +205,7 @@ TEST_F(ConfigTest, test_list_configs) {
     }
 }
 
-TEST_F(ConfigTest, UpdateConfigs) {
+TEST_F(ConfigTest, test_set_config) {
     CONF_Bool(cfg_bool_immutable, "true");
     CONF_mBool(cfg_bool, "false");
     CONF_mDouble(cfg_double, "123.456");
@@ -248,37 +249,31 @@ TEST_F(ConfigTest, UpdateConfigs) {
 
     // not exist
     Status s = config::set_config("cfg_not_exist", "123");
-    ASSERT_FALSE(s.ok());
-    ASSERT_EQ(s.to_string(), "Not found: 'cfg_not_exist' is not found");
+    ASSERT_TRUE(s.is_not_found()) << s;
 
     // immutable
     ASSERT_TRUE(cfg_bool_immutable);
     s = config::set_config("cfg_bool_immutable", "false");
-    ASSERT_FALSE(s.ok());
-    ASSERT_EQ(s.to_string(), "Not supported: 'cfg_bool_immutable' is immutable");
+    ASSERT_TRUE(s.is_not_supported()) << s;
     ASSERT_TRUE(cfg_bool_immutable);
 
     // convert error
     s = config::set_config("cfg_bool", "falseeee");
-    ASSERT_FALSE(s.ok());
-    ASSERT_EQ(s.to_string(), "Invalid argument: convert 'falseeee' as bool failed");
+    ASSERT_TRUE(s.is_invalid_argument()) << s;
     ASSERT_TRUE(cfg_bool);
 
     s = config::set_config("cfg_double", "");
-    ASSERT_FALSE(s.ok());
-    ASSERT_EQ(s.to_string(), "Invalid argument: convert '' as double failed");
+    ASSERT_TRUE(s.is_invalid_argument()) << s;
     ASSERT_EQ(cfg_double, 654.321);
 
     // convert error
     s = config::set_config("cfg_int32_t", "4294967296124");
-    ASSERT_FALSE(s.ok());
-    ASSERT_EQ(s.to_string(), "Invalid argument: convert '4294967296124' as int32_t failed");
+    ASSERT_TRUE(s.is_invalid_argument()) << s;
     ASSERT_EQ(cfg_int32_t, 65536124);
 
     // not support
     s = config::set_config("cfg_std_string", "test");
-    ASSERT_FALSE(s.ok());
-    ASSERT_EQ(s.to_string(), "Not supported: 'cfg_std_string' is immutable");
+    ASSERT_TRUE(s.is_not_supported()) << s;
     ASSERT_EQ(cfg_std_string, "starrocks_config_test_string");
 }
 

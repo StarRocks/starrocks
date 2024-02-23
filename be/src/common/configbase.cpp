@@ -187,9 +187,10 @@ inline bool Properties::load(std::istream& input) {
 
 // Init conf fields.
 bool init(const char* filename) {
-    // If 'filename' is null, use the empty props.
     if (filename == nullptr) {
-        return true;
+        // Init configurations by default values
+        std::istringstream empty_input;
+        return init(empty_input);
     }
 
     // Open the conf file
@@ -216,14 +217,14 @@ bool init(std::istream& input) {
     // Set conf fields.
     for (const auto& [name, field] : Field::fields()) {
         std::string value = props.get(name).value_or(field->defval());
-        StripWhiteSpace(&value);
         auto st = replaceenv(value);
         if (!st.ok()) {
             std::cerr << st << '\n';
             return false;
         }
+        StripWhiteSpace(&value);
         if (!field->parse_value(value)) {
-            std::cerr << name << ": Invalid config value: '" << value << '\n';
+            std::cerr << fmt::format("Invalid value of config '{}': '{}'", name, value) << '\n';
             return false;
         }
     }
@@ -241,7 +242,7 @@ Status set_config(const std::string& field, const std::string& value) {
     std::string real_value = value;
     RETURN_IF_ERROR(replaceenv(real_value));
     if (!it->second->parse_value(real_value)) {
-        return Status::InvalidArgument(fmt::format("{}: Invalid config value: '{}'", field, value));
+        return Status::InvalidArgument(fmt::format("Invalid value of config '{}': '{}'", field, value));
     }
     return Status::OK();
 }
