@@ -1000,4 +1000,4 @@ BE static parameters are as follows.
 #### starlet_star_cache_disk_size_percent
 
 - **Default**：80
-- **Description**：The percentage of disk capacity that block data cache uses at most in a shared-data cluster.
+- **Description**：The percentage of disk capacity that block data cache can use at most in a shared-data cluster.
