@@ -460,7 +460,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                                 if (tbl != null) {
                                     try {
                                         Authorizer.checkAnyActionOnTableLikeObject(currentUser,
-                                                null, tableName.getDb(), tbl);
+                                                null, db.getFullName(), tbl);
                                     } catch (AccessDeniedException e) {
                                         continue OUTER;
                                     }
