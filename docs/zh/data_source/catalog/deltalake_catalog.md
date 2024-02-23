@@ -8,7 +8,7 @@ Delta Lake Catalog 是一种 External Catalog。通过 Delta Lake Catalog，您�
 
 此外，您还可以基于 Delta Lake Catalog，结合 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 能力来实现数据转换和导入。StarRocks 从 2.5 版本开始支持 Delta Lake Catalog。
 
-为保证正常访问 Delta Lake 内的数据，StarRocks 集群必须集成以下两个关键组件：
+为保证正常访问 Delta Lake 内的数据，StarRocks 集群必须能够访问 Delta Lake 集群的存储系统和元数据服务。目前 StarRocks 支持以下存储系统和元数据服务：
 
 - 对象存储或分布式文件系统，如 AWS S3、其他兼容 S3 协议的对象存储、Microsoft Azure Storage、Google GCS、或 HDFS
 
