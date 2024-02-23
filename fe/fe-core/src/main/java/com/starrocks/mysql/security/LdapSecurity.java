@@ -16,6 +16,7 @@
 package com.starrocks.mysql.security;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.util.NetUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -32,8 +33,9 @@ public class LdapSecurity {
 
     //bind to ldap server to check password
     public static boolean checkPassword(String dn, String password) {
-        String url = "ldap://" + Config.authentication_ldap_simple_server_host + ":" +
-                Config.authentication_ldap_simple_server_port;
+        String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(Config.authentication_ldap_simple_server_host,
+                Config.authentication_ldap_simple_server_port);
+        String url = "ldap://" + accessibleHostPort;
         Hashtable<String, String> env = new Hashtable<>();
         env.put(Context.SECURITY_AUTHENTICATION, "simple");
         env.put(Context.SECURITY_CREDENTIALS, password);
@@ -64,8 +66,9 @@ public class LdapSecurity {
     //2. search user
     //3. if match exactly one, check password
     public static boolean checkPasswordByRoot(String user, String password) {
-        String url = "ldap://" + Config.authentication_ldap_simple_server_host + ":" +
-                Config.authentication_ldap_simple_server_port;
+        String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(Config.authentication_ldap_simple_server_host, 
+                Config.authentication_ldap_simple_server_port);
+        String url = "ldap://" + accessibleHostPort;
         Hashtable<String, String> env = new Hashtable<>();
         //dn contains '=', so we should use ' or " to wrap the value in config file
         String rootDN = Config.authentication_ldap_simple_bind_root_dn;
