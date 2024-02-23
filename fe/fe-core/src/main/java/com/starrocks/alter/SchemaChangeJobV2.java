@@ -597,6 +597,12 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                                                     new Field(col.getName(), col.getType(), tableName, null))
                                             .collect(Collectors.toList())));
 
+                            if (ConnectContext.get() == null) {
+                                LOG.warn("Connect Context is null when add/modify generated column");
+                            } else {
+                                ConnectContext.get().setDatabase(db.getFullName());
+                            }
+
                             RewriteAliasVisitor visitor =
                                     new RewriteAliasVisitor(sourceScope, outputScope,
                                             outputExprs, ConnectContext.get());

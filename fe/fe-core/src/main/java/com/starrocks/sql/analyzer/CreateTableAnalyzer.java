@@ -484,6 +484,9 @@ public class CreateTableAnalyzer {
                     if (slots.size() != 0) {
                         for (SlotRef slot : slots) {
                             Column refColumn = columnsMap.get(slot.getColumnName());
+                            if (refColumn == null) {
+                                throw new SemanticException("column:" + slot.getColumnName() + " does not exist");
+                            }
                             if (refColumn.isGeneratedColumn()) {
                                 throw new SemanticException("Expression can not refers to other generated columns");
                             }
