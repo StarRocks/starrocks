@@ -29,13 +29,7 @@ public class MaterializedViewTPCDSTest extends MaterializedViewTestBase {
         starRocksAssert.withDatabase(MATERIALIZED_DB_NAME)
                 .useDatabase(MATERIALIZED_DB_NAME);
         TPCDSTestUtil.prepareTables(starRocksAssert);
-<<<<<<< HEAD
-=======
-        starRocksAssert.dropDatabase("test");
-        starRocksAssert.withDatabase("test")
-                        .useDatabase("test");
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
->>>>>>> bbb1da845f ([BugFix] Fix partition predicates compensate bug with multi partition tables (backport #41385) (#41450))
     }
 
     @Test
