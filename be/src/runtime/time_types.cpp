@@ -302,7 +302,7 @@ bool date::from_string(const char* date_str, size_t len, int* year, int* month, 
     return true;
 }
 
-// Get date base on format "%YYYY-%mm-%dd", where '-' means any char.
+// Get date base on format "%Y-%m-%d", where '-' means any char.
 // compare every char.
 // Note that this method does not check whether the parsed year, month, and day are in valid range.
 bool date::from_string_to_date_internal(const char* ptr, int* pyear, int* pmonth, int* pday) {
