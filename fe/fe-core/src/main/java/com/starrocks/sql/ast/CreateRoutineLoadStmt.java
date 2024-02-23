@@ -136,8 +136,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     public static final String PULSAR_DEFAULT_INITIAL_POSITION = "pulsar_default_initial_position";
 
     private static final String NAME_TYPE = "ROUTINE LOAD NAME";
-    private static final String ENDPOINT_REGEX = "[-A-Za-z0-9+&@#/%?=~_|!:,.;]+[-A-Za-z0-9+&@#/%=~_|]";
-    private static final String IPV6_REGEX = "\\[([0-9a-zA-Z\\-%._:]*)\\]:(\\d+)";
+    private static final String ENDPOINT_REGEX = ".*?\\[?([0-9a-zA-Z\\-%._:]*)\\]?:(\\d+)";
 
     private static final ImmutableSet<String> PROPERTIES_SET = new ImmutableSet.Builder<String>()
             .add(DESIRED_CONCURRENT_NUMBER_PROPERTY)
@@ -683,9 +682,9 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         }
         String[] kafkaBrokerList = this.kafkaBrokerList.split(",");
         for (String broker : kafkaBrokerList) {
-            if (!Pattern.matches(ENDPOINT_REGEX, broker) && !Pattern.matches(IPV6_REGEX, broker)) {
+            if (!Pattern.matches(ENDPOINT_REGEX, broker)) {
                 throw new AnalysisException(KAFKA_BROKER_LIST_PROPERTY + ":" + broker
-                        + " not match pattern " + ENDPOINT_REGEX + " or " + IPV6_REGEX);
+                        + " not match pattern " + ENDPOINT_REGEX);
             }
         }
 
