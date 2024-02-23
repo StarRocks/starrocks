@@ -1,0 +1,42 @@
+-- name: generate_series_by_seconds_01
+select * from table(generate_series('2023-12-31 23:59:56', '2024-01-01 00:00:06', interval 3 second));
+-- name: generate_series_by_seconds_02
+select * from table(generate_series('2024-01-01 00:00:06', '2023-12-31 23:59:56', interval 3 second));
+-- name: generate_series_by_seconds_03
+select * from table(generate_series('2024-01-01 00:00:06', '2023-12-31 23:59:56', interval -3 second));
+-- name: generate_series_by_minute_01
+select * from table(generate_series('2023-12-31 23:57:56', '2024-01-01 00:05:06', interval 2 minute));
+-- name: generate_series_by_minute_02
+select * from table(generate_series('2024-01-01 00:05:06', '2023-12-31 23:57:56', interval -2 minute));
+-- name: generate_series_by_hour_01
+select * from table(generate_series('2023-12-31 19:59:56', '2024-01-01 02:00:06', interval 3 hour));
+-- name: generate_series_by_hour_02
+select * from table(generate_series('2024-01-01 02:00:06', '2023-12-31 19:59:56', interval -3 hour));
+-- name: generate_series_by_day_01
+select * from table(generate_series('2023-02-27', '2023-03-02'));
+-- name: generate_series_by_day_02
+select * from table(generate_series('2024-02-27 02:05:15', '2024-03-02 04:11:17'));
+-- name: generate_series_by_day_03
+select * from table(generate_series('2023-02-02', '2023-01-30'));
+-- name: generate_series_by_day_04
+select * from table(generate_series('2023-11-25', '2024-01-20', 15));
+-- name: generate_series_by_day_04
+select * from table(generate_series('2023-01-30', '2023-02-02', interval 2 day));
+-- name: generate_series_by_day_06
+select * from table(generate_series('2023-02-02', '2023-01-30', -2));
+-- name: generate_series_by_month_01
+select * from table(generate_series('2023-04-02', '2024-03-08', interval 3 month));
+-- name: generate_series_by_month_02
+select * from table(generate_series('2024-03-08', '2023-04-02', interval -3 month));
+-- name: generate_series_by_month_01
+select * from table(generate_series('1996-04-02', '2024-03-08', interval 3 year));
+-- name: generate_series_by_month_02
+select * from table(generate_series('2024-03-08', '1996-04-02', interval -3 year));
+-- name: generate_series_abnormal_case_01
+SELECT * from table(generate_series('2023-12-29 00:00:00', '2024-01-02 00:00:00', 2.4));
+SELECT * from table(generate_series('2023-12-29 00:00:00', '2024-01-02 00:00:00', interval 2.3 second));
+-- name: generate_series_abnormal_case_02
+CREATE TABLE t_datetime (seq int, start datetime, end datetime, step int) DUPLICATE KEY(`seq`) DISTRIBUTED BY HASH(seq) BUCKETS 1;
+INSERT INTO t_datetime VALUES(1, '2023-12-31 23:59:57', '2024-01-01 00:00:04', 2),(2, '2024-01-01 00:00:06', '2023-12-31 23:59:56', -3),(3, NULL, '2024-01-01 00:00:04', 2),(4, '2023-12-31 23:59:57', NULL, 2),(5, '2023-12-31 23:59:57', '2024-01-01 00:00:04', NULL);
+SELECT * FROM t_datetime, generate_series(t_datetime.start, t_datetime.end, interval 3 second);
+SELECT * FROM t_datetime, generate_series(start, end, interval step second);
