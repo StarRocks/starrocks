@@ -274,15 +274,14 @@ public class AnalyzeInsertTest {
                         "\t\"path\" = \"s3://path/to/directory/\", \n" +
                         "\t\"compression\" = \"uncompressed\" ) \n" +
                         "select \"abc\" as k1",
-                "format is a mandatory property. " +
-                        "Use \"format\" = \"parquet\" as only parquet format is supported now");
+                "format is a mandatory property. Use any of (parquet, orc).");
 
         analyzeFail("insert into files ( \n" +
                 "\t\"path\" = \"s3://path/to/directory/\", \n" +
-                "\t\"format\"=\"orc\", \n" +
+                "\t\"format\"=\"unknown\", \n" +
                 "\t\"compression\" = \"uncompressed\" ) \n" +
                 "select \"abc\" as k1",
-                "use \"format\" = \"parquet\", as only parquet format is supported now");
+                "format unknown is not supported. Use any of (parquet, orc).");
 
         analyzeFail("insert into files ( \n" +
                         "\t\"path\" = \"s3://path/to/directory/\", \n" +

@@ -347,11 +347,12 @@ public class InsertStmt extends DmlStmt {
 
         if (format == null) {
             throw new SemanticException("format is a mandatory property. " +
-                    "Use \"format\" = \"parquet\" as only parquet format is supported now");
+                    "Use any of (parquet, orc).");
         }
 
         if (!format.equalsIgnoreCase("parquet") && !format.equalsIgnoreCase("orc")) {
-            throw new SemanticException("use \"path\" = \"parquet\", as only parquet format is supported now");
+            throw new SemanticException("format " + format + " is not supported. " +
+                    "Use any of (parquet, orc).");
         }
 
         // if compression codec is not specified, use compression codec from session
