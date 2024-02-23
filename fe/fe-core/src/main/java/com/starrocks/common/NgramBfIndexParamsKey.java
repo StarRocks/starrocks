@@ -25,7 +25,8 @@ public enum NgramBfIndexParamsKey implements ParamsKey {
     /**
      * bloom filter's false positive possibility
      */
-    BLOOM_FILTER_FPP(String.valueOf(FeConstants.DEFAULT_BLOOM_FILTER_FPP), true);
+    BLOOM_FILTER_FPP(String.valueOf(FeConstants.DEFAULT_BLOOM_FILTER_FPP), true),
+    CASE_SENSITIVE(FeConstants.NGRAM_CASE_SENSITIVE, true);
 
     private final String defaultValue;
     private boolean needDefault = false;

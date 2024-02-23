@@ -23,7 +23,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.NgramBfIndexParamsKey;
 import com.starrocks.sql.analyzer.SemanticException;
 
-import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -31,6 +30,8 @@ import java.util.Set;
 public class BloomFilterIndexUtil {
     public static String FPP_KEY = NgramBfIndexParamsKey.BLOOM_FILTER_FPP.toString().toLowerCase(Locale.ROOT);
     public static String GRAM_NUM_KEY = NgramBfIndexParamsKey.GRAM_NUM.toString().toLowerCase(Locale.ROOT);
+
+    public static String CASE_SENSITIVE_KEY = NgramBfIndexParamsKey.CASE_SENSITIVE.toString().toLowerCase(Locale.ROOT);
     private static final double MAX_FPP = 0.05;
     private static final double MIN_FPP = 0.0001;
 
@@ -48,6 +49,7 @@ public class BloomFilterIndexUtil {
             if (bfFpp < MIN_FPP || bfFpp > MAX_FPP) {
                 throw new SemanticException("Bloom filter fpp should in [" + MIN_FPP + ", " + MAX_FPP + "]");
             }
+            properties.remove(FPP_KEY);
         }
 
         return bfFpp;
@@ -59,6 +61,17 @@ public class BloomFilterIndexUtil {
             if (gram_num <= 0) {
                 throw new SemanticException("Ngram Bloom filter's gram_num should be positive number");
             }
+            properties.remove(GRAM_NUM_KEY);
+        }
+    }
+
+    private static void analyzeBloomFilterCaseSensitive(Map<String, String> properties) throws SemanticException {
+        if (properties != null && properties.containsKey(CASE_SENSITIVE_KEY)) {
+            String caseSensitive = properties.get(CASE_SENSITIVE_KEY);
+            if (!caseSensitive.equalsIgnoreCase("true") && !caseSensitive.equalsIgnoreCase("false")) {
+                throw new SemanticException("Ngram Bloom filter's case_sensitive should be true or false");
+            }
+            properties.remove(CASE_SENSITIVE_KEY);
         }
     }
 
@@ -82,6 +95,11 @@ public class BloomFilterIndexUtil {
 
         analyzeBloomFilterFpp(properties);
         analyzeBloomFilterGramNum(properties);
+        analyzeBloomFilterGramNum(properties);
+        analyzeBloomFilterCaseSensitive(properties);
+        if (!properties.isEmpty()) {
+            throw new SemanticException("Invalid properties for Ngram Bloom filter index: " + properties.keySet());
+        }
     }
 
     public static void analyseBfWithNgramBf(Set<Index> newIndexs, Set<String> bfColumns) throws AnalysisException {

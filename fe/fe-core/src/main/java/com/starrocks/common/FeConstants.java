@@ -45,6 +45,9 @@ public class FeConstants {
 
     // NGRAM Bloom filter's default gram number
     public static final int DEFAULT_GRAM_NUM = 2;
+
+    public static final String NGRAM_CASE_SENSITIVE = "true";
+
     // general model
     @Deprecated
     // for rollback compatible
