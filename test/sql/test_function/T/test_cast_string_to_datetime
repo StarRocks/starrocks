@@ -127,56 +127,56 @@ select
 from t1;
 
 -- ## 2.3 Query constants.
-select cast(NULL as datetime);
-select cast("20200101" as datetime);
-select cast("20200101010203" as datetime);
-select cast("20200101T010203" as datetime);
-select cast("20200101T0102033" as datetime);
-select cast("20200101T010203.123" as datetime);
+select cast(column_0 as datetime) from (values (NULL)) as tmp;
+select cast(column_0 as datetime) from (values ("20200101")) as tmp;
+select cast(column_0 as datetime) from (values ("20200101010203")) as tmp;
+select cast(column_0 as datetime) from (values ("20200101T010203")) as tmp;
+select cast(column_0 as datetime) from (values ("20200101T0102033")) as tmp;
+select cast(column_0 as datetime) from (values ("20200101T010203.123")) as tmp;
 
-select cast("200101" as datetime);
-select cast("200101010203" as datetime);
-select cast("200101T010203" as datetime);
-select cast("200101T0102033" as datetime);
-select cast("200101T010203.123" as datetime);
+select cast(column_0 as datetime) from (values ("200101")) as tmp;
+select cast(column_0 as datetime) from (values ("200101010203")) as tmp;
+select cast(column_0 as datetime) from (values ("200101T010203")) as tmp;
+select cast(column_0 as datetime) from (values ("200101T0102033")) as tmp;
+select cast(column_0 as datetime) from (values ("200101T010203.123")) as tmp;
 
-select cast("2020.01.01" as datetime);
-select cast("2020.01.01T01.02.03" as datetime);
-select cast("2020.01.01T01.02.033" as datetime);
-select cast("2020.01.01T01.0203.123" as datetime);
+select cast(column_0 as datetime) from (values ("2020.01.01")) as tmp;
+select cast(column_0 as datetime) from (values ("2020.01.01T01.02.03")) as tmp;
+select cast(column_0 as datetime) from (values ("2020.01.01T01.02.033")) as tmp;
+select cast(column_0 as datetime) from (values ("2020.01.01T01.0203.123")) as tmp;
 
-select cast("  20200101 " as datetime);
-select cast("  20200101010203   " as datetime);
-select cast("  20200101T010203" as datetime);
-select cast("20200101T0102033  " as datetime);
-select cast("  20200101T010203.123    \n" as datetime);
-select cast("  20200101T010203.123    \n \t \v \f \r " as datetime);
+select cast(column_0 as datetime) from (values ("  20200101 ")) as tmp;
+select cast(column_0 as datetime) from (values ("  20200101010203   ")) as tmp;
+select cast(column_0 as datetime) from (values ("  20200101T010203")) as tmp;
+select cast(column_0 as datetime) from (values ("20200101T0102033  ")) as tmp;
+select cast(column_0 as datetime) from (values ("  20200101T010203.123    \n")) as tmp;
+select cast(column_0 as datetime) from (values ("  20200101T010203.123    \n \t \v \f \r ")) as tmp;
     
-select cast("2020.13.29" as datetime);
-select cast("2020.13.61" as datetime);
+select cast(column_0 as datetime) from (values ("2020.13.29")) as tmp;
+select cast(column_0 as datetime) from (values ("2020.13.61")) as tmp;
 
-select cast("2020.02.29" as datetime);
-select cast("2020.02.28" as datetime);
-select cast("2000.02.29" as datetime);
-select cast("2000.02.28" as datetime);
+select cast(column_0 as datetime) from (values ("2020.02.29")) as tmp;
+select cast(column_0 as datetime) from (values ("2020.02.28")) as tmp;
+select cast(column_0 as datetime) from (values ("2000.02.29")) as tmp;
+select cast(column_0 as datetime) from (values ("2000.02.28")) as tmp;
 
-select cast("2021.02.28" as datetime);
-select cast("2100.02.28" as datetime);
+select cast(column_0 as datetime) from (values ("2021.02.28")) as tmp;
+select cast(column_0 as datetime) from (values ("2100.02.28")) as tmp;
 
-select cast("invalid" as datetime);
+select cast(column_0 as datetime) from (values ("invalid")) as tmp;
 
-select cast("2021.02.29" as datetime);
-select cast("2100.02.29" as datetime);
+select cast(column_0 as datetime) from (values ("2021.02.29")) as tmp;
+select cast(column_0 as datetime) from (values ("2100.02.29")) as tmp;
 
-select cast("?100.02.28" as datetime);
-select cast("2?00.02.28" as datetime);
-select cast("21?0.02.28" as datetime);
-select cast("210?.02.28" as datetime);
-select cast("2100902.28" as datetime);
-select cast("2100.?2.28" as datetime);
-select cast("2100.0?.28" as datetime);
-select cast("2100.02928" as datetime);
-select cast("2100.02.?8" as datetime);
-select cast("2100.02.2?" as datetime);
+select cast(column_0 as datetime) from (values ("?100.02.28")) as tmp;
+select cast(column_0 as datetime) from (values ("2?00.02.28")) as tmp;
+select cast(column_0 as datetime) from (values ("21?0.02.28")) as tmp;
+select cast(column_0 as datetime) from (values ("210?.02.28")) as tmp;
+select cast(column_0 as datetime) from (values ("2100902.28")) as tmp;
+select cast(column_0 as datetime) from (values ("2100.?2.28")) as tmp;
+select cast(column_0 as datetime) from (values ("2100.0?.28")) as tmp;
+select cast(column_0 as datetime) from (values ("2100.02928")) as tmp;
+select cast(column_0 as datetime) from (values ("2100.02.?8")) as tmp;
+select cast(column_0 as datetime) from (values ("2100.02.2?")) as tmp;
 
 
