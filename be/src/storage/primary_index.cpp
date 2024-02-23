@@ -1455,9 +1455,9 @@ double PrimaryIndex::get_write_amp_score() {
     }
 }
 
-Status PrimaryIndex::major_compaction(Tablet* tablet) {
+Status PrimaryIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, std::timed_mutex* mutex) {
     if (_persistent_index != nullptr) {
-        return _persistent_index->major_compaction(tablet);
+        return _persistent_index->major_compaction(data_dir, tablet_id, mutex);
     } else {
         return Status::OK();
     }

@@ -4784,7 +4784,7 @@ Status PersistentIndex::TEST_major_compaction(PersistentIndexMetaPB& index_meta)
 // 1. load current l2 vec
 // 2. merge l2 files to new l2 file
 // 3. modify PersistentIndexMetaPB and make this step atomic.
-Status PersistentIndex::major_compaction(Tablet* tablet) {
+Status PersistentIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, std::timed_mutex* mutex) {
     if (_cancel_major_compaction) {
         return Status::InternalError("cancel major compaction");
     }
@@ -4804,8 +4804,7 @@ Status PersistentIndex::major_compaction(Tablet* tablet) {
     _latest_compaction_time = UnixSeconds();
     // merge all l2 files
     PersistentIndexMetaPB prev_index_meta;
-    RETURN_IF_ERROR(
-            TabletMetaManager::get_persistent_index_meta(tablet->data_dir(), tablet->tablet_id(), &prev_index_meta));
+    RETURN_IF_ERROR(TabletMetaManager::get_persistent_index_meta(data_dir, tablet_id, &prev_index_meta));
     if (prev_index_meta.l2_versions_size() <= 1) {
         return Status::OK();
     }
@@ -4826,16 +4825,14 @@ Status PersistentIndex::major_compaction(Tablet* tablet) {
     ASSIGN_OR_RETURN(EditVersion new_l2_version, _major_compaction_impl(l2_versions, l2_vec));
     // 3. modify PersistentIndexMetaPB and reload index, protected by index lock
     {
-        std::lock_guard lg(*tablet->updates()->get_index_lock());
+        std::lock_guard lg(*mutex);
         if (_cancel_major_compaction) {
             return Status::OK();
         }
         PersistentIndexMetaPB index_meta;
-        RETURN_IF_ERROR(
-                TabletMetaManager::get_persistent_index_meta(tablet->data_dir(), tablet->tablet_id(), &index_meta));
+        RETURN_IF_ERROR(TabletMetaManager::get_persistent_index_meta(data_dir, tablet_id, &index_meta));
         modify_l2_versions(l2_versions, new_l2_version, index_meta);
-        RETURN_IF_ERROR(
-                TabletMetaManager::write_persistent_index_meta(tablet->data_dir(), tablet->tablet_id(), index_meta));
+        RETURN_IF_ERROR(TabletMetaManager::write_persistent_index_meta(data_dir, tablet_id, index_meta));
         // reload new l2 versions
         RETURN_IF_ERROR(_reload(index_meta));
         // delete useless files
