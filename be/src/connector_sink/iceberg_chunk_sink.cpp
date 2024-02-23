@@ -62,12 +62,14 @@ StatusOr<ConnectorChunkSink::Futures> IcebergChunkSink::add(ChunkPtr chunk) {
     }
 
     Futures futures;
-    auto& writer = _partition_writers[partition];
-    if (writer->get_written_bytes() > _max_file_size) {
+    auto writer = _partition_writers[partition];
+    if (writer->get_written_bytes() >= _max_file_size) {
         auto f = writer->commit();
         futures.commit_file_future.push_back(std::move(f));
         auto path = _partition_column_names.empty() ? _location_provider->get() : _location_provider->get(partition);
-        ASSIGN_OR_RETURN(_partition_writers[partition], _file_writer_factory->create(path));
+        ASSIGN_OR_RETURN(writer, _file_writer_factory->create(path));
+        RETURN_IF_ERROR(writer->init());
+        _partition_writers[partition] = writer;
     }
 
     auto f = writer->write(chunk);

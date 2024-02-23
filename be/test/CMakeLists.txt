@@ -1,5 +1,8 @@
 set(EXEC_FILES
         ./exec/sink/connector_sink_operator_test.cpp
+        ./connector_sink/hive_chunk_sink_test.cpp
+        ./connector_sink/iceberg_chunk_sink_test.cpp
+        ./connector_sink/file_chunk_sink_test.cpp
 )
 
 add_library(starrocks_test_objs OBJECT ${EXEC_FILES})
