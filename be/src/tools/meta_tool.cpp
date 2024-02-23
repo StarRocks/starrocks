@@ -817,7 +817,7 @@ Status SegmentDump::calc_checksum() {
         }
     }
 
-    auto schema = ChunkHelper::convert_schema(_tablet_schema, return_columns);
+    auto schema = ChunkHelper::convert_schema(*_tablet_schema, return_columns);
     SegmentReadOptions seg_opts;
     seg_opts.fs = _fs;
     seg_opts.use_page_cache = false;
