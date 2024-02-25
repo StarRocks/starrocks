@@ -332,7 +332,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     std::unordered_set<std::string> known_column_names;
     OrcChunkReader::build_column_name_set(&known_column_names, _scanner_ctx.hive_column_names, reader->getType(),
                                           _scanner_ctx.case_sensitive);
-    _scanner_ctx.update_materialized_columns(known_column_names);
+    RETURN_IF_ERROR(_scanner_ctx.update_materialized_columns(known_column_names));
     ASSIGN_OR_RETURN(auto skip, _scanner_ctx.should_skip_by_evaluating_not_existed_slots());
     if (skip) {
         LOG(INFO) << "HdfsOrcScanner: do_open. skip file for non existed slot conjuncts.";
@@ -341,12 +341,13 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
         return Status::OK();
     }
 
-    // create orc reader for further reading.
     int src_slot_index = 0;
     // we don't need to eval conjunct ctxs at outside any more
     // we evaluate conjunct ctxs in `do_get_next`.
     _scanner_params.eval_conjunct_ctxs = false;
     for (const auto& column : _scanner_ctx.materialized_columns) {
+        // VLOG_OPERATOR << "[xxx] materialized column: " << column.col_name << ", slot_id: " << column.slot_id;
+
         auto col_name = OrcChunkReader::format_column_name(column.col_name, _scanner_ctx.case_sensitive);
         if (known_column_names.find(col_name) == known_column_names.end()) continue;
         bool is_lazy_slot = _scanner_params.is_lazy_materialization_slot(column.slot_id);
@@ -416,10 +417,50 @@ void HdfsOrcScanner::do_close(RuntimeState* runtime_state) noexcept {
 
 Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     CHECK(chunk != nullptr);
+    // VLOG_OPERATOR << "[xxx] do_get_next, should_skip_file = " << _should_skip_file
+    //               << ", return_count_column = " << _scanner_ctx.return_count_column;
     if (_should_skip_file) {
         return Status::EndOfFile("");
     }
 
+    size_t rows_read = 0;
+
+    if (_scanner_ctx.return_count_column) {
+        ASSIGN_OR_RETURN(rows_read, _do_get_next_count(chunk));
+    } else {
+        ASSIGN_OR_RETURN(rows_read, _do_get_next(chunk));
+    }
+
+    DCHECK_EQ(rows_read, chunk->get()->num_rows());
+    return Status::OK();
+}
+
+StatusOr<size_t> HdfsOrcScanner::_do_get_next_count(ChunkPtr* chunk) {
+    size_t read_num_values = 0;
+    Status st = Status::OK();
+    while (true) {
+        {
+            SCOPED_RAW_TIMER(&_app_stats.column_read_ns);
+            orc::RowReader::ReadPosition position;
+            st = _orc_reader->read_next(&position);
+            if (!st.ok()) {
+                break;
+            }
+        }
+        read_num_values += _orc_reader->get_cvb_size();
+        if (!_need_skip_rowids.empty()) {
+            read_num_values -= _orc_reader->get_row_delete_number(_need_skip_rowids);
+        }
+    }
+
+    if (!st.is_end_of_file()) return st;
+    if (read_num_values == 0) return Status::EndOfFile("No more rows to read");
+    _scanner_ctx.append_or_update_count_column_to_chunk(chunk, read_num_values);
+    _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, 1);
+    return 1;
+}
+
+StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
     ChunkPtr& ck = *chunk;
     // this infinite for loop is for retry.
     for (;;) {
@@ -461,10 +502,10 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
                 *chunk = std::move(ret.value());
             }
 
-            // important to add columns before evaluation
-            // because ctxs_by_slot maybe refers to some non-existed slot or partition slot.
-            _scanner_ctx.append_not_existed_columns_to_chunk(chunk, chunk_size);
-            _scanner_ctx.append_partition_column_to_chunk(chunk, chunk_size);
+            // we need to append none existed column before do eval, just for count(*) optimization
+            _scanner_ctx.append_or_update_not_existed_columns_to_chunk(chunk, chunk_size);
+            _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, chunk_size);
+
             // do stats before we filter rows which does not match.
             _app_stats.raw_rows_read += chunk_size;
             _chunk_filter.assign(chunk_size, 1);
