@@ -441,9 +441,9 @@ public class AnalyzeCreateTableTest {
 
         // create index with invalid properties
         sql = "CREATE TABLE TABLE1 (COL1 INT, COL2 VARCHAR(10)," +
-                "INDEX INDEX1(COL2) USING NGRAMBF ('BLOOM_FILTER_FPP' = '0.01', 'GRAM_NUM' = '2', 'INVALID' = '2'))" +
+                "INDEX INDEX1(COL2) USING NGRAMBF ('BLOOM_FILTER_FPP' = '0.01', 'GRAM_NUM' = '2', 'CASE_SENSITIVE' = '2'))" +
                 "AGGREGATE KEY(COL1, COL2) DISTRIBUTED BY HASH(COL1) BUCKETS 10;";
-        analyzeFail(sql, "Invalid properties for Ngram Bloom filter index");
+        analyzeFail(sql, "Ngram Bloom filter's case_sensitive should be true or false");
 
         // create index with correct fpp and gram num and case-insensitive
         sql = "CREATE TABLE TABLE1 (COL1 INT, COL2 VARCHAR(10)," +

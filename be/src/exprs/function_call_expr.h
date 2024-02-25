@@ -50,7 +50,7 @@ protected:
 
 private:
     bool split_normal_string_to_ngram(FunctionContext* fn_ctx, const NgramBloomFilterReaderOptions& reader_options,
-                                      NgramBloomFilterState* ngram_state, std::string func_name) const;
+                                      NgramBloomFilterState* ngram_state, const std::string& func_name) const;
 
     bool split_like_string_to_ngram(FunctionContext* fn_ctx, const NgramBloomFilterReaderOptions& reader_options,
                                     std::vector<Slice>& ngram_set) const;

@@ -10,7 +10,7 @@ CREATE TABLE ngram_index(
 
 show index from ngram_index;
 
-insert into ngram_index values ('2023-01-01',"chinese",3),('2023-01-02',"chineeeinese",4),('2023-01-03',"我爱吃烤全羊yangyangchinchin",4),('2023-01-04',"tonightisgreadchin",4);
+insert into ngram_index values ('2023-01-01',"chinese",3),('2023-01-02',"chineaaaaaaaaaaaab",4),('2023-01-03',"我爱吃烤全羊yangyangchin",4),('2023-01-04',"tonightisgreadnight",4);
 
 select * from ngram_index order by ngram_search(username, 'chinese',4) desc;
 drop index idx_name1 on ngram_index;

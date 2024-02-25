@@ -38,7 +38,6 @@
 #include <memory>
 #include <utility>
 
-#include "column/bytes.h"
 #include "fs/fs.h"
 #include "runtime/mem_pool.h"
 #include "storage/olap_type_infra.h"
@@ -205,11 +204,6 @@ public:
     explicit NgramBloomFilterIndexWriterImpl(const BloomFilterOptions& bf_options, TypeInfoPtr typeinfo)
             : BloomFilterIndexWriterImpl<TYPE_VARCHAR>(bf_options, std::move(typeinfo)) {}
 
-    void inline static tolower(const Slice& str, std::string& buf) {
-        buf.assign(str.data, str.size);
-        std::transform(buf.begin(), buf.end(), buf.begin(), [](unsigned char c) { return std::tolower(c); });
-    }
-
     void add_values(const void* values, size_t count) override {
         size_t gram_num = this->_bf_options.gram_num;
         const auto* cur_slice = reinterpret_cast<const Slice*>(values);
@@ -231,18 +225,17 @@ public:
                     } else {
                         // todo::exist two copy of ngram, need to optimize
                         std::string lower_ngram;
-                        tolower(cur_ngram, lower_ngram);
-                        Slice lower_ngram_slice(lower_ngram);
-                        _values.insert(get_value<TYPE_VARCHAR>(&cur_ngram, this->_typeinfo, &this->_pool));
+                        Slice lower_ngram_slice = cur_ngram.tolower(lower_ngram);
+                        _values.insert(get_value<TYPE_VARCHAR>(&lower_ngram_slice, this->_typeinfo, &this->_pool));
                     }
                 }
             }
-
             // move to next row
             ++cur_slice;
         }
     }
 };
+} // namespace
 
 struct BloomFilterBuilderFunctor {
     template <LogicalType ftype>
@@ -256,12 +249,11 @@ struct BloomFilterBuilderFunctor {
         return Status::OK();
     }
 };
-} // namespace
 
 // TODO currently we don't support bloom filter index for tinyint/hll/float/double
 Status BloomFilterIndexWriter::create(const BloomFilterOptions& bf_options, const TypeInfoPtr& typeinfo,
                                       std::unique_ptr<BloomFilterIndexWriter>* res) {
     return field_type_dispatch_bloomfilter(typeinfo->type(), BloomFilterBuilderFunctor(), res, bf_options, typeinfo);
-} // namespace
+}
 
 } // namespace starrocks

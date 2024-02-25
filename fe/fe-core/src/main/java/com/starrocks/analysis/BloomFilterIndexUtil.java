@@ -28,10 +28,11 @@ import java.util.Map;
 import java.util.Set;
 
 public class BloomFilterIndexUtil {
-    public static String FPP_KEY = NgramBfIndexParamsKey.BLOOM_FILTER_FPP.toString().toLowerCase(Locale.ROOT);
-    public static String GRAM_NUM_KEY = NgramBfIndexParamsKey.GRAM_NUM.toString().toLowerCase(Locale.ROOT);
+    public static final String FPP_KEY = NgramBfIndexParamsKey.BLOOM_FILTER_FPP.toString().toLowerCase(Locale.ROOT);
+    public static final String GRAM_NUM_KEY = NgramBfIndexParamsKey.GRAM_NUM.toString().toLowerCase(Locale.ROOT);
 
-    public static String CASE_SENSITIVE_KEY = NgramBfIndexParamsKey.CASE_SENSITIVE.toString().toLowerCase(Locale.ROOT);
+    public static final String CASE_SENSITIVE_KEY =
+            NgramBfIndexParamsKey.CASE_SENSITIVE.toString().toLowerCase(Locale.ROOT);
     private static final double MAX_FPP = 0.05;
     private static final double MIN_FPP = 0.0001;
 
@@ -49,7 +50,6 @@ public class BloomFilterIndexUtil {
             if (bfFpp < MIN_FPP || bfFpp > MAX_FPP) {
                 throw new SemanticException("Bloom filter fpp should in [" + MIN_FPP + ", " + MAX_FPP + "]");
             }
-            properties.remove(FPP_KEY);
         }
 
         return bfFpp;
@@ -61,7 +61,6 @@ public class BloomFilterIndexUtil {
             if (gram_num <= 0) {
                 throw new SemanticException("Ngram Bloom filter's gram_num should be positive number");
             }
-            properties.remove(GRAM_NUM_KEY);
         }
     }
 
@@ -92,14 +91,9 @@ public class BloomFilterIndexUtil {
             throw new SemanticException("Ngram Bloom filter index only used in columns of DUP_KEYS/PRIMARY table or "
                     + "key columns of UNIQUE_KEYS/AGG_KEYS table. invalid column: " + column.getName());
         }
-
         analyzeBloomFilterFpp(properties);
         analyzeBloomFilterGramNum(properties);
-        analyzeBloomFilterGramNum(properties);
         analyzeBloomFilterCaseSensitive(properties);
-        if (!properties.isEmpty()) {
-            throw new SemanticException("Invalid properties for Ngram Bloom filter index: " + properties.keySet());
-        }
     }
 
     public static void analyseBfWithNgramBf(Set<Index> newIndexs, Set<String> bfColumns) throws AnalysisException {

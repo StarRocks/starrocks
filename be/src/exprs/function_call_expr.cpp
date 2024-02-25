@@ -182,11 +182,11 @@ bool VectorizedFunctionCallExpr::ngram_bloom_filter(ExprContext* context, const 
     std::unique_ptr<NgramBloomFilterState>& ngram_state = fn_ctx->get_ngram_state();
 
     // initialize ngram_state: determine whether this index useful or not, split needle into ngram_set if useful
-    if (ngram_state = nullptr) {
+    if (ngram_state == nullptr) {
         ngram_state = std::make_unique<NgramBloomFilterState>();
         std::vector<Slice>& ngram_set = ngram_state->ngram_set;
         bool index_useful;
-        if (_fn_desc->name == "like") {
+        if (_fn_desc->name == "LIKE") {
             index_useful = split_like_string_to_ngram(fn_ctx, reader_options, ngram_set);
         } else {
             index_useful = split_normal_string_to_ngram(fn_ctx, reader_options, ngram_state.get(), _fn_desc->name);
@@ -205,13 +205,25 @@ bool VectorizedFunctionCallExpr::ngram_bloom_filter(ExprContext* context, const 
 
     // if empty, which means needle is too short, so index_valid should be false
     DCHECK(!ngram_state->ngram_set.empty());
-    for (auto& ngram : ngram_state->ngram_set) {
-        if (bf->test_bytes(ngram.get_data(), ngram.get_size())) {
-            return true;
+    if (_fn_desc->name == "LIKE") {
+        for (auto& ngram : ngram_state->ngram_set) {
+            // if any ngram in needle doesn't hit bf, this page has nothing to do with target,so filter it
+            if (!bf->test_bytes(ngram.get_data(), ngram.get_size())) {
+                return false;
+            }
         }
+        // if all ngram in needle hit bf, this page may have something to do with needle, so don't filter it
+        return true;
+    } else {
+        for (auto& ngram : ngram_state->ngram_set) {
+            // if any ngram in needle hit bf, this page may have something to do with needle, so don't filter it
+            if (bf->test_bytes(ngram.get_data(), ngram.get_size())) {
+                return true;
+            }
+        }
+        // if neither ngram in needle hit bf, this page has nothing to do with target,so filter it!
+        return false;
     }
-    // if neither ngram in target hit bf, this page has nothing to do with target,so filter it!
-    return false;
 }
 
 bool VectorizedFunctionCallExpr::support_ngram_bloom_filter(ExprContext* context) const {
@@ -221,7 +233,7 @@ bool VectorizedFunctionCallExpr::support_ngram_bloom_filter(ExprContext* context
         return false;
     }
 
-    return _fn_desc->name == "like" || _fn_desc->name == "ngram_search" ||
+    return _fn_desc->name == "LIKE" || _fn_desc->name == "ngram_search" ||
            _fn_desc->name == "ngram_search_case_insensitive";
 }
 
@@ -229,7 +241,7 @@ bool VectorizedFunctionCallExpr::support_ngram_bloom_filter(ExprContext* context
 bool VectorizedFunctionCallExpr::split_normal_string_to_ngram(FunctionContext* fn_ctx,
                                                               const NgramBloomFilterReaderOptions& reader_options,
                                                               NgramBloomFilterState* ngram_state,
-                                                              string func_name) const {
+                                                              const string& func_name) const {
     size_t index_gram_num = reader_options.index_gram_num;
     bool index_case_sensitive = reader_options.index_case_sensitive;
     std::vector<Slice>& ngram_set = ngram_state->ngram_set;
@@ -321,7 +333,7 @@ bool VectorizedFunctionCallExpr::split_like_string_to_ngram(FunctionContext* fn_
         }
 
         if (cur_valid_grams_num == index_gram_num) {
-            ngram_set.push_back(Slice(needle.data + cur_grams_begin_index, i - cur_grams_begin_index));
+            ngram_set.emplace_back(needle.data + cur_grams_begin_index, i - cur_grams_begin_index);
             cur_valid_grams_num = 0;
             cur_grams_begin_index = i;
         }
