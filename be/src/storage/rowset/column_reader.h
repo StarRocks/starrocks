@@ -78,7 +78,7 @@ class ParsedPage;
 class ZoneMapIndexPB;
 class ZoneMapPB;
 class Segment;
-struct BloomFilterReaderOptions;
+struct NgramBloomFilterReaderOptions;
 
 // There will be concurrent users to read the same column. So
 // we should do our best to reduce resource usage through share
@@ -189,7 +189,7 @@ private:
 
     Status _load_inverted_index(const std::shared_ptr<TabletIndex>& index_meta, const SegmentReadOptions& opts);
 
-    BloomFilterReaderOptions _get_reader_options_for_ngram() const;
+    NgramBloomFilterReaderOptions _get_reader_options_for_ngram() const;
 
     // ColumnReader will be resident in memory. When there are many columns in the table,
     // the meta in ColumnReader takes up a lot of memory,

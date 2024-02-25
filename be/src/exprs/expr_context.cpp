@@ -186,7 +186,7 @@ StatusOr<ColumnPtr> ExprContext::evaluate(Expr* e, Chunk* chunk, uint8_t* filter
     }
 }
 
-bool ExprContext::ngram_bloom_filter(const BloomFilter* bf, const BloomFilterReaderOptions& reader_options) {
+bool ExprContext::ngram_bloom_filter(const BloomFilter* bf, const NgramBloomFilterReaderOptions& reader_options) {
     return _root->ngram_bloom_filter(this, bf, reader_options);
 }
 

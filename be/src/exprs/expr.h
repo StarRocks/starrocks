@@ -255,7 +255,7 @@ public:
 
     // Return false to filter out a data page.
     virtual bool ngram_bloom_filter(ExprContext* context, const BloomFilter* bf,
-                                    const BloomFilterReaderOptions& reader_options) const;
+                                    const NgramBloomFilterReaderOptions& reader_options) const;
 
     // Return true if this expr or any of its children is index only filter, otherwise return false
     bool is_index_only_filter() const;

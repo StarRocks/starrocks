@@ -55,7 +55,7 @@ class RuntimeState;
 class ObjectPool;
 class TColumnValue;
 class BloomFilter;
-struct BloomFilterReaderOptions;
+struct NgramBloomFilterReaderOptions;
 
 /// An ExprContext contains the state for the execution of a tree of Exprs, in particular
 /// the FunctionContexts necessary for the expr tree. This allows for multi-threaded
@@ -116,7 +116,7 @@ public:
 
     [[nodiscard]] StatusOr<ColumnPtr> evaluate(Chunk* chunk, uint8_t* filter = nullptr);
     [[nodiscard]] StatusOr<ColumnPtr> evaluate(Expr* expr, Chunk* chunk, uint8_t* filter = nullptr);
-    bool ngram_bloom_filter(const BloomFilter* bf, const BloomFilterReaderOptions& reader_options);
+    bool ngram_bloom_filter(const BloomFilter* bf, const NgramBloomFilterReaderOptions& reader_options);
     bool support_ngram_bloom_filter();
     bool is_index_only_filter() const;
 

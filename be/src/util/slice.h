@@ -183,6 +183,13 @@ public:
         return ((size >= x.size) && memequal(data + (size - x.size), x.size, x.data, x.size));
     }
 
+    Slice tolower(std::string& buf) {
+        // copy this slice into buf
+        buf.assign(get_data(), get_size());
+        std::transform(buf.begin(), buf.end(), buf.begin(), [](unsigned char c) { return std::tolower(c); });
+        return Slice(buf.data(), buf.size());
+    }
+
     /// @brief Comparator struct, useful for ordered collections (like STL maps).
     struct Comparator {
         /// Compare two slices using Slice::compare()
@@ -340,11 +347,6 @@ private:
 
 inline void swap(OwnedSlice& s1, OwnedSlice& s2) {
     s1.swap(s2);
-}
-
-void inline static tolower(const Slice& str, std::string& buf) {
-    buf.assign(str.get_data(), str.get_size());
-    std::transform(buf.begin(), buf.end(), buf.begin(), [](unsigned char c) { return std::tolower(c); });
 }
 
 } // namespace starrocks

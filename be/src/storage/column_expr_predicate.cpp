@@ -185,7 +185,7 @@ bool ColumnExprPredicate::zone_map_filter(const ZoneMapDetail& detail) const {
 }
 
 bool ColumnExprPredicate::ngram_bloom_filter(const BloomFilter* bf,
-                                             const BloomFilterReaderOptions& reader_options) const {
+                                             const NgramBloomFilterReaderOptions& reader_options) const {
     return _expr_ctxs[0]->ngram_bloom_filter(bf, reader_options);
 }
 

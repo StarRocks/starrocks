@@ -191,7 +191,6 @@ template <LogicalType field_type>
 class NgramBloomFilterIndexWriterImpl : public BloomFilterIndexWriterImpl<field_type> {
 public:
     using CppType = typename CppTypeTraits<field_type>::CppType;
-    using ValueDict = typename BloomFilterTraits<CppType>::ValueDict;
     using BloomFilterIndexWriterImpl<field_type>::_values;
 
     explicit NgramBloomFilterIndexWriterImpl(const BloomFilterOptions& bf_options, TypeInfoPtr typeinfo)
@@ -236,13 +235,14 @@ public:
                         Slice lower_ngram_slice(lower_ngram);
                         _values.insert(get_value<TYPE_VARCHAR>(&cur_ngram, this->_typeinfo, &this->_pool));
                     }
+                }
             }
 
             // move to next row
             ++cur_slice;
         }
     }
-    };
+};
 
 struct BloomFilterBuilderFunctor {
     template <LogicalType ftype>
@@ -256,11 +256,12 @@ struct BloomFilterBuilderFunctor {
         return Status::OK();
     }
 };
+} // namespace
 
 // TODO currently we don't support bloom filter index for tinyint/hll/float/double
 Status BloomFilterIndexWriter::create(const BloomFilterOptions& bf_options, const TypeInfoPtr& typeinfo,
                                       std::unique_ptr<BloomFilterIndexWriter>* res) {
     return field_type_dispatch_bloomfilter(typeinfo->type(), BloomFilterBuilderFunctor(), res, bf_options, typeinfo);
-}
+} // namespace
 
 } // namespace starrocks

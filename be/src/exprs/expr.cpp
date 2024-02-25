@@ -846,7 +846,7 @@ bool Expr::support_ngram_bloom_filter(ExprContext* context) const {
 }
 
 bool Expr::ngram_bloom_filter(ExprContext* context, const BloomFilter* bf,
-                              const BloomFilterReaderOptions& reader_options) const {
+                              const NgramBloomFilterReaderOptions& reader_options) const {
     bool no_need_to_filt = true;
     for (auto& child : _children) {
         if (!child->ngram_bloom_filter(context, bf, reader_options)) {

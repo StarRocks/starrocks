@@ -32,6 +32,7 @@ class RuntimeState;
 class Column;
 class Slice;
 struct JavaUDAFContext;
+struct NgramBloomFilterState;
 using ColumnPtr = std::shared_ptr<Column>;
 
 class FunctionContext {
@@ -174,7 +175,7 @@ public:
 
     bool error_if_overflow() const;
 
-    std::vector<Slice>& get_ngram_set() { return ngram_set; }
+    std::unique_ptr<NgramBloomFilterState>& get_ngram_state() { return _ngramState; }
 
 private:
     friend class ExprContext;
@@ -220,7 +221,7 @@ private:
     ssize_t group_concat_max_len = 1024;
 
     // used for ngram bloom filter to speed up some function
-    std::vector<Slice> ngram_set;
+    std::unique_ptr<NgramBloomFilterState> _ngramState;
 };
 
 } // namespace starrocks

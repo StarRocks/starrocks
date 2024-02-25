@@ -367,7 +367,8 @@ Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& pre
         RETURN_IF_ERROR(bf_iter->read_bloom_filter(pid, &bf));
         for (const auto* pred : predicates) {
             if ((pred->support_bloom_filter() && pred->bloom_filter(bf.get())) ||
-                (pred->support_ngram_bloom_filter() && pred->ngram_bloom_filter(bf.get(), _get_gram_num_for_ngram()))) {
+                (pred->support_ngram_bloom_filter() &&
+                 pred->ngram_bloom_filter(bf.get(), _get_reader_options_for_ngram()))) {
                 bf_row_ranges.add(
                         Range<>(_ordinal_index->get_first_ordinal(pid), _ordinal_index->get_last_ordinal(pid) + 1));
             }
@@ -686,9 +687,9 @@ size_t ColumnReader::mem_usage() const {
     return size;
 }
 
-BloomFilterReaderOptions ColumnReader::_get_reader_options_for_ngram() const {
+NgramBloomFilterReaderOptions ColumnReader::_get_reader_options_for_ngram() const {
     // initialize with invalid number
-    BloomFilterReaderOptions reader_options;
+    NgramBloomFilterReaderOptions reader_options;
     std::shared_ptr<TabletIndex> ngram_bf_index;
 
     Status status = _segment->tablet_schema().get_indexes_for_column(_column_unique_id, NGRAMBF, ngram_bf_index);
