@@ -70,7 +70,6 @@ private:
 private:
     const ParquetField* _field = nullptr;
 
-    bool _eof = false;
     bool _meet_first_record = false;
 
     size_t _not_null_to_skip = 0;
@@ -146,8 +145,6 @@ private:
     // so that the advantages of RLE encoding can be fully utilized and a lot of overhead
     // can be saved in decoding.
     bool _need_parse_levels = false;
-
-    bool _eof = false;
 
     size_t _levels_parsed = 0;
     size_t _levels_decoded = 0;
