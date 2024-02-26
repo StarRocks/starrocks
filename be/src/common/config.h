@@ -348,6 +348,7 @@ CONF_Int64(vertical_compaction_max_columns_per_group, "5");
 CONF_Bool(enable_event_based_compaction_framework, "true");
 
 CONF_Bool(enable_size_tiered_compaction_strategy, "true");
+CONF_mBool(enable_pk_size_tiered_compaction_strategy, "true");
 CONF_mInt64(size_tiered_min_level_size, "131072");
 CONF_mInt64(size_tiered_level_multiple, "5");
 CONF_mInt64(size_tiered_level_multiple_dupkey, "10");
@@ -941,7 +942,7 @@ CONF_mInt64(lake_vacuum_retry_min_delay_ms, "10");
 CONF_mInt64(lake_max_garbage_version_distance, "100");
 CONF_mBool(enable_primary_key_recover, "false");
 CONF_mBool(lake_enable_compaction_async_write, "false");
-CONF_mInt64(lake_pk_compaction_max_input_rowsets, "5");
+CONF_mInt64(lake_pk_compaction_max_input_rowsets, "1000");
 // Used for control memory usage of update state cache and compaction state cache
 CONF_mInt32(lake_pk_preload_memory_limit_percent, "30");
 
