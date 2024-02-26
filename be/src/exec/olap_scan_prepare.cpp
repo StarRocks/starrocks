@@ -346,7 +346,7 @@ void ChunkPredicateBuilder<E>::normalize_in_or_equal_predicate(const SlotDescrip
             using ValueType = typename RunTimeTypeTraits<SlotType>::CppType;
             SQLFilterOp op;
             ValueType value;
-            ExprContext* expr_context = _exprs[i].expr_context(_opts.obj_pool, _opts.runtime_state);
+            ASSIGN_OR_RETURN(auto* expr_context, _exprs[i].expr_context(_opts.obj_pool, _opts.runtime_state));
             bool ok = get_predicate_value(_opts.obj_pool, slot, root_expr, expr_context, &value, &op, &status);
             if (ok && range->add_fixed_values(FILTER_IN, std::set<RangeValueType>{value}).ok()) {
                 _normalized_exprs[i] = true;
@@ -433,7 +433,7 @@ void ChunkPredicateBuilder<E>::normalize_in_or_equal_predicate<starrocks::TYPE_D
             FILTER_IN == to_olap_filter_type(root_expr->op(), false)) {
             SQLFilterOp op;
             DateValue value{0};
-            ExprContext* expr_context = _exprs[i].expr_context(_opts.obj_pool, _opts.runtime_state);
+            ASSIGN_OR_RETURN(auto* expr_context, _exprs[i].expr_context(_opts.obj_pool, _opts.runtime_state));
             bool ok = get_predicate_value(_opts.obj_pool, slot, root_expr, expr_context, &value, &op, &status);
             if (ok && range->add_fixed_values(FILTER_IN, std::set<DateValue>{value}).ok()) {
                 _normalized_exprs[i] = true;
@@ -464,7 +464,7 @@ void ChunkPredicateBuilder<E>::normalize_binary_predicate(const SlotDescriptor& 
 
         SQLFilterOp op;
         ValueType value;
-        ExprContext* expr_context = _exprs[i].expr_context(_opts.obj_pool, _opts.runtime_state);
+        ASSIGN_OR_RETURN(auto* expr_context, _exprs[i].expr_context(_opts.obj_pool, _opts.runtime_state));
         bool ok = get_predicate_value(_opts.obj_pool, slot, root_expr, expr_context, &value, &op, &status);
         if (ok && range->add_range(op, static_cast<RangeValueType>(value)).ok()) {
             _normalized_exprs[i] = true;
@@ -580,7 +580,7 @@ void ChunkPredicateBuilder<E>::normalize_not_in_or_not_equal_predicate(const Slo
         if (root_expr->node_type() == TExprNodeType::BINARY_PRED && root_expr->op() == TExprOpcode::NE) {
             SQLFilterOp op;
             ValueType value;
-            ExprContext* expr_context = _exprs[i].expr_context(_opts.obj_pool, _opts.runtime_state);
+            ASSIGN_OR_RETURN(auto* expr_context, _exprs[i].expr_context(_opts.obj_pool, _opts.runtime_state));
             bool ok = get_predicate_value(_opts.obj_pool, slot, root_expr, expr_context, &value, &op, &status);
             if (ok && range->add_fixed_values(FILTER_NOT_IN, std::set<RangeValueType>{value}).ok()) {
                 _normalized_exprs[i] = true;
