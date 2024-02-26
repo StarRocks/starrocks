@@ -674,11 +674,11 @@ Status ChunkPredicateBuilder<E>::normalize_predicate(const SlotDescriptor& slot,
 
 struct ColumnRangeBuilder {
     template <LogicalType ltype>
-    std::nullptr_t operator()(ChunkPredicateBuilder<ExprContextContainer>* parent, const SlotDescriptor* slot,
+    Status operator()(ChunkPredicateBuilder<ExprContextContainer>* parent, const SlotDescriptor* slot,
                               std::map<std::string, ColumnValueRangeType>* column_value_ranges) {
         if constexpr (ltype == TYPE_TIME || ltype == TYPE_NULL || ltype == TYPE_JSON || lt_is_float<ltype> ||
                       lt_is_binary<ltype>) {
-            return nullptr;
+            return Status::OK();
         }
 
         // Treat tinyint and boolean as int
@@ -701,8 +701,8 @@ struct ColumnRangeBuilder {
             range.set_precision(slot->type().precision);
             range.set_scale(slot->type().scale);
         }
-        parent->normalize_predicate<mapping_type, value_type>(*slot, &range);
-        return nullptr;
+        RETURN_IF_ERROR(parent->normalize_predicate<mapping_type, value_type>(*slot, &range));
+        return Status::OK();
     }
 };
 
@@ -716,8 +716,8 @@ Status ChunkPredicateBuilder<E>::normalize_expressions() {
     // TODO(zhuming): if any of the normalized column range is empty, we can know that
     // no row will be selected anymore and can return EOF directly.
     for (auto& slot : _opts.tuple_desc->decoded_slots()) {
-        type_dispatch_predicate<std::nullptr_t>(slot->type().type, false, ColumnRangeBuilder(), this, slot,
-                                                &column_value_ranges);
+        RETURN_IF_ERROR(type_dispatch_predicate<Status>(slot->type().type, false, ColumnRangeBuilder(), this, slot,
+                                                &column_value_ranges));
     }
     return Status::OK();
 }
