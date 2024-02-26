@@ -458,7 +458,7 @@
                 },
                 {
                   "type": "category",
-                  "label": "System configurations and file",
+                  "label": "System Configurations and Files",
                   "items": [
                   "sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG",
                   "sql-reference/sql-statements/Administration/ADMIN_SHOW_CONFIG",
