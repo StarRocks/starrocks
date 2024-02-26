@@ -21,6 +21,7 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -48,10 +49,12 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_HIVE_SCAN);
     public static final RewriteSimpleAggToHDFSScanRule ICEBERG_SCAN =
             new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_ICEBERG_SCAN);
+    final OperatorType scanOperatorType;
 
     public RewriteSimpleAggToHDFSScanRule(OperatorType logicalOperatorType) {
         super(RuleType.TF_REWRITE_SIMPLE_AGG, Pattern.create(OperatorType.LOGICAL_AGGR)
                 .addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT, logicalOperatorType)));
+        scanOperatorType = logicalOperatorType;
     }
 
     private OptExpression buildAggScanOperator(LogicalAggregationOperator aggregationOperator,
@@ -161,6 +164,13 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
         // TODO(yanz): not quite sure why this limitation !
         if (aggregationOperator.getPredicate() != null) {
             return false;
+        }
+
+        if (scanOperatorType == OperatorType.LOGICAL_ICEBERG_SCAN) {
+            IcebergTable icebergTable = (IcebergTable) scanOperator.getTable();
+            if (!icebergTable.isAllPartitionColumnsIdentity()) {
+                return false;
+            }
         }
 
         boolean allValid = aggregationOperator.getAggregations().values().stream().allMatch(
