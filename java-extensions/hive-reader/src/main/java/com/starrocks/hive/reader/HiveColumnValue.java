@@ -26,6 +26,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.StructField;
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
 
 import java.math.BigDecimal;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -103,6 +104,8 @@ public class HiveColumnValue implements ColumnValue {
                     Instant.ofEpochSecond(localTimestampWritable.getSeconds(), localTimestampWritable.getNanos()),
                     ZoneId.systemDefault());
             return localDateTime.format(DATETIME_FORMATTER);
+        } else if (fieldData instanceof Timestamp) {
+            return fieldData.toString();
         } else {
             return inspectObject().toString();
         }
