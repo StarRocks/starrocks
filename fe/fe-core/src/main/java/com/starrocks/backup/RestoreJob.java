@@ -71,6 +71,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
@@ -1375,7 +1376,7 @@ public class RestoreJob extends AbstractJob {
         allTabletCommitted(true /* is replay */);
     }
 
-    public List<String> getInfo() {
+    public List<String> getInfo() throws AnalysisException {
         List<String> info = Lists.newArrayList();
         info.add(String.valueOf(jobId));
         info.add(label);
@@ -1390,12 +1391,16 @@ public class RestoreJob extends AbstractJob {
         info.add(TimeUtils.longToTimeString(snapshotFinishedTime));
         info.add(TimeUtils.longToTimeString(downloadFinishedTime));
         info.add(TimeUtils.longToTimeString(finishedTime));
-        info.add(Joiner.on(", ").join(unfinishedSignatureToId.entrySet()));
-        info.add(Joiner.on(", ").join(taskProgress.entrySet().stream().map(
-                e -> "[" + e.getKey() + ": " + e.getValue().first + "/" + e.getValue().second + "]").collect(
-                Collectors.toList())));
-        info.add(Joiner.on(", ").join(taskErrMsg.entrySet().stream().map(n -> "[" + n.getKey() + ": " + n.getValue()
-                + "]").collect(Collectors.toList())));
+        try {
+            info.add(Joiner.on(", ").join(unfinishedSignatureToId.entrySet()));
+            info.add(Joiner.on(", ").join(taskProgress.entrySet().stream().map(
+                    e -> "[" + e.getKey() + ": " + e.getValue().first + "/" + e.getValue().second + "]").collect(
+                    Collectors.toList())));
+            info.add(Joiner.on(", ").join(taskErrMsg.entrySet().stream().map(n -> "[" + n.getKey() + ": " + n.getValue()
+                    + "]").collect(Collectors.toList())));
+        } catch (Exception e) {
+            throw new AnalysisException("meta data may has been updated during this period, please try again");
+        }
         info.add(status.toString());
         info.add(String.valueOf(timeoutMs / 1000));
         return info;

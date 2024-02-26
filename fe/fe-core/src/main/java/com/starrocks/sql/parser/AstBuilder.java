@@ -2871,7 +2871,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitCancelBackupStatement(StarRocksParser.CancelBackupStatementContext context) {
+<<<<<<< HEAD
         return new CancelBackupStmt(((Identifier) visit(context.identifier())).getValue(), false);
+=======
+        if (context.identifier() == null) {
+            throw new ParsingException(PARSER_ERROR_MSG.nullIdentifierCancelBackupRestore());
+        }
+        return new CancelBackupStmt(((Identifier) visit(context.identifier())).getValue(),
+                false, createPos(context));
+>>>>>>> 108982bbf1 ([BugFix] Fix two NPE problem for backup/restore(#40091) (#40092))
     }
 
     @Override
@@ -2920,7 +2928,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitCancelRestoreStatement(StarRocksParser.CancelRestoreStatementContext context) {
+<<<<<<< HEAD
         return new CancelBackupStmt(((Identifier) visit(context.identifier())).getValue(), true);
+=======
+        if (context.identifier() == null) {
+            throw new ParsingException(PARSER_ERROR_MSG.nullIdentifierCancelBackupRestore());
+        }
+        return new CancelBackupStmt(((Identifier) visit(context.identifier())).getValue(), true,
+                createPos(context));
+>>>>>>> 108982bbf1 ([BugFix] Fix two NPE problem for backup/restore(#40091) (#40092))
     }
 
     @Override
