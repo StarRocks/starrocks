@@ -18,6 +18,7 @@
 #include "gutil/strings/join.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/primary_key_compaction_policy.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/update_manager.h"
 #include "storage/tablet_schema.h"
@@ -75,6 +76,7 @@ private:
     int64_t _max_level_size;
 };
 
+<<<<<<< HEAD
 struct RowsetStat {
     size_t num_rows = 0;
     size_t num_dels = 0;
@@ -194,6 +196,11 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(TabletMet
 StatusOr<uint32_t> primary_compaction_score_by_policy(TabletManager* tablet_mgr, const TabletMetadataPB& metadata) {
     ASSIGN_OR_RETURN(auto tablet, ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet(metadata.id()));
     auto policy = std::make_shared<PrimaryCompactionPolicy>(std::make_shared<Tablet>(tablet));
+=======
+StatusOr<uint32_t> primary_compaction_score_by_policy(TabletManager* tablet_mgr,
+                                                      const std::shared_ptr<const TabletMetadataPB>& metadata) {
+    PrimaryCompactionPolicy policy(tablet_mgr, metadata);
+>>>>>>> 731b2e82b7 ([Enhancement] cloud native pk table support size tiered compaction policy (#41034))
     std::vector<bool> has_dels;
     ASSIGN_OR_RETURN(auto pick_rowsets,
                      policy->pick_rowsets(std::make_shared<TabletMetadataPB>(metadata), true, &has_dels));
