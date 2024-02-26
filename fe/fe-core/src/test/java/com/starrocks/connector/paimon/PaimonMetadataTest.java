@@ -220,6 +220,17 @@ public class PaimonMetadataTest {
     }
 
     @Test
+    public void testTableExists() {
+        new Expectations() {
+            {
+                paimonNativeCatalog.tableExists((Identifier) any);
+                result = true;
+            }
+        };
+        Assert.assertTrue(metadata.tableExists("db1", "tbl1"));
+    }
+
+    @Test
     public void testGetTableDoesNotExist() throws Exception {
         Identifier identifier = new Identifier("nonexistentDb", "nonexistentTbl");
         new Expectations() {
