@@ -24,7 +24,7 @@ namespace starrocks::connector {
 
 StatusOr<std::string> HiveUtils::make_partition_name(
         const std::vector<std::string>& column_names,
-        const std::vector<std::unique_ptr<ColumnEvaluator>>& column_evaluators, Chunk *chunk) {
+        const std::vector<std::unique_ptr<ColumnEvaluator>>& column_evaluators, Chunk* chunk) {
     DCHECK_EQ(column_names.size(), column_evaluators.size());
     std::stringstream ss;
     for (size_t i = 0; i < column_evaluators.size(); i++) {

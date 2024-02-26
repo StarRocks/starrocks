@@ -22,8 +22,7 @@
 
 namespace starrocks::formats {
 
-class ORCWriterOptions : public FileWriterOptions {
-};
+class ORCWriterOptions : public FileWriterOptions {};
 
 class ORCFileWriter final : public FileWriter {
 public:
