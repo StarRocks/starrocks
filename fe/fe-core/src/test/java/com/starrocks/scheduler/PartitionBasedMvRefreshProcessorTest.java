@@ -2137,7 +2137,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "PARTITION BY (`l_shipdate`)\n" +
                         "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
-                        "REFRESH MANUAL\n" +
+                        "REFRESH DEFERRED MANUAL\n" +
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\",\n" +
                         "\"storage_medium\" = \"HDD\"\n" +
@@ -2636,7 +2636,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW partition_prune_mv1 \n" +
                 "PARTITION BY k3\n" +
                 "DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
-                "REFRESH ASYNC\n" +
+                "REFRESH DEFERRED ASYNC\n" +
                 "PROPERTIES('replication_num' = '1') \n" +
                 "AS " +
                 " SELECT test_partition_prune_tbl2.k1 as k1, test_partition_prune_tbl2.k2 as k2, " +
