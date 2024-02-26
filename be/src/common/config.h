@@ -915,6 +915,7 @@ CONF_mInt32(starlet_fs_stream_buffer_size_bytes, "1048576");
 CONF_mBool(starlet_use_star_cache, "false");
 // TODO: support runtime change
 CONF_Int32(starlet_star_cache_mem_size_percent, "0");
+CONF_Int32(starlet_star_cache_mem_size_bytes, "134217728");
 CONF_Int32(starlet_star_cache_disk_size_percent, "80");
 CONF_Int64(starlet_star_cache_disk_size_bytes, "0");
 CONF_Int32(starlet_star_cache_block_size_bytes, "1048576");
