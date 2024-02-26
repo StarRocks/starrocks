@@ -363,6 +363,7 @@ jobs:
     needs:
       - info
       - deploy
+      - SQL-Tester
     if: always() && needs.deploy.result == 'success'
     env:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
@@ -390,6 +391,7 @@ jobs:
     needs:
       - info
       - deploy
+      - SQL-Tester
     if: always() && needs.deploy.result == 'success'
     timeout-minutes: 20
     env:
