@@ -20,7 +20,7 @@ namespace starrocks::io {
 
 Status JindoOutputStream::write(const void* data, int64_t size) {
     if (_write_handle == nullptr) {
-        JdoContext_t jdo_ctx = jdo_createContext1(_jindo_client);
+        JdoContext_t jdo_ctx = jdo_createContext1(*_jindo_client);
         _write_handle = jdo_open(jdo_ctx, _file_path.c_str(), JDO_OPEN_FLAG_CREATE | JDO_OPEN_FLAG_APPEND, 0777);
         Status init_status = io::check_jindo_status(jdo_ctx);
         jdo_freeContext(jdo_ctx);
@@ -30,7 +30,7 @@ Status JindoOutputStream::write(const void* data, int64_t size) {
     }
     _buffer.append(static_cast<const char*>(data), size);
 
-    JdoContext_t jdo_write_ctx = jdo_createContext2(_jindo_client, _write_handle);
+    JdoContext_t jdo_write_ctx = jdo_createContext2(*_jindo_client, _write_handle);
     jdo_write(jdo_write_ctx, static_cast<const char*>(data), size);
     Status status = io::check_jindo_status(jdo_write_ctx);
     jdo_freeContext(jdo_write_ctx);
@@ -46,7 +46,7 @@ Status JindoOutputStream::write(const void* data, int64_t size) {
 }
 
 Status JindoOutputStream::flush() {
-    JdoContext_t jdo_write_ctx = jdo_createContext2(_jindo_client, _write_handle);
+    JdoContext_t jdo_write_ctx = jdo_createContext2(*_jindo_client, _write_handle);
     jdo_flush(jdo_write_ctx);
     Status status = io::check_jindo_status(jdo_write_ctx);
     jdo_freeContext(jdo_write_ctx);
@@ -58,7 +58,7 @@ Status JindoOutputStream::flush() {
 }
 
 Status JindoOutputStream::close() {
-    auto jdo_ctx = jdo_createContext2(_jindo_client, _write_handle);
+    auto jdo_ctx = jdo_createContext2(*_jindo_client, _write_handle);
     jdo_close(jdo_ctx);
     Status status = io::check_jindo_status(jdo_ctx);
     jdo_freeContext(jdo_ctx);

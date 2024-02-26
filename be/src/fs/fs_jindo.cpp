@@ -193,7 +193,7 @@ JdoOptions_t JindoClientFactory::get_or_create_jindo_opts(const S3URI& uri, cons
     return jdo_options;
 }
 
-StatusOr<JdoSystem_t> JindoClientFactory::new_client(const S3URI& uri, const FSOptions& opts) {
+StatusOr<std::shared_ptr<JdoSystem_t>> JindoClientFactory::new_client(const S3URI& uri, const FSOptions& opts) {
     std::lock_guard l(_lock);
     auto jdo_options = get_or_create_jindo_opts(uri, opts);
     std::string uri_prefix = uri.scheme() + "://" + uri.bucket();
@@ -206,10 +206,10 @@ StatusOr<JdoSystem_t> JindoClientFactory::new_client(const S3URI& uri, const FSO
     }
 
     LOG(INFO) << "Creating jindo client for " << uri_prefix;
-    JdoSystem_t client = jdo_createSystem(jdo_options, uri_prefix.c_str());
+    auto client = std::make_shared<JdoSystem_t>(jdo_createSystem(jdo_options, uri_prefix.c_str()));
     ASSIGN_OR_RETURN(auto user_name, get_local_user())
     auto jdo_login_user = jdo_createLoginUser(user_name.c_str());
-    auto jdo_ctx = jdo_createContext1(client);
+    auto jdo_ctx = jdo_createContext1(*client);
     jdo_init(jdo_ctx, jdo_login_user);
     Status init_status = io::check_jindo_status(jdo_ctx);
     jdo_freeContext(jdo_ctx);
@@ -217,14 +217,14 @@ StatusOr<JdoSystem_t> JindoClientFactory::new_client(const S3URI& uri, const FSO
         LOG(ERROR) << fmt::format("Failed to init the jindo file system for {} and file {}.", uri_prefix, uri.key());
         if (client != nullptr) {
             LOG(INFO) << "Free invalid jindo client for " << uri_prefix;
-            JdoContext_t ctx = jdo_createContext1(client);
+            JdoContext_t ctx = jdo_createContext1(*client);
             jdo_destroySystem(ctx);
             Status destroy_status = io::check_jindo_status(ctx);
             jdo_freeContext(ctx);
             if (UNLIKELY(!destroy_status.ok())) {
                 return destroy_status;
             }
-            jdo_freeSystem(client);
+            jdo_freeSystem(*client);
         }
         return init_status;
     }
@@ -233,7 +233,7 @@ StatusOr<JdoSystem_t> JindoClientFactory::new_client(const S3URI& uri, const FSO
         int idx = _rand.Uniform(MAX_CLIENTS_ITEMS);
 
         LOG(INFO) << "Free jindo client for " << uri_prefix << ", index " << _items;
-        auto old_client = _clients[idx];
+        auto old_client = *_clients[idx];
         jdo_freeOptions(_configs[idx]);
         JdoContext_t ctx = jdo_createContext1(old_client);
         jdo_destroySystem(ctx);
@@ -304,7 +304,7 @@ Status JindoFileSystem::path_exists(const std::string& path) {
     }
 
     ASSIGN_OR_RETURN(auto client, JindoClientFactory::instance().new_client(uri, _options))
-    auto jdo_ctx = jdo_createContext1(client);
+    auto jdo_ctx = jdo_createContext1(*client);
     bool result = jdo_exists(jdo_ctx, path.c_str());
     Status status = io::check_jindo_status(jdo_ctx);
     jdo_freeContext(jdo_ctx);
@@ -331,7 +331,7 @@ Status JindoFileSystem::iterate_dir(const std::string& dir, const std::function<
     }
     JdoListDirectoryResult_t listResult;
     ASSIGN_OR_RETURN(auto client, JindoClientFactory::instance().new_client(uri, _options))
-    auto jdo_ctx = jdo_createContext1(client);
+    auto jdo_ctx = jdo_createContext1(*client);
     jdo_listDirectory(jdo_ctx, ndir.c_str(), false, &listResult);
     status = io::check_jindo_status(jdo_ctx);
     jdo_freeContext(jdo_ctx);
@@ -381,7 +381,7 @@ Status JindoFileSystem::iterate_dir2(const std::string& dir, const std::function
     }
     JdoListDirectoryResult_t listResult;
     ASSIGN_OR_RETURN(auto client, JindoClientFactory::instance().new_client(uri, _options))
-    auto jdo_ctx = jdo_createContext1(client);
+    auto jdo_ctx = jdo_createContext1(*client);
     jdo_listDirectory(jdo_ctx, ndir.c_str(), false, &listResult);
     status = io::check_jindo_status(jdo_ctx);
     jdo_freeContext(jdo_ctx);
@@ -432,7 +432,7 @@ Status JindoFileSystem::remove_internal(const std::string& path, bool recursive)
         return Status::InvalidArgument(fmt::format("Invalid OSS URI: {}", path));
     }
     ASSIGN_OR_RETURN(auto client, JindoClientFactory::instance().new_client(uri, _options))
-    auto jdo_ctx = jdo_createContext1(client);
+    auto jdo_ctx = jdo_createContext1(*client);
     bool result = jdo_remove(jdo_ctx, path.c_str(), recursive);
     status = io::check_jindo_status(jdo_ctx);
     jdo_freeContext(jdo_ctx);
@@ -458,7 +458,7 @@ Status JindoFileSystem::create_dir_internal(const std::string& dirname, bool rec
         return Status::InvalidArgument(fmt::format("Invalid OSS URI: {}", dirname));
     }
     ASSIGN_OR_RETURN(auto client, JindoClientFactory::instance().new_client(uri, _options))
-    auto jdo_ctx = jdo_createContext1(client);
+    auto jdo_ctx = jdo_createContext1(*client);
     bool result = jdo_mkdir(jdo_ctx, dirname.c_str(), recursive, 0777);
     status = io::check_jindo_status(jdo_ctx);
     jdo_freeContext(jdo_ctx);
@@ -525,7 +525,7 @@ StatusOr<JdoFileStatus_t> JindoFileSystem::get_file_status(const std::string& pa
 
     bool has_cap_of_symlink = false;
     {
-        auto jdo_ctx = jdo_createContext1(client);
+        auto jdo_ctx = jdo_createContext1(*client);
         has_cap_of_symlink = jdo_hasCapOf(jdo_ctx, path.c_str(), JDO_STORE_SYMLINK);
         status = io::check_jindo_status(jdo_ctx);
         jdo_freeContext(jdo_ctx);
@@ -536,7 +536,7 @@ StatusOr<JdoFileStatus_t> JindoFileSystem::get_file_status(const std::string& pa
     }
 
     {
-        auto jdo_ctx = jdo_createContext1(client);
+        auto jdo_ctx = jdo_createContext1(*client);
         JdoFileStatus_t file_status;
         if (!has_cap_of_symlink) {
             jdo_getFileStatus(jdo_ctx, path.c_str(), &file_status);
@@ -589,7 +589,7 @@ Status JindoFileSystem::rename_file(const std::string& src, const std::string& t
         return Status::InvalidArgument(fmt::format("Invalid OSS URI: {}", src));
     }
     ASSIGN_OR_RETURN(auto client, JindoClientFactory::instance().new_client(uri, _options))
-    auto jdo_ctx = jdo_createContext1(client);
+    auto jdo_ctx = jdo_createContext1(*client);
     bool result = jdo_rename(jdo_ctx, src.c_str(), target.c_str());
     status = io::check_jindo_status(jdo_ctx);
     jdo_freeContext(jdo_ctx);

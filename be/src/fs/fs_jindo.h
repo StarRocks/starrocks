@@ -71,7 +71,7 @@ public:
     bool option_equals(const JdoOptions_t& left, const JdoOptions_t& right);
     StatusOr<std::string> get_local_user();
     JdoOptions_t get_or_create_jindo_opts(const S3URI& uri, const FSOptions& opts);
-    StatusOr<JdoSystem_t> new_client(const S3URI& uri, const FSOptions& opts);
+    StatusOr<std::shared_ptr<JdoSystem_t>> new_client(const S3URI& uri, const FSOptions& opts);
 
 private:
     JindoClientFactory();
@@ -85,7 +85,7 @@ private:
     int _items{0};
     // _configs[i] is the client configuration of _clients[i].
     JdoOptions_t _configs[MAX_CLIENTS_ITEMS];
-    JdoSystem_t _clients[MAX_CLIENTS_ITEMS];
+    std::shared_ptr<JdoSystem_t> _clients[MAX_CLIENTS_ITEMS];
     Random _rand;
 
     HashMap _jindo_config_map;

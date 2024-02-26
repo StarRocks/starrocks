@@ -24,18 +24,19 @@ namespace starrocks::io {
 
 class JindoOutputStream : public OutputStream {
 public:
-    explicit JindoOutputStream(JdoSystem_t client, std::string file_path)
+    explicit JindoOutputStream(std::shared_ptr<JdoSystem_t> client, std::string file_path)
             : _jindo_client(std::move(client)), _write_handle(nullptr), _file_path(std::move(file_path)) {}
 
     ~JindoOutputStream() override {
         if (_write_handle != nullptr) {
-            auto jdo_ctx = jdo_createContext2(_jindo_client, _write_handle);
+            auto jdo_ctx = jdo_createContext2(*_jindo_client, _write_handle);
             jdo_close(jdo_ctx);
             Status init_status = io::check_jindo_status(jdo_ctx);
             jdo_freeContext(jdo_ctx);
             jdo_freeHandle(_write_handle);
         }
         _write_handle = nullptr;
+        _jindo_client.reset();
     };
 
     // Disallow copy and assignment
@@ -63,7 +64,7 @@ public:
     Status close() override;
 
 private:
-    JdoSystem_t _jindo_client;
+    std::shared_ptr<JdoSystem_t> _jindo_client;
     JdoHandle_t _write_handle;
     std::string _file_path;
     std::string _buffer;

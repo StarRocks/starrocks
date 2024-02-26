@@ -22,7 +22,7 @@ namespace starrocks::io {
 
 StatusOr<int64_t> JindoInputStream::read(void* out, int64_t count) {
     if (_open_handle == nullptr) {
-        JdoContext_t jdo_ctx = jdo_createContext1(_jindo_client);
+        JdoContext_t jdo_ctx = jdo_createContext1(*_jindo_client);
         _open_handle = jdo_open(jdo_ctx, _file_path.c_str(), JDO_OPEN_FLAG_READ_ONLY, 0777);
         Status init_status = io::check_jindo_status(jdo_ctx);
         jdo_freeContext(jdo_ctx);
@@ -41,7 +41,7 @@ StatusOr<int64_t> JindoInputStream::read(void* out, int64_t count) {
     int64_t bytes_read = 0;
     int64_t bytes = 0;
     while (bytes_to_read > 0) {
-        JdoContext_t jdo_read_ctx = jdo_createContext2(_jindo_client, _open_handle);
+        JdoContext_t jdo_read_ctx = jdo_createContext2(*_jindo_client, _open_handle);
         bytes = jdo_pread(jdo_read_ctx, buffer + bytes_read, bytes_to_read, _offset);
         Status read_status = check_jindo_status(jdo_read_ctx);
         jdo_freeContext(jdo_read_ctx);
@@ -81,7 +81,7 @@ StatusOr<int64_t> JindoInputStream::position() {
 StatusOr<int64_t> JindoInputStream::get_size() {
     if (_size == -1) {
         {
-            JdoContext_t jdo_ctx = jdo_createContext1(_jindo_client);
+            JdoContext_t jdo_ctx = jdo_createContext1(*_jindo_client);
             bool file_exist = jdo_exists(jdo_ctx, _file_path.c_str());
             Status get_status = check_jindo_status(jdo_ctx);
             jdo_freeContext(jdo_ctx);
@@ -97,7 +97,7 @@ StatusOr<int64_t> JindoInputStream::get_size() {
         }
         {
             JdoFileStatus_t info;
-            JdoContext_t jdo_ctx = jdo_createContext1(_jindo_client);
+            JdoContext_t jdo_ctx = jdo_createContext1(*_jindo_client);
             jdo_getFileStatus(jdo_ctx, _file_path.c_str(), &info);
             Status get_status = check_jindo_status(jdo_ctx);
             jdo_freeContext(jdo_ctx);
