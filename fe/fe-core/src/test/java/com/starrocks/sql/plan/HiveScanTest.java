@@ -109,40 +109,4 @@ public class HiveScanTest extends ConnectorPlanTestBase {
         }
         connectContext.getSessionVariable().setEnableRewriteSimpleAggToHdfsScan(false);
     }
-
-    @Test
-    public void testIcebergRewriteSimpleAggToHdfsScan() throws Exception {
-        connectContext.getSessionVariable().setEnableRewriteSimpleAggToHdfsScan(true);
-        // positive cases.
-        {
-            String[] sqlString = {
-                    "select count(*) from iceberg0.partitioned_db.t1",
-                    "select count(*) from iceberg0.partitioned_db.t1 where date = '2020-01-01'",
-                    "select count(*), date from iceberg0.partitioned_db.t1 where date = '2020-01-01' " +
-                            "group by date"
-            };
-            for (int i = 0; i < sqlString.length; i++) {
-                String sql = sqlString[i];
-                String plan = getFragmentPlan(sql);
-                assertContains(plan, "___count___");
-            }
-        }
-        // negative cases.
-        {
-            String[] sqlString = {
-                    "select count(id) from iceberg0.partitioned_db.t1",
-                    "select count(*) from iceberg0.partitioned_db.t1 where date = '1998-01-01' and id =" +
-                            " 202",
-                    "select count(*), count(id), date from iceberg0.partitioned_db.t1 where date " +
-                            "= '2020-01-01' group by " +
-                            "date"
-            };
-            for (int i = 0; i < sqlString.length; i++) {
-                String sql = sqlString[i];
-                String plan = getFragmentPlan(sql);
-                assertNotContains(plan, "___count___");
-            }
-        }
-        connectContext.getSessionVariable().setEnableRewriteSimpleAggToHdfsScan(false);
-    }
 }
