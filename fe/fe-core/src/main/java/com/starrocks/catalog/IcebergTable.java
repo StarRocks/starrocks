@@ -170,6 +170,15 @@ public class IcebergTable extends Table {
         return allPartitionColumns;
     }
 
+    public boolean isAllPartitionColumnsIdentity() {
+        for (PartitionField field : getNativeTable().spec().fields()) {
+            if (!field.transform().isIdentity()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     public PartitionField getPartitionField(String partitionColumnName) {
         List<PartitionField> allPartitionFields = getNativeTable().spec().fields();
         Schema schema = this.getNativeTable().schema();
