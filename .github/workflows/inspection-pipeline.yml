@@ -41,6 +41,7 @@ env:
 jobs:
   info:
     runs-on: [self-hosted, normal]
+    name: INFO
     env:
       REPO: ${{ github.repository }}
       GH_TOKEN: ${{ github.token }}
