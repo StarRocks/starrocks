@@ -23,7 +23,6 @@
 namespace starrocks::formats {
 
 class ORCWriterOptions : public FileWriterOptions {
-    int64_t stripe_size = 1 << 27; // 128MB
 };
 
 class ORCFileWriter final : public FileWriter {

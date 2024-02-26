@@ -27,12 +27,12 @@
 
 namespace starrocks::connector {
 
-HiveChunkSink::HiveChunkSink(const std::vector<std::string>& partition_columns,
+HiveChunkSink::HiveChunkSink(std::vector<std::string> partition_columns,
                              std::vector<std::unique_ptr<ColumnEvaluator>>&& partition_column_evaluators,
                              std::unique_ptr<LocationProvider> location_provider,
                              std::unique_ptr<formats::FileWriterFactory> file_writer_factory, int64_t max_file_size,
                              RuntimeState* state)
-        : _partition_column_names(partition_columns),
+        : _partition_column_names(std::move(partition_columns)),
           _partition_column_evaluators(std::move(partition_column_evaluators)),
           _location_provider(std::move(location_provider)),
           _file_writer_factory(std::move(file_writer_factory)),
