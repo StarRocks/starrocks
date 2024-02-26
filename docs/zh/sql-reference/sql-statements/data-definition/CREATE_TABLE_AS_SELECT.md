@@ -121,7 +121,7 @@ SELECT * FROM employee_new;
 +------------+
 ```
 
-示例四：同步查询原表 `customers`中的 `customer_id` 和 `first_name` 列并根据查询结果创建新表 `customers_new`，然后将查询结果插入到新表中，并指定新表中列的名称为 `customer_id_new` 和 `first_name_new`。同时在新表中基于列 `customer_id_new` 构建 Bitmap 索引。
+示例四：同步查询原表 `customers` 中的 `customer_id` 和 `first_name` 列并根据查询结果创建新表 `customers_new`，然后将查询结果插入到新表中，并指定新表中列的名称为 `customer_id_new` 和 `first_name_new`。同时在新表中基于列 `customer_id_new` 构建 Bitmap 索引。
 
 ```SQL
 CREATE TABLE customers_new 
