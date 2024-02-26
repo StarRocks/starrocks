@@ -2738,8 +2738,6 @@ public class JoinTest extends PlanTestBase {
         }
     }
 
-
-
     @Test
     public void testPushDownTopWithOuterJoin() throws Exception {
         String sql = "SELECT\n" +
@@ -3167,6 +3165,134 @@ public class JoinTest extends PlanTestBase {
                 "     TABLE: t0");
 
         FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testPushDownTopWithMultiOuterJoin() throws Exception {
+        String sql = "SELECT\n" +
+                "    *\n" +
+                "FROM\n" +
+                "    (\n" +
+                "        SELECT\n" +
+                "            tmp_0.*,\n" +
+                "            t1.v5,\n" +
+                "            t1.v6\n" +
+                "        FROM\n" +
+                "            (\n" +
+                "                SELECT * FROM\n" +
+                "                t0 LEFT JOIN t2 ON t0.v1 = t2.v7\n" +
+                "            ) tmp_0\n" +
+                "            LEFT JOIN t1 ON tmp_0.v1 = t1.v4\n" +
+                "    ) AS mocktable\n" +
+                "ORDER BY\n" +
+                "    mocktable.v2 DESC\n" +
+                "LIMIT\n" +
+                "    2";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:TOP-N\n" +
+                "  |  order by: <slot 2> 2: v2 DESC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 2\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON");
+
+        sql = "SELECT\n" +
+                "    *\n" +
+                "FROM\n" +
+                "    (\n" +
+                "        SELECT\n" +
+                "            tmp_0.*,\n" +
+                "            t1.v5,\n" +
+                "            t1.v6\n" +
+                "        FROM\n" +
+                "            (\n" +
+                "                SELECT * FROM\n" +
+                "                (\n" +
+                "                    SELECT * FROM t3 RIGHT JOIN t0 on\n" +
+                "                    t0.v2 = t3.v11\n" +
+                "                ) tmp_1 LEFT JOIN t2 ON tmp_1.v1 = t2.v7\n" +
+                "            ) tmp_0\n" +
+                "            LEFT JOIN t1 ON tmp_0.v1 = t1.v4\n" +
+                "    ) AS mocktable\n" +
+                "ORDER BY\n" +
+                "    mocktable.v2 DESC\n" +
+                "LIMIT\n" +
+                "    2";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:TOP-N\n" +
+                "  |  order by: <slot 5> 5: v2 DESC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 2\n" +
+                "  |  \n" +
+                "  2:OlapScanNode\n" +
+                "     TABLE: t0");
+
+        sql = "SELECT\n" +
+                "    *\n" +
+                "FROM\n" +
+                "    (\n" +
+                "        SELECT\n" +
+                "            tmp_0.*,\n" +
+                "            t1.v5,\n" +
+                "            t1.v6\n" +
+                "        FROM\n" +
+                "            (\n" +
+                "                SELECT * FROM\n" +
+                "                (\n" +
+                "                    SELECT * FROM t3 LEFT JOIN t0 on\n" +
+                "                    t0.v2 = t3.v11\n" +
+                "                ) tmp_1 LEFT JOIN t2 ON tmp_1.v1 = t2.v7\n" +
+                "            ) tmp_0\n" +
+                "            LEFT JOIN t1 ON tmp_0.v1 = t1.v4\n" +
+                "    ) AS mocktable\n" +
+                "ORDER BY\n" +
+                "    mocktable.v2 DESC\n" +
+                "LIMIT\n" +
+                "    2";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  4:TOP-N\n" +
+                "  |  order by: <slot 5> 5: v2 DESC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 2\n" +
+                "  |  \n" +
+                "  3:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 2: v11 = 5: v2");
+
+        sql = "select T.v4,\n" +
+                "       T1.v8,\n" +
+                "       T2.v12,\n" +
+                "       P.*\n" +
+                "from (\n" +
+                "    SELECT\n" +
+                "           P.*\n" +
+                "    FROM t0 P\n" +
+                "    WHERE v2 BETWEEN 5 AND 10\n" +
+                "    ORDER BY P.v1,\n" +
+                "             P.v2,\n" +
+                "             P.v3\n" +
+                "    LIMIT 10\n" +
+                ") P \n" +
+                "  left JOIN t1 T ON P.v1 = T.v4\n" +
+                "  left JOIN t2 T1 ON P.v2 = T1.v8\n" +
+                "  left JOIN t3 T2 ON P.v3 = T2.v12\n" +
+                "ORDER BY P.v1,\n" +
+                "             P.v2,\n" +
+                "             P.v3\n" +
+                "    LIMIT 10;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:TOP-N\n" +
+                "  |  order by: <slot 1> 1: v1 ASC, <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 10\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 2: v2 >= 5, 2: v2 <= 10");
     }
 
     @Test
