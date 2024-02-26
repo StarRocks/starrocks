@@ -9,11 +9,11 @@ This topic lists all the SQL statements supported by StarRocks and categorizes t
 - [All statements](#all-statements)
   - [User account management](#user-account-management)
   - [Cluster management](#cluster-management)
-    - [FE, BE, CN, Broker, process](#fe-be-cn-broker-process)
+    - [Nodes and processes](#nodes-and-processes)
     - [Resource group](#resource-group)
     - [Storage volume](#storage-volume)
-    - [Table, tablet, replica](#table-tablet-replica)
-    - [File, index, variable](#file-index-variable)
+    - [Check and repair table, tablet, and replica](#check-and-repair-table-tablet-and-replica)
+    - [Parameters, variables, and files](#parameters-variables-and-files)
     - [SQL Blacklist](#sql-blacklist)
     - [Plugin](#plugin)
     - [Query plan and query profile](#query-plan-and-query-profile)
@@ -26,11 +26,11 @@ This topic lists all the SQL statements supported by StarRocks and categorizes t
     - [Catalog](#catalog)
     - [Database](#database)
     - [Resource](#resource)
-  - [Create table, partition](#create-table-partition)
+  - [Table, partition, index](#table-partition-index)
   - [View, materialized view](#view-materialized-view)
     - [View](#view)
     - [Materialized view](#materialized-view)
-  - [Function, SELECT](#function-select)
+  - [Function](#function)
   - [CBO statistics](#cbo-statistics)
   - [Backup and restore](#backup-and-restore)
   - [Utility commands](#utility-commands)
@@ -59,9 +59,9 @@ Manages users, roles, and privileges.
 
 ## Cluster management
 
-Manages clusters, including FEs, BEs, compute nodes, brokers, resource groups, storage volumes, tables, tablets, replicas, files, indexes, variables, and plugins.
+Manages clusters, including FEs, BEs, compute nodes (CN), brokers, resource groups, storage volumes, tables, tablets, replicas, files, variables, plugins, and SQL blacklist.
 
-### FE, BE, CN, Broker, process
+### Nodes and processes
 
 - [ADMIN SET CONFIG](./Administration/ADMIN_SET_CONFIG.md)
 - [ADMIN SHOW CONFIG](./Administration/ADMIN_SHOW_CONFIG.md)
@@ -93,7 +93,7 @@ Manages clusters, including FEs, BEs, compute nodes, brokers, resource groups, s
 - [SET DEFAULT STORAGE VOLUME](./Administration/SET_DEFAULT_STORAGE_VOLUME.md)
 - [SHOW STORAGE VOLUMES](./Administration/SHOW_STORAGE_VOLUMES.md)
 
-### Table, tablet, replica
+### Check and repair table, tablet, and replica
 
 - [ADMIN CANCEL REPAIR TABLE](./Administration/ADMIN_CANCEL_REPAIR.md)
 - [ADMIN CHECK TABLET](./Administration/ADMIN_CHECK_TABLET.md)
@@ -104,7 +104,7 @@ Manages clusters, including FEs, BEs, compute nodes, brokers, resource groups, s
 - [RECOVER](./data-definition/RECOVER.md)
 - [SHOW TABLE STATUS](./Administration/SHOW_TABLE_STATUS.md)
 
-### File, index, variable
+### Parameters, variables, and files
 
 - [CREATE FILE](./Administration/CREATE_FILE.md)
 - [CREATE INDEX](./data-definition/CREATE_INDEX.md)
@@ -112,8 +112,6 @@ Manages clusters, including FEs, BEs, compute nodes, brokers, resource groups, s
 - [DROP INDEX](./data-definition/DROP_INDEX.md)
 - [SET (variable)](./Administration/SET.md)
 - [SHOW FILE](./Administration/SHOW_FILE.md)
-- [SHOW FULL COLUMNS](./Administration/SHOW_FULL_COLUMNS.md)
-- [SHOW INDEX](./Administration/SHOW_INDEX.md)
 - [SHOW VARIABLES](./Administration/SHOW_VARIABLES.md)
 
 ### SQL Blacklist
@@ -134,7 +132,6 @@ Manages clusters, including FEs, BEs, compute nodes, brokers, resource groups, s
 - [EXPLAIN](./Administration/EXPLAIN.md)
 - [EXPLAIN ANALYZE](./Administration/EXPLAIN_ANALYZE.md)
 - [SHOW PROFILELIST](./Administration/SHOW_PROFILELIST.md)
-
 
 ## Loading, unloading
 
@@ -202,7 +199,7 @@ Manages clusters, including FEs, BEs, compute nodes, brokers, resource groups, s
 - [DROP RESOURCE](./data-definition/DROP_RESOURCE.md)
 - [SHOW RESOURCES](./data-definition/SHOW_RESOURCES.md)
 
-## Create table, partition
+## Table, partition, index
 
 - [ALTER TABLE](./data-definition/ALTER_TABLE.md)
 - [CANCEL ALTER TABLE](./data-definition/CANCEL_ALTER_TABLE.md)
@@ -213,10 +210,13 @@ Manages clusters, including FEs, BEs, compute nodes, brokers, resource groups, s
 - [REFRESH EXTERNAL TABLE](./data-definition/REFRESH_EXTERNAL_TABLE.md)
 - [TRUNCATE TABLE](./data-definition/TRUNCATE_TABLE.md)
 - [DELETE](./data-manipulation/DELETE.md)
+- [SELECT](./data-manipulation/SELECT.md)
 - [SHOW ALTER TABLE](./data-manipulation/SHOW_ALTER.md)
 - [SHOW CREATE TABLE](./data-manipulation/SHOW_CREATE_TABLE.md)
 - [SHOW DELETE](./data-manipulation/SHOW_DELETE.md)
 - [SHOW DYNAMIC PARTITION TABLES](./data-manipulation/SHOW_DYNAMIC_PARTITION_TABLES.md)
+- [SHOW FULL COLUMNS](./data-manipulation//SHOW_FULL_COLUMNS.md)
+- [SHOW INDEX](./data-manipulation//SHOW_INDEX.md)
 - [SHOW PARTITIONS](./data-manipulation/SHOW_PARTITIONS.md)
 - [SHOW TABLES](./data-manipulation/SHOW_TABLES.md)
 - [SHOW TABLET](./data-manipulation/SHOW_TABLET.md)
@@ -242,12 +242,11 @@ Manages clusters, including FEs, BEs, compute nodes, brokers, resource groups, s
 - [SHOW CREATE MATERIALIZED VIEW](./data-manipulation/SHOW_CREATE_MATERIALIZED_VIEW.md)
 - [SHOW MATERIALIZED VIEWS](./data-manipulation/SHOW_MATERIALIZED_VIEW.md)
 
-## Function, SELECT
+## Function
 
 - [CREATE FUNCTION](./data-definition/CREATE_FUNCTION.md)
 - [DROP FUNCTION](./data-definition/DROP_FUNCTION.md)
 - [SHOW FUNCTION](./data-definition/SHOW_FUNCTIONS.md)
-- [SELECT](./data-manipulation/SELECT.md)
 
 ## CBO statistics
 
