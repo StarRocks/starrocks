@@ -1516,10 +1516,10 @@ Status SegmentIterator::_init_global_dict_decoder() {
 }
 
 Status SegmentIterator::_rewrite_predicates() {
-    //
-    ColumnPredicateRewriter rewriter(_column_iterators, _opts.predicates, _schema, _predicate_need_rewrite,
-                                     _predicate_columns, _scan_range);
-    RETURN_IF_ERROR(rewriter.rewrite_predicate(&_obj_pool));
+    // TODO(lzh): rewrite column predicates.
+    // ColumnPredicateRewriter rewriter(_column_iterators, _opts.predicates, _schema, _predicate_need_rewrite,
+    //                                  _predicate_columns, _scan_range);
+    // RETURN_IF_ERROR(rewriter.rewrite_predicate(&_obj_pool));
 
     // for each delete predicate,
     // If the global dictionary optimization is enabled for the column,
