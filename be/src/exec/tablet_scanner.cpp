@@ -379,7 +379,7 @@ void TabletScanner::update_counter() {
     COUNTER_UPDATE(_parent->_segments_read_count, _reader->stats().segments_read_count);
     COUNTER_UPDATE(_parent->_total_columns_data_page_count, _reader->stats().total_columns_data_page_count);
 
-    COUNTER_SET(_parent->_pushdown_predicates_counter, (int64_t)_params.predicates.size());
+    COUNTER_SET(_parent->_pushdown_predicates_counter, (int64_t)_params.chunk_pred->size());
 
     StarRocksMetrics::instance()->query_scan_bytes.increment(_compressed_bytes_read);
     StarRocksMetrics::instance()->query_scan_rows.increment(_raw_rows_read);

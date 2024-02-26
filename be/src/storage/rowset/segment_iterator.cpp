@@ -1195,50 +1195,52 @@ StatusOr<uint16_t> SegmentIterator::_filter(Chunk* chunk, vector<rowid_t>* rowid
     DCHECK(_vectorized_preds.size() + _branchless_preds.size() > 0 || _del_vec);
 
     SCOPED_RAW_TIMER(&_opts.stats->vec_cond_ns);
+    RETURN_IF_ERROR(_opts.chunk_pred->evaluate(chunk, _selection.data(), from , to));
 
-    // first evaluate
-    if (!_vectorized_preds.empty()) {
-        SCOPED_RAW_TIMER(&_opts.stats->vec_cond_evaluate_ns);
-        const ColumnPredicate* pred = _vectorized_preds[0];
-        Column* c = chunk->get_column_by_id(pred->column_id()).get();
-        RETURN_IF_ERROR(pred->evaluate(c, _selection.data(), from, to));
-        for (int i = 1; i < _vectorized_preds.size(); ++i) {
-            pred = _vectorized_preds[i];
-            c = chunk->get_column_by_id(pred->column_id()).get();
-            RETURN_IF_ERROR(pred->evaluate_and(c, _selection.data(), from, to));
-        }
-    }
 
-    // evaluate brachless
-    if (!_branchless_preds.empty()) {
-        SCOPED_RAW_TIMER(&_opts.stats->branchless_cond_evaluate_ns);
-
-        uint16_t selected_size = 0;
-        if (!_vectorized_preds.empty()) {
-            for (uint16_t i = from; i < to; ++i) {
-                _selected_idx[selected_size] = i;
-                selected_size += _selection[i];
-            }
-        } else {
-            // when there is no vectorized predicates, should initialize _selected_idx
-            // in a vectorized way
-            selected_size = to - from;
-            for (uint16_t i = from, j = 0; i < to; ++i, ++j) {
-                _selected_idx[j] = i;
-            }
-        }
-
-        for (size_t i = 0; selected_size > 0 && i < _branchless_preds.size(); ++i) {
-            const ColumnPredicate* pred = _branchless_preds[i];
-            ColumnPtr& c = chunk->get_column_by_id(pred->column_id());
-            ASSIGN_OR_RETURN(selected_size, pred->evaluate_branchless(c.get(), _selected_idx.data(), selected_size));
-        }
-
-        memset(&_selection[from], 0, to - from);
-        for (uint16_t i = 0; i < selected_size; ++i) {
-            _selection[_selected_idx[i]] = 1;
-        }
-    }
+    // // first evaluate
+    // if (!_vectorized_preds.empty()) {
+    //     SCOPED_RAW_TIMER(&_opts.stats->vec_cond_evaluate_ns);
+    //     const ColumnPredicate* pred = _vectorized_preds[0];
+    //     Column* c = chunk->get_column_by_id(pred->column_id()).get();
+    //     RETURN_IF_ERROR(pred->evaluate(c, _selection.data(), from, to));
+    //     for (int i = 1; i < _vectorized_preds.size(); ++i) {
+    //         pred = _vectorized_preds[i];
+    //         c = chunk->get_column_by_id(pred->column_id()).get();
+    //         RETURN_IF_ERROR(pred->evaluate_and(c, _selection.data(), from, to));
+    //     }
+    // }
+    //
+    // // evaluate brachless
+    // if (!_branchless_preds.empty()) {
+    //     SCOPED_RAW_TIMER(&_opts.stats->branchless_cond_evaluate_ns);
+    //
+    //     uint16_t selected_size = 0;
+    //     if (!_vectorized_preds.empty()) {
+    //         for (uint16_t i = from; i < to; ++i) {
+    //             _selected_idx[selected_size] = i;
+    //             selected_size += _selection[i];
+    //         }
+    //     } else {
+    //         // when there is no vectorized predicates, should initialize _selected_idx
+    //         // in a vectorized way
+    //         selected_size = to - from;
+    //         for (uint16_t i = from, j = 0; i < to; ++i, ++j) {
+    //             _selected_idx[j] = i;
+    //         }
+    //     }
+    //
+    //     for (size_t i = 0; selected_size > 0 && i < _branchless_preds.size(); ++i) {
+    //         const ColumnPredicate* pred = _branchless_preds[i];
+    //         ColumnPtr& c = chunk->get_column_by_id(pred->column_id());
+    //         ASSIGN_OR_RETURN(selected_size, pred->evaluate_branchless(c.get(), _selected_idx.data(), selected_size));
+    //     }
+    //
+    //     memset(&_selection[from], 0, to - from);
+    //     for (uint16_t i = 0; i < selected_size; ++i) {
+    //         _selection[_selected_idx[i]] = 1;
+    //     }
+    // }
 
     auto hit_count = SIMD::count_nonzero(&_selection[from], to - from);
     uint16_t chunk_size = to;
