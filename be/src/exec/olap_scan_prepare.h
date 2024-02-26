@@ -120,26 +120,26 @@ private:
     Status build_scan_keys(bool unlimited, int32_t max_scan_key_num);
 
     template <LogicalType SlotType, typename RangeValueType>
-    void normalize_predicate(const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range);
+    Status normalize_predicate(const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range);
 
     template <LogicalType SlotType, typename RangeValueType>
-    void normalize_in_or_equal_predicate(const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range);
+    Status normalize_in_or_equal_predicate(const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range);
 
     template <LogicalType SlotType, typename RangeValueType>
-    void normalize_binary_predicate(const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range);
+    Status normalize_binary_predicate(const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range);
 
     template <LogicalType SlotType, typename RangeValueType>
-    void normalize_join_runtime_filter(const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range);
+    Status normalize_join_runtime_filter(const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range);
 
     template <LogicalType SlotType, typename RangeValueType>
-    void normalize_not_in_or_not_equal_predicate(const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range);
+    Status normalize_not_in_or_not_equal_predicate(const SlotDescriptor& slot, ColumnValueRange<RangeValueType>* range);
 
-    void normalize_is_null_predicate(const SlotDescriptor& slot);
+    Status normalize_is_null_predicate(const SlotDescriptor& slot);
 
     // To build `ColumnExprPredicate`s from conjuncts passed from olap scan node.
     // `ColumnExprPredicate` would be used in late materialization, zone map filtering,
     // dict encoded column filtering and bitmap value column filtering etc.
-    void build_column_expr_predicates();
+    Status build_column_expr_predicates();
 };
 
 class OlapScanConjunctsManager {

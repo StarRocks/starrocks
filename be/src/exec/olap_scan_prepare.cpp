@@ -233,7 +233,7 @@ StatusOr<bool> ChunkPredicateBuilder<E>::parse_conjuncts() {
 
     if (_opts.enable_column_expr_predicate) {
         VLOG_FILE << "OlapScanConjunctsManager: enable_column_expr_predicate = true. push down column expr predicates";
-        build_column_expr_predicates();
+        RETURN_IF_ERROR(build_column_expr_predicates());
     }
 
     return _normalize_and_or_predicates();
@@ -299,7 +299,7 @@ StatusOr<ChunkPredicatePtr> ChunkPredicateBuilder<E>::get_chunk_predicate(Predic
 
 template <ExprContainer E>
 template <LogicalType SlotType, typename RangeValueType>
-void ChunkPredicateBuilder<E>::normalize_in_or_equal_predicate(const SlotDescriptor& slot,
+Status ChunkPredicateBuilder<E>::normalize_in_or_equal_predicate(const SlotDescriptor& slot,
                                                                ColumnValueRange<RangeValueType>* range) {
     Status status;
 
@@ -353,12 +353,14 @@ void ChunkPredicateBuilder<E>::normalize_in_or_equal_predicate(const SlotDescrip
             }
         }
     }
+
+    return Status::OK();
 }
 
 // explicit specialization for DATE.
 template <ExprContainer E>
 template <>
-void ChunkPredicateBuilder<E>::normalize_in_or_equal_predicate<starrocks::TYPE_DATE, DateValue>(
+Status ChunkPredicateBuilder<E>::normalize_in_or_equal_predicate<starrocks::TYPE_DATE, DateValue>(
         const SlotDescriptor& slot, ColumnValueRange<DateValue>* range) {
     Status status;
 
@@ -440,11 +442,13 @@ void ChunkPredicateBuilder<E>::normalize_in_or_equal_predicate<starrocks::TYPE_D
             }
         }
     }
+
+    return Status::OK();
 }
 
 template <ExprContainer E>
 template <LogicalType SlotType, typename RangeValueType>
-void ChunkPredicateBuilder<E>::normalize_binary_predicate(const SlotDescriptor& slot,
+Status ChunkPredicateBuilder<E>::normalize_binary_predicate(const SlotDescriptor& slot,
                                                           ColumnValueRange<RangeValueType>* range) {
     Status status;
     DCHECK((SlotType == slot.type().type) || (SlotType == TYPE_VARCHAR && slot.type().type == TYPE_CHAR));
@@ -470,11 +474,13 @@ void ChunkPredicateBuilder<E>::normalize_binary_predicate(const SlotDescriptor& 
             _normalized_exprs[i] = true;
         }
     }
+
+    return Status::OK();
 }
 
 template <ExprContainer E>
 template <LogicalType SlotType, typename RangeValueType>
-void ChunkPredicateBuilder<E>::normalize_join_runtime_filter(const SlotDescriptor& slot,
+Status ChunkPredicateBuilder<E>::normalize_join_runtime_filter(const SlotDescriptor& slot,
                                                              ColumnValueRange<RangeValueType>* range) {
     // in runtime filter
 
@@ -560,11 +566,13 @@ void ChunkPredicateBuilder<E>::normalize_join_runtime_filter(const SlotDescripto
                                                                                                          nullptr);
         }
     }
+
+    return Status::OK();
 }
 
 template <ExprContainer E>
 template <LogicalType SlotType, typename RangeValueType>
-void ChunkPredicateBuilder<E>::normalize_not_in_or_not_equal_predicate(const SlotDescriptor& slot,
+Status ChunkPredicateBuilder<E>::normalize_not_in_or_not_equal_predicate(const SlotDescriptor& slot,
                                                                        ColumnValueRange<RangeValueType>* range) {
     Status status;
     DCHECK((SlotType == slot.type().type) || (SlotType == TYPE_VARCHAR && slot.type().type == TYPE_CHAR));
@@ -615,10 +623,12 @@ void ChunkPredicateBuilder<E>::normalize_not_in_or_not_equal_predicate(const Slo
             }
         }
     }
+
+    return Status::OK();
 }
 
 template <ExprContainer E>
-void ChunkPredicateBuilder<E>::normalize_is_null_predicate(const SlotDescriptor& slot) {
+Status ChunkPredicateBuilder<E>::normalize_is_null_predicate(const SlotDescriptor& slot) {
     for (size_t i = 0; i < _exprs.size(); i++) {
         if (_normalized_exprs[i]) {
             continue;
@@ -644,18 +654,22 @@ void ChunkPredicateBuilder<E>::normalize_is_null_predicate(const SlotDescriptor&
             }
         }
     }
+
+    return Status::OK();
 }
 
 template <ExprContainer E>
 template <LogicalType SlotType, typename RangeValueType>
-void ChunkPredicateBuilder<E>::normalize_predicate(const SlotDescriptor& slot,
+Status ChunkPredicateBuilder<E>::normalize_predicate(const SlotDescriptor& slot,
                                                    ColumnValueRange<RangeValueType>* range) {
-    normalize_in_or_equal_predicate<SlotType, RangeValueType>(slot, range);
-    normalize_binary_predicate<SlotType, RangeValueType>(slot, range);
-    normalize_not_in_or_not_equal_predicate<SlotType, RangeValueType>(slot, range);
-    normalize_is_null_predicate(slot);
+    RETURN_IF_ERROR(normalize_in_or_equal_predicate<SlotType, RangeValueType>(slot, range));
+    RETURN_IF_ERROR(normalize_binary_predicate<SlotType, RangeValueType>(slot, range));
+    RETURN_IF_ERROR(normalize_not_in_or_not_equal_predicate<SlotType, RangeValueType>(slot, range));
+    RETURN_IF_ERROR(normalize_is_null_predicate(slot));
     // Must handle join runtime filter last
-    normalize_join_runtime_filter<SlotType, RangeValueType>(slot, range);
+    RETURN_IF_ERROR(normalize_join_runtime_filter<SlotType, RangeValueType>(slot, range));
+
+    return Status::OK();
 }
 
 struct ColumnRangeBuilder {
@@ -835,7 +849,7 @@ bool ChunkPredicateBuilder<E>::is_pred_normalized(size_t index) const {
 }
 
 template <ExprContainer E>
-void ChunkPredicateBuilder<E>::build_column_expr_predicates() {
+Status ChunkPredicateBuilder<E>::build_column_expr_predicates() {
     std::map<SlotId, int> slot_id_to_index;
     const auto& slots = _opts.tuple_desc->decoded_slots();
     for (int i = 0; i < slots.size(); i++) {
@@ -874,6 +888,8 @@ void ChunkPredicateBuilder<E>::build_column_expr_predicates() {
         iter->second.emplace_back(expr_ctx);
         _normalized_exprs[i] = true;
     }
+
+    return Status::OK();
 }
 
 // ------------------------------------------------------------------------------------
