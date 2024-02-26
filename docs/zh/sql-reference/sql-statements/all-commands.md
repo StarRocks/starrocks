@@ -12,7 +12,7 @@ displayed_sidebar: "Chinese"
     - [节点和进程](#节点和进程)
     - [资源组](#资源组)
     - [存储卷](#存储卷)
-    - [表、tablet 和 副本修复](#表tablet-和-副本修复)
+    - [表，tablet，副本检查与修复](#表tablet副本检查与修复)
     - [参数配置、系统变量、文件](#参数配置系统变量文件)
     - [SQL 黑名单](#sql-黑名单)
     - [插件](#插件)
@@ -26,7 +26,7 @@ displayed_sidebar: "Chinese"
     - [Catalog](#catalog)
     - [数据库](#数据库)
     - [资源](#资源)
-  - [建表，分区](#建表分区)
+  - [表，分区，索引](#表分区索引)
   - [视图，物化视图](#视图物化视图)
     - [视图](#视图)
     - [物化视图](#物化视图)
@@ -59,7 +59,7 @@ displayed_sidebar: "Chinese"
 
 ## 集群管理
 
-管理集群，包括 FE、BE、Compute Node (CN)、资源组 (Resource Group)、存储卷（Storage Volume）、表、Tablet、副本 (Replica)、文件、变量（Variable）、插件（Plugin）、SQL Blacklist 等。
+管理集群，包括 FE、BE、Compute Node (CN) 节点、资源组 (Resource Group)、存储卷（Storage Volume）、表、Tablet、副本 (Replica)、文件、变量（Variable）、插件（Plugin）、SQL Blacklist 等。
 
 ### 节点和进程
 
@@ -91,7 +91,7 @@ displayed_sidebar: "Chinese"
 - [SET DEFAULT STORAGE VOLUME](./Administration/SET_DEFAULT_STORAGE_VOLUME.md)
 - [SHOW STORAGE VOLUMES](./Administration/SHOW_STORAGE_VOLUMES.md)
 
-### 表、tablet 和 副本修复
+### 表，tablet，副本检查与修复
 
 - [ADMIN CANCEL REPAIR TABLE](./Administration/ADMIN_CANCEL_REPAIR.md)
 - [ADMIN CHECK TABLET](./Administration/ADMIN_CHECK_TABLET.md)
@@ -129,7 +129,7 @@ displayed_sidebar: "Chinese"
 - [ANALYZE PROFILE](./Administration/ANALYZE_PROFILE.md)
 - [EXPLAIN](./Administration/EXPLAIN.md)
 - [EXPLAIN ANALYZE](./Administration/EXPLAIN_ANALYZE.md)
-- [SHOW PROFILELIST](./Administration/SHOW_PROFILELIST.md)
+- [SELECT](./data-manipulation/SELECT.md)
 
 ## 导入，导出
 
@@ -197,7 +197,7 @@ displayed_sidebar: "Chinese"
 - [DROP RESOURCE](./data-definition/DROP_RESOURCE.md)
 - [SHOW RESOURCES](./data-definition/SHOW_RESOURCES.md)
 
-## 建表，分区
+## 表，分区，索引
 
 - [ALTER TABLE](./data-definition/ALTER_TABLE.md)
 - [CANCEL ALTER TABLE](./data-definition/CANCEL_ALTER_TABLE.md)
@@ -205,11 +205,11 @@ displayed_sidebar: "Chinese"
 - [CREATE TABLE](./data-definition/CREATE_TABLE.md)
 - [CREATE TABLE AS SELECT](./data-definition/CREATE_TABLE_AS_SELECT.md)
 - [CREATE TABLE LIKE](./data-definition/CREATE_TABLE_LIKE.md)
+- [DELETE](./data-manipulation/DELETE.md)
 - [DROP INDEX](./data-definition/DROP_INDEX.md)
 - [DROP TABLE](./data-definition/DROP_TABLE.md)
 - [REFRESH EXTERNAL TABLE](./data-definition/REFRESH_EXTERNAL_TABLE.md)
 - [TRUNCATE TABLE](./data-definition/TRUNCATE_TABLE.md)
-- [DELETE](./data-manipulation/DELETE.md)
 - [SHOW ALTER TABLE](./data-manipulation/SHOW_ALTER.md)
 - [SHOW CREATE TABLE](./data-manipulation/SHOW_CREATE_TABLE.md)
 - [SHOW DELETE](./data-manipulation/SHOW_DELETE.md)
@@ -246,7 +246,6 @@ displayed_sidebar: "Chinese"
 - [CREATE FUNCTION](./data-definition/CREATE_FUNCTION.md)
 - [DROP FUNCTION](./data-definition/DROP_FUNCTION.md)
 - [SHOW FUNCTION](./data-definition/SHOW_FUNCTIONS.md)
-- [SELECT](./data-manipulation/SELECT.md)
 
 ## CBO 统计信息
 
