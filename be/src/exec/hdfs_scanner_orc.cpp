@@ -346,8 +346,6 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     // we evaluate conjunct ctxs in `do_get_next`.
     _scanner_params.eval_conjunct_ctxs = false;
     for (const auto& column : _scanner_ctx.materialized_columns) {
-        // VLOG_OPERATOR << "[xxx] materialized column: " << column.col_name << ", slot_id: " << column.slot_id;
-
         auto col_name = OrcChunkReader::format_column_name(column.col_name, _scanner_ctx.case_sensitive);
         if (known_column_names.find(col_name) == known_column_names.end()) continue;
         bool is_lazy_slot = _scanner_params.is_lazy_materialization_slot(column.slot_id);
@@ -417,8 +415,6 @@ void HdfsOrcScanner::do_close(RuntimeState* runtime_state) noexcept {
 
 Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     CHECK(chunk != nullptr);
-    // VLOG_OPERATOR << "[xxx] do_get_next, should_skip_file = " << _should_skip_file
-    //               << ", return_count_column = " << _scanner_ctx.return_count_column;
     if (_should_skip_file) {
         return Status::EndOfFile("");
     }
