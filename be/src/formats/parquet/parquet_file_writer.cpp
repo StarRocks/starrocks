@@ -925,7 +925,8 @@ Status ParquetFileWriter::init() {
 
 ParquetFileWriter::~ParquetFileWriter() {
     try {
-        _output_stream->Close();
+        auto st = _output_stream->Close();
+        LOG_IF(WARNING, !st.ok()) << st;
     } catch (...) {
     }
 }
