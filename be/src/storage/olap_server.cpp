@@ -344,14 +344,14 @@ void* StorageEngine::_disk_stat_monitor_thread_callback(void* arg) {
     ProfilerRegisterThread();
 #endif
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
-        _start_disk_stat_monitor();
-
         int32_t interval = config::disk_stat_monitor_interval;
         if (interval <= 0) {
             LOG(WARNING) << "disk_stat_monitor_interval config is illegal: " << interval << ", force set to 1";
             interval = 1;
         }
         SLEEP_IN_BG_WORKER(interval);
+
+        _start_disk_stat_monitor();
     }
 
     return nullptr;
