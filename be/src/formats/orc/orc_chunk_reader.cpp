@@ -727,6 +727,8 @@ static std::unordered_set<TExprNodeType::type> _supported_expr_node_types = {
         TExprNodeType::type::SLOT_REF,
         TExprNodeType::type::STRING_LITERAL,
         TExprNodeType::type::LARGE_INT_LITERAL,
+        // is null & is not null
+        TExprNodeType::type::FUNCTION_CALL,
 };
 
 static std::unordered_map<LogicalType, orc::PredicateDataType> _supported_logical_types = {
@@ -752,8 +754,8 @@ static std::unordered_map<LogicalType, orc::PredicateDataType> _supported_logica
 };
 
 bool OrcChunkReader::_ok_to_add_conjunct(const Expr* conjunct) {
-    TExprNodeType::type node_type = conjunct->node_type();
-    TExprOpcode::type op_type = conjunct->op();
+    const TExprNodeType::type& node_type = conjunct->node_type();
+    const TExprOpcode::type& op_type = conjunct->op();
     if (_supported_expr_node_types.find(node_type) == _supported_expr_node_types.end()) {
         return false;
     }
@@ -782,7 +784,7 @@ bool OrcChunkReader::_ok_to_add_conjunct(const Expr* conjunct) {
     // supported one level. first child is slot, and others are literal values.
     // and only support some of logical types.
     if (node_type == TExprNodeType::BINARY_PRED || node_type == TExprNodeType::IN_PRED ||
-        node_type == TExprNodeType::IS_NULL_PRED) {
+        node_type == TExprNodeType::IS_NULL_PRED || node_type == TExprNodeType::FUNCTION_CALL) {
         // first child should be slot
         // and others should be literal.
         Expr* c = conjunct->get_child(0);
@@ -800,6 +802,18 @@ bool OrcChunkReader::_ok_to_add_conjunct(const Expr* conjunct) {
         // It's unsafe to do eval on char type because of padding problems.
         if (slot_desc->type().type == TYPE_CHAR) {
             return false;
+        }
+
+        if (node_type == TExprNodeType::IS_NULL_PRED) {
+            // null predicate only has one child
+            return true;
+        }
+
+        if (node_type == TExprNodeType::FUNCTION_CALL) {
+            // check is null & is not null
+            // null predicate only has one child
+            std::string null_str;
+            return conjunct->is_null_scalar_function(null_str);
         }
 
         if (conjunct->get_num_children() == 1) {
@@ -884,8 +898,8 @@ static StatusOr<orc::Literal> translate_to_orc_literal(Expr* lit, orc::Predicate
 }
 
 Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::SearchArgumentBuilder>& builder) {
-    TExprNodeType::type node_type = conjunct->node_type();
-    TExprOpcode::type op_type = conjunct->op();
+    const TExprNodeType::type& node_type = conjunct->node_type();
+    const TExprOpcode::type& op_type = conjunct->op();
 
     // If conjunct is slot ref, like SELECT * FROM tbl where col;
     // We build SearchArgument about col=true directly.
@@ -936,8 +950,8 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::
     Expr* slot = conjunct->get_child(0);
     DCHECK(slot->is_slotref());
     auto* ref = down_cast<ColumnRef*>(slot);
-    SlotId slot_id = ref->slot_id();
-    std::string name = _slot_id_to_desc[slot_id]->col_name();
+    const SlotId& slot_id = ref->slot_id();
+    const std::string& name = _slot_id_to_desc[slot_id]->col_name();
     orc::PredicateDataType pred_type = _supported_logical_types[slot->type().type];
 
     if (node_type == TExprNodeType::type::BINARY_PRED) {
@@ -1003,8 +1017,17 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::
         return Status::OK();
     }
 
-    if (node_type == TExprNodeType::IS_NULL_PRED) {
-        builder->isNull(name, pred_type);
+    if (node_type == TExprNodeType::IS_NULL_PRED || node_type == TExprNodeType::FUNCTION_CALL) {
+        std::string null_function_name;
+        if (conjunct->is_null_scalar_function(null_function_name)) {
+            if (null_function_name == "null") {
+                builder->isNull(name, pred_type);
+            } else if (null_function_name == "not null") {
+                builder->startNot();
+                builder->isNull(name, pred_type);
+                builder->end();
+            }
+        }
         return Status::OK();
     }
 
