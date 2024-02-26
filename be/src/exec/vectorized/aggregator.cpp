@@ -788,8 +788,16 @@ Status Aggregator::_evaluate_exprs(vectorized::Chunk* chunk) {
         // for nullable column when the real whole chunk data all not-null.
         if (_group_by_types[i].is_nullable && !_group_by_columns[i]->is_nullable()) {
             // TODO: optimized the memory usage
+<<<<<<< HEAD:be/src/exec/vectorized/aggregator.cpp
             _group_by_columns[i] = vectorized::NullableColumn::create(
                     _group_by_columns[i], vectorized::NullColumn::create(_group_by_columns[i]->size(), 0));
+=======
+            _group_by_columns[i] =
+                    NullableColumn::create(_group_by_columns[i], NullColumn::create(_group_by_columns[i]->size(), 0));
+        } else if (!_group_by_types[i].is_nullable && _group_by_columns[i]->is_nullable()) {
+            return Status::InternalError(fmt::format("error nullablel column, index: {}, slot: {}", i,
+                                                     _group_by_expr_ctxs[i]->root()->debug_string()));
+>>>>>>> 01ef74d40f ([BugFix] window lose tuple.computeMemory (#41442)):be/src/exec/aggregator.cpp
         }
     }
 

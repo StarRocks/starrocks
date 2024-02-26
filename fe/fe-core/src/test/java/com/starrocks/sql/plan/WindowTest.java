@@ -812,4 +812,134 @@ public class WindowTest extends PlanTestBase {
                 "args nullable: true; result nullable: true]\n" +
                 "  |  cardinality: 1");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testSkewPartition() throws Exception {
+        String sql = "select *, " +
+                "sum(v1) over(partition by v2 order by v3), " +
+                "avg(v1) over(partition by v2 order by v3), " +
+                "max(v1) over(partition by v2 order by v3), " +
+                "min(v1) over(partition by v2 order by v3) " +
+                "from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:ANALYTIC\n" +
+                "  |  functions: [, sum(1: v1), ], [, avg(1: v1), ], [, max(1: v1), ], [, min(1: v1), ]\n" +
+                "  |  partition by: 2: v2\n" +
+                "  |  order by: 3: v3 ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  \n" +
+                "  1:SORT");
+
+        sql = "select *, " +
+                "sum(v1) over([skewed]partition by v2 order by v3), " +
+                "avg(v1) over(partition by v2 order by v3), " +
+                "max(v1) over(partition by v2 order by v3), " +
+                "min(v1) over(partition by v2 order by v3) " +
+                "from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:ANALYTIC\n" +
+                "  |  functions: [, sum(1: v1), ], [, avg(1: v1), ], [, max(1: v1), ], [, min(1: v1), ]\n" +
+                "  |  partition by: 2: v2\n" +
+                "  |  order by: 3: v3 ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  isSkewed\n" +
+                "  |  \n" +
+                "  1:SORT");
+
+        sql = "select *, " +
+                "sum(v1) over(partition by v2 order by v3), " +
+                "avg(v1) over([skewed]partition by v2 order by v3), " +
+                "max(v1) over(partition by v2 order by v3), " +
+                "min(v1) over(partition by v2 order by v3) " +
+                "from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:ANALYTIC\n" +
+                "  |  functions: [, sum(1: v1), ], [, avg(1: v1), ], [, max(1: v1), ], [, min(1: v1), ]\n" +
+                "  |  partition by: 2: v2\n" +
+                "  |  order by: 3: v3 ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  isSkewed\n" +
+                "  |  \n" +
+                "  1:SORT");
+
+        sql = "select *, " +
+                "sum(v1) over(partition by v2 order by v3), " +
+                "avg(v1) over(partition by v2 order by v3), " +
+                "max(v1) over([skewed]partition by v2 order by v3), " +
+                "min(v1) over(partition by v2 order by v3) " +
+                "from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:ANALYTIC\n" +
+                "  |  functions: [, sum(1: v1), ], [, avg(1: v1), ], [, max(1: v1), ], [, min(1: v1), ]\n" +
+                "  |  partition by: 2: v2\n" +
+                "  |  order by: 3: v3 ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  isSkewed\n" +
+                "  |  \n" +
+                "  1:SORT");
+
+        sql = "select *, " +
+                "sum(v1) over(partition by v2 order by v3), " +
+                "avg(v1) over(partition by v2 order by v3), " +
+                "max(v1) over(partition by v2 order by v3), " +
+                "min(v1) over([skewed]partition by v2 order by v3) " +
+                "from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:ANALYTIC\n" +
+                "  |  functions: [, sum(1: v1), ], [, avg(1: v1), ], [, max(1: v1), ], [, min(1: v1), ]\n" +
+                "  |  partition by: 2: v2\n" +
+                "  |  order by: 3: v3 ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  isSkewed\n" +
+                "  |  \n" +
+                "  1:SORT");
+
+        sql = "select *, " +
+                "sum(v1) over([skewed]partition by v2 order by v3), " +
+                "avg(v1) over([skewed]partition by v2 order by v3), " +
+                "max(v1) over([skewed]partition by v2 order by v3), " +
+                "min(v1) over([skewed]partition by v2 order by v3) " +
+                "from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:ANALYTIC\n" +
+                "  |  functions: [, sum(1: v1), ], [, avg(1: v1), ], [, max(1: v1), ], [, min(1: v1), ]\n" +
+                "  |  partition by: 2: v2\n" +
+                "  |  order by: 3: v3 ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  isSkewed\n" +
+                "  |  \n" +
+                "  1:SORT");
+    }
+
+    @Test
+    public void testWindowOutputColumnNullCheck() throws Exception {
+        String sql = "select t1a, t1b, t1c, count(t1d) over (partition by t1d) " +
+                "from test_all_type_not_null";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  2:ANALYTIC\n" +
+                "  |  functions: [, count[([4: t1d, BIGINT, false]); args: BIGINT; result: BIGINT; " +
+                "args nullable: false; result nullable: false], ]\n" +
+                "  |  partition by: [4: t1d, BIGINT, false]\n" +
+                "  |  cardinality: 1");
+        assertContains(plan, "  3:Project\n" +
+                "  |  output columns:\n" +
+                "  |  1 <-> [1: t1a, VARCHAR, false]\n" +
+                "  |  2 <-> [2: t1b, SMALLINT, false]\n" +
+                "  |  3 <-> [3: t1c, INT, false]\n" +
+                "  |  11 <-> [11: count(4: t1d), BIGINT, false]\n" +
+                "  |  cardinality: 1");
+
+        plan = getDescTbl(sql);
+        assertContains(plan, "TSlotDescriptor(id:11, parent:2, " +
+                "slotType:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:BIGINT))]), " +
+                "columnPos:-1, byteOffset:-1, nullIndicatorByte:-1, nullIndicatorBit:-1, " +
+                "colName:, slotIdx:-1, isMaterialized:true, isOutputColumn:false, isNullable:false)");
+        assertContains(plan, "TSlotDescriptor(id:11, parent:4, " +
+                "slotType:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:BIGINT))]), " +
+                "columnPos:-1, byteOffset:-1, nullIndicatorByte:-1, nullIndicatorBit:-1, " +
+                "colName:, slotIdx:-1, isMaterialized:true, isOutputColumn:false, isNullable:false)");
+    }
+>>>>>>> 01ef74d40f ([BugFix] window lose tuple.computeMemory (#41442))
 }
