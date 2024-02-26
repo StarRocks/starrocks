@@ -2908,6 +2908,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitCancelBackupStatement(StarRocksParser.CancelBackupStatementContext context) {
+        if (context.identifier() == null) {
+            throw new ParsingException(PARSER_ERROR_MSG.nullIdentifierCancelBackupRestore());
+        }
         return new CancelBackupStmt(((Identifier) visit(context.identifier())).getValue(),
                 false, createPos(context));
     }
@@ -2959,6 +2962,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitCancelRestoreStatement(StarRocksParser.CancelRestoreStatementContext context) {
+        if (context.identifier() == null) {
+            throw new ParsingException(PARSER_ERROR_MSG.nullIdentifierCancelBackupRestore());
+        }
         return new CancelBackupStmt(((Identifier) visit(context.identifier())).getValue(), true,
                 createPos(context));
     }
