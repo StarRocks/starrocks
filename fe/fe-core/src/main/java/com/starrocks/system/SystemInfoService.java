@@ -466,6 +466,12 @@ public class SystemInfoService implements GsonPostProcessable {
         idToReportVersionRef = ImmutableMap.<Long, AtomicLong>of();
     }
 
+    // only for test
+    public void dropAllComputeNode() {
+        // update idToComputeNodeRef
+        idToComputeNodeRef.clear();
+    }
+
     public Backend getBackend(long backendId) {
         return idToBackendRef.get(backendId);
     }
@@ -594,6 +600,7 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public Backend getBackendWithBePort(String host, int bePort) {
+<<<<<<< HEAD
 
         Pair<String, String> targetPair;
         try {
@@ -625,6 +632,9 @@ public class SystemInfoService implements GsonPostProcessable {
             }
         }
         return null;
+=======
+        return getComputeNodeWithBePortCommon(host, bePort, idToBackendRef);
+>>>>>>> 9df7a76052 ([BugFix] Create table failed when deploying shared-data cluster in k8s with CN nodes only (#41418))
     }
 
     public ComputeNode getBackendOrComputeNodeWithBePort(String host, int bePort) {
@@ -668,8 +678,37 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public ComputeNode getComputeNodeWithBePort(String host, int bePort) {
-        for (ComputeNode computeNode : idToComputeNodeRef.values()) {
-            if (computeNode.getHost().equals(host) && computeNode.getBePort() == bePort) {
+        return getComputeNodeWithBePortCommon(host, bePort, idToComputeNodeRef);
+    }
+
+    private <T extends ComputeNode> T getComputeNodeWithBePortCommon(String host, int bePort,
+                                                                     Map<Long, T> nodeRef) {
+        Pair<String, String> targetPair;
+        try {
+            targetPair = NetUtils.getIpAndFqdnByHost(host);
+        } catch (UnknownHostException e) {
+            LOG.warn("failed to get right ip by fqdn {}", e.getMessage());
+            return null;
+        }
+
+        for (T computeNode : nodeRef.values()) {
+            Pair<String, String> curPair;
+            try {
+                curPair = NetUtils.getIpAndFqdnByHost(computeNode.getHost());
+            } catch (UnknownHostException e) {
+                LOG.warn("failed to get right ip by fqdn {}", e.getMessage());
+                continue;
+            }
+            boolean hostMatch = false;
+            // target, cur has same ip
+            if (targetPair.first.equals(curPair.first)) {
+                hostMatch = true;
+            }
+            // target, cur has same fqdn and both of them are not equal ""
+            if (!hostMatch && targetPair.second.equals(curPair.second) && !curPair.second.equals("")) {
+                hostMatch = true;
+            }
+            if (hostMatch && (computeNode.getBePort() == bePort)) {
                 return computeNode;
             }
         }
