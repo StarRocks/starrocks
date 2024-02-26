@@ -13,7 +13,7 @@ displayed_sidebar: "Chinese"
     - [资源组](#资源组)
     - [存储卷](#存储卷)
     - [表，tablet，副本检查与修复](#表tablet副本检查与修复)
-    - [参数配置、系统变量、文件](#参数配置系统变量文件)
+    - [系统配置、系统变量、文件](#系统配置系统变量文件)
     - [SQL 黑名单](#sql-黑名单)
     - [插件](#插件)
     - [查询分析](#查询分析)
@@ -102,7 +102,7 @@ displayed_sidebar: "Chinese"
 - [RECOVER](./data-definition/RECOVER.md)
 - [SHOW TABLE STATUS](./Administration/SHOW_TABLE_STATUS.md)
 
-### 参数配置、系统变量、文件
+### 系统配置、系统变量、文件
 
 - [ADMIN SET CONFIG](./Administration/ADMIN_SET_CONFIG.md)
 - [ADMIN SHOW CONFIG](./Administration/ADMIN_SHOW_CONFIG.md)
