@@ -1326,4 +1326,33 @@ public class WindowTest extends PlanTestBase {
                 "  |  \n" +
                 "  1:SORT");
     }
+
+    @Test
+    public void testWindowOutputColumnNullCheck() throws Exception {
+        String sql = "select t1a, t1b, t1c, count(t1d) over (partition by t1d) " +
+                "from test_all_type_not_null";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  2:ANALYTIC\n" +
+                "  |  functions: [, count[([4: t1d, BIGINT, false]); args: BIGINT; result: BIGINT; " +
+                "args nullable: false; result nullable: false], ]\n" +
+                "  |  partition by: [4: t1d, BIGINT, false]\n" +
+                "  |  cardinality: 1");
+        assertContains(plan, "  3:Project\n" +
+                "  |  output columns:\n" +
+                "  |  1 <-> [1: t1a, VARCHAR, false]\n" +
+                "  |  2 <-> [2: t1b, SMALLINT, false]\n" +
+                "  |  3 <-> [3: t1c, INT, false]\n" +
+                "  |  11 <-> [11: count(4: t1d), BIGINT, false]\n" +
+                "  |  cardinality: 1");
+
+        plan = getDescTbl(sql);
+        assertContains(plan, "TSlotDescriptor(id:11, parent:2, " +
+                "slotType:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:BIGINT))]), " +
+                "columnPos:-1, byteOffset:-1, nullIndicatorByte:-1, nullIndicatorBit:-1, " +
+                "colName:, slotIdx:-1, isMaterialized:true, isOutputColumn:false, isNullable:false)");
+        assertContains(plan, "TSlotDescriptor(id:11, parent:4, " +
+                "slotType:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:BIGINT))]), " +
+                "columnPos:-1, byteOffset:-1, nullIndicatorByte:-1, nullIndicatorBit:-1, " +
+                "colName:, slotIdx:-1, isMaterialized:true, isOutputColumn:false, isNullable:false)");
+    }
 }
