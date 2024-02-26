@@ -142,10 +142,16 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
         if (scanOperator.getLimit() != -1) {
             return false;
         }
-        // no filter
+
+        // filter only involved with partition keys.
         if (scanOperator.getPredicate() != null) {
-            return false;
+            if (!scanOperator.getPartitionColumns()
+                    .containsAll(scanOperator.getPredicate().getColumnRefs().stream().map(x -> x.getName()).collect(
+                            Collectors.toList()))) {
+                return false;
+            }
         }
+
         // all group by keys are partition keys.
         List<ColumnRefOperator> groupingKeys = aggregationOperator.getGroupingKeys();
         if (!scanOperator.getPartitionColumns()

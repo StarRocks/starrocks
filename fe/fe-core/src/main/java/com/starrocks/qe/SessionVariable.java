@@ -3289,6 +3289,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.enableRewriteSimpleAggToMetaScan;
     }
 
+    public void setEnableRewriteSimpleAggToHdfsScan(boolean v) {
+        this.enableRewriteSimpleAggToHdfsScan = v;
+    }
     public boolean isEnableRewriteSimpleAggToHdfsScan() {
         return this.enableRewriteSimpleAggToHdfsScan;
     }
