@@ -129,7 +129,6 @@ displayed_sidebar: "Chinese"
 - [ANALYZE PROFILE](./Administration/ANALYZE_PROFILE.md)
 - [EXPLAIN](./Administration/EXPLAIN.md)
 - [EXPLAIN ANALYZE](./Administration/EXPLAIN_ANALYZE.md)
-- [SELECT](./data-manipulation/SELECT.md)
 
 ## 导入，导出
 
@@ -210,13 +209,14 @@ displayed_sidebar: "Chinese"
 - [DROP TABLE](./data-definition/DROP_TABLE.md)
 - [REFRESH EXTERNAL TABLE](./data-definition/REFRESH_EXTERNAL_TABLE.md)
 - [TRUNCATE TABLE](./data-definition/TRUNCATE_TABLE.md)
+- [SELECT](./data-manipulation/SELECT.md)
 - [SHOW ALTER TABLE](./data-manipulation/SHOW_ALTER.md)
 - [SHOW CREATE TABLE](./data-manipulation/SHOW_CREATE_TABLE.md)
 - [SHOW DELETE](./data-manipulation/SHOW_DELETE.md)
 - [SHOW DYNAMIC PARTITION TABLES](./data-manipulation/SHOW_DYNAMIC_PARTITION_TABLES.md)
 - [SHOW PARTITIONS](./data-manipulation/SHOW_PARTITIONS.md)
-- [SHOW FULL COLUMNS](./Administration/SHOW_FULL_COLUMNS.md)
-- [SHOW INDEX](./Administration/SHOW_INDEX.md)
+- [SHOW FULL COLUMNS](./data-manipulation/SHOW_FULL_COLUMNS.md)
+- [SHOW INDEX](./data-manipulation/SHOW_INDEX.md)
 - [SHOW TABLES](./data-manipulation/SHOW_TABLES.md)
 - [SHOW TABLET](./data-manipulation/SHOW_TABLET.md)
 - [UPDATE](./data-manipulation/UPDATE.md)
