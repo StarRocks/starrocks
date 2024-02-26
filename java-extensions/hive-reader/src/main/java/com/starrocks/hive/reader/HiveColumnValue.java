@@ -28,6 +28,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.DateObjectInspect
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.TimestampObjectInspector;
 
 import java.math.BigDecimal;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -97,24 +98,6 @@ public class HiveColumnValue implements ColumnValue {
     }
 
     @Override
-<<<<<<< HEAD
-    public String getTimestamp(ColumnType.TypeValue type) {
-        // for rcfile with LazyBinaryColumnarSerDe, it will store timestamp type as UTC
-        // So we need adjust timestamp type's value according to current time zone
-        if (fieldData instanceof TimestampWritableV2) {
-            TimestampWritableV2 localTimestampWritable = (TimestampWritableV2) fieldData;
-            LocalDateTime localDateTime = LocalDateTime.ofInstant(
-                    Instant.ofEpochSecond(localTimestampWritable.getSeconds(), localTimestampWritable.getNanos()),
-                    ZoneId.systemDefault());
-            return localDateTime.format(DATETIME_FORMATTER);
-        } else {
-            return inspectObject().toString();
-        }
-    }
-
-    @Override
-=======
->>>>>>> cdf22824ef ([Enhancement]Enhance JNI reader for date and timestamp type (#38537))
     public byte[] getBytes() {
         return (byte[]) inspectObject();
     }
