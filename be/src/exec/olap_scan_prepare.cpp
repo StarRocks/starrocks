@@ -199,7 +199,7 @@ RawExprContainer::RawExprContainer(Expr* root_expr) : root_expr(root_expr) {}
 Expr* RawExprContainer::root() const {
     return root_expr;
 }
-StatusOr<ExprContext*> RawExprContainer::expr_context(ObjectPool* obj_pool, RuntimeState* state) {
+StatusOr<ExprContext*> RawExprContainer::expr_context(ObjectPool* obj_pool, RuntimeState* state)  const {
     ExprContext* expr_ctx = obj_pool->add(new ExprContext(root_expr));
     RETURN_IF_ERROR(expr_ctx->prepare(state));
     RETURN_IF_ERROR(expr_ctx->open(state));
@@ -210,7 +210,7 @@ ExprContextContainer::ExprContextContainer(ExprContext* expr_ctx) : expr_ctx(exp
 Expr* ExprContextContainer::root() const {
     return get_root_expr(expr_ctx);
 }
-StatusOr<ExprContext*> ExprContextContainer::expr_context(ObjectPool* obj_pool, RuntimeState* state) {
+StatusOr<ExprContext*> ExprContextContainer::expr_context(ObjectPool* obj_pool, RuntimeState* state) const {
     return expr_ctx;
 }
 

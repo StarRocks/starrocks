@@ -49,7 +49,7 @@ struct RawExprContainer {
     explicit RawExprContainer(Expr* root_expr);
 
     Expr* root() const;
-    StatusOr<ExprContext*> expr_context(ObjectPool* obj_pool, RuntimeState* state);
+    StatusOr<ExprContext*> expr_context(ObjectPool* obj_pool, RuntimeState* state) const;
 
     Expr* root_expr;
 };
@@ -58,7 +58,7 @@ struct ExprContextContainer {
     explicit ExprContextContainer(ExprContext* expr_ctx);
 
     Expr* root() const;
-    StatusOr<ExprContext*> expr_context(ObjectPool* obj_pool, RuntimeState* state);
+    StatusOr<ExprContext*> expr_context(ObjectPool* obj_pool, RuntimeState* state) const;
 
     ExprContext* expr_ctx;
 };
