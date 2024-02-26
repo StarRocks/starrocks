@@ -407,5 +407,19 @@ void update_staros_starcache() {
     }
 }
 
+void update_staros_starcache_memory_limit_bytes() {
+    if (fslib::FLAGS_star_cache_mem_size_bytes != config::starlet_star_cache_mem_size_bytes) {
+        fslib::FLAGS_star_cache_mem_size_bytes = config::starlet_star_cache_mem_size_bytes;
+        (void)fslib::star_cache_update_memory_quota_bytes(fslib::FLAGS_star_cache_mem_size_bytes);
+    }
+}
+
+void update_staros_starcache_memory_limit_percent() {
+    if (fslib::FLAGS_star_cache_mem_size_percent != config::starlet_star_cache_mem_size_percent) {
+        fslib::FLAGS_star_cache_mem_size_percent = config::starlet_star_cache_mem_size_percent;
+        (void)fslib::star_cache_update_memory_quota_percent(fslib::FLAGS_star_cache_mem_size_percent);
+    }
+}
+
 } // namespace starrocks
 #endif // USE_STAROS
