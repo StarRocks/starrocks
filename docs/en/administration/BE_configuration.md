@@ -262,7 +262,12 @@ BE dynamic parameters are as follows.
 #### enable_size_tiered_compaction_strategy
 
 - **Default:** true
-- **Description:** Whether to enable the Size-tiered Compaction policy.
+- **Description:** Whether to enable the Size-tiered Compaction policy (Excludes primary key table).
+
+#### enable_pk_size_tiered_compaction_strategy
+
+- **Default:** true
+- **Description:** Whether to enable the Size-tiered Compaction policy for Primary Key table.
 
 #### min_compaction_failure_interval_sec
 

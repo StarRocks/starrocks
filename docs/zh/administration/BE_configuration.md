@@ -293,7 +293,12 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### enable_size_tiered_compaction_strategy
 
-- 含义：是否开启 Size-tiered Compaction 策略。
+- 含义：是否开启 Size-tiered Compaction 策略 (Primary Key表除外)。
+- 默认值：true
+
+#### enable_pk_size_tiered_compaction_strategy
+
+- 含义：是否给Primary Key表开启 Size-tiered Compaction 策略。
 - 默认值：true
 
 #### min_compaction_failure_interval_sec
