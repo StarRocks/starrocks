@@ -7,7 +7,7 @@ displayed_sidebar: "English"
 `columns` contains information about all table columns (or view columns).
 
 :::note
-The metadata of [synchronous materialized views](../../using_starrocks/Materialized_view-single_table.md) will not be recorded in `columns`. You can access it by executing `SHOW PROC '/dbs/db/table/index_schema'`.
+The metadata of [synchronous materialized views](../../using_starrocks/Materialized_view-single_table.md) are not recorded in `columns`. You can access it by executing `SHOW PROC '/dbs/db/table/index_schema'`.
 :::
 
 The following fields are provided in `columns`:
