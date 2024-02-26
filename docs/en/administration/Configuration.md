@@ -2389,6 +2389,12 @@ BE static parameters are as follows.
 - **Unit**: N/A
 - **Description**: The maximum concurrency of RPC requests in a shared-data cluster. Incoming requests will be rejected when this threshold is reached. When this item is set to 0, no limit is imposed on the concurrency.
 
+#### starlet_star_cache_disk_size_percent
+
+- **Default**：80
+- **Description**：The percentage of disk capacity that block data cache can use at most in a shared-data cluster.
+- **Introduced in:** v3.1
+
 <!--| aws_sdk_logging_trace_enabled | 0 | N/A | |
 | be_exit_after_disk_write_hang_second | 60 | N/A | |
 | be_service_threads | 64 | N/A | |
