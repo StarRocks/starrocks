@@ -26,15 +26,16 @@ Status SegmentReadOptions::convert_to(SegmentReadOptions* dst, const std::vector
     }
 
     // predicates
-    for (auto& pair : predicates) {
-        auto cid = pair.first;
-        int num_preds = pair.second.size();
-        std::vector<const ColumnPredicate*> new_preds(num_preds, nullptr);
-        for (int i = 0; i < num_preds; ++i) {
-            RETURN_IF_ERROR(pair.second[i]->convert_to(&new_preds[i], get_type_info(new_types[cid]), obj_pool));
-        }
-        dst->predicates.emplace(pair.first, std::move(new_preds));
-    }
+    // TODO(lzh): convert chunk_predicate.
+    // for (auto& pair : predicates) {
+    //     auto cid = pair.first;
+    //     int num_preds = pair.second.size();
+    //     std::vector<const ColumnPredicate*> new_preds(num_preds, nullptr);
+    //     for (int i = 0; i < num_preds; ++i) {
+    //         RETURN_IF_ERROR(pair.second[i]->convert_to(&new_preds[i], get_type_info(new_types[cid]), obj_pool));
+    //     }
+    //     dst->predicates.emplace(pair.first, std::move(new_preds));
+    // }
 
     // delete predicates
     RETURN_IF_ERROR(delete_predicates.convert_to(&dst->delete_predicates, new_types, obj_pool));

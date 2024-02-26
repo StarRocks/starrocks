@@ -26,6 +26,7 @@
 #include "exprs/expr_context.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/runtime_state.h"
+#include "storage/chunk_predicate.h"
 #include "storage/conjunctive_predicates.h"
 #include "storage/tablet.h"
 #include "storage/tablet_reader.h"
@@ -87,11 +88,11 @@ private:
     using PredicatePtr = std::unique_ptr<ColumnPredicate>;
     ObjectPool _pool;
     std::vector<ExprContext*> _conjunct_ctxs;
-    ConjunctivePredicates _predicates;
+    ChunkPredicatePtr _predicates = nullptr;
     std::vector<uint8_t> _selection;
 
     // for release memory.
-    std::vector<PredicatePtr> _predicate_free_pool;
+    ChunkPredicatePtr _push_down_predicates = nullptr;
 
     bool _is_open = false;
     bool _is_closed = false;

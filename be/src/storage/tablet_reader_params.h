@@ -37,6 +37,8 @@ using RowidRangeOptionPtr = std::shared_ptr<RowidRangeOption>;
 struct ShortKeyRangesOption;
 using ShortKeyRangesOptionPtr = std::shared_ptr<ShortKeyRangesOption>;
 
+class ChunkPredicate;
+
 static inline std::unordered_set<uint32_t> EMPTY_FILTERED_COLUMN_IDS;
 
 // Params for TabletReader
@@ -65,7 +67,7 @@ struct TabletReaderParams {
     RangeEndOperation end_range = RangeEndOperation::LT;
     std::vector<OlapTuple> start_key;
     std::vector<OlapTuple> end_key;
-    std::vector<const ColumnPredicate*> predicates;
+    ChunkPredicate* chunk_pred = nullptr;
 
     RuntimeState* runtime_state = nullptr;
 

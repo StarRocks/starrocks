@@ -46,6 +46,7 @@
 #include "gutil/strings/substitute.h"
 #include "segment_iterator.h"
 #include "segment_options.h"
+#include "storage/chunk_predicate.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/default_value_column_iterator.h"
@@ -263,28 +264,63 @@ bool Segment::_use_segment_zone_map_filter(const SegmentReadOptions& read_option
 
 StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const Schema& schema, const SegmentReadOptions& read_options) {
     DCHECK(read_options.stats != nullptr);
-    // trying to prune the current segment by segment-level zone map
-    for (const auto& pair : read_options.predicates_for_zone_map) {
-        ColumnId column_id = pair.first;
-        const auto& tablet_column = read_options.tablet_schema ? read_options.tablet_schema->column(column_id)
-                                                               : _tablet_schema->column(column_id);
-        auto column_unique_id = tablet_column.unique_id();
-        if (_column_readers.count(column_unique_id) < 1 || !_column_readers.at(column_unique_id)->has_zone_map()) {
-            continue;
-        }
-        if (!_column_readers.at(column_unique_id)->segment_zone_map_filter(pair.second)) {
-            // skip segment zonemap filter when this segment has column files link to it.
-            if (tablet_column.is_key() || _use_segment_zone_map_filter(read_options)) {
-                if (read_options.is_first_split_of_segment) {
-                    read_options.stats->segment_stats_filtered += _column_readers.at(column_unique_id)->num_rows();
-                }
-                return Status::EndOfFile(
-                        strings::Substitute("End of file $0, empty iterator", _segment_file_info.path));
+
+    class SegmentZoneMapChunkPredicateVisitor final : public ChunkPredicateVisitor2 {
+    public:
+        explicit SegmentZoneMapChunkPredicateVisitor(Segment* parent) : parent(parent) {}
+        ~SegmentZoneMapChunkPredicateVisitor() override = default;
+
+        Status visit_column_pred(ColumnChunkPredicate* pred) override {
+            auto* col_pred = pred->pred();
+            const ColumnId column_id = col_pred->column_id();
+
+            const auto& tablet_column = read_options.tablet_schema ? read_options.tablet_schema->column(column_id)
+                                                                   : parent->_tablet_schema->column(column_id);
+            const auto column_unique_id = tablet_column.unique_id();
+
+            if (auto it = parent->_column_readers.find(column_unique_id); it == parent->_column_readers.end()) {
+                pruned = false;
             } else {
-                break;
+                pruned = it->second->has_zone_map() && !it->second->segment_zone_map_filter({col_pred}) &&
+                         (tablet_column.is_key() || parent->_use_segment_zone_map_filter(read_options));
             }
+
+            return Status::OK();
         }
+        Status visit_and_pred(CompoundChunkPredicate* pred) override {
+            pruned = false;
+            for (const auto& chunk_pred : pred->preds()) {
+                RETURN_IF_ERROR(chunk_pred->accept(*this));
+                if (pruned) {
+                    break;
+                }
+            }
+            return Status::OK();
+        }
+        Status visit_or_pred(CompoundChunkPredicate* pred) override {
+            pruned = false;
+            for (const auto& chunk_pred : pred->preds()) {
+                RETURN_IF_ERROR(chunk_pred->accept(*this));
+                if (!pruned) {
+                    break;
+                }
+            }
+            return Status::OK();
+        }
+
+        Segment* parent;
+        bool pruned = false;
+    };
+
+    SegmentZoneMapChunkPredicateVisitor prune_segment_visitor(this);
+    read_options.chunk_pred->accept(prune_segment_visitor);
+    if (prune_segment_visitor.pruned) {
+        if (read_options.is_first_split_of_segment) {
+            read_options.stats->segment_stats_filtered += num_rows();
+        }
+        return Status::EndOfFile(strings::Substitute("End of file $0, empty iterator", _segment_file_info.path));
     }
+
     return new_segment_iterator(shared_from_this(), schema, read_options);
 }
 

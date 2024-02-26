@@ -49,7 +49,8 @@ OlapChunkSource::OlapChunkSource(ScanOperator* op, RuntimeProfile* runtime_profi
 
 OlapChunkSource::~OlapChunkSource() {
     _reader.reset();
-    _predicate_free_pool.clear();
+    _push_down_predicates.reset();
+    _not_push_down_predicates.reset();
 }
 
 void OlapChunkSource::close(RuntimeState* state) {
@@ -62,7 +63,8 @@ void OlapChunkSource::close(RuntimeState* state) {
     if (_reader) {
         _reader.reset();
     }
-    _predicate_free_pool.clear();
+    _push_down_predicates.reset();
+    _not_push_down_predicates.reset();
 }
 
 Status OlapChunkSource::prepare(RuntimeState* state) {
@@ -205,22 +207,16 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
     _params.runtime_range_pruner =
             OlapRuntimeScanRangePruner(parser, _scan_ctx->conjuncts_manager().unarrived_runtime_filters());
     _morsel->init_tablet_reader_params(&_params);
-    std::vector<PredicatePtr> preds;
-    RETURN_IF_ERROR(_scan_ctx->conjuncts_manager().get_column_predicates(parser, &preds));
-    _decide_chunk_size(!preds.empty());
-    for (auto& p : preds) {
-        if (parser->can_pushdown(p.get())) {
-            _params.predicates.push_back(p.get());
-        } else {
-            _not_push_down_predicates.add(p.get());
-        }
-        _predicate_free_pool.emplace_back(std::move(p));
-    }
+
+    ASSIGN_OR_RETURN(auto chunk_pred, _scan_ctx->conjuncts_manager().get_chunk_predicate(parser));
+    _decide_chunk_size(!chunk_pred->empty());
+    _not_push_down_predicates = chunk_pred->extract_non_pushdownable(parser);
+    _push_down_predicates = std::move(chunk_pred);
+    _params.chunk_pred = _push_down_predicates.get();
 
     {
-        GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(_not_push_down_predicates,
-                                                                     *_params.global_dictmaps);
-        RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool));
+        GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(*_params.global_dictmaps);
+        RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(*_not_push_down_predicates));
     }
 
     // Range
@@ -367,7 +363,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
         _prj_iter = new_projection_iterator(output_schema, _reader);
     }
 
-    if (!_scan_ctx->not_push_down_conjuncts().empty() || !_not_push_down_predicates.empty()) {
+    if (!_scan_ctx->not_push_down_conjuncts().empty() || !_not_push_down_predicates->empty()) {
         _expr_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ExprFilterTime", IO_TASK_EXEC_TIMER_NAME);
     }
 
@@ -434,11 +430,11 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, Chunk* chu
             chunk->set_slot_id_to_index(slot->id(), column_index);
         }
 
-        if (!_not_push_down_predicates.empty()) {
+        if (!_not_push_down_predicates->empty()) {
             SCOPED_TIMER(_expr_filter_timer);
             size_t nrows = chunk->num_rows();
             _selection.resize(nrows);
-            RETURN_IF_ERROR(_not_push_down_predicates.evaluate(chunk, _selection.data(), 0, nrows));
+            RETURN_IF_ERROR(_not_push_down_predicates->evaluate(chunk, _selection.data(), 0, nrows));
             chunk->filter(_selection);
             DCHECK_CHUNK(chunk);
         }

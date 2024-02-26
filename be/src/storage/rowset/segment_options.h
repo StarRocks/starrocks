@@ -44,6 +44,7 @@ struct RowidRangeOption;
 using RowidRangeOptionPtr = std::shared_ptr<RowidRangeOption>;
 struct ShortKeyRangeOption;
 using ShortKeyRangeOptionPtr = std::shared_ptr<ShortKeyRangeOption>;
+class ChunkPredicate;
 
 class SegmentReadOptions {
 public:
@@ -53,8 +54,8 @@ public:
 
     std::vector<SeekRange> ranges;
 
-    std::unordered_map<ColumnId, PredicateList> predicates;
-    std::unordered_map<ColumnId, PredicateList> predicates_for_zone_map;
+    ChunkPredicate* chunk_pred;
+    ChunkPredicate* chunk_pred_for_zone_map;
 
     DisjunctivePredicates delete_predicates;
 

@@ -19,6 +19,7 @@
 #include "column/schema.h"
 #include "common/object_pool.h"
 #include "runtime/global_dict/types.h"
+#include "storage/chunk_predicate.h"
 #include "storage/column_predicate.h"
 #include "storage/conjunctive_predicates.h"
 #include "storage/olap_common.h"
@@ -73,23 +74,25 @@ private:
 // TODO: refactor GlobalDictPredicatesRewriter and ColumnPredicateRewriter
 class GlobalDictPredicatesRewriter {
 public:
-    GlobalDictPredicatesRewriter(ConjunctivePredicates& predicates, const ColumnIdToGlobalDictMap& dict_maps)
-            : GlobalDictPredicatesRewriter(predicates, dict_maps, nullptr) {}
-    GlobalDictPredicatesRewriter(ConjunctivePredicates& predicates, const ColumnIdToGlobalDictMap& dict_maps,
-                                 std::vector<uint8_t>* disable_rewrite)
-            : _predicates(predicates), _dict_maps(dict_maps), _disable_dict_rewrite(disable_rewrite) {}
+    GlobalDictPredicatesRewriter(const ColumnIdToGlobalDictMap& dict_maps)
+            : GlobalDictPredicatesRewriter(dict_maps, nullptr) {}
+    GlobalDictPredicatesRewriter(const ColumnIdToGlobalDictMap& dict_maps, std::vector<uint8_t>* disable_rewrite)
+            : _dict_maps(dict_maps), _disable_dict_rewrite(disable_rewrite) {}
 
-    Status rewrite_predicate(ObjectPool* pool);
+    StatusOr<ColumnPredicatePtr> rewrite_predicate(const ColumnPredicate* pred);
+    Status rewrite_predicate(ConjunctivePredicates& predicates, ObjectPool* pool);
+    Status rewrite_predicate(ChunkPredicate& chunk_pred);
 
+private:
     bool column_need_rewrite(ColumnId cid) {
         if (_disable_dict_rewrite && (*_disable_dict_rewrite)[cid]) return false;
         return _dict_maps.count(cid);
     }
 
 private:
-    ConjunctivePredicates& _predicates;
     const ColumnIdToGlobalDictMap& _dict_maps;
     std::vector<uint8_t>* _disable_dict_rewrite;
+    std::vector<uint8_t> _selection;
 };
 
 // For zone map index, some predicates can not be used directly,

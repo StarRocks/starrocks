@@ -37,6 +37,7 @@ class TabletSchema;
 
 class ColumnPredicate;
 class DeletePredicates;
+class ChunkPredicate;
 struct RowidRangeOption;
 struct ShortKeyRangesOption;
 
@@ -51,8 +52,8 @@ public:
 
     std::vector<SeekRange> ranges;
 
-    std::unordered_map<ColumnId, PredicateList> predicates;
-    std::unordered_map<ColumnId, PredicateList> predicates_for_zone_map;
+    ChunkPredicate* chunk_pred;
+    ChunkPredicate* chunk_pred_for_zone_map;
 
     // whether rowset should return rows in sorted order.
     bool sorted = true;

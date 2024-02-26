@@ -126,9 +126,11 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     RETURN_IF_ERROR(init_delete_predicates(params, &_delete_predicates));
     RETURN_IF_ERROR(parse_seek_range(*_tablet_schema, params.range, params.end_range, params.start_key, params.end_key,
                                      &rs_opts.ranges, &_mempool));
-    rs_opts.predicates = _pushdown_predicates;
-    RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_map(&_obj_pool, rs_opts.predicates,
-                                                                     &rs_opts.predicates_for_zone_map));
+    rs_opts.chunk_pred = params.chunk_pred;
+    // TODO(lzh): support rewrite zonemap predicate for chunk predicate.
+    rs_opts.chunk_pred_for_zone_map = rs_opts.chunk_pred;
+    // RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_map(&_obj_pool, rs_opts.predicates,
+    //                                                                  &rs_opts.predicates_for_zone_map));
     rs_opts.sorted = ((keys_type != DUP_KEYS && keys_type != PRIMARY_KEYS) && !params.skip_aggregation) ||
                      is_compaction(params.reader_type) || params.sorted_by_keys_per_tablet;
     rs_opts.reader_type = params.reader_type;
@@ -158,9 +160,9 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
 }
 
 Status TabletReader::init_predicates(const TabletReaderParams& params) {
-    for (const ColumnPredicate* pred : params.predicates) {
-        _pushdown_predicates[pred->column_id()].emplace_back(pred);
-    }
+    // for (const ColumnPredicate* pred : params.predicates) {
+    //     _pushdown_predicates[pred->column_id()].emplace_back(pred);
+    // }
     return Status::OK();
 }
 

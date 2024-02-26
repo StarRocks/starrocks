@@ -583,8 +583,8 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_rowset_path));
     seg_options.stats = options.stats;
     seg_options.ranges = options.ranges;
-    seg_options.predicates = options.predicates;
-    seg_options.predicates_for_zone_map = options.predicates_for_zone_map;
+    seg_options.chunk_pred = options.chunk_pred;
+    seg_options.chunk_pred_for_zone_map = options.chunk_pred_for_zone_map;
     seg_options.use_page_cache = options.use_page_cache;
     seg_options.profile = options.profile;
     seg_options.reader_type = options.reader_type;

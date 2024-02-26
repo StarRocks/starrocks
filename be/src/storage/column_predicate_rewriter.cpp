@@ -390,42 +390,68 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_expr_predicate(ObjectPool* pool
     return true;
 }
 
-// member function for GlobalDictPredicatesRewriter
+// ------------------------------------------------------------------------------------
+// GlobalDictPredicatesRewriter
+// ------------------------------------------------------------------------------------
 
-Status GlobalDictPredicatesRewriter::rewrite_predicate(ObjectPool* pool) {
+StatusOr<ColumnPredicatePtr> GlobalDictPredicatesRewriter::rewrite_predicate(const ColumnPredicate* pred) {
+    if (!column_need_rewrite(pred->column_id())) {
+        return Status::OK();
+    }
+
+    const auto& dict = _dict_maps.at(pred->column_id());
+    ChunkPtr temp_chunk = std::make_shared<Chunk>();
+
+    auto [binary_column, codes] = extract_column_with_codes(*dict);
+
+    size_t dict_rows = codes.size();
+    _selection.resize(dict_rows);
+
+    RETURN_IF_ERROR(pred->evaluate(binary_column.get(), _selection.data(), 0, dict_rows));
+
+    std::vector<uint8_t> code_mapping;
+    code_mapping.resize(DICT_DECODE_MAX_SIZE + 1);
+    for (size_t i = 0; i < codes.size(); ++i) {
+        code_mapping[codes[i]] = _selection[i];
+    }
+
+    auto* new_pred =
+            new_column_dict_conjuct_predicate(get_type_info(kDictCodeType), pred->column_id(), std::move(code_mapping));
+    return std::unique_ptr<ColumnPredicate>(new_pred);
+}
+
+Status GlobalDictPredicatesRewriter::rewrite_predicate(ConjunctivePredicates& predicates, ObjectPool* pool) {
     std::vector<uint8_t> selection;
-    auto pred_rewrite = [&](std::vector<const ColumnPredicate*>& preds) {
+    auto preds_rewrite = [&](std::vector<const ColumnPredicate*>& preds) {
         for (auto& pred : preds) {
-            if (column_need_rewrite(pred->column_id())) {
-                const auto& dict = _dict_maps.at(pred->column_id());
-                ChunkPtr temp_chunk = std::make_shared<Chunk>();
-
-                auto [binary_column, codes] = extract_column_with_codes(*dict);
-
-                size_t dict_rows = codes.size();
-                selection.resize(dict_rows);
-
-                RETURN_IF_ERROR(pred->evaluate(binary_column.get(), selection.data(), 0, dict_rows));
-
-                std::vector<uint8_t> code_mapping;
-                code_mapping.resize(DICT_DECODE_MAX_SIZE + 1);
-                for (size_t i = 0; i < codes.size(); ++i) {
-                    code_mapping[codes[i]] = selection[i];
-                }
-
-                pred = new_column_dict_conjuct_predicate(get_type_info(kDictCodeType), pred->column_id(),
-                                                         std::move(code_mapping));
-                pool->add(const_cast<ColumnPredicate*>(pred));
+            ASSIGN_OR_RETURN(auto new_pred, rewrite_predicate(pred));
+            if (new_pred != nullptr) {
+                pred = pool->add(new_pred.release());
             }
         }
         return Status::OK();
     };
 
-    RETURN_IF_ERROR(pred_rewrite(_predicates.non_vec_preds()));
-    RETURN_IF_ERROR(pred_rewrite(_predicates.vec_preds()));
+    RETURN_IF_ERROR(preds_rewrite(predicates.non_vec_preds()));
+    RETURN_IF_ERROR(preds_rewrite(predicates.vec_preds()));
 
     return Status::OK();
 }
+
+Status GlobalDictPredicatesRewriter::rewrite_predicate(ChunkPredicate& chunk_pred) {
+    return chunk_pred.for_each_column_pred([this](ColumnPredicatePtr& col_pred) {
+        ASSIGN_OR_RETURN(auto new_col_pred, rewrite_predicate(col_pred.get()));
+        if (new_col_pred != nullptr) {
+            col_pred = std::move(new_col_pred);
+        }
+
+        return Status::OK();
+    });
+}
+
+// ------------------------------------------------------------------------------------
+// ZonemapPredicatesRewriter
+// ------------------------------------------------------------------------------------
 
 Status ZonemapPredicatesRewriter::rewrite_predicate_map(ObjectPool* pool,
                                                         const std::unordered_map<ColumnId, PredicateList>& src,

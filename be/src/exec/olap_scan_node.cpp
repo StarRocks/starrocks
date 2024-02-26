@@ -521,14 +521,6 @@ Status OlapScanNode::collect_query_statistics(QueryStatistics* statistics) {
 Status OlapScanNode::_start_scan(RuntimeState* state) {
     RETURN_IF_CANCELLED(state);
 
-    OlapScanConjunctsManager& cm = _conjuncts_manager;
-    cm.conjunct_ctxs_ptr = &_conjunct_ctxs;
-    cm.tuple_desc = _tuple_desc;
-    cm.obj_pool = _pool;
-    cm.key_column_names = &_olap_scan_node.sort_key_column_names;
-    cm.runtime_filters = &_runtime_filter_collector;
-    cm.runtime_state = state;
-
     const TQueryOptions& query_options = state->query_options();
     int32_t max_scan_key_num;
     if (query_options.__isset.max_scan_key_num && query_options.max_scan_key_num > 0) {
@@ -541,7 +533,22 @@ Status OlapScanNode::_start_scan(RuntimeState* state) {
     if (_olap_scan_node.__isset.enable_column_expr_predicate) {
         enable_column_expr_predicate = _olap_scan_node.enable_column_expr_predicate;
     }
-    RETURN_IF_ERROR(cm.parse_conjuncts(scan_keys_unlimited, max_scan_key_num, enable_column_expr_predicate));
+
+    OlapScanConjunctsManagerOptions opts;
+    opts.conjunct_ctxs_ptr = &_conjunct_ctxs;
+    opts.tuple_desc = _tuple_desc;
+    opts.obj_pool = _pool;
+    opts.key_column_names = &_olap_scan_node.sort_key_column_names;
+    opts.runtime_filters = &_runtime_filter_collector;
+    opts.runtime_state = state;
+    opts.scan_keys_unlimited = scan_keys_unlimited;
+    opts.max_scan_key_num = max_scan_key_num;
+    opts.enable_column_expr_predicate = enable_column_expr_predicate;
+
+    _conjuncts_manager = std::make_unique<OlapScanConjunctsManager>(std::move(opts));
+    OlapScanConjunctsManager& cm = *_conjuncts_manager;
+
+    RETURN_IF_ERROR(cm.parse_conjuncts());
     RETURN_IF_ERROR(_start_scan_thread(state));
 
     return Status::OK();
@@ -659,9 +666,9 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
     }
 
     std::vector<std::unique_ptr<OlapScanRange>> key_ranges;
-    RETURN_IF_ERROR(_conjuncts_manager.get_key_ranges(&key_ranges));
+    RETURN_IF_ERROR(_conjuncts_manager->get_key_ranges(&key_ranges));
     std::vector<ExprContext*> conjunct_ctxs;
-    _conjuncts_manager.get_not_push_down_conjuncts(&conjunct_ctxs);
+    _conjuncts_manager->get_not_push_down_conjuncts(&conjunct_ctxs);
 
     RETURN_IF_ERROR(state->mutable_dict_optimize_parser()->rewrite_conjuncts(&conjunct_ctxs));
 

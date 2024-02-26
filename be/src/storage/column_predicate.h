@@ -112,6 +112,9 @@ public:
     static uint8_t apply(uint8_t a, uint8_t b) { return a | b; }
 };
 
+class ColumnPredicate;
+using ColumnPredicatePred = std::unique_ptr<ColumnPredicate>;
+
 // ColumnPredicate represents a predicate that can only be applied to a column.
 class ColumnPredicate {
 public:

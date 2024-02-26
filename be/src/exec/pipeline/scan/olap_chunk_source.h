@@ -25,6 +25,7 @@
 #include "exprs/expr_context.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/runtime_state.h"
+#include "storage/chunk_predicate.h"
 #include "storage/conjunctive_predicates.h"
 #include "storage/tablet.h"
 #include "storage/tablet_reader.h"
@@ -77,7 +78,7 @@ private:
     const int64_t _limit; // -1: no limit
     TInternalScanRange* _scan_range;
 
-    ConjunctivePredicates _not_push_down_predicates;
+    ChunkPredicatePtr _not_push_down_predicates = nullptr;
     std::vector<uint8_t> _selection;
 
     ObjectPool _obj_pool;
@@ -90,7 +91,7 @@ private:
 
     // For release memory.
     using PredicatePtr = std::unique_ptr<ColumnPredicate>;
-    std::vector<PredicatePtr> _predicate_free_pool;
+    ChunkPredicatePtr _push_down_predicates = nullptr;
 
     // NOTE: _reader may reference the _predicate_free_pool, it should be released before the _predicate_free_pool
     std::shared_ptr<TabletReader> _reader;

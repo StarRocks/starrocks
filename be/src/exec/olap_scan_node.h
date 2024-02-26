@@ -169,7 +169,7 @@ private:
     TOlapScanNode _olap_scan_node;
     std::vector<std::unique_ptr<TInternalScanRange>> _scan_ranges;
     TupleDescriptor* _tuple_desc = nullptr;
-    OlapScanConjunctsManager _conjuncts_manager;
+    std::unique_ptr<OlapScanConjunctsManager> _conjuncts_manager = nullptr;
     const Schema* _chunk_schema = nullptr;
 
     int32_t _num_scanners = 0;

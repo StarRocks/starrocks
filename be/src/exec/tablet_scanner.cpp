@@ -75,7 +75,7 @@ Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParam
         _prj_iter = new_projection_iterator(output_schema, _reader);
     }
 
-    if (!_conjunct_ctxs.empty() || !_predicates.empty()) {
+    if (!_conjunct_ctxs.empty() || !_predicates->empty()) {
         _expr_filter_timer = ADD_TIMER(_parent->_runtime_profile, "ExprFilterTime");
     }
 
@@ -121,7 +121,8 @@ void TabletScanner::close(RuntimeState* state) {
     }
     update_counter();
     _reader.reset();
-    _predicate_free_pool.clear();
+    _push_down_predicates.reset();
+    _predicates.reset();
     Expr::close(_conjunct_ctxs, state);
     // Reduce the memory usage if the the average string size is greater than 512.
     release_large_columns<BinaryColumn>(state->chunk_size() * 512);
@@ -153,27 +154,23 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
     _params.need_agg_finalize = _need_agg_finalize;
     _params.use_page_cache = _runtime_state->use_page_cache();
     auto parser = _pool.add(new PredicateParser(_tablet_schema));
-    std::vector<PredicatePtr> preds;
-    RETURN_IF_ERROR(_parent->_conjuncts_manager.get_column_predicates(parser, &preds));
+
+    ASSIGN_OR_RETURN(auto chunk_pred, _parent->_conjuncts_manager->get_chunk_predicate(parser));
 
     // Improve for select * from table limit x, x is small
-    if (preds.empty() && _parent->_limit != -1 && _parent->_limit < runtime_state()->chunk_size()) {
+    if (chunk_pred->empty() && _parent->_limit != -1 && _parent->_limit < runtime_state()->chunk_size()) {
         _params.chunk_size = _parent->_limit;
     } else {
         _params.chunk_size = runtime_state()->chunk_size();
     }
 
-    for (auto& p : preds) {
-        if (parser->can_pushdown(p.get())) {
-            _params.predicates.push_back(p.get());
-        } else {
-            _predicates.add(p.get());
-        }
-        _predicate_free_pool.emplace_back(std::move(p));
-    }
+    _predicates = chunk_pred->extract_non_pushdownable(parser);
+    _push_down_predicates = std::move(chunk_pred);
 
-    GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(_predicates, *_params.global_dictmaps);
-    RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_pool));
+    {
+        GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(*_params.global_dictmaps);
+        RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(*_predicates));
+    }
 
     // Range
     for (auto key_range : *key_ranges) {
@@ -286,11 +283,11 @@ Status TabletScanner::get_chunk(RuntimeState* state, Chunk* chunk) {
             chunk->set_slot_id_to_index(slot->id(), column_index);
         }
 
-        if (!_predicates.empty()) {
+        if (!_predicates->empty()) {
             SCOPED_TIMER(_expr_filter_timer);
             size_t nrows = chunk->num_rows();
             _selection.resize(nrows);
-            RETURN_IF_ERROR(_predicates.evaluate(chunk, _selection.data(), 0, nrows));
+            RETURN_IF_ERROR(_predicates->evaluate(chunk, _selection.data(), 0, nrows));
             chunk->filter(_selection);
             DCHECK_CHUNK(chunk);
         }
