@@ -196,7 +196,7 @@ static std::vector<RawExprContainer> build_raw_expr_containers(const std::vector
 // ------------------------------------------------------------------------------------
 
 RawExprContainer::RawExprContainer(Expr* root_expr) : root_expr(root_expr) {}
-Expr* RawExprContainer::root() {
+Expr* RawExprContainer::root() const {
     return root_expr;
 }
 StatusOr<ExprContext*> RawExprContainer::expr_context(ObjectPool* obj_pool, RuntimeState* state) {
@@ -207,7 +207,7 @@ StatusOr<ExprContext*> RawExprContainer::expr_context(ObjectPool* obj_pool, Runt
 }
 
 ExprContextContainer::ExprContextContainer(ExprContext* expr_ctx) : expr_ctx(expr_ctx) {}
-Expr* ExprContextContainer::root() {
+Expr* ExprContextContainer::root() const {
     return get_root_expr(expr_ctx);
 }
 StatusOr<ExprContext*> ExprContextContainer::expr_context(ObjectPool* obj_pool, RuntimeState* state) {

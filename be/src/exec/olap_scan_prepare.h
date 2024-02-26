@@ -48,7 +48,7 @@ struct OlapScanConjunctsManagerOptions {
 struct RawExprContainer {
     explicit RawExprContainer(Expr* root_expr);
 
-    Expr* root();
+    Expr* root() const;
     StatusOr<ExprContext*> expr_context(ObjectPool* obj_pool, RuntimeState* state);
 
     Expr* root_expr;
@@ -57,7 +57,7 @@ struct RawExprContainer {
 struct ExprContextContainer {
     explicit ExprContextContainer(ExprContext* expr_ctx);
 
-    Expr* root();
+    Expr* root() const;
     StatusOr<ExprContext*> expr_context(ObjectPool* obj_pool, RuntimeState* state);
 
     ExprContext* expr_ctx;
