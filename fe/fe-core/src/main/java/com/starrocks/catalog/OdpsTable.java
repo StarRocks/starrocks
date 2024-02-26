@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.odps.EntityConvertUtils;
 import com.starrocks.thrift.THdfsTable;
 import com.starrocks.thrift.TTableDescriptor;
@@ -127,6 +128,7 @@ public class OdpsTable extends Table implements HiveMetaStoreTable {
         hdfsTable.setColumns(getColumns().stream().map(Column::toThrift).collect(Collectors.toList()));
         // for be, partition column is equals to data column
         hdfsTable.setPartition_columnsIsSet(false);
+        hdfsTable.setTime_zone(TimeUtils.getSessionTimeZone());
         tTableDescriptor.setHdfsTable(hdfsTable);
         return tTableDescriptor;
     }
