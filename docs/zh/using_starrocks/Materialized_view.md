@@ -1,9 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
-<<<<<<< HEAD
-=======
 keywords: ['wuhua', 'Wuhuashitu']
->>>>>>> 6a61124180 ([Doc] More pinyin (#41579))
 ---
 
 # 异步物化视图
