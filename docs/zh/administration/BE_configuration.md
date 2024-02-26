@@ -293,13 +293,14 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### enable_size_tiered_compaction_strategy
 
-- 含义：是否开启 Size-tiered Compaction 策略 (Primary Key表除外)。
+- 含义：是否开启 Size-tiered Compaction 策略 (Primary Key 表除外)。
 - 默认值：true
 
 #### enable_pk_size_tiered_compaction_strategy
 
-- 含义：是否给Primary Key表开启 Size-tiered Compaction 策略。
+- 含义：是否给 Primary Key 表开启 Size-tiered Compaction 策略。
 - 默认值：true
+- 引入版本：v3.2.4, v3.1.10
 
 #### min_compaction_failure_interval_sec
 
@@ -510,8 +511,8 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### lake_pk_compaction_max_input_rowsets
 
-- 含义：存算分离集群下，主键表 Compaction 任务中允许的最大输入 Rowset 数量。
-- 默认值：5
+- 含义：存算分离集群下，主键表 Compaction 任务中允许的最大输入 Rowset 数量。从 v3.2.4 和 v3.1.10 版本开始，该参数默认值从 `5` 改为 `1000`。存算分离主键表在新的 Sized-tiered Compaction 策略下，不需要通过限制每次Compaction 的 Rowset 个数来降低写放大，因此调大该值。
+- 默认值：1000
 - 引入版本：v3.1.8、v3.2.3
 
 #### compact_threads
