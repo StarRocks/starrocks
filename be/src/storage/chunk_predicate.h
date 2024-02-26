@@ -74,12 +74,33 @@ public:
     virtual size_t size() const = 0;
     bool empty() const { return size() == 0; }
     // TODO(lzh): should be const, but need a const version of for_each_column_pred.
-    size_t num_columns();
+
+
 
     using ColumnPredicateVisitor = std::function<Status(ColumnPredicatePtr&)>;
     virtual Status for_each_column_pred(const ColumnPredicateVisitor& visitor) = 0;
 
     virtual Status accept(ChunkPredicateVisitor2& visitor) = 0;
+
+    std::unordered_map<ColumnId, std::vector<const ColumnPredicate*>>& get_column_preds() const {
+        if (!_cache_column_preds.has_value()) {
+            auto& column_prds = _cache_column_preds.emplace();
+            _collect_column_preds(column_prds, 0);
+        }
+        return _cache_column_preds.value();
+    }
+
+    std::map<ColumnId, std::vector<const ColumnPredicate*>>& get_all_column_preds();
+    size_t num_columns();
+    bool contains_column(ColumnId cid);
+
+    // TODO(lzh): wa, this cannot be procted, because CompoundChunkPredicate call ChunkPredicate::_collect_column_preds
+    virtual void _collect_column_preds(std::unordered_map<ColumnId, std::vector<const ColumnPredicate*>>& column_preds,
+                                       int deep) const = 0;
+
+protected:
+    mutable std::optional<std::unordered_map<ColumnId, std::vector<const ColumnPredicate*>>> _cache_column_preds;
+    mutable std::optional<std::map<ColumnId, std::vector<const ColumnPredicate*>>> _all_column_preds;
 };
 
 // TODO(lzh): use template
@@ -105,6 +126,9 @@ public:
 
     ColumnPredicate* pred() const { return _pred.get(); }
 
+    void _collect_column_preds(std::unordered_map<ColumnId, std::vector<const ColumnPredicate*>>& column_preds,int deep) const override;
+
+protected:
 private:
     ColumnPredicatePtr _pred;
 };
@@ -124,6 +148,9 @@ public:
 
     std::vector<ChunkPredicatePtr>& preds() { return _preds; }
 
+    void _collect_column_preds(std::unordered_map<ColumnId, std::vector<const ColumnPredicate*>>& column_preds,int deep) const override;
+
+protected:
 public:
     static ChunkPredicatePtr create_and();
     static ChunkPredicatePtr create_or();
@@ -131,7 +158,5 @@ public:
 protected:
     std::vector<ChunkPredicatePtr> _preds;
 };
-
-
 
 } // namespace starrocks

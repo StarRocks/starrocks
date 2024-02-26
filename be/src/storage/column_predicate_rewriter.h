@@ -39,20 +39,19 @@ public:
     using ColumnIterators = std::vector<std::unique_ptr<ColumnIterator>>;
     using PushDownPredicates = std::unordered_map<ColumnId, PredicateList>;
 
-    ColumnPredicateRewriter(const ColumnIterators& column_iterators, PushDownPredicates& pushdown_predicates,
+    ColumnPredicateRewriter(const ColumnIterators& column_iterators,
                             const Schema& schema, std::vector<uint8_t>& need_rewrite, int column_size,
                             SparseRange<>& scan_range)
             : _column_iterators(column_iterators),
-              _predicates(pushdown_predicates),
               _schema(schema),
               _need_rewrite(need_rewrite),
               _column_size(column_size),
               _scan_range(scan_range) {}
 
-    Status rewrite_predicate(ObjectPool* pool);
+    Status rewrite_predicate(PushDownPredicates& _predicates, ObjectPool* pool);
 
 private:
-    StatusOr<bool> _rewrite_predicate(ObjectPool* pool, const FieldPtr& field);
+    StatusOr<bool> _rewrite_predicate(PushDownPredicates& _predicates, ObjectPool* pool, const FieldPtr& field);
     StatusOr<bool> _rewrite_expr_predicate(ObjectPool* pool, const ColumnPredicate*, const ColumnPtr& dict_column,
                                            const ColumnPtr& code_column, bool field_nullable, ColumnPredicate** ptr);
     Status _get_segment_dict(std::vector<std::pair<std::string, int>>* dicts, ColumnIterator* iter);
@@ -60,7 +59,6 @@ private:
                                  bool field_nullable);
 
     const ColumnIterators& _column_iterators;
-    PushDownPredicates& _predicates;
     const Schema& _schema;
     std::vector<uint8_t>& _need_rewrite;
     const int _column_size;

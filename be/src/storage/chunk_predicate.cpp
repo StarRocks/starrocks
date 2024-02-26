@@ -25,12 +25,27 @@ namespace starrocks {
 // ------------------------------------------------------------------------------------
 
 size_t ChunkPredicate::num_columns() {
-    std::unordered_set<ColumnId> columns;
-    (void)for_each_column_pred([&columns](ColumnPredicatePtr& col_pred) {
-        columns.emplace(col_pred->column_id());
-        return Status::OK();
-    });
-    return columns.size();
+    return get_all_column_preds().size();
+}
+
+bool ChunkPredicate::contains_column(ColumnId cid) {
+    return get_all_column_preds().contains(cid);
+}
+
+std::map<ColumnId, std::vector<const ColumnPredicate*>>& ChunkPredicate::get_all_column_preds() {
+    if (!_all_column_preds.has_value()) {
+        auto& all_column_preds = _all_column_preds.emplace();
+        (void)for_each_column_pred([&all_column_preds](ColumnPredicatePtr& col_pred) {
+            const auto cid = col_pred->column_id();
+            if (auto it = all_column_preds.find(cid); it != all_column_preds.end()) {
+                it->second.emplace_back(col_pred.get());
+            } else {
+                all_column_preds.emplace(cid, std::vector<const ColumnPredicate*>{col_pred.get()});
+            }
+            return Status::OK();
+        });
+    }
+    return _all_column_preds.value();
 }
 
 // ------------------------------------------------------------------------------------
@@ -80,6 +95,19 @@ Status ColumnChunkPredicate::accept(ChunkPredicateVisitor2& visitor) {
     return visitor.visit_column_pred(this);
 }
 
+void ColumnChunkPredicate::_collect_column_preds(
+        std::unordered_map<ColumnId, std::vector<const ColumnPredicate*>>& column_preds, int deep) const {
+    if (deep > 1) {
+        return;
+    }
+    const auto cid = _pred->column_id();
+    if (auto it = column_preds.find(cid); it != column_preds.end()) {
+        it->second.emplace_back(_pred.get());
+    } else {
+        column_preds.emplace(cid, std::vector<const ColumnPredicate*>{_pred.get()});
+    }
+}
+
 // ------------------------------------------------------------------------------------
 // CompoundChunkPredicate
 // ------------------------------------------------------------------------------------
@@ -120,6 +148,16 @@ Status CompoundChunkPredicate::for_each_column_pred(const ColumnPredicateVisitor
     return Status::OK();
 }
 
+void CompoundChunkPredicate::_collect_column_preds(
+        std::unordered_map<ColumnId, std::vector<const ColumnPredicate*>>& column_preds, int deep) const {
+    if (deep >= 1) {
+        return;
+    }
+    for (auto& pred : _preds) {
+        pred->_collect_column_preds(column_preds, deep + 1);
+    }
+}
+
 // ------------------------------------------------------------------------------------
 // AndChunkPredicate
 // ------------------------------------------------------------------------------------
@@ -135,7 +173,7 @@ public:
     Status zone_map_filter(ColumnIterators& column_iterators, const std::map<ColumnId, ColumnOrPredicate>& del_preds,
                            SparseRange<>* dest_row_ranges) const override;
 
-   Status accept(ChunkPredicateVisitor2& visitor) override;
+    Status accept(ChunkPredicateVisitor2& visitor) override;
 
 private:
     mutable std::vector<uint8_t> _or_selection_buffer;
@@ -275,7 +313,6 @@ ChunkPredicatePtr CompoundChunkPredicate::create_and() {
 ChunkPredicatePtr CompoundChunkPredicate::create_or() {
     return std::make_unique<OrChunkPredicate>();
 }
-
 
 // ------------------------------------------------------------------------------------
 // ChunkPredicateVisitor
