@@ -51,8 +51,8 @@ StatusOr<ConnectorChunkSink::Futures> FileChunkSink::add(ChunkPtr chunk) {
     if (_partition_column_names.empty()) {
         partition = DEFAULT_PARTITION;
     } else {
-        ASSIGN_OR_RETURN(partition,
-                         HiveUtils::make_partition_name(_partition_column_names, _partition_column_evaluators, chunk.get()));
+        ASSIGN_OR_RETURN(partition, HiveUtils::make_partition_name(_partition_column_names,
+                                                                   _partition_column_evaluators, chunk.get()));
     }
 
     // create writer if not found
