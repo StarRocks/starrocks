@@ -9,11 +9,11 @@ displayed_sidebar: "Chinese"
 - [All commands](#all-commands)
   - [用户账户管理](#用户账户管理)
   - [集群管理](#集群管理)
-    - [FE，BE，CN，Broker，process](#febecnbrokerprocess)
+    - [节点和进程](#节点和进程)
     - [资源组](#资源组)
     - [存储卷](#存储卷)
-    - [表，tablet，副本](#表tablet副本)
-    - [文件，索引，变量](#文件索引变量)
+    - [表、tablet 和 副本修复](#表tablet-和-副本修复)
+    - [参数配置、系统变量、文件](#参数配置系统变量文件)
     - [SQL 黑名单](#sql-黑名单)
     - [插件](#插件)
     - [查询分析](#查询分析)
@@ -59,12 +59,10 @@ displayed_sidebar: "Chinese"
 
 ## 集群管理
 
-管理集群，包括 FE、BE、Compute Node (CN)、资源组 (Resource Group)、存储卷（Storage Volume）、表、Tablet、副本 (Replica)、文件、索引（Index）、变量（Variable）、插件（Plugin）等。
+管理集群，包括 FE、BE、Compute Node (CN)、资源组 (Resource Group)、存储卷（Storage Volume）、表、Tablet、副本 (Replica)、文件、变量（Variable）、插件（Plugin）、SQL Blacklist 等。
 
-### FE，BE，CN，Broker，process
+### 节点和进程
 
-- [ADMIN SET CONFIG](./Administration/ADMIN_SET_CONFIG.md)
-- [ADMIN SHOW CONFIG](./Administration/ADMIN_SHOW_CONFIG.md)
 - [ALTER SYSTEM](./Administration/ALTER_SYSTEM.md)
 - [CANCEL DECOMMISSION](./Administration/CANCEL_DECOMMISSION.md)
 - [KILL](./Administration/KILL.md)
@@ -93,7 +91,7 @@ displayed_sidebar: "Chinese"
 - [SET DEFAULT STORAGE VOLUME](./Administration/SET_DEFAULT_STORAGE_VOLUME.md)
 - [SHOW STORAGE VOLUMES](./Administration/SHOW_STORAGE_VOLUMES.md)
 
-### 表，tablet，副本
+### 表、tablet 和 副本修复
 
 - [ADMIN CANCEL REPAIR TABLE](./Administration/ADMIN_CANCEL_REPAIR.md)
 - [ADMIN CHECK TABLET](./Administration/ADMIN_CHECK_TABLET.md)
@@ -104,16 +102,14 @@ displayed_sidebar: "Chinese"
 - [RECOVER](./data-definition/RECOVER.md)
 - [SHOW TABLE STATUS](./Administration/SHOW_TABLE_STATUS.md)
 
-### 文件，索引，变量
+### 参数配置、系统变量、文件
 
+- [ADMIN SET CONFIG](./Administration/ADMIN_SET_CONFIG.md)
+- [ADMIN SHOW CONFIG](./Administration/ADMIN_SHOW_CONFIG.md)
 - [CREATE FILE](./Administration/CREATE_FILE.md)
-- [CREATE INDEX](./data-definition/CREATE_INDEX.md)
 - [DROP FILE](./Administration/DROP_FILE.md)
-- [DROP INDEX](./data-definition/DROP_INDEX.md)
 - [SET (variable)](./Administration/SET.md)
 - [SHOW FILE](./Administration/SHOW_FILE.md)
-- [SHOW FULL COLUMNS](./Administration/SHOW_FULL_COLUMNS.md)
-- [SHOW INDEX](./Administration/SHOW_INDEX.md)
 - [SHOW VARIABLES](./Administration/SHOW_VARIABLES.md)
 
 ### SQL 黑名单
@@ -205,9 +201,11 @@ displayed_sidebar: "Chinese"
 
 - [ALTER TABLE](./data-definition/ALTER_TABLE.md)
 - [CANCEL ALTER TABLE](./data-definition/CANCEL_ALTER_TABLE.md)
+- [CREATE INDEX](./data-definition/CREATE_INDEX.md)
 - [CREATE TABLE](./data-definition/CREATE_TABLE.md)
 - [CREATE TABLE AS SELECT](./data-definition/CREATE_TABLE_AS_SELECT.md)
 - [CREATE TABLE LIKE](./data-definition/CREATE_TABLE_LIKE.md)
+- [DROP INDEX](./data-definition/DROP_INDEX.md)
 - [DROP TABLE](./data-definition/DROP_TABLE.md)
 - [REFRESH EXTERNAL TABLE](./data-definition/REFRESH_EXTERNAL_TABLE.md)
 - [TRUNCATE TABLE](./data-definition/TRUNCATE_TABLE.md)
@@ -217,6 +215,8 @@ displayed_sidebar: "Chinese"
 - [SHOW DELETE](./data-manipulation/SHOW_DELETE.md)
 - [SHOW DYNAMIC PARTITION TABLES](./data-manipulation/SHOW_DYNAMIC_PARTITION_TABLES.md)
 - [SHOW PARTITIONS](./data-manipulation/SHOW_PARTITIONS.md)
+- [SHOW FULL COLUMNS](./Administration/SHOW_FULL_COLUMNS.md)
+- [SHOW INDEX](./Administration/SHOW_INDEX.md)
 - [SHOW TABLES](./data-manipulation/SHOW_TABLES.md)
 - [SHOW TABLET](./data-manipulation/SHOW_TABLET.md)
 - [UPDATE](./data-manipulation/UPDATE.md)
