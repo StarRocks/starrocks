@@ -942,12 +942,7 @@ CONF_mInt64(lake_vacuum_retry_max_attempts, "5");
 CONF_mInt64(lake_vacuum_retry_min_delay_ms, "10");
 CONF_mInt64(lake_max_garbage_version_distance, "100");
 CONF_mBool(enable_primary_key_recover, "false");
-<<<<<<< HEAD
-CONF_mInt64(lake_pk_compaction_max_input_rowsets, "5");
-=======
-CONF_mBool(lake_enable_compaction_async_write, "false");
 CONF_mInt64(lake_pk_compaction_max_input_rowsets, "1000");
->>>>>>> 731b2e82b7 ([Enhancement] cloud native pk table support size tiered compaction policy (#41034))
 // Used for control memory usage of update state cache and compaction state cache
 CONF_mInt32(lake_pk_preload_memory_limit_percent, "30");
 

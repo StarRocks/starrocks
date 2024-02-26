@@ -21,6 +21,8 @@
 #include "common/statusor.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/compaction_policy.h"
+#include "storage/lake/tablet_metadata.h"
+#include "storage/lake/types_fwd.h"
 
 namespace starrocks::lake {
 
@@ -32,8 +34,7 @@ struct RowsetStat {
 
 class RowsetCandidate {
 public:
-    RowsetCandidate(const RowsetMetadataPB* rp, const RowsetStat& rs, int index)
-            : rowset_meta_ptr(rp), stat(rs), rowset_index(index) {
+    RowsetCandidate(RowsetMetadataPtr rp, const RowsetStat& rs) : rowset_meta_ptr(std::move(rp)), stat(rs) {
         calculate_score();
     }
     // The goal of lake primary table compaction is to reduce the overhead of reading data.
@@ -68,9 +69,8 @@ public:
     }
     bool operator<(const RowsetCandidate& other) const { return score < other.score; }
 
-    const RowsetMetadataPB* rowset_meta_ptr;
+    RowsetMetadataPtr rowset_meta_ptr;
     RowsetStat stat;
-    int rowset_index;
     double score;
 };
 
@@ -114,20 +114,12 @@ struct PKSizeTieredLevel {
 
 class PrimaryCompactionPolicy : public CompactionPolicy {
 public:
-    explicit PrimaryCompactionPolicy(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> tablet_metadata)
-            : CompactionPolicy(tablet_mgr, std::move(tablet_metadata)) {}
-
+    explicit PrimaryCompactionPolicy(TabletPtr tablet) : CompactionPolicy(tablet) {}
     ~PrimaryCompactionPolicy() override = default;
 
-    StatusOr<std::vector<RowsetPtr>> pick_rowsets() override;
-    StatusOr<std::vector<RowsetPtr>> pick_rowsets(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata,
-                                                  bool calc_score, std::vector<bool>* has_dels);
-
-    // Common function to return the picked rowset indexes.
-    // For compaction score, only picked rowset indexes are needed.
-    // For compaction, picked rowsets can be constructed by picked rowset indexes.
-    StatusOr<std::vector<int64_t>> pick_rowset_indexes(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata,
-                                                       bool calc_score, std::vector<bool>* has_dels);
+    StatusOr<std::vector<RowsetPtr>> pick_rowsets(int64_t version) override;
+    StatusOr<std::vector<RowsetPtr>> pick_rowsets(TabletMetadataPtr tablet_metadata, bool calc_score,
+                                                  std::vector<bool>* has_dels);
 
     // When using Sized-tiered compaction policy, we need this function to pick highest score level.
     static StatusOr<std::unique_ptr<PKSizeTieredLevel>> pick_max_level(bool calc_score,
