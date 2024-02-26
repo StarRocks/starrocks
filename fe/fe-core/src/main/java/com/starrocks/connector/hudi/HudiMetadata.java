@@ -211,8 +211,10 @@ public class HudiMetadata implements ConnectorMetadata {
         if (isResourceMappingCatalog(catalogName)) {
             HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) GlobalStateMgr.getCurrentState()
                     .getMetadata().getTable(dbName, tableName);
-            cacheUpdateProcessor.ifPresent(processor -> processor.invalidateTable(
-                    hmsTable.getDbName(), hmsTable.getTableName(), hmsTable.getTableLocation()));
+            if (hmsTable != null) {
+                cacheUpdateProcessor.ifPresent(processor -> processor.invalidateTable(
+                        hmsTable.getDbName(), hmsTable.getTableName(), hmsTable.getTableLocation()));
+            }
         }
     }
 
