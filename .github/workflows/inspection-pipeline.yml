@@ -84,7 +84,7 @@ jobs:
         timeout-minutes: 90
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/elastic-ut.sh --repository ${{ github.repository }} -branch ${BRANCH} --pr ${PR_NUMBER} --module be
+          ./bin/elastic-ut.sh --repository ${{ github.repository }} --branch ${BRANCH} --pr ${PR_NUMBER} --module be
 
       - name: clean ECI
         if: always()
@@ -137,7 +137,7 @@ jobs:
         timeout-minutes: 60
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/elastic-ut.sh --repository ${{ github.repository }} -branch ${BRANCH} --pr ${PR_NUMBER} --module fe --build Release
+          ./bin/elastic-ut.sh --repository ${{ github.repository }} --branch ${BRANCH} --pr ${PR_NUMBER} --module fe --build Release
 
       - name: Clean ECI
         if: always()
@@ -211,7 +211,7 @@ jobs:
         timeout-minutes: 90
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/elastic-build.sh --repository ${{ github.repository }} -branch ${BRANCH} --pr ${PR_NUMBER} --build Release
+          ./bin/elastic-build.sh --repository ${{ github.repository }} --branch ${BRANCH} --pr ${PR_NUMBER} --build Release
 
       - name: BUILD RESULT
         run: |
