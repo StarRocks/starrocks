@@ -47,7 +47,8 @@ ParquetOutputStream::ParquetOutputStream(std::unique_ptr<starrocks::WritableFile
 }
 
 ParquetOutputStream::~ParquetOutputStream() {
-    ParquetOutputStream::Close();
+    auto st = ParquetOutputStream::Close();
+    LOG_IF(WARNING, !st.ok()) << "close parquet output stream failed: " << st;
 }
 
 arrow::Status ParquetOutputStream::Write(const std::shared_ptr<arrow::Buffer>& data) {
