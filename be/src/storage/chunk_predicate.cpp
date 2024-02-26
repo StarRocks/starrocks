@@ -113,8 +113,7 @@ void ColumnChunkPredicate::_collect_column_preds(
 // ------------------------------------------------------------------------------------
 
 bool CompoundChunkPredicate::can_pushdown(PredicateParser* parser) const {
-    return std::all_of(_preds.begin(), _preds.end(),
-                       [parser](const auto& pred) { return parser->can_pushdown(pred.get()); });
+    return std::all_of(_preds.begin(), _preds.end(), [parser](const auto& pred) { return pred->can_pushdown(parser); });
 }
 
 ChunkPredicatePtr CompoundChunkPredicate::extract_non_pushdownable(PredicateParser* parser) {
@@ -129,7 +128,7 @@ ChunkPredicatePtr CompoundChunkPredicate::extract_non_pushdownable(PredicatePars
     }
     _preds = std::move(pushdownable);
 
-    auto non_pushdownable_pred = std::make_unique<CompoundChunkPredicate>();
+    auto non_pushdownable_pred = clone_empty();
     for (auto& pred : non_pushdownable) {
         non_pushdownable_pred->add_child_predicate(std::move(pred));
     }
@@ -174,6 +173,8 @@ public:
                            SparseRange<>* dest_row_ranges) const override;
 
     Status accept(ChunkPredicateVisitor2& visitor) override;
+
+    std::unique_ptr<CompoundChunkPredicate> clone_empty() const override;
 
 private:
     mutable std::vector<uint8_t> _or_selection_buffer;
@@ -237,6 +238,10 @@ Status AndChunkPredicate::accept(ChunkPredicateVisitor2& visitor) {
     return visitor.visit_and_pred(this);
 }
 
+std::unique_ptr<CompoundChunkPredicate> AndChunkPredicate::clone_empty() const {
+    return std::make_unique<AndChunkPredicate>();
+}
+
 // ------------------------------------------------------------------------------------
 // OrChunkPredicate
 // ------------------------------------------------------------------------------------
@@ -253,6 +258,8 @@ public:
                            SparseRange<>* dest_row_ranges) const override;
 
     Status accept(ChunkPredicateVisitor2& visitor) override;
+
+    std::unique_ptr<CompoundChunkPredicate> clone_empty() const override;
 
 private:
     mutable std::vector<uint8_t> _and_selection_buffer;
@@ -305,6 +312,10 @@ Status OrChunkPredicate::zone_map_filter(ColumnIterators& column_iterators,
 
 Status OrChunkPredicate::accept(ChunkPredicateVisitor2& visitor) {
     return visitor.visit_or_pred(this);
+}
+
+std::unique_ptr<CompoundChunkPredicate> OrChunkPredicate::clone_empty() const {
+    return std::make_unique<OrChunkPredicate>();
 }
 
 ChunkPredicatePtr CompoundChunkPredicate::create_and() {

@@ -775,7 +775,7 @@ Status SegmentIterator::_get_row_ranges_by_zone_map() {
     }
 
     SparseRange<> r;
-    _opts.chunk_pred->zone_map_filter(_column_iterators, _del_predicates, &r);
+    RETURN_IF_ERROR(_opts.chunk_pred->zone_map_filter(_column_iterators, _del_predicates, &r));
     zm_range = zm_range.intersection(r);
     // for (ColumnId cid : columns) {
     //     auto iter1 = _opts.predicates_for_zone_map.find(cid);

@@ -62,20 +62,21 @@ std::string SegmentReadOptions::debug_string() const {
         ss << ranges[i].debug_string();
     }
     ss << "],predicates=[";
-    int i = 0;
-    for (auto& pair : predicates) {
-        if (i++ != 0) {
-            ss << ",";
-        }
-        ss << "{id=" << pair.first << ",pred=[";
-        for (int j = 0; j < pair.second.size(); ++j) {
-            if (j != 0) {
-                ss << ",";
-            }
-            ss << pair.second[j]->debug_string();
-        }
-        ss << "]}";
-    }
+    // TODO(lzh)
+    // int i = 0;
+    // for (auto& pair : predicates) {
+    //     if (i++ != 0) {
+    //         ss << ",";
+    //     }
+    //     ss << "{id=" << pair.first << ",pred=[";
+    //     for (int j = 0; j < pair.second.size(); ++j) {
+    //         if (j != 0) {
+    //             ss << ",";
+    //         }
+    //         ss << pair.second[j]->debug_string();
+    //     }
+    //     ss << "]}";
+    // }
     ss << "],delete_predicates={";
     ss << "},unsafe_tablet_schema_ref={";
     ss << "},use_page_cache=" << use_page_cache;

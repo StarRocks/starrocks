@@ -150,6 +150,8 @@ public:
 
     void _collect_column_preds(std::unordered_map<ColumnId, std::vector<const ColumnPredicate*>>& column_preds,int deep) const override;
 
+    virtual std::unique_ptr<CompoundChunkPredicate> clone_empty() const = 0;
+
 protected:
 public:
     static ChunkPredicatePtr create_and();

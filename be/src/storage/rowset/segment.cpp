@@ -313,7 +313,7 @@ StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const Schema& schema, const Se
     };
 
     SegmentZoneMapChunkPredicateVisitor prune_segment_visitor(this);
-    read_options.chunk_pred->accept(prune_segment_visitor);
+    RETURN_IF_ERROR(read_options.chunk_pred->accept(prune_segment_visitor));
     if (prune_segment_visitor.pruned) {
         if (read_options.is_first_split_of_segment) {
             read_options.stats->segment_stats_filtered += num_rows();
