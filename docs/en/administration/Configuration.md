@@ -1847,8 +1847,8 @@ BE dynamic parameters are as follows.
 
 #### lake_pk_compaction_max_input_rowsets
 
-- **Default:** 5
-- **Description:** The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster.
+- **Default:** 1000
+- **Description:** The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster. Since v3.2.4 and v3.1.10, the default value of this parameter is changed from `5` to `1000`. After the Sized-tiered Compaction policy is enabled for Primary Key tables (by setting `enable_pk_size_tiered_compaction_strategy` to `true`), StarRocks does not need to limit the number of rowsets for each compaction to reduce write amplification. Therefore, the default value of this parameter is increased.
 - **Introduced in:** v3.1.8, v3.2.3
 
 #### compact_threads
@@ -2381,7 +2381,13 @@ BE static parameters are as follows.
 
 - **Default**: TRUE
 - **Unit**: N/A
-- **Description**: Whether to enable the Size-tiered Compaction strategy. TRUE indicates the Size-tiered Compaction strategy is enabled, and FALSE indicates it is disabled.
+- **Description**: Whether to enable the Size-tiered Compaction strategy (excluding Primary Key tables). TRUE indicates the Size-tiered Compaction strategy is enabled, and FALSE indicates it is disabled.
+
+#### enable_pk_size_tiered_compaction_strategy
+
+- **Default:** true
+- **Description:** Whether to enable the Size-tiered Compaction policy for Primary Key tables.
+- **Introduced in**: v3.2.4, v3.1.10
 
 #### lake_service_max_concurrency
 
