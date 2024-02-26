@@ -95,6 +95,7 @@ message CompactResponse {
 message DropTableRequest {
     // tablet_id can be the id of any of the tablet belongs to the table to be dropped.
     optional int64 tablet_id = 1;
+    optional string path = 2;
 }
 
 message DropTableResponse {
