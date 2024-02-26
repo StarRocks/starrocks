@@ -217,6 +217,7 @@ public class ConnectContext {
     protected TWorkGroup resourceGroup;
 
     protected volatile boolean isPending = false;
+    protected volatile boolean isForward = false;
 
     protected SSLContext sslContext;
 
@@ -840,6 +841,14 @@ public class ConnectContext {
         return isPending;
     }
 
+    public void setIsForward(boolean forward) {
+        isForward = forward;
+    }
+
+    public boolean isForward() {
+        return isForward;
+    }
+
     public boolean supportSSL() {
         return sslContext != null;
     }
@@ -1016,7 +1025,13 @@ public class ConnectContext {
                 }
             }
             row.add(stmt);
-            row.add(Boolean.toString(isPending));
+            if (isForward) {
+                // if query is forward to leader, we can't know its accurate status in query queue,
+                // so isPending should not be displayed
+                row.add("");
+            } else {
+                row.add(Boolean.toString(isPending));
+            }
             return row;
         }
     }
