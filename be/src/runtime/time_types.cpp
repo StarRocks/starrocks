@@ -175,6 +175,11 @@ int64_t date::standardize_date(int64_t value) {
     return value;
 }
 
+static bool is_space(char ch) {
+    // \t, \n, \v, \f, \r are 9~13, respectively.
+    return UNLIKELY(ch == ' ' || (ch >= 9 && ch <= 13));
+}
+
 bool date::from_string(const char* date_str, size_t len, int* year, int* month, int* day, int* hour, int* minute,
                        int* second, int* microsecond) {
     const char* ptr = date_str;
@@ -186,7 +191,7 @@ bool date::from_string(const char* date_str, size_t len, int* year, int* month, 
     int32_t date_len[MAX_DATE_PARTS];
 
     // Skip space character
-    while (ptr < end && isspace(*ptr)) {
+    while (ptr < end && is_space(*ptr)) {
         ptr++;
     }
     if (ptr == end || !isdigit(*ptr)) {
@@ -253,8 +258,8 @@ bool date::from_string(const char* date_str, size_t len, int* year, int* month, 
             continue;
         }
         // escape separator
-        while (ptr < end && (ispunct(*ptr) || isspace(*ptr))) {
-            if (isspace(*ptr)) {
+        while (ptr < end && (ispunct(*ptr) || is_space(*ptr))) {
+            if (is_space(*ptr)) {
                 if (((1 << field_idx) & allow_space_mask) == 0) {
                     return false;
                 }
@@ -298,31 +303,25 @@ bool date::from_string(const char* date_str, size_t len, int* year, int* month, 
     return true;
 }
 
-// Get date base on format "%Y-%m-%d", '-' means any char.
+// Get date base on format "%Y-%m-%d", where '-' means any char.
 // compare every char.
-bool date::from_string_to_date_internal(const char* ptr, int* year, int* month, int* day) {
-    uint8_t year1;
-    uint8_t year2;
-    uint8_t year3;
-    uint8_t year4;
-    uint8_t month1;
-    uint8_t month2;
-    uint8_t day1;
-    uint8_t day2;
-    if (char_to_digit(ptr, 0, &year1) || char_to_digit(ptr, 1, &year2) || char_to_digit(ptr, 2, &year3) ||
-        char_to_digit(ptr, 3, &year4) || isdigit(ptr[4]) || char_to_digit(ptr, 5, &month1) ||
-        char_to_digit(ptr, 6, &month2) || isdigit(ptr[7]) || char_to_digit(ptr, 8, &day1) ||
-        char_to_digit(ptr, 9, &day2)) {
+// Note that this method does not check whether the parsed year, month, and day are in valid range.
+bool date::from_string_to_date_internal(const char* ptr, int* pyear, int* pmonth, int* pday) {
+    const bool is_valid = isdigit(ptr[0]) && isdigit(ptr[1]) && isdigit(ptr[2]) && isdigit(ptr[3]) &&
+                          !isdigit(ptr[4]) && isdigit(ptr[5]) && isdigit(ptr[6]) && !isdigit(ptr[7]) &&
+                          isdigit(ptr[8]) && isdigit(ptr[9]);
+    if (!is_valid) {
         return false;
     }
 
-    *year = year1 * 1000 + year2 * 100 + year3 * 10 + year4;
-    *month = month1 * 10 + month2;
-    *day = day1 * 10 + day2;
+    const int year = ptr[0] * 1000 + ptr[1] * 100 + ptr[2] * 10 + ptr[3] - static_cast<int>('0') * 1111;
+    const int month = ptr[5] * 10 + ptr[6] - static_cast<int>('0') * 11;
+    const int day = ptr[8] * 10 + ptr[9] - static_cast<int>('0') * 11;
 
-    if (*month > 12 || (*day > DAYS_IN_MONTH[is_leap(*year)][*month])) {
-        return false;
-    }
+    *pyear = year;
+    *pmonth = month;
+    *pday = day;
+
     return true;
 }
 
@@ -331,11 +330,11 @@ bool date::from_string_to_date(const char* date_str, size_t len, int* year, int*
     const char* ptr = date_str;
     const char* end = date_str + len;
     // Skip space character
-    while (ptr < end && isspace(*ptr)) {
+    while (ptr < end && is_space(*ptr)) {
         ++ptr;
     }
     // Skip space character
-    while (ptr < end && isspace(*(end - 1))) {
+    while (ptr < end && is_space(*(end - 1))) {
         --end;
     }
 
@@ -370,7 +369,7 @@ bool date::is_standard_datetime_format(const char* ptr, int length, const char**
             const char* local_ptr = ptr + 10;
             length -= 18;
             for (int i = 0; i < length; ++i) {
-                if (!isspace(local_ptr[i])) {
+                if (!is_space(local_ptr[i])) {
                     return false;
                 }
             }
@@ -424,7 +423,6 @@ bool date::from_string_to_datetime_internal(const char* ptr_date, const char* pt
 
     return true;
 }
-
 // if string content is 10 chars try to process based on "%Y-%m-%d",
 //    if successful return result;
 //    else failed use uncommon approach.
@@ -432,39 +430,44 @@ bool date::from_string_to_datetime_internal(const char* ptr_date, const char* pt
 //    if successful return result;
 //    else failed use uncommon approach.
 // else use uncommon approach.
-bool date::from_string_to_datetime(const char* date_str, size_t len, int* year, int* month, int* day, int* hour,
-                                   int* minute, int* second, int* microsecond) {
+//
+// @return <is_valid, is_only_date>
+//     is_valid is true if the date_str is valid datetime string.
+//     is_only_date is true if the date_str only contains date part.
+//         hour, minute, second, and microsecond of res will be undefined if is_only_date is true.
+std::pair<bool, bool> date::from_string_to_datetime(const char* date_str, size_t len, ToDatetimeResult* res) {
+    auto& [year, month, day, hour, minute, second, microsecond] = *res;
+
     const char* ptr = date_str;
     const char* end = date_str + len;
     // Skip space character
-    while (ptr < end && isspace(*ptr)) {
+    while (ptr < end && is_space(*ptr)) {
         ++ptr;
     }
-    while (ptr < end && isspace(*(end - 1))) {
+    while (ptr < end && is_space(*(end - 1))) {
         --end;
     }
 
     int length = end - ptr;
     if (length == 10) {
-        *hour = *minute = *second = *microsecond = 0;
-        bool result = from_string_to_date_internal(ptr, year, month, day);
-        if (!result) {
-            return from_string(date_str, len, year, month, day, hour, minute, second, microsecond);
+        const bool is_valid = from_string_to_date_internal(ptr, &year, &month, &day);
+        if (is_valid) {
+            return {true, true};
         }
-        return result;
+        return {from_string(date_str, len, &year, &month, &day, &hour, &minute, &second, &microsecond), false};
     }
 
     const char* ptr_date = ptr;
     const char* ptr_time = nullptr;
     if (is_standard_datetime_format(ptr, length, &ptr_time)) {
-        bool result = from_string_to_datetime_internal(ptr_date, ptr_time, year, month, day, hour, minute, second,
-                                                       microsecond);
-        if (!result) {
-            return from_string(date_str, len, year, month, day, hour, minute, second, microsecond);
+        const bool is_valid = from_string_to_datetime_internal(ptr_date, ptr_time, &year, &month, &day, &hour, &minute,
+                                                               &second, &microsecond);
+        if (is_valid) {
+            return {true, false};
         }
-        return result;
+        return {from_string(date_str, len, &year, &month, &day, &hour, &minute, &second, &microsecond), false};
     } else {
-        return from_string(date_str, len, year, month, day, hour, minute, second, microsecond);
+        return {from_string(date_str, len, &year, &month, &day, &hour, &minute, &second, &microsecond), false};
     }
 }
 
@@ -515,14 +518,6 @@ bool date::is_leap(int year) {
     return ((year % 4) == 0) && ((year % 100 != 0) || ((year % 400) == 0 && year));
 }
 
-bool date::check(int year, int month, int day) {
-    if (year > 9999 || month > 12 || month < 1 || day > 31 || day < 1) {
-        return false;
-    }
-
-    return day <= DAYS_IN_MONTH[is_leap(year)][month];
-}
-
 void date::to_string(int year, int month, int day, char* to) {
     uint32_t temp;
     temp = year / 100;
@@ -542,10 +537,6 @@ void date::to_string(int year, int month, int day, char* to) {
 
     to[8] = day / 10 + '0';
     to[9] = day % 10 + '0';
-}
-
-bool timestamp::check_time(int hour, int minute, int second, int microsecond) {
-    return hour < HOURS_PER_DAY && minute < MINS_PER_HOUR && second < SECS_PER_MINUTE && microsecond < USECS_PER_SEC;
 }
 
 } // namespace starrocks
