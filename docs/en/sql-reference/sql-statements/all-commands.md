@@ -13,7 +13,7 @@ This topic lists all the SQL statements supported by StarRocks and categorizes t
     - [Resource group](#resource-group)
     - [Storage volume](#storage-volume)
     - [Check and repair table, tablet, and replica](#check-and-repair-table-tablet-and-replica)
-    - [Parameters, variables, and files](#parameters-variables-and-files)
+    - [System configurations, variables, and files](#system-configurations-variables-and-files)
     - [SQL Blacklist](#sql-blacklist)
     - [Plugin](#plugin)
     - [Query plan and query profile](#query-plan-and-query-profile)
@@ -104,12 +104,12 @@ Manages clusters, including FEs, BEs, compute nodes (CN), brokers, resource grou
 - [RECOVER](./data-definition/RECOVER.md)
 - [SHOW TABLE STATUS](./Administration/SHOW_TABLE_STATUS.md)
 
-### Parameters, variables, and files
+### System configurations, variables, and files
 
+- [ADMIN SET CONFIG](./Administration/ADMIN_SET_CONFIG.md)
+- [ADMIN SHOW CONFIG](./Administration/ADMIN_SHOW_CONFIG.md)
 - [CREATE FILE](./Administration/CREATE_FILE.md)
-- [CREATE INDEX](./data-definition/CREATE_INDEX.md)
 - [DROP FILE](./Administration/DROP_FILE.md)
-- [DROP INDEX](./data-definition/DROP_INDEX.md)
 - [SET (variable)](./Administration/SET.md)
 - [SHOW FILE](./Administration/SHOW_FILE.md)
 - [SHOW VARIABLES](./Administration/SHOW_VARIABLES.md)
