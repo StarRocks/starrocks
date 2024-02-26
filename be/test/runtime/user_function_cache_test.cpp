@@ -39,6 +39,7 @@
 #include <cstdio>
 #include <cstdlib>
 
+#include "common/config.h"
 #include "common/logging.h"
 #include "fmt/core.h"
 #include "fs/fs_util.h"
@@ -123,6 +124,9 @@ public:
         my_add_md5sum = compute_md5("./be/test/runtime/test_data/user_function_cache/lib/my_add.so");
 
         jar_md5sum = compute_md5("./be/test/runtime/test_data/user_function_cache/lib/my_udf.jar");
+
+        res = system("mkdir -p ./be/test/runtime/test_data/user_function_cache/clear/1");
+        res = system("touch ./be/test/runtime/test_data/user_function_cache/clear/1/1.1.jar");
     }
     static void TearDownTestCase() {
         s_server->stop();
@@ -131,6 +135,7 @@ public:
         [[maybe_unused]] auto res = system("rm -rf ./be/test/runtime/test_data/user_function_cache/lib/my_add.so");
         res = system("rm -rf ./be/test/runtime/test_data/user_function_cache/lib/my_udf.jar");
         res = system("rm -rf ./be/test/runtime/test_data/user_function_cache/download/");
+        res = system("rm -rf ./be/test/runtime/test_data/user_function_cache/clear");
     }
     void SetUp() override { k_is_downloaded = false; }
 };
@@ -161,6 +166,17 @@ TEST_F(UserFunctionCacheTest, download_normal) {
         std::string URL = fmt::format("http://127.0.0.1:{}/test.jar", real_port);
         (void)cache.get_libpath(fid, URL, jar_md5sum, &libpath);
     }
+}
+
+TEST_F(UserFunctionCacheTest, clear_all_lib_file_before_start) {
+    UserFunctionCache cache;
+    std::string lib_dir = "./be/test/runtime/test_data/user_function_cache/clear";
+    fs::remove_all(lib_dir);
+    config::clear_udf_cache_when_start = true;
+    auto st = cache.init(lib_dir);
+    config::clear_udf_cache_when_start = false;
+    ASSERT_TRUE(st.ok()) << st;
+    ASSERT_FALSE(fs::path_exist(lib_dir + "/1/1.1.jar"));
 }
 
 } // namespace starrocks
