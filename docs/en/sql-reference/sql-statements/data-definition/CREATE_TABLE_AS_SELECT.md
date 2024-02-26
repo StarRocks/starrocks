@@ -17,13 +17,13 @@ You can submit an asynchronous CTAS task using [SUBMIT TASK](../data-manipulatio
 
   ```SQL
   CREATE TABLE [IF NOT EXISTS] [database.]table_name
-  [column_name [, column_name2, ...]]
-  [, index_definition1[, index_definition2, ...]]
+  [column_name1 [, column_name2, ...]]
+  [index_definition1 [, index_definition2, ...]]
   [key_desc]
   [COMMENT "table comment"]
   [partition_desc]
   [distribution_desc]
-  [ORDER BY (column_name,...)]
+  [ORDER BY (column_name1 [, column_name2, ...])]
   [PROPERTIES ("key"="value", ...)]
   AS SELECT query
   [ ... ]
@@ -34,14 +34,14 @@ You can submit an asynchronous CTAS task using [SUBMIT TASK](../data-manipulatio
   ```SQL
   SUBMIT [/*+ SET_VAR(key=value) */] TASK [[database.]<task_name>]AS
   CREATE TABLE [IF NOT EXISTS] [database.]table_name
-  [column_name [, column_name2, ...]]
-  [, index_definition1[, index_definition2, ...]]
+  [column_name1 [, column_name2, ...]]
+  [index_definition1 [, index_definition2, ...]]
   [key_desc]
   [COMMENT "table comment"]
   [partition_desc]
   [distribution_desc]
-  [ORDER BY (column_name,...)]
-  [PROPERTIES ("key"="value", ...)]AS SELECT query
+  [ORDER BY (column_name1 [, column_name2, ...])]
+  [PROPERTIES ("key"="value", ...)] AS SELECT query
   [ ... ]
   ```
 
@@ -49,13 +49,13 @@ You can submit an asynchronous CTAS task using [SUBMIT TASK](../data-manipulatio
 
 | **Parameter**     | **Required** | **Description**                                              |
 | ----------------- | ------------ | ------------------------------------------------------------ |
-| column_name       | No          | The name of a column in the new table. You do not need to specify the data type for the column. StarRocks automatically specifies an appropriate data type for the column . StarRocks converts FLOAT and DOUBLE data into DECIMAL(38,9) data. StarRocks also converts CHAR, VARCHAR, and STRING data into VARCHAR(65533) data. |
+| column_name       | No          | The name of a column in the new table. You do not need to specify the data type for the column. StarRocks automatically specifies an appropriate data type for the column. StarRocks converts FLOAT and DOUBLE data into DECIMAL(38,9) data. StarRocks also converts CHAR, VARCHAR, and STRING data into VARCHAR(65533) data. |
 | index_definition| No          | Since v3.1.8, a bitmap index can be created for the new table. The syntax is `INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] COMMENT 'xxxxxx'`. For more information about parameter descriptions and usage notes, see [Bitmap indexes](../../../table_design/indexes/Bitmap_index.md). | 
 | key_desc          | No           | The syntax is `key_type ( <col_name1> [, <col_name2> , ...])`.<br />**Parameters**:<ul><li>`key_type`: [the key type of the new table](../../../table_design/table_types/table_types.md). Valid values: `DUPLICATE KEY` and `PRIMARY KEY`. Default value: `DUPLICATE KEY`.</li><li> `col_name`: the column to form the key.</li></ul> |
 | COMMENT           | No           | The comment of the new table.                                |
-| partition_desc    | No           | The partitioning method of the new table. If you do not specify this parameter, by default, the new table has no partition. For more information about partitioning, see [CREATE TABLE](./CREATE_TABLE.md#partition_desc). |
+| partition_desc    | No           | The partitioning method of the new table. By default, if you do not specify this parameter, the new table has no partition. For more information about partitioning, see [CREATE TABLE](./CREATE_TABLE.md#partition_desc). |
 | distribution_desc | No           | The bucketing method of the new table. If you do not specify this parameter, the bucket column defaults to the column with the highest cardinality collected by the cost-based optimizer (CBO). The number of buckets defaults to 10. If the CBO does not collect information about the cardinality, the bucket column defaults to the first column in the new table. For more information about bucketing, see [CREATE TABLE](./CREATE_TABLE.md#distribution_desc). |
-| ORDER BY | No | Since v3.1.8, the sort key can be specified for the new table (which must be a Primary Key table). The sort key can be a combination of columns in any order. Note that, meanwhile, you must use `PRIMARY KEY (xxx)` to specify the new table as a Primary Key table.| 
+| ORDER BY | No | Since v3.1.8, a sort key can be specified for the new table if the new table is a Primary Key table. The sort key can be a combination of any columns. Note that, meanwhile, you must use `PRIMARY KEY (xxx)` to specify the new table as a Primary Key table.| 
 | Properties        | No           | The properties of the new table.                             |
 | AS SELECT query   | Yes          | The query result.  You can specify columns in `... AS SELECT query`, for example, `... AS SELECT a, b, c FROM table_a;`. In this example, `a`, `b`, and `c` indicates the column names of the table that is queried. If you do not specify the column names of the new table, the column names of the new table are also `a`, `b`, and `c`. You can specify expressions in `... AS SELECT query`, for example, `... AS SELECT a+1 AS x, b+2 AS y, c*c AS z FROM table_a;`. In this example, `a+1`, `b+2`, and `c*c` indicates the column names of the table that is queried, and `x`, `y`, and `z` indicates the column names of the new table. Note:  The number of columns in the new table need to be the same as the number of the columns specified in the SELECT statement . We recommend that you use column names that are easy to identify. |
 
