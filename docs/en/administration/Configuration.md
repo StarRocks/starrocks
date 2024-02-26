@@ -1880,6 +1880,18 @@ BE dynamic parameters are as follows.
 - **Unit**: N/A
 - **Description**: The number of scan threads assigned to Pipeline Connector per CPU core in the BE node. This configuration is changed to dynamic from v3.1.7 onwards.
 
+#### starlet_use_star_cache
+
+- **Default**：true
+- **Description**：Whether to enable block data cache in a shared-data cluster. `true` indicates enabling this feature and `false` indicates disabling it.
+- **Introduced in:** v3.1
+
+#### starlet_cache_evict_high_water
+
+- **Default**：0.2
+- **Description**：In a shared-data cluster, if the percentage of the available disk capacity is below this value, file data cache eviction will be triggered. The default value indicates that file data cache will use at most 80% of the disk capacity.
+- **Introduced in:** v3.0
+
 ### Configure BE static parameters
 
 You can only set the static parameters of a BE by changing them in the corresponding configuration file **be.conf**, and restart the BE to allow the changes to take effect.
