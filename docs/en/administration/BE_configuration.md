@@ -268,7 +268,7 @@ BE dynamic parameters are as follows.
 
 - **Default:** true
 - **Description:** Whether to enable the Size-tiered Compaction policy for Primary Key tables.
-- **Introduced in**: v3.2.4, v3.1.9
+- **Introduced in**: v3.2.4, v3.1.10
 
 #### min_compaction_failure_interval_sec
 
@@ -458,7 +458,7 @@ BE dynamic parameters are as follows.
 #### lake_pk_compaction_max_input_rowsets
 
 - **Default:** 1000
-- **Description:** The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster. Since v3.2.4 and v3.1.9, the default value of this parameter is changed from `5` to `1000`.
+- **Description:** The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster. Since v3.2.4 and v3.1.10, the default value of this parameter is changed from `5` to `1000`.
 - **Introduced in:** v3.1.8, v3.2.3
 
 #### compact_threads
