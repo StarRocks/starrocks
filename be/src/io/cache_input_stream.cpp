@@ -168,13 +168,25 @@ Status CacheInputStream::_read_blocks_from_remote(const int64_t offset, const in
     for (int64_t read_offset_cursor = block_start_offset; read_offset_cursor < block_end_offset;) {
         // Everytime read at most one buffer size
         const int64_t read_size = std::min(_buffer_size, block_end_offset - read_offset_cursor);
-        RETURN_IF_ERROR(_sb_stream->read_at_fully(read_offset_cursor, _buffer.data(), read_size));
+        char* src = nullptr;
+
+        // check [read_offset_cursor, read_size) is already in SharedBuffer
+        // If existed, we can use zero copy to avoid copy data from SharedBuffer to _buffer
+        auto ret = _sb_stream->find_shared_buffer(read_offset_cursor, read_size);
+        if (ret.ok()) {
+            const uint8_t* buffer = nullptr;
+            RETURN_IF_ERROR(_sb_stream->get_bytes(&buffer, read_offset_cursor, read_size));
+            src = (char*)buffer;
+        } else {
+            RETURN_IF_ERROR(_sb_stream->read_at_fully(read_offset_cursor, _buffer.data(), read_size));
+            src = _buffer.data();
+        }
 
         // write _buffer's data into `out`
         const int64_t shift = out_offset_cursor - read_offset_cursor;
         const int64_t out_size = std::min(read_size - shift, out_remain_size);
         if (out_size > 0) {
-            strings::memcpy_inlined(out_pointer_cursor, _buffer.data() + shift, out_size);
+            strings::memcpy_inlined(out_pointer_cursor, src + shift, out_size);
 
             // cursor for `out`
             out_offset_cursor += out_size;
@@ -183,7 +195,7 @@ Status CacheInputStream::_read_blocks_from_remote(const int64_t offset, const in
         }
 
         if (_enable_populate_cache) {
-            RETURN_IF_ERROR(_populate_to_cache(read_offset_cursor, read_size, _buffer.data()));
+            RETURN_IF_ERROR(_populate_to_cache(read_offset_cursor, read_size, src));
         }
 
         read_offset_cursor += read_size;
@@ -268,13 +280,14 @@ Status CacheInputStream::read_at_fully(int64_t offset, void* out, int64_t count)
     if (count < 0) {
         return Status::EndOfFile("");
     }
-    const int64_t _block_size = _cache->block_size();
+    const int64_t end_offset = offset + count;
+
     char* p = static_cast<char*>(out);
     char* pe = p + count;
 
-    int64_t end_offset = offset + count;
-    int64_t start_block_id = offset / _block_size;
-    int64_t end_block_id = (end_offset - 1) / _block_size;
+    const int64_t _block_size = _cache->block_size();
+    const int64_t start_block_id = offset / _block_size;
+    const int64_t end_block_id = (end_offset - 1) / _block_size;
 
     std::vector<ReadFromRemoteIORange> need_read_from_remote{};
 
@@ -282,6 +295,7 @@ Status CacheInputStream::read_at_fully(int64_t offset, void* out, int64_t count)
     // For example [block1] [block2] [block3] [block4]
     // If [block1] not existed in cache, we will not check [block2] is existed in cache, just go to check [block3],
     // then [block1] and [block2] will from remote directly.
+    // The reason for this is to reduce iops
     int64_t _remain_ignore_block_nums = 0;
     for (int64_t i = start_block_id; i <= end_block_id; i++) {
         size_t off = std::max(offset, i * _block_size);
@@ -298,7 +312,7 @@ Status CacheInputStream::read_at_fully(int64_t offset, void* out, int64_t count)
             st = _read_block_from_local(off, size, p);
         }
         if (st.is_not_found()) {
-            // Not found block from local
+            // Not found block from local, we need to load it from remote
             need_read_from_remote.emplace_back(off, p, size);
             if (_remain_ignore_block_nums == 0) {
                 _remain_ignore_block_nums = _ignore_block_nums;
