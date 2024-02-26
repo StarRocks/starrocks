@@ -267,7 +267,8 @@ StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const Schema& schema, const Se
 
     class SegmentZoneMapChunkPredicateVisitor final : public ChunkPredicateVisitor2 {
     public:
-        explicit SegmentZoneMapChunkPredicateVisitor(Segment* parent) : parent(parent) {}
+        explicit SegmentZoneMapChunkPredicateVisitor(Segment* parent, const SegmentReadOptions& read_options)
+                : parent(parent), read_options(read_options) {}
         ~SegmentZoneMapChunkPredicateVisitor() override = default;
 
         Status visit_column_pred(ColumnChunkPredicate* pred) override {
@@ -309,10 +310,11 @@ StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const Schema& schema, const Se
         }
 
         Segment* parent;
+        const SegmentReadOptions& read_options;
         bool pruned = false;
     };
 
-    SegmentZoneMapChunkPredicateVisitor prune_segment_visitor(this);
+    SegmentZoneMapChunkPredicateVisitor prune_segment_visitor(this, read_options);
     RETURN_IF_ERROR(read_options.chunk_pred->accept(prune_segment_visitor));
     if (prune_segment_visitor.pruned) {
         if (read_options.is_first_split_of_segment) {
