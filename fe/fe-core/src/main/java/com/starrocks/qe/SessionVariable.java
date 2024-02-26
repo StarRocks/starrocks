@@ -444,6 +444,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         FOLLOWER,   // proxy queries to follower no matter the follower's replay progress
         LEADER      // proxy queries to leader no matter the follower's replay progress
     }
+
     public static final String FOLLOWER_QUERY_FORWARD_MODE = "follower_query_forward_mode";
 
     public static final String ENABLE_ARRAY_DISTINCT_AFTER_AGG_OPT = "enable_array_distinct_after_agg_opt";
@@ -504,7 +505,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_REORDER_THRESHOLD_USE_EXHAUSTIVE = "cbo_reorder_threshold_use_exhaustive";
     public static final String ENABLE_REWRITE_SUM_BY_ASSOCIATIVE_RULE = "enable_rewrite_sum_by_associative_rule";
     public static final String ENABLE_REWRITE_SIMPLE_AGG_TO_META_SCAN = "enable_rewrite_simple_agg_to_meta_scan";
-
+    public static final String ENABLE_REWRITE_SIMPLE_AGG_TO_HDFS_SCAN = "enable_rewrite_simple_agg_to_hdfs_scan";
     public static final String ENABLE_PRUNE_COMPLEX_TYPES = "enable_prune_complex_types";
 
     public static final String ENABLE_SUBFIELD_NO_COPY = "enable_subfield_no_copy";
@@ -1179,6 +1180,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_REWRITE_SIMPLE_AGG_TO_META_SCAN)
     private boolean enableRewriteSimpleAggToMetaScan = false;
+
+    @VarAttr(name = ENABLE_REWRITE_SIMPLE_AGG_TO_HDFS_SCAN)
+    private boolean enableRewriteSimpleAggToHdfsScan = false;
 
     // support auto|row|column
     @VariableMgr.VarAttr(name = PARTIAL_UPDATE_MODE)
@@ -2502,6 +2506,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setInterpolatePassthrough(boolean value) {
         this.interpolatePassthrough = value;
     }
+
     public boolean isHashJoinInterpolatePassthrough() {
         return hashJoinInterpolatePassthrough;
     }
@@ -2743,6 +2748,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.enableRewriteSimpleAggToMetaScan;
     }
 
+    public void setEnableRewriteSimpleAggToHdfsScan(boolean v) {
+        this.enableRewriteSimpleAggToHdfsScan = v;
+    }
+    public boolean isEnableRewriteSimpleAggToHdfsScan() {
+        return this.enableRewriteSimpleAggToHdfsScan;
+    }
+
     public boolean getEnablePruneComplexTypes() {
         return this.enablePruneComplexTypes;
     }
@@ -2911,7 +2923,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public boolean getEnableArrayDistinctAfterAggOpt() {
-        return  enableArrayDistinctAfterAggOpt;
+        return enableArrayDistinctAfterAggOpt;
     }
 
     public int getSkewJoinRandRange() {

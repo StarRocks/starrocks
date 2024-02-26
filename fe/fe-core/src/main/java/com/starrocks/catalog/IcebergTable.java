@@ -189,6 +189,15 @@ public class IcebergTable extends Table {
         return partitionColumns;
     }
 
+    public boolean isAllPartitionColumnsIdentity() {
+        for (PartitionField field : getNativeTable().spec().fields()) {
+            if (!field.transform().isIdentity()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     public long nextPartitionId() {
         return partitionIdGen.getAndIncrement();
     }

@@ -35,10 +35,10 @@ PARALLEL_TEST(SharedBufferedInputStreamTest, test_release) {
     sb_stream->set_coalesce_options(opts);
 
     // 150k -> 520k
-    auto r_active = io::SharedBufferedInputStream::IORange{.offset = 150 * 1024, .size = 370 * 1024};
+    auto r_active = io::SharedBufferedInputStream::IORange(150 * 1024, 370 * 1024);
     ranges.push_back(r_active);
     // 550k -> 650k
-    auto r_lazy = io::SharedBufferedInputStream::IORange{.offset = 550 * 1024, .size = 100 * 1024};
+    auto r_lazy = io::SharedBufferedInputStream::IORange(550 * 1024, 100 * 1024);
     ranges.push_back(r_lazy);
     auto st = sb_stream->set_io_ranges(ranges);
     ASSERT_OK(st);

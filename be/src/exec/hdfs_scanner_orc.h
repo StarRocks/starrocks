@@ -37,6 +37,9 @@ public:
     void disable_use_orc_sargs() { _use_orc_sargs = false; }
 
 private:
+    Status _do_get_next(ChunkPtr* chunk);
+    Status _do_get_next_count(ChunkPtr* chunk);
+
     // it means if we can skip this file without reading.
     // Normally it happens when we peek file column statistics,
     // and if we are sure there is no row matches, we can skip this file.

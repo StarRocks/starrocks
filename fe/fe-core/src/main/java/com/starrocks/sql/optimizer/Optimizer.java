@@ -54,6 +54,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownTopNBelowUnionRul
 import com.starrocks.sql.optimizer.rule.transformation.PushLimitAndFilterToCTEProduceRule;
 import com.starrocks.sql.optimizer.rule.transformation.RemoveAggregationFromAggTable;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
+import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToHDFSScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.SeparateProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.SkewJoinOptimizeRule;
@@ -425,6 +426,8 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteIterative(tree, rootTaskContext, new RewriteSimpleAggToMetaScanRule());
+        ruleRewriteIterative(tree, rootTaskContext, RewriteSimpleAggToHDFSScanRule.HIVE_SCAN);
+        ruleRewriteIterative(tree, rootTaskContext, RewriteSimpleAggToHDFSScanRule.ICEBERG_SCAN);
         ruleRewriteOnlyOnce(tree, rootTaskContext, new MinMaxCountOptOnScanRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PartitionColumnValueOnlyOnScanRule());
 

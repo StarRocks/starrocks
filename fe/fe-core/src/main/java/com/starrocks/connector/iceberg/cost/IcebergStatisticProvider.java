@@ -223,6 +223,13 @@ public class IcebergStatisticProvider {
             columnStatistics.put(columnList.get(0), generateColumnStatistic(
                     idColumn.getKey(), colRefToColumnMetaMap.get(columnList.get(0)), icebergFileStats, columnNdvs));
         }
+
+        for (ColumnRefOperator c : colRefToColumnMetaMap.keySet()) {
+            if (!columnStatistics.containsKey(c)) {
+                columnStatistics.put(c, ColumnStatistic.unknown());
+            }
+        }
+
         return columnStatistics;
     }
 
