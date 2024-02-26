@@ -49,7 +49,7 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
     public static final RewriteSimpleAggToHDFSScanRule ICEBERG_SCAN =
             new RewriteSimpleAggToHDFSScanRule(OperatorType.LOGICAL_ICEBERG_SCAN);
 
-    public RewriteSimpleAggToHDFSScanRule(OperatorType logicalOperatorType) {
+    private RewriteSimpleAggToHDFSScanRule(OperatorType logicalOperatorType) {
         super(RuleType.TF_REWRITE_SIMPLE_AGG, Pattern.create(OperatorType.LOGICAL_AGGR)
                 .addChildren(Pattern.create(OperatorType.LOGICAL_PROJECT, logicalOperatorType)));
     }

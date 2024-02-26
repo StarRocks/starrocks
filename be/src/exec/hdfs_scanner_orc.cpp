@@ -395,10 +395,6 @@ Status HdfsOrcScanner::resolve_columns(orc::Reader* reader) {
         return Status::OK();
     }
 
-    // for (const auto& s : known_column_names) {
-    //     VLOG_OPERATOR << "[xxx] known column name: " << s;
-    // }
-
     int src_slot_index = 0;
     for (const auto& column : _scanner_ctx.materialized_columns) {
         auto col_name = OrcChunkReader::format_column_name(column.name(), _scanner_ctx.case_sensitive);
