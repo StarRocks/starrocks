@@ -63,8 +63,6 @@ Manages clusters, including FEs, BEs, compute nodes (CN), brokers, resource grou
 
 ### Nodes and processes
 
-- [ADMIN SET CONFIG](./Administration/ADMIN_SET_CONFIG.md)
-- [ADMIN SHOW CONFIG](./Administration/ADMIN_SHOW_CONFIG.md)
 - [ALTER SYSTEM](./Administration/ALTER_SYSTEM.md)
 - [CANCEL DECOMMISSION](./Administration/CANCEL_DECOMMISSION.md)
 - [KILL](./Administration/KILL.md)
@@ -101,7 +99,6 @@ Manages clusters, including FEs, BEs, compute nodes (CN), brokers, resource grou
 - [ADMIN SET REPLICA STATUS](./Administration/ADMIN_SET_REPLICA_STATUS.md)
 - [ADMIN SHOW REPLICA DISTRIBUTION](./Administration/ADMIN_SHOW_REPLICA_DISTRIBUTION.md)
 - [ADMIN SHOW REPLICA STATUS](./Administration/ADMIN_SHOW_REPLICA_STATUS.md)
-- [RECOVER](./data-definition/RECOVER.md)
 - [SHOW TABLE STATUS](./Administration/SHOW_TABLE_STATUS.md)
 
 ### System configurations, variables, and files
