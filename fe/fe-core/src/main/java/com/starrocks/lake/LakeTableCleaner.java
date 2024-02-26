@@ -98,6 +98,7 @@ class LakeTableCleaner {
     private boolean removePartitionDirectory(String path, Tablet tablet) {
         DropTableRequest request = new DropTableRequest();
         request.tabletId = tablet.getId();
+        request.path = path;
         ComputeNode node = Utils.chooseNode((LakeTablet) tablet);
         if (node == null) {
             LOG.warn("Fail to remove {}: no alive node", path);
@@ -114,7 +115,7 @@ class LakeTableCleaner {
             LOG.info("Removed {} at node {}", path, node.getHost());
             return true;
         } catch (Exception e) {
-            LOG.warn("Fail to execute removal of {} on node {}: {}", path, node.getHost(), e.getMessage());
+            LOG.warn("Fail to remove {} on node {}: {}", path, node.getHost(), e.getMessage());
             return false;
         }
     }

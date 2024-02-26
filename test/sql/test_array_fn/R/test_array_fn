@@ -4548,11 +4548,11 @@ select array_contains_seq([json_keys('{"a":1,"b":2}')], [json_keys('{"a":1,"b":2
 -- result:
 1
 -- !result
-select array_contains_seq([map([1,2,5],[2,4,5])], [map([1,2,5],[2,4,5])]);
+select array_contains_seq([map(1,[2,4,5])], [map(1,[2,4,5])]);
 -- result:
 1
 -- !result
-select array_contains_seq([map([1,2,5],[2,4,5])], [map([1,2],[2,4])]);
+select array_contains_seq([map(1,[2,4,5])], [map(2,[2,4])]);
 -- result:
 0
 -- !result
