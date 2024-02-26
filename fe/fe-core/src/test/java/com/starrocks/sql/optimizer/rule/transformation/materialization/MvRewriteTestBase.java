@@ -88,6 +88,7 @@ public class MvRewriteTestBase {
 
         // set default config for async mvs
         UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
+        temp.create();
         ConnectorPlanTestBase.mockAllCatalogs(connectContext, temp.newFolder().toURI().toString());
     }
 
