@@ -423,19 +423,16 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         return Status::EndOfFile("");
     }
 
-    size_t rows_read = 0;
-
     if (_scanner_ctx.return_count_column) {
-        ASSIGN_OR_RETURN(rows_read, _do_get_next_count(chunk));
+        RETURN_IF_ERROR(_do_get_next_count(chunk));
     } else {
-        ASSIGN_OR_RETURN(rows_read, _do_get_next(chunk));
+        RETURN_IF_ERROR(_do_get_next(chunk));
     }
 
-    DCHECK_EQ(rows_read, chunk->get()->num_rows());
     return Status::OK();
 }
 
-StatusOr<size_t> HdfsOrcScanner::_do_get_next_count(ChunkPtr* chunk) {
+Status HdfsOrcScanner::_do_get_next_count(ChunkPtr* chunk) {
     size_t read_num_values = 0;
     Status st = Status::OK();
     while (true) {
@@ -457,10 +454,10 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next_count(ChunkPtr* chunk) {
     if (read_num_values == 0) return Status::EndOfFile("No more rows to read");
     _scanner_ctx.append_or_update_count_column_to_chunk(chunk, read_num_values);
     _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, 1);
-    return 1;
+    return Status::OK();
 }
 
-StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
+Status HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
     ChunkPtr& ck = *chunk;
     // this infinite for loop is for retry.
     for (;;) {
