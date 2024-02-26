@@ -468,7 +468,7 @@ public class TaskManagerTest {
     }
 
     @Test
-    public void testGetInitialDelayTime() throws Exception {
+    public void testGetInitialDelayTime1() throws Exception {
         Assert.assertEquals(50, TaskManager.getInitialDelayTime(60, parseLocalDateTime("2023-04-18 19:08:50"),
                 parseLocalDateTime("2023-04-18 20:00:00")));
         Assert.assertEquals(30, TaskManager.getInitialDelayTime(60, parseLocalDateTime("2023-04-18 19:08:30"),
@@ -477,6 +477,14 @@ public class TaskManagerTest {
                 parseLocalDateTime("2023-04-18 20:00:10")));
         Assert.assertEquals(0, TaskManager.getInitialDelayTime(20, parseLocalDateTime("2023-04-18 19:08:30"),
                 parseLocalDateTime("2023-04-18 21:00:10")));
+    }
+
+    @Test
+    public void testGetInitialDelayTime2() throws Exception {
+        Assert.assertEquals(23, TaskManager.getInitialDelayTime(60, parseLocalDateTime("2023-12-29 19:50:00"),
+                LocalDateTime.parse("2024-01-30T15:27:37.342356010")));
+        Assert.assertEquals(50, TaskManager.getInitialDelayTime(60, parseLocalDateTime("2023-12-29 19:50:00"),
+                LocalDateTime.parse("2024-01-30T15:27:10.342356010")));
     }
 
     private static ExecuteOption makeExecuteOption(boolean isMergeRedundant, boolean isSync) {
