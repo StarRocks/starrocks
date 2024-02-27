@@ -1042,6 +1042,10 @@ public class MaterializedViewHandler extends AlterHandler {
 
     @Override
     public void cancel(CancelStmt stmt) throws DdlException {
+        cancel(stmt, "user cancelled");
+    }
+
+    public void cancel(CancelStmt stmt, String reason) throws DdlException {
         CancelAlterTableStmt cancelAlterTableStmt = (CancelAlterTableStmt) stmt;
 
         String dbName = cancelAlterTableStmt.getDbName();
@@ -1092,7 +1096,7 @@ public class MaterializedViewHandler extends AlterHandler {
 
         // alter job v2's cancel must be called outside the database lock
         for (AlterJobV2 alterJobV2 : rollupJobV2List) {
-            alterJobV2.cancel("user cancelled");
+            alterJobV2.cancel(reason);
             if (alterJobV2.isDone()) {
                 onJobDone(alterJobV2);
             }
