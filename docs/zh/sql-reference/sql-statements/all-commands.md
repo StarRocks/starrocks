@@ -20,6 +20,7 @@ displayed_sidebar: "Chinese"
   - [导入，导出](#导入导出)
     - [Routine load](#routine-load)
     - [其他导入](#其他导入)
+    - [Pipe](#pipe)
     - [导出](#导出)
     - [ETL 任务](#etl-任务)
   - [数据目录 (Catalog)，数据库，资源](#数据目录-catalog数据库资源)
@@ -144,18 +145,21 @@ displayed_sidebar: "Chinese"
 ### 其他导入
 
 - [ALTER LOAD](./data-manipulation/ALTER_LOAD.md)
-- [ALTER PIPE](./data-manipulation/ALTER_PIPE.md)
 - [BROKER LOAD](./data-manipulation/BROKER_LOAD.md)
 - [CANCEL LOAD](./data-manipulation/CANCEL_LOAD.md)
-- [CREATE PIPE](./data-manipulation/CREATE_PIPE.md)
-- [DROP PIPE](./data-manipulation/DROP_PIPE.md)
 - [INSERT](./data-manipulation/INSERT.md)
-- [RETRY FILE](./data-manipulation/RETRY_FILE.md)
 - [SHOW LOAD](./data-manipulation/SHOW_LOAD.md)
-- [SHOW PIPES](./data-manipulation/SHOW_PIPES.md)
 - [SHOW TRANSACTION](./data-manipulation/SHOW_TRANSACTION.md)
 - [SPARK LOAD](./data-manipulation/SPARK_LOAD.md)
 - [STREAM LOAD](./data-manipulation/STREAM_LOAD.md)
+
+### Pipe
+
+- [ALTER PIPE](./data-manipulation/ALTER_PIPE.md)
+- [CREATE PIPE](./data-manipulation/CREATE_PIPE.md)
+- [DROP PIPE](./data-manipulation/DROP_PIPE.md)
+- [RETRY FILE](./data-manipulation/RETRY_FILE.md)
+- [SHOW PIPES](./data-manipulation/SHOW_PIPES.md)
 - [SUSPEND or RESUME PIPE](./data-manipulation/SUSPEND_or_RESUME_PIPE.md)
 
 ### 导出
@@ -244,7 +248,7 @@ displayed_sidebar: "Chinese"
 
 - [CREATE FUNCTION](./data-definition/CREATE_FUNCTION.md)
 - [DROP FUNCTION](./data-definition/DROP_FUNCTION.md)
-- [SHOW FUNCTION](./data-definition/SHOW_FUNCTIONS.md)
+- [SHOW FUNCTIONS](./data-definition/SHOW_FUNCTIONS.md)
 
 ## CBO 统计信息
 
