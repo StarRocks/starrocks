@@ -24,9 +24,9 @@ Status JitRewriterConcurrent::rewrite(std::vector<ExprContext*>& expr_ctxs, Obje
     if (!enable_jit) {
         return Status::OK();
     }
-    int id;
-    while ((id = _id++) < expr_ctxs.size()) {
-        auto st = expr_ctxs[id]->rewrite_jit_expr(pool);
+    _barrier.arrive();
+    for (int i = _id.fetch_add(1); i < expr_ctxs.size(); i = _id.fetch_add(1)) {
+        auto st = expr_ctxs[i]->rewrite_jit_expr(pool);
         if (!st.ok()) {
             _errors++;
         }

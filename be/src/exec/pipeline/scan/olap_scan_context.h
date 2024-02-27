@@ -44,22 +44,26 @@ using OlapScanContextFactoryPtr = std::shared_ptr<OlapScanContextFactory>;
 
 class JitRewriterConcurrent {
 public:
-    JitRewriterConcurrent(int32_t dop) : _dop(dop), _id(0), _barrier(dop), _errors(0) {}
+    JitRewriterConcurrent(int32_t dop) : _dop(dop), _barrier(), _errors(0), _id(0) {}
     Status rewrite(std::vector<ExprContext*>& expr_ctxs, ObjectPool* pool, bool enable_jit);
 
 private:
     // TODO: use c++20 barrier after upgrading gcc
     class Barrier {
     public:
-        explicit Barrier(std::size_t count) : _count(count), _current(0) {}
+        explicit Barrier() : _count(0), _current(0) {}
+
+        void arrive() {
+            std::unique_lock<std::mutex> lock(_mutex);
+            ++_count;
+        }
 
         void wait() {
             std::unique_lock<std::mutex> lock(_mutex);
-            if (++_current == _count) {
-                _current = 0;
+            if (++_current >= _count) {
                 _cv.notify_all();
             } else {
-                _cv.wait(lock, [this] { return _current == 0; });
+                _cv.wait(lock, [this] { return _current >= _count; });
             }
         }
 
@@ -70,9 +74,9 @@ private:
         std::condition_variable _cv;
     };
     const int32_t _dop;
-    std::atomic_int _id = 0;
     Barrier _barrier;
     std::atomic_int _errors;
+    std::atomic_int _id = 0;
 };
 
 class OlapScanContext final : public ContextWithDependency {
