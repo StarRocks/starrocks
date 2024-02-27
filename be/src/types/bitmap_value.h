@@ -68,12 +68,7 @@ class BitmapValue {
 public:
     friend class BitmapValueIter;
 
-    enum BitmapDataType {
-        EMPTY = 0,
-        SINGLE = 1,
-        BITMAP = 2,
-        SET = 3
-    };
+    enum BitmapDataType { EMPTY = 0, SINGLE = 1, BITMAP = 2, SET = 3 };
 
     // Construct an empty bitmap.
     BitmapValue() = default;
