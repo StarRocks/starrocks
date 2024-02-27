@@ -38,11 +38,11 @@ public abstract class RecyclePartitionInfo implements Writable {
     @SerializedName(value = "recoverable")
     protected boolean recoverable;
 
-    protected RecyclePartitionInfo() {
+    public RecyclePartitionInfo() {
         recoverable = true;
     }
 
-    protected RecyclePartitionInfo(long dbId, long tableId, Partition partition,
+    public RecyclePartitionInfo(long dbId, long tableId, Partition partition,
                                    DataProperty dataProperty, short replicationNum,
                                    boolean isInMemory) {
         this.dbId = dbId;
