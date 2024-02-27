@@ -71,7 +71,6 @@ import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.stream.Collectors;
 
 public class AuthorizationMgr {
     private static final Logger LOG = LogManager.getLogger(AuthorizationMgr.class);
@@ -164,11 +163,21 @@ public class AuthorizationMgr {
             // 2. builtin db_admin role
             rolePrivilegeCollection = initBuiltinRoleUnlocked(PrivilegeBuiltinConstants.DB_ADMIN_ROLE_ID,
                     PrivilegeBuiltinConstants.DB_ADMIN_ROLE_NAME, "built-in database administration role");
-            // ALL system but GRANT AND NODE
-            List<PrivilegeType> actionWithoutNodeGrant = provider.getAvailablePrivType(ObjectType.SYSTEM).stream().filter(
-                    x -> !x.equals(PrivilegeType.GRANT) && !x.equals(PrivilegeType.NODE)).collect(Collectors.toList());
-            initPrivilegeCollections(rolePrivilegeCollection, ObjectType.SYSTEM, actionWithoutNodeGrant, null,
-                    false);
+            // System grant belong to db_admin
+            List<PrivilegeType> dbAdminSystemGrant = Lists.newArrayList(
+                    PrivilegeType.CREATE_RESOURCE,
+                    PrivilegeType.PLUGIN,
+                    PrivilegeType.FILE,
+                    PrivilegeType.BLACKLIST,
+                    PrivilegeType.OPERATE,
+                    PrivilegeType.CREATE_EXTERNAL_CATALOG,
+                    PrivilegeType.REPOSITORY,
+                    PrivilegeType.CREATE_RESOURCE_GROUP,
+                    PrivilegeType.CREATE_GLOBAL_FUNCTION,
+                    PrivilegeType.CREATE_STORAGE_VOLUME,
+                    PrivilegeTypeEPack.SECURITY);
+            initPrivilegeCollections(rolePrivilegeCollection, ObjectType.SYSTEM, dbAdminSystemGrant, null, false);
+
             for (ObjectType t : Arrays.asList(
                     ObjectType.CATALOG,
                     ObjectType.DATABASE,
