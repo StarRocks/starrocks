@@ -1563,59 +1563,120 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    public void dropPartition(Database db, Table table, DropPartitionClause clause) throws DdlException {
+    public void dropPartition(Database db, Table table, DropPartitionClause clause) throws DdlException, AnalysisException {
         CatalogUtils.checkTableExist(db, table.getName());
         OlapTable olapTable = (OlapTable) table;
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        Map<String, String> tableProperties = olapTable.getTableProperty().getProperties();
         Locker locker = new Locker();
         Preconditions.checkArgument(locker.isWriteLockHeldByCurrentThread(db));
 
-        String partitionName = clause.getPartitionName();
-        boolean isTempPartition = clause.isTempPartition();
 
         if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
             throw InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName());
         }
-
-        if (!olapTable.checkPartitionNameExist(partitionName, isTempPartition)) {
-            if (clause.isSetIfExists()) {
-                LOG.info("drop partition[{}] which does not exist", partitionName);
-                return;
-            } else {
-                ErrorReport.reportDdlException(ErrorCode.ERR_DROP_PARTITION_NON_EXISTENT, partitionName);
-            }
-        }
-
-        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         if (!partitionInfo.isRangePartition() && partitionInfo.getType() != PartitionType.LIST) {
             throw new DdlException("Alter table [" + olapTable.getName() + "] failed. Not a partitioned table");
         }
+        List<String> partitionNames = new ArrayList<>();
+        boolean isTempPartition = clause.isTempPartition();
 
-        // drop
-        if (isTempPartition) {
-            olapTable.dropTempPartition(partitionName, true);
-        } else {
-            Partition partition = olapTable.getPartition(partitionName);
-            if (!clause.isForceDrop()) {
-                if (partition != null) {
-                    if (stateMgr.getGlobalTransactionMgr()
-                            .existCommittedTxns(db.getId(), olapTable.getId(), partition.getId())) {
-                        throw new DdlException(
-                                "There are still some transactions in the COMMITTED state waiting to be completed." +
-                                        " The partition [" + partitionName +
-                                        "] cannot be dropped. If you want to forcibly drop(cannot be recovered)," +
-                                        " please use \"DROP PARTITION <partition> FORCE\".");
+        if (clause.hasMultiPartitions()) {
+            PartitionDesc partitionDesc = clause.getPartitionDesc();
+            if (partitionDesc instanceof MultiRangePartitionDesc) {
+
+                if (!(partitionInfo instanceof RangePartitionInfo)) {
+                    throw new DdlException("Batch creation of partitions only support range partition tables.");
+                }
+                RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+
+                List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+                if (partitionColumns.size() != 1) {
+                    throw new DdlException("Alter batch build partition only support single range column.");
+                }
+
+                Column firstPartitionColumn = partitionColumns.get(0);
+                MultiRangePartitionDesc multiRangePartitionDesc = (MultiRangePartitionDesc) partitionDesc;
+                boolean isAutoPartitionTable = false;
+                if (partitionInfo.getType() == PartitionType.EXPR_RANGE) {
+                    isAutoPartitionTable = true;
+                    ExpressionRangePartitionInfo exprRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+                    Expr expr = exprRangePartitionInfo.getPartitionExprs().get(0);
+                    if (expr instanceof FunctionCallExpr) {
+                        FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
+                        checkAutoPartitionTableLimit(functionCallExpr, multiRangePartitionDesc);
                     }
                 }
+                Map<String, String> properties = clause.getProperties();
+                if (properties == null) {
+                    properties = Maps.newHashMap();
+                }
+                if (tableProperties != null && tableProperties.containsKey(DynamicPartitionProperty.START_DAY_OF_WEEK)) {
+                    properties.put(DynamicPartitionProperty.START_DAY_OF_WEEK,
+                            tableProperties.get(DynamicPartitionProperty.START_DAY_OF_WEEK));
+                }
+                PartitionConvertContext context = new PartitionConvertContext();
+                context.setAutoPartitionTable(isAutoPartitionTable);
+                context.setFirstPartitionColumnType(firstPartitionColumn.getType());
+                context.setProperties(properties);
+                context.setTempPartition(clause.isTempPartition());
+                List<SingleRangePartitionDesc> singleRangePartitionDescs = multiRangePartitionDesc.convertToSingle(context);
+                partitionNames.addAll(singleRangePartitionDescs.stream()
+                        .map(SingleRangePartitionDesc::getPartitionName).collect(Collectors.toList()));
             }
-            Range<PartitionKey> partitionRange = null;
-            if (partitionInfo instanceof RangePartitionInfo && partition != null) {
-                partitionRange = ((RangePartitionInfo) partitionInfo).getRange(partition.getId());
+        } else {
+            partitionNames.add(clause.getPartitionName());
+        }
+        List<String> existPartition = Lists.newArrayList();
+        List<String> notExistPartition = Lists.newArrayList();
+
+        for (String partitionName : partitionNames) {
+            if (olapTable.checkPartitionNameExist(partitionName, isTempPartition)) {
+                existPartition.add(partitionName);
+            } else {
+                notExistPartition.add(partitionName);
             }
-            olapTable.dropPartition(db.getId(), partitionName, clause.isForceDrop());
-            if (olapTable instanceof MaterializedView) {
-                MaterializedView mv = (MaterializedView) olapTable;
-                SyncPartitionUtils.dropBaseVersionMeta(mv, partitionName, partitionRange);
+        }
+        if (CollectionUtils.isNotEmpty(notExistPartition)) {
+            if (clause.isSetIfExists()) {
+                LOG.info("drop partition[{}] which does not exist", notExistPartition.toString());
+                if (CollectionUtils.isEmpty(existPartition)) {
+                    return;
+                }
+            } else {
+                ErrorReport.reportDdlException(ErrorCode.ERR_DROP_PARTITION_NON_EXISTENT, notExistPartition.toString());
             }
+        }
+        for (String partitionName : existPartition) {
+            // drop
+            if (isTempPartition) {
+                olapTable.dropTempPartition(partitionName, true);
+            } else {
+                Partition partition = olapTable.getPartition(partitionName);
+                if (!clause.isForceDrop()) {
+                    if (partition != null) {
+                        if (stateMgr.getGlobalTransactionMgr()
+                                .existCommittedTxns(db.getId(), olapTable.getId(), partition.getId())) {
+                            throw new DdlException(
+                                    "There are still some transactions in the COMMITTED state waiting to be completed." +
+                                            " The partition [" + partitionName +
+                                            "] cannot be dropped. If you want to forcibly drop(cannot be recovered)," +
+                                            " please use \"DROP PARTITION <partition> FORCE\".");
+                        }
+                    }
+                }
+                Range<PartitionKey> partitionRange = null;
+                if (partitionInfo instanceof RangePartitionInfo && partition != null) {
+                    partitionRange = ((RangePartitionInfo) partitionInfo).getRange(partition.getId());
+                }
+                olapTable.dropPartition(db.getId(), partitionName, clause.isForceDrop());
+                if (olapTable instanceof MaterializedView) {
+                    MaterializedView mv = (MaterializedView) olapTable;
+                    SyncPartitionUtils.dropBaseVersionMeta(mv, partitionName, partitionRange);
+                }
+            }
+        }
+        if (!isTempPartition) {
             try {
                 for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
                     MaterializedView materializedView = (MaterializedView) db.getTable(mvId.getId());
@@ -1629,13 +1690,10 @@ public class LocalMetastore implements ConnectorMetadata {
                 throw new DdlException("fail to refresh materialized views when dropping partition", e);
             }
         }
-
-        // log
-        DropPartitionInfo info = new DropPartitionInfo(db.getId(), olapTable.getId(), partitionName, isTempPartition,
-                clause.isForceDrop());
+        DropPartitionInfo info = new DropPartitionInfo(db.getId(), olapTable.getId(),
+                isTempPartition, clause.isForceDrop(), partitionNames);
         GlobalStateMgr.getCurrentState().getEditLog().logDropPartition(info);
-
-        LOG.info("succeed in droping partition[{}], is temp : {}, is force : {}", partitionName, isTempPartition,
+        LOG.info("succeed in dropping partition[{}], is temp : {}, is force : {}", partitionNames.toString(), isTempPartition,
                 clause.isForceDrop());
     }
 

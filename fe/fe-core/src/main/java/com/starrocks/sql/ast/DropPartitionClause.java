@@ -27,10 +27,16 @@ public class DropPartitionClause extends AlterTableClause {
     // true if this is to drop a temp partition
     private final boolean isTempPartition;
     private final boolean forceDrop;
+    private final PartitionDesc partitionDesc;
 
     public DropPartitionClause(boolean ifExists, String partitionName, boolean isTempPartition, boolean forceDrop) {
         this(ifExists, partitionName, isTempPartition, forceDrop, NodePosition.ZERO);
     }
+
+    public DropPartitionClause(boolean ifExists, PartitionDesc partitionDesc, boolean isTempPartition, boolean forceDrop) {
+        this(ifExists, partitionDesc, isTempPartition, forceDrop, NodePosition.ZERO);
+    }
+
 
     public DropPartitionClause(boolean ifExists, String partitionName, boolean isTempPartition,
                                boolean forceDrop, NodePosition pos) {
@@ -40,6 +46,18 @@ public class DropPartitionClause extends AlterTableClause {
         this.isTempPartition = isTempPartition;
         this.needTableStable = false;
         this.forceDrop = forceDrop;
+        this.partitionDesc = null;
+    }
+
+    public DropPartitionClause(boolean ifExists, PartitionDesc partitionDesc, boolean isTempPartition,
+                               boolean forceDrop, NodePosition pos) {
+        super(AlterOpType.DROP_PARTITION, pos);
+        this.ifExists = ifExists;
+        this.partitionName = null;
+        this.isTempPartition = isTempPartition;
+        this.needTableStable = false;
+        this.forceDrop = forceDrop;
+        this.partitionDesc = partitionDesc;
     }
 
     public boolean isSetIfExists() {
@@ -63,8 +81,17 @@ public class DropPartitionClause extends AlterTableClause {
         return null;
     }
 
+    public PartitionDesc getPartitionDesc() {
+        return partitionDesc;
+    }
+
+    public boolean hasMultiPartitions() {
+        return partitionDesc != null;
+    }
+
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitDropPartitionClause(this, context);
     }
+
 }

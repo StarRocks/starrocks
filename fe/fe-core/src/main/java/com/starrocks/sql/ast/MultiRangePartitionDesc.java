@@ -77,6 +77,14 @@ public class MultiRangePartitionDesc extends PartitionDesc {
         return timeUnit;
     }
 
+    public String getPartitionBegin() {
+        return partitionBegin;
+    }
+
+    public String getPartitionEnd() {
+        return partitionEnd;
+    }
+
     public List<SingleRangePartitionDesc> convertToSingle(PartitionConvertContext context) throws AnalysisException {
 
         if (this.getStep() <= 0) {

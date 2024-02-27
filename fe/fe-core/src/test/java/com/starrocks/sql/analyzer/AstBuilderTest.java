@@ -20,8 +20,10 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
+import com.starrocks.sql.ast.MultiRangePartitionDesc;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.parser.AstBuilder;
@@ -91,5 +93,67 @@ public class AstBuilderTest {
         List<AlterClause> alterClauses = aStmt.getOps();
         TruncatePartitionClause c = (TruncatePartitionClause) alterClauses.get(0);
         Assert.assertTrue(c.getPartitionNames().getPartitionNames().get(0).equals("p1"));
+    }
+
+    @Test
+    public void testDropTemporaryPartition() throws Exception {
+        String partitionName = "p20220101";
+        boolean isTempPartition = true;
+        String sql = "ALTER TABLE test.haishen_neteye_kafka_out_test DROP  TEMPORARY PARTITION IF EXISTS %s ;";
+        StatementBase statement = SqlParser.parse(String.format(sql, partitionName),
+                connectContext.getSessionVariable().getSqlMode()).get(0);
+        AlterTableStmt aStmt = (AlterTableStmt) statement;
+        List<AlterClause> alterClauses = aStmt.getOps();
+        DropPartitionClause dropPartitionClause = (DropPartitionClause) alterClauses.get(0);
+        Assert.assertTrue(partitionName.equals(dropPartitionClause.getPartitionName()) &&
+                isTempPartition == dropPartitionClause.isTempPartition());
+    }
+
+    @Test
+    public void testDropPartition() throws Exception {
+        String partitionName = "tp20220101";
+        boolean isTempPartition = false;
+        String sql = "ALTER TABLE test.haishen_neteye_kafka_out_test DROP  PARTITION IF EXISTS %s ;";
+        StatementBase statement = SqlParser.parse(String.format(sql, partitionName),
+                connectContext.getSessionVariable().getSqlMode()).get(0);
+        AlterTableStmt aStmt = (AlterTableStmt) statement;
+        List<AlterClause> alterClauses = aStmt.getOps();
+        DropPartitionClause dropPartitionClause = (DropPartitionClause) alterClauses.get(0);
+        Assert.assertTrue(partitionName.equals(dropPartitionClause.getPartitionName()) &&
+                isTempPartition == dropPartitionClause.isTempPartition());
+    }
+
+    @Test
+    public void testBatchDropPartition() throws Exception {
+        String start = "2022-01-01";
+        String end = "2022-01-04";
+        boolean isTempPartition = false;
+        String sql = "ALTER TABLE test.haishen_neteye_kafka_out_test DROP PARTITIONS " +
+                "IF EXISTS START(\"%s\") END(\"%s\") EVERY (INTERVAL 1 DAY);";
+        StatementBase statement = SqlParser.parse(String.format(sql, start, end),
+                connectContext.getSessionVariable().getSqlMode()).get(0);
+        AlterTableStmt aStmt = (AlterTableStmt) statement;
+        List<AlterClause> alterClauses = aStmt.getOps();
+        DropPartitionClause dropPartitionClause = (DropPartitionClause) alterClauses.get(0);
+        MultiRangePartitionDesc partitionDesc = (MultiRangePartitionDesc) dropPartitionClause.getPartitionDesc();
+        Assert.assertTrue(start.equals(partitionDesc.getPartitionBegin()) &&
+                end.equals(partitionDesc.getPartitionEnd()) && isTempPartition == dropPartitionClause.isTempPartition());
+    }
+
+    @Test
+    public void testBatchDropTemporaryPartition() throws Exception {
+        String start = "2022-01-01";
+        String end = "2022-01-04";
+        boolean isTempPartition = true;
+        String sql = "ALTER TABLE test.haishen_neteye_kafka_out_test DROP TEMPORARY PARTITIONS " +
+                "IF EXISTS START(\"%s\") END(\"%s\") EVERY (INTERVAL 1 DAY);";
+        StatementBase statement = SqlParser.parse(String.format(sql, start, end),
+                connectContext.getSessionVariable().getSqlMode()).get(0);
+        AlterTableStmt aStmt = (AlterTableStmt) statement;
+        List<AlterClause> alterClauses = aStmt.getOps();
+        DropPartitionClause dropPartitionClause = (DropPartitionClause) alterClauses.get(0);
+        MultiRangePartitionDesc partitionDesc = (MultiRangePartitionDesc) dropPartitionClause.getPartitionDesc();
+        Assert.assertTrue(start.equals(partitionDesc.getPartitionBegin()) &&
+                end.equals(partitionDesc.getPartitionEnd()) && isTempPartition == dropPartitionClause.isTempPartition());
     }
 }
