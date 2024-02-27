@@ -3451,16 +3451,9 @@ public class LocalMetastore implements ConnectorMetadata {
      */
     public void cancelAlter(CancelAlterTableStmt stmt, String reason) throws DdlException {
         if (stmt.getAlterType() == ShowAlterStmt.AlterType.ROLLUP) {
-<<<<<<< HEAD
-            stateMgr.getRollupHandler().cancel(stmt);
-        } else if (stmt.getAlterType() == ShowAlterStmt.AlterType.COLUMN) {
-            stateMgr.getSchemaChangeHandler().cancel(stmt);
-=======
             stateMgr.getRollupHandler().cancel(stmt, reason);
-        } else if (stmt.getAlterType() == ShowAlterStmt.AlterType.COLUMN
-                || stmt.getAlterType() == ShowAlterStmt.AlterType.OPTIMIZE) {
+        } else if (stmt.getAlterType() == ShowAlterStmt.AlterType.COLUMN) {
             stateMgr.getSchemaChangeHandler().cancel(stmt, reason);
->>>>>>> 28e78c841a ([BugFix] Fix the issue of concurrent conflicts between automatic partition and schema change, prioritize the availability of ingestion as the top priority. (#39810))
         } else if (stmt.getAlterType() == ShowAlterStmt.AlterType.MATERIALIZED_VIEW) {
             stateMgr.getRollupHandler().cancelMV(stmt);
         } else {
