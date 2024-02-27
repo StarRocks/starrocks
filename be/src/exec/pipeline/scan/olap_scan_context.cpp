@@ -20,7 +20,8 @@
 
 namespace starrocks::pipeline {
 
-Status JitRewriterConcurrent::rewrite(std::vector<ExprContext*>& expr_ctxs, ObjectPool* pool, bool enable_jit) {
+// more than one threads concurrently rewrite jit expression trees.
+Status ConcurrentJitRewriter::rewrite(std::vector<ExprContext*>& expr_ctxs, ObjectPool* pool, bool enable_jit) {
     if (!enable_jit) {
         return Status::OK();
     }

@@ -42,9 +42,9 @@ using OlapScanContextPtr = std::shared_ptr<OlapScanContext>;
 class OlapScanContextFactory;
 using OlapScanContextFactoryPtr = std::shared_ptr<OlapScanContextFactory>;
 
-class JitRewriterConcurrent {
+class ConcurrentJitRewriter {
 public:
-    JitRewriterConcurrent(int32_t dop) : _dop(dop), _barrier(), _errors(0), _id(0) {}
+    ConcurrentJitRewriter(int32_t dop) : _dop(dop), _barrier(), _errors(0), _id(0) {}
     Status rewrite(std::vector<ExprContext*>& expr_ctxs, ObjectPool* pool, bool enable_jit);
 
 private:
@@ -82,7 +82,7 @@ private:
 class OlapScanContext final : public ContextWithDependency {
 public:
     explicit OlapScanContext(OlapScanNode* scan_node, int64_t scan_table_id, int32_t dop, bool shared_scan,
-                             BalancedChunkBuffer& chunk_buffer, JitRewriterConcurrent& jit_rewriter)
+                             BalancedChunkBuffer& chunk_buffer, ConcurrentJitRewriter& jit_rewriter)
             : _scan_node(scan_node),
               _scan_table_id(scan_table_id),
               _chunk_buffer(chunk_buffer),
@@ -149,7 +149,7 @@ private:
     // the row sets into _tablet_rowsets in the preparation phase to avoid the row sets being deleted.
     std::vector<TabletSharedPtr> _tablets;
     std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
-    JitRewriterConcurrent& _jit_rewriter;
+    ConcurrentJitRewriter& _jit_rewriter;
 };
 
 // OlapScanContextFactory creates different contexts for each scan operator, if _shared_scan is false.
@@ -180,7 +180,7 @@ private:
 
     int64_t _scan_table_id = -1;
     std::vector<OlapScanContextPtr> _contexts;
-    JitRewriterConcurrent _jit_rewriter;
+    ConcurrentJitRewriter _jit_rewriter;
 };
 
 } // namespace pipeline
