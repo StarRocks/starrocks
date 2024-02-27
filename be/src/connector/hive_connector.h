@@ -110,7 +110,6 @@ private:
     bool _use_file_metacache = false;
     bool _enable_split_tasks = false;
 
-
     // ============ conjuncts =================
     std::vector<ExprContext*> _min_max_conjunct_ctxs;
 
