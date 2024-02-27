@@ -166,13 +166,13 @@ fi
 
 if [ -e /proc/cpuinfo ] ; then
     # detect cpuinfo
-    if [[ -z $(grep -o 'avx[^ ]*' /proc/cpuinfo) ]]; then
+    if [[ -z $(grep -o 'avx[^ ]\+' /proc/cpuinfo) ]]; then
         USE_AVX2=OFF
     fi
     if [[ -z $(grep -o 'avx512' /proc/cpuinfo) ]]; then
         USE_AVX512=OFF
     fi
-    if [[ -z $(grep -o 'sse[^ ]*' /proc/cpuinfo) ]]; then
+    if [[ -z $(grep -o 'sse4[^ ]*' /proc/cpuinfo) ]]; then
         USE_SSE4_2=OFF
     fi
 fi
@@ -272,6 +272,7 @@ echo "Get params:
     ENABLE_SHARED_DATA  -- $USE_STAROS
     USE_AVX2            -- $USE_AVX2
     USE_AVX512          -- $USE_AVX512
+    USE_SSE4_2          -- $USE_SSE4_2
     JEMALLOC_DEBUG      -- $JEMALLOC_DEBUG
     PARALLEL            -- $PARALLEL
     ENABLE_QUERY_DEBUG_TRACE -- $ENABLE_QUERY_DEBUG_TRACE
