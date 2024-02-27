@@ -1369,12 +1369,11 @@ Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& 
 }
 
 [[maybe_unused]] Status PrimaryIndex::try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
-                                                  const vector<uint32_t>& src_rssid, vector<uint32_t>* deletes,
-                                                  IOStat* iostat) {
+                                                  const vector<uint32_t>& src_rssid, vector<uint32_t>* deletes) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
     Status st;
     if (_persistent_index != nullptr) {
-        st = _replace_persistent_index(rssid, rowid_start, pks, src_rssid, deletes, iostat);
+        st = _replace_persistent_index(rssid, rowid_start, pks, src_rssid, deletes);
     } else {
         _pkey_to_rssid_rowid->try_replace(rssid, rowid_start, pks, src_rssid, 0, pks.size(), deletes);
     }

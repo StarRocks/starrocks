@@ -82,8 +82,7 @@ public:
     //
     // [not thread-safe]
     [[maybe_unused]] Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
-                                        const vector<uint32_t>& src_rssid, vector<uint32_t>* failed,
-                                        IOStat* iostat = nullptr);
+                                        const vector<uint32_t>& src_rssid, vector<uint32_t>* failed);
 
     // used for compaction, try replace input rowsets' rowid with output segment's rowid, if
     // input rowsets' rowid greater than the max src rssid, this indicates that the row of output rowset is
