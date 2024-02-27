@@ -594,8 +594,6 @@
                         "sql-reference/sql-statements./data-manipulation/ALTER_ROUTINE_LOAD_TASK",
                         "sql-reference/sql-statements./data-manipulation/STOP_ROUTINE_LOAD"
                       ]
-                    }
-                    ]
                     },
                     {
                       "type": "category",
@@ -608,26 +606,24 @@
                         "sql-reference/sql-statements./data-manipulation/SHOW_PIPES",
                         "sql-reference/sql-statements./data-manipulation/SUSPEND_or_RESUME_PIPE"
                       ]
-                    }
-                  ]
-                },
-                {
-                  "type": "category",
-                  "label": "Unloading",
-                  "items": [
-                    "sql-reference/sql-statements/data-definition/EXPORT",
-                    "sql-reference/sql-statements/data-definition/CANCEL_EXPORT",
-                    "sql-reference/sql-statements/data-definition/SHOW_EXPORT"
-                  ]
-                },
-                {
-                  "type": "category",
-                  "label": "ETL tasks",
-                  "items": [
-                    "sql-reference/sql-statements/data-definition/DROP_TASK",
-                    "sql-reference/sql-statements/data-definition/SUBMIT_TASK"
-                  ]
-                }
+                    },
+                    {
+                      "type": "category",
+                      "label": "Unloading",
+                      "items": [
+                        "sql-reference/sql-statements/data-definition/EXPORT",
+                        "sql-reference/sql-statements/data-definition/CANCEL_EXPORT",
+                        "sql-reference/sql-statements/data-definition/SHOW_EXPORT"
+                     ]
+                   },
+                   {
+                    "type": "category",
+                    "label": "ETL tasks",
+                    "items": [
+                      "sql-reference/sql-statements/data-definition/DROP_TASK",
+                      "sql-reference/sql-statements/data-definition/SUBMIT_TASK"
+                    ]
+                  }
               ]
             },
             {
@@ -694,7 +690,6 @@
                     "sql-reference/sql-statements/data-manipulation/SHOW_TABLES",
                     "sql-reference/sql-statements/data-manipulation/SHOW_TABLET",
                     "sql-reference/sql-statements/data-manipulation/UPDATE"
-
                 ]
             },
             {
@@ -777,7 +772,6 @@
             }
           ]
         },
-
         {
           "type": "category",
           "label": "SQL Functions",
