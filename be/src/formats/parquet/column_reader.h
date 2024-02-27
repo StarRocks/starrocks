@@ -28,13 +28,6 @@ struct HdfsScanStats;
 } // namespace starrocks
 
 namespace starrocks::parquet {
-struct ColumnReaderContext {
-    Buffer<uint8_t>* filter = nullptr;
-    size_t next_row = 0;
-    size_t rows_to_skip = 0;
-
-    void advance(size_t num_rows) { next_row += num_rows; }
-};
 
 struct ColumnReaderOptions {
     std::string timezone;
@@ -44,7 +37,6 @@ struct ColumnReaderOptions {
     RandomAccessFile* file = nullptr;
     const tparquet::RowGroup* row_group_meta = nullptr;
     uint64_t first_row_index = 0;
-    ColumnReaderContext* context = nullptr;
 };
 
 class StoredColumnReader;
@@ -88,14 +80,6 @@ public:
                                                   std::vector<const TIcebergSchemaField*>& iceberg_schema_subfield);
 
     virtual ~ColumnReader() = default;
-
-    virtual Status prepare_batch(size_t* num_records, Column* column) = 0;
-    virtual Status finish_batch() = 0;
-
-    Status next_batch(size_t* num_records, Column* column) {
-        RETURN_IF_ERROR(prepare_batch(num_records, column));
-        return finish_batch();
-    }
 
     virtual Status read_range(const Range<uint64_t>& range, const Filter* filter, Column* dst) = 0;
 
