@@ -417,9 +417,7 @@ public:
             }
             auto saved_errno = errno;
             auto r = cb(name);
-            if (UNLIKELY(errno != saved_errno)) {
-                errno = saved_errno;
-            }
+            errno = saved_errno;
             if (!r) {
                 break;
             }
@@ -465,9 +463,7 @@ public:
             de.size = child_stat.st_size;
             auto saved_errno = errno;
             auto r = cb(de);
-            if (UNLIKELY(errno != saved_errno)) {
-                errno = saved_errno;
-            }
+            errno = saved_errno;
             if (!r) {
                 break;
             }
