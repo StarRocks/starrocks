@@ -23,7 +23,6 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/broker_mgr.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -195,12 +194,32 @@ Status ORCScanner::_open_next_orc_reader() {
         const TBrokerRangeDesc& range_desc = _scan_range.ranges[_next_range];
         Status st = create_random_access_file(range_desc, _scan_range.broker_addresses[0], _scan_range.params,
                                               CompressionTypePB::NO_COMPRESSION, &file);
+
+        const std::string file_name = file->filename();
+        std::shared_ptr<io::SeekableInputStream> input_stream = file->stream();
+        ASSIGN_OR_RETURN(uint64_t file_size, file->get_size());
+
+        auto shared_buffered_input_stream = std::make_shared<io::SharedBufferedInputStream>(input_stream, file_name, file_size);
+        const io::SharedBufferedInputStream::CoalesceOptions options = {
+            .max_dist_size = config::io_coalesce_read_max_distance_size,
+            .max_buffer_size = config::io_coalesce_read_max_buffer_size};
+        shared_buffered_input_stream->set_coalesce_options(options);
+
+        // If file size smaller than 8mb, we will load the whole file in one IO request
+        if (file_size < 8 * 1024 * 1024) {
+            std::vector<io::SharedBufferedInputStream::IORange> io_ranges{};
+            io_ranges.emplace_back(0, file_size);
+            RETURN_IF_ERROR(shared_buffered_input_stream->set_io_ranges(io_ranges));
+        }
+
+        file = std::make_shared<RandomAccessFile>(shared_buffered_input_stream, file_name);
+        file->set_size(file_size);
+
         if (!st.ok()) {
             LOG(WARNING) << "Failed to create random-access files. status: " << st.to_string();
             return st;
         }
-        const std::string& file_name = file->filename();
-        ASSIGN_OR_RETURN(uint64_t file_size, file->get_size());
+
         auto inStream = std::make_unique<ORCFileStream>(file, file_size, _counter);
         _next_range++;
         _last_file_size = file_size;
