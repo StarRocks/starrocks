@@ -3824,7 +3824,7 @@ Status PersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_value
 
 [[maybe_unused]] Status PersistentIndex::try_replace(size_t n, const Slice* keys, const IndexValue* values,
                                                      const std::vector<uint32_t>& src_rssid,
-                                                     std::vector<uint32_t>* failed, IOStat* iostat) {
+                                                     std::vector<uint32_t>* failed) {
     std::vector<IndexValue> found_values;
     found_values.resize(n);
     RETURN_IF_ERROR(get(n, keys, found_values.data()));
@@ -3838,7 +3838,7 @@ Status PersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_value
         }
     }
     RETURN_IF_ERROR(_l0->replace(keys, values, replace_idxes));
-    return _flush_advance_or_append_wal(n, keys, values, &replace_idxes, iostat);
+    return _flush_advance_or_append_wal(n, keys, values, &replace_idxes);
 }
 
 Status PersistentIndex::try_replace(size_t n, const Slice* keys, const IndexValue* values, const uint32_t max_src_rssid,

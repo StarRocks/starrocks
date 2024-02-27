@@ -744,10 +744,8 @@ public:
     // |keys|: key array as raw buffer
     // |values|: value array
     // |src_rssid|: rssid array
-    // |failed|: return not match rowid
     [[maybe_unused]] Status try_replace(size_t n, const Slice* keys, const IndexValue* values,
-                                        const std::vector<uint32_t>& src_rssid, std::vector<uint32_t>* failed,
-                                        IOStat* iostat = nullptr);
+                                        const std::vector<uint32_t>& src_rssid, std::vector<uint32_t>* failed);
 
     // batch replace
     // |n|: size of key/value array

@@ -169,8 +169,7 @@ private:
 
     // TODO(qzc): maybe unused, remove it or refactor it with the methods in use by template after a period of time
     [[maybe_unused]] Status _replace_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
-                                                      const vector<uint32_t>& src_rssid, vector<uint32_t>* deletes,
-                                                      IOStat* iostat = nullptr);
+                                                      const vector<uint32_t>& src_rssid, vector<uint32_t>* deletes);
     Status _replace_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
                                      const uint32_t max_src_rssid, vector<uint32_t>* deletes, IOStat* iostat = nullptr);
 
