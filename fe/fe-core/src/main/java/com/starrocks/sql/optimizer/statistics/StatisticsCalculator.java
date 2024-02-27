@@ -130,6 +130,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.stream.LogicalBinlogScanOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
 import com.starrocks.statistic.StatisticUtils;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -560,6 +561,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
      * return new partition column statistics or else null
      */
     private ColumnStatistic adjustPartitionStatistic(Collection<Long> selectedPartitionId, OlapTable olapTable) {
+        if (CollectionUtils.isEmpty(selectedPartitionId)) {
+            return null;
+        }
         int selectedPartitionsSize = selectedPartitionId.size();
         int allNoEmptyPartitionsSize = (int) olapTable.getPartitions().stream().filter(Partition::hasData).count();
         if (selectedPartitionsSize != allNoEmptyPartitionsSize) {
