@@ -860,11 +860,10 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
 
                     long currentBackendReportVersion =
                             GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendReportVersion(backendId);
-                    long pathHash = replica.getPathHash();
-                    if (pathHash == -1L) {
-                        continue;
-                    }
-                    DiskInfo diskInfo = hashToDiskInfo.get(pathHash);
+                    DiskInfo diskInfo = hashToDiskInfo.get(replica.getPathHash());
+
+                    // Only check reportVersion when the disk is online,
+                    // as there will be no tablet changes on an unavailable disk
                     if (diskInfo != null
                             && diskInfo.getState() == DiskInfo.DiskState.ONLINE
                             && backendReportVersion < currentBackendReportVersion) {
