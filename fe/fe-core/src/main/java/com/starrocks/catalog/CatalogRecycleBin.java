@@ -207,17 +207,19 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     public synchronized void recyclePartition(RecyclePartitionInfo recyclePartitionInfo) {
         Preconditions.checkState(!idToPartition.containsKey(recyclePartitionInfo.getPartition().getId()));
 
-        long dbId = recyclePartitionInfo.dbId;
-        long tableId = recyclePartitionInfo.tableId;
-        Partition partition = recyclePartitionInfo.partition;
+        long dbId = recyclePartitionInfo.getDbId();
+        long tableId = recyclePartitionInfo.getTableId();
+        Partition partition = recyclePartitionInfo.getPartition();
         long partitionId = partition.getId();
         String partitionName = partition.getName();
+
         disableRecoverPartitionWithSameName(dbId, tableId, partitionName);
 
         long recycleTime = recyclePartitionInfo.isRecoverable() ? System.currentTimeMillis() : 0;
         idToRecycleTime.put(partitionId, recycleTime);
         idToPartition.put(partitionId, recyclePartitionInfo);
-        LOG.info("Finished put partition '{}' to recycle bin. partitionId: {}", partitionName, partitionName);
+        LOG.info("Finished put partition '{}' to recycle bin. dbId: {} tableId: {} partitionId: {} recoverable: {}",
+                partitionName, dbId, tableId, partitionName, recyclePartitionInfo.isRecoverable());
     }
 
     public synchronized Partition getPartition(long partitionId) {
