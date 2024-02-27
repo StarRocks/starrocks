@@ -179,4 +179,8 @@ Status BlockCache::shutdown() {
     return st;
 }
 
+DataCacheEngineType BlockCache::engine_type() {
+    return _kv_cache->engine_type();
+}
+
 } // namespace starrocks
