@@ -575,4 +575,158 @@ public class IcebergMetadataTest extends TableTestBase {
         List<PartitionInfo> partitions = metadata.getPartitions(icebergTable, Lists.newArrayList());
         Assert.assertEquals(1, partitions.size());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testGetPartitionsWithExpireSnapshot() {
+        mockedNativeTableB.newAppend().appendFile(FILE_B_1).commit();
+        mockedNativeTableB.refresh();
+        mockedNativeTableB.newAppend().appendFile(FILE_B_2).commit();
+        mockedNativeTableB.refresh();
+        mockedNativeTableB.expireSnapshots().expireOlderThan(System.currentTimeMillis()).commit();
+        mockedNativeTableB.refresh();
+
+        Map<String, String> config = new HashMap<>();
+        config.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732");
+        config.put(ICEBERG_CATALOG_TYPE, "hive");
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog("iceberg_catalog", new Configuration(), config);
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(icebergHiveCatalog, 3,
+                Executors.newSingleThreadExecutor());
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, cachingIcebergCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor());
+
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog",
+                "resource_name", "db",
+                "table", Lists.newArrayList(), mockedNativeTableB, Maps.newHashMap());
+
+        List<PartitionInfo> partitions = metadata.getPartitions(icebergTable, ImmutableList.of("k2=2", "k2=3"));
+        Assert.assertEquals(2, partitions.size());
+        Assert.assertTrue(partitions.stream().anyMatch(x -> x.getModifiedTime() == -1));
+    }
+
+    @Test
+    public void testRefreshTableException(@Mocked CachingIcebergCatalog icebergCatalog) {
+        new Expectations() {
+            {
+                icebergCatalog.refreshTable(anyString, anyString, null);
+                result = new StarRocksConnectorException("refresh failed");
+            }
+        };
+
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor());
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
+                "table_name", new ArrayList<>(), mockedNativeTableD, Maps.newHashMap());
+        metadata.refreshTable("db", icebergTable, null, true);
+    }
+
+    @Test
+    public void testAlterTable(@Mocked IcebergHiveCatalog icebergHiveCatalog) throws UserException {
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor());
+
+        TableName tableName = new TableName("db", "tbl");
+        ColumnDef c1 = new ColumnDef("col1", TypeDef.create(PrimitiveType.INT), true);
+        AddColumnClause addColumnClause = new AddColumnClause(c1, null, null, new HashMap<>());
+
+        ColumnDef c2 = new ColumnDef("col2", TypeDef.create(PrimitiveType.BIGINT), true);
+        ColumnDef c3 = new ColumnDef("col3", TypeDef.create(PrimitiveType.VARCHAR), true);
+        List<ColumnDef> cols = new ArrayList<>();
+        cols.add(c2);
+        cols.add(c3);
+        AddColumnsClause addColumnsClause = new AddColumnsClause(cols, null, new HashMap<>());
+
+        List<AlterClause> clauses = Lists.newArrayList();
+        clauses.add(addColumnClause);
+        clauses.add(addColumnsClause);
+        AlterTableStmt stmt = new AlterTableStmt(tableName, clauses);
+        metadata.alterTable(stmt);
+        clauses.clear();
+
+        // must be default null
+        ColumnDef c4 = new ColumnDef("col4", TypeDef.create(PrimitiveType.INT), false);
+        AddColumnClause addC4 = new AddColumnClause(c4, null, null, new HashMap<>());
+        clauses.add(addC4);
+        AlterTableStmt stmtC4 = new AlterTableStmt(tableName, clauses);
+        Assert.assertThrows(DdlException.class, () -> metadata.alterTable(stmtC4));
+        clauses.clear();
+
+        // drop/rename/modify column
+        DropColumnClause dropColumnClause = new DropColumnClause("col1", null, new HashMap<>());
+        ColumnRenameClause columnRenameClause = new ColumnRenameClause("col2", "col22");
+        ColumnDef newCol = new ColumnDef("col1", TypeDef.create(PrimitiveType.BIGINT), true);
+        Map<String, String> properties = new HashMap<>();
+        ModifyColumnClause modifyColumnClause =
+                new ModifyColumnClause(newCol, ColumnPosition.FIRST, null, properties);
+        clauses.add(dropColumnClause);
+        clauses.add(columnRenameClause);
+        clauses.add(modifyColumnClause);
+        metadata.alterTable(new AlterTableStmt(tableName, clauses));
+
+        // rename table
+        clauses.clear();
+        TableRenameClause tableRenameClause = new TableRenameClause("newTbl");
+        clauses.add(tableRenameClause);
+        metadata.alterTable(new AlterTableStmt(tableName, clauses));
+
+        // modify table properties/comment
+        clauses.clear();
+        Map<String, String> newProperties = new HashMap<>();
+        newProperties.put(FILE_FORMAT, "orc");
+        newProperties.put(LOCATION_PROPERTY, "new location");
+        newProperties.put(COMPRESSION_CODEC, "gzip");
+        newProperties.put(TableProperties.ORC_BATCH_SIZE, "10240");
+        ModifyTablePropertiesClause modifyTablePropertiesClause = new ModifyTablePropertiesClause(newProperties);
+        AlterTableCommentClause alterTableCommentClause = new AlterTableCommentClause("new comment", NodePosition.ZERO);
+        clauses.add(modifyTablePropertiesClause);
+        clauses.add(alterTableCommentClause);
+        metadata.alterTable(new AlterTableStmt(tableName, clauses));
+
+        // modify empty properties
+        clauses.clear();
+        Map<String, String> emptyProperties = new HashMap<>();
+        ModifyTablePropertiesClause emptyPropertiesClause = new ModifyTablePropertiesClause(emptyProperties);
+        clauses.add(emptyPropertiesClause);
+        Assert.assertThrows(DdlException.class, () -> metadata.alterTable(new AlterTableStmt(tableName, clauses)));
+
+        // modify unsupported properties
+        clauses.clear();
+        Map<String, String> invalidProperties = new HashMap<>();
+        invalidProperties.put(FILE_FORMAT, "parquet");
+        invalidProperties.put(COMPRESSION_CODEC, "zzz");
+        ModifyTablePropertiesClause invalidCompressionClause = new ModifyTablePropertiesClause(invalidProperties);
+        clauses.add(invalidCompressionClause);
+        Assert.assertThrows(DdlException.class, () -> metadata.alterTable(new AlterTableStmt(tableName, clauses)));
+    }
+
+    @Test
+    public void testGetIcebergMetricsConfig() {
+        List<Column> columns = Lists.newArrayList(new Column("k1", INT),
+                new Column("k2", STRING),
+                new Column("k3", STRING),
+                new Column("k4", STRING),
+                new Column("k5", STRING));
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
+                "table_name", columns, mockedNativeTableH, Maps.newHashMap());
+        Assert.assertEquals(0, IcebergMetadata.getIcebergMetricsConfig(icebergTable).size());
+        Map<String, String> icebergProperties = Maps.newHashMap();
+        icebergProperties.put("write.metadata.metrics.column.k1", "none");
+        icebergProperties.put("write.metadata.metrics.column.k2", "counts");
+        icebergProperties.put("write.metadata.metrics.column.k3", "truncate(16)");
+        icebergProperties.put("write.metadata.metrics.column.k4", "truncate(32)");
+        icebergProperties.put("write.metadata.metrics.column.k5", "full");
+        UpdateProperties updateProperties = mockedNativeTableH.updateProperties();
+        icebergProperties.forEach(updateProperties::set);
+        updateProperties.commit();
+        Map<String, MetricsModes.MetricsMode> actual2 = IcebergMetadata.getIcebergMetricsConfig(icebergTable);
+        Assert.assertEquals(4, actual2.size());
+        Map<String, MetricsModes.MetricsMode> expected2 = Maps.newHashMap();
+        expected2.put("k1", MetricsModes.None.get());
+        expected2.put("k2", MetricsModes.Counts.get());
+        expected2.put("k4", MetricsModes.Truncate.withLength(32));
+        expected2.put("k5", MetricsModes.Full.get());
+        Assert.assertEquals(expected2, actual2);
+    }
+>>>>>>> 52d655f6d3 ([BugFix] fix refresh iceberg mv with expired snapshot (#41515))
 }
