@@ -92,7 +92,7 @@ void PersistentIndexBlockCache::update_memory_usage() {
 
 StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
                                                            int64_t base_version, int64_t new_version,
-                                                           std::unique_ptr<std::lock_guard<std::mutex>>& guard) {
+                                                           std::unique_ptr<std::lock_guard<std::timed_mutex>>& guard) {
     auto index_entry = _index_cache.get_or_create(metadata->id());
     index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     auto& index = index_entry->value();
@@ -357,7 +357,7 @@ Status UpdateManager::_handle_index_op(Tablet* tablet, int64_t base_version, boo
     // release index entry but keep it in cache
     DeferOp release_index_entry([&] { _index_cache.release(index_entry); });
     auto& index = index_entry->value();
-    std::unique_ptr<std::lock_guard<std::mutex>> guard = nullptr;
+    std::unique_ptr<std::lock_guard<std::timed_mutex>> guard = nullptr;
     // Fetch lock guard before check `is_load()`
     if (need_lock) {
         guard = index.try_fetch_guard();
@@ -941,6 +941,52 @@ Status UpdateManager::execute_index_major_compaction(int64_t tablet_id, const Ta
     DeferOp release_index_entry([&] { _index_cache.release(index_entry); });
     auto& index = index_entry->value();
     return index.major_compact(metadata, txn_log);
+}
+
+Status UpdateManager::pk_index_major_compaction(int64_t tablet_id, DataDir* data_dir) {
+    auto index_entry = _index_cache.get(tablet_id);
+    if (index_entry == nullptr) {
+        return Status::OK();
+    }
+    index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
+    auto& index = index_entry->value();
+
+    // release when function end
+    DeferOp index_defer([&]() { _index_cache.release(index_entry); });
+    _index_cache.update_object_size(index_entry, index.memory_usage());
+    RETURN_IF_ERROR(index.major_compaction(data_dir, tablet_id, index.get_index_lock()));
+    index.set_local_pk_index_write_amp_score(0.0);
+    return Status::OK();
+}
+
+std::vector<TabletAndScore> UpdateManager::pick_tablets_to_do_pk_index_major_compaction() {
+    auto tablet_indexes = _index_cache.get_key_entries();
+    std::vector<TabletAndScore> pick_tablets;
+    if (tablet_indexes.empty()) {
+        return pick_tablets;
+    }
+    // 1. pick valid tablet, which score is larger than 0
+    for (auto& tablet_index : tablet_indexes) {
+        auto& index = tablet_index.second->value();
+        double score = index.get_write_amp_score();
+        TEST_SYNC_POINT_CALLBACK("LocalPkIndexManager::pick_tablets_to_do_pk_index_major_compaction:1", &score);
+        if (score <= 0) {
+            // score == 0 means this tablet's pk index doesn't need major compaction
+            _index_cache.release(tablet_index.second);
+            continue;
+        }
+        pick_tablets.emplace_back(tablet_index.first, score);
+    }
+    // 2. sort tablet by score, by ascending order.
+    std::sort(pick_tablets.begin(), pick_tablets.end(), [](TabletAndScore& a, TabletAndScore& b) {
+        // We try to compact tablet with small write amplification score first,
+        // to improve the total write IO amplification
+        return a.second < b.second;
+    });
+    if (!pick_tablets.empty()) {
+        LOG(INFO) << fmt::format("found {} tablets to do pk index major compaction", pick_tablets.size());
+    }
+    return pick_tablets;
 }
 
 } // namespace starrocks::lake

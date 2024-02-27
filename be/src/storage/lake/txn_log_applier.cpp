@@ -292,7 +292,7 @@ private:
     int64_t _max_txn_id{0}; // Used as the file name prefix of the delvec file
     MetaFileBuilder _builder;
     DynamicCache<uint64_t, LakePrimaryIndex>::Entry* _index_entry{nullptr};
-    std::unique_ptr<std::lock_guard<std::mutex>> _guard{nullptr};
+    std::unique_ptr<std::lock_guard<std::timed_mutex>> _guard{nullptr};
     // True when finalize meta file success.
     bool _has_finalized = false;
 };
