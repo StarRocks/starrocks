@@ -389,11 +389,18 @@ public class IcebergMetadata implements ConnectorMetadata {
                         // Get the partition data/spec id/last updated time according to the table schema
                         StructProjection partitionData = row.get(0, StructProjection.class);
                         int specId = row.get(1, Integer.class);
-                        long lastUpdated = row.get(9, Long.class);
                         PartitionSpec spec = icebergTable.getNativeTable().specs().get(specId);
-                        Partition partition = new Partition(lastUpdated);
                         String partitionName =
                                 PartitionUtil.convertIcebergPartitionToPartitionName(spec, partitionData);
+
+                        long lastUpdated = -1;
+                        try {
+                            lastUpdated = row.get(9, Long.class);
+                        } catch (NullPointerException e) {
+                            LOG.error("The table [{}.{}] snapshot [{}] has been expired",
+                                    icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName(), partitionName, e);
+                        }
+                        Partition partition = new Partition(lastUpdated);
                         partitionMap.put(partitionName, partition);
                     }
                 }
