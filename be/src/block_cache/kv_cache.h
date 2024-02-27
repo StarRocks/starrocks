@@ -23,7 +23,11 @@
 using DataCacheMetrics = starcache::CacheMetrics;
 using DataCacheStatus = starcache::CacheStatus;
 
+<<<<<<< HEAD
 namespace starrocks {
+=======
+enum class DataCacheEngineType { STARCACHE, CACHELIB };
+>>>>>>> ac44d3a6d5 ([BugFix] Replace the `rapidjson::StringRef` with `SetString` to avoid refrencing a temporary string pointer which cause `stack-use-after-return` memory issue in datacache http action. (#41663))
 
 class KvCache {
 public:
@@ -55,6 +59,8 @@ public:
     virtual void record_read_cache(size_t size, int64_t lateny_us) = 0;
 
     virtual Status shutdown() = 0;
+
+    virtual DataCacheEngineType engine_type() = 0;
 };
 
 } // namespace starrocks
