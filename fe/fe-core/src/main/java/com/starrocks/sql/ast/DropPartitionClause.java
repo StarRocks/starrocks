@@ -33,11 +33,6 @@ public class DropPartitionClause extends AlterTableClause {
         this(ifExists, partitionName, isTempPartition, forceDrop, NodePosition.ZERO);
     }
 
-    public DropPartitionClause(boolean ifExists, PartitionDesc partitionDesc, boolean isTempPartition, boolean forceDrop) {
-        this(ifExists, partitionDesc, isTempPartition, forceDrop, NodePosition.ZERO);
-    }
-
-
     public DropPartitionClause(boolean ifExists, String partitionName, boolean isTempPartition,
                                boolean forceDrop, NodePosition pos) {
         super(AlterOpType.DROP_PARTITION, pos);
