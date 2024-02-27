@@ -2514,6 +2514,7 @@ public class PlanFragmentBuilder {
                 context.getColRefToExpr()
                         .put(analyticCall.getKey(), new SlotRef(analyticCall.getKey().toString(), slotDesc));
             }
+            outputTupleDesc.computeMemLayout();
 
             List<Expr> partitionExprs =
                     node.getPartitionExpressions().stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
