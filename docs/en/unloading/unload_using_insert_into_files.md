@@ -113,9 +113,9 @@ FILES(
 SELECT * FROM sales_records;
 ```
 
-### Unload data into a single file and in S3 (min.io)
+### Unload data into a single file and in S3 (MinIO)
 
-Here is another example of unloading into S3.
+The following example unloads all data rows in `sales_records` into MinIO.
 
 ```SQL
 INSERT INTO 
