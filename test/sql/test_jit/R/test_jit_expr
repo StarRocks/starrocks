@@ -391,9 +391,9 @@ insert into dict values(4, 'hello world 4', default, 4 * 10);
 -- !result
 select count(*) from t where int0 <> dict_mapping("dict", int0);
 -- result:
-0
+4
 -- !result
 select count(*) from t where int0 = dict_mapping("dict", int0);
 -- result:
-4
+0
 -- !result
