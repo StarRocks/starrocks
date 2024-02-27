@@ -886,8 +886,10 @@ static StatusOr<orc::Literal> translate_to_orc_literal(Expr* lit, orc::Predicate
     case LogicalType::TYPE_DECIMAL128:
         return orc::Literal{to_orc128(datum.get_int128()), lit->type().precision, lit->type().scale};
     default:
-        CHECK(false) << "failed to handle logical type = " << std::to_string(ltype);
+        DCHECK(false);
     }
+    LOG(WARNING) << "failed to handle logical type = " << std::to_string(ltype) << " in translate_to_orc_literal()";
+    return Status::InternalError("failed to handle logical type = " + std::to_string(ltype));
 }
 
 Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::SearchArgumentBuilder>& builder) {
