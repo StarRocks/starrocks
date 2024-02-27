@@ -132,7 +132,7 @@ FILES(
         "single" = "true",
         "aws.s3.endpoint" = "http://minio:9000"
 )
-SELECT * FROM item;
+SELECT * FROM sales_records;
 ```
 
 ## See also
