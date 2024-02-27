@@ -121,6 +121,8 @@ public:
 
     bool error_if_overflow() const;
 
+    Status rewrite_jit_expr(ObjectPool* pool);
+
 private:
     friend class Expr;
     friend class OlapScanNode;

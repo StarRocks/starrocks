@@ -226,29 +226,12 @@ Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext*
     return status;
 }
 
-Status Expr::rewrite_jit_exprs(std::vector<ExprContext*>& expr_ctxs, ObjectPool* pool, RuntimeState* state) {
-    std::vector<ExprContext*> tmp;
-    for (auto ctx : expr_ctxs) {
-        auto* prev_expr = ctx->root();
-        auto* root_expr = &prev_expr;
-        bool replaced = false;
-        auto st = (*root_expr)->replace_compilable_exprs(root_expr, pool, replaced);
-        if (!st.ok()) {
-            LOG(WARNING) << "Can't replace compilable exprs.\n" << st.message() << "\n" << (*root_expr)->debug_string();
-            // Fall back to the non-JIT path.
-            return Status::OK();
-        }
-        auto new_ctx = ctx;
-        if (replaced) {
-            // The node was replaced, so we need to update the context.
-            new_ctx = pool->add(new ExprContext(*root_expr));
-        }
-        tmp.emplace_back(new_ctx);
+Status Expr::prepare_jit_expr(RuntimeState* state, ExprContext* context) {
+    if (this->node_type() == TExprNodeType::JIT_EXPR) {
+        RETURN_IF_ERROR(((JITExpr*)this)->prepare_impl(state, context));
     }
-    expr_ctxs.swap(tmp);
-    if (state != nullptr) {
-        RETURN_IF_ERROR(Expr::prepare(expr_ctxs, state));
-        RETURN_IF_ERROR(Expr::open(expr_ctxs, state));
+    for (auto child : _children) {
+        RETURN_IF_ERROR(child->prepare_jit_expr(state, context));
     }
     return Status::OK();
 }
