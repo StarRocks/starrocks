@@ -438,6 +438,7 @@ public class StmtExecutor {
     public void execute() throws Exception {
         long beginTimeInNanoSecond = TimeUtils.getStartTime();
         context.setStmtId(STMT_ID_GENERATOR.incrementAndGet());
+        context.setIsForward(false);
 
         // set execution id.
         // Try to use query id as execution id when execute first time.
@@ -544,6 +545,7 @@ public class StmtExecutor {
                 return;
             }
             if (isForwardToLeader()) {
+                context.setIsForward(true);
                 forwardToLeader();
                 return;
             } else {
