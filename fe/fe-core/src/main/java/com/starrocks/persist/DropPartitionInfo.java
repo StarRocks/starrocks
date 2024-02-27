@@ -43,6 +43,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.List;
 
 public class DropPartitionInfo implements Writable {
     @SerializedName(value = "dbId")
@@ -55,6 +56,8 @@ public class DropPartitionInfo implements Writable {
     private boolean isTempPartition = false;
     @SerializedName(value = "forceDrop")
     private boolean forceDrop = false;
+    @SerializedName(value = "partitionNames")
+    private List<String> partitionNames;
 
     private DropPartitionInfo() {
     }
@@ -67,6 +70,14 @@ public class DropPartitionInfo implements Writable {
         this.isTempPartition = isTempPartition;
         this.forceDrop = forceDrop;
     }
+    public DropPartitionInfo(Long dbId, Long tableId, boolean isTempPartition, boolean forceDrop, List<String> partitionNames) {
+        this.dbId = dbId;
+        this.tableId = tableId;
+        this.isTempPartition = isTempPartition;
+        this.forceDrop = forceDrop;
+        this.partitionNames = partitionNames;
+    }
+
 
     public Long getDbId() {
         return dbId;

@@ -1109,6 +1109,7 @@ addPartitionClause
 
 dropPartitionClause
     : DROP TEMPORARY? PARTITION (IF EXISTS)? identifier FORCE?
+    | DROP TEMPORARY? PARTITIONS (IF EXISTS)? multiRangePartition FORCE?
     ;
 
 truncatePartitionClause

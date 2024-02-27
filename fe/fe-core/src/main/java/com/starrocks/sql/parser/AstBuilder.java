@@ -4036,11 +4036,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitDropPartitionClause(StarRocksParser.DropPartitionClauseContext context) {
-        String partitionName = ((Identifier) visit(context.identifier())).getValue();
         boolean temp = context.TEMPORARY() != null;
         boolean force = context.FORCE() != null;
         boolean exists = context.EXISTS() != null;
-        return new DropPartitionClause(exists, partitionName, temp, force, createPos(context));
+        if (context.multiRangePartition() != null) {
+            PartitionDesc partitionDesc = (PartitionDesc) visitMultiRangePartition(context.multiRangePartition());
+            return new DropPartitionClause(exists, partitionDesc, temp, force);
+        } else {
+            String partitionName = ((Identifier) visit(context.identifier())).getValue();
+            return new DropPartitionClause(exists, partitionName, temp, force, createPos(context));
+        }
     }
 
     @Override
