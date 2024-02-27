@@ -1502,4 +1502,82 @@ public class ExpressionTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 2: v2 = 5: v5");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testDateAddReduce() throws Exception {
+        String sql = "select date_add(date_add(date_add(v2, 1), 2), 3) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "days_add(CAST(2: v2 AS DATETIME), 6)");
+
+        sql = "select date_add(date_add(date_add(v2, -1), -2), -3) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "days_sub(CAST(2: v2 AS DATETIME), 6)");
+
+        sql = "select years_add(years_sub(years_sub(v2, -1), -2), -3) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "<slot 4> : CAST(2: v2 AS DATETIME)");
+
+        sql = "select date_add(date_add(date_sub(v2, -1), -2), -3) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "days_sub(CAST(2: v2 AS DATETIME), 4)");
+
+        sql = "select date_add(weeks_add(date_sub(v2, -1), -2), 3) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "days_add(weeks_add(days_sub(CAST(2: v2 AS DATETIME), -1), -2), 3)");
+
+        sql = "select adddate(subdate(adddate(v2, -1), 2), -3) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "days_sub(CAST(2: v2 AS DATETIME), 6)");
+
+        sql = "select months_add(months_add(months_sub(v2, -1), 2), NULL) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "<slot 4> : NULL");
+    }
+
+    @Test
+    public void testDateTrunc() throws Exception {
+        String sql = "select date_trunc('day', cast(v2 as date)) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "<slot 4> : CAST(2: v2 AS DATE)");
+
+        sql = "select date_trunc('day', cast(v2 as datetime)) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "<slot 4> : date_trunc('day', CAST(2: v2 AS DATETIME))");
+    }
+
+    @Test
+    public void testSimplifyTruePredicate() throws Exception {
+        String sql = "select id_bool = true from test_bool where id_bool = false or id_bool = true";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: (11: id_bool = FALSE) OR (11: id_bool)");
+
+        sql = "select * from test_object where true = bitmap_contains(b1, v1) or bitmap_contains(b1, v2) = true";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: (bitmap_contains(5: b1, CAST(1: v1 AS BIGINT))) " +
+                "OR (bitmap_contains(5: b1, CAST(2: v2 AS BIGINT)))");
+    }
+
+    @Test
+    public void testCastStringDouble() throws Exception {
+        try {
+            connectContext.getSessionVariable().setCboEqBaseType("VARCHAR");
+            String sql = "select t1a = 1 from test_all_type";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "11 <-> [1: t1a, VARCHAR, true] = '1'");
+        } finally {
+            connectContext.getSessionVariable().setCboEqBaseType("VARCHAR");
+        }
+
+        try {
+            connectContext.getSessionVariable().setCboEqBaseType("DECIMAL");
+            String sql = "select t1a = 1 from test_all_type";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "cast([1: t1a, VARCHAR, true] as DECIMAL128(38,9)) = 1");
+        } finally {
+            connectContext.getSessionVariable().setCboEqBaseType("VARCHAR");
+        }
+    }
+>>>>>>> 95365787ce ([Enhancement] Control implicit cast optimization by cbo_eq_type (#40619))
 }
