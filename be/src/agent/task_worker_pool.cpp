@@ -833,10 +833,10 @@ void* ReportDataCacheMetricsTaskWorkerPool::_worker_thread_callback(void* arg_th
             const DataCacheMetrics& metrics = cache->cache_metrics();
 
             switch (metrics.status) {
-            case starcache::CacheStatus::NORMAL:
+            case DataCacheStatus::NORMAL:
                 t_metrics.__set_status(TDataCacheStatus::NORMAL);
                 break;
-            case starcache::CacheStatus::UPDATING:
+            case DataCacheStatus::UPDATING:
                 t_metrics.__set_status(TDataCacheStatus::UPDATING);
                 break;
             default:

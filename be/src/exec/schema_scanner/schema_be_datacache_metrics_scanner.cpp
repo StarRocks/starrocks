@@ -47,10 +47,10 @@ Status SchemaBeDataCacheMetricsScanner::get_next(ChunkPtr* chunk, bool* eos) {
         const DataCacheMetrics& metrics = cache->cache_metrics();
 
         switch (metrics.status) {
-        case starcache::CacheStatus::NORMAL:
+        case DataCacheStatus::NORMAL:
             status = "Normal";
             break;
-        case starcache::CacheStatus::UPDATING:
+        case DataCacheStatus::UPDATING:
             status = "Updating";
             break;
         default:
