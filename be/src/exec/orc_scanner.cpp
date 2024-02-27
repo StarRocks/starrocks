@@ -192,8 +192,8 @@ Status ORCScanner::_open_next_orc_reader() {
         }
         std::shared_ptr<RandomAccessFile> file;
         const TBrokerRangeDesc& range_desc = _scan_range.ranges[_next_range];
-        Status st = create_random_access_file(range_desc, _scan_range.broker_addresses[0], _scan_range.params,
-                                              CompressionTypePB::NO_COMPRESSION, &file);
+        RETURN_IF_ERROR(create_random_access_file(range_desc, _scan_range.broker_addresses[0], _scan_range.params,
+                                                  CompressionTypePB::NO_COMPRESSION, &file));
 
         const std::string file_name = file->filename();
         std::shared_ptr<io::SeekableInputStream> input_stream = file->stream();
@@ -216,17 +216,12 @@ Status ORCScanner::_open_next_orc_reader() {
         file = std::make_shared<RandomAccessFile>(shared_buffered_input_stream, file_name);
         file->set_size(file_size);
 
-        if (!st.ok()) {
-            LOG(WARNING) << "Failed to create random-access files. status: " << st.to_string();
-            return st;
-        }
-
         auto inStream = std::make_unique<ORCFileStream>(file, file_size, _counter);
         _next_range++;
         _last_file_size = file_size;
         _orc_reader->set_read_chunk_size(_max_chunk_size);
         _orc_reader->set_current_file_name(file_name);
-        st = _orc_reader->init(std::move(inStream));
+        auto st = _orc_reader->init(std::move(inStream));
         if (st.is_end_of_file()) {
             LOG(WARNING) << "Failed to init orc reader. filename: " << file_name << ", status: " << st.to_string();
             continue;

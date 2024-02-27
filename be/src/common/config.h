@@ -821,7 +821,8 @@ CONF_mBool(orc_coalesce_read_enable, "true");
 // Default is 8MB for tiny stripe threshold size
 CONF_Int32(orc_tiny_stripe_threshold_size, "8388608");
 
-// orc load parameters
+// When the ORC file file size is smaller than orc_loading_buffer_size,
+// we'll read the whole file at once instead of reading a footer first.
 CONF_Int32(orc_loading_buffer_size, "8388608");
 
 // parquet reader
