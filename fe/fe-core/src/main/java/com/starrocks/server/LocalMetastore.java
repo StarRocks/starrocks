@@ -4124,16 +4124,27 @@ public class LocalMetastore implements ConnectorMetadata {
      * used for handling CacnelAlterStmt (for client is the CANCEL ALTER
      * command). including SchemaChangeHandler and RollupHandler
      */
-    public void cancelAlter(CancelAlterTableStmt stmt) throws DdlException {
+    public void cancelAlter(CancelAlterTableStmt stmt, String reason) throws DdlException {
         if (stmt.getAlterType() == ShowAlterStmt.AlterType.ROLLUP) {
+<<<<<<< HEAD
             stateMgr.getRollupHandler().cancel(stmt);
         } else if (stmt.getAlterType() == ShowAlterStmt.AlterType.COLUMN) {
             stateMgr.getSchemaChangeHandler().cancel(stmt);
+=======
+            stateMgr.getRollupHandler().cancel(stmt, reason);
+        } else if (stmt.getAlterType() == ShowAlterStmt.AlterType.COLUMN
+                || stmt.getAlterType() == ShowAlterStmt.AlterType.OPTIMIZE) {
+            stateMgr.getSchemaChangeHandler().cancel(stmt, reason);
+>>>>>>> 28e78c841a ([BugFix] Fix the issue of concurrent conflicts between automatic partition and schema change, prioritize the availability of ingestion as the top priority. (#39810))
         } else if (stmt.getAlterType() == ShowAlterStmt.AlterType.MATERIALIZED_VIEW) {
             stateMgr.getRollupHandler().cancelMV(stmt);
         } else {
             throw new DdlException("Cancel " + stmt.getAlterType() + " does not implement yet");
         }
+    }
+
+    public void cancelAlter(CancelAlterTableStmt stmt) throws DdlException {
+        cancelAlter(stmt, "user cancelled");
     }
 
     // entry of rename table operation
