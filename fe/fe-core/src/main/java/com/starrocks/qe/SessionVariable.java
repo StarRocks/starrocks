@@ -1657,6 +1657,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return cboEqBaseType;
     }
 
+    public void setCboEqBaseType(String cboEqBaseType) {
+        this.cboEqBaseType = cboEqBaseType;
+    }
+
     public boolean isEnablePruneIcebergManifest() {
         return enablePruneIcebergManifest;
     }
