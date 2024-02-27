@@ -205,17 +205,6 @@ public class IcebergTable extends Table {
         return true;
     }
 
-    public PartitionField getPartitionField(String partitionColumnName) {
-        List<PartitionField> allPartitionFields = getNativeTable().spec().fields();
-        Schema schema = this.getNativeTable().schema();
-        for (PartitionField field : allPartitionFields) {
-            if (getPartitionSourceName(schema, field).equalsIgnoreCase(partitionColumnName)) {
-                return field;
-            }
-        }
-        return true;
-    }
-
     public long nextPartitionId() {
         return partitionIdGen.getAndIncrement();
     }
