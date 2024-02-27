@@ -105,6 +105,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.PseudoType;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.RecycleListPartitionInfo;
 import com.starrocks.catalog.RecyclePartitionInfoV2;
 import com.starrocks.catalog.RecycleRangePartitionInfo;
 import com.starrocks.catalog.Resource;
@@ -119,6 +120,8 @@ import com.starrocks.catalog.View;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.RecycleLakeListPartitionInfo;
+import com.starrocks.lake.RecycleLakeRangePartitionInfo;
 import com.starrocks.lake.backup.LakeBackupJob;
 import com.starrocks.lake.backup.LakeRestoreJob;
 import com.starrocks.lake.backup.LakeTableSnapshotInfo;
@@ -284,7 +287,10 @@ public class GsonUtils {
     private static final RuntimeTypeAdapterFactory<RecyclePartitionInfoV2>
             RECYCLE_PARTITION_INFO_V_2_ADAPTER_FACTORY
             = RuntimeTypeAdapterFactory.of(RecyclePartitionInfoV2.class, "clazz")
-            .registerSubtype(RecycleRangePartitionInfo.class, "RecycleRangePartitionInfo");
+            .registerSubtype(RecycleRangePartitionInfo.class, "RecycleRangePartitionInfo")
+            .registerSubtype(RecycleLakeRangePartitionInfo.class, "RecycleLakeRangePartitionInfo")
+            .registerSubtype(RecycleListPartitionInfo.class, "RecycleListPartitionInfo")
+            .registerSubtype(RecycleLakeListPartitionInfo.class, "RecycleLakeListPartitionInfo");
 
     private static final RuntimeTypeAdapterFactory<com.starrocks.catalog.Table> TABLE_TYPE_ADAPTER_FACTORY
             = RuntimeTypeAdapterFactory.of(com.starrocks.catalog.Table.class, "clazz")
