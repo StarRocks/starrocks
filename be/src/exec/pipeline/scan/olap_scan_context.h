@@ -48,6 +48,7 @@ public:
     Status rewrite(std::vector<ExprContext*>& expr_ctxs, ObjectPool* pool, bool enable_jit);
 
 private:
+    // TODO: use c++20 barrier after upgrading gcc
     class Barrier {
     public:
         explicit Barrier(std::size_t count) : _count(count), _current(0) {}
@@ -82,7 +83,7 @@ public:
               _scan_table_id(scan_table_id),
               _chunk_buffer(chunk_buffer),
               _shared_scan(shared_scan),
-              _jit_rewriter(jit_rewriter){}
+              _jit_rewriter(jit_rewriter) {}
     ~OlapScanContext() override = default;
 
     Status prepare(RuntimeState* state);
