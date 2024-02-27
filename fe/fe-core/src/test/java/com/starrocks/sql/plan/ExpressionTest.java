@@ -1502,4 +1502,25 @@ public class ExpressionTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 2: v2 = 5: v5");
     }
+
+    @Test
+    public void testCastStringDouble() throws Exception {
+        try {
+            connectContext.getSessionVariable().setCboEqBaseType("VARCHAR");
+            String sql = "select t1a = 1 from test_all_type";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "11 <-> [1: t1a, VARCHAR, true] = '1'");
+        } finally {
+            connectContext.getSessionVariable().setCboEqBaseType("VARCHAR");
+        }
+
+        try {
+            connectContext.getSessionVariable().setCboEqBaseType("DECIMAL");
+            String sql = "select t1a = 1 from test_all_type";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "cast([1: t1a, VARCHAR, true] as DECIMAL128(38,9)) = 1");
+        } finally {
+            connectContext.getSessionVariable().setCboEqBaseType("VARCHAR");
+        }
+    }
 }
