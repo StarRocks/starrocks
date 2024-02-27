@@ -4023,7 +4023,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         boolean exists = context.EXISTS() != null;
         if (context.multiRangePartition() != null) {
             PartitionDesc partitionDesc = (PartitionDesc) visitMultiRangePartition(context.multiRangePartition());
-            return new DropPartitionClause(exists, partitionDesc, temp, force);
+            return new DropPartitionClause(exists, partitionDesc, temp, force,createPos(context));
         } else {
             String partitionName = ((Identifier) visit(context.identifier())).getValue();
             return new DropPartitionClause(exists, partitionName, temp, force, createPos(context));
