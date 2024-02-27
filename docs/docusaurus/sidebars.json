@@ -703,7 +703,7 @@
                   "items": [
                     "sql-reference/sql-statements/data-definition/ALTER_VIEW",
                     "sql-reference/sql-statements/data-definition/CREATE_VIEW",
-                    "sql-reference/sql-statements/data-definition/DROP_VIEW"
+                    "sql-reference/sql-statements/data-definition/DROP_VIEW",
                     "sql-reference/sql-statements/data-manipulation/SHOW_CREATE_VIEW"
                   ]
                 },
