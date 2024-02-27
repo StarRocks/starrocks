@@ -35,12 +35,15 @@
 package com.starrocks.planner;
 
 import com.google.common.base.MoreObjects;
+import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.common.UserException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.ScanOptimzeOption;
+import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
 import com.starrocks.thrift.TColumnAccessPath;
 import com.starrocks.thrift.TScanRangeLocations;
 
@@ -93,6 +96,33 @@ public abstract class ScanNode extends PlanNode {
         } else {
             return expr;
         }
+    }
+
+    @Override
+    public boolean pushDownRuntimeFilters(DescriptorTable descTbl, RuntimeFilterDescription description, Expr probeExpr,
+                                          List<Expr> partitionByExprs) {
+        boolean supported = super.pushDownRuntimeFilters(descTbl, description, probeExpr, partitionByExprs);
+        if (!supported) {
+            return false;
+        }
+
+        // we guess the io cost time...
+        int numBackends = ConnectContext.get() != null ? ConnectContext.get().getAliveBackendNumber() : 1;
+        long speed = Math.max(1, numBackends) * StatisticsEstimateCoefficient.DEFAULT_DISK_IO_SPEED;
+
+        long maxWaitMs = ConnectContext.get() != null ?
+                ConnectContext.get().getSessionVariable().getRuneTimeFilterScanMaxWaitTime() : 1000;
+        long baseWaitMs = ConnectContext.get() != null ?
+                ConnectContext.get().getSessionVariable().getRuntimeFilterScanWaitTime() : 20;
+
+        // compute wait time on scan node
+        for (RuntimeFilterDescription probeRuntimeFilter : getProbeRuntimeFilters()) {
+            double selectivity = probeRuntimeFilter.getSelectivity();
+            double saveBytes = this.getAvgRowSize() * (1 - this.getCardinality()) * selectivity;
+            double costMs = saveBytes / speed * 1000;
+            probeRuntimeFilter.setWaitTimeMs((int) Math.max(Math.min(maxWaitMs, costMs), baseWaitMs));
+        }
+        return true;
     }
 
     /**

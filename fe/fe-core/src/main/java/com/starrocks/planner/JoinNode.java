@@ -211,9 +211,17 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
             rf.setEqualCount(eqJoinConjuncts.size());
             rf.setBuildCardinality(inner.getCardinality());
             rf.setEqualForNull(BinaryPredicate.IS_EQ_NULL_PREDICATE.apply(joinConjunct));
+            rf.setWaitTimeMs(sessionVariable.getGlobalRuntimeFilterWaitTimeout());
+            double selectivity = ((double) getCardinality()) / getChild(0).getCardinality();
+            selectivity = Math.max(0, Math.min(selectivity, 1.0));
+            rf.setSelectivity(selectivity);
 
             Expr left = joinConjunct.getChild(0);
             Expr right = joinConjunct.getChild(1);
+
+            if (!isEffectiveFilter(sessionVariable, rf)) {
+                continue;
+            }
             if (!joinOp.isCrossJoin()) {
                 rf.setFilterId(runtimeFilterIdIdGenerator.getNextId().asInt());
                 ArrayList<TupleId> buildTupleIds = inner.getTupleIds();
@@ -250,6 +258,31 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         }
     }
 
+    public boolean isEffectiveFilter(SessionVariable sessionVariable, RuntimeFilterDescription runtimeFilter) {
+        long probeMin = sessionVariable.getGlobalRuntimeFilterProbeMinSize();
+        long card = this.getCardinality();
+
+        long buildMin = sessionVariable.getGlobalRuntimeFilterBuildMinSize();
+        long buildCardinality = getChild(1).getCardinality();
+        if (buildMin > 0 && (this.isColocate || this.isLocalHashBucket)) {
+            int numBackends = ConnectContext.get() != null ? ConnectContext.get().getAliveBackendNumber() : 1;
+            numBackends = Math.max(1, numBackends);
+            buildMin = (Long.MAX_VALUE / numBackends > buildMin) ? buildMin * numBackends : Long.MAX_VALUE;
+        }
+        if (probeMin == 0 || (buildMin > 0 && buildCardinality <= buildMin)) {
+            return true;
+        }
+        if (card < probeMin) {
+            return false;
+        }
+
+        if (cardinality > sessionVariable.getGlobalRuntimeFilterProbeMinSize()) {
+            // don't push down if the filter is meaningless
+            return runtimeFilter.getSelectivity() <= sessionVariable.getGlobalRuntimeFilterProbeMinSelectivity();
+        }
+        return true;
+    }
+
     /**
      * Each slotExpr can deduce many slotExprs which is adjective because each join's conjunct can deduce left/right exprs.
      */
@@ -272,7 +305,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
                 }
             }
         }
-        return newSlotExprs.size() > 0 ? Optional.of(newSlotExprs) : Optional.empty();
+        return !newSlotExprs.isEmpty() ? Optional.of(newSlotExprs) : Optional.empty();
     }
 
     public Optional<List<List<Expr>>> candidatesOfSlotExprsForChild(List<Expr> exprs, int childIdx) {

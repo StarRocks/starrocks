@@ -78,6 +78,14 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
                 rf.setOnlyLocal(true);
                 rf.setBuildExpr(right);
 
+                rf.setWaitTimeMs(sessionVariable.getGlobalRuntimeFilterWaitTimeout());
+                double selectivity = ((double) getCardinality()) / getChild(0).getCardinality();
+                selectivity = Math.max(0, Math.min(selectivity, 1.0));
+                rf.setSelectivity(selectivity);
+
+                if (!isEffectiveFilter(sessionVariable, rf)) {
+                    continue;
+                }
                 if (getChild(0).pushDownRuntimeFilters(descTbl, rf, left, probePartitionByExprs)) {
                     this.getBuildRuntimeFilters().add(rf);
                 }

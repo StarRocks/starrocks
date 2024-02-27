@@ -140,6 +140,8 @@ struct TRuntimeFilterDescription {
 
   16: optional TRuntimeFilterBuildType filter_type;
   17: optional TRuntimeFilterLayout layout;
+
+  18: optional i32 wait_time_ms;
 }
 
 struct TRuntimeFilterProberParams {
