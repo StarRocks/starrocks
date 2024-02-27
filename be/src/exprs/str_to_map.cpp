@@ -33,8 +33,11 @@ namespace starrocks {
 StatusOr<ColumnPtr> StringFunctions::str_to_map(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 3);
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    // split first
+    Columns split_columns{columns[0], columns[1]};
     RETURN_IF_ERROR(StringFunctions::split_prepare(context, FunctionContext::FRAGMENT_LOCAL));
-    ASSIGN_OR_RETURN(auto splited, StringFunctions::split(context, columns));
+    ASSIGN_OR_RETURN(auto splited, StringFunctions::split(context, split_columns));
     RETURN_IF_ERROR(StringFunctions::split_close(context, FunctionContext::FRAGMENT_LOCAL));
 
     Columns splited_columns{splited, columns[2]};

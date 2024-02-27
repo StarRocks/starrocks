@@ -23,6 +23,7 @@
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/string_functions.h"
 #include "runtime/large_int_value.h"
+#include "runtime/types.h"
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
 
@@ -742,6 +743,12 @@ PARALLEL_TEST(VecStringFunctionsTest, str_to_map_v1) {
     array_str_null->append_datum(Datum(DatumArray{Datum("a:c:b:d"), Datum(""), Datum("")}));
     array_str_null->append_datum(Datum(DatumArray{Datum("ab:b"), Datum("ab:b"), Datum("")}));
 
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    TypeDescriptor string_type_desc = TypeDescriptor::create_varchar_type(10);
+    auto string_column = ColumnHelper::create_column(string_type_desc, true);
+    string_column->append_datum("a:b,c:d");
+    string_column->append_datum("a:1,b:2");
+
     auto array_str_notnull = ColumnHelper::create_column(TYPE_ARRAY_VARCHAR, false);
     array_str_notnull->append_datum(Datum(DatumArray{}));
     array_str_notnull->append_datum(Datum(DatumArray{Datum("中国:shang海")}));
@@ -765,6 +772,9 @@ PARALLEL_TEST(VecStringFunctionsTest, str_to_map_v1) {
     map_delimiter_builder_nullable.append("");
     map_delimiter_builder_nullable.append_null();
     auto map_delimiter_nullable = map_delimiter_builder_nullable.build_nullable_column();
+    auto delimiter_column = ColumnHelper::create_column(string_type_desc, true);
+    delimiter_column->append_datum(",");
+    delimiter_column->append_datum(",");
 
     auto map_delimiter_builder_notnull = ColumnBuilder<TYPE_VARCHAR>(chunk_size);
     map_delimiter_builder_notnull.append(":");
@@ -788,6 +798,12 @@ PARALLEL_TEST(VecStringFunctionsTest, str_to_map_v1) {
     const_col->append_datum(":");
     auto delim_const = ConstColumn::create(const_col, chunk_size);
 
+    {
+        Columns columns{string_column, delimiter_column, map_delimiter_nullable};
+        ctx->set_constant_columns(columns);
+        auto res = StringFunctions::str_to_map(ctx.get(), columns).value();
+        ASSERT_EQ(res->debug_string(), "[{'a':'b','c':'d'}, {'a':'1','b':'2'}]");
+    }
     {
         auto res = StringFunctions::str_to_map_v1(nullptr, {array_str_null, only_null}).value();
         ASSERT_EQ(res->debug_string(), "CONST: NULL Size : 7");
