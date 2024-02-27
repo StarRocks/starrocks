@@ -210,12 +210,14 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         long dbId = recyclePartitionInfo.dbId;
         long tableId = recyclePartitionInfo.tableId;
         Partition partition = recyclePartitionInfo.partition;
-        disableRecoverPartitionWithSameName(dbId, tableId, partition.getName());
+        long partitionId = partition.getId();
+        String partitionName = partition.getName();
+        disableRecoverPartitionWithSameName(dbId, tableId, partitionName);
 
         long recycleTime = recyclePartitionInfo.isRecoverable() ? System.currentTimeMillis() : 0;
-        idToRecycleTime.put(partition.getId(), recycleTime);
-        idToPartition.put(partition.getId(), recyclePartitionInfo);
-        LOG.info("recycle partition[{}-{}]", partition.getId(), partition.getName());
+        idToRecycleTime.put(partitionId, recycleTime);
+        idToPartition.put(partitionId, recyclePartitionInfo);
+        LOG.info("Finished put partition '{}' to recycle bin. partitionId: {}", partitionName, partitionName);
     }
 
     public synchronized Partition getPartition(long partitionId) {
@@ -539,13 +541,13 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 continue;
             }
             if (partitionInfo.delete()) {
-                // erase partition
                 iterator.remove();
                 removeRecycleMarkers(partitionId);
 
-                // log
                 GlobalStateMgr.getCurrentState().getEditLog().logErasePartition(partitionId);
-                LOG.info("erase partition[{}-{}] finished", partitionId, partition.getName());
+
+                LOG.info("Removed partition '{}' from recycle bin. dbId: {} tableId: {} partitionId: {}",
+                        partition.getName(), partitionInfo.getDbId(), partitionInfo.getTableId(), partitionId);
                 currentEraseOpCnt++;
                 if (currentEraseOpCnt >= MAX_ERASE_OPERATIONS_PER_CYCLE) {
                     break;
