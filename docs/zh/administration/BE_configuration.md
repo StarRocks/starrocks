@@ -521,7 +521,8 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 默认值：0.5
 
 #### lake_compaction_stream_buffer_size_bytes
-- 含义：存算分离集群 Compaction 任务在远程 Fs 读 IO 阶段的 Buffer 大小。默认值1MB，可以适当增加该配置项取值以提升冷数据分区的 Compaction 耗时。支持动态修改。
+
+- 含义：存算分离集群 Compaction 任务在远程 FS 读 I/O 阶段的 Buffer 大小。默认值为 1MB。您可以适当增大该配置项取值以加速 Compaction 任务。
 - 默认值：1048576
 - 引入版本：v3.2.3
 
