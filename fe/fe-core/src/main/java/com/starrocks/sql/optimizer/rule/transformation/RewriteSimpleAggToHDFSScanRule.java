@@ -168,7 +168,7 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
 
         if (scanOperatorType == OperatorType.LOGICAL_ICEBERG_SCAN) {
             IcebergTable icebergTable = (IcebergTable) scanOperator.getTable();
-            if (!icebergTable.isAllPartitionColumnsIdentity()) {
+            if (!scanOperator.getPartitionColumns().isEmpty() && !icebergTable.isAllPartitionColumnsAlwaysIdentity()) {
                 return false;
             }
         }
