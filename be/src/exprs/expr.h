@@ -166,8 +166,6 @@ public:
     static Status create_expr_trees(ObjectPool* pool, const std::vector<TExpr>& texprs, std::vector<ExprContext*>* ctxs,
                                     RuntimeState* state, bool can_jit = false);
 
-    static Status rewrite_jit_exprs(std::vector<ExprContext*>& expr_ctxs, ObjectPool* pool, RuntimeState* state);
-
     /// Creates an expr tree for the node rooted at 'node_idx' via depth-first traversal.
     /// parameters
     ///   nodes: vector of thrift expression nodes to be translated
@@ -355,6 +353,8 @@ protected:
         out << expr_name << "(" << Expr::debug_string() << ")";
         return out.str();
     }
+
+    Status prepare_jit_expr(RuntimeState* state, ExprContext* context);
 
 private:
     // Create a new vectorized expr
