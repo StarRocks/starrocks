@@ -138,7 +138,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import java.util.zip.Adler32;
 import javax.annotation.Nullable;
-import javax.validation.constraints.NotNull;
 
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_TYPE_COLUMN;
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_TYPE_COLUMN_WITH_ROW;
@@ -1153,7 +1152,11 @@ public class OlapTable extends Table {
             return;
         }
 
-        beforeDropPartition(dbId, partition, isForceDrop, reserveTablets);
+        if (!reserveTablets) {
+            RecyclePartitionInfo recyclePartitionInfo = buildRecyclePartitionInfo(dbId, partition);
+            recyclePartitionInfo.setRecoverable(!isForceDrop);
+            GlobalStateMgr.getCurrentState().getRecycleBin().recyclePartition(recyclePartitionInfo);
+        }
 
         partitionInfo.dropPartition(partition.getId());
         idToPartition.remove(partition.getId());
@@ -1163,15 +1166,6 @@ public class OlapTable extends Table {
                 .collect(Collectors.toList()));
 
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropPartition(partition.getId());
-    }
-
-    private void beforeDropPartition(long dbId, @NotNull Partition partition, boolean isForceDrop, boolean reserveTablets) {
-        if (reserveTablets) {
-            return;
-        }
-        RecyclePartitionInfo recyclePartitionInfo = buildRecyclePartitionInfo(dbId, partition);
-        recyclePartitionInfo.setRecoverable(!isForceDrop);
-        GlobalStateMgr.getCurrentState().getRecycleBin().recyclePartition(recyclePartitionInfo);
     }
 
     protected RecyclePartitionInfo buildRecyclePartitionInfo(long dbId, Partition partition) {
