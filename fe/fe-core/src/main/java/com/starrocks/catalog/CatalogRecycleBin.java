@@ -1135,7 +1135,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
 
         int idToPartitionSize = reader.readInt();
         for (int i = 0; i < idToPartitionSize; ++i) {
-            RecycleRangePartitionInfo recycleRangePartitionInfo = reader.readJson(RecycleRangePartitionInfo.class);
+            RecyclePartitionInfo recycleRangePartitionInfo = reader.readJson(RecyclePartitionInfo.class);
             idToPartition.put(recycleRangePartitionInfo.partition.getId(), recycleRangePartitionInfo);
         }
 
