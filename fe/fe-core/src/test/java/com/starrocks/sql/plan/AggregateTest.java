@@ -2629,4 +2629,45 @@ public class AggregateTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "output: group_concat(CAST(1: v1 AS VARCHAR), '-', ',')");
     }
+
+    @Test
+    public void testCountDistinctGlobalAgg() throws Exception {
+        String sql = "select /*+SET_VAR(new_planner_agg_stage=1)*/ " +
+                "count(distinct t1d) from test_all_type";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "AGGREGATE (update finalize)");
+        assertContains(plan, "aggregate: multi_distinct_count[([4: t1d, BIGINT, true]); " +
+                "args: BIGINT; result: BIGINT; args nullable: true; result nullable: false]");
+
+        sql = "select /*+SET_VAR(new_planner_agg_stage=1)*/ " +
+                "count(distinct id_decimal) from test_all_type";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "AGGREGATE (update finalize)");
+        assertContains(plan, "multi_distinct_count[([10: id_decimal, DECIMAL64(10,2), true]); " +
+                "args: DECIMAL64; result: BIGINT; args nullable: true; result nullable: false]");
+
+        sql = "select /*+SET_VAR(new_planner_agg_stage=1)*/ " +
+                "sum(distinct id_decimal) from test_all_type";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "AGGREGATE (update finalize)");
+        assertContains(plan, "aggregate: multi_distinct_sum[([10: id_decimal, DECIMAL64(10,2), true]); " +
+                "args: DECIMAL64; result: DECIMAL128(38,2); args nullable: true; result nullable: true]");
+    }
+
+    @Test
+    public void testArrayAggGlobalAgg() throws Exception {
+        String sql = "select /*+SET_VAR(new_planner_agg_stage=1)*/ " +
+                "array_agg(distinct t1g) from test_all_type";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "AGGREGATE (update finalize)");
+        assertContains(plan, "aggregate: array_agg_distinct[([7: t1g, BIGINT, true]); " +
+                "args: BIGINT; result: ARRAY<BIGINT>; args nullable: true; result nullable: true]");
+
+        sql = "select /*+SET_VAR(new_planner_agg_stage=1)*/ " +
+                "array_agg(distinct t1f) from test_all_type";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "AGGREGATE (update finalize)");
+        assertContains(plan, "aggregate: array_agg_distinct[([6: t1f, DOUBLE, true]); " +
+                "args: DOUBLE; result: ARRAY<DOUBLE>; args nullable: true; result nullable: true]");
+    }
 }

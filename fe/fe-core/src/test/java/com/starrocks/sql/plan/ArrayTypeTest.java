@@ -731,4 +731,14 @@ public class ArrayTypeTest extends PlanTestBase {
         assertCContains(plan, "arrays_overlap[([[],[]], cast([] as ARRAY<ARRAY<BOOLEAN>>)); " +
                 "args: INVALID_TYPE,INVALID_TYPE; result: BOOLEAN; args nullable: true; result nullable: true]");
     }
+
+    @Test
+    public void testCountDistinctLambdaGlobalAgg() throws Exception {
+        String sql = "select /*+SET_VAR(new_planner_agg_stage=1)*/ " +
+                "count(distinct array_length(array_map(x -> x + 1, d_2))) from adec";
+        String plan = getFragmentPlan(sql);
+        assertCContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: multi_distinct_count(array_length(array_map" +
+                "(<slot 10> -> CAST(<slot 10> AS DECIMAL64(13,3)) + 1, 5: d_2)))");
+    }
 }
