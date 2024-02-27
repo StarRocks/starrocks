@@ -262,7 +262,13 @@ BE dynamic parameters are as follows.
 #### enable_size_tiered_compaction_strategy
 
 - **Default:** true
-- **Description:** Whether to enable the Size-tiered Compaction policy.
+- **Description:** Whether to enable the Size-tiered Compaction policy (excluding Primary Key tables).
+
+#### enable_pk_size_tiered_compaction_strategy
+
+- **Default:** true
+- **Description:** Whether to enable the Size-tiered Compaction policy for Primary Key tables.
+- **Introduced in**: v3.2.4, v3.1.10
 
 #### min_compaction_failure_interval_sec
 
@@ -451,8 +457,8 @@ BE dynamic parameters are as follows.
 
 #### lake_pk_compaction_max_input_rowsets
 
-- **Default:** 5
-- **Description:** The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster.
+- **Default:** 1000
+- **Description:** The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster. Since v3.2.4 and v3.1.10, the default value of this parameter is changed from `5` to `1000`. After the Sized-tiered Compaction policy is enabled for Primary Key tables (by setting `enable_pk_size_tiered_compaction_strategy` to `true`), StarRocks does not need to limit the number of rowsets for each compaction to reduce write amplification. Therefore, the default value of this parameter is increased.
 - **Introduced in:** v3.1.8, v3.2.3
 
 #### compact_threads
@@ -483,6 +489,18 @@ BE dynamic parameters are as follows.
 - **Default**: 8
 - **Unit**: N/A
 - **Description**: The number of scan threads assigned to Pipeline Connector per CPU core in the BE node. This configuration is changed to dynamic from v3.1.7 onwards.
+
+#### starlet_use_star_cache
+
+- **Default**：true
+- **Description**：Whether to enable block data cache in a shared-data cluster. `true` indicates enabling this feature and `false` indicates disabling it.
+- **Introduced in:** v3.1
+
+#### starlet_cache_evict_high_water
+
+- **Default**：0.2
+- **Description**：In a shared-data cluster, if the percentage of the available disk capacity is below this value, file data cache eviction will be triggered. The default value indicates that file data cache will use at most 80% of the disk capacity.
+- **Introduced in:** v3.0
 
 ## Configure BE static parameters
 
@@ -986,3 +1004,9 @@ BE static parameters are as follows.
 - **Default**: 0
 - **Unit**: N/A
 - **Description**: The maximum concurrency of RPC requests in a shared-data cluster. Incoming requests will be rejected when this threshold is reached. When this item is set to 0, no limit is imposed on the concurrency.
+
+#### starlet_star_cache_disk_size_percent
+
+- **Default**：80
+- **Description**：The percentage of disk capacity that block data cache can use at most in a shared-data cluster.
+- **Introduced in:** v3.1

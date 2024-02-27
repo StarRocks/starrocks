@@ -622,6 +622,12 @@ public class SystemInfoService implements GsonPostProcessable {
         idToReportVersionRef = ImmutableMap.of();
     }
 
+    // only for test
+    public void dropAllComputeNode() {
+        // update idToComputeNodeRef
+        idToComputeNodeRef.clear();
+    }
+
     public Backend getBackend(long backendId) {
         return idToBackendRef.get(backendId);
     }
@@ -748,34 +754,7 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public Backend getBackendWithBePort(String host, int bePort) {
-
-        Pair<String, String> targetPair;
-        try {
-            targetPair = NetUtils.getIpAndFqdnByHost(host);
-        } catch (UnknownHostException e) {
-            LOG.warn("failed to get right ip by fqdn {}", e.getMessage());
-            return null;
-        }
-
-        for (Backend backend : idToBackendRef.values()) {
-            Pair<String, String> curPair;
-            try {
-                curPair = NetUtils.getIpAndFqdnByHost(backend.getHost());
-            } catch (UnknownHostException e) {
-                LOG.warn("failed to get right ip by fqdn {}", e.getMessage());
-                continue;
-            }
-            // target, cur has same ip
-            boolean hostMatch = targetPair.first.equals(curPair.first);
-            // target, cur has same fqdn and both of them are not equal ""
-            if (!hostMatch && targetPair.second.equals(curPair.second) && !curPair.second.isEmpty()) {
-                hostMatch = true;
-            }
-            if (hostMatch && (backend.getBePort() == bePort)) {
-                return backend;
-            }
-        }
-        return null;
+        return getComputeNodeWithBePortCommon(host, bePort, idToBackendRef);
     }
 
     public ComputeNode getBackendOrComputeNodeWithBePort(String host, int bePort) {
@@ -817,8 +796,37 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public ComputeNode getComputeNodeWithBePort(String host, int bePort) {
-        for (ComputeNode computeNode : idToComputeNodeRef.values()) {
-            if (computeNode.getHost().equals(host) && computeNode.getBePort() == bePort) {
+        return getComputeNodeWithBePortCommon(host, bePort, idToComputeNodeRef);
+    }
+
+    private <T extends ComputeNode> T getComputeNodeWithBePortCommon(String host, int bePort,
+                                                                     Map<Long, T> nodeRef) {
+        Pair<String, String> targetPair;
+        try {
+            targetPair = NetUtils.getIpAndFqdnByHost(host);
+        } catch (UnknownHostException e) {
+            LOG.warn("failed to get right ip by fqdn {}", e.getMessage());
+            return null;
+        }
+
+        for (T computeNode : nodeRef.values()) {
+            Pair<String, String> curPair;
+            try {
+                curPair = NetUtils.getIpAndFqdnByHost(computeNode.getHost());
+            } catch (UnknownHostException e) {
+                LOG.warn("failed to get right ip by fqdn {}", e.getMessage());
+                continue;
+            }
+            boolean hostMatch = false;
+            // target, cur has same ip
+            if (targetPair.first.equals(curPair.first)) {
+                hostMatch = true;
+            }
+            // target, cur has same fqdn and both of them are not equal ""
+            if (!hostMatch && targetPair.second.equals(curPair.second) && !curPair.second.equals("")) {
+                hostMatch = true;
+            }
+            if (hostMatch && (computeNode.getBePort() == bePort)) {
                 return computeNode;
             }
         }

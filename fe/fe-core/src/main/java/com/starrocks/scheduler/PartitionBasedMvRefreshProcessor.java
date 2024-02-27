@@ -22,6 +22,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+import com.google.common.util.concurrent.Uninterruptibles;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IsNullPredicate;
@@ -111,6 +112,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -127,6 +129,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -153,6 +156,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private static final int MV_DEFAULT_QUERY_TIMEOUT = 3600;
 
     private static final int MAX_RETRY_NUM = 10;
+    private static final int CREATE_PARTITION_BATCH_SIZE = 64;
 
     private Database db;
     private MaterializedView materializedView;
@@ -1864,17 +1868,21 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     new SingleRangePartitionDesc(false, mvPartitionName, partitionKeyDesc, partitionProperties);
             partitionDescs.add(singleRangePartitionDesc);
         }
-        RangePartitionDesc rangePartitionDesc =
-                new RangePartitionDesc(materializedView.getPartitionColumnNames(), partitionDescs);
 
-        try {
-            GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(
-                    database, materializedView.getName(),
-                    new AddPartitionClause(rangePartitionDesc, distributionDesc,
-                            partitionProperties, false));
-        } catch (Exception e) {
-            throw new DmlException("Expression add partition failed: %s, db: %s, table: %s", e, e.getMessage(),
-                    database.getFullName(), materializedView.getName());
+        // create partitions in small batch, to avoid create too many partitions at once
+        for (List<PartitionDesc> batch : ListUtils.partition(partitionDescs, CREATE_PARTITION_BATCH_SIZE)) {
+            RangePartitionDesc rangePartitionDesc =
+                    new RangePartitionDesc(materializedView.getPartitionColumnNames(), batch);
+            AddPartitionClause alterPartition = new AddPartitionClause(rangePartitionDesc, distributionDesc,
+                    partitionProperties, false);
+            try {
+                GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(
+                        database, materializedView.getName(), alterPartition);
+            } catch (Exception e) {
+                throw new DmlException("Expression add partition failed: %s, db: %s, table: %s", e, e.getMessage(),
+                        database.getFullName(), materializedView.getName());
+            }
+            Uninterruptibles.sleepUninterruptibly(Config.mv_create_partition_batch_interval_ms, TimeUnit.MILLISECONDS);
         }
     }
 

@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
-keywords: ['wuhua']
+keywords: ['wuhua', 'Wuhuashitu']
 ---
 
 # 异步物化视图
