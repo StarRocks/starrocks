@@ -199,10 +199,11 @@ Status ORCScanner::_open_next_orc_reader() {
         std::shared_ptr<io::SeekableInputStream> input_stream = file->stream();
         ASSIGN_OR_RETURN(uint64_t file_size, file->get_size());
 
-        auto shared_buffered_input_stream = std::make_shared<io::SharedBufferedInputStream>(input_stream, file_name, file_size);
+        auto shared_buffered_input_stream =
+                std::make_shared<io::SharedBufferedInputStream>(input_stream, file_name, file_size);
         const io::SharedBufferedInputStream::CoalesceOptions options = {
-            .max_dist_size = config::io_coalesce_read_max_distance_size,
-            .max_buffer_size = config::io_coalesce_read_max_buffer_size};
+                .max_dist_size = config::io_coalesce_read_max_distance_size,
+                .max_buffer_size = config::io_coalesce_read_max_buffer_size};
         shared_buffered_input_stream->set_coalesce_options(options);
 
         // If file size smaller than 8mb, we will load the whole file in one IO request
