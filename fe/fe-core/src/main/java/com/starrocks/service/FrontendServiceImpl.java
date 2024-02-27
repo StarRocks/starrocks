@@ -2330,9 +2330,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         GlobalStateMgr state = GlobalStateMgr.getCurrentState();
 
         try {
-<<<<<<< HEAD
-            state.addPartitions(db, olapTable.getName(), addPartitionClause);
-=======
             // ingestion is top priority, if schema change or rollup is running, cancel it
             try {
                 if (olapTable.getState() == OlapTable.OlapTableState.ROLLUP) {
@@ -2355,8 +2352,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             } catch (Exception e) {
                 LOG.warn("cancel schema change or rollup failed. error: {}", e.getMessage());
             }
-            state.getLocalMetastore().addPartitions(db, olapTable.getName(), addPartitionClause);
->>>>>>> 28e78c841a ([BugFix] Fix the issue of concurrent conflicts between automatic partition and schema change, prioritize the availability of ingestion as the top priority. (#39810))
+            state.addPartitions(db, olapTable.getName(), addPartitionClause);
         } catch (Exception e) {
             LOG.warn(e);
             errorStatus.setError_msgs(Lists.newArrayList(
