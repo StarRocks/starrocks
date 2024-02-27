@@ -654,6 +654,11 @@ public class UtFrameUtils {
         return UtFrameUtils.getThriftString(UtFrameUtils.getPlanAndFragment(ctx, queryStr).second.getFragments());
     }
 
+    public static String getThriftDescTbl(ConnectContext ctx, String queryStr) throws Exception {
+        Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(ctx, queryStr);
+        return pair.second.getDescTbl().toThrift().toString();
+    }
+
     // Lock all database before analyze
     private static void lock(Map<String, Database> dbs) {
         if (dbs == null) {
