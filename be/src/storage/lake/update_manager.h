@@ -39,6 +39,7 @@ class MetaFileBuilder;
 class UpdateManager;
 struct AutoIncrementPartialUpdateState;
 using IndexEntry = DynamicCache<uint64_t, LakePrimaryIndex>::Entry;
+using TabletAndScore = std::pair<int64_t, double>;
 
 class LakeDelvecLoader : public DelvecLoader {
 public:
@@ -133,7 +134,7 @@ public:
     // get or create primary index, and prepare primary index state
     StatusOr<IndexEntry*> prepare_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
                                                 int64_t base_version, int64_t new_version,
-                                                std::unique_ptr<std::lock_guard<std::mutex>>& lock);
+                                                std::unique_ptr<std::lock_guard<std::timed_mutex>>& lock);
 
     // commit primary index, only take affect when it is local persistent index
     Status commit_primary_index(IndexEntry* index_entry, Tablet* tablet);
@@ -158,6 +159,10 @@ public:
     void try_remove_cache(uint32_t tablet_id, int64_t txn_id);
 
     void set_enable_persistent_index(int64_t tablet_id, bool enable_persistent_index);
+
+    Status pk_index_major_compaction(int64_t tablet_id, DataDir* data_dir);
+
+    std::vector<TabletAndScore> pick_tablets_to_do_pk_index_major_compaction();
 
 private:
     // print memory tracker state
