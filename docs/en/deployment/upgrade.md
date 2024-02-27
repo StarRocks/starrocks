@@ -16,7 +16,7 @@ The version of StarRocks is represented by three numbers in the form **Major.Min
 
 > **CAUTION**
 >
-> Please note that you cannot upgrade an existing shared-nothing cluster to a shared-data cluster, or vice versa.
+> Please note that you cannot upgrade an existing shared-nothing cluster to a shared-data cluster, or vice versa. You must deploy a new shared-data cluster.
 
 ### Upgrade paths
 
