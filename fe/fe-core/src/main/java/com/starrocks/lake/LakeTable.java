@@ -52,7 +52,6 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import javax.validation.constraints.NotNull;
 
 /**
  * Metadata for StarRocks lake table
@@ -216,16 +215,7 @@ public class LakeTable extends OlapTable {
     }
 
     @Override
-    protected void beforeDropPartition(long dbId, @NotNull Partition partition, boolean isForceDrop, boolean reserveTablets) {
-        if (reserveTablets) {
-            return;
-        }
-        RecyclePartitionInfo recyclePartitionInfo = buildRecyclePartitionInfo(dbId, partition);
-        recyclePartitionInfo.setRecoverable(!isForceDrop);
-        GlobalStateMgr.getCurrentState().getRecycleBin().recyclePartition(recyclePartitionInfo);
-    }
-
-    private RecyclePartitionInfo buildRecyclePartitionInfo(long dbId, Partition partition) {
+    protected RecyclePartitionInfo buildRecyclePartitionInfo(long dbId, Partition partition) {
         if (partitionInfo.isRangePartition()) {
             Range<PartitionKey> range = ((RangePartitionInfo) partitionInfo).getRange(partition.getId());
             return new RecycleLakeRangePartitionInfo(dbId, id, partition, range,

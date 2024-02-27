@@ -1165,16 +1165,16 @@ public class OlapTable extends Table {
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropPartition(partition.getId());
     }
 
-    protected void beforeDropPartition(long dbId, @NotNull Partition partition, boolean isForceDrop, boolean reserveTablets) {
-        if (!isForceDrop) {
-            RecyclePartitionInfo recyclePartitionInfo =  buildRecyclePartitionInfo(dbId, partition);
-            GlobalStateMgr.getCurrentState().getRecycleBin().recyclePartition(recyclePartitionInfo);
-        } else if (!reserveTablets) {
-            GlobalStateMgr.getCurrentState().getLocalMetastore().onErasePartition(partition);
-        } // else: do nothing
+    private void beforeDropPartition(long dbId, @NotNull Partition partition, boolean isForceDrop, boolean reserveTablets) {
+        if (reserveTablets) {
+            return;
+        }
+        RecyclePartitionInfo recyclePartitionInfo = buildRecyclePartitionInfo(dbId, partition);
+        recyclePartitionInfo.setRecoverable(!isForceDrop);
+        GlobalStateMgr.getCurrentState().getRecycleBin().recyclePartition(recyclePartitionInfo);
     }
 
-    private RecyclePartitionInfo buildRecyclePartitionInfo(long dbId, Partition partition) {
+    protected RecyclePartitionInfo buildRecyclePartitionInfo(long dbId, Partition partition) {
         if (partitionInfo.isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             return new RecycleRangePartitionInfo(dbId, id, partition,
