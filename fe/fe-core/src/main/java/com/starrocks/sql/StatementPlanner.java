@@ -109,7 +109,7 @@ public class StatementPlanner {
 
         // 1. For all queries, we need db lock when analyze phase
         Locker locker = new Locker();
-        try (var guard = session.bindScope()) {
+        try (ConnectContext.ScopeGuard guard = session.bindScope()) {
             lock(locker, dbs);
             try (Timer ignored = Tracers.watchScope("Analyzer")) {
                 Analyzer.analyze(stmt, session);

@@ -415,7 +415,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(table.getId(), column.getName());
             // cache reaches capacity limit, randomly eliminate some keys
             // then we will get an empty dictionary.
-            if (dict.isEmpty()) {
+            if (!dict.isPresent()) {
                 continue;
             }
 

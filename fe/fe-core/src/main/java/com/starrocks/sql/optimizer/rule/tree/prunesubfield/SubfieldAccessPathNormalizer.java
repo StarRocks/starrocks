@@ -140,7 +140,7 @@ public class SubfieldAccessPathNormalizer {
         public Optional<AccessPath> visitCollectionElement(CollectionElementOperator collectionElementOp,
                                                            List<Optional<AccessPath>> childrenAccessPaths) {
             Optional<AccessPath> parent = childrenAccessPaths.get(0);
-            if (parent.isEmpty()) {
+            if (!parent.isPresent()) {
                 return Optional.empty();
             }
 

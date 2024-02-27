@@ -1259,7 +1259,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     throw new DdlException("Can not modify partition column[" + colName + "]. index["
                             + olapTable.getIndexNameById(alterIndexId) + "]");
                 }
-                if (col.isEmpty() && alterIndexId == olapTable.getBaseIndexId()) {
+                if (!col.isPresent() && alterIndexId == olapTable.getBaseIndexId()) {
                     // 2.1 partition column cannot be deleted.
                     throw new DdlException("Partition column[" + partitionCol.getName()
                             + "] cannot be dropped. index[" + olapTable.getIndexNameById(alterIndexId) + "]");
@@ -1277,7 +1277,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     throw new DdlException("Can not modify distribution column[" + colName + "]. index["
                             + olapTable.getIndexNameById(alterIndexId) + "]");
                 }
-                if (col.isEmpty() && alterIndexId == olapTable.getBaseIndexId()) {
+                if (!col.isPresent() && alterIndexId == olapTable.getBaseIndexId()) {
                     // 2.2 distribution column cannot be deleted.
                     throw new DdlException("Distribution column[" + distributionCol.getName()
                             + "] cannot be dropped. index[" + olapTable.getIndexNameById(alterIndexId) + "]");
@@ -1298,7 +1298,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     String columnName = index.getSchema().get(colIdx).getName();
                     Optional<Column> oneCol =
                             alterSchema.stream().filter(c -> c.getName().equalsIgnoreCase(columnName)).findFirst();
-                    if (oneCol.isEmpty()) {
+                    if (!oneCol.isPresent()) {
                         LOG.warn("Sort Key Column[" + columnName + "] not exists in new schema");
                         throw new DdlException("Sort Key Column[" + columnName + "] not exists in new schema");
                     }
@@ -1556,7 +1556,7 @@ public class SchemaChangeHandler extends AlterHandler {
             } else if (alterClause instanceof DropColumnClause) {
                 DropColumnClause dropColumnClause = (DropColumnClause) alterClause;
                 // check relative mvs with the modified column
-                Set<String> modifiedColumns = Set.of(dropColumnClause.getColName());
+                Set<String> modifiedColumns = Sets.newHashSet(dropColumnClause.getColName());
                 checkModifiedColumWithMaterializedViews(olapTable, modifiedColumns);
 
                 // drop column and drop indexes on this column
@@ -1567,7 +1567,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 ModifyColumnClause modifyColumnClause = (ModifyColumnClause) alterClause;
 
                 // check relative mvs with the modified column
-                Set<String> modifiedColumns = Set.of(modifyColumnClause.getColumn().getName());
+                Set<String> modifiedColumns = Sets.newHashSet(modifyColumnClause.getColumn().getName());
                 checkModifiedColumWithMaterializedViews(olapTable, modifiedColumns);
 
                 // modify column
@@ -2410,7 +2410,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 if (sortKeyUniqueIds != null) {
                     for (Integer uniqueId : sortKeyUniqueIds) {
                         Optional<Column> col = indexSchema.stream().filter(c -> c.getUniqueId() == uniqueId).findFirst();
-                        if (col.isEmpty()) {
+                        if (!col.isPresent()) {
                             throw new DdlException("Sork key col with unique id: " + uniqueId + " not exists");
                         }
                         int sortKeyIdx = indexSchema.indexOf(col.get());

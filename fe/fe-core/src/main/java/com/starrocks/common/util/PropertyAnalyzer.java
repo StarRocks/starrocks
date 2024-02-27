@@ -1158,7 +1158,7 @@ public class PropertyAnalyzer {
         }
         StringBuilder sb = new StringBuilder("(");
         boolean first = true;
-        for (var entry : properties.entrySet()) {
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
             if (!first) {
                 sb.append(",");
             }

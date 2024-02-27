@@ -29,11 +29,11 @@ under the License.
     <packaging>pom</packaging>
 
     <modules>
-        <module>plugin-common</module>
+<!--        <module>plugin-common</module>-->
         <module>fe-common</module>
         <module>spark-dpp</module>
         <module>fe-core</module>
-        <module>hive-udf</module>
+<!--        <module>hive-udf</module>-->
     </modules>
 
     <name>starrocks-fe</name>
@@ -41,8 +41,8 @@ under the License.
     <properties>
         <starrocks.home>${basedir}/../</starrocks.home>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.source>11</maven.compiler.source>
-        <maven.compiler.target>11</maven.compiler.target>
+        <maven.compiler.source>8</maven.compiler.source>
+        <maven.compiler.target>8</maven.compiler.target>
         <jprotobuf.version>2.4.12</jprotobuf.version>
         <log4j.version>2.19.0</log4j.version>
         <jackson.version>2.15.2</jackson.version>

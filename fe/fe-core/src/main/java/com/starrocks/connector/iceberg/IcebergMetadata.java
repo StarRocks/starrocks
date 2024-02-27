@@ -558,7 +558,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         IcebergTable icebergTable = (IcebergTable) table;
         Optional<Snapshot> snapshot = icebergTable.getSnapshot();
         // empty table
-        if (snapshot.isEmpty()) {
+        if (!snapshot.isPresent()) {
             return;
         }
 

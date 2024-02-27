@@ -319,7 +319,7 @@ public class InsertOverwriteJobRunner {
     private void executeInsert() throws Exception {
         long insertStartTimestamp = System.currentTimeMillis();
         // should replan here because prepareInsert has changed the targetPartitionNames of insertStmt
-        try (var guard = context.bindScope()) {
+        try (ConnectContext.ScopeGuard guard = context.bindScope()) {
             ExecPlan newPlan = StatementPlanner.plan(insertStmt, context);
             // Use `handleDMLStmt` instead of `handleDMLStmtWithProfile` because cannot call `writeProfile` in
             // InsertOverwriteJobRunner.

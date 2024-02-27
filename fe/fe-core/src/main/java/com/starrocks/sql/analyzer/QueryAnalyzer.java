@@ -865,7 +865,7 @@ public class QueryAnalyzer {
             List<String> names = node.getFunctionParams().getExprsNames();
             String[] namesArray = null;
             if (names != null && !names.isEmpty()) {
-                namesArray = names.toArray(String[]::new);
+                names.toArray(namesArray);
             }
             Function fn = Expr.getBuiltinFunction(node.getFunctionName().getFunction(), argTypes, namesArray,
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);

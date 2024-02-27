@@ -218,13 +218,13 @@ class DecodeContext {
             Preconditions.checkState(Type.ARRAY_VARCHAR.matchesType(useStringRef.getType()));
             array2StringAnchor = Optional.empty();
             ScalarOperator result = expression.accept(this, null);
-            if (result.isColumnRef() && array2StringAnchor.isEmpty()) {
+            if (result.isColumnRef() && !array2StringAnchor.isPresent()) {
                 // decode array-column-ref
                 return new DictMappingOperator(useDictRef, result, expression.getType());
             } else if (result instanceof CallOperator &&
                     (FunctionSet.ARRAY_LENGTH.equalsIgnoreCase(((CallOperator) result).getFnName()) ||
                             FunctionSet.CARDINALITY.equalsIgnoreCase(((CallOperator) result).getFnName()))) {
-                Preconditions.checkState(array2StringAnchor.isEmpty());
+                Preconditions.checkState(!array2StringAnchor.isPresent());
                 return result;
             }
             result = processArrayAnchor(result);
