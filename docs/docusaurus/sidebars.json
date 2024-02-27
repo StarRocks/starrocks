@@ -573,57 +573,59 @@
                   "type": "category",
                   "label": "Loading",
                   "items": [
-                    "sql-reference/sql-statements./data-manipulation/ALTER_LOAD",
-                    "sql-reference/sql-statements./data-manipulation/BROKER_PIPE",
-                    "sql-reference/sql-statements./data-manipulation/CANCEL_LOAD",
-                    "sql-reference/sql-statements./data-manipulation/INSERT",
-                    "sql-reference/sql-statements./data-manipulation/SHOW_LOAD",
-                    "sql-reference/sql-statements./data-manipulation/SHOW_TRANSACTION",
-                    "sql-reference/sql-statements./data-manipulation/INSERT",
-                    "sql-reference/sql-statements./data-manipulation/SPARK_LOAD",
-                    "sql-reference/sql-statements./data-manipulation/STREAM_LOAD",
+                    "sql-reference/sql-statements/data-manipulation/ALTER_LOAD",
+                    "sql-reference/sql-statements/data-manipulation/BROKER_LOAD",
+                    "sql-reference/sql-statements/data-manipulation/CANCEL_LOAD",
+                    "sql-reference/sql-statements/data-manipulation/INSERT",
+                    "sql-reference/sql-statements/data-manipulation/SHOW_LOAD",
+                    "sql-reference/sql-statements/data-manipulation/SHOW_TRANSACTION",
+                    "sql-reference/sql-statements/data-manipulation/INSERT",
+                    "sql-reference/sql-statements/data-manipulation/SPARK_LOAD",
+                    "sql-reference/sql-statements/data-manipulation/STREAM_LOAD",
                     {
                       "type": "category",
                       "label": "Routine Load",
                       "items": [
-                        "sql-reference/sql-statements./data-manipulation/ALTER_ROUTINE_LOAD",
-                        "sql-reference/sql-statements./data-manipulation/CREATE_ROUTINE_LOAD",
-                        "sql-reference/sql-statements./data-manipulation/PAUSE_ROUTINE_LOAD",
-                        "sql-reference/sql-statements./data-manipulation/RESUME_ROUTINE_LOAD",
-                        "sql-reference/sql-statements./data-manipulation/SHOW_ROUTINE_LOAD",
-                        "sql-reference/sql-statements./data-manipulation/ALTER_ROUTINE_LOAD_TASK",
-                        "sql-reference/sql-statements./data-manipulation/STOP_ROUTINE_LOAD"
+                        "sql-reference/sql-statements/data-manipulation/ALTER_ROUTINE_LOAD",
+                        "sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD",
+                        "sql-reference/sql-statements/data-manipulation/PAUSE_ROUTINE_LOAD",
+                        "sql-reference/sql-statements/data-manipulation/RESUME_ROUTINE_LOAD",
+                        "sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD",
+                        "sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD_TASK",
+                        "sql-reference/sql-statements/data-manipulation/STOP_ROUTINE_LOAD"
                       ]
                     },
                     {
                       "type": "category",
                       "label": "Pipe",
                       "items": [
-                        "sql-reference/sql-statements./data-manipulation/ALTER_PIPE",
-                        "sql-reference/sql-statements./data-manipulation/CREATE_PIPE",
-                        "sql-reference/sql-statements./data-manipulation/DROP_PIPE",
-                        "sql-reference/sql-statements./data-manipulation/RETRY_FILE",
-                        "sql-reference/sql-statements./data-manipulation/SHOW_PIPES",
-                        "sql-reference/sql-statements./data-manipulation/SUSPEND_or_RESUME_PIPE"
+                        "sql-reference/sql-statements/data-manipulation/ALTER_PIPE",
+                        "sql-reference/sql-statements/data-manipulation/CREATE_PIPE",
+                        "sql-reference/sql-statements/data-manipulation/DROP_PIPE",
+                        "sql-reference/sql-statements/data-manipulation/RETRY_FILE",
+                        "sql-reference/sql-statements/data-manipulation/SHOW_PIPES",
+                        "sql-reference/sql-statements/data-manipulation/SUSPEND_or_RESUME_PIPE"
                       ]
                     },
                     {
                       "type": "category",
                       "label": "Unloading",
                       "items": [
-                        "sql-reference/sql-statements/data-definition/EXPORT",
-                        "sql-reference/sql-statements/data-definition/CANCEL_EXPORT",
-                        "sql-reference/sql-statements/data-definition/SHOW_EXPORT"
+                        "sql-reference/sql-statements/data-manipulation/EXPORT",
+                        "sql-reference/sql-statements/data-manipulation/CANCEL_EXPORT",
+                        "sql-reference/sql-statements/data-manipulation/SHOW_EXPORT"
                      ]
-                   },
-                   {
-                    "type": "category",
-                    "label": "ETL tasks",
-                    "items": [
-                      "sql-reference/sql-statements/data-definition/DROP_TASK",
-                      "sql-reference/sql-statements/data-definition/SUBMIT_TASK"
-                    ]
-                  }
+                    },
+                    {
+                      "type": "category",
+                      "label": "ETL tasks",
+                      "items": [
+                        "sql-reference/sql-statements/data-manipulation/DROP_TASK",
+                        "sql-reference/sql-statements/data-manipulation/SUBMIT_TASK"
+                      ]
+                    }
+                  ]
+                }
               ]
             },
             {
@@ -636,8 +638,8 @@
                   "items": [
                     "sql-reference/sql-statements/data-definition/CREATE_EXTERNAL_CATALOG",
                     "sql-reference/sql-statements/data-definition/DROP_CATALOG",
-                    "sql-reference/sql-statements/data-definition/SHOW_CATALOGS",
-                    "sql-reference/sql-statements/data-definition/SHOW_CREATE_CATALOG"
+                    "sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS",
+                    "sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG"
                   ]
                 },
                 {
@@ -647,9 +649,9 @@
                     "sql-reference/sql-statements/data-definition/ALTER_DATABASE",
                     "sql-reference/sql-statements/data-definition/CREATE_DATABASE",
                     "sql-reference/sql-statements/data-definition/DROP_DATABASE",
-                    "sql-reference/sql-statements/data-definition/SHOW_CREATE_DATABASE",
-                    "sql-reference/sql-statements/data-definition/SHOW_DATA",
-                    "sql-reference/sql-statements/data-definition/SHOW_DATABASES"
+                    "sql-reference/sql-statements/data-manipulation/SHOW_CREATE_DATABASE",
+                    "sql-reference/sql-statements/data-manipulation/SHOW_DATA",
+                    "sql-reference/sql-statements/data-manipulation/SHOW_DATABASES"
                   ]
                 },
                 {
@@ -726,38 +728,38 @@
               "type": "category",
               "label": "Function",
               "items": [
-                "sql-reference/sql-statements/data-definition./data-definition/CREATE_FUNCTION",
-                "sql-reference/sql-statements/data-definition./data-definition/DROP_FUNCTION",
-                "sql-reference/sql-statements/data-definition./data-definition/SHOW_FUNCTION"
+                "sql-reference/sql-statements/data-definition/CREATE_FUNCTION",
+                "sql-reference/sql-statements/data-definition/DROP_FUNCTION",
+                "sql-reference/sql-statements/data-definition/SHOW_FUNCTIONS"
               ]
             },
             {
               "type": "category",
               "label": "CBO statistics",
               "items": [
-                "sql-reference/sql-statements/data-definition./data-definition/ANALYZE_TABLE",
-                "sql-reference/sql-statements/data-definition./data-definition/CREATE_ANALYZE",
-                "sql-reference/sql-statements/data-definition./data-definition/DROP_ANALYZE",
-                "sql-reference/sql-statements/data-definition./data-definition/DROP_STATS",
-                "sql-reference/sql-statements/data-definition./data-definition/KILL_ANALYZE",
-                "sql-reference/sql-statements/data-definition./data-definition/SHOW_ANALYZE_JOB",
-                "sql-reference/sql-statements/data-definition./data-definition/SHOW_ANALYZE_STATUS",
-                "sql-reference/sql-statements/data-definition./data-definition/SHOW_META"
+                "sql-reference/sql-statements/data-definition/ANALYZE_TABLE",
+                "sql-reference/sql-statements/data-definition/CREATE_ANALYZE",
+                "sql-reference/sql-statements/data-definition/DROP_ANALYZE",
+                "sql-reference/sql-statements/data-definition/DROP_STATS",
+                "sql-reference/sql-statements/data-definition/KILL_ANALYZE",
+                "sql-reference/sql-statements/data-definition/SHOW_ANALYZE_JOB",
+                "sql-reference/sql-statements/data-definition/SHOW_ANALYZE_STATUS",
+                "sql-reference/sql-statements/data-definition/SHOW_META"
               ]
             },
             {
               "type": "category",
               "label": "Backup and restore",
               "items": [
-                "sql-reference/sql-statements/data-definition./data-definition/BACKUP",
-                "sql-reference/sql-statements/data-definition./data-definition/CANCEL_BACKUP",
-                "sql-reference/sql-statements/data-definition./data-definition/CANCEL_RESTORE",
-                "sql-reference/sql-statements/data-definition./data-definition/CREATE_REPOSITORY",
-                "sql-reference/sql-statements/data-definition./data-definition/DROP_REPOSITORY",
-                "sql-reference/sql-statements/data-definition./data-definition/RECOVER",
-                "sql-reference/sql-statements/data-definition./data-definition/RESTORE",
-                "sql-reference/sql-statements/data-definition./data-definition/SHOW_BACKUP",
-                "sql-reference/sql-statements/data-definition./data-definition/SHOW_REPOSITORIES"
+                "sql-reference/sql-statements/data-definition/BACKUP",
+                "sql-reference/sql-statements/data-definition/CANCEL_BACKUP",
+                "sql-reference/sql-statements/data-definition/CANCEL_RESTORE",
+                "sql-reference/sql-statements/data-definition/CREATE_REPOSITORY",
+                "sql-reference/sql-statements/data-definition/DROP_REPOSITORY",
+                "sql-reference/sql-statements/data-definition/RECOVER",
+                "sql-reference/sql-statements/data-definition/RESTORE",
+                "sql-reference/sql-statements/data-manipulation/SHOW_BACKUP",
+                "sql-reference/sql-statements/data-manipulation/SHOW_REPOSITORIES"
               ]
             },
             {
