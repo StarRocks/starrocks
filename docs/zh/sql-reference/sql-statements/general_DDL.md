@@ -2,7 +2,7 @@
 displayed_sidebar: "Chinese"
 ---
 
-# General DDL
+# DDL
 
 ## CREATE
 

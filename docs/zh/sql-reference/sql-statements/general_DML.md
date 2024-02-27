@@ -2,7 +2,7 @@
 displayed_sidebar: "Chinese"
 ---
 
-# General DML
+# DML
 
 ## 导入
 

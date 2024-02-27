@@ -16,7 +16,7 @@ displayed_sidebar: "Chinese"
     - [系统配置、系统变量、文件](#系统配置系统变量文件)
     - [SQL 黑名单](#sql-黑名单)
     - [插件](#插件)
-    - [查询分析](#查询分析)
+    - [执行计划和 Profile](#执行计划和-profile)
   - [导入，导出](#导入导出)
     - [Routine load](#routine-load)
     - [其他导入](#其他导入)
@@ -124,11 +124,12 @@ displayed_sidebar: "Chinese"
 - [SHOW PLUGINS](./Administration/SHOW_PLUGINS.md)
 - [UNINSTALL PLUGIN](./Administration/UNINSTALL_PLUGIN.md)
 
-### 查询分析
+### 执行计划和 Profile
 
 - [ANALYZE PROFILE](./Administration/ANALYZE_PROFILE.md)
 - [EXPLAIN](./Administration/EXPLAIN.md)
 - [EXPLAIN ANALYZE](./Administration/EXPLAIN_ANALYZE.md)
+- [SHOW PROFILELIST](./Administration/SHOW_PROFILELIST.md)
 
 ## 导入，导出
 

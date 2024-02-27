@@ -553,7 +553,7 @@
                 },
                 {
                   "type": "category",
-                  "label": "Query plan and profile",
+                  "label": "Execution plan and profile",
                   "items": [
                   "sql-reference/sql-statements/Administration/ANALYZE_PROFILE",
                   "sql-reference/sql-statements/Administration/EXPLAIN",
@@ -569,64 +569,57 @@
               "type": "category",
               "label": "Loading, unloading",
               "items": [
+                "sql-reference/sql-statements/data-manipulation/ALTER_LOAD",
+                "sql-reference/sql-statements/data-manipulation/BROKER_LOAD",
+                "sql-reference/sql-statements/data-manipulation/CANCEL_LOAD",
+                "sql-reference/sql-statements/data-manipulation/INSERT",
                 {
                   "type": "category",
-                  "label": "Loading",
+                  "label": "ROUTINE LOAD",
                   "items": [
-                    "sql-reference/sql-statements/data-manipulation/ALTER_LOAD",
-                    "sql-reference/sql-statements/data-manipulation/BROKER_LOAD",
-                    "sql-reference/sql-statements/data-manipulation/CANCEL_LOAD",
-                    "sql-reference/sql-statements/data-manipulation/INSERT",
-                    "sql-reference/sql-statements/data-manipulation/SHOW_LOAD",
-                    "sql-reference/sql-statements/data-manipulation/SHOW_TRANSACTION",
-                    "sql-reference/sql-statements/data-manipulation/INSERT",
-                    "sql-reference/sql-statements/data-manipulation/SPARK_LOAD",
-                    "sql-reference/sql-statements/data-manipulation/STREAM_LOAD",
-                    {
-                      "type": "category",
-                      "label": "Routine Load",
-                      "items": [
-                        "sql-reference/sql-statements/data-manipulation/ALTER_ROUTINE_LOAD",
-                        "sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD",
-                        "sql-reference/sql-statements/data-manipulation/PAUSE_ROUTINE_LOAD",
-                        "sql-reference/sql-statements/data-manipulation/RESUME_ROUTINE_LOAD",
-                        "sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD",
-                        "sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD_TASK",
-                        "sql-reference/sql-statements/data-manipulation/STOP_ROUTINE_LOAD"
-                      ]
-                    },
-                    {
-                      "type": "category",
-                      "label": "Pipe",
-                      "items": [
-                        "sql-reference/sql-statements/data-manipulation/ALTER_PIPE",
-                        "sql-reference/sql-statements/data-manipulation/CREATE_PIPE",
-                        "sql-reference/sql-statements/data-manipulation/DROP_PIPE",
-                        "sql-reference/sql-statements/data-manipulation/RETRY_FILE",
-                        "sql-reference/sql-statements/data-manipulation/SHOW_PIPES",
-                        "sql-reference/sql-statements/data-manipulation/SUSPEND_or_RESUME_PIPE"
-                      ]
-                    },
-                    {
-                      "type": "category",
-                      "label": "Unloading",
-                      "items": [
-                        "sql-reference/sql-statements/data-manipulation/EXPORT",
-                        "sql-reference/sql-statements/data-manipulation/CANCEL_EXPORT",
-                        "sql-reference/sql-statements/data-manipulation/SHOW_EXPORT"
-                     ]
-                    },
-                    {
-                      "type": "category",
-                      "label": "ETL tasks",
-                      "items": [
-                        "sql-reference/sql-statements/data-manipulation/DROP_TASK",
-                        "sql-reference/sql-statements/data-manipulation/SUBMIT_TASK"
-                      ]
-                    }
+                    "sql-reference/sql-statements/data-manipulation/ALTER_ROUTINE_LOAD",
+                    "sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD",
+                    "sql-reference/sql-statements/data-manipulation/PAUSE_ROUTINE_LOAD",
+                    "sql-reference/sql-statements/data-manipulation/RESUME_ROUTINE_LOAD",
+                    "sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD",
+                    "sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD_TASK",
+                    "sql-reference/sql-statements/data-manipulation/STOP_ROUTINE_LOAD"
                   ]
-                }
-              ]
+                },
+                "sql-reference/sql-statements/data-manipulation/SHOW_LOAD",
+                "sql-reference/sql-statements/data-manipulation/SHOW_TRANSACTION",
+                "sql-reference/sql-statements/data-manipulation/SPARK_LOAD",
+                "sql-reference/sql-statements/data-manipulation/STREAM_LOAD",
+                {
+                  "type": "category",
+                  "label": "PIPE",
+                  "items": [
+                    "sql-reference/sql-statements/data-manipulation/ALTER_PIPE",
+                    "sql-reference/sql-statements/data-manipulation/CREATE_PIPE",
+                    "sql-reference/sql-statements/data-manipulation/DROP_PIPE",
+                    "sql-reference/sql-statements/data-manipulation/RETRY_FILE",
+                    "sql-reference/sql-statements/data-manipulation/SHOW_PIPES",
+                    "sql-reference/sql-statements/data-manipulation/SUSPEND_or_RESUME_PIPE"
+                  ]
+                },
+                {
+                  "type": "category",
+                  "label": "Unloading",
+                  "items": [
+                    "sql-reference/sql-statements/data-manipulation/EXPORT",
+                    "sql-reference/sql-statements/data-manipulation/CANCEL_EXPORT",
+                    "sql-reference/sql-statements/data-manipulation/SHOW_EXPORT"
+                    ]
+                  },
+                  {
+                    "type": "category",
+                    "label": "ETL tasks",
+                    "items": [
+                      "sql-reference/sql-statements/data-manipulation/DROP_TASK",
+                      "sql-reference/sql-statements/data-manipulation/SUBMIT_TASK"
+                    ]
+                  }
+                ]
             },
             {
               "type": "category",
@@ -1529,7 +1522,7 @@
                   },
                   {
                     "type": "category",
-                    "label": "Tablet 和 Replica 检查修复",
+                    "label": "Tablet，Replica 检查修复",
                     "items": [
                     "sql-reference/sql-statements/Administration/ADMIN_CANCEL_REPAIR",
                     "sql-reference/sql-statements/Administration/ADMIN_CHECK_TABLET",
@@ -1573,7 +1566,7 @@
                   },
                   {
                     "type": "category",
-                    "label": "查询计划和 Profile",
+                    "label": "执行计划和 Profile",
                     "items": [
                     "sql-reference/sql-statements/Administration/ANALYZE_PROFILE",
                     "sql-reference/sql-statements/Administration/EXPLAIN",
@@ -1587,22 +1580,192 @@
             "sql-reference/sql-statements/general_DML",
             {
               "type": "category",
-              "label": "DDL",
+              "label": "导入导出",
+              "items": [
+                "sql-reference/sql-statements/data-manipulation/ALTER_LOAD",
+                "sql-reference/sql-statements/data-manipulation/BROKER_LOAD",
+                "sql-reference/sql-statements/data-manipulation/CANCEL_LOAD",
+                "sql-reference/sql-statements/data-manipulation/INSERT",
+                {
+                  "type": "category",
+                  "label": "ROUTINE LOAD",
+                  "items": [
+                    "sql-reference/sql-statements/data-manipulation/ALTER_ROUTINE_LOAD",
+                    "sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD",
+                    "sql-reference/sql-statements/data-manipulation/PAUSE_ROUTINE_LOAD",
+                    "sql-reference/sql-statements/data-manipulation/RESUME_ROUTINE_LOAD",
+                    "sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD",
+                    "sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD_TASK",
+                    "sql-reference/sql-statements/data-manipulation/STOP_ROUTINE_LOAD"
+                  ]
+                },
+                "sql-reference/sql-statements/data-manipulation/SHOW_LOAD",
+                "sql-reference/sql-statements/data-manipulation/SHOW_TRANSACTION",
+                "sql-reference/sql-statements/data-manipulation/SPARK_LOAD",
+                "sql-reference/sql-statements/data-manipulation/STREAM_LOAD",
+                {
+                  "type": "category",
+                  "label": "PIPE",
+                  "items": [
+                    "sql-reference/sql-statements/data-manipulation/ALTER_PIPE",
+                    "sql-reference/sql-statements/data-manipulation/CREATE_PIPE",
+                    "sql-reference/sql-statements/data-manipulation/DROP_PIPE",
+                    "sql-reference/sql-statements/data-manipulation/RETRY_FILE",
+                    "sql-reference/sql-statements/data-manipulation/SHOW_PIPES",
+                    "sql-reference/sql-statements/data-manipulation/SUSPEND_or_RESUME_PIPE"
+                  ]
+                },
+                {
+                  "type": "category",
+                  "label": "导出",
+                  "items": [
+                    "sql-reference/sql-statements/data-manipulation/EXPORT",
+                    "sql-reference/sql-statements/data-manipulation/CANCEL_EXPORT",
+                    "sql-reference/sql-statements/data-manipulation/SHOW_EXPORT"
+                    ]
+                  },
+                  {
+                    "type": "category",
+                    "label": "ETL 任务",
+                    "items": [
+                      "sql-reference/sql-statements/data-manipulation/DROP_TASK",
+                      "sql-reference/sql-statements/data-manipulation/SUBMIT_TASK"
+                    ]
+                  }
+                ]
+            },
+            {
+              "type": "category",
+              "label": "数据目录，数据库，资源",
               "items": [
                 {
-                  "type": "autogenerated",
-                  "dirName": "sql-reference/sql-statements/data-definition"
+                  "type": "category",
+                  "label": "Catalog",
+                  "items": [
+                    "sql-reference/sql-statements/data-definition/CREATE_EXTERNAL_CATALOG",
+                    "sql-reference/sql-statements/data-definition/DROP_CATALOG",
+                    "sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS",
+                    "sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG"
+                  ]
+                },
+                {
+                  "type": "category",
+                  "label": "Database",
+                  "items": [
+                    "sql-reference/sql-statements/data-definition/ALTER_DATABASE",
+                    "sql-reference/sql-statements/data-definition/CREATE_DATABASE",
+                    "sql-reference/sql-statements/data-definition/DROP_DATABASE",
+                    "sql-reference/sql-statements/data-manipulation/SHOW_CREATE_DATABASE",
+                    "sql-reference/sql-statements/data-manipulation/SHOW_DATA",
+                    "sql-reference/sql-statements/data-manipulation/SHOW_DATABASES"
+                  ]
+                },
+                {
+                  "type": "category",
+                  "label": "Resource",
+                  "items": [
+                    "sql-reference/sql-statements/data-definition/ALTER_RESOURCE",
+                    "sql-reference/sql-statements/data-definition/CREATE_RESOURCE",
+                    "sql-reference/sql-statements/data-definition/DROP_RESOURCE",
+                    "sql-reference/sql-statements/data-definition/SHOW_RESOURCES"
+                  ]
                 }
               ]
             },
             {
               "type": "category",
-              "label": "DML",
+              "label": "表，分区，索引",
+              "items": [
+                    "sql-reference/sql-statements/data-definition/ALTER_TABLE",
+                    "sql-reference/sql-statements/data-definition/CANCEL_ALTER_TABLE",
+                    "sql-reference/sql-statements/data-definition/CREATE_INDEX",
+                    "sql-reference/sql-statements/data-definition/CREATE_TABLE",
+                    "sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT",
+                    "sql-reference/sql-statements/data-definition/CREATE_TABLE_LIKE",
+                    "sql-reference/sql-statements/data-definition/DROP_INDEX",
+                    "sql-reference/sql-statements/data-definition/DROP_TABLE",
+                    "sql-reference/sql-statements/data-definition/REFRESH_EXTERNAL_TABLE",
+                    "sql-reference/sql-statements/data-definition/TRUNCATE_TABLE",
+                    "sql-reference/sql-statements/data-manipulation/DELETE",
+                    "sql-reference/sql-statements/data-manipulation/SELECT",
+                    "sql-reference/sql-statements/data-manipulation/SHOW_ALTER",
+                    "sql-reference/sql-statements/data-manipulation/SHOW_CREATE_TABLE",
+                    "sql-reference/sql-statements/data-manipulation/SHOW_DELETE",
+                    "sql-reference/sql-statements/data-manipulation/SHOW_DYNAMIC_PARTITION_TABLES",
+                    "sql-reference/sql-statements/data-manipulation/SHOW_FULL_COLUMNS",
+                    "sql-reference/sql-statements/data-manipulation/SHOW_INDEX",
+                    "sql-reference/sql-statements/data-manipulation/SHOW_PARTITIONS",
+                    "sql-reference/sql-statements/data-manipulation/SHOW_TABLES",
+                    "sql-reference/sql-statements/data-manipulation/SHOW_TABLET",
+                    "sql-reference/sql-statements/data-manipulation/UPDATE"
+                ]
+            },
+            {
+              "type": "category", 
+              "label": "视图，物化视图",
               "items": [
                 {
-                  "type": "autogenerated",
-                  "dirName": "sql-reference/sql-statements/data-manipulation"
+                  "type": "category",
+                  "label": "视图",
+                  "items": [
+                    "sql-reference/sql-statements/data-definition/ALTER_VIEW",
+                    "sql-reference/sql-statements/data-definition/CREATE_VIEW",
+                    "sql-reference/sql-statements/data-manipulation/SHOW_CREATE_VIEW",
+                    "sql-reference/sql-statements/data-definition/DROP_VIEW"
+                  ]
+                },
+                {
+                  "type": "category",
+                  "label": "物化视图",
+                  "items": [
+                    "sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW",
+                    "sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW",
+                    "sql-reference/sql-statements/data-definition/DROP_MATERIALIZED_VIEW",
+                    "sql-reference/sql-statements/data-manipulation/CANCEL_REFRESH_MATERIALIZED_VIEW",
+                    "sql-reference/sql-statements/data-manipulation/REFRESH_MATERIALIZED_VIEW",
+                    "sql-reference/sql-statements/data-manipulation/SHOW_ALTER_MATERIALIZED_VIEW",
+                    "sql-reference/sql-statements/data-manipulation/SHOW_CREATE_MATERIALIZED_VIEW",
+                    "sql-reference/sql-statements/data-manipulation/SHOW_MATERIALIZED_VIEW"
+                  ]
                 }
+              ]
+            },
+            {
+              "type": "category",
+              "label": "函数",
+              "items": [
+                "sql-reference/sql-statements/data-definition/CREATE_FUNCTION",
+                "sql-reference/sql-statements/data-definition/DROP_FUNCTION",
+                "sql-reference/sql-statements/data-definition/SHOW_FUNCTIONS"
+              ]
+            },
+            {
+              "type": "category",
+              "label": "CBO 统计信息",
+              "items": [
+                "sql-reference/sql-statements/data-definition/ANALYZE_TABLE",
+                "sql-reference/sql-statements/data-definition/CREATE_ANALYZE",
+                "sql-reference/sql-statements/data-definition/DROP_ANALYZE",
+                "sql-reference/sql-statements/data-definition/DROP_STATS",
+                "sql-reference/sql-statements/data-definition/KILL_ANALYZE",
+                "sql-reference/sql-statements/data-definition/SHOW_ANALYZE_JOB",
+                "sql-reference/sql-statements/data-definition/SHOW_ANALYZE_STATUS",
+                "sql-reference/sql-statements/data-definition/SHOW_META"
+              ]
+            },
+            {
+              "type": "category",
+              "label": "备份与恢复",
+              "items": [
+                "sql-reference/sql-statements/data-definition/BACKUP",
+                "sql-reference/sql-statements/data-definition/CANCEL_BACKUP",
+                "sql-reference/sql-statements/data-definition/CANCEL_RESTORE",
+                "sql-reference/sql-statements/data-definition/CREATE_REPOSITORY",
+                "sql-reference/sql-statements/data-definition/DROP_REPOSITORY",
+                "sql-reference/sql-statements/data-definition/RECOVER",
+                "sql-reference/sql-statements/data-definition/RESTORE",
+                "sql-reference/sql-statements/data-manipulation/SHOW_BACKUP",
+                "sql-reference/sql-statements/data-manipulation/SHOW_REPOSITORIES"
               ]
             },
             {

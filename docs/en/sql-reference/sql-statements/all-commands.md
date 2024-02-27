@@ -16,7 +16,7 @@ This topic lists all the SQL statements supported by StarRocks and categorizes t
     - [System configurations, variables, and files](#system-configurations-variables-and-files)
     - [SQL Blacklist](#sql-blacklist)
     - [Plugin](#plugin)
-    - [Query plan and query profile](#query-plan-and-query-profile)
+    - [Execution plan and query profile](#execution-plan-and-query-profile)
   - [Loading, unloading](#loading-unloading)
     - [Routine load](#routine-load)
     - [Other load](#other-load)
@@ -124,7 +124,7 @@ Manages clusters, including FEs, BEs, compute nodes (CN), brokers, resource grou
 - [SHOW PLUGINS](./Administration/SHOW_PLUGINS.md)
 - [UNINSTALL PLUGIN](./Administration/UNINSTALL_PLUGIN.md)
 
-### Query plan and query profile
+### Execution plan and query profile
 
 - [ANALYZE PROFILE](./Administration/ANALYZE_PROFILE.md)
 - [EXPLAIN](./Administration/EXPLAIN.md)
