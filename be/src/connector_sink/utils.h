@@ -63,6 +63,13 @@ public:
         CHECK_NE(i, std::string::npos);
         return path.substr(i + 1);
     }
+
+    static std::string remove_trailing_slash(const std::string& path) {
+        if (path.ends_with("/")) {
+            return path.substr(0, path.size() - 1);
+        }
+        return path;
+    }
 };
 
 // Location provider provides file location for every output file. The name format depends on if the write is partitioned or not.
@@ -71,14 +78,14 @@ public:
     // file_name_prefix = {query_id}_{be_number}_{driver_id}
     LocationProvider(const std::string& base_path, const std::string& query_id, int be_number, int driver_id,
                      const std::string& file_suffix)
-            : _base_path(base_path),
+            : _base_path(PathUtils::remove_trailing_slash(base_path)),
               _file_name_prefix(fmt::format("{}_{}_{}", query_id, be_number, driver_id)),
               _file_name_suffix(file_suffix) {}
 
     // location = base_path/partition/{query_id}_{be_number}_{driver_id}_index.file_suffix
     std::string get(const std::string& partition) {
-        return fmt::format("{}/{}/{}_{}.{}", _base_path, partition, _file_name_prefix, _partition2index[partition]++,
-                           _file_name_suffix);
+        return fmt::format("{}/{}/{}_{}.{}", _base_path, PathUtils::remove_trailing_slash(partition), _file_name_prefix,
+                           _partition2index[partition]++, _file_name_suffix);
     }
 
     // location = base_path/{query_id}_{be_number}_{driver_id}_index.file_suffix
