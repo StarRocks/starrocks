@@ -66,6 +66,8 @@ public:
 
     Status shutdown() override;
 
+    DataCacheEngineType engine_type() override { return DataCacheEngineType::CACHELIB; }
+
 private:
     void _dump_cache_stats();
 
