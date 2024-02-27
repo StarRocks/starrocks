@@ -418,7 +418,6 @@ public:
             auto saved_errno = errno;
             auto r = cb(name);
             if (UNLIKELY(errno != saved_errno)) {
-                LOG(INFO) << "errno changed to " << errno << ", will restore it back to " << saved_errno;
                 errno = saved_errno;
             }
             if (!r) {
@@ -467,7 +466,6 @@ public:
             auto saved_errno = errno;
             auto r = cb(de);
             if (UNLIKELY(errno != saved_errno)) {
-                LOG(INFO) << "errno changed to " << errno << ", will restore it back to " << saved_errno;
                 errno = saved_errno;
             }
             if (!r) {
