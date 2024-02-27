@@ -48,6 +48,8 @@ public:
 
     Status shutdown() override;
 
+    DataCacheEngineType engine_type() override { return DataCacheEngineType::STARCACHE; }
+
 private:
     std::unique_ptr<starcache::StarCache> _cache;
     std::unique_ptr<starcache::TimeBasedCacheAdaptor> _cache_adaptor;
