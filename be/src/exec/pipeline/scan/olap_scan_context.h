@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <atomic>
+#include <condition_variable>
 #include <mutex>
 
 #include "column/column_access_path.h"
@@ -40,14 +42,47 @@ using OlapScanContextPtr = std::shared_ptr<OlapScanContext>;
 class OlapScanContextFactory;
 using OlapScanContextFactoryPtr = std::shared_ptr<OlapScanContextFactory>;
 
+class JitRewriterConcurrent {
+public:
+    JitRewriterConcurrent(int32_t dop) : _dop(dop), _id(0), _barrier(dop), _errors(0) {}
+    Status rewrite(std::vector<ExprContext*>& expr_ctxs, ObjectPool* pool, bool enable_jit);
+
+private:
+    class Barrier {
+    public:
+        explicit Barrier(std::size_t count) : _count(count), _current(0) {}
+
+        void wait() {
+            std::unique_lock<std::mutex> lock(_mutex);
+            if (++_current == _count) {
+                _current = 0;
+                _cv.notify_all();
+            } else {
+                _cv.wait(lock, [this] { return _current == 0; });
+            }
+        }
+
+    private:
+        std::size_t _count;
+        std::size_t _current;
+        std::mutex _mutex;
+        std::condition_variable _cv;
+    };
+    const int32_t _dop;
+    std::atomic_int _id = 0;
+    Barrier _barrier;
+    std::atomic_int _errors;
+};
+
 class OlapScanContext final : public ContextWithDependency {
 public:
     explicit OlapScanContext(OlapScanNode* scan_node, int64_t scan_table_id, int32_t dop, bool shared_scan,
-                             BalancedChunkBuffer& chunk_buffer)
+                             BalancedChunkBuffer& chunk_buffer, JitRewriterConcurrent& jit_rewriter)
             : _scan_node(scan_node),
               _scan_table_id(scan_table_id),
               _chunk_buffer(chunk_buffer),
-              _shared_scan(shared_scan) {}
+              _shared_scan(shared_scan),
+              _jit_rewriter(jit_rewriter){}
     ~OlapScanContext() override = default;
 
     Status prepare(RuntimeState* state);
@@ -109,6 +144,7 @@ private:
     // the row sets into _tablet_rowsets in the preparation phase to avoid the row sets being deleted.
     std::vector<TabletSharedPtr> _tablets;
     std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
+    JitRewriterConcurrent& _jit_rewriter;
 };
 
 // OlapScanContextFactory creates different contexts for each scan operator, if _shared_scan is false.
@@ -123,7 +159,8 @@ public:
               _shared_scan(shared_scan),
               _chunk_buffer(shared_scan ? BalanceStrategy::kRoundRobin : BalanceStrategy::kDirect, dop,
                             std::move(chunk_buffer_limiter)),
-              _contexts(shared_morsel_queue ? 1 : dop) {}
+              _contexts(shared_morsel_queue ? 1 : dop),
+              _jit_rewriter(dop) {}
 
     OlapScanContextPtr get_or_create(int32_t driver_sequence);
 
@@ -138,6 +175,7 @@ private:
 
     int64_t _scan_table_id = -1;
     std::vector<OlapScanContextPtr> _contexts;
+    JitRewriterConcurrent _jit_rewriter;
 };
 
 } // namespace pipeline

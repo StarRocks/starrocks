@@ -20,6 +20,26 @@
 
 namespace starrocks::pipeline {
 
+Status JitRewriterConcurrent::rewrite(std::vector<ExprContext*>& expr_ctxs, ObjectPool* pool, bool enable_jit) {
+    if (!enable_jit) {
+        return Status::OK();
+    }
+    int id;
+    while ((id = _id++) < expr_ctxs.size()) {
+        auto st = expr_ctxs[id]->rewrite_jit_expr(pool);
+        if (!st.ok()) {
+            _errors++;
+        }
+    }
+    _barrier.wait();
+    // TODO(fzh): just generate 1 warnings
+    if (_errors > 0) {
+        return Status::JitCompileError("jit rewriter has errors");
+    } else {
+        return Status::OK();
+    }
+}
+
 /// OlapScanContext.
 
 const std::vector<ColumnAccessPathPtr>* OlapScanContext::column_access_paths() const {
@@ -128,7 +148,7 @@ Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<E
     // rewrite after push down scan predicate, scan predicate should rewrite by local-dict
     RETURN_IF_ERROR(state->mutable_dict_optimize_parser()->rewrite_conjuncts(&_not_push_down_conjuncts));
 
-    RETURN_IF_ERROR(Expr::rewrite_jit_exprs(_not_push_down_conjuncts, &_obj_pool, state));
+    WARN_IF_ERROR(_jit_rewriter.rewrite(_not_push_down_conjuncts, &_obj_pool, state->is_jit_enabled()), "");
 
     return Status::OK();
 }
@@ -142,7 +162,7 @@ OlapScanContextPtr OlapScanContextFactory::get_or_create(int32_t driver_sequence
 
     if (_contexts[idx] == nullptr) {
         _contexts[idx] =
-                std::make_shared<OlapScanContext>(_scan_node, _scan_table_id, _dop, _shared_scan, _chunk_buffer);
+                std::make_shared<OlapScanContext>(_scan_node, _scan_table_id, _dop, _shared_scan, _chunk_buffer, _jit_rewriter);
     }
     return _contexts[idx];
 }

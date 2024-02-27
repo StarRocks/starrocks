@@ -355,3 +355,45 @@ select int0 from t where case nint0 when 0 then int0 when 1 then int1 when 2 the
 -- result:
 1
 -- !result
+CREATE FUNCTION Echotinyint(tinyint)
+RETURNS tinyint
+properties
+(
+    "symbol" = "Echotinyint",
+    "type" = "StarrocksJar",
+    "file" = "${udf_url}/starrocks-jdbc%2FEchotinyint.jar"
+);
+-- result:
+-- !result
+select count(*) from t where int0 = Echotinyint(int0);
+-- result:
+8
+-- !result
+create table dict(col_1 int, col_2 string, col_3 bigint not null auto_increment, col_4 int)
+                primary key(col_1)
+                distributed by hash(col_1)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into dict values(1, 'hello world 1', default, 1 * 10);
+-- result:
+-- !result
+insert into dict values(2, 'hello world 2', default, 2 * 10);
+-- result:
+-- !result
+insert into dict values(3, 'hello world 3', default, 3 * 10);
+-- result:
+-- !result
+insert into dict values(4, 'hello world 4', default, 4 * 10);
+-- result:
+-- !result
+select count(*) from t where int0 <> dict_mapping("dict", int0);
+-- result:
+0
+-- !result
+select count(*) from t where int0 = dict_mapping("dict", int0);
+-- result:
+4
+-- !result
