@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.DropTableResponse;
 import com.starrocks.proto.StatusPB;
@@ -338,7 +339,11 @@ public class CatalogRecycleBinLakeTableTest {
 
         Partition p1 = table1.getPartition("p1");
         Partition p2 = table1.getPartition("p2");
+        Partition p3 = table1.getPartition("p3");
         Assert.assertNotNull(p1);
+        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p1));
+        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p2));
+        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p3));
 
         // Drop partition "p1"
         alterTable(connectContext, String.format("ALTER TABLE %s.t1 DROP PARTITION p1", dbName));
@@ -433,6 +438,7 @@ public class CatalogRecycleBinLakeTableTest {
                         "PROPERTIES('replication_num' = '1');", dbName));
 
         p1 = table2.getPartition("p1");
+        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p1));
         // Drop partition "p1"
         alterTable(connectContext, String.format("ALTER TABLE %s.t2 DROP PARTITION p1", dbName));
         Assert.assertNull(table2.getPartition("p1"));
@@ -454,5 +460,72 @@ public class CatalogRecycleBinLakeTableTest {
         recycleBin.erasePartition(System.currentTimeMillis() + delay);
         Assert.assertNull(recycleBin.getPartition(p1.getId()));
         checkPartitionTablet(p1, false);
+    }
+
+    @Test
+    public void testRecycleLakePartitionWithSharedDirectory(@Mocked LakeService lakeService) throws Exception {
+        final String dbName = "recycle_partition_shared_directory_test";
+        CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+        // create database
+        String createDbStmtStr = String.format("create database %s;", dbName);
+        CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
+        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
+        Database db = GlobalStateMgr.getCurrentState().getMetadata().getDb(dbName);
+
+        Table table1 = createTable(connectContext, String.format(
+                "CREATE TABLE %s.t1" +
+                        "(" +
+                        "  k1 DATE," +
+                        "  v1 varchar(10)" +
+                        ")" +
+                        "DUPLICATE KEY(k1)\n" +
+                        "PARTITION BY RANGE(k1) (" +
+                        "  PARTITION p1 VALUES LESS THAN('2024-01-01')," +
+                        "  PARTITION p2 VALUES LESS THAN('2024-02-01')," +
+                        "  PARTITION p3 VALUES LESS THAN('2024-03-01')" +
+                        ")" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 1\n" +
+                        "PROPERTIES('replication_num' = '1');", dbName));
+
+        Partition p1 = table1.getPartition("p1");
+        Partition p2 = table1.getPartition("p2");
+        Assert.assertNotNull(p1);
+        System.out.printf("p1=%d p2=%d%n", p1.getId(), p2.getId());
+
+        alterTable(connectContext, String.format("ALTER TABLE %s.t1 DROP PARTITION p1 FORCE", dbName));
+        alterTable(connectContext, String.format("ALTER TABLE %s.t1 DROP PARTITION p2 FORCE", dbName));
+        Assert.assertNull(table1.getPartition("p1"));
+        Assert.assertNull(table1.getPartition("p2"));
+        checkPartitionTablet(p1, true);
+        checkPartitionTablet(p2, true);
+
+        new MockUp<LakeTableHelper>() {
+            @Mock
+            public boolean isSharedDirectory(String path, long partitionId) {
+                Assert.assertTrue(path.endsWith("/" + partitionId));
+                return partitionId == p1.getId();
+            }
+        };
+        new MockUp<BrpcProxy>() {
+            @Mock
+            public LakeService getLakeService(TNetworkAddress address) throws RpcException {
+                return lakeService;
+            }
+        };
+        new Expectations() {
+            {
+                lakeService.dropTable((DropTableRequest) any);
+                minTimes = 1;
+                maxTimes = 1;
+                result = buildDropTableResponse(0, "");
+            }
+        };
+
+        recycleBin.erasePartition(System.currentTimeMillis());
+        Assert.assertNull(recycleBin.getPartition(p1.getId()));
+        Assert.assertNull(recycleBin.getPartition(p2.getId()));
+        checkPartitionTablet(p1, false);
+        checkPartitionTablet(p2, false);
     }
 }

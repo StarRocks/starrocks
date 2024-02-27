@@ -131,8 +131,24 @@ public class LakeTableHelper {
         return ret;
     }
 
-    // Check if a directory is shared by multiple partitions.
-    static boolean isSharedDirectory(String path, long partitionId) {
-        return !path.endsWith(String.valueOf(partitionId));
+    public static boolean isSharedPartitionDirectory(PhysicalPartition partition) throws StarClientException {
+        ShardInfo shardInfo = getAssociatedShardInfo(partition).orElse(null);
+        if (shardInfo == null) {
+            return false;
+        }
+        return isSharedDirectory(shardInfo.getFilePath().getFullPath(), partition.getId());
+    }
+
+    /**
+     * Check if a directory is shared by multiple partitions.
+     * If {@code path} ends with {@code partitionId}, it is considered exclusive to the
+     * partition, otherwise it is considered shared.
+     * <p>
+     * Reference: {@link OlapTable#getPartitionFilePathInfo(long)}
+     *
+     * @return true if the directory is a shared directory, false otherwise
+     */
+    public static boolean isSharedDirectory(String path, long partitionId) {
+        return !path.endsWith(String.format("/%d", partitionId));
     }
 }
