@@ -45,6 +45,5 @@ private:
     std::shared_ptr<JavaUDFContext> _func_desc;
     std::shared_ptr<UDFFunctionCallHelper> _call_helper;
     bool _is_returning_random_value;
-    bool _is_prepared = false;
 };
 } // namespace starrocks

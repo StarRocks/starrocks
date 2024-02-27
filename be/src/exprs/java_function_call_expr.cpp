@@ -125,13 +125,9 @@ JavaFunctionCallExpr::~JavaFunctionCallExpr() {
 
 // TODO support prepare UDF
 Status JavaFunctionCallExpr::prepare(RuntimeState* state, ExprContext* context) {
+    _runtime_state = state;
     // init Expr::prepare
     RETURN_IF_ERROR(Expr::prepare(state, context));
-    if (_is_prepared) {
-        return Status::OK();
-    }
-    _is_prepared = true;
-    _runtime_state = state;
 
     if (!_fn.__isset.fid) {
         return Status::InternalError("Not Found function id for " + _fn.name.function_name);
